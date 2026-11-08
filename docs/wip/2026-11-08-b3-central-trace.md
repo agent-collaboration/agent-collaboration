@@ -18,9 +18,13 @@ shared type decides.
 | `DeviceLoginRefusal` | `notOwner` is now `notPermitted`. Adds `formerServiceLinkedElsewhere {}`. `withinSeconds` is positive. |
 | `MachineTokenDecision.grant` | adds optional `superseded: EndedMachineClient { enrollmentId, clientId }` |
 
-The mirror is changing on its side to match: the label byte check, C0 refusal, and
-lowercase UUIDs, including `formerServiceId`. A cross-repo equality test will read a
-committed copy of the mirror's vectors.
+The mirror changed on its side to match: the label byte check, C0 refusal, and lowercase
+UUIDs, including `formerServiceId`. `machine_login_mirror_vectors` reads a byte-exact copy of
+the mirror's 95 validation vectors (switchboard `86d79179`, in
+`contracts/issuer-mirror/`). Central refuses exactly the 59 the mirror refuses and accepts
+the 36 it accepts, writing each byte for byte. The one named exception is row 6's null
+versus an omitted `approverSecondFactorAt`. With the label seeded as an unbounded string,
+36 of the 95 vectors disagree.
 
 Proof:
 

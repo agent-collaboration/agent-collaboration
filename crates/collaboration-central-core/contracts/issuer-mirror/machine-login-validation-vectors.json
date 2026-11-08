@@ -1,0 +1,1483 @@
+{
+	"source": "machine-login-contracts.ts; PD boundary encoding and Fleet access Lead validation rulings, 2026-11-08; literal expected JSON output in schema field order",
+	"vectors": [
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "accept",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			},
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null}"
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "accept",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			},
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"a\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null}"
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "accept",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			},
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null}"
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "accept",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			},
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null}"
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "accept",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			},
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null}"
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééa",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀a",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": " \t\n ",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "accept",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": " \tRouter\n ",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			},
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null}"
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "accept",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\tb",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			},
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"a\\tb\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null}"
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "accept",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\nb",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			},
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"a\\nb\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null}"
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u0000b",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u0001b",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u0002b",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u0003b",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u0004b",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u0005b",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u0006b",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u0007b",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\bb",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u000bb",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\fb",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\rb",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u000eb",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u000fb",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u0010b",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u0011b",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u0012b",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u0013b",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u0014b",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u0015b",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u0016b",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u0017b",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u0018b",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u0019b",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u001ab",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u001bb",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u001cb",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u001db",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u001eb",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "a\u001fb",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019A61BB-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019A61BB-0000-7000-8000-000000000001",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019A61BB-0000-7000-8000-000000000001",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019A61BB-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019A61BB-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": ["019A61BB-0000-7000-8000-000000000001"],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "a77d3c10-cc03-4528-a5b3-6b1566cb4b91",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "accept",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null,
+				"formerServiceId": "a77d3c10-cc03-4528-a5b3-6b1566cb4b91"
+			},
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null,\"formerServiceId\":\"a77d3c10-cc03-4528-a5b3-6b1566cb4b91\"}"
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "accept",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null,
+				"formerServiceId": "019a61bb-0000-7000-8000-000000000001"
+			},
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null,\"formerServiceId\":\"019a61bb-0000-7000-8000-000000000001\"}"
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null,
+				"formerServiceId": "A77D3C10-CC03-4528-A5B3-6B1566CB4B91"
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null,
+				"formerServiceId": "019A61BB-0000-7000-8000-000000000001"
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null,
+				"formerServiceId": "550e8400-e29b-11d4-a716-446655440000"
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null,
+				"formerServiceId": "550e8400-e29b-51d4-a716-446655440000"
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null,
+				"formerServiceId": "a77d3c10-cc03-4528-75b3-6b1566cb4b91"
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null,
+				"formerServiceId": "019a61bb-0000-7000-c000-000000000001"
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "accept",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001"
+				],
+				"approverSecondFactorAt": null
+			},
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\"],\"approverSecondFactorAt\":null}"
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001",
+					"019a61bb-0000-7000-8000-000000000001"
+				],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "accept",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": 1794110400
+			},
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":1794110400}"
+		},
+		{
+			"contract": "DeviceLoginDecision",
+			"verdict": "accept",
+			"input": {
+				"result": "approved",
+				"enrollmentId": "019a61bb-0000-7000-8000-000000000001"
+			},
+			"output": "{\"result\":\"approved\",\"enrollmentId\":\"019a61bb-0000-7000-8000-000000000001\"}"
+		},
+		{
+			"contract": "DeviceLoginDecision",
+			"verdict": "accept",
+			"input": {
+				"result": "refused",
+				"reason": {
+					"kind": "notPermitted"
+				}
+			},
+			"output": "{\"result\":\"refused\",\"reason\":{\"kind\":\"notPermitted\"}}"
+		},
+		{
+			"contract": "DeviceLoginRefusal",
+			"verdict": "accept",
+			"input": {
+				"kind": "notPermitted"
+			},
+			"output": "{\"kind\":\"notPermitted\"}"
+		},
+		{
+			"contract": "DeviceLoginDecision",
+			"verdict": "accept",
+			"input": {
+				"result": "refused",
+				"reason": {
+					"kind": "machineInAnotherOrganization"
+				}
+			},
+			"output": "{\"result\":\"refused\",\"reason\":{\"kind\":\"machineInAnotherOrganization\"}}"
+		},
+		{
+			"contract": "DeviceLoginRefusal",
+			"verdict": "accept",
+			"input": {
+				"kind": "machineInAnotherOrganization"
+			},
+			"output": "{\"kind\":\"machineInAnotherOrganization\"}"
+		},
+		{
+			"contract": "DeviceLoginDecision",
+			"verdict": "accept",
+			"input": {
+				"result": "refused",
+				"reason": {
+					"kind": "unknownWorkspace"
+				}
+			},
+			"output": "{\"result\":\"refused\",\"reason\":{\"kind\":\"unknownWorkspace\"}}"
+		},
+		{
+			"contract": "DeviceLoginRefusal",
+			"verdict": "accept",
+			"input": {
+				"kind": "unknownWorkspace"
+			},
+			"output": "{\"kind\":\"unknownWorkspace\"}"
+		},
+		{
+			"contract": "DeviceLoginDecision",
+			"verdict": "accept",
+			"input": {
+				"result": "refused",
+				"reason": {
+					"kind": "secondFactorRequired",
+					"withinSeconds": 900
+				}
+			},
+			"output": "{\"result\":\"refused\",\"reason\":{\"kind\":\"secondFactorRequired\",\"withinSeconds\":900}}"
+		},
+		{
+			"contract": "DeviceLoginRefusal",
+			"verdict": "accept",
+			"input": {
+				"kind": "secondFactorRequired",
+				"withinSeconds": 900
+			},
+			"output": "{\"kind\":\"secondFactorRequired\",\"withinSeconds\":900}"
+		},
+		{
+			"contract": "DeviceLoginDecision",
+			"verdict": "accept",
+			"input": {
+				"result": "refused",
+				"reason": {
+					"kind": "formerServiceLinkedElsewhere"
+				}
+			},
+			"output": "{\"result\":\"refused\",\"reason\":{\"kind\":\"formerServiceLinkedElsewhere\"}}"
+		},
+		{
+			"contract": "DeviceLoginRefusal",
+			"verdict": "accept",
+			"input": {
+				"kind": "formerServiceLinkedElsewhere"
+			},
+			"output": "{\"kind\":\"formerServiceLinkedElsewhere\"}"
+		},
+		{
+			"contract": "DeviceLoginRefusal",
+			"verdict": "refuse",
+			"input": {
+				"kind": "formerServiceLinkedElsewhere",
+				"installation": "019a61bb-0000-7000-8000-000000000001"
+			}
+		},
+		{
+			"contract": "DeviceLoginDecision",
+			"verdict": "refuse",
+			"input": {
+				"result": "refused",
+				"reason": {
+					"kind": "formerServiceLinkedElsewhere",
+					"installation": "019a61bb-0000-7000-8000-000000000001"
+				}
+			}
+		},
+		{
+			"contract": "DeviceLoginRefusal",
+			"verdict": "refuse",
+			"input": {
+				"kind": "formerServiceLinkedElsewhere",
+				"organizationId": "019a61bb-0000-7000-8000-000000000001"
+			}
+		},
+		{
+			"contract": "DeviceLoginDecision",
+			"verdict": "refuse",
+			"input": {
+				"result": "refused",
+				"reason": {
+					"kind": "formerServiceLinkedElsewhere",
+					"organizationId": "019a61bb-0000-7000-8000-000000000001"
+				}
+			}
+		},
+		{
+			"contract": "DeviceLoginRefusal",
+			"verdict": "refuse",
+			"input": {
+				"kind": "formerServiceLinkedElsewhere",
+				"serviceId": "019a61bb-0000-7000-8000-000000000001"
+			}
+		},
+		{
+			"contract": "DeviceLoginDecision",
+			"verdict": "refuse",
+			"input": {
+				"result": "refused",
+				"reason": {
+					"kind": "formerServiceLinkedElsewhere",
+					"serviceId": "019a61bb-0000-7000-8000-000000000001"
+				}
+			}
+		},
+		{
+			"contract": "DeviceLoginRefusal",
+			"verdict": "refuse",
+			"input": {
+				"kind": "formerServiceLinkedElsewhere",
+				"enrollmentId": "019a61bb-0000-7000-8000-000000000001"
+			}
+		},
+		{
+			"contract": "DeviceLoginDecision",
+			"verdict": "refuse",
+			"input": {
+				"result": "refused",
+				"reason": {
+					"kind": "formerServiceLinkedElsewhere",
+					"enrollmentId": "019a61bb-0000-7000-8000-000000000001"
+				}
+			}
+		},
+		{
+			"contract": "DecideMachineToken",
+			"verdict": "accept",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"enrollmentId": "019a61bb-0000-7000-8000-000000000002",
+				"clientId": "019a61bb-0000-7000-8000-000000000002"
+			},
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"enrollmentId\":\"019a61bb-0000-7000-8000-000000000002\",\"clientId\":\"019a61bb-0000-7000-8000-000000000002\"}"
+		},
+		{
+			"contract": "DecideMachineToken",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019A61BB-0000-7000-8000-000000000001",
+				"enrollmentId": "019a61bb-0000-7000-8000-000000000002",
+				"clientId": "019a61bb-0000-7000-8000-000000000002"
+			}
+		},
+		{
+			"contract": "DecideMachineToken",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"enrollmentId": "019A61BB-0000-7000-8000-000000000001",
+				"clientId": "019a61bb-0000-7000-8000-000000000002"
+			}
+		},
+		{
+			"contract": "DecideMachineToken",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"enrollmentId": "019a61bb-0000-7000-8000-000000000002",
+				"clientId": "019A61BB-0000-7000-8000-000000000001"
+			}
+		},
+		{
+			"contract": "MachineTokenDecision",
+			"verdict": "accept",
+			"input": {
+				"result": "grant",
+				"installation": "019a61bb-0000-7000-8000-000000000002",
+				"enrollmentId": "019a61bb-0000-7000-8000-000000000001",
+				"decidedAt": 1794110400,
+				"grantExpiresAt": 1794111000
+			},
+			"output": "{\"result\":\"grant\",\"installation\":\"019a61bb-0000-7000-8000-000000000002\",\"enrollmentId\":\"019a61bb-0000-7000-8000-000000000001\",\"decidedAt\":1794110400,\"grantExpiresAt\":1794111000}"
+		},
+		{
+			"contract": "MachineTokenDecision",
+			"verdict": "accept",
+			"input": {
+				"result": "grant",
+				"installation": "019a61bb-0000-7000-8000-000000000002",
+				"enrollmentId": "019a61bb-0000-7000-8000-000000000001",
+				"decidedAt": 1794110400,
+				"grantExpiresAt": 1794111000,
+				"superseded": {
+					"enrollmentId": "019a61bb-0000-7000-8000-000000000003",
+					"clientId": "019a61bb-0000-7000-8000-000000000003"
+				}
+			},
+			"output": "{\"result\":\"grant\",\"installation\":\"019a61bb-0000-7000-8000-000000000002\",\"enrollmentId\":\"019a61bb-0000-7000-8000-000000000001\",\"decidedAt\":1794110400,\"grantExpiresAt\":1794111000,\"superseded\":{\"enrollmentId\":\"019a61bb-0000-7000-8000-000000000003\",\"clientId\":\"019a61bb-0000-7000-8000-000000000003\"}}"
+		},
+		{
+			"contract": "MachineTokenDecision",
+			"verdict": "accept",
+			"input": {
+				"result": "refuse",
+				"reason": {
+					"kind": "enrollmentNotActive"
+				}
+			},
+			"output": "{\"result\":\"refuse\",\"reason\":{\"kind\":\"enrollmentNotActive\"}}"
+		},
+		{
+			"contract": "MachineTokenRefusal",
+			"verdict": "accept",
+			"input": {
+				"kind": "enrollmentNotActive"
+			},
+			"output": "{\"kind\":\"enrollmentNotActive\"}"
+		},
+		{
+			"contract": "MachineTokenDecision",
+			"verdict": "accept",
+			"input": {
+				"result": "refuse",
+				"reason": {
+					"kind": "superseded"
+				}
+			},
+			"output": "{\"result\":\"refuse\",\"reason\":{\"kind\":\"superseded\"}}"
+		},
+		{
+			"contract": "MachineTokenRefusal",
+			"verdict": "accept",
+			"input": {
+				"kind": "superseded"
+			},
+			"output": "{\"kind\":\"superseded\"}"
+		},
+		{
+			"contract": "MachineTokenDecision",
+			"verdict": "accept",
+			"input": {
+				"result": "refuse",
+				"reason": {
+					"kind": "wrongClient"
+				}
+			},
+			"output": "{\"result\":\"refuse\",\"reason\":{\"kind\":\"wrongClient\"}}"
+		},
+		{
+			"contract": "MachineTokenRefusal",
+			"verdict": "accept",
+			"input": {
+				"kind": "wrongClient"
+			},
+			"output": "{\"kind\":\"wrongClient\"}"
+		},
+		{
+			"contract": "MachineTokenDecision",
+			"verdict": "accept",
+			"input": {
+				"result": "refuse",
+				"reason": {
+					"kind": "idleExpired"
+				}
+			},
+			"output": "{\"result\":\"refuse\",\"reason\":{\"kind\":\"idleExpired\"}}"
+		},
+		{
+			"contract": "MachineTokenRefusal",
+			"verdict": "accept",
+			"input": {
+				"kind": "idleExpired"
+			},
+			"output": "{\"kind\":\"idleExpired\"}"
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "accept",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			},
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null}"
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "accept",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "﻿Router﻿",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			},
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"﻿Router﻿\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null}"
+		}
+	]
+}
