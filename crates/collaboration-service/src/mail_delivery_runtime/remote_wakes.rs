@@ -199,9 +199,21 @@ impl MailDeliveryRuntime {
             .wake_at(self.host.now())
             .await
             .map_err(|_| RemoteWakeRefusal::RemoteUnavailable)?;
-        let mut interval = tokio::time::interval(std::time::Duration::from_millis(50));
+        self.await_remote_wake_answer(id, deadline_ms).await
+    }
+
+    /// Waits for the answer the recipient's status report commits into the outbox: one
+    /// read, then a sleep until the next interaction-store commit or the deadline.
+    pub(crate) async fn await_remote_wake_answer(
+        &self,
+        id: ItemId,
+        deadline_ms: i64,
+    ) -> Result<RemoteWakeResult, RemoteWakeRefusal> {
+        let mut commits = self.owner.subscribe_commits();
         loop {
-            interval.tick().await;
+            commits.borrow_and_update();
+            self.remote_wake_wait
+                .record_read("remote_wake.outbox_status");
             let state = self
                 .outbox_status(id)
                 .await
@@ -209,10 +221,28 @@ impl MailDeliveryRuntime {
             if let Some(answer) = retained_wake_answer(state)? {
                 return Ok(answer);
             }
-            if self.clock.now().timestamp_millis() >= deadline_ms {
+            let remaining_ms = deadline_ms.saturating_sub(self.clock.now().timestamp_millis());
+            let Ok(remaining_ms) = u64::try_from(remaining_ms) else {
+                return Err(RemoteWakeRefusal::DeadlineExpired);
+            };
+            if remaining_ms == 0 {
                 return Err(RemoteWakeRefusal::DeadlineExpired);
             }
+            let timer = self.clock.sleep_until(
+                self.clock.monotonic_now() + std::time::Duration::from_millis(remaining_ms),
+            );
+            self.remote_wake_wait.read_found_nothing().await;
+            let ended = collaboration_runtime::wait_for_commit_or_timer(&mut commits, timer).await;
+            if ended == collaboration_runtime::CommitWaitEnd::StoreClosed {
+                return Err(RemoteWakeRefusal::RemoteUnavailable);
+            }
         }
+    }
+
+    /// The remote-wake wait's reads and sleeps, for a test.
+    #[cfg(test)]
+    pub(crate) fn remote_wake_wait_observation(&self) -> collaboration_runtime::WorkerObservation {
+        self.remote_wake_wait.clone()
     }
 }
 

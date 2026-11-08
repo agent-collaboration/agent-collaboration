@@ -18,12 +18,12 @@ use fleet_sync_protocol::{
 use serde_json::json;
 use std::{sync::Arc, time::Duration};
 
-fn service(last: u8) -> collaboration_protocol::UuidIdentity {
+pub(super) fn service(last: u8) -> collaboration_protocol::UuidIdentity {
     format!("00000000-0000-4000-8000-{last:012}")
         .try_into()
         .unwrap()
 }
-fn create_request(deadline: chrono::DateTime<chrono::Utc>) -> WakeSendRequest {
+pub(super) fn create_request(deadline: chrono::DateTime<chrono::Utc>) -> WakeSendRequest {
     serde_json::from_value(json!({
         "operationId":OperationId::generate(),"requestedBy":{"kind":"owner"},"replace":false,
         "message":{"target":{"endpoint":{"serviceId":service(2),"endpointId":"codex-local"},"sessionId":"late-replay"},"content":{"kind":"humanUser","text":"retained remote wake"},"delivery":"auto"},
@@ -31,7 +31,7 @@ fn create_request(deadline: chrono::DateTime<chrono::Utc>) -> WakeSendRequest {
         "expiry":{"kind":"at","at":deadline.to_rfc3339_opts(chrono::SecondsFormat::Millis,true)}
     })).unwrap()
 }
-fn creation_mail(
+pub(super) fn creation_mail(
     request: &WakeSendRequest,
     deadline: chrono::DateTime<chrono::Utc>,
 ) -> RemoteWakeMail {

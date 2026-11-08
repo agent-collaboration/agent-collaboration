@@ -43,6 +43,19 @@ impl WorkerObservation {
         let _ = deadline;
         std::future::ready(())
     }
+
+    /// A waiter calls this right after the read that found nothing, before anything else:
+    /// it counts the coming sleep and holds at the gate, and leaves the armed deadline alone.
+    #[cfg(any(test, feature = "test-support"))]
+    pub async fn read_found_nothing(&self) {
+        self.observed.slept(None).await;
+    }
+
+    /// A waiter calls this right after the read that found nothing.
+    #[cfg(not(any(test, feature = "test-support")))]
+    pub fn read_found_nothing(&self) -> std::future::Ready<()> {
+        std::future::ready(())
+    }
 }
 
 #[cfg(any(test, feature = "test-support"))]
@@ -105,6 +118,12 @@ mod observed {
         }
 
         pub(super) async fn armed(&self, deadline: Option<SyncTime>) {
+            self.slept(Some(deadline)).await;
+        }
+
+        /// Holds at the gate if one is set, then counts the sleep. `armed` is the deadline
+        /// a loop armed; a waiter passes `None` and leaves it unchanged.
+        pub(super) async fn slept(&self, armed: Option<Option<SyncTime>>) {
             let held = self.held.lock().ok().and_then(|mut held| held.take());
             if let Some(held) = held {
                 let _ = held.reached.send(());
@@ -113,7 +132,9 @@ mod observed {
             let mut sleeps = 0;
             self.update(|snapshot| {
                 snapshot.sleeps += 1;
-                snapshot.armed_deadline = deadline;
+                if let Some(deadline) = armed {
+                    snapshot.armed_deadline = deadline;
+                }
                 sleeps = snapshot.sleeps;
             });
             self.sleeps.send_replace(sleeps);

@@ -1,6 +1,6 @@
 //! Persisted reader discovery restores startup and starts missing writable-project owners.
 use super::super::{
-    ProjectSubscriptionRecord, SubscriptionWindowStore, failure_backoff::FailureBackoff,
+    ProjectSubscriptionRecord, SubscriptionWindowStore,
     subscription_windows::StartupProjectDiscovery,
 };
 use super::{
@@ -159,7 +159,7 @@ impl SubscriptionDeliveryService {
             let mut shared_failure = false;
             // Each attempt that leaves a project pending backs off; one that settles
             // a project starts the next wait again at the first delay.
-            let mut pending_backoff = FailureBackoff::default();
+            let mut pending_backoff = collaboration_runtime::FailedPassBackoff::default();
             let mut delay = pending_backoff.record_failure().delay;
             while !projects.is_empty() {
                 let deadline = service.inner.clock.monotonic_now() + delay;

@@ -30,10 +30,9 @@ pub struct WakeOperations {
     store: Option<Arc<Mutex<AutomationStore>>>,
     /// Concurrent first-fire waits share these permits; a handle without them cannot wait.
     wait_permits: Option<Arc<Semaphore>>,
+    /// Reports a first-fire wait's reads and sleeps; production keeps nothing.
+    wait_observation: collaboration_runtime::WorkerObservation,
 }
-
-/// How often a first-fire wait checks for new automation events.
-const WAKE_WAIT_POLL_INTERVAL: Duration = Duration::from_millis(50);
 /// How long a first-fire wait runs when the caller names no timeout.
 const DEFAULT_WAKE_WAIT_SECONDS: u32 = 60;
 /// The longest a single first-fire wait may run.
@@ -46,7 +45,14 @@ impl WakeOperations {
             remote: None,
             store: store.cloned(),
             wait_permits: None,
+            wait_observation: collaboration_runtime::WorkerObservation::default(),
         }
+    }
+
+    /// A first-fire wait's reads and sleeps, for a test.
+    #[cfg(test)]
+    pub(crate) fn wait_observation(&self) -> collaboration_runtime::WorkerObservation {
+        self.wait_observation.clone()
     }
 
     /// Lets this handle run first-fire waits, sharing `wait_permits` with every other wait.
@@ -431,6 +437,17 @@ impl WakeOperations {
             cursor,
         };
         let (store, permit) = self.wait_admission(&wakeup_id)?;
+        // Subscribe before the first read, so a commit that lands after it still wakes the
+        // wait. Reaching the store counts against the bound like every read the wait makes.
+        let subscribed =
+            tokio::time::timeout_at(deadline, async { store.lock().await.subscribe_commits() })
+                .await;
+        let mut commits = match (subscribed, &request.after) {
+            (Ok(commits), _) => commits,
+            (Err(_), None) => return Err(WakeWaitFailure::unavailable(wakeup_id.clone())),
+            (Err(_), Some(cursor)) => return Ok(timed_out(wakeup_id, cursor.clone())),
+        };
+        commits.borrow_and_update();
         let mut observation = match request.after {
             None => {
                 let started = tokio::time::timeout_at(
@@ -488,6 +505,7 @@ impl WakeOperations {
             }
         };
         loop {
+            self.wait_observation.record_read("wake_wait.next_changes");
             let read = tokio::time::timeout_at(deadline, observation.next_changes()).await;
             let changes = match read {
                 Ok(changes) => {
@@ -508,10 +526,16 @@ impl WakeOperations {
                     .map_err(|_| WakeWaitFailure::unavailable(wakeup_id.clone()))?;
                 return Ok(timed_out(wakeup_id, cursor));
             }
-            tokio::time::sleep_until(
-                (tokio::time::Instant::now() + WAKE_WAIT_POLL_INTERVAL).min(deadline),
+            self.wait_observation.read_found_nothing().await;
+            let ended = collaboration_runtime::wait_for_commit_or_timer(
+                &mut commits,
+                tokio::time::sleep_until(deadline),
             )
             .await;
+            if ended == collaboration_runtime::CommitWaitEnd::StoreClosed {
+                return Err(WakeWaitFailure::unavailable(wakeup_id.clone()));
+            }
+            commits.borrow_and_update();
         }
     }
 
@@ -543,3 +567,7 @@ fn settled_outcome(snapshot: &WakeSnapshot) -> Option<WakeWaitOutcome> {
         WakeState::Finished => Some(WakeWaitOutcome::FinishedWithoutFiring),
     }
 }
+
+#[cfg(test)]
+#[path = "wake_operations_test.rs"]
+mod tests;

@@ -20,7 +20,6 @@ use super::subscription_service::OwnerObservation;
 use super::subscription_windows::{ProjectSubscriptionRecord, ReaderSubscriptionSnapshot};
 use super::{
     BoardAvailability, SubscriptionClock,
-    failure_backoff::FailureBackoff,
     subscription_facts::{PRESENCE_INTERVAL, RootSubscriptionFacts, root_facts, wall_deadline},
     subscription_push::{SubscriptionPushStore, target_session},
     subscription_wait::{PollWaiter, SubscriptionWaitFilter, SubscriptionWaitResult},
@@ -159,13 +158,13 @@ pub(super) struct ReaderDeliveryOwner {
     pending_ended_push_cleanup: Option<String>,
     /// When a failed clean-up of ended subscriptions is next retried, on its own backoff.
     held_cleanup_retry_at: Option<Instant>,
-    held_cleanup_backoff: FailureBackoff,
+    held_cleanup_backoff: collaboration_runtime::FailedPassBackoff,
     rescan: bool,
     reconcile_replies: Vec<ReconcileReply>,
     dm_checked_presence: HashMap<PushId, Instant>,
     dm_replies: HashMap<PushId, Vec<DirectMessageReply>>,
     /// A failed pass retries on this backoff; the next pass that completes clears it.
-    failed_pass_backoff: FailureBackoff,
+    failed_pass_backoff: collaboration_runtime::FailedPassBackoff,
     #[cfg(test)]
     barriers: Vec<oneshot::Sender<()>>,
     #[cfg(test)]
@@ -215,12 +214,12 @@ impl ReaderDeliveryOwner {
             pending_waiters: VecDeque::new(),
             pending_ended_push_cleanup: None,
             held_cleanup_retry_at: None,
-            held_cleanup_backoff: FailureBackoff::default(),
+            held_cleanup_backoff: collaboration_runtime::FailedPassBackoff::default(),
             rescan: true,
             reconcile_replies: Vec::new(),
             dm_checked_presence: HashMap::new(),
             dm_replies: HashMap::new(),
-            failed_pass_backoff: FailureBackoff::default(),
+            failed_pass_backoff: collaboration_runtime::FailedPassBackoff::default(),
             #[cfg(test)]
             barriers: Vec::new(),
             #[cfg(test)]
