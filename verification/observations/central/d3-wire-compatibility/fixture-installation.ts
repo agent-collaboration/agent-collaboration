@@ -72,7 +72,7 @@ export class FixtureInstallation {
     this.home = `${this.root}/codex`;
     this.serviceDirectory = `${this.root}/agent-communication`;
     this.environment = {
-      HOME: process.env.HOME,
+      HOME: `${input.runtime}/home-${input.name}`,
       PATH: "/usr/bin:/bin:/usr/sbin:/sbin",
       CODEX_HOME: this.home,
       TMPDIR: input.runtime,
@@ -103,6 +103,7 @@ export class FixtureInstallation {
   private async prepareState(input: { central: string; ownerAssertion: string }): Promise<void> {
     const { plan, port } = this.input;
     await mkdir(this.root, { mode: 0o700 });
+    await mkdir(`${this.input.runtime}/home-${this.input.name}`, { mode: 0o700 });
     await mkdir(`${this.root}/n`, { mode: 0o700 });
     await mkdir(`${this.home}/packages/standalone/current`, { recursive: true, mode: 0o700 });
     const stagedNative = `${this.home}/packages/standalone/current/codex`;
