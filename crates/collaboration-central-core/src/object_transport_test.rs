@@ -266,3 +266,121 @@ fn organization_binding_refuses_encoding_a_cross_fleet_dispatch() {
     };
     assert!(serialize_object_call(&caller, call).is_err());
 }
+
+/// Every Access-era public route builds its caller with
+/// `CentralApplication`'s legacy organization (owner or Access machine) and
+/// can only name the legacy Fleet. Program Design step 2 removes these routes.
+fn access_era_callers(
+    legacy: &fleet_identity_protocol::OrganizationId,
+) -> Vec<CallerContext<crate::EdgeKind>> {
+    vec![
+        CallerContext::for_owner(
+            crate::OwnerIdentity::from_access(crate::AccessCaller::Owner {
+                email: "owner@example.invalid".into(),
+            })
+            .unwrap(),
+            legacy.clone(),
+        ),
+        CallerContext::for_verified_edge(
+            crate::AccessCaller::Machine {
+                client_id: crate::AccessClientId::new("machine-client.access").unwrap(),
+            },
+            legacy.clone(),
+        )
+        .unwrap(),
+    ]
+}
+
+fn admin_input() -> crate::person_request::PersonRequestInput {
+    crate::person_request::PersonRequestInput {
+        route: crate::person_request::AdminRoute::WorkspaceLookup,
+        method: "POST".into(),
+        authorization: "DPoP token".into(),
+        proof: "proof".into(),
+        body: "{}".into(),
+    }
+}
+
+fn call_identity() -> durable_steps::CallId {
+    durable_steps::CallId {
+        operation: durable_steps::OperationId::new(
+            durable_steps::Uuid::parse_str("019f0000-0000-7000-8000-00000000ac06").unwrap(),
+        )
+        .unwrap(),
+        step: durable_steps::StepName::new("access_era").unwrap(),
+    }
+}
+
+// Wrong build caught: an Access-era caller (owner or Access machine, bound to
+// the legacy organization) reaching a non-legacy Fleet object, which an
+// unstamped organization would then answer. Each encoder refuses the
+// crossing, and a hand-built crossing envelope is refused at decode; the same
+// envelope addressed to the legacy Fleet decodes (positive control).
+#[test]
+fn access_era_callers_reach_only_the_legacy_fleet() {
+    let legacy = organization();
+    let other: fleet_identity_protocol::OrganizationId = "019f0000-0000-7000-8000-00000000ac02"
+        .to_owned()
+        .try_into()
+        .unwrap();
+    for caller in access_era_callers(&legacy) {
+        assert!(
+            crate::object_call_envelope::encode_shared_call::<crate::EdgeKind, FleetKind, _>(
+                &caller,
+                crate::FleetAddress::new(other.clone()),
+                crate::FleetOrganizationAdmin,
+                admin_input(),
+                call_identity(),
+            )
+            .is_err(),
+            "the shared encoder refuses an edge call to another organization's Fleet"
+        );
+        assert!(
+            serialize_object_call(
+                &caller,
+                Dispatch::<crate::RegistryKind> {
+                    call_id: crate::ObjectCallId::new("019f0000-0000-7000-8000-00000000ac03")
+                        .unwrap(),
+                    to: crate::FleetAddress::new(other.clone()),
+                    call: crate::RegistryCall::RevokeEnrollment {
+                        installation: "019f0000-0000-7000-8000-00000000ac05"
+                            .to_owned()
+                            .try_into()
+                            .unwrap(),
+                    },
+                },
+            )
+            .is_err(),
+            "the typed encoder refuses an edge call to another organization's registry"
+        );
+        let legacy_call =
+            crate::object_call_envelope::encode_shared_call::<crate::EdgeKind, FleetKind, _>(
+                &caller,
+                crate::FleetAddress::new(legacy.clone()),
+                crate::FleetOrganizationAdmin,
+                admin_input(),
+                call_identity(),
+            )
+            .unwrap();
+        let bytes = legacy_call.bytes().to_vec();
+        assert!(
+            ObjectCallEnvelope::decode(&bytes, fleet(), CallerKind::Fleet, &legacy).is_ok(),
+            "positive control: the legacy Fleet accepts its own Access-era caller"
+        );
+        let mut crossing: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        let foreign = ObjectAddress::Fleet {
+            organization: other.clone(),
+        };
+        crossing["destination"] = serde_json::to_value(&foreign).unwrap();
+        assert!(
+            ObjectCallEnvelope::decode(
+                &serde_json::to_vec(&crossing).unwrap(),
+                foreign,
+                CallerKind::Fleet,
+                &other
+            )
+            .is_err(),
+            "a non-legacy Fleet refuses a caller bound to the legacy organization"
+        );
+    }
+}

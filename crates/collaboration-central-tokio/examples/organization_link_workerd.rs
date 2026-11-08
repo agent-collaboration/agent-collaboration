@@ -24,6 +24,8 @@ use tokio::{
 
 const OTHER: &str = "019f0000-0000-7000-8000-00000000b2c1";
 const THIRD: &str = "019f0000-0000-7000-8000-00000000b2c2";
+/// Never provisioned: a non-legacy organization with no stamp.
+const UNSTAMPED: &str = "019f0000-0000-7000-8000-00000000b2c3";
 const LEGACY_MACHINE: &str = "550e8400-e29b-41d4-a716-44665544b2a8";
 
 /// The stamp-profile refusals, each a correctly signed statement but for one field.
@@ -294,6 +296,34 @@ fn summary(records: &Value) -> Vec<(String, String, String)> {
         .unwrap_or_default()
 }
 
+/// Every record read back names exactly the origin its kind allows: setup and
+/// renewal records the sign-in service alone (no person, no permission), a
+/// created workspace the owner and the permission checked; each ID a UUIDv7.
+fn origins_closed(records: &Value) -> bool {
+    let Some(records) = records.get("records").and_then(Value::as_array) else {
+        return false;
+    };
+    !records.is_empty()
+        && records.iter().all(|record| {
+            let id = record.get("id").and_then(Value::as_str).unwrap_or_default();
+            let uuid_v7 = id.len() == 36
+                && id.get(14..15) == Some("7")
+                && id.chars().all(|character| {
+                    character == '-'
+                        || character.is_ascii_hexdigit() && !character.is_ascii_uppercase()
+                });
+            let expected = match record.get("kind").and_then(Value::as_str) {
+                Some("organizationProvisioned" | "stampRenewed") => {
+                    json!({"kind":"signInProvisioning"})
+                }
+                Some("workspaceCreated") => json!({"kind":"person","personId":ADMIN_OWNER,
+                    "permissionChecked":"workspace:create"}),
+                _ => return false,
+            };
+            uuid_v7 && record.get("origin") == Some(&expected)
+        })
+}
+
 #[tokio::main]
 async fn main() -> ConformanceResult<()> {
     let mut args = std::env::args().skip(1);
@@ -360,6 +390,71 @@ async fn main() -> ConformanceResult<()> {
             "an unstamped Fleet has no digest",
             &unstamped,
         )?;
+        // B2's own routes refuse on any unstamped store and reveal nothing,
+        // legacy or not. The Access-era enrollment above is the transition's
+        // positive control; Program Design step 2 removes those routes.
+        let mut unstamped_b2 = Vec::new();
+        for (index, organization) in [legacy, UNSTAMPED].into_iter().enumerate() {
+            let person = AdminPerson {
+                id: ADMIN_OWNER,
+                subject: ADMIN_SUBJECT,
+                organization: organization.to_owned(),
+                permissions: vec!["organization:view", "workspace:create"],
+                key: ProofKey::generate()?,
+            };
+            let workspace = "019f0000-0000-7000-8000-00000000b2d9";
+            let serial = u16::try_from(100 + 2 * index)?;
+            unstamped_b2.push(
+                caller
+                    .admin(
+                        "/organization-admin/v1/workspace-lookup",
+                        &json!({"v":1,"operation":"WorkspaceLookup","organization":organization,
+                            "target":workspace,"operationId":null,"params":{}}),
+                        &json!({"organizationId":organization,"workspaceId":workspace}),
+                        &person,
+                        serial,
+                    )
+                    .await?,
+            );
+            unstamped_b2.push(
+                caller
+                    .admin(
+                        "/organization-admin/v1/create-workspace",
+                        &json!({"v":1,"operation":"CreateWorkspace","organization":organization,
+                            "target":organization,"operationId":workspace,
+                            "params":{"name":"research","description":""}}),
+                        &json!({"organizationId":organization,"operationId":workspace,
+                            "name":"research","description":""}),
+                        &person,
+                        serial + 1,
+                    )
+                    .await?,
+            );
+            let push = caller
+                .post(
+                    "/link/internal/organization-authorization-revisions",
+                    &json!({"kind":"organization","organizationId":organization,"revision":1,
+                        "state":"active","permissionPolicyDigest":ADMIN_POLICY}),
+                )
+                .await?;
+            unstamped_b2.push((push.0, push.2));
+        }
+        require(
+            unstamped_b2.iter().all(|answer| answer == &(503, Value::Null)),
+            "B2 link routes on an unstamped legacy or non-legacy store refuse and reveal nothing",
+            &unstamped_b2,
+        )?;
+        let unserved = caller.post("/public/no-such-route", &json!({})).await?;
+        let mut b2_public = Vec::new();
+        for path in ["/public/fleet/v1/session", "/public/fleet/admin/v1/workspaces"] {
+            let answer = caller.post(path, &json!({})).await?;
+            b2_public.push((answer.0, answer.2));
+        }
+        require(
+            b2_public.iter().all(|answer| answer == &(unserved.0, unserved.2.clone())),
+            "B2 public paths answer exactly like any unserved path",
+            &(b2_public, unserved),
+        )?;
         let answers = vec![
             caller.provision(legacy, &legacy_statement).await?,
             caller.provision(legacy, &legacy_statement).await?,
@@ -389,7 +484,9 @@ async fn main() -> ConformanceResult<()> {
         let other_rows = caller.records(OTHER).await?;
         require(
             other_rows.get("statement") == Some(&json!(other_statement))
-                && summary(&other_rows).len() == 1,
+                && summary(&other_rows).len() == 1
+                && origins_closed(&legacy_rows)
+                && origins_closed(&other_rows),
             "a non-legacy organization's object holds only its own stamp",
             &other_rows,
         )?;
@@ -422,7 +519,8 @@ async fn main() -> ConformanceResult<()> {
             faulted == 503
                 && after_fault.0 == 404
                 && retried_third == 200
-                && summary(&third_after).len() == 1,
+                && summary(&third_after).len() == 1
+                && origins_closed(&third_after),
             "a faulted record leaves no stamp and the retry commits both",
             &(faulted, after_fault, retried_third, third_after),
         )?;
@@ -478,6 +576,26 @@ async fn main() -> ConformanceResult<()> {
             (public_admin.0, public_admin.1.as_str()) == (404, "collaboration-central-public-entry"),
             "public central has no admin route",
             &public_admin,
+        )?;
+        let mut link_on_public = Vec::new();
+        for path in [
+            "/internal/organization-provisioning",
+            "/internal/organization-statement-digest",
+            "/internal/organization-authorization-revisions",
+            "/organization-admin/v1/workspace-lookup",
+            "/organization-admin/v1/change-records",
+        ] {
+            let answer = caller
+                .post(&format!("/public{path}"), &json!({"organizationId":legacy}))
+                .await?;
+            link_on_public.push((answer.0, answer.1));
+        }
+        require(
+            link_on_public
+                .iter()
+                .all(|(status, entry)| *status == 404 && entry == "collaboration-central-public-entry"),
+            "public central serves none of the private link routes, metadata included",
+            &link_on_public,
         )?;
         let unproved_admin = caller
             .post(
@@ -630,7 +748,16 @@ async fn main() -> ConformanceResult<()> {
             )
             .await?;
         require(tampered.0 == 200, "the stored statement was overwritten", &tampered)?;
-        caller.records(legacy).await
+        let final_rows = caller.records(legacy).await?;
+        require(
+            origins_closed(&final_rows)
+                && summary(&final_rows)
+                    .iter()
+                    .any(|(_, kind, _)| kind == "workspaceCreated"),
+            "setup records name only the sign-in service and the admin record its person, read back from central",
+            &final_rows,
+        )?;
+        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(final_rows)
     }
     .await;
     harness.stop().await?;
