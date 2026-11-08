@@ -248,10 +248,9 @@ fn organization_with_history(state: StoredEnrollmentState) -> EnrollmentStore {
             .get(&enrollment(0x40))
             .map(|row| &row.state),
         Some(StoredEnrollmentState::Enrolled { .. })
-    ) {
-        if let Some(row) = store.installations.get_mut(&installation(OTHER_MACHINE)) {
-            row.active = None;
-        }
+    ) && let Some(row) = store.installations.get_mut(&installation(OTHER_MACHINE))
+    {
+        row.active = None;
     }
     store
 }

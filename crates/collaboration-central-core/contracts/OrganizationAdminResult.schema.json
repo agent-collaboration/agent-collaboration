@@ -41,7 +41,10 @@
       "enum": [
         "organizationProvisioned",
         "stampRenewed",
-        "workspaceCreated"
+        "workspaceCreated",
+        "machineEnrolled",
+        "machineRevoked",
+        "allowanceChanged"
       ],
       "type": "string"
     },

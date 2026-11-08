@@ -34,13 +34,13 @@ pub(super) fn idle_expiry(
         },
         ..enrollment.clone()
     })];
-    if let Some(row) = &facts.installation {
-        if row.active.as_ref() == Some(&enrollment.id) {
-            changes.push(EnrollmentChange::PutInstallation(InstallationRow {
-                active: None,
-                ..row.clone()
-            }));
-        }
+    if let Some(row) = &facts.installation
+        && row.active.as_ref() == Some(&enrollment.id)
+    {
+        changes.push(EnrollmentChange::PutInstallation(InstallationRow {
+            active: None,
+            ..row.clone()
+        }));
     }
     changes.extend(
         facts
