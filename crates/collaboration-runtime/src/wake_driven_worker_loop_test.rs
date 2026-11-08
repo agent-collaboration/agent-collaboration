@@ -434,8 +434,7 @@ async fn batches_run_with(cancel_during_batch: Option<u32>, shutdown: Cancellati
         started,
         "shutdown needs no clock advance"
     );
-    let ran = *batches.lock().unwrap();
-    ran
+    *batches.lock().unwrap()
 }
 
 #[tokio::test(start_paused = true)]
