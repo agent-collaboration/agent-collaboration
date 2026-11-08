@@ -126,6 +126,7 @@ impl ServerSocket {
             panic!("expected Hello")
         };
         self.send(ServerFrame::Welcome {
+            capabilities: None,
             session_id,
             databases: vec![],
         })
@@ -393,6 +394,7 @@ async fn slow_link_observer_never_blocks_repeated_recovery() {
     };
     server
         .send(ServerFrame::Welcome {
+            capabilities: None,
             session_id,
             databases: vec![],
         })

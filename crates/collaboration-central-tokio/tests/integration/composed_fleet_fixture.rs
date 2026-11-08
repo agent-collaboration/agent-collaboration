@@ -381,6 +381,7 @@ impl Fixture {
                 binding,
                 serde_json::to_vec(
                     &ClientFrame::<board_sync_protocol::BoardConsumerProtocol>::Hello {
+                        capabilities: None,
                         session_id: SessionId::new(durable_steps::Uuid::now_v7())?,
                         schema_support: SchemaSupport { max_version: 7 },
                     },

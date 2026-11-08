@@ -22,6 +22,7 @@ fn attachment(
         peer: PeerId::new(durable_steps::Uuid::now_v7())?,
         expires_at: SyncTime::from_unix_millis(expires_at),
         registration: ConnectionRegistration::Attaching {
+            capabilities: None,
             session_id: SessionId::new(durable_steps::Uuid::now_v7())?,
             schema_support: SchemaSupport { max_version },
             attach_seq: AttachSequence::new(attach_seq)?,
@@ -65,6 +66,58 @@ fn full_integer_domains_roundtrip_as_decimal_text_without_losing_admission_origi
         assert_eq!(restored.binding().connection, expected.connection);
         assert_eq!(restored.binding().peer, expected.peer);
         assert_eq!(restored.binding().expires_at, expected.expires_at);
+    }
+    Ok(())
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions pin the optional capability codec contract."
+)]
+#[test]
+fn hibernation_preserves_capabilities_and_old_attachments_omit_them() -> TestResult {
+    for attached in [false, true] {
+        let mut expected = attachment(1, 1, 123)?;
+        if attached {
+            let ConnectionRegistration::Attaching {
+                session_id,
+                schema_support,
+                ..
+            } = expected.registration
+            else {
+                return Err("fixture is not attaching".into());
+            };
+            expected.registration = ConnectionRegistration::Attached {
+                session_id,
+                schema_support,
+                capabilities: None,
+            };
+        }
+        let legacy = serde_json::to_value(&expected)?;
+        assert!(legacy.pointer("/registration/capabilities").is_none());
+        if let ConnectionRegistration::Attaching { capabilities, .. }
+        | ConnectionRegistration::Attached { capabilities, .. } = &mut expected.registration
+        {
+            *capabilities = Some(fleet_protocol::FrameCapabilities::SUPPORTED);
+        }
+        let wire = serde_json::to_value(&expected)?;
+        assert_eq!(
+            wire.pointer("/registration/capabilities/batches"),
+            Some(&serde_json::json!(true))
+        );
+        let restored: BindingAttachment = serde_json::from_value(wire)?;
+        assert_eq!(restored, expected);
+        let restored: BindingAttachment = serde_json::from_value(legacy)?;
+        assert!(matches!(
+            restored.registration,
+            ConnectionRegistration::Attaching {
+                capabilities: None,
+                ..
+            } | ConnectionRegistration::Attached {
+                capabilities: None,
+                ..
+            }
+        ));
     }
     Ok(())
 }

@@ -44,6 +44,11 @@ impl<
             .upgrade()
             .ok_or_else(|| unavailable("service closed"))?;
         let answer = match operation {
+            OperationRequest::NoticesApplied { .. } => {
+                return Err(unavailable(
+                    "notice acknowledgment bypassed typed session admission",
+                ));
+            }
             OperationRequest::Replication(request) => OperationAnswer::Replication(
                 state
                     .replicate(session.peer, request)

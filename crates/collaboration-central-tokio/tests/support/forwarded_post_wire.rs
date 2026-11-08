@@ -26,6 +26,7 @@ pub async fn connect(base: &str, credential: &str) -> ConformanceResult<WebSocke
     send(
         &mut socket,
         ClientFrame::Hello {
+            capabilities: None,
             session_id,
             schema_support: SchemaSupport { max_version: 1 },
         },

@@ -119,6 +119,7 @@ async fn reconnect_writer(
     replacement
         .send(Message::Binary(
             serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Hello {
+                capabilities: None,
                 session_id: session,
                 schema_support: SchemaSupport { max_version: 1 },
             })?
@@ -138,6 +139,7 @@ async fn reconnect_writer(
     };
     match welcome {
         ServerFrame::Welcome {
+            capabilities: None,
             session_id,
             databases,
         } if session_id == session => {

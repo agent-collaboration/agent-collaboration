@@ -139,6 +139,7 @@ impl<SharedHost: Host> CloudflareStorageHost<SharedHost> {
                     peer: original.peer,
                     expires_at: SyncTime::from_unix_millis(expiry),
                     registration: ConnectionRegistration::Attaching {
+                        capabilities: None,
                         session_id,
                         schema_support: SchemaSupport {
                             max_version: support,

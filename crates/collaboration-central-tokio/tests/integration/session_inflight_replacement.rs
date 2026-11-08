@@ -88,6 +88,7 @@ async fn replacement(
     socket
         .send(Message::Binary(
             serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Hello {
+                capabilities: None,
                 session_id,
                 schema_support: SchemaSupport { max_version: 1 },
             })?
@@ -99,6 +100,7 @@ async fn replacement(
         .await?;
     match receive(&mut socket).await? {
         ServerFrame::Welcome {
+            capabilities: None,
             session_id: actual,
             databases,
         } if actual == session_id

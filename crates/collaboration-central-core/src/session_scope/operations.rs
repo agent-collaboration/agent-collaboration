@@ -44,6 +44,11 @@ where
             );
         }
         match operation {
+            OperationRequest::NoticesApplied { .. } => {
+                return Err(StoreError::Aborted {
+                    reason: "notice acknowledgment bypassed its typed admission".into(),
+                });
+            }
             OperationRequest::Consumer(request) => {
                 self.stage_consumer_request(connection, session, frame, request, now, forward_frame)
                     .await?

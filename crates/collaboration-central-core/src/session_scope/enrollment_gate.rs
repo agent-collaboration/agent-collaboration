@@ -37,6 +37,7 @@ where
             })
         };
         let answer = match operation {
+            OperationRequest::NoticesApplied { .. } => None,
             // D2 owns Fleet-originated sends; enrollment never grants Fleet settlement authority.
             OperationRequest::Delivery(DeliveryRequest::Settle {
                 submitter: Submitter::Fleet(_),

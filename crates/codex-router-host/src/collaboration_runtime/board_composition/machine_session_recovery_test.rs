@@ -89,6 +89,7 @@ impl TransportConnection for ScriptedConnection {
                 match self.reply {
                     HelloReply::WelcomeThenReplaced => {
                         let welcome: ServerFrame<BoardConsumerProtocol> = ServerFrame::Welcome {
+                            capabilities: None,
                             session_id,
                             databases: Vec::new(),
                         };
@@ -100,6 +101,7 @@ impl TransportConnection for ScriptedConnection {
                         }
                     }
                     HelloReply::Welcome => ServerFrame::Welcome {
+                        capabilities: None,
                         session_id,
                         databases: Vec::new(),
                     },
@@ -127,7 +129,9 @@ impl TransportConnection for ScriptedConnection {
                     )),
                 }
             }
-            ClientFrame::Answer { .. } => return Err(ConnectionClosed::UnsupportedFrame),
+            ClientFrame::Answer { .. }
+            | ClientFrame::RequestBatch(_)
+            | ClientFrame::AnswerBatch(_) => return Err(ConnectionClosed::UnsupportedFrame),
         };
         self.send
             .send(serde_json::to_vec(&response).unwrap().into())

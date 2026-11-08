@@ -47,6 +47,7 @@ impl Sink<Message> for ControlledSocket {
                 serde_json::from_slice(bytes)
         {
             let welcome = ServerFrame::<NoConsumer>::Welcome {
+                capabilities: None,
                 session_id,
                 databases: Vec::new(),
             };

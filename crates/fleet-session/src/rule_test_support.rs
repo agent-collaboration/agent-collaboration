@@ -115,6 +115,7 @@ pub fn binding(value: u128) -> ConnectionBinding {
 }
 pub fn hello(id: SessionId, max_version: u64) -> Vec<u8> {
     serde_json::to_vec(&ClientFrame::<NoConsumer>::Hello {
+        capabilities: None,
         session_id: id,
         schema_support: SchemaSupport { max_version },
     })

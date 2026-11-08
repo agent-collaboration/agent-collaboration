@@ -204,6 +204,7 @@ where
             match frame {
                 ServerFrame::Notice { .. } => {}
                 ServerFrame::Welcome {
+                    capabilities: None,
                     session_id,
                     databases,
                 } if session_id.as_uuid() == session => return Ok(databases),
@@ -243,6 +244,7 @@ async fn reopened_welcome_accepts_notice_before_its_exact_session() -> Conforman
         reason: fleet_protocol::CopyUnavailableReason::Uninitialized,
     }];
     let welcome = ServerFrame::<BoardConsumerProtocol>::Welcome {
+        capabilities: None,
         session_id: session,
         databases: expected.clone(),
     };
@@ -307,6 +309,7 @@ async fn reopened_welcome_rejects_a_changed_session_or_another_frame() -> Confor
     let session = Uuid::now_v7();
     for frame in [
         ServerFrame::<BoardConsumerProtocol>::Welcome {
+            capabilities: None,
             session_id: fleet_protocol::SessionId::new(Uuid::now_v7())?,
             databases: Vec::new(),
         },
@@ -315,6 +318,7 @@ async fn reopened_welcome_rejects_a_changed_session_or_another_frame() -> Confor
         },
     ] {
         let valid_welcome = ServerFrame::<BoardConsumerProtocol>::Welcome {
+            capabilities: None,
             session_id: fleet_protocol::SessionId::new(session)?,
             databases: Vec::new(),
         };

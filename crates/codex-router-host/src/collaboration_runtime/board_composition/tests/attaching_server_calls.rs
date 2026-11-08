@@ -107,6 +107,7 @@ async fn exchange_before_welcome(socket: &mut WebSocket, database: DatabaseId) -
     send(
         socket,
         ServerFrame::Welcome {
+            capabilities: None,
             session_id,
             databases: Vec::new(),
         },

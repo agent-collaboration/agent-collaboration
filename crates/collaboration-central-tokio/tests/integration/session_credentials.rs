@@ -226,9 +226,11 @@ async fn replace_registered_socket_before_revocation(
         connection_control(fixture.base(),RuntimeControl::ResumeDispatch { key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet) }).await?;
         if !matches!(next_data(&mut fixture.old).await?,ServerFrame::Answer {frame:actual,body:OperationAnswer::Lease(LeaseAnswer::Renew(answer))} if actual==frame && answer==expected_renewal(fixture.database)?) {return Err("captured current-session renewal did not complete exactly".into());}
         let mut replacement=upgrade(&fixture.http,fixture.base(),CREDENTIAL).await?.into_websocket().await?;
-        replacement.send(Message::Binary(serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Hello {session_id,schema_support:SchemaSupport {max_version:1}})?.into())).await?;
+        replacement.send(Message::Binary(serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Hello {
+ capabilities: None,session_id,schema_support:SchemaSupport {max_version:1}})?.into())).await?;
         collaboration_central_conformance::ConformanceClient::new(fixture.base())?.wake_due_after_hello(session_id).await?;
-        if !matches!(next_data(&mut replacement).await?,ServerFrame::Welcome {session_id:actual,databases} if actual==session_id && databases==vec![DatabaseStatus::Ready {database:fixture.database,acked:fixture::position(1,1)?,lease:fixture::lease(fixture.database,1,fixture::OLD_PEER)?}]) {return Err("pre-revocation replacement lost the exact registered Welcome".into());}
+        if !matches!(next_data(&mut replacement).await?,ServerFrame::Welcome {
+ capabilities: None,session_id:actual,databases} if actual==session_id && databases==vec![DatabaseStatus::Ready {database:fixture.database,acked:fixture::position(1,1)?,lease:fixture::lease(fixture.database,1,fixture::OLD_PEER)?}]) {return Err("pre-revocation replacement lost the exact registered Welcome".into());}
         if !matches!(next_data(&mut fixture.old).await?,ServerFrame::Closed {reason:CloseReason::ConnectionReplaced}) {return Err("pre-revocation old socket lost typed replacement close".into());}
         if !matches!(tokio::time::timeout(Duration::from_secs(5),fixture.old.next()).await?,Some(Ok(Message::Close {..}))|None) {return Err("pre-revocation old socket did not physically close".into());}
         let old=std::mem::replace(&mut fixture.old,replacement);
@@ -263,14 +265,18 @@ async fn reconnect_unrelated_installation(fixture: &mut fixture::Fixture) -> Con
         socket
             .send(Message::Binary(
                 serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Hello {
+                    capabilities: None,
                     session_id,
                     schema_support: SchemaSupport { max_version: 10 },
                 })?
                 .into(),
             ))
             .await?;
-        collaboration_central_conformance::ConformanceClient::new(fixture.base())?.wake_due_after_hello(session_id).await?;
-        if !matches!(next_data(&mut socket).await?,ServerFrame::Welcome {session_id:actual,databases} if actual==session_id && databases.is_empty())
+        collaboration_central_conformance::ConformanceClient::new(fixture.base())?
+            .wake_due_after_hello(session_id)
+            .await?;
+        if !matches!(next_data(&mut socket).await?,ServerFrame::Welcome {
+ capabilities: None,session_id:actual,databases} if actual==session_id && databases.is_empty())
         {
             return Err(
                 "unrelated reconnect did not complete its exact fresh Hello/empty Welcome".into(),

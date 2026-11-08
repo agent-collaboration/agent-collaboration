@@ -48,6 +48,7 @@ impl IncomingPollSession {
                 .unwrap()
                 {
                     ClientFrame::Hello { session_id, .. } => ServerFrame::Welcome {
+                        capabilities: None,
                         session_id,
                         databases: Vec::new(),
                     },

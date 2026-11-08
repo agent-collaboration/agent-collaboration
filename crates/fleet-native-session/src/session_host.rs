@@ -342,11 +342,25 @@ impl<
                     session_id,
                 } => match self.handler.gather(peer).await {
                     Ok(databases) => {
+                        let capabilities = self
+                            .runtime
+                            .lock()
+                            .await
+                            .registrations
+                            .get(&connection)
+                            .and_then(|registration| match registration {
+                                ConnectionRegistration::Attached { capabilities, .. } => {
+                                    *capabilities
+                                }
+                                _ => None,
+                            })
+                            .map(|offer| offer.intersection(FrameCapabilities::SUPPORTED));
                         self.send(
                             connection,
                             ServerFrame::Welcome {
                                 session_id,
                                 databases,
+                                capabilities,
                             },
                         )
                         .await?
@@ -376,6 +390,11 @@ impl<
                     return Err(SessionHostError::Unavailable {
                         message: "request route needs its owned connection task".into(),
                     });
+                }
+                SessionEffect::RequestBatch { .. }
+                | SessionEffect::AnswerBatch { .. }
+                | SessionEffect::NoticesApplied { .. } => {
+                    // Vocabulary admission is dormant until the execution cutover.
                 }
             }
         }

@@ -30,6 +30,7 @@ async fn revocation_closes_opening_sockets_and_prevents_late_attachment_and_work
 
         let attempted_id = SessionId::new(Uuid::now_v7())?;
         let late_hello: ClientFrame<FixtureProtocol> = ClientFrame::Hello {
+            capabilities: None,
             session_id: attempted_id,
             schema_support: SchemaSupport { max_version: 1 },
         };

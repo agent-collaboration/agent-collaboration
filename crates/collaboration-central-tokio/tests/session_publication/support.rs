@@ -448,6 +448,7 @@ impl Fixture {
         session_id: SessionId,
     ) -> Result<(), TestError> {
         let hello = serde_json::to_vec(&ClientFrame::<NoConsumer>::Hello {
+            capabilities: None,
             session_id,
             schema_support: SchemaSupport { max_version: 7 },
         })?;

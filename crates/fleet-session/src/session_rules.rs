@@ -8,19 +8,25 @@ use sqlx_core::{
 
 use fleet_protocol::*;
 
+#[cfg(test)]
+#[path = "session_rules_test.rs"]
+mod tests;
+
 // Identify correlation independently from the consumer's body types. Unknown
 // fields are checked by ClientFrame's full decoder after this envelope is read.
 #[derive(Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 enum ClientEnvelope {
     Hello {},
+    RequestBatch(serde::de::IgnoredAny),
+    AnswerBatch(serde::de::IgnoredAny),
     Request { frame: FrameId },
     Answer { frame: FrameId },
 }
 impl ClientEnvelope {
     fn frame(&self) -> Option<FrameId> {
         match self {
-            Self::Hello {} => None,
+            Self::Hello {} | Self::RequestBatch(_) | Self::AnswerBatch(_) => None,
             Self::Request { frame } | Self::Answer { frame } => Some(*frame),
         }
     }
@@ -86,6 +92,13 @@ where
         Ok(envelope) => envelope,
         Err(_) => return close_connection(scope, binding, CloseReason::MalformedFrame, now).await,
     };
+    if matches!(
+        envelope,
+        ClientEnvelope::RequestBatch(_) | ClientEnvelope::AnswerBatch(_)
+    ) && frame.len() > MAX_BATCH_BYTES
+    {
+        return close_connection(scope, binding, CloseReason::MalformedFrame, now).await;
+    }
     let frame = match serde_json::from_slice::<ClientFrame<P>>(frame) {
         Ok(frame) => frame,
         Err(_) => {
@@ -106,6 +119,7 @@ where
     if let ClientFrame::Hello {
         session_id,
         schema_support,
+        capabilities,
     } = frame
     {
         return attach_session(
@@ -114,11 +128,17 @@ where
             registration,
             session_id,
             schema_support,
+            capabilities,
             now,
         )
         .await;
     }
-    let ConnectionRegistration::Attached { session_id, .. } = registration else {
+    let ConnectionRegistration::Attached {
+        session_id,
+        capabilities,
+        ..
+    } = registration
+    else {
         return close_connection(scope, binding, CloseReason::MalformedFrame, now).await;
     };
     let key = SessionKey {
@@ -135,7 +155,44 @@ where
     {
         return Ok(Vec::new());
     }
+    let negotiated = capabilities.unwrap_or_default();
+    let permitted = match &frame {
+        ClientFrame::RequestBatch(batch) => {
+            negotiated.batches
+                && batch.items().iter().all(|item| {
+                    !matches!(item.body, OperationRequest::NoticesApplied { .. })
+                        || negotiated.notices_applied
+                })
+        }
+        ClientFrame::AnswerBatch(_) => negotiated.batches,
+        ClientFrame::Request {
+            body: OperationRequest::NoticesApplied { .. },
+            ..
+        } => negotiated.notices_applied,
+        ClientFrame::Hello { .. } | ClientFrame::Request { .. } | ClientFrame::Answer { .. } => {
+            true
+        }
+    };
+    if !permitted {
+        return close_connection(scope, binding, CloseReason::MalformedFrame, now).await;
+    }
     Ok(match frame {
+        ClientFrame::RequestBatch(batch) => vec![SessionEffect::RequestBatch {
+            session: key,
+            batch,
+        }],
+        ClientFrame::AnswerBatch(batch) => vec![SessionEffect::AnswerBatch {
+            session: key,
+            batch,
+        }],
+        ClientFrame::Request {
+            frame,
+            body: OperationRequest::NoticesApplied { through },
+        } => vec![SessionEffect::NoticesApplied {
+            session: key,
+            frame,
+            through,
+        }],
         ClientFrame::Request { frame, body } => vec![SessionEffect::Route {
             session: key,
             frame,
@@ -156,6 +213,7 @@ async fn attach_session<S, P: ConsumerProtocol>(
     registration: ConnectionRegistration,
     session_id: SessionId,
     schema_support: SchemaSupport,
+    capabilities: Option<FrameCapabilities>,
     now: SyncTime,
 ) -> Result<Vec<SessionEffect<P>>, SessionError>
 where
@@ -174,9 +232,10 @@ where
         ConnectionRegistration::Attaching {
             session_id: attached,
             schema_support: declared,
+            capabilities: advertised,
             ..
         } => {
-            if attached != session_id || declared != schema_support {
+            if attached != session_id || declared != schema_support || advertised != capabilities {
                 return close_connection(scope, binding, CloseReason::MalformedFrame, now).await;
             }
             return Ok(Vec::new());
@@ -184,8 +243,9 @@ where
         ConnectionRegistration::Attached {
             session_id: attached,
             schema_support: declared,
+            capabilities: advertised,
         } => {
-            if attached != session_id || declared != schema_support {
+            if attached != session_id || declared != schema_support || advertised != capabilities {
                 return close_connection(scope, binding, CloseReason::MalformedFrame, now).await;
             }
             let Some(record) = load_session(scope, &key).await? else {
@@ -249,6 +309,7 @@ where
             session_id,
             schema_support,
             attach_seq,
+            capabilities,
         },
     );
     scope
