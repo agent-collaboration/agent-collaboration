@@ -1,56 +1,9 @@
-import { createServer } from "node:http";
+import { fixture, type ControlFixture } from "./control-fixture.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { CentralOwner } from "../../../clients/central-owner.ts";
-import { decode, encode } from "../../../exact-json.ts";
 import { D4ControlClient } from "./control-client.ts";
 
 const subject = "01900000-0000-7000-8000-000000000001";
-interface ControlFixture {
-  readonly owner: CentralOwner;
-  readonly requests: unknown[];
-  close(): Promise<void>;
-}
-async function fixture(answers: readonly unknown[]): Promise<ControlFixture> {
-  const requests: unknown[] = [];
-  const failures: unknown[] = [];
-  const server = createServer((request, response): void => {
-    void (async (): Promise<void> => {
-      const chunks: Buffer[] = [];
-      for await (const chunk of request) chunks.push(Buffer.from(chunk));
-      assert.equal(request.method, "POST");
-      assert.equal(request.url, "/admin/v1/conformance/runtime");
-      assert.equal(request.headers["cf-access-jwt-assertion"], "synthetic-owner");
-      requests.push(decode(Buffer.concat(chunks).toString("utf8")));
-      const answer = answers[requests.length - 1];
-      if (answer === undefined) throw new Error("fixture received an unexpected control");
-      response.setHeader("content-type", "application/json");
-      response.end(encode(answer));
-    })().catch((error: unknown): void => {
-      failures.push(error);
-      response.writeHead(500).end("fixture failure");
-    });
-  });
-  await new Promise<void>((resolve, reject): void => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
-  const address = server.address();
-  if (address === null || typeof address === "string") throw new Error("fixture bind missing");
-  return {
-    owner: new CentralOwner(`http://127.0.0.1:${address.port}`, {
-      "Cf-Access-Jwt-Assertion": "synthetic-owner",
-    }),
-    requests,
-    async close(): Promise<void> {
-      server.closeAllConnections();
-      await new Promise<void>((resolve, reject): void => {
-        server.close((error): void => (error === undefined ? resolve() : reject(error)));
-      });
-      assert.deepEqual(failures, []);
-    },
-  };
-}
 function client(
   input: ControlFixture,
   changes: Partial<ConstructorParameters<typeof D4ControlClient>[0]> = {},
@@ -106,10 +59,27 @@ test("unqualified controls and the old clock wake path refuse before any request
       /passivity is unqualified/,
     );
     await assert.rejects(
-      client(input, { clockPassivity: "unqualified" }).setTime("2026-11-08T00:00:00Z"),
-      /wake side effect/,
+      client(input, { clockPassivity: "unqualified" }).settleClock("2026-11-08T00:00:00Z"),
+      /drain\/passivity is unqualified/,
     );
     assert.deepEqual(input.requests, []);
+  } finally {
+    await input.close();
+  }
+});
+
+test("SettleClock requires the settled clock epoch reply and preserves its exact Alarm count", async (): Promise<void> => {
+  const input = await fixture([
+    { kind: "clockSettled", value: { alarmEvents: 9007199254740993n } },
+    { kind: "done" },
+  ]);
+  try {
+    assert.equal(await client(input).settleClock("2026-11-08T00:00:00Z"), 9007199254740993n);
+    await assert.rejects(client(input).settleClock("2026-11-08T01:00:00Z"));
+    assert.deepEqual(input.requests[0], {
+      address: { kind: "fleet" },
+      command: { kind: "settleClock", value: { now: "2026-11-08T00:00:00Z" } },
+    });
   } finally {
     await input.close();
   }
@@ -123,7 +93,7 @@ test("Tokio-only controls never leak onto workerd", async (): Promise<void> => {
       (): Promise<unknown> => controls.readPending(),
       (): Promise<unknown> => controls.readEvents(0n),
       (): Promise<unknown> => controls.rebuildAtQuiescence(true),
-      (): Promise<unknown> => controls.setTime("2026-11-08T00:00:00Z"),
+      (): Promise<unknown> => controls.settleClock("2026-11-08T00:00:00Z"),
       (): Promise<unknown> => controls.barrier("beforeClaim", null),
     ])
       await assert.rejects(call, /Tokio-only/);
@@ -136,13 +106,13 @@ test("Tokio-only controls never leak onto workerd", async (): Promise<void> => {
 test("beforeClaim preserves the atomic claim boundary and replies use exact adjacent tags", async (): Promise<void> => {
   const input = await fixture([
     { kind: "barrierArmed", value: { barrierId: subject } },
-    { kind: "barrier", value: { reached: true } },
+    { kind: "barrier", value: { reached: true, eventId: subject } },
     { kind: "done" },
   ]);
   try {
     const controls = client(input);
     await controls.barrier("beforeClaim", null);
-    await controls.awaitBarrier(subject);
+    assert.equal(await controls.awaitBarrier(subject), subject);
     await controls.releaseBarrier(subject);
     assert.deepEqual(input.requests[0], {
       address: { kind: "fleet" },

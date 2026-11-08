@@ -154,14 +154,22 @@ export class D4ControlClient {
   async duplicateAlarm(): Promise<void> {
     doneSchema.parse(await this.control({ kind: "duplicateAlarm" }));
   }
-  async setTime(now: string): Promise<void> {
+  async settleClock(now: string): Promise<bigint> {
     this.requireTokio();
     if (this.clockPassivity !== "observed")
-      throw new Error("D4 SetTime still has an unqualified wake side effect");
+      throw new Error("D4 clock drain/passivity is unqualified");
     // RegistryTime is transparently serialized DateTime<Utc>, not an epoch integer.
-    doneSchema.parse(
-      await this.control({ kind: "setTime", value: { now: z.iso.datetime().parse(now) } }),
-    );
+    // Draft v3.4: the alarm loop acknowledges this clock epoch only after any
+    // caused Alarm events finish and their S1 records reach the ring.
+    return z
+      .object({
+        kind: z.literal("clockSettled"),
+        value: z.object({ alarmEvents: unsigned64Schema }).strict(),
+      })
+      .strict()
+      .parse(
+        await this.control({ kind: "settleClock", value: { now: z.iso.datetime().parse(now) } }),
+      ).value.alarmEvents;
   }
   async rebuildAtQuiescence(enabled: boolean): Promise<void> {
     this.requireTokio();
@@ -272,16 +280,20 @@ export class D4ControlClient {
         }),
       ).value.barrierId;
   }
-  async awaitBarrier(barrierId: string): Promise<void> {
+  async awaitBarrier(barrierId: string): Promise<string> {
     this.requireTokio();
-    z.object({ kind: z.literal("barrier"), value: z.object({ reached: z.literal(true) }).strict() })
+    return z
+      .object({
+        kind: z.literal("barrier"),
+        value: z.object({ reached: z.literal(true), eventId: z.uuidv7() }).strict(),
+      })
       .strict()
       .parse(
         await this.control({
           kind: "awaitBarrier",
           value: { barrierId: z.uuidv7().parse(barrierId) },
         }),
-      );
+      ).value.eventId;
   }
   async releaseBarrier(barrierId: string): Promise<void> {
     this.requireTokio();
