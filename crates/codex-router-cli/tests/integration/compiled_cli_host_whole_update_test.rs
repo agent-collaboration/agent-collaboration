@@ -6,11 +6,13 @@
 //! enrollment, its secrets and the pending reset exactly as a Router does. The older
 //! layout is then added beside them: the populated Fleet stores, the old settings files,
 //! the old provider proxy store and a dead file.
-use super::compiled_cli_host_fixture::{sign_debug_binary, stop_fixture_processes};
+use super::compiled_cli_host_fixture::{kill_fixture_processes, sign_debug_binary};
 use super::reserve_loopback_port;
 use super::updated_root_tests::{HOST_SIGNAL_BOUND, host_answer, host_synchronized};
 use super::{check, install_debug_profile, install_launchctl_fixture, install_managed_fixture};
-use crate::fleet_enrollment_producer::{fleet_cli, fleet_fixture::ProducerFixture};
+use crate::fleet_enrollment_producer::{
+    create_and_read_project, fleet_cli, fleet_fixture::ProducerFixture,
+};
 use codex_router_core::{ids::AccountId, provider::Provider};
 use codex_router_state::{
     account::{AccountRecord, AccountStatus},
@@ -127,11 +129,12 @@ async fn a_real_host_starts_ready_on_a_genuinely_enrolled_root_after_the_whole_u
     fixture
         .run(async |fixture| {
             let journey = whole_update_journey(fixture, &directory).await;
-            // Any app-server stand-in still running is this test's; stop it on every
-            // path, while the fixture directory still exists.
-            let cleaned = stop_fixture_processes(&directory);
+            // An app-server stand-in still running once the Host is gone is this
+            // test's: signal it on every path, while the fixture directory exists. On a
+            // passing journey the Host stopped it, so none may be left.
+            let leftover = kill_fixture_processes(&directory);
             journey?;
-            Ok(cleaned?)
+            check(!leftover?, "no app-server stand-in may outlive the Host")
         })
         .await
 }
@@ -170,15 +173,20 @@ async fn whole_update_journey(fixture: &ProducerFixture, directory: &Path) -> Te
     // Act: the whole update, then a real Host on the same root with no port flags.
     agent_router_update::run_router_update(router_root).await?;
     assert_kept_for_pr_b(router_root, &kept)?;
-    let identity = tokio::process::Command::new("codesign")
-        .arg("-dv")
-        .arg(&binary)
-        .output()
-        .await?;
-    check(
-        String::from_utf8_lossy(&identity.stderr).contains("TeamIdentifier=974QD84WVC"),
-        "the Host binary must be signed by the team identity before it is launched",
-    )?;
+    // On a Mac the copy must carry the team identity right before it runs; Linux CI
+    // has no codesign, and the runner leaves builds linker-signed there.
+    #[cfg(target_os = "macos")]
+    {
+        let identity = tokio::process::Command::new("codesign")
+            .arg("-dv")
+            .arg(&binary)
+            .output()
+            .await?;
+        check(
+            String::from_utf8_lossy(&identity.stderr).contains("TeamIdentifier=974QD84WVC"),
+            "the Host binary must be signed by the team identity before it is launched",
+        )?;
+    }
     let host_stderr = directory.join("host-stderr.log");
     let mut host = tokio::process::Command::new(&binary)
         .args(["host", "--require-debug-isolation", "--router-root"])
@@ -226,7 +234,15 @@ async fn whole_update_journey(fixture: &ProducerFixture, directory: &Path) -> Te
                 &stdout,
             )?;
         }
-        // The Host attached to the central its kept enrollment names, with its secrets.
+        // The Host attached to the central its kept enrollment names, with its secrets:
+        // a project created through it reaches central, and only then is a session counted.
+        let client = collaboration_client::CollaborationClient::connect(
+            &router_root.join("agent-communication"),
+            "whole-update-test",
+            "1",
+        )
+        .await?;
+        create_and_read_project(&client).await?;
         check(
             fixture.central.session_connections() > 0,
             "the Host must connect to the enrolled central",

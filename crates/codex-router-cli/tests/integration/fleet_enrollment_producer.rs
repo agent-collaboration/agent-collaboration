@@ -110,7 +110,7 @@ fn future_expiry() -> String {
     (Utc::now() + ChronoDuration::hours(1)).to_rfc3339()
 }
 
-async fn create_and_read_project(client: &CollaborationClient) -> TestResult {
+pub(crate) async fn create_and_read_project(client: &CollaborationClient) -> TestResult {
     let (workspace, board, project) = project_requests()?;
     require_accepted(settled(|| client.workspace_create(workspace.clone())).await?)?;
     require_accepted(settled(|| client.board_create(board.clone())).await?)?;
