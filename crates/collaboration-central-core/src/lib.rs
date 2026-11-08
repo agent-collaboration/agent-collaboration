@@ -36,8 +36,13 @@ mod conformance_fleet_entity;
 pub use conformance_access::{AccessCallerClass, AccessVerificationOutcome};
 mod connection_admission;
 pub use connection_admission::AdmissionOrigin;
+mod alarm_scheduler;
 mod object_alarm;
+mod object_kernel;
 pub use object_alarm::ObjectAlarm;
+pub use object_kernel::{KernelFace, ObjectKernel};
+mod object_event;
+pub use object_event::{EventReply, ObjectEvent};
 mod object_platform;
 mod platform_capabilities;
 pub use object_platform::{

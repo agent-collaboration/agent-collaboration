@@ -392,7 +392,7 @@ impl Fixture {
                 )?,
             )
             .await?;
-        self.runtime.on_alarm().await?;
+        crate::kernel_alarm::deliver_alarm(&self.runtime).await?;
         self.runtime.on_socket_closed(binding).await?;
         collaboration_central_core::ObjectPlatform::quarantine_connections(
             self.host.as_ref(),

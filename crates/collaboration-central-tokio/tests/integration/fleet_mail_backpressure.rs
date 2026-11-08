@@ -24,7 +24,7 @@ async fn full_recipient_send_queue_cannot_outlive_the_push_deadline_or_block_ano
     submit(&fixture, &first).await?;
     submit(&fixture, &second).await?;
     let (drive, ()) = Box::pin(tokio::time::timeout(CAP, async {
-        tokio::try_join!(fixture.runtime.on_alarm(), async {
+        tokio::try_join!(fixture.runtime.conformance_drive_operations(), async {
             let frame = responsive
                 .push(second.id())
                 .await

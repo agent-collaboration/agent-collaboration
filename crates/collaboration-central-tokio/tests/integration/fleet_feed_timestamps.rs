@@ -73,7 +73,7 @@ async fn feed_state_and_reader_keep_their_ids_and_creation_times_as_the_owner_cl
     assert_eq!(updated, (initial.0.clone(), NOW, NOW + 10_000, 4, 0));
     assert_eq!(updated_reader, Some((reader.0, NOW, NOW + 10_000, 2)));
     fixture.io.advance(31 * 24 * 60 * 60 * 1_000);
-    fixture.runtime.on_alarm().await?;
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
     let retained = times(&fixture).await?.0;
     assert_eq!(
         retained,
@@ -101,9 +101,11 @@ async fn fractional_feed_state_and_reader_timestamps_are_refused_on_decode() -> 
     fixture
         .sql("UPDATE fleet_feed_state SET updated_at=1.5")
         .await?;
-    assert!(
-        matches!(fixture.runtime.on_alarm().await, Err(StoreError::Corrupt {field,..}) if field=="fleet.feed_state.updated_at")
-    );
+    // The real read path still refuses the fractional timestamp; it is never coerced.
+    assert!(read_feed(&fixture, 0).await.is_err());
+    // Due work fails alone (R7): the alarm is delivered, and the corrupt feed
+    // source is retried at the next batch slot instead of failing every event.
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
     fixture
         .sql("UPDATE fleet_feed_state SET updated_at=created_at")
         .await?;

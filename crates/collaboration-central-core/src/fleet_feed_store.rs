@@ -294,3 +294,34 @@ fn stored_position(
     }
     FleetPosition::try_from(position).map_err(|error| corrupt("feed.position", error))
 }
+
+/// When the oldest retained feed row passes the 30-day retention rule, if any row is retained.
+pub(crate) async fn next_retention_at<Scope: TransactionScope>(
+    scope: &mut Scope,
+) -> Result<Option<runtime_primitives::SyncTime>, StoreError>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    let state = state(scope).await?;
+    let Some(mut oldest) =
+        queries::read_fleet_feed_page(scope, state.floor.get().to_string(), "1".into())
+            .await
+            .map_err(StoreError::backend)?
+            .into_iter()
+            .next()
+    else {
+        return Ok(None);
+    };
+    let header = crate::fleet_feed_header::decode(&mut oldest)?;
+    // prune() removes rows with as_of <= now - 30 days, so a row becomes due exactly then.
+    let due = header
+        .as_of
+        .checked_add_signed(TimeDelta::days(30))
+        .ok_or_else(|| corrupt("feed.retention", "time overflow"))?;
+    Ok(Some(runtime_primitives::SyncTime::from_unix_millis(
+        due.timestamp_millis(),
+    )))
+}

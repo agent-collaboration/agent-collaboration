@@ -1,6 +1,7 @@
 //! Redeliver failed native alarms even while their durable deadlines are unreadable.
 use super::{RuntimeFace, SharedClock};
 use crate::ObjectAlarmTimer;
+use collaboration_central_core::{EventReply, ObjectEvent};
 use runtime_primitives::{Clock, WakeScheduler};
 use std::{sync::Arc, time::Duration};
 use tokio_util::sync::CancellationToken;
@@ -41,7 +42,10 @@ async fn drive(
     clock: &SharedClock,
     retry_delay: &mut Duration,
 ) {
-    if runtime.on_alarm().await.is_ok() {
+    if !matches!(
+        runtime.on_event(ObjectEvent::Alarm).await,
+        EventReply::AlarmRetry
+    ) {
         *retry_delay = INITIAL_RETRY_DELAY;
         return;
     }

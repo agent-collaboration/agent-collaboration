@@ -16,7 +16,7 @@ use fleet_session::{ConnectionBinding, VerifiedPeer};
 use runtime_primitives::Clock;
 use serde_json::json;
 use sqlx_core::{query::query, row::Row};
-use std::{sync::atomic::Ordering, time::Duration};
+use std::time::Duration;
 
 #[tokio::test]
 async fn another_verified_peer_cannot_consume_a_known_forward_identity() -> Result<(), TestError> {
@@ -33,7 +33,7 @@ async fn run(expired: bool) -> Result<(), TestError> {
     let fixture = Fixture::open(root.path()).await?;
     let (holder, holder_session, mut holder_socket) = fixture.socket().await?;
     fixture.hello(holder, holder_session).await?;
-    fixture.runtime.on_alarm().await?;
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
     let _welcome = holder_socket.try_recv()?;
     let sender_service = "019f0000-0000-7000-8000-000000000002";
     let sender_peer = PeerId::new(Uuid::now_v7())?;
@@ -62,7 +62,7 @@ async fn run(expired: bool) -> Result<(), TestError> {
         )
         .await;
     fixture.hello(sender, sender_session).await?;
-    fixture.runtime.on_alarm().await?;
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
     let _welcome = sender_socket.try_recv()?;
     let forward = FrameId::new(Uuid::now_v7())?;
     let request_frame = FrameId::new(Uuid::now_v7())?;
@@ -112,15 +112,12 @@ async fn run(expired: bool) -> Result<(), TestError> {
     assert_eq!(request_count(&fixture, forward).await?, 1);
     replace_recorded_holder(&fixture, forward, original).await?;
     if expired {
-        fixture
-            .io
-            .clock_offset_millis
-            .store(30_000, Ordering::SeqCst);
+        fixture.io.clock.set_offset(30_000);
         fixture.runtime.on_frame(sender, answer.clone()).await?;
         fixture.runtime.on_frame(holder, answer).await?;
         assert!(sender_socket.try_recv().is_err());
         assert_eq!(request_count(&fixture, forward).await?, 1);
-        fixture.runtime.on_alarm().await?;
+        crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
         assert_answer(
             sender_socket.try_recv()?,
             request_frame,

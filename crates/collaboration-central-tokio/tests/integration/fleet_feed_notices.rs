@@ -104,7 +104,15 @@ async fn rejected_local_dispatch_recovers_after_fleet_reopen_without_changing_th
     );
     assert!(notices(&fixture).await?.is_empty());
     fixture.io.reject_next_notice.store(true, Ordering::SeqCst);
-    assert_eq!(fixture.runtime.on_alarm().await?.retried.len(), 1);
+    assert_eq!(
+        fixture
+            .runtime
+            .conformance_drive_operations()
+            .await?
+            .retried
+            .len(),
+        1
+    );
     let frozen = calls(&fixture)?;
     assert_eq!(frozen.len(), 1);
     assert_eq!(
@@ -115,10 +123,26 @@ async fn rejected_local_dispatch_recovers_after_fleet_reopen_without_changing_th
     fixture.close().await?;
 
     let reopened = Fixture::open(root.path(), NOW + 10_000).await?;
-    assert_eq!(reopened.runtime.on_alarm().await?.retried.len(), 1);
+    assert_eq!(
+        reopened
+            .runtime
+            .conformance_drive_operations()
+            .await?
+            .retried
+            .len(),
+        1
+    );
     assert_eq!(calls(&reopened)?, frozen);
     assert!(notices(&reopened).await?.is_empty());
-    assert_eq!(reopened.runtime.on_alarm().await?.completed.len(), 1);
+    assert_eq!(
+        reopened
+            .runtime
+            .conformance_drive_operations()
+            .await?
+            .completed
+            .len(),
+        1
+    );
     let committed = notices(&reopened).await?;
     assert_eq!(committed.len(), 1);
     assert_eq!(committed[0].1, 1);
@@ -129,14 +153,29 @@ async fn rejected_local_dispatch_recovers_after_fleet_reopen_without_changing_th
         &committed[0].0
     )?));
     reopened.io.advance(10_000);
-    assert_eq!(reopened.runtime.on_alarm().await?.completed.len(), 1);
+    assert_eq!(
+        reopened
+            .runtime
+            .conformance_drive_operations()
+            .await?
+            .completed
+            .len(),
+        1
+    );
     assert_eq!(
         calls(&reopened)?,
         vec![frozen[0].clone(), frozen[0].clone()]
     );
     assert_eq!(notices(&reopened).await?, committed);
     assert_eq!(decide(&reopened, &create).await?, answer);
-    assert!(reopened.runtime.on_alarm().await?.completed.is_empty());
+    assert!(
+        reopened
+            .runtime
+            .conformance_drive_operations()
+            .await?
+            .completed
+            .is_empty()
+    );
     reopened.close().await
 }
 
@@ -164,10 +203,18 @@ async fn post_callback_sql_failure_rolls_back_metadata_feed_notice_debt_and_wake
     assert!(calls(&fixture)?.is_empty());
     assert!(notices(&fixture).await?.is_empty());
     decide(&fixture, &create).await?;
-    assert_eq!(fixture.runtime.on_alarm().await?.retried.len(), 1);
-    fixture.runtime.on_alarm().await?;
+    assert_eq!(
+        fixture
+            .runtime
+            .conformance_drive_operations()
+            .await?
+            .retried
+            .len(),
+        1
+    );
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
     fixture.io.advance(10_000);
-    fixture.runtime.on_alarm().await?;
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
     assert_eq!(notices(&fixture).await?.len(), 1);
     fixture.close().await
 }
@@ -183,8 +230,16 @@ async fn lost_local_receipt_after_append_survives_fleet_reopen_without_a_second_
     let fixture = Fixture::open(root.path(), NOW).await?;
     feed(&fixture, 0).await?;
     decide(&fixture, &request(true)?).await?;
-    assert_eq!(fixture.runtime.on_alarm().await?.retried.len(), 1);
-    fixture.runtime.on_alarm().await?;
+    assert_eq!(
+        fixture
+            .runtime
+            .conformance_drive_operations()
+            .await?
+            .retried
+            .len(),
+        1
+    );
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
     let committed = notices(&fixture).await?;
     assert_eq!(committed.len(), 1);
     fixture
@@ -192,14 +247,30 @@ async fn lost_local_receipt_after_append_survives_fleet_reopen_without_a_second_
         .lose_next_notice_reply
         .store(true, Ordering::SeqCst);
     fixture.io.advance(10_000);
-    assert_eq!(fixture.runtime.on_alarm().await?.retried.len(), 1);
+    assert_eq!(
+        fixture
+            .runtime
+            .conformance_drive_operations()
+            .await?
+            .retried
+            .len(),
+        1
+    );
     assert!(!fixture.io.lose_next_notice_reply.load(Ordering::SeqCst));
     let frozen = calls(&fixture)?;
     assert_eq!(frozen.len(), 2);
     assert_eq!(frozen[0], frozen[1]);
     fixture.close().await?;
     let reopened = Fixture::open(root.path(), NOW + 20_000).await?;
-    assert_eq!(reopened.runtime.on_alarm().await?.completed.len(), 1);
+    assert_eq!(
+        reopened
+            .runtime
+            .conformance_drive_operations()
+            .await?
+            .completed
+            .len(),
+        1
+    );
     assert_eq!(calls(&reopened)?, vec![frozen[0].clone()]);
     assert_eq!(notices(&reopened).await?, committed);
     reopened.close().await
@@ -223,10 +294,10 @@ async fn lost_offered_page_keeps_its_applied_cursor_and_a_later_append_still_hin
         &before.0
     )?));
     decide(&fixture, &request(false)?).await?;
-    fixture.runtime.on_alarm().await?;
-    fixture.runtime.on_alarm().await?;
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
     fixture.io.advance(10_000);
-    fixture.runtime.on_alarm().await?;
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
     let rows = notices(&fixture).await?;
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].1, 1);
@@ -262,7 +333,9 @@ async fn each_fleet_alarm_pays_eight_sql_per_append_and_one_lookup_per_dispatche
         }
         let before = (calls(&fixture)?.len(), notices(&fixture).await?.len());
         let trace = AlarmSql::default();
-        let report = trace.observe(fixture.runtime.on_alarm()).await?;
+        let report = trace
+            .observe(fixture.runtime.conformance_drive_operations())
+            .await?;
         assert!(report.failed.is_empty(), "{report:?}");
         let observed = (
             calls(&fixture)?.len() - before.0,

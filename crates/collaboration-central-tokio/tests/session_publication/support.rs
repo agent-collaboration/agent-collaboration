@@ -35,13 +35,28 @@ pub struct Transport {
     pub wakes: Arc<Mutex<Vec<SyncTime>>>,
     pub gather: Arc<PublicationProbe>,
     pub schema: Arc<PublicationProbe>,
-    pub clock_offset_millis: Arc<AtomicI64>,
+    pub clock: Arc<InjectedClock>,
+}
+
+/// The fixture's business clock. Moving it wakes any event deadline it passes,
+/// so a test ends a wait causally, without real time.
+#[derive(Default)]
+pub struct InjectedClock {
+    offset_millis: AtomicI64,
+    moved: tokio::sync::Notify,
+}
+impl InjectedClock {
+    pub fn set_offset(&self, millis: i64) {
+        self.offset_millis.store(millis, Ordering::SeqCst);
+        self.moved.notify_waiters();
+    }
+    fn offset(&self) -> i64 {
+        self.offset_millis.load(Ordering::SeqCst)
+    }
 }
 impl Clock for Transport {
     fn now(&self) -> SyncTime {
-        SyncTime::from_unix_millis(
-            1_792_281_600_000_i64.saturating_add(self.clock_offset_millis.load(Ordering::SeqCst)),
-        )
+        SyncTime::from_unix_millis(1_792_281_600_000_i64.saturating_add(self.clock.offset()))
     }
 }
 impl IdSource for Transport {
@@ -65,7 +80,25 @@ impl ObjectIo for Transport {
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
-        tokio::time::sleep(remaining)
+        let until = self.now().after(remaining);
+        let io = self.clone();
+        async move {
+            let injected = async {
+                loop {
+                    let moved = io.clock.moved.notified();
+                    tokio::pin!(moved);
+                    moved.as_mut().enable();
+                    if io.now() >= until {
+                        return;
+                    }
+                    moved.await;
+                }
+            };
+            tokio::select! {
+                () = tokio::time::sleep(remaining) => {}
+                () = injected => {}
+            }
+        }
     }
 
     async fn before_local_call(&self, bytes: &[u8]) -> Result<(), CallFailure> {

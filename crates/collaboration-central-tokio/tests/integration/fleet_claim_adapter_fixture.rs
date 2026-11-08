@@ -49,7 +49,7 @@ pub async fn prepare_fleet(root: &Path, successor: bool) -> TestResult<Fixture> 
     }
     // Drain only setup's causally admitted work, without advancing the clock.
     for _ in 0..8 {
-        let report = fixture.runtime.on_alarm().await?;
+        let report = fixture.runtime.conformance_drive_operations().await?;
         if !report.failed.is_empty() || !report.retried.is_empty() {
             return Err(format!("setup did not finish: {report:?}").into());
         }
@@ -176,5 +176,5 @@ pub async fn resume_settlement(fixture: &Fixture) -> TestResult {
 }
 
 pub async fn drive_fleet(fixture: &Fixture) -> TestResult<durable_steps::DriveReport> {
-    Ok(fixture.runtime.on_alarm().await?)
+    Ok(fixture.runtime.conformance_drive_operations().await?)
 }

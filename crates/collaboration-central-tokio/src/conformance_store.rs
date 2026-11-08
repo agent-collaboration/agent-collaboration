@@ -43,10 +43,6 @@ impl<Store> ConformanceStore<Store> {
         self.begin_failures_observed
             .load(std::sync::atomic::Ordering::SeqCst)
     }
-    #[cfg(test)]
-    pub(crate) fn begin_failed(&self) -> bool {
-        self.begin_failures() > 0
-    }
 }
 impl<Store> AtomicStore for ConformanceStore<Store>
 where

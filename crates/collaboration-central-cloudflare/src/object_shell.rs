@@ -4,7 +4,8 @@ use crate::{CloudflareStorageHost, binding_attachment::BindingAttachment, cloudf
 #[cfg(feature = "conformance")]
 use collaboration_central_core::ObjectPlatform;
 use collaboration_central_core::{
-    CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectIo, ObjectRuntime,
+    CopyKind, CoreHost, EventReply, FleetKind, ObjectAddress, ObjectEvent, ObjectIo, ObjectKernel,
+    ObjectRuntime,
 };
 use durable_steps::{CallFailure, NotSentReason};
 use fleet_project_lease::RegistryConfig;
@@ -100,26 +101,39 @@ impl ObjectIo for CloudflareObjectIo {
 }
 type StoreHost = CloudflareStorageHost<CloudflareObjectIo>;
 enum RuntimeFace {
-    Fleet(ObjectRuntime<FleetKind, StoreHost>),
-    Copy(ObjectRuntime<CopyKind, StoreHost>),
+    Fleet(ObjectKernel<ObjectRuntime<FleetKind, StoreHost>>),
+    Copy(ObjectKernel<ObjectRuntime<CopyKind, StoreHost>>),
 }
 impl RuntimeFace {
     async fn initialize(&self) -> Result<()> {
         match self {
-            Self::Fleet(runtime) => runtime.initialize().await.map_err(error)?,
+            Self::Fleet(kernel) => kernel.face().initialize().await.map_err(error)?,
             // Copy's core classifies Health before its call/alarm prelude.
             Self::Copy(_) => 0,
         };
         Ok(())
     }
-    async fn on_alarm(&self) -> Result<()> {
+    async fn on_event(&self, event: ObjectEvent) -> EventReply {
         match self {
-            Self::Fleet(runtime) => {
-                runtime.on_alarm().await.map_err(error)?;
-            }
-            Self::Copy(runtime) => runtime.on_alarm().await.map_err(error)?,
-        };
-        Ok(())
+            Self::Fleet(kernel) => kernel.on_event(event).await,
+            Self::Copy(kernel) => kernel.on_event(event).await,
+        }
+    }
+}
+fn call_response(reply: EventReply) -> Result<Response> {
+    match reply {
+        EventReply::CallAnswer(bytes) => Response::from_bytes(bytes),
+        EventReply::CallFailure(failure) => Ok(Response::from_json(
+            &cloudflare_transport::WireCallFailure::from(failure),
+        )?
+        .with_status(409)),
+        EventReply::None
+        | EventReply::SocketFailed
+        | EventReply::AlarmDone
+        | EventReply::AlarmRetry => Ok(Response::from_json(
+            &cloudflare_transport::WireCallFailure::from(CallFailure::AnswerLost),
+        )?
+        .with_status(409)),
     }
 }
 #[derive(Clone, Copy)]
@@ -235,13 +249,15 @@ impl ShellActor {
             return Ok((host, runtime.clone()));
         }
         let runtime = match address {
-            ObjectAddress::Copy(project) => RuntimeFace::Copy(ObjectRuntime::copy(
-                host.clone(),
-                config.authoritative_receiver,
-                project,
-                serde_json::from_str(&self.env.var("CENTRAL_COPY_ACK_WAIT")?.to_string())?,
-            )),
-            ObjectAddress::Fleet => RuntimeFace::Fleet(
+            ObjectAddress::Copy(project) => {
+                RuntimeFace::Copy(ObjectKernel::new(ObjectRuntime::copy(
+                    host.clone(),
+                    config.authoritative_receiver,
+                    project,
+                    serde_json::from_str(&self.env.var("CENTRAL_COPY_ACK_WAIT")?.to_string())?,
+                )))
+            }
+            ObjectAddress::Fleet => RuntimeFace::Fleet(ObjectKernel::new(
                 ObjectRuntime::fleet(
                     host.clone(),
                     config,
@@ -252,7 +268,7 @@ impl ShellActor {
                     fleet_protocol::FrameCapabilities::default(),
                 )
                 .map_err(error)?,
-            ),
+            )),
         };
         let runtime = Arc::new(runtime);
         // Publish before an initializer can yield, so independent socket events
@@ -284,34 +300,10 @@ impl ShellActor {
     async fn runtime(&self, address: ObjectAddress) -> Result<(Arc<StoreHost>, Arc<RuntimeFace>)> {
         #[cfg(feature = "conformance")]
         self.restore_conformance_state().await?;
-        self.rearm_stale_alarm().await?;
         let (host, runtime) = self.runtime_handles(address)?;
         host.migrate_store().await.map_err(error)?;
         runtime.initialize().await?;
         Ok((host, runtime))
-    }
-    async fn rearm_stale_alarm(&self) -> Result<()> {
-        #[cfg(feature = "conformance")]
-        let faults = self.faults.clone();
-        let storage = self.state.storage();
-        // Repair at event entry, before any store or runtime can ask the shared
-        // library owner for a wake. The platform gate excludes competing events
-        // from this read/replace; future alarms keep the library's arbitration.
-        let repair = async move {
-            let existing = storage.get_alarm().await?;
-            let now = chrono::Utc::now();
-            #[cfg(feature = "conformance")]
-            let now = faults.clock().map_or(now, |now| now.0);
-            if existing.is_some_and(|at| at < now.timestamp_millis()) {
-                storage.set_alarm(worker::ScheduledTime::from(now)).await?;
-            }
-            Ok::<_, Error>(())
-        };
-        // Match with_local_section: an I/O error is a returned value, not a
-        // thrown blockConcurrencyWhile callback that resets the whole object.
-        self.state
-            .block_concurrency_while(async move { Ok(repair.await) })
-            .await?
     }
     async fn fetch(&self, mut request: Request) -> Result<Response> {
         let requested = request
@@ -371,38 +363,43 @@ impl ShellActor {
             return Ok(response);
         }
         match (request.path().as_str(), runtime.as_ref()) {
-            ("/call", RuntimeFace::Fleet(runtime)) => {
-                match runtime.on_call(request.bytes().await?).await {
-                    Ok(bytes) => Response::from_bytes(bytes),
-                    Err(failure) => Ok(Response::from_json(
-                        &cloudflare_transport::WireCallFailure::from(failure),
-                    )?
-                    .with_status(409)),
-                }
+            ("/call", RuntimeFace::Fleet(_)) => {
+                let body = request.bytes().await?;
+                call_response(
+                    runtime
+                        .on_event(ObjectEvent::Call {
+                            body,
+                            storage_bytes: None,
+                        })
+                        .await,
+                )
             }
-            ("/call", RuntimeFace::Copy(runtime)) => {
-                let bytes = request.bytes().await?;
-                let result = match runtime.copy_call_class(&bytes) {
+            ("/call", RuntimeFace::Copy(kernel)) => {
+                let body = request.bytes().await?;
+                let storage_bytes = match kernel.face().copy_call_class(&body) {
                     Ok(collaboration_central_core::CopyCallClass::Health) => {
                         match crate::storage_measurement::storage_bytes(&self.state.storage()) {
-                            Ok(storage_bytes) => runtime.on_health(bytes, storage_bytes).await,
-                            Err(_) => Err(CallFailure::AnswerLost),
+                            Ok(storage_bytes) => Some(storage_bytes),
+                            Err(_) => {
+                                return call_response(EventReply::CallFailure(
+                                    CallFailure::AnswerLost,
+                                ));
+                            }
                         }
                     }
-                    Ok(collaboration_central_core::CopyCallClass::Ordinary) => {
-                        runtime.on_call(bytes).await
-                    }
-                    Err(failure) => Err(failure),
+                    Ok(collaboration_central_core::CopyCallClass::Ordinary) => None,
+                    Err(failure) => return call_response(EventReply::CallFailure(failure)),
                 };
-                match result {
-                    Ok(bytes) => Response::from_bytes(bytes),
-                    Err(failure) => Ok(Response::from_json(
-                        &cloudflare_transport::WireCallFailure::from(failure),
-                    )?
-                    .with_status(409)),
-                }
+                call_response(
+                    runtime
+                        .on_event(ObjectEvent::Call {
+                            body,
+                            storage_bytes,
+                        })
+                        .await,
+                )
             }
-            ("/session", RuntimeFace::Fleet(runtime)) => {
+            ("/session", RuntimeFace::Fleet(_)) => {
                 use base64::Engine;
                 let encoded = request
                     .headers()
@@ -421,7 +418,11 @@ impl ShellActor {
                 let pair = WebSocketPair::new()?;
                 host.accept_socket(&pair.server, binding, attachment.admission_origin)
                     .map_err(error)?;
-                runtime.on_socket_opened(binding).await.map_err(error)?;
+                socket_outcome(
+                    runtime
+                        .on_event(ObjectEvent::SocketOpened { binding })
+                        .await,
+                )?;
                 Response::from_websocket(pair.client)
             }
             _ => Ok(
@@ -441,32 +442,51 @@ impl ShellActor {
     ) -> Result<()> {
         let address = self.address(None).await?;
         let (host, runtime) = self.runtime(address).await?;
-        let RuntimeFace::Fleet(runtime) = runtime.as_ref() else {
+        if !matches!(runtime.as_ref(), RuntimeFace::Fleet(_)) {
             return Err(error("socket on non-session object"));
-        };
+        }
         let binding = host.binding(&socket).map_err(error)?;
         let bytes = match message {
             WebSocketIncomingMessage::Binary(bytes) => bytes,
             WebSocketIncomingMessage::String(text) => text.into_bytes(),
         };
-        runtime.on_frame(binding, bytes).await.map_err(error)
+        socket_outcome(
+            runtime
+                .on_event(ObjectEvent::Frame {
+                    binding,
+                    frame: bytes,
+                })
+                .await,
+        )
     }
     async fn disconnected(&self, socket: WebSocket) -> Result<()> {
         let address = self.address(None).await?;
         let (host, runtime) = self.runtime(address).await?;
-        let RuntimeFace::Fleet(runtime) = runtime.as_ref() else {
+        if !matches!(runtime.as_ref(), RuntimeFace::Fleet(_)) {
             return Err(error("socket on non-session object"));
-        };
-        runtime
-            .on_socket_closed(host.binding(&socket).map_err(error)?)
-            .await
-            .map_err(error)
+        }
+        let binding = host.binding(&socket).map_err(error)?;
+        socket_outcome(
+            runtime
+                .on_event(ObjectEvent::SocketClosed { binding })
+                .await,
+        )
     }
     async fn alarm(&self) -> Result<Response> {
         let address = self.address(None).await?;
         let (_, runtime) = self.runtime(address).await?;
-        runtime.on_alarm().await?;
-        Response::ok("alarm applied")
+        match runtime.on_event(ObjectEvent::Alarm).await {
+            // Cloudflare redelivers a failed alarm event up to 6 times from 2 s.
+            EventReply::AlarmRetry => Err(error("alarm recompute failed")),
+            _ => Response::ok("alarm applied"),
+        }
+    }
+}
+/// A failed socket event errors the handler, which closes that connection, as before.
+fn socket_outcome(reply: EventReply) -> Result<()> {
+    match reply {
+        EventReply::SocketFailed => Err(error("socket event failed")),
+        _ => Ok(()),
     }
 }
 fn error(error: impl std::fmt::Display) -> Error {

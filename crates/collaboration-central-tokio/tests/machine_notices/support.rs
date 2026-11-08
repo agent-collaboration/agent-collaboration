@@ -84,7 +84,7 @@ pub async fn deliver(fixture: &Fixture, bytes: &[u8]) -> Result<(), TestError> {
         ),
         "a newly admitted operation cannot acknowledge before its append commits"
     );
-    fixture.runtime.on_alarm().await?;
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
     assert_eq!(
         fixture.runtime.delivery()?.on_call(bytes.to_vec()).await?,
         b"null"
@@ -120,7 +120,7 @@ pub async fn admit(
     fixture.runtime.on_socket_opened(binding).await?;
     let session = SessionId::new(durable_steps::Uuid::now_v7())?;
     fixture.hello(binding, session).await?;
-    fixture.runtime.on_alarm().await?;
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
     assert!(
         matches!(next(&mut socket).await?,ServerFrame::Welcome {session_id,..} if session_id==session)
     );

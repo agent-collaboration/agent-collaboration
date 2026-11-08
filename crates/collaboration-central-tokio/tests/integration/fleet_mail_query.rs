@@ -98,7 +98,7 @@ async fn query_preserves_order_and_digest_before_and_after_recipient_commit_and_
     ));
     assert_eq!(custody(&fixture, item.id()).await?, ("sent".into(), true));
     let (drive, ()) = tokio::time::timeout(CAP, async {
-        tokio::try_join!(fixture.runtime.on_alarm(), async {
+        tokio::try_join!(fixture.runtime.conformance_drive_operations(), async {
             let pushed = recipient
                 .push_envelope(item.id())
                 .await

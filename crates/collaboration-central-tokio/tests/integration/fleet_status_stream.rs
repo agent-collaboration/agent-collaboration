@@ -190,8 +190,23 @@ async fn a_disconnected_leaf_completes_publication_and_fetches_one_revision_afte
     assert_eq!(stored.events[0].status, DeliveryStatus::Sent);
 
     // A disconnected peer publication finishes, rather than backing off forever.
-    assert_eq!(first.runtime.on_alarm().await?.completed.len(), 1);
-    assert!(first.runtime.on_alarm().await?.completed.is_empty());
+    assert_eq!(
+        first
+            .runtime
+            .conformance_drive_operations()
+            .await?
+            .completed
+            .len(),
+        1
+    );
+    assert!(
+        first
+            .runtime
+            .conformance_drive_operations()
+            .await?
+            .completed
+            .is_empty()
+    );
     assert_eq!(
         first.io.0.load(Ordering::SeqCst),
         0,
@@ -205,7 +220,14 @@ async fn a_disconnected_leaf_completes_publication_and_fetches_one_revision_afte
     let reopened = Fixture::open(root.path(), installation.clone()).await?;
     assert_eq!(reopened.fetch(peer).await?, stored);
     reopened.publish(peer, installation, item).await?;
-    assert!(reopened.runtime.on_alarm().await?.completed.is_empty());
+    assert!(
+        reopened
+            .runtime
+            .conformance_drive_operations()
+            .await?
+            .completed
+            .is_empty()
+    );
     assert_eq!(reopened.fetch(peer).await?, stored);
     assert_eq!(reopened.io.0.load(Ordering::SeqCst), 0);
     reopened.objects.close().await?;
@@ -243,8 +265,23 @@ async fn a_status_route_for_another_installation_is_refused_without_forwarding()
         "{classified:?}"
     );
     assert_eq!(fixture.fetch(peer).await?, before);
-    assert_eq!(fixture.runtime.on_alarm().await?.completed.len(), 1);
-    assert!(fixture.runtime.on_alarm().await?.completed.is_empty());
+    assert_eq!(
+        fixture
+            .runtime
+            .conformance_drive_operations()
+            .await?
+            .completed
+            .len(),
+        1
+    );
+    assert!(
+        fixture
+            .runtime
+            .conformance_drive_operations()
+            .await?
+            .completed
+            .is_empty()
+    );
     assert_eq!(fixture.io.0.load(Ordering::SeqCst), 0);
     fixture.objects.close().await?;
     Ok(())
@@ -269,8 +306,23 @@ async fn reopening_between_storage_and_the_live_attempt_keeps_status_fetchable()
 
     let reopened = Fixture::open(root.path(), installation).await?;
     assert_eq!(reopened.fetch(peer).await?, saved);
-    assert_eq!(reopened.runtime.on_alarm().await?.completed.len(), 1);
-    assert!(reopened.runtime.on_alarm().await?.completed.is_empty());
+    assert_eq!(
+        reopened
+            .runtime
+            .conformance_drive_operations()
+            .await?
+            .completed
+            .len(),
+        1
+    );
+    assert!(
+        reopened
+            .runtime
+            .conformance_drive_operations()
+            .await?
+            .completed
+            .is_empty()
+    );
     assert_eq!(reopened.fetch(peer).await?, saved);
     assert_eq!(reopened.io.0.load(Ordering::SeqCst), 0);
     reopened.objects.close().await?;
@@ -296,7 +348,7 @@ async fn a_live_status_attempt_never_waits_for_the_router_and_session_fetch_keep
     let fixture = session_fixture::Fixture::open(root.path()).await?;
     let (binding, session, mut socket) = fixture.socket().await?;
     fixture.hello(binding, session).await?;
-    fixture.runtime.on_alarm().await?;
+    fixture.runtime.conformance_drive_operations().await?;
     assert!(matches!(socket.try_recv(), Ok(SocketCommand::Frame(_))));
     let route = ServiceId::try_from("019f0000-0000-7000-8000-000000000001".to_owned())?;
     let item = ItemId::new(Uuid::now_v7())?;
@@ -322,7 +374,11 @@ async fn a_live_status_attempt_never_waits_for_the_router_and_session_fetch_keep
     })).await?;
     // The configured answer deadline is two seconds. This drive must finish
     // without any Router answer, well before that independent deadline.
-    let driven = tokio::time::timeout(Duration::from_secs(1), fixture.runtime.on_alarm()).await??;
+    let driven = tokio::time::timeout(
+        Duration::from_secs(1),
+        fixture.runtime.conformance_drive_operations(),
+    )
+    .await??;
     assert_eq!(driven.completed.len(), 1);
     assert!(driven.retried.is_empty());
     assert_eq!(fixture.runtime.conformance_holder_observation()?.0, 0);

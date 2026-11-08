@@ -67,7 +67,7 @@ async fn attached(
         None => fixture.socket().await?,
     };
     fixture.hello(binding, session).await?;
-    fixture.runtime.on_alarm().await?;
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
     assert_eq!(
         frame(&mut socket).await?,
         json!({"kind":"welcome","value":{"sessionId":session,"databases":[]}})
@@ -121,12 +121,9 @@ async fn selection_skips_opening_attaching_closed_and_expired_sockets_then_uses_
             fixture.hello(binding, session).await?;
         }
     }
-    fixture.runtime.on_alarm().await?;
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
     let _welcome = frame(&mut socket).await?;
-    fixture
-        .io
-        .clock_offset_millis
-        .store(3_600_000, Ordering::SeqCst);
+    fixture.io.clock.set_offset(3_600_000);
     assert!(matches!(
         fixture
             .runtime
@@ -134,7 +131,7 @@ async fn selection_skips_opening_attaching_closed_and_expired_sockets_then_uses_
             .await,
         Err(CallFailure::NotSent { .. })
     ));
-    fixture.io.clock_offset_millis.store(0, Ordering::SeqCst);
+    fixture.io.clock.set_offset(0);
     fixture
         .host
         .publish_registrations([(binding.connection, ConnectionRegistration::Closed)].into())
@@ -233,17 +230,14 @@ async fn close_and_the_existing_alarm_fail_sent_requests_as_answer_lost() -> Res
         if close {
             fixture.runtime.on_socket_closed(holder).await?;
         } else {
-            fixture
-                .io
-                .clock_offset_millis
-                .store(2_000, Ordering::SeqCst);
-            fixture.runtime.on_alarm().await?;
+            fixture.io.clock.set_offset(2_000);
+            crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
         }
         assert!(matches!(
             tokio::time::timeout(Duration::from_secs(5), pending).await??,
             Err(CallFailure::AnswerLost)
         ));
-        fixture.io.clock_offset_millis.store(0, Ordering::SeqCst);
+        fixture.io.clock.set_offset(0);
     }
     fixture.objects.close().await?;
     Ok(())
@@ -304,7 +298,8 @@ async fn replacing_the_holder_during_schema_publication_loses_the_old_attempt_an
     fixture.hello(replacement, session).await?;
     fixture.io.schema.hold.store(true, Ordering::SeqCst);
     let runtime = fixture.runtime.clone();
-    let publication = tokio::spawn(async move { runtime.on_alarm().await });
+    let publication =
+        tokio::spawn(async move { crate::kernel_alarm::deliver_alarm(&runtime).await });
     tokio::time::timeout(Duration::from_secs(5), fixture.io.schema.entered.acquire())
         .await??
         .forget();

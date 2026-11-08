@@ -63,7 +63,7 @@ impl Socket {
                 })?,
             )
             .await?;
-        let report = fixture.runtime.on_alarm().await?;
+        let report = fixture.runtime.conformance_drive_operations().await?;
         assert!(report.failed.is_empty(), "session setup: {report:?}");
         let mut socket = Self {
             binding,
@@ -276,7 +276,7 @@ async fn silent_recipient_retries_at_injected_deadline_while_another_recipient_c
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     };
     let (report, ()) = Box::pin(tokio::time::timeout(CAP, async {
-        tokio::try_join!(fixture.runtime.on_alarm(), async {
+        tokio::try_join!(fixture.runtime.conformance_drive_operations(), async {
             proof.await.map_err(StoreError::backend)
         })
     }))
@@ -318,7 +318,7 @@ async fn no_capacity_keeps_content_and_retries_the_same_item_after_capacity_retu
     let item = envelope(B, SERVICE_B)?;
     submit(&fixture, &item).await?;
     let (report, ()) = tokio::time::timeout(CAP, async {
-        tokio::try_join!(fixture.runtime.on_alarm(), async {
+        tokio::try_join!(fixture.runtime.conformance_drive_operations(), async {
             let pushed = recipient
                 .push_envelope(item.id())
                 .await
@@ -346,7 +346,7 @@ async fn no_capacity_keeps_content_and_retries_the_same_item_after_capacity_retu
     assert_eq!(inbox.count().await?, 0);
     fixture.io.advance(60_000);
     let (report, ()) = tokio::time::timeout(CAP, async {
-        tokio::try_join!(fixture.runtime.on_alarm(), async {
+        tokio::try_join!(fixture.runtime.conformance_drive_operations(), async {
             let pushed = recipient
                 .push_envelope(item.id())
                 .await

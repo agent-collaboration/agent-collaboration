@@ -68,7 +68,7 @@ async fn the_second_holder_notice_failure_rolls_back_lease_directory_counter_and
     );
     fixture.sql("DROP TRIGGER reject_new_holder_notice").await?;
     fixture.io.now.store(NOW + 10_000, Ordering::SeqCst);
-    fixture.runtime.on_alarm().await?;
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
     let answer = fixture.owner(request.clone()).await?;
     assert_eq!(
         answer.pointer("/value/kind"),
@@ -182,7 +182,7 @@ async fn one_fleet_dispatcher_recovers_holder_change_feed_notice_and_schema_supp
             .io
             .now
             .store(NOW + offset * 10_000, Ordering::SeqCst);
-        reopened.runtime.on_alarm().await?;
+        crate::kernel_alarm::deliver_alarm(&reopened.runtime).await?;
     }
     assert!(
         task_states(&reopened, "failed").await?.is_empty(),

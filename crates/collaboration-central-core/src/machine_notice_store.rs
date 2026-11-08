@@ -451,3 +451,33 @@ fn decode(row: queries::StoredMachineNotice) -> Result<PositionedBoardNotice, St
 #[cfg(test)]
 #[path = "machine_notice_store_test.rs"]
 mod tests;
+
+/// The earliest notice expiry across every machine's stream, read without deleting anything.
+pub(crate) async fn next_expiry_any<Scope: TransactionScope>(
+    scope: &mut Scope,
+) -> Result<Option<SyncTime>, StoreError>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    let mut earliest = None::<SyncTime>;
+    for row in queries::read_machine_notice_peers(scope)
+        .await
+        .map_err(StoreError::backend)?
+    {
+        let machine_id = required(
+            row.machine_id,
+            "machine_control_project_progress.machine_id",
+        )?;
+        check_private_id(&machine_id, "machine_control_project_progress.machine_id")?;
+        let peer = machine_id
+            .try_into()
+            .map_err(|error| corrupt("machine_control_project_progress.machine_id", error))?;
+        if let Some(at) = next_expiry(scope, peer).await? {
+            earliest = Some(earliest.map_or(at, |current| current.min(at)));
+        }
+    }
+    Ok(earliest)
+}

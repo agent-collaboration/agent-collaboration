@@ -14,8 +14,9 @@ impl NativeObjects {
             .get()
             .ok_or_else(|| StoreError::backend("Registry missing"))?;
         match runtime.as_ref() {
-            RuntimeFace::Fleet(runtime) => {
-                runtime
+            RuntimeFace::Fleet(kernel) => {
+                kernel
+                    .face()
                     .conformance_import_board_snapshot(owner, state, pages, manifest)
                     .await
             }

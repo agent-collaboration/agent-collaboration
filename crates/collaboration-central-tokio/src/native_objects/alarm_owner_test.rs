@@ -60,7 +60,7 @@ fn envelope(database: DatabaseId, kind: &str, target: Value, request: Value) -> 
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
-async fn copy_expiry_cancels_the_real_wait_even_when_that_alarm_inspection_fails() -> TestResult {
+async fn copy_ack_wait_ends_at_its_event_deadline_and_arms_no_alarm() -> TestResult {
     let root = tempfile::tempdir()?;
     let objects = open(root.path()).await?;
     let database = DatabaseId::new(durable_steps::Uuid::now_v7())?;
@@ -68,15 +68,17 @@ async fn copy_expiry_cancels_the_real_wait_even_when_that_alarm_inspection_fails
     let slot = objects.slot(ObjectAddress::Copy(database)).await?;
     ready(&slot).await?;
     let runtime = slot.runtime.get().ok_or("copy runtime missing")?.clone();
-    let RuntimeFace::Copy(copy) = runtime.as_ref() else {
+    let RuntimeFace::Copy(copy_kernel) = runtime.as_ref() else {
         return Err("wrong Copy face".into());
     };
+    let copy = copy_kernel.face();
     copy.on_call(serde_json::to_vec(&envelope(database,"fleet-sync.copy-create",json!({"copy":receiver}),json!({"database":database,"epoch":1,"holder":durable_steps::Uuid::now_v7(),"origin":{"kind":"empty"}})))?).await.map_err(|failure|format!("create: {failure:?}"))?;
     let waiting = runtime.clone();
     let task = tokio::spawn(async move {
-        let RuntimeFace::Copy(copy) = waiting.as_ref() else {
+        let RuntimeFace::Copy(copy_kernel) = waiting.as_ref() else {
             return Err(CallFailure::AnswerLost);
         };
+        let copy = copy_kernel.face();
         copy.await_copy_acked(ReplicationPosition::new(
             Epoch::new(1).map_err(|_| CallFailure::AnswerLost)?,
             CommitSequence::new(1),
@@ -101,15 +103,12 @@ async fn copy_expiry_cancels_the_real_wait_even_when_that_alarm_inspection_fails
         }
     })
     .await??;
-    let host = slot.host.get().ok_or("copy host missing")?;
-    host.observed.inner().fail_next_begin();
-    // No call, alarm or mutation follows the fault arm. Only the real timer runs.
+    // No call, alarm or mutation follows. Only the wait's own event deadline runs (H2).
     let outcome = tokio::time::timeout(Duration::from_secs(2), task).await??;
     assert!(
         matches!(outcome, Err(CallFailure::AnswerLost)),
         "expiry invented progress: {outcome:?}"
     );
-    assert!(host.observed.inner().begin_failed());
     objects.shutdown().await?;
     Ok(())
 }
@@ -232,9 +231,11 @@ async fn registry_consumed_wake_recovers_its_saved_operation_after_two_begin_fai
     assert_eq!(observed.request_key, key);
     assert_eq!(host.observed.inner().begin_failures(), 2);
     let copy_slot = objects.slot(ObjectAddress::Copy(database)).await?;
-    let RuntimeFace::Copy(copy) = copy_slot.runtime.get().ok_or("copy missing")?.as_ref() else {
+    let RuntimeFace::Copy(copy_kernel) = copy_slot.runtime.get().ok_or("copy missing")?.as_ref()
+    else {
         return Err("wrong face".into());
     };
+    let copy = copy_kernel.face();
     assert!(
         matches!(copy.read_copy_status().await.map_err(|failure|format!("{failure:?}"))?,CopyStatusAnswer::Status(status) if status.database==database && status.acked.sequence.value()==0)
     );

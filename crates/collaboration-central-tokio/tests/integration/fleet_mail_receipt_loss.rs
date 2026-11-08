@@ -22,7 +22,7 @@ async fn committed_inbox_replays_one_item_after_its_receipt_is_lost_and_the_owne
     let limits = collaboration_central_core::fleet_outbox_limits()?;
     submit(&fixture, &item).await?;
     let (drive, original_call) = tokio::time::timeout(CAP, async {
-        tokio::try_join!(fixture.runtime.on_alarm(), async {
+        tokio::try_join!(fixture.runtime.conformance_drive_operations(), async {
             let pushed = recipient
                 .push_envelope(item.id())
                 .await
@@ -54,7 +54,7 @@ async fn committed_inbox_replays_one_item_after_its_receipt_is_lost_and_the_owne
     assert_eq!(reopened.count().await?, 1);
     fixture.io.advance(60_000);
     let (drive, ()) = tokio::time::timeout(CAP, async {
-        tokio::try_join!(fixture.runtime.on_alarm(), async {
+        tokio::try_join!(fixture.runtime.conformance_drive_operations(), async {
             let pushed = recipient
                 .push_envelope(item.id())
                 .await

@@ -19,13 +19,12 @@ use crate::{
 };
 use board_sync_protocol::BoardDeliveryTypes;
 use durable_steps::{
-    AtomicStore, BoxFuture, CallFailure, CallTarget, JournalScope, NotSentReason, StoreError,
-    storage::{JournalStorage, TransactionScope},
+    AtomicStore, BoxFuture, CallFailure, CallTarget, NotSentReason, StoreError,
+    storage::TransactionScope,
 };
 use fleet_mail_delivery::{DeliveryLimits, Outbox};
 use fleet_protocol::{DeliveryItemRef, ServerCall};
 use message_board::RequestEffectsRequest;
-use runtime_primitives::WakeScheduler;
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
@@ -192,64 +191,62 @@ where
             face: PhantomData,
         })
     }
-    pub async fn on_alarm(&self) -> Result<durable_steps::DriveReport, StoreError> {
-        // Callers combine this alarm with socket work. Keep all its phases in
-        // one heap-owned future rather than inflating every caller's frame.
-        Box::pin(self.drive_fleet_alarm()).await
+    /// Every Fleet due source except long operations, each failing alone.
+    pub(crate) async fn run_fleet_due_sources(&self, now: runtime_primitives::SyncTime) {
+        if let Err(failure) = self.prune_feed().await {
+            eprintln!("Fleet feed retention failed: {failure}");
+        }
+        let (store, _) = match self.session_store() {
+            Ok(handles) => handles,
+            Err(failure) => {
+                eprintln!("Fleet session store unavailable for due work: {failure}");
+                return;
+            }
+        };
+        // Each machine's stream fails alone and logs its own failure.
+        let _ = crate::machine_notice_store::prune::<_, Host::Database>(store, now).await;
     }
 
-    async fn drive_fleet_alarm(&self) -> Result<durable_steps::DriveReport, StoreError> {
-        let ObjectWork::Fleet {
-            engine,
-            host,
-            replies,
-            shared_host,
-            ..
-        } = &self.work
-        else {
-            return Err(wrong_face());
+    /// Forwarded posts past their 30 s deadline end Unanswered and free their slot.
+    /// Never held by the cadence: the deadline is a protocol answer.
+    pub(crate) async fn expire_fleet_forwards(&self, now: runtime_primitives::SyncTime) {
+        let store = match self.session_store() {
+            Ok((store, _)) => store,
+            Err(failure) => {
+                eprintln!("Fleet session store unavailable for forward expiry: {failure}");
+                return;
+            }
         };
-        let mut maintenance_failure = self.prune_feed().await.err();
-        let now = runtime_primitives::Clock::now(shared_host.as_ref());
-        replies.expire(now);
-        if let Some(at) = replies.next_deadline() {
-            let wake = host.alarm().wake_at(at).await.map_err(StoreError::backend);
-            maintenance_failure = maintenance_failure.or(wake.err());
-        }
-        let (store, shared) = self.session_store()?;
-        let now = runtime_primitives::Clock::now(shared.as_ref());
-        let forwards = store
+        if let Err(failure) = store
             .transaction(move |scope| Box::pin(async move { scope.expire_forwards(now).await }))
-            .await;
-        maintenance_failure = maintenance_failure.or(forwards.err());
-        let notices = crate::machine_notice_store::prune::<_, Host::Database>(store, now).await;
-        maintenance_failure = maintenance_failure.or(notices.err());
-        // Maintenance failure must not prevent the existing journal from
-        // deciding which unrelated operations can make progress.
-        let driven = engine.drive_due().await;
-        let rearmed = host
-            .store()
-            .transaction(|scope| {
-                Box::pin(async move {
-                    if let Some(at) = scope.earliest().await? {
-                        scope.ensure_wake(at).await?;
-                    }
-                    Ok(())
-                })
-            })
-            .await;
-        if let Err(failure) = &driven {
+            .await
+        {
+            eprintln!("Fleet forward expiry failed: {failure}");
+        }
+    }
+
+    /// The long-operation engine. Until slice 4 it still carries every job kind.
+    pub(crate) async fn drive_fleet_operations(&self) {
+        if let Err(failure) = self.drive_fleet_engine().await {
             eprintln!("Fleet job drive failed: {failure}");
         }
-        if let Err(failure) = &rearmed {
-            eprintln!("Fleet journal rearm failed: {failure}");
-        }
-        if let Some(failure) = maintenance_failure {
-            return Err(failure);
-        }
-        let report = driven?;
-        rearmed?;
-        Ok(report)
+    }
+
+    /// One engine drive and its report, for conformance checks of job outcomes.
+    #[cfg(feature = "conformance")]
+    pub async fn conformance_drive_operations(
+        &self,
+    ) -> Result<durable_steps::DriveReport, StoreError> {
+        self.drive_fleet_engine().await
+    }
+
+    async fn drive_fleet_engine(&self) -> Result<durable_steps::DriveReport, StoreError> {
+        let ObjectWork::Fleet { engine, .. } = &self.work else {
+            return Err(wrong_face());
+        };
+        // Callers combine this drive with socket work. Keep its phases in one
+        // heap-owned future rather than inflating every caller's frame.
+        Box::pin(engine.drive_due()).await
     }
     pub async fn initialize(&self) -> Result<usize, StoreError> {
         let ObjectWork::Fleet { host, io, .. } = &self.work else {
@@ -265,7 +262,7 @@ where
         ] {
             applied += bootstrap.initialize(schema).await?;
         }
-        self.prune_feed().await?;
+        // Feed retention is its own due source; opening never prunes (#pipeline step 0).
         Ok(applied)
     }
     #[cfg(feature = "conformance")]
@@ -308,29 +305,11 @@ where
     }
     pub async fn on_call(&self, bytes: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
         let envelope: ObjectCallEnvelope = serde_json::from_slice(&bytes).map_err(|_| refused())?;
-        let answer = match envelope.destination_face {
+        match envelope.destination_face {
             CallerKind::Registry => self.on_registry_call(bytes).await,
             CallerKind::Delivery => self.delivery().map_err(|_| refused())?.on_call(bytes).await,
             _ => self.dispatch_call(bytes).await,
-        };
-        let ObjectWork::Fleet { host, .. } = &self.work else {
-            return Err(refused());
-        };
-        // The mutation saved both notice debt and wake intent in its transaction.
-        // Only after it settles do we arm the platform timer. An inbound call
-        // never drives notice work; a replay can also rearm an earlier saved debt.
-        let earliest = host
-            .store()
-            .transaction(|scope| Box::pin(async move { scope.earliest().await }))
-            .await
-            .map_err(|_| CallFailure::AnswerLost)?;
-        if let Some(at) = earliest {
-            host.alarm()
-                .wake_at(at)
-                .await
-                .map_err(|_| CallFailure::AnswerLost)?;
         }
-        answer
     }
 
     pub(crate) async fn mail_submit_call(

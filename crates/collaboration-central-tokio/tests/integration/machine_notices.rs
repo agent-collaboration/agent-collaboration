@@ -9,7 +9,6 @@ use durable_steps::{AtomicStore, StoreError};
 use fleet_protocol::*;
 use fleet_session::SessionKey;
 use session_fixture::{Fixture, TestError};
-use std::sync::atomic::Ordering;
 use support::*;
 
 struct RetentionSeed {
@@ -93,7 +92,7 @@ async fn fleet_floor_98_prunes_99_through_110_and_drives_due_work() -> Result<()
         Err(durable_steps::CallFailure::AnswerLost)
     ));
 
-    fixture.runtime.on_alarm().await?;
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
 
     assert_eq!(fixture.runtime.delivery()?.on_call(call).await?, b"null");
     assert_eq!(
@@ -134,16 +133,13 @@ async fn one_machine_hole_does_not_block_other_retention_jobs_or_future_wakes()
         },
     )
     .await?;
-    fixture
-        .io
-        .clock_offset_millis
-        .store(5_000, Ordering::SeqCst);
+    fixture.io.clock.set_offset(5_000);
     let future = invocation(&notice(122)?)?;
     assert!(matches!(
         fixture.runtime.delivery()?.on_call(future.clone()).await,
         Err(durable_steps::CallFailure::AnswerLost)
     ));
-    fixture.io.clock_offset_millis.store(0, Ordering::SeqCst);
+    fixture.io.clock.set_offset(0);
     let due = invocation(&notice(121)?)?;
     assert!(matches!(
         fixture.runtime.delivery()?.on_call(due.clone()).await,
@@ -156,11 +152,13 @@ async fn one_machine_hole_does_not_block_other_retention_jobs_or_future_wakes()
         .map_err(|_| "wake lock poisoned")?
         .clear();
 
-    let result = fixture.runtime.on_alarm().await;
+    let result = crate::kernel_alarm::deliver_alarm(&fixture.runtime).await;
 
+    // One machine's corrupt stream fails alone (R7): the alarm is delivered,
+    // the healthy stream is pruned and the broken one is left untouched below.
     assert!(
-        matches!(result, Err(StoreError::Corrupt { .. })),
-        "maintenance corruption must remain visible"
+        result.is_ok(),
+        "one stream's corruption must not fail the alarm"
     );
     assert_eq!(fixture.runtime.delivery()?.on_call(due).await?, b"null");
     assert!(matches!(
@@ -343,11 +341,8 @@ async fn retention_floor_and_a_restored_older_head_have_explicit_read_outcomes()
         assert_hint(next(&mut socket).await?, position, position, &kind);
     }
     fixture.runtime.on_socket_closed(binding).await?;
-    fixture
-        .io
-        .clock_offset_millis
-        .store(RETENTION, Ordering::SeqCst);
-    fixture.runtime.on_alarm().await?;
+    fixture.io.clock.set_offset(RETENTION);
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
     assert_eq!(rows(&fixture).await?, 0);
     let (binding, _, mut socket) = admit(&fixture, peer).await?;
     assert_eq!(
@@ -385,10 +380,7 @@ async fn retention_floor_and_a_restored_older_head_have_explicit_read_outcomes()
     snapshot_closed_owner(root.path(), saved.path())?;
 
     let fixture = Fixture::reopen(root.path()).await?;
-    fixture
-        .io
-        .clock_offset_millis
-        .store(RETENTION, Ordering::SeqCst);
+    fixture.io.clock.set_offset(RETENTION);
     let (_, _, mut socket) = admit(&fixture, peer).await?;
     let fourth = notice(4)?;
     deliver(&fixture, &invocation(&fourth)?).await?;
@@ -397,10 +389,7 @@ async fn retention_floor_and_a_restored_older_head_have_explicit_read_outcomes()
     drop(fixture);
     // Restore the closed owner in a fresh home, including its SQLite sidecars.
     let fixture = Fixture::reopen(saved.path()).await?;
-    fixture
-        .io
-        .clock_offset_millis
-        .store(RETENTION, Ordering::SeqCst);
+    fixture.io.clock.set_offset(RETENTION);
     let (binding, _, mut socket) = admit(&fixture, peer).await?;
     assert_eq!(
         read(&fixture, binding, &mut socket, Some(4)).await?,

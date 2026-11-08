@@ -32,7 +32,7 @@ async fn deliver(
     expected: &DeliveryEnvelope<BoardDeliveryTypes>,
 ) -> TestResult {
     let (drive, ()) = tokio::time::timeout(CAP, async {
-        tokio::try_join!(fixture.runtime.on_alarm(), async {
+        tokio::try_join!(fixture.runtime.conformance_drive_operations(), async {
             let pushed = socket
                 .push_envelope(expected.id())
                 .await
@@ -97,7 +97,7 @@ async fn push_wait_deadline_survives_fleet_reopen_before_due_without_any_recipie
         RecipientInbox::open(&inbox_path, fixture.io.clone(), B.to_owned().try_into()?).await?;
     let expired = item(true)?;
     submit(&fixture, &expired).await?;
-    let report = fixture.runtime.on_alarm().await?;
+    let report = fixture.runtime.conformance_drive_operations().await?;
     assert!(report.failed.is_empty(), "{report:?}");
     assert_eq!(
         custody(&fixture, expired.id()).await?,
@@ -112,7 +112,7 @@ async fn push_wait_deadline_survives_fleet_reopen_before_due_without_any_recipie
     let inbox =
         RecipientInbox::open(&inbox_path, fixture.io.clone(), B.to_owned().try_into()?).await?;
     // Drive the real recovered runtime before a query or either socket opens.
-    let report = fixture.runtime.on_alarm().await?;
+    let report = fixture.runtime.conformance_drive_operations().await?;
     assert!(report.failed.is_empty(), "{report:?}");
     assert_eq!(
         custody(&fixture, expired.id()).await?,
@@ -166,7 +166,7 @@ async fn offline_expiry_creates_no_recipient_work_and_survives_reopen_while_rece
     let no_ttl = item(false)?;
     submit(&fixture, &expired).await?;
     submit(&fixture, &no_ttl).await?;
-    let drive = tokio::time::timeout(CAP, fixture.runtime.on_alarm()).await??;
+    let drive = tokio::time::timeout(CAP, fixture.runtime.conformance_drive_operations()).await??;
     assert!(drive.failed.is_empty(), "{drive:?}");
     assert_eq!(
         custody(&fixture, expired.id()).await?,
@@ -174,7 +174,7 @@ async fn offline_expiry_creates_no_recipient_work_and_survives_reopen_while_rece
     );
     assert_eq!(custody(&fixture, no_ttl.id()).await?, ("sent".into(), true));
     fixture.io.advance(1_001);
-    let drive = tokio::time::timeout(CAP, fixture.runtime.on_alarm()).await??;
+    let drive = tokio::time::timeout(CAP, fixture.runtime.conformance_drive_operations()).await??;
     assert!(drive.failed.is_empty(), "{drive:?}");
     let mut sender = Socket::open(&fixture, A, SERVICE_A).await?;
     require_expired(&fixture, &mut sender, &expired).await?;

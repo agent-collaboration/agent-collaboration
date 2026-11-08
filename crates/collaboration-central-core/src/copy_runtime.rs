@@ -1,6 +1,7 @@
 //! Copy rules retain their transaction certainty at central's store boundary.
 use runtime_primitives::{Clock as _, IdSource as _};
 
+use crate::ObjectIo as _;
 use crate::{
     CopyKind, ObjectPlatform, ObjectRuntime,
     object_runtime::ObjectWork,
@@ -11,7 +12,6 @@ use fleet_project_copy::CopyTransactionFailure;
 use fleet_protocol::{
     AwaitAckedAnswer, CopyStatusAnswer, DatabaseId, ReceiverId, ReplicationPosition,
 };
-use runtime_primitives::WakeScheduler;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
@@ -79,7 +79,6 @@ where
         through: ReplicationPosition,
     ) -> Result<AwaitAckedAnswer, CallFailure> {
         let ObjectWork::Copy {
-            host,
             io,
             changes,
             copy_ack_wait,
@@ -98,11 +97,7 @@ where
         loop {
             // Subscribe first. A commit after this point either changes the
             // status we read, or leaves this waiter ready before we await it.
-            let waiter = changes.subscribe(io.new_id(), deadline)?;
-            host.alarm()
-                .wake_at(deadline)
-                .await
-                .map_err(|_| CallFailure::AnswerLost)?;
+            let waiter = changes.subscribe(io.new_id())?;
             let status = self.read_wait_status().await?;
             if io.now() >= deadline {
                 return Err(CallFailure::AnswerLost);
@@ -123,7 +118,25 @@ where
             }
             // read_copy_status has returned from its store boundary. No object,
             // transaction or notifier guard is held while a later event runs.
-            waiter.changed().await?;
+            // The wait is bounded by an event-scoped deadline, dropped with this
+            // call; no alarm and no timer outlives the event (H2).
+            let remaining = std::time::Duration::from_millis(
+                u64::try_from(
+                    deadline
+                        .unix_millis()
+                        .saturating_sub(io.now().unix_millis()),
+                )
+                .unwrap_or(0),
+            );
+            let changed = waiter.changed();
+            let expiry = io.event_deadline(remaining);
+            futures_util::pin_mut!(changed, expiry);
+            match futures_util::future::select(changed, expiry).await {
+                futures_util::future::Either::Left((changed, _)) => changed?,
+                futures_util::future::Either::Right(((), _)) => {
+                    return Err(CallFailure::AnswerLost);
+                }
+            }
         }
     }
 
@@ -173,23 +186,13 @@ where
             .map_err(|_| CallFailure::AnswerLost)
     }
 
-    pub async fn on_alarm(&self) -> Result<(), StoreError> {
-        let ObjectWork::Copy {
-            host, io, changes, ..
-        } = &self.work
-        else {
+    /// The Copy's due source: initialize a live copy, then expire its staged parts.
+    pub(crate) async fn expire_copy_staged_parts(&self) -> Result<(), StoreError> {
+        let ObjectWork::Copy { host, io, .. } = &self.work else {
             return Err(StoreError::Aborted {
                 reason: "copy runtime has a different face".into(),
             });
         };
-        // Expired acknowledgement waits must not depend on follow-up success.
-        changes.expire(io.now());
-        if let Some(at) = changes.next_deadline() {
-            host.alarm()
-                .wake_at(at)
-                .await
-                .map_err(StoreError::backend)?;
-        }
         if matches!(
             self.inspection().await?,
             fleet_project_copy::CopyInspection::Retired { .. }
@@ -197,16 +200,10 @@ where
             return Ok(());
         }
         self.initialize().await?;
-        let (next_expiry, _) = StepDriver::new(host.clone())
+        StepDriver::new(host.clone())
             .run(crate::copy_staged_parts::ExpireStagedParts { now: io.now() })
             .await?;
-        if let Some(at) = next_expiry {
-            host.alarm()
-                .wake_at(at)
-                .await
-                .map_err(StoreError::backend)?;
-        }
-        self.drive_copy_followups().await
+        Ok(())
     }
     pub async fn initialize(&self) -> Result<usize, StoreError> {
         let ObjectWork::Copy { host, io, .. } = &self.work else {

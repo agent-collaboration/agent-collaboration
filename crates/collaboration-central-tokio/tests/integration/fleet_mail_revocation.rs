@@ -62,7 +62,7 @@ async fn selected_push_held_by_native_backpressure_can_finish_after_revoke_witho
             async {
                 fixture
                     .runtime
-                    .on_alarm()
+                    .conformance_drive_operations()
                     .await
                     .map_err(Box::<dyn std::error::Error + Send + Sync>::from)
             },
@@ -97,7 +97,7 @@ async fn selected_push_held_by_native_backpressure_can_finish_after_revoke_witho
                 let ended = async {
                     fixture
                         .runtime
-                        .on_alarm()
+                        .conformance_drive_operations()
                         .await
                         .map_err(Box::<dyn std::error::Error + Send + Sync>::from)
                 };
@@ -164,7 +164,7 @@ async fn selected_push_held_by_native_backpressure_can_finish_after_revoke_witho
         assert!(matches!(status(&fixture,item.id()).await?.state,ItemStatusState::Known {status:DeliveryStatus::Sent,version,..} if version.value()==1));
         assert_eq!(*selected.borrow(),before+1);
         fixture.io.advance(10_000);
-        assert!(fixture.runtime.on_alarm().await?.failed.is_empty());
+        assert!(fixture.runtime.conformance_drive_operations().await?.failed.is_empty());
         assert_eq!(*selected.borrow(),before+1,"revoked peer acquired a new selected send");
         assert_eq!(custody(&fixture,item.id()).await?,("sent".into(),true));
         assert!(matches!(status(&fixture,item.id()).await?.state,ItemStatusState::Known {status:DeliveryStatus::Sent,version,..} if version.value()==1));
@@ -268,7 +268,7 @@ async fn revoked_recipient_gets_no_queued_push_and_fleet_keeps_sent_content() ->
             );
             // The sender admits the receiving EndSessions task in this Fleet
             // journal. This fixture explicitly drives that newly committed wake.
-            let ended = fixture.runtime.on_alarm().await?;
+            let ended = fixture.runtime.conformance_drive_operations().await?;
             assert!(ended.failed.is_empty(), "{ended:?}");
             Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
         };
@@ -291,7 +291,7 @@ async fn revoked_recipient_gets_no_queued_push_and_fleet_keeps_sent_content() ->
         .await??;
         assert_eq!(custody(&fixture, item.id()).await?, before);
         fixture.io.advance(10_000);
-        let driven = fixture.runtime.on_alarm().await?;
+        let driven = fixture.runtime.conformance_drive_operations().await?;
         assert!(driven.failed.is_empty(), "{driven:?}");
         assert_eq!(custody(&fixture, item.id()).await?, before);
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
@@ -319,10 +319,17 @@ async fn never_readmitted_recipient_custody_is_removed_at_day_sixty_and_then_too
             .await?,
         RevocationDecision::MachineRevoked
     );
-    fixture.runtime.on_alarm().await?;
+    fixture.runtime.conformance_drive_operations().await?;
     let deadline = fleet_mail_delivery::removal_deadline(item.id()).unix_millis();
     fixture.io.advance(deadline - NOW - 1);
-    assert!(fixture.runtime.on_alarm().await?.failed.is_empty());
+    assert!(
+        fixture
+            .runtime
+            .conformance_drive_operations()
+            .await?
+            .failed
+            .is_empty()
+    );
     assert!(matches!(
         status(&fixture, item.id()).await?.state,
         ItemStatusState::Known {
@@ -332,7 +339,14 @@ async fn never_readmitted_recipient_custody_is_removed_at_day_sixty_and_then_too
     ));
     assert_eq!(custody(&fixture, item.id()).await?, ("sent".into(), true));
     fixture.io.advance(1);
-    assert!(fixture.runtime.on_alarm().await?.failed.is_empty());
+    assert!(
+        fixture
+            .runtime
+            .conformance_drive_operations()
+            .await?
+            .failed
+            .is_empty()
+    );
     assert!(matches!(
         status(&fixture, item.id()).await?.state,
         ItemStatusState::Unknown

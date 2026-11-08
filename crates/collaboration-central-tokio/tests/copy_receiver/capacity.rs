@@ -212,7 +212,7 @@ async fn summary_storage_full_is_preserved_as_copy_unavailable_after_real_rollba
         );
         assert_eq!(restored.counts().await?, (1, 1, 1));
         assert_eq!(restored.runtime.copy_summary().await?, summary);
-        restored.runtime.on_alarm().await?;
+        crate::kernel_alarm::deliver_alarm(&restored.runtime).await?;
         assert_eq!(
             restored.summary(true).await?,
             restored.summary(false).await?

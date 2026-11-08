@@ -1,5 +1,5 @@
 //! The target object's physical file sample belongs to its Health request.
-use super::{CopyRuntime, NativeObjects, ObjectSlot, no_route};
+use super::{NativeObjects, ObjectSlot, no_route};
 #[cfg(feature = "conformance")]
 use collaboration_central_core::ObjectAddress;
 use durable_steps::CallFailure;
@@ -19,13 +19,12 @@ pub enum HealthFileSample {
 }
 
 impl NativeObjects {
-    pub(super) async fn read_health(
+    /// The Copy's on-disk size (database and WAL), which a Health read reports.
+    pub(super) async fn measure_storage(
         &self,
         slot: &ObjectSlot,
-        runtime: &CopyRuntime,
-        body: Vec<u8>,
         #[cfg(feature = "conformance")] address: ObjectAddress,
-    ) -> Result<Vec<u8>, CallFailure> {
+    ) -> Result<u64, CallFailure> {
         let host = slot.host.get().ok_or_else(no_route)?;
         let path = host.object.path();
         let mut wal = path.as_os_str().to_os_string();
@@ -58,7 +57,7 @@ impl NativeObjects {
         if let ObjectAddress::Copy(database) = address {
             self.health_samples.lock().await.insert(database, sample);
         }
-        runtime.on_health(body, bytes).await
+        Ok(bytes)
     }
 
     #[cfg(feature = "conformance")]

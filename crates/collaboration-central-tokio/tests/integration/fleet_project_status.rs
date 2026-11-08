@@ -196,7 +196,8 @@ async fn absent_or_expired_project_holder_keeps_durable_publication_pending_with
             fixture.io.advance(60_000);
         }
         let (operation, _) = admit(&fixture).await?;
-        let report = tokio::time::timeout(CAP, fixture.runtime.on_alarm()).await??;
+        let report =
+            tokio::time::timeout(CAP, fixture.runtime.conformance_drive_operations()).await??;
         assert!(report.failed.is_empty(), "{report:?}");
         assert!(report.retried.contains(&operation));
         assert_eq!(
@@ -232,7 +233,7 @@ async fn silent_project_holder_retries_the_original_call_to_the_real_successor_w
     let mut deadlines = fixture.io.reply_deadlines.subscribe();
     let first_deadline = *deadlines.borrow() + 1;
     let (report, original) = Box::pin(tokio::time::timeout(CAP, async {
-        tokio::try_join!(fixture.runtime.on_alarm(), async {
+        tokio::try_join!(fixture.runtime.conformance_drive_operations(), async {
             let (call, sent) = publication(&mut first).await.map_err(StoreError::backend)?;
             assert_eq!(sent, expected);
             assert_eq!(call.operation, operation);
@@ -261,7 +262,7 @@ async fn silent_project_holder_retries_the_original_call_to_the_real_successor_w
     fixture.io.advance(10_000);
     let second_deadline = *deadlines.borrow() + 1;
     let (report, ()) = Box::pin(tokio::time::timeout(CAP, async {
-        tokio::try_join!(fixture.runtime.on_alarm(), async {
+        tokio::try_join!(fixture.runtime.conformance_drive_operations(), async {
             let (call, sent) = publication(&mut successor)
                 .await
                 .map_err(StoreError::backend)?;

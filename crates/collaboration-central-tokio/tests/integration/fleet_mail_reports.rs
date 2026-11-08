@@ -100,7 +100,7 @@ async fn only_the_recipient_can_report_and_replay_never_advances_status_or_owes_
     let item = envelope(B, SERVICE_B)?;
     submit(&fixture, &item).await?;
     let (drive, ()) = tokio::time::timeout(CAP, async {
-        tokio::try_join!(fixture.runtime.on_alarm(), async {
+        tokio::try_join!(fixture.runtime.conformance_drive_operations(), async {
             let frame = recipient
                 .push(item.id())
                 .await
@@ -243,7 +243,7 @@ async fn report_admission_captures_its_post_commit_wake_in_the_session_adapter()
     let item = envelope(B, SERVICE_B)?;
     submit(&fixture, &item).await?;
     let (drive, ()) = tokio::time::timeout(CAP, async {
-        tokio::try_join!(fixture.runtime.on_alarm(), async {
+        tokio::try_join!(fixture.runtime.conformance_drive_operations(), async {
             let frame = recipient
                 .push(item.id())
                 .await
@@ -263,7 +263,7 @@ async fn report_admission_captures_its_post_commit_wake_in_the_session_adapter()
     .await??;
     assert!(drive.failed.is_empty(), "{drive:?}");
     // Drain only the setup publication. No alarm is driven after the Report.
-    let setup = fixture.runtime.on_alarm().await?;
+    let setup = fixture.runtime.conformance_drive_operations().await?;
     assert!(setup.failed.is_empty(), "{setup:?}");
     fixture.io.advance(1_000);
     let now = fixture.io.now();
@@ -304,22 +304,23 @@ async fn revoked_recipient_report(handoff: bool) -> TestResult {
     let item = envelope(B, SERVICE_B)?;
     submit(&fixture, &item).await?;
     if handoff {
-        let (drive, ()) = tokio::try_join!(fixture.runtime.on_alarm(), async {
-            let frame = recipient
-                .push(item.id())
-                .await
-                .map_err(StoreError::backend)?;
-            recipient
-                .answer(
-                    &fixture,
-                    frame,
-                    PushResult::Accepted {
-                        accepted_at: fixture.io.now(),
-                    },
-                )
-                .await
-                .map_err(StoreError::backend)
-        })?;
+        let (drive, ()) =
+            tokio::try_join!(fixture.runtime.conformance_drive_operations(), async {
+                let frame = recipient
+                    .push(item.id())
+                    .await
+                    .map_err(StoreError::backend)?;
+                recipient
+                    .answer(
+                        &fixture,
+                        frame,
+                        PushResult::Accepted {
+                            accepted_at: fixture.io.now(),
+                        },
+                    )
+                    .await
+                    .map_err(StoreError::backend)
+            })?;
         if !drive.failed.is_empty() {
             return Err("handoff control failed".into());
         }

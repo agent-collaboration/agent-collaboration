@@ -5,6 +5,8 @@ mod fleet_record_rows;
 #[cfg(feature = "conformance")]
 #[path = "../support/io_alarm.rs"]
 mod io_alarm;
+#[path = "../support/kernel_alarm.rs"]
+mod kernel_alarm;
 
 #[cfg(feature = "conformance")]
 #[path = "../support/clocked_server.rs"]

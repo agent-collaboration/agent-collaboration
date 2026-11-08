@@ -195,3 +195,20 @@ where
 #[cfg(test)]
 #[path = "project_request_store_test.rs"]
 mod tests;
+
+/// The earliest pending forwarded-post deadline, if any post is pending.
+pub(crate) async fn next_deadline<Scope: TransactionScope>(
+    scope: &mut Scope,
+) -> Result<Option<SyncTime>, StoreError>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    Ok(requests(scope)
+        .await?
+        .into_iter()
+        .map(|request| request.deadline)
+        .min())
+}

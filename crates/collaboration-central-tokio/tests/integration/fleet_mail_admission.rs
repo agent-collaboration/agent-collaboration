@@ -82,7 +82,7 @@ async fn replay_and_conflict_preserve_one_fleet_custody_row_and_a_restart_still_
     .await?;
     reopened.io.advance(2_000);
     let (drive, ()) = tokio::time::timeout(CAP, async {
-        tokio::try_join!(reopened.runtime.on_alarm(), async {
+        tokio::try_join!(reopened.runtime.conformance_drive_operations(), async {
             let pushed = recipient
                 .push_envelope(item.id())
                 .await
@@ -173,12 +173,10 @@ async fn push_admission_rollback_and_post_commit_wake_loss_preserve_one_replayab
     fixture
         .sql("DROP TRIGGER reject_fleet_push_admission")
         .await?;
+    // #failures: an alarm write that fails on a call still sends the answer;
+    // the admission lowered the alarm in its own commit, so the work keeps its wake.
     fixture.io.reject_next_wake.store(true, Ordering::SeqCst);
-    assert!(
-        submit_answer(&fixture, &item).await.is_err(),
-        "post-commit wake loss must not acknowledge activation"
-    );
-    assert!(!fixture.io.reject_next_wake.load(Ordering::SeqCst));
+    submit_answer(&fixture, &item).await?;
     assert_eq!(
         admitted_rows(&fixture).await?,
         (1, 1),

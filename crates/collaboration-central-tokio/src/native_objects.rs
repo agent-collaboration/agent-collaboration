@@ -24,7 +24,8 @@ use crate::ObjectAlarmTimer;
 use crate::{SocketCommand, TokioStorageHost};
 use axum::extract::ws::{CloseFrame, Message, WebSocket};
 use collaboration_central_core::{
-    AdmissionOrigin, CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectIo, ObjectRuntime,
+    AdmissionOrigin, CopyKind, CoreHost, EventReply, FleetKind, ObjectAddress, ObjectEvent,
+    ObjectIo, ObjectKernel, ObjectRuntime,
 };
 use durable_steps::{BoxFuture, CallFailure, NotSentReason, StoreError};
 use fleet_project_lease::RegistryConfig;
@@ -58,6 +59,9 @@ pub struct TokioObjectIo {
     wake: Arc<ObjectAlarmTimer>,
     #[cfg(feature = "conformance")]
     faults: Arc<collaboration_central_conformance::RuntimeFaults>,
+    /// Signalled when a conformance control moves the injected clock.
+    #[cfg(feature = "conformance")]
+    clock_moved: Arc<tokio::sync::watch::Sender<()>>,
 }
 impl Clock for TokioObjectIo {
     fn now(&self) -> SyncTime {
@@ -83,7 +87,31 @@ impl ObjectIo for TokioObjectIo {
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
-        tokio::time::sleep(remaining)
+        #[cfg(not(feature = "conformance"))]
+        {
+            tokio::time::sleep(remaining)
+        }
+        // Conformance only: the deadline also passes when the injected clock does,
+        // so a test ends a wait causally, without real time or an alarm.
+        #[cfg(feature = "conformance")]
+        {
+            let io = self.clone();
+            let until = self.now().after(remaining);
+            let mut moved = self.clock_moved.subscribe();
+            async move {
+                let injected = async {
+                    while io.now() < until {
+                        if moved.changed().await.is_err() {
+                            std::future::pending::<()>().await;
+                        }
+                    }
+                };
+                tokio::select! {
+                    () = tokio::time::sleep(remaining) => {}
+                    () = injected => {}
+                }
+            }
+        }
     }
 
     #[cfg(feature = "conformance")]
@@ -128,28 +156,38 @@ impl ObjectIo for TokioObjectIo {
 }
 
 enum RuntimeFace {
-    Fleet(FleetRuntime),
-    Copy(CopyRuntime),
+    Fleet(ObjectKernel<FleetRuntime>),
+    Copy(ObjectKernel<CopyRuntime>),
 }
 impl RuntimeFace {
     async fn initialize(&self) -> Result<(), StoreError> {
         match self {
-            Self::Fleet(runtime) => runtime.initialize().await.map(|_| ()),
+            Self::Fleet(kernel) => kernel.face().initialize().await.map(|_| ()),
             // Copy's core call/alarm prelude runs after Health classification.
             Self::Copy(_) => Ok(()),
         }
     }
-    // Keep a scheduled drive's SQL and dispatched effects in one observable
-    // scope, distinct from inbound requests and later redelivery attempts.
-    #[tracing::instrument(level = "trace", name = "central_alarm", skip_all, fields(object_kind = match self {
+    // Keep each event's SQL and dispatched effects in one observable scope.
+    #[tracing::instrument(level = "trace", name = "central_event", skip_all, fields(object_kind = match self {
         Self::Fleet(_) => "fleet",
         Self::Copy(_) => "copy",
     }))]
-    async fn on_alarm(&self) -> Result<(), StoreError> {
+    async fn on_event(&self, event: ObjectEvent) -> EventReply {
         match self {
-            Self::Fleet(runtime) => runtime.on_alarm().await.map(|_| ()),
-            Self::Copy(runtime) => runtime.on_alarm().await,
+            Self::Fleet(kernel) => kernel.on_event(event).await,
+            Self::Copy(kernel) => kernel.on_event(event).await,
         }
+    }
+}
+
+fn call_answer(reply: EventReply) -> Result<Vec<u8>, CallFailure> {
+    match reply {
+        EventReply::CallAnswer(answer) => Ok(answer),
+        EventReply::CallFailure(failure) => Err(failure),
+        EventReply::None
+        | EventReply::SocketFailed
+        | EventReply::AlarmDone
+        | EventReply::AlarmRetry => Err(CallFailure::AnswerLost),
     }
 }
 
@@ -196,6 +234,7 @@ impl NativeObjects {
             .await
             .map_err(StoreError::backend)?;
         if advances_clock {
+            slot.io.clock_moved.send_replace(());
             slot.io
                 .wake
                 .wake_at(self.clock.now())
@@ -314,6 +353,8 @@ impl NativeObjects {
                             wake: Arc::new(ObjectAlarmTimer::new(self.clock.0.clone())),
                             #[cfg(feature = "conformance")]
                             faults: self.startup_controls.faults_for(&key),
+                            #[cfg(feature = "conformance")]
+                            clock_moved: Arc::new(tokio::sync::watch::channel(()).0),
                         },
                         host: OnceCell::new(),
                         runtime: OnceCell::new(),
@@ -360,19 +401,23 @@ impl NativeObjects {
             .runtime
             .get_or_try_init(|| async {
                 let runtime = match &address {
-                    ObjectAddress::Copy(project) => RuntimeFace::Copy(ObjectRuntime::copy(
-                        host,
-                        self.config.authoritative_receiver,
-                        *project,
-                        self.copy_ack_wait,
-                    )),
-                    ObjectAddress::Fleet => RuntimeFace::Fleet(ObjectRuntime::fleet(
-                        host,
-                        self.config,
-                        self.delivery,
-                        self.holder_answer_timeout,
-                        fleet_protocol::FrameCapabilities::default(),
-                    )?),
+                    ObjectAddress::Copy(project) => {
+                        RuntimeFace::Copy(ObjectKernel::new(ObjectRuntime::copy(
+                            host,
+                            self.config.authoritative_receiver,
+                            *project,
+                            self.copy_ack_wait,
+                        )))
+                    }
+                    ObjectAddress::Fleet => {
+                        RuntimeFace::Fleet(ObjectKernel::new(ObjectRuntime::fleet(
+                            host,
+                            self.config,
+                            self.delivery,
+                            self.holder_answer_timeout,
+                            fleet_protocol::FrameCapabilities::default(),
+                        )?))
+                    }
                 };
                 runtime.initialize().await?;
                 Ok::<_, StoreError>(Arc::new(runtime))
@@ -416,26 +461,30 @@ impl NativeObjects {
             {
                 return Err(no_route());
             }
-            match slot.runtime.get().map(Arc::as_ref) {
-                Some(RuntimeFace::Fleet(runtime)) => runtime.on_call(body).await,
-                Some(RuntimeFace::Copy(runtime)) => match runtime.copy_call_class(&body)? {
-                    collaboration_central_core::CopyCallClass::Health => {
+            let runtime = slot.runtime.get().cloned().ok_or_else(no_route)?;
+            let storage_bytes = match runtime.as_ref() {
+                RuntimeFace::Copy(kernel) => match kernel.face().copy_call_class(&body)? {
+                    collaboration_central_core::CopyCallClass::Health => Some(
                         objects
-                            .read_health(
+                            .measure_storage(
                                 &slot,
-                                runtime,
-                                body,
                                 #[cfg(feature = "conformance")]
                                 health_address,
                             )
-                            .await
-                    }
-                    collaboration_central_core::CopyCallClass::Ordinary => {
-                        runtime.on_call(body).await
-                    }
+                            .await?,
+                    ),
+                    collaboration_central_core::CopyCallClass::Ordinary => None,
                 },
-                _ => Err(no_route()),
-            }
+                RuntimeFace::Fleet(_) => None,
+            };
+            call_answer(
+                runtime
+                    .on_event(ObjectEvent::Call {
+                        body,
+                        storage_bytes,
+                    })
+                    .await,
+            )
         })
     }
 
@@ -457,13 +506,18 @@ impl NativeObjects {
         let Some(runtime_handle) = slot.runtime.get().cloned() else {
             return;
         };
-        let RuntimeFace::Fleet(runtime) = runtime_handle.as_ref() else {
+        if !matches!(runtime_handle.as_ref(), RuntimeFace::Fleet(_)) {
             return;
-        };
+        }
         let mut outgoing = host.attach_socket(binding, origin).await;
         let mut socket = socket;
         let mut requests = tokio::task::JoinSet::new();
-        if runtime.on_socket_opened(binding).await.is_ok() {
+        if matches!(
+            runtime_handle
+                .on_event(ObjectEvent::SocketOpened { binding })
+                .await,
+            EventReply::None
+        ) {
             loop {
                 tokio::select! {
                     _ = self.stop.cancelled() => break,
@@ -483,11 +537,11 @@ impl NativeObjects {
                     message = socket.recv() => match message {
                         Some(Ok(Message::Binary(bytes))) => {
                             let runtime = runtime_handle.clone();
-                            requests.spawn(async move { match runtime.as_ref() { RuntimeFace::Fleet(runtime) => runtime.on_frame(binding, bytes.to_vec()).await, RuntimeFace::Copy(_) => Err(StoreError::Aborted { reason: "session runtime missing".into() }) } });
+                            requests.spawn(async move { frame_outcome(runtime.on_event(ObjectEvent::Frame { binding, frame: bytes.to_vec() }).await) });
                         },
                         Some(Ok(Message::Text(text))) => {
                             let runtime = runtime_handle.clone();
-                            requests.spawn(async move { match runtime.as_ref() { RuntimeFace::Fleet(runtime) => runtime.on_frame(binding, text.as_bytes().to_vec()).await, RuntimeFace::Copy(_) => Err(StoreError::Aborted { reason: "session runtime missing".into() }) } });
+                            requests.spawn(async move { frame_outcome(runtime.on_event(ObjectEvent::Frame { binding, frame: text.as_bytes().to_vec() }).await) });
                         },
                         Some(Ok(Message::Ping(_) | Message::Pong(_))) => {},
                         Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
@@ -497,7 +551,9 @@ impl NativeObjects {
         }
         requests.abort_all();
         while requests.join_next().await.is_some() {}
-        let _ = runtime.on_socket_closed(binding).await;
+        let _ = runtime_handle
+            .on_event(ObjectEvent::SocketClosed { binding })
+            .await;
         host.detach_socket(binding.connection).await;
     }
 
@@ -519,7 +575,7 @@ impl NativeObjects {
             .and_then(|slot| slot.runtime.get())
             .map(Arc::as_ref)
         {
-            Some(RuntimeFace::Fleet(runtime)) => runtime.conformance_forward_state().await,
+            Some(RuntimeFace::Fleet(kernel)) => kernel.face().conformance_forward_state().await,
             _ => Err(StoreError::Aborted {
                 reason: "connection runtime missing".into(),
             }),
@@ -537,7 +593,7 @@ impl NativeObjects {
             .and_then(|slot| slot.runtime.get())
             .map(Arc::as_ref)
         {
-            Some(RuntimeFace::Fleet(runtime)) => runtime.conformance_holder_frames(),
+            Some(RuntimeFace::Fleet(kernel)) => kernel.face().conformance_holder_frames(),
             _ => Err(StoreError::Aborted {
                 reason: "connection runtime missing".into(),
             }),
@@ -556,7 +612,7 @@ impl NativeObjects {
             .and_then(|slot| slot.runtime.get())
             .map(Arc::as_ref)
         {
-            Some(RuntimeFace::Fleet(runtime)) => runtime.conformance_mail_custody(item).await,
+            Some(RuntimeFace::Fleet(kernel)) => kernel.face().conformance_mail_custody(item).await,
             _ => Err(StoreError::Aborted {
                 reason: "Fleet owner missing".into(),
             }),
@@ -642,7 +698,7 @@ impl NativeObjects {
     ) -> Result<Option<fleet_protocol::ReportSchemaSupport>, StoreError> {
         let slot = self.slot(ObjectAddress::Fleet).await?;
         match slot.runtime.get().map(Arc::as_ref) {
-            Some(RuntimeFace::Fleet(runtime)) => runtime.conformance_schema_report(peer).await,
+            Some(RuntimeFace::Fleet(kernel)) => kernel.face().conformance_schema_report(peer).await,
             _ => Err(StoreError::Aborted {
                 reason: "registry runtime missing".into(),
             }),
@@ -672,6 +728,16 @@ impl NativeObjects {
 impl Drop for NativeObjects {
     fn drop(&mut self) {
         self.stop.cancel();
+    }
+}
+
+/// A failed frame ends the socket loop, which closes the connection.
+fn frame_outcome(reply: EventReply) -> Result<(), StoreError> {
+    match reply {
+        EventReply::SocketFailed => Err(StoreError::Aborted {
+            reason: "frame failed".into(),
+        }),
+        _ => Ok(()),
     }
 }
 

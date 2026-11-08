@@ -28,7 +28,7 @@ async fn closed_socket_cleanup_does_not_require_a_live_admission_and_other_sessi
         .await?;
     fixture.hello(dead, dead_session).await?;
     fixture.hello(healthy, healthy_session).await?;
-    fixture.runtime.on_alarm().await?;
+    fixture.runtime.conformance_drive_operations().await?;
     assert!(matches!(
         dead_socket.try_recv(),
         Ok(SocketCommand::Frame(_))
@@ -58,7 +58,7 @@ async fn closed_socket_cleanup_does_not_require_a_live_admission_and_other_sessi
             Err(durable_steps::CallFailure::AnswerLost)
         ));
     }
-    fixture.runtime.on_alarm().await?;
+    fixture.runtime.conformance_drive_operations().await?;
     assert!(
         fixture
             .host
@@ -105,7 +105,7 @@ async fn closed_socket_cleanup_does_not_require_a_live_admission_and_other_sessi
         )
         .await?;
     fixture.hello(fresh, fresh_session).await?;
-    fixture.runtime.on_alarm().await?;
+    fixture.runtime.conformance_drive_operations().await?;
     assert!(matches!(
         fresh_socket.try_recv(),
         Ok(SocketCommand::Frame(_))
@@ -154,7 +154,7 @@ async fn register_refuses_another_peer_before_dispatch_and_keeps_the_socket_usab
     let fixture = Fixture::open(directory.path()).await?;
     let (binding, session_id, mut socket) = fixture.socket().await?;
     fixture.hello(binding, session_id).await?;
-    fixture.runtime.on_alarm().await?;
+    fixture.runtime.conformance_drive_operations().await?;
     let Some(SocketCommand::Frame(welcome)) = socket.try_recv().ok() else {
         return Err("attached fixture has no Welcome".into());
     };
@@ -242,7 +242,7 @@ async fn hello_commits_attaching_before_engine_publication_then_welcomes_once()
             .map_err(|_| "wake mutex poisoned")?
             .is_empty()
     );
-    fixture.runtime.on_alarm().await?;
+    fixture.runtime.conformance_drive_operations().await?;
     assert_eq!(
         fixture.host.registrations().await?.get(&binding.connection),
         Some(&ConnectionRegistration::Attached {
@@ -259,7 +259,7 @@ async fn hello_commits_attaching_before_engine_publication_then_welcomes_once()
         frame,
         serde_json::json!({"kind":"welcome","value":{"sessionId":session_id,"databases":[]}})
     );
-    fixture.runtime.on_alarm().await?;
+    fixture.runtime.conformance_drive_operations().await?;
     assert!(matches!(
         socket.try_recv(),
         Err(tokio::sync::mpsc::error::TryRecvError::Empty)
@@ -293,7 +293,7 @@ async fn rollback_case(fault: u8) -> Result<(), TestError> {
     fixture.hello(binding, session_id).await?;
     fixture.host.store.rollback.store(fault, Ordering::SeqCst);
 
-    let report = fixture.runtime.on_alarm().await?;
+    let report = fixture.runtime.conformance_drive_operations().await?;
     assert_eq!(report.retried.len(), 1);
     assert!(report.failed.is_empty());
 
@@ -342,7 +342,7 @@ async fn publication_failure_quarantines_only_the_failed_connection_after_commit
         .lock()
         .map_err(|_| "probe poisoned")? = Some(failed.connection);
 
-    let report = fixture.runtime.on_alarm().await?;
+    let report = fixture.runtime.conformance_drive_operations().await?;
 
     assert_eq!(report.completed.len(), 1);
     assert!(report.failed.is_empty());
@@ -371,7 +371,7 @@ async fn publication_failure_quarantines_only_the_failed_connection_after_commit
         Some(&ConnectionRegistration::Opening)
     );
     fixture.hello(healthy, healthy_session).await?;
-    let surviving = fixture.runtime.on_alarm().await?;
+    let surviving = fixture.runtime.conformance_drive_operations().await?;
     assert_eq!(surviving.completed.len() + report.completed.len(), 2);
     assert!(surviving.failed.is_empty());
     assert!(matches!(
@@ -403,7 +403,7 @@ async fn local_section_excludes_a_second_snapshot_until_committed_publication()
     fixture.hello(binding, session_id).await?;
     fixture.host.probe.hold.store(true, Ordering::SeqCst);
     let runtime = fixture.runtime.clone();
-    let drive = tokio::spawn(async move { runtime.on_alarm().await });
+    let drive = tokio::spawn(async move { runtime.conformance_drive_operations().await });
     tokio::time::timeout(Duration::from_secs(5), fixture.host.probe.entered.acquire())
         .await??
         .forget();
@@ -448,7 +448,7 @@ async fn interruption_after_commit_does_not_undo_the_receipt_or_emit_welcome()
     fixture.hello(binding, session_id).await?;
     fixture.host.probe.hold.store(true, Ordering::SeqCst);
     let runtime = fixture.runtime.clone();
-    let drive = tokio::spawn(async move { runtime.on_alarm().await });
+    let drive = tokio::spawn(async move { runtime.conformance_drive_operations().await });
     tokio::time::timeout(Duration::from_secs(5), fixture.host.probe.entered.acquire())
         .await??
         .forget();
@@ -485,7 +485,7 @@ async fn welcome_transport_releases_local_exclusion_before_the_socket_send() -> 
     fixture.hello(binding, session_id).await?;
     fixture.io.gather.hold.store(true, Ordering::SeqCst);
     let runtime = fixture.runtime.clone();
-    let drive = tokio::spawn(async move { runtime.on_alarm().await });
+    let drive = tokio::spawn(async move { runtime.conformance_drive_operations().await });
     tokio::time::timeout(Duration::from_secs(5), fixture.io.gather.entered.acquire())
         .await??
         .forget();
@@ -535,7 +535,7 @@ async fn a_reopened_native_host_starts_with_no_transport_registrations() -> Resu
     let reopened = Fixture::reopen(directory.path()).await?;
 
     assert!(reopened.host.registrations().await?.is_empty());
-    let report = reopened.runtime.on_alarm().await?;
+    let report = reopened.runtime.conformance_drive_operations().await?;
     assert_eq!(report.completed.len(), 1);
     assert!(reopened.host.registrations().await?.is_empty());
     reopened.objects.close().await?;

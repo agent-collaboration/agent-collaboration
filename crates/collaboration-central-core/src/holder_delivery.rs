@@ -1,5 +1,6 @@
 //! The connection object's delivery face sends outside local exclusion.
 use crate::FleetKind;
+use runtime_primitives::Clock as _;
 
 use crate::{
     CallerKind, DeliveryKind, ObjectAddress, ObjectIo, ObjectPlatform, ObjectRuntime,
@@ -261,7 +262,7 @@ where
             ),
         };
         let deadline_io = io.clone();
-        let answer = crate::peer_request::begin_peer_request(
+        let waiter = crate::peer_request::begin_peer_request(
             host.clone(),
             io.clone(),
             replies.clone(),
@@ -270,9 +271,26 @@ where
             *holder_answer_timeout,
             move |remaining| async move { deadline_io.event_deadline(remaining).await },
         )
-        .await?
-        .answer()
         .await?;
+        // The wait ends at its event deadline, never through the alarm (H2).
+        let remaining = std::time::Duration::from_millis(
+            u64::try_from(
+                waiter
+                    .deadline()
+                    .unix_millis()
+                    .saturating_sub(io.now().unix_millis()),
+            )
+            .unwrap_or(0),
+        );
+        let answer = match futures_util::future::select(
+            Box::pin(waiter.answer()),
+            Box::pin(io.event_deadline(remaining)),
+        )
+        .await
+        {
+            futures_util::future::Either::Left((answer, _)) => answer?,
+            futures_util::future::Either::Right(_) => return Err(CallFailure::AnswerLost),
+        };
         match (reply_kind, answer) {
             (HolderReplyKind::Release, ClientAnswer::Crate(ServerCallAnswer::Release(answer))) => {
                 serde_json::to_vec(&answer).map_err(|_| CallFailure::AnswerLost)

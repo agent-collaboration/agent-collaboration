@@ -12,7 +12,7 @@ use durable_steps::{
 use fleet_protocol::{FrameId, PeerId, ServerCall, ServerFrame, ServerRequest};
 use fleet_session::{ConnectionRegistration, SessionKey};
 use futures_util::future::{Either, select};
-use runtime_primitives::{Clock, IdSource, WakeScheduler};
+use runtime_primitives::{Clock, IdSource};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
@@ -110,7 +110,6 @@ where
         .unwrap_or(0),
     );
     let send = async {
-        host.alarm().wake_at(deadline).await.map_err(|_| unsent())?;
         host.send_frame(connection, bytes.into())
             .await
             .map_err(|_| CallFailure::AnswerLost)

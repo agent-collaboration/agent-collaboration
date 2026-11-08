@@ -162,7 +162,12 @@ where
                     fleet_protocol::CopyStatusAnswer::Retired => CopyOpsAnswer::Retired,
                     fleet_protocol::CopyStatusAnswer::Status(_)
                     | fleet_protocol::CopyStatusAnswer::NotInitialized => {
-                        self.on_alarm().await.map_err(|_| CallFailure::AnswerLost)?;
+                        self.expire_copy_staged_parts()
+                            .await
+                            .map_err(|_| CallFailure::AnswerLost)?;
+                        self.drive_copy_followups()
+                            .await
+                            .map_err(|_| CallFailure::AnswerLost)?;
                         CopyOpsAnswer::Repaired
                     }
                 }

@@ -86,7 +86,7 @@ async fn a_part_younger_than_one_day_survives_and_rearms_its_original_deadline()
             .map_err(|_| "wake observation poisoned")?
             .clear();
 
-        fixture.runtime.on_alarm().await?;
+        crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
 
         assert_eq!(staged(&fixture).await?, before);
         assert_eq!(
@@ -173,7 +173,7 @@ async fn an_alarm_discards_a_younger_transaction_below_the_actual_copy_fence() -
                 "the library does not discard at fence time"
             );
 
-            fixture.runtime.on_alarm().await?;
+            crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
 
             assert!(staged(&fixture).await?.is_empty());
             Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
