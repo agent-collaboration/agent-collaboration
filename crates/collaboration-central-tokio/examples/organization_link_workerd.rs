@@ -31,6 +31,10 @@ const UNSTAMPED: &str = "019f0000-0000-7000-8000-00000000b2c3";
 const RACE: &str = "019f0000-0000-7000-8000-00000000b2c4";
 /// Provisioned only by the byte-identical first-provision race.
 const RACE_SAME: &str = "019f0000-0000-7000-8000-00000000b2c5";
+/// Stamped under the second published key, which is retired before the restart.
+const KEYED: &str = "019f0000-0000-7000-8000-00000000b2c6";
+/// Never provisioned; offered a statement under the retired key after the restart.
+const AFTER_RETIREMENT: &str = "019f0000-0000-7000-8000-00000000b2c7";
 const LEGACY_MACHINE: &str = "550e8400-e29b-41d4-a716-44665544b2a8";
 
 /// The stamp-profile refusals, each a correctly signed statement but for one field.
@@ -381,6 +385,14 @@ async fn main() -> ConformanceResult<()> {
             "two byte-identical first provisions at once: both Provisioned, one stamp, one record",
             &(same_race, after_same),
         )?;
+        let keyed = caller
+            .provision(KEYED, &stamps::stamp_under_second_key(KEYED)?)
+            .await?;
+        require(
+            keyed == 200 && caller.digest(KEYED).await?.0 == 200,
+            "a stamp under the second published key is accepted while that key is published",
+            &keyed,
+        )?;
         let renewal_held = stamps::renewal(RACE, &first_racing, 10)?;
         let renewal_racing = stamps::renewal(RACE, &first_racing, 11)?;
         let renewal_race = race(&caller, RACE, renewal_held, renewal_racing.clone()).await?;
@@ -657,6 +669,8 @@ async fn main() -> ConformanceResult<()> {
     .await;
     harness.stop().await?;
     let before_restart = first?;
+    // The sign-in service retires its second key once every central restarted.
+    keys.retire("stamp-b")?;
     let restarted = LinkHarness::start(&harness_arguments).await?;
     let second = async {
         let after_restart = caller.records(legacy).await?;
@@ -699,6 +713,25 @@ async fn main() -> ConformanceResult<()> {
                 && created_records(&recovered_rows, LOST_OPERATION) == 1,
             "the same operation finds its workspace after the restart: one workspace, one record",
             &(recovered, recovered_rows),
+        )?;
+        // A stamp under the retired key is refused after the cold start; a new
+        // statement under it is refused before any write.
+        let retired_digest = caller.digest(KEYED).await?;
+        let retired_setup = caller.provision(KEYED, &stamps::stamp(KEYED)?).await?;
+        let retired_new = caller
+            .provision(
+                AFTER_RETIREMENT,
+                &stamps::stamp_under_second_key(AFTER_RETIREMENT)?,
+            )
+            .await?;
+        let retired_rows = caller.records(AFTER_RETIREMENT).await?;
+        require(
+            retired_digest.0 == 503
+                && retired_setup == 409
+                && retired_new == 422
+                && retired_rows.get("statement") == Some(&Value::Null),
+            "a retired key's stamp is refused after the cold start and a new statement under it writes nothing",
+            &(retired_digest, retired_setup, retired_new, retired_rows),
         )?;
         // OTHER's stored statement was damaged in place before the restart:
         // every call naming OTHER is refused, the damage is still what is

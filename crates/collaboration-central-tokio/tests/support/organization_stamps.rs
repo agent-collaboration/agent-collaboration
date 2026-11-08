@@ -31,6 +31,19 @@ pub(crate) fn published_keys() -> ConformanceResult<Value> {
     Ok(json!({"keys":[key("stamp-a", 7)?, key("stamp-b", 8)?]}))
 }
 
+/// The published set without the keys the fixture has retired.
+fn published_keys_except(retired: &[String]) -> ConformanceResult<Value> {
+    let mut keys = published_keys()?;
+    if let Some(list) = keys.get_mut("keys").and_then(Value::as_array_mut) {
+        list.retain(|key| {
+            key.get("kid")
+                .and_then(Value::as_str)
+                .is_none_or(|kid| !retired.iter().any(|gone| gone == kid))
+        });
+    }
+    Ok(keys)
+}
+
 pub(crate) fn claims(organization: &str) -> Value {
     json!({
         "purpose":"fleet-organization-stamp","version":1,"iss":ISSUER,"aud":AUDIENCE,
@@ -58,6 +71,15 @@ pub(crate) fn stamp_header() -> Value {
 
 pub(crate) fn stamp(organization: &str) -> ConformanceResult<String> {
     sign(&stamp_header(), &claims(organization), 7)
+}
+
+/// A valid statement signed by the published `stamp-b` key (seed 8).
+pub(crate) fn stamp_under_second_key(organization: &str) -> ConformanceResult<String> {
+    sign(
+        &json!({"typ":"fleet-organization-stamp+jwt","alg":"EdDSA","kid":"stamp-b"}),
+        &claims(organization),
+        8,
+    )
 }
 
 /// Flip one base64url symbol inside the signature, keeping the JWS decodable.
@@ -115,6 +137,7 @@ pub(crate) fn set_claim(claims: &mut Value, name: &str, value: Value) -> Conform
 /// The fixture sign-in service: only its published key set, over loopback.
 pub(crate) struct SignInKeys {
     pub url: String,
+    retired: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
     stop: tokio::sync::oneshot::Sender<()>,
     task: tokio::task::JoinHandle<Result<(), std::io::Error>>,
 }
@@ -122,12 +145,21 @@ impl SignInKeys {
     pub(crate) async fn start() -> ConformanceResult<Self> {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
         let url = format!("http://{}/api/auth/jwks", listener.local_addr()?);
+        let retired = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let published = retired.clone();
         let router = axum::Router::new().route(
             "/api/auth/jwks",
-            axum::routing::get(|| async {
-                published_keys()
-                    .map(axum::Json)
-                    .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)
+            axum::routing::get(move || {
+                let published = published.clone();
+                async move {
+                    let retired = published
+                        .lock()
+                        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)?
+                        .clone();
+                    published_keys_except(&retired)
+                        .map(axum::Json)
+                        .map_err(|_| axum::http::StatusCode::INTERNAL_SERVER_ERROR)
+                }
             }),
         );
         let (stop, stopped) = tokio::sync::oneshot::channel();
@@ -138,7 +170,21 @@ impl SignInKeys {
                 })
                 .await
         });
-        Ok(Self { url, stop, task })
+        Ok(Self {
+            url,
+            retired,
+            stop,
+            task,
+        })
+    }
+    /// Stop publishing `kid`, as the sign-in service does once every central
+    /// holds a statement under its successor and has restarted cold.
+    pub(crate) fn retire(&self, kid: &str) -> ConformanceResult<()> {
+        self.retired
+            .lock()
+            .map_err(|_| "retired key list poisoned")?
+            .push(kid.to_owned());
+        Ok(())
     }
     pub(crate) async fn shutdown(self) -> ConformanceResult<()> {
         let _ = self.stop.send(());

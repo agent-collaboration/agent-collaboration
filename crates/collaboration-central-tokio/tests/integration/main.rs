@@ -121,6 +121,7 @@ mod organization_admin_lost_answer;
 mod organization_admin_origin;
 mod organization_provisioning_link;
 mod organization_provisioning_races;
+mod organization_retired_key;
 mod organization_unstamped_routes;
 mod owner_admin_sessions;
 mod owner_fence_ordering;
