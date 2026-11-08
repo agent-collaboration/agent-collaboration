@@ -276,4 +276,11 @@ impl<H: Host> JournalScope for WriterJournalScope<'_, H> {
     async fn ensure_wake(&mut self, at: SyncTime) -> Result<(), StoreError> {
         self.journal().ensure_wake(at).await
     }
+    async fn make_due(
+        &mut self,
+        id: durable_steps::OperationId,
+        now: SyncTime,
+    ) -> Result<bool, StoreError> {
+        self.journal().make_due(id, now).await
+    }
 }

@@ -41,7 +41,7 @@ durable-steps = { workspace = true, features = ["turso"] }
 fleet-native-writer.workspace = true
 fleet-session-client.workspace = true
 fleet-tokio-objects.workspace = true
-sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "eec81ee707873b5a8b266f30e0d193c70338415e", default-features = false }
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "5dbdba7ad2241a67f08f6d312b50cd8ab3bef3b9", default-features = false }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

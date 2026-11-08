@@ -300,6 +300,15 @@ where
         self.wake_at = Some(self.wake_at.map_or(at, |current| current.min(at)));
         Ok(())
     }
+    async fn make_due(&mut self, id: OperationId, now: SyncTime) -> Result<bool, StoreError> {
+        let made_due = self.inner.make_due(id, now).await?;
+        if made_due {
+            // Like ensure_wake: the inner wake commits with the transaction on Cloudflare;
+            // Tokio learns it only from this post-commit wake.
+            self.wake_at = Some(self.wake_at.map_or(now, |current| current.min(now)));
+        }
+        Ok(made_due)
+    }
 }
 
 impl<Host: ObjectPlatform> JournalStorage for CoreSessionScope<'_, Host>
