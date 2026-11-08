@@ -122,6 +122,15 @@ pub mod stored_inventory_observation;
 mod wakeup_timing_worker;
 pub(crate) use interaction_storage_failure::map_interaction_storage_error;
 mod push_handoff_worker;
+mod wake_driven_worker_loop;
+mod wake_driven_worker_observation;
+pub use wake_driven_worker_loop::{BatchOutcome, WakeDrivenWorkerLoop, WakeSource, WorkerPass};
+pub use wake_driven_worker_observation::WorkerObservation;
+#[cfg(any(test, feature = "test-support"))]
+pub use wake_driven_worker_observation::{LoopSnapshot, SleepGate};
+/// Test-only wall clock that moves with Tokio's paused clock.
+#[cfg(any(test, feature = "test-support"))]
+pub mod paused_wall_clock;
 pub use push_handoff_worker::{PushHandoffError, PushHandoffWorker};
 pub mod received_mail_push;
 pub use received_mail_push::received_mail_push;
