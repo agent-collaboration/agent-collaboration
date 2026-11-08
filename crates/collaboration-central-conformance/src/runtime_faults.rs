@@ -63,6 +63,7 @@ struct FaultState {
     dispatch: DispatchHolds,
     object_reply: ObjectReplyFault,
     session: session_faults::SessionFaultState,
+    organization_record: bool,
 }
 impl Default for FaultState {
     fn default() -> Self {
@@ -73,6 +74,7 @@ impl Default for FaultState {
             dispatch: DispatchHolds::default(),
             object_reply: ObjectReplyFault::Idle,
             session: Default::default(),
+            organization_record: false,
         }
     }
 }
@@ -98,6 +100,10 @@ impl RuntimeFaults {
             self.state()?.storage,
             StorageFaultObservation::Armed { .. } | StorageFaultObservation::Unavailable
         ))
+    }
+    /// Consume an armed provisioning record fault, if any.
+    pub fn take_organization_record_fault(&self) -> Result<bool, RuntimeControlFailure> {
+        Ok(std::mem::take(&mut self.state()?.organization_record))
     }
     pub fn project_unavailable(&self) -> Result<bool, RuntimeControlFailure> {
         Ok(matches!(
@@ -335,6 +341,9 @@ impl RuntimeFaults {
                     ObjectReplyFault::Idle => return Err(RuntimeControlFailure::NotArmed),
                 };
                 observed.wait().await?;
+            }
+            RuntimeControl::FailNextOrganizationRecord => {
+                self.state()?.organization_record = true;
             }
             RuntimeControl::Observe => {}
         }

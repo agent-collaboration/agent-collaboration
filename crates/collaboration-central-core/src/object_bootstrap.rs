@@ -446,6 +446,25 @@ static FLEET_MIGRATIONS: std::sync::LazyLock<Vec<sqlx_core::migrate::Migration>>
                 "organization change records",
                 include_str!("../organization_migrations/0012_organization_change_records.sql"),
             ),
+            (
+                13,
+                "organization authorization floors",
+                include_str!(
+                    "../organization_migrations/0013_organization_authorization_floors.sql"
+                ),
+            ),
+            (
+                14,
+                "person organization authorization floors",
+                include_str!(
+                    "../organization_migrations/0014_person_organization_authorization_floors.sql"
+                ),
+            ),
+            (
+                15,
+                "organization used requests",
+                include_str!("../organization_migrations/0015_organization_used_requests.sql"),
+            ),
         ]
         .into_iter()
         .map(|(version, description, sql)| {

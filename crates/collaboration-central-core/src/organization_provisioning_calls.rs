@@ -154,7 +154,7 @@ where
                 now_millis: io.now().unix_millis(),
                 stored_trusted,
                 #[cfg(feature = "conformance")]
-                fail_after_record: false,
+                fail_after_record: io.take_organization_record_fault(),
             }))
             .await
             .map_err(|_| CallFailure::AnswerLost)?;

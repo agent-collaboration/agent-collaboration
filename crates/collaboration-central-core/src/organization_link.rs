@@ -16,9 +16,20 @@ use crate::{
 use durable_steps::{CallFailure, CallId, CallTarget, OperationId, StepName};
 use fleet_identity_protocol::OrganizationId;
 
-/// Build the link router over a host's object transport.
+/// Build the link router over a host's object transport: provisioning, the
+/// renewal digest read, and the three admin routes.
 pub fn organization_link_router<Platform: CentralPlatform>(platform: Platform) -> axum::Router {
-    crate::organization_provisioning_router(std::sync::Arc::new(FleetLinkProvisioner { platform }))
+    crate::organization_provisioning_router(std::sync::Arc::new(FleetLinkProvisioner {
+        platform: platform.clone(),
+    }))
+    .merge(crate::organization_admin_link::admin_link_routes(platform))
+}
+
+/// Whether a path belongs to the private link's surface (all of it, on any host).
+#[must_use]
+pub fn is_private_link_path(path: &str) -> bool {
+    path.starts_with(crate::PRIVATE_LINK_PREFIX)
+        || path.starts_with(crate::ORGANIZATION_ADMIN_PREFIX)
 }
 
 struct FleetLinkProvisioner<Platform> {

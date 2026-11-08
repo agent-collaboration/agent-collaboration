@@ -79,6 +79,11 @@ impl PlatformIo for CloudflareObjectIo {
             .drop_successful_object_reply(&self.address, request)
             .map_err(|_| CallFailure::AnswerLost)
     }
+    #[cfg(feature = "conformance")]
+    fn take_organization_record_fault(&self) -> bool {
+        // A poisoned fault lock fails the conformance run closed.
+        self.faults.take_organization_record_fault().unwrap_or(true)
+    }
     fn object_call(
         &self,
         address: ObjectAddress,

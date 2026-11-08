@@ -207,7 +207,7 @@ where
     #[must_use]
     pub fn with_organization_statements(
         self,
-        check: Arc<dyn crate::organization_authority::OrganizationStatementCheck>,
+        check: Arc<dyn crate::organization_authority::SignInVerification>,
     ) -> Self {
         if let ObjectWork::Fleet {
             organization_stamp, ..
@@ -487,6 +487,9 @@ where
         }
         if call.kind == crate::FleetOrganizationStatementDigest::KIND {
             return self.statement_digest_call(call).await;
+        }
+        if call.kind == crate::FleetOrganizationAdmin::KIND {
+            return self.organization_admin_call(call).await;
         }
         if call.kind == crate::mail_submit_calls::FleetMailSubmit::KIND {
             return self.mail_submit_call(call).await;

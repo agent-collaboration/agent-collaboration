@@ -23,10 +23,6 @@ impl OrganizationChangeKind {
             Self::WorkspaceCreated => "workspaceCreated",
         }
     }
-    #[cfg_attr(
-        not(any(test, feature = "conformance")),
-        expect(dead_code, reason = "B2d's change-record lookups decode records")
-    )]
     fn parse(value: &str) -> Result<Self, StoreError> {
         match value {
             "organizationProvisioned" => Ok(Self::OrganizationProvisioned),
@@ -130,10 +126,6 @@ where
     .map_err(StoreError::backend)
 }
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "B2d's change-record lookups read records back")
-)]
 pub(crate) async fn read_by_request<S: TransactionScope>(
     scope: &mut S,
     request: &ChangeRequestId,
@@ -164,10 +156,6 @@ where
 }
 
 /// A bounded page of records in identity order, after the given record.
-#[cfg_attr(
-    not(any(test, feature = "conformance")),
-    expect(dead_code, reason = "B2d's change-record lookups read records back")
-)]
 pub(crate) async fn read_page<S: TransactionScope>(
     scope: &mut S,
     after: Option<Uuid>,
@@ -200,15 +188,7 @@ where
         .collect()
 }
 
-#[cfg_attr(
-    not(any(test, feature = "conformance")),
-    expect(dead_code, reason = "B2d's change-record lookups read records back")
-)]
 type Column = (Option<String>, Option<String>);
-#[cfg_attr(
-    not(any(test, feature = "conformance")),
-    expect(dead_code, reason = "B2d's change-record lookups read records back")
-)]
 struct StoredColumns {
     id: Column,
     request_id: Column,
@@ -220,10 +200,6 @@ struct StoredColumns {
     created_at: Column,
 }
 
-#[cfg_attr(
-    not(any(test, feature = "conformance")),
-    expect(dead_code, reason = "B2d's change-record lookups read records back")
-)]
 fn decode(columns: StoredColumns) -> Result<OrganizationChangeRecord, StoreError> {
     let id = text(columns.id, "id")?;
     fleet_row_codec::check_private_id(&id, "organization_change_records.id")?;
@@ -267,10 +243,6 @@ fn decode(columns: StoredColumns) -> Result<OrganizationChangeRecord, StoreError
     })
 }
 
-#[cfg_attr(
-    not(any(test, feature = "conformance")),
-    expect(dead_code, reason = "B2d's change-record lookups read records back")
-)]
 fn text((value, class): Column, field: &str) -> Result<String, StoreError> {
     if fleet_row_codec::required(class, field)? != "text" {
         return Err(corrupt(field, "column is not TEXT"));
@@ -278,10 +250,6 @@ fn text((value, class): Column, field: &str) -> Result<String, StoreError> {
     fleet_row_codec::required(value, field)
 }
 
-#[cfg_attr(
-    not(any(test, feature = "conformance")),
-    expect(dead_code, reason = "B2d's change-record lookups read records back")
-)]
 fn optional_text((value, class): Column, field: &str) -> Result<Option<String>, StoreError> {
     match fleet_row_codec::required(class, field)?.as_str() {
         "null" => Ok(None),

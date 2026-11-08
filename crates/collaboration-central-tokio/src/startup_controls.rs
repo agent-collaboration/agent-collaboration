@@ -21,7 +21,8 @@ impl PreparedRuntimeControls {
                 | RuntimeControl::DropNextAnswer { .. }
                 | RuntimeControl::HoldNextDispatch { .. }
                 | RuntimeControl::DropNextObjectReply { .. }
-                | RuntimeControl::DropNextSelectedObjectReply { .. } => {}
+                | RuntimeControl::DropNextSelectedObjectReply { .. }
+                | RuntimeControl::FailNextOrganizationRecord => {}
                 RuntimeControl::ProjectUnavailable
                 | RuntimeControl::ClearProjectFault
                 | RuntimeControl::AwaitDroppedAnswer { .. }

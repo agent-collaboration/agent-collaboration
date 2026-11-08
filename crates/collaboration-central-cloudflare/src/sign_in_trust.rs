@@ -5,8 +5,14 @@ use collaboration_central_core::{
     SignatureValidity, VerifyFailure,
     organization_authority::{
         FleetOrganizationStatementRefusal, FleetOrganizationStatementTrust,
-        FleetOrganizationStatementVerifier, OrganizationStatementCheck,
-        VerifiedFleetOrganizationStatement,
+        FleetOrganizationStatementVerifier, SignInVerification, VerifiedFleetOrganizationStatement,
+    },
+};
+use collaboration_central_core::{
+    IssuerSignatureVerifier,
+    person_request::{
+        Es256Verification, PersonRequestInput, PersonRequestPolicy, PersonRequestRefusal,
+        PersonRequestVerifier, ProofJwk, VerifiedPersonRequest,
     },
 };
 use fleet_identity_protocol::OrganizationId;
@@ -28,7 +34,7 @@ pub(crate) struct CloudflareStatementCheck {
     pub(crate) cache: Arc<IssuerKeyCache>,
 }
 
-impl OrganizationStatementCheck for CloudflareStatementCheck {
+impl SignInVerification for CloudflareStatementCheck {
     fn verify_statement<'a>(
         &'a self,
         statement: &'a str,
@@ -60,6 +66,126 @@ impl OrganizationStatementCheck for CloudflareStatementCheck {
             .verify(statement)
             .await
         })
+    }
+
+    fn verify_person_request<'a>(
+        &'a self,
+        input: &'a PersonRequestInput,
+    ) -> durable_steps::BoxFuture<'a, Result<VerifiedPersonRequest, PersonRequestRefusal>> {
+        Box::pin(async move {
+            let variable = |name: &str| {
+                self.env
+                    .var(name)
+                    .map(|value| value.to_string())
+                    .map_err(|_| PersonRequestRefusal::Policy)
+            };
+            let keys = WorkerSignInKeys {
+                source: variable("CENTRAL_SIGN_IN_JWKS_URL")?,
+            };
+            PersonRequestVerifier::new(
+                IssuerSignatureVerifier::new(
+                    WorkerEd25519,
+                    keys,
+                    self.cache.clone(),
+                    self.clock.clone(),
+                ),
+                WorkerEs256,
+                self.clock.clone(),
+                PersonRequestPolicy {
+                    issuer: variable("CENTRAL_SIGN_IN_ISSUER")?,
+                    audience: variable("CENTRAL_ADMIN_AUDIENCE")?,
+                    public_origin: variable("CENTRAL_PUBLIC_ORIGIN")?,
+                },
+            )
+            .verify(input)
+            .await
+        })
+    }
+}
+
+#[derive(Clone)]
+struct WorkerEs256;
+impl Es256Verification for WorkerEs256 {
+    fn verify_es256(
+        &self,
+        key: &ProofJwk,
+        signed: &[u8],
+        signature: &[u8],
+    ) -> impl Future<Output = Result<SignatureValidity, VerifyFailure>> + Send {
+        let key = key.clone();
+        let signed = signed.to_vec();
+        let signature = signature.to_vec();
+        SendFuture::new(async move { verify_es256(&key, &signed, &signature).await })
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct EcAlgorithm {
+    name: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    named_curve: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hash: Option<&'static str>,
+}
+
+async fn verify_es256(
+    key: &ProofJwk,
+    signed: &[u8],
+    signature: &[u8],
+) -> Result<SignatureValidity, VerifyFailure> {
+    let global: web_sys::WorkerGlobalScope = js_sys::global().unchecked_into();
+    let subtle = global.crypto().map_err(|_| VerifyFailure::Crypto)?.subtle();
+    let to_object = |value: JsValue| {
+        value
+            .dyn_into::<Object>()
+            .map_err(|_| VerifyFailure::UnsupportedKey)
+    };
+    let jwk =
+        to_object(serde_wasm_bindgen::to_value(key).map_err(|_| VerifyFailure::UnsupportedKey)?)?;
+    let import = to_object(
+        serde_wasm_bindgen::to_value(&EcAlgorithm {
+            name: "ECDSA",
+            named_curve: Some("P-256"),
+            hash: None,
+        })
+        .map_err(|_| VerifyFailure::UnsupportedKey)?,
+    )?;
+    let verification = to_object(
+        serde_wasm_bindgen::to_value(&EcAlgorithm {
+            name: "ECDSA",
+            named_curve: None,
+            hash: Some("SHA-256"),
+        })
+        .map_err(|_| VerifyFailure::UnsupportedKey)?,
+    )?;
+    let usages = Array::new();
+    usages.push(&JsValue::from_str("verify"));
+    let public_key = JsFuture::from(
+        subtle
+            .import_key_with_object("jwk", &jwk, &import, false, &usages)
+            .map_err(|_| VerifyFailure::UnsupportedKey)?,
+    )
+    .await
+    .map_err(|_| VerifyFailure::UnsupportedKey)?
+    .dyn_into::<web_sys::CryptoKey>()
+    .map_err(|_| VerifyFailure::UnsupportedKey)?;
+    let result = JsFuture::from(
+        subtle
+            .verify_with_object_and_u8_array_and_u8_array(
+                &verification,
+                &public_key,
+                signature,
+                signed,
+            )
+            .map_err(|_| VerifyFailure::Crypto)?,
+    )
+    .await
+    .map_err(|_| VerifyFailure::Crypto)?;
+    match result.as_bool() {
+        Some(true) => Ok(SignatureValidity::Valid),
+        Some(false) => Ok(SignatureValidity::Invalid),
+        None => Err(VerifyFailure::Crypto),
     }
 }
 

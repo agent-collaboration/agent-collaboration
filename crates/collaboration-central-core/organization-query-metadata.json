@@ -53,18 +53,25 @@
     "generator:sqlx-turso/src/lib.rs": "32ec3ac4ca4d0d703a452496262928a3a00ddfdf71eac8cbbe4ce1a3da69d9b5",
     "generator:workspace/Cargo.lock": "e6dd6bbdd6d3915326e1bb54c57870a5d55f515e4be70732d385a2c7fd5bebbe",
     "generator:workspace/rust-toolchain.toml": "3baca9098f290c1bc291aa94f22c516487ba2c0865bd9795d1c863b72025ab9c",
-    "organization-queries.json": "c7ec28e01b75b735be5fb3025c7c1a59ff6d1394f5bca391b2d90356ac2ef2bd",
+    "organization-queries.json": "9980b89094c0f7822772325e1df142bc8acd6f683729ea5268e133598d898a90",
     "organization_migrations/0011_organization_identity.sql": "98e15aa9ea55f1df922c729a929ca7125383a8ffe47784ea2686978c02b9cb33",
     "organization_migrations/0012_organization_change_records.sql": "15ee67c9e3bc242fe8aa851b84798297d4b0ba1f8897eec8a74f143e5c99a33f",
+    "organization_migrations/0013_organization_authorization_floors.sql": "4181711639247252f5e662051bb17f50c80354146efb00d16508803f8ec09f65",
+    "organization_migrations/0014_person_organization_authorization_floors.sql": "7c16caa23f8a5789a4f4adb0f2169d3bf280cf12b4c394fbbc5dd9f807c26c22",
+    "organization_migrations/0015_organization_used_requests.sql": "1545c05b93fb692acf4f1edbc12f29067173465b84a2372f6813404716cd8308",
     "organization_sql/insert_organization_change_record.sql": "892c89d1af3358cf8a5c2ad9e2b911990c6fca8b0c874f7a39a26b25869075ee",
     "organization_sql/insert_organization_identity.sql": "34f12fbba028d036bd54dad3b65f84c9bcd83ffacc4be5542ce65624cc24741c",
+    "organization_sql/insert_used_request.sql": "afc6d01fb5bf3be12dda48d9b4b3c13df770af13e8af244e71462f4933b72a9f",
+    "organization_sql/read_organization_authorization_floor.sql": "c73c12f92ed2af18618fe2cf4379978799e094a4abdf72643b412239144b2a45",
     "organization_sql/read_organization_change_record.sql": "c90022f3f4299a4dd8fd3d5d5e16ac55b49546da2ef32f41d2ff35205757658c",
     "organization_sql/read_organization_change_records.sql": "e0fc4e46e22eddccf078580d757e6bf6f57ef502f231bf064580af1018ac5ac6",
     "organization_sql/read_organization_identities.sql": "f9997d65913a706caba495c008bb4707f28e814387f9a652271f932801fb3563",
+    "organization_sql/read_person_authorization_floor.sql": "3e3d5f96fad010f2a44201f548bdfcf9d9382825ee50aee1d2e55b27d3f23776",
     "organization_sql/replace_organization_statement.sql": "4331ea782c545984297de95c885f8ebeb4b69544382f4e2775a691179eac8a1c",
-    "src/generated_organization.rs": "1992e56980e6a4f79a506441a0f52727242cf495f7b92d4840b3f638230b4889"
+    "organization_sql/used_request_exists.sql": "bae784d0dd9ef17868e3f35215fc6b47c0cb9ef2fd88030ca11f58c8ea44d137",
+    "src/generated_organization.rs": "292ccc9dacdf90754391cb5c06ce57935f9f35501240bf1a9c26d6b9c7b3844a"
   },
-  "queries_digest": "520fcaa8556fc10ac1fd90a2001ae218a70dd5a0abab55c04e88b0dd7c40003b",
+  "queries_digest": "6adf0fc73971757c067aa3aaabb54a7088ef1ead09643827cdc8d3e56c51d7e7",
   "queries": [
     {
       "name": "read_organization_identities",
@@ -350,6 +357,168 @@
           "type_source": "typeof"
         }
       ]
+    },
+    {
+      "name": "read_organization_authorization_floor",
+      "bind_slots": 1,
+      "columns": [
+        {
+          "name": "id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "id_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "minimum_revision",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "minimum_revision_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "state",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "state_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "permission_policy_digest",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "permission_policy_digest_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "request_reject_through_ms",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "request_reject_through_ms_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        }
+      ]
+    },
+    {
+      "name": "read_person_authorization_floor",
+      "bind_slots": 2,
+      "columns": [
+        {
+          "name": "id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "id_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "organization_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "organization_id_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "person_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "person_id_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "minimum_revision",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "minimum_revision_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "state",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "state_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        }
+      ]
+    },
+    {
+      "name": "used_request_exists",
+      "bind_slots": 1,
+      "columns": []
+    },
+    {
+      "name": "insert_used_request",
+      "bind_slots": 9,
+      "columns": []
     }
   ]
 }

@@ -108,8 +108,8 @@ async fn exported_engine_corpora_initialize_once_and_reopen_without_reapplying_t
         (EngineSchema::Copy, 3),
         (EngineSchema::Session, 5),
         (EngineSchema::Delivery, 11),
-        // D1's ten Fleet migrations plus B2's organization identity and records.
-        (EngineSchema::Fleet, 12),
+        // D1's ten Fleet migrations plus B2's identity, records, two floors and used requests.
+        (EngineSchema::Fleet, 15),
     ] {
         let directory = tempfile::tempdir()?;
         let fixture = Fixture::open(directory.path()).await?;

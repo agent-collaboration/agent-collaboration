@@ -7,11 +7,7 @@ use worker::{Context, Env, Request, Response, Result, event};
 pub async fn main(request: Request, env: Env, _context: Context) -> Result<Response> {
     let labels = access_verification::InvocationLabels::for_request(&request, &env)?;
     let request: worker::HttpRequest = request.try_into()?;
-    if !request
-        .uri()
-        .path()
-        .starts_with(collaboration_central_core::PRIVATE_LINK_PREFIX)
-    {
+    if !collaboration_central_core::is_private_link_path(request.uri().path()) {
         let mut response = Response::empty()?.with_status(404);
         response
             .headers_mut()

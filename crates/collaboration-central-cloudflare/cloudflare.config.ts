@@ -24,6 +24,9 @@ export default {
       CENTRAL_SIGN_IN_ISSUER: { type: "text", value: "REPLACE_SIGN_IN_ISSUER" },
       CENTRAL_SIGN_IN_AUDIENCE: { type: "text", value: "REPLACE_CENTRAL_STAMP_AUDIENCE" },
       CENTRAL_SIGN_IN_JWKS_URL: { type: "text", value: "REPLACE_SIGN_IN_JWKS_URL" },
+      // Person tokens name this audience; DPoP proofs name this external origin.
+      CENTRAL_ADMIN_AUDIENCE: { type: "text", value: "REPLACE_CENTRAL_ADMIN_AUDIENCE" },
+      CENTRAL_PUBLIC_ORIGIN: { type: "text", value: "REPLACE_CENTRAL_PUBLIC_ORIGIN" },
       PROJECT_COPIES: {
         type: "durable-object",
         worker: "replace-worker-name",

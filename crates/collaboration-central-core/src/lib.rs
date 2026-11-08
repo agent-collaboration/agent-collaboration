@@ -4,6 +4,7 @@
 mod fleet_location;
 pub mod identity_contract;
 pub mod organization_authority;
+pub mod person_request;
 pub use fleet_location::{FleetLocationPolicy, FleetLocationRefusal};
 mod copy_fleet_reference;
 mod fleet_organization_authority;
@@ -12,6 +13,10 @@ mod organization_records_observation;
 #[cfg(feature = "conformance")]
 pub use organization_records_observation::{
     ORGANIZATION_RECORDS_PATH, OrganizationRecordsObservation, OrganizationRecordsRequest,
+};
+mod organization_admin_calls;
+pub use organization_admin_calls::{
+    AdminRefusal, FleetOrganizationAdmin, OrganizationAdminAnswer, WorkspaceView,
 };
 mod organization_provisioning_calls;
 pub use organization_provisioning_calls::{
@@ -30,15 +35,12 @@ mod generated_copy_fleet_reference;
     clippy::too_many_arguments,
     reason = "Generated record statements bind the approved typed change-record row."
 )]
-#[cfg_attr(
-    not(any(test, feature = "conformance")),
-    expect(dead_code, reason = "B2d's change-record lookups read the record page")
-)]
 mod generated_organization;
 mod organization_addresses;
 pub use organization_addresses::{CopyAddress, FleetAddress, SessionAddress};
 mod organization_link;
-pub use organization_link::organization_link_router;
+pub use organization_link::{is_private_link_path, organization_link_router};
+mod organization_admin_link;
 mod organization_provisioning_http;
 pub use organization_provisioning_http::organization_provisioning_router;
 
@@ -474,7 +476,9 @@ mod owner_operation_calls;
 pub use conformance_drive_tokens::DriveTokenObserver;
 #[cfg(feature = "conformance")]
 mod conformance_holder;
-pub use central_router::{PRIVATE_LINK_PREFIX, central_jwks_router, central_router};
+pub use central_router::{
+    ORGANIZATION_ADMIN_PREFIX, PRIVATE_LINK_PREFIX, central_jwks_router, central_router,
+};
 mod edge_contract;
 pub use edge_contract::*;
 mod access_rules;

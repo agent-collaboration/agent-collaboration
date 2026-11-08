@@ -151,6 +151,103 @@
           "nullable": false
         }
       ]
+    },
+    {
+      "name": "read_organization_authorization_floor",
+      "sql": "organization_sql/read_organization_authorization_floor.sql",
+      "row": "StoredOrganizationFloor",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_person_authorization_floor",
+      "sql": "organization_sql/read_person_authorization_floor.sql",
+      "row": "StoredPersonFloor",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "organization_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "person_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "used_request_exists",
+      "sql": "organization_sql/used_request_exists.sql",
+      "row": null,
+      "result": "exists",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_used_request",
+      "sql": "organization_sql/insert_used_request.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "organization_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "request_time_ms",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "operation_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "actor_person_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "actor_session_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "intent_digest",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "proof_key_thumbprint",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
     }
   ]
 }

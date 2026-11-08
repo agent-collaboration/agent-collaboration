@@ -35,6 +35,11 @@ pub trait PlatformIo: Clock + IdSource + WakeScheduler + Send + Sync + 'static {
     fn drop_local_reply(&self, _request: &[u8]) -> Result<bool, CallFailure> {
         Ok(false)
     }
+    /// Conformance only: whether the next provisioning should abort after its record.
+    #[cfg(feature = "conformance")]
+    fn take_organization_record_fault(&self) -> bool {
+        false
+    }
     fn object_call(
         &self,
         destination: ObjectAddress,

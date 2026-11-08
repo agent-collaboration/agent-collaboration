@@ -130,11 +130,13 @@ pub fn central_router<Platform: CentralPlatform>(
         .with_state(application)
 }
 
-/// Every route the private sign-in link serves lives under this prefix.
+/// The private sign-in link's own contracts live under this prefix.
 pub const PRIVATE_LINK_PREFIX: &str = "/internal/";
+/// Person admin routes, served only over the private link for now.
+pub const ORGANIZATION_ADMIN_PREFIX: &str = "/organization-admin/";
 
 async fn refuse_link_routes(request: Request, next: Next) -> Response {
-    if request.uri().path().starts_with(PRIVATE_LINK_PREFIX) {
+    if crate::is_private_link_path(request.uri().path()) {
         return StatusCode::NOT_FOUND.into_response();
     }
     next.run(request).await

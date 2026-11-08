@@ -47,7 +47,9 @@ impl RuntimeControlRequest {
                 ObjectAddress::Copy(_),
             )
             | (
-                RuntimeControl::DropNextAnswer { .. } | RuntimeControl::AwaitDroppedAnswer { .. },
+                RuntimeControl::DropNextAnswer { .. }
+                | RuntimeControl::AwaitDroppedAnswer { .. }
+                | RuntimeControl::FailNextOrganizationRecord,
                 ObjectAddress::Fleet { .. },
             )
             | (
@@ -118,6 +120,9 @@ pub enum RuntimeControl {
         key: DispatchKey,
     },
     AwaitDroppedObjectReply,
+    /// Abort the next provisioning transaction after its change record is
+    /// written, to prove the stamp and its record commit as one unit.
+    FailNextOrganizationRecord,
     Observe,
 }
 

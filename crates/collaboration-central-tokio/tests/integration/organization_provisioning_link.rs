@@ -3,7 +3,8 @@
 #![cfg(feature = "conformance")]
 use crate::configuration;
 use crate::organization_stamps::{
-    self as stamps, AUDIENCE, ISSUER, NOW_SECONDS, SignInKeys, link_post,
+    self as stamps, ADMIN_AUDIENCE, AUDIENCE, ISSUER, NOW_SECONDS, PUBLIC_ORIGIN, SignInKeys,
+    link_post,
 };
 use collaboration_central_conformance::{
     ConformanceResult, JwksFixtureServer, RuntimeControl, RuntimeControlRequest, fixture_policy,
@@ -53,7 +54,8 @@ async fn start(
     let socket = root.join("sign-in-link.sock");
     let now = chrono::DateTime::from_timestamp(now_seconds, 0).ok_or("fixture time")?;
     let mut controls = Vec::new();
-    for organization in [ORGANIZATION_A, ORGANIZATION_B] {
+    let legacy = collaboration_central_conformance::legacy_organization();
+    for organization in [ORGANIZATION_A, ORGANIZATION_B, legacy.as_str()] {
         controls.push(RuntimeControlRequest {
             address: ObjectAddress::Fleet {
                 organization: organization.to_owned().try_into()?,
@@ -68,6 +70,8 @@ async fn start(
         SignInLinkSettings {
             issuer: ISSUER.into(),
             audience: AUDIENCE.into(),
+            admin_audience: ADMIN_AUDIENCE.into(),
+            public_origin: PUBLIC_ORIGIN.into(),
             jwks_url: keys.url.clone(),
             socket: socket.clone(),
         },
@@ -98,8 +102,15 @@ async fn stored(
     root: &Path,
     organization: &str,
 ) -> ConformanceResult<(Vec<IdentityRow>, Vec<RecordRow>)> {
+    stored_file(root, &format!("fleet-{organization}.db")).await
+}
+
+async fn stored_file(
+    root: &Path,
+    file: &str,
+) -> ConformanceResult<(Vec<IdentityRow>, Vec<RecordRow>)> {
     let mut store = sqlx_turso::TursoConnectOptions::new()
-        .filename(root.join(format!("fleet-{organization}.db")))
+        .filename(root.join(file))
         .connect()
         .await?;
     let identity = query_as(
@@ -474,6 +485,243 @@ async fn organization_link_refuses_a_stamp_edited_on_disk_or_expired_after_resta
     );
     assert_eq!(untouched.0, 200);
     assert_eq!(expired.0, 503);
+    keys.shutdown().await?;
+    access.shutdown().await?;
+    Ok(())
+}
+
+/// Drive a conformance control through the server's owner-only HTTP route.
+async fn control(base: &str, organization: &str, command: RuntimeControl) -> ConformanceResult<()> {
+    reqwest::Client::builder()
+        .no_proxy()
+        .build()?
+        .post(format!("{base}/admin/v1/conformance/runtime"))
+        .header(
+            "Cf-Access-Jwt-Assertion",
+            collaboration_central_conformance::owner_assertion()?,
+        )
+        .json(&RuntimeControlRequest {
+            address: ObjectAddress::Fleet {
+                organization: organization.to_owned().try_into()?,
+            },
+            command,
+        })
+        .send()
+        .await?
+        .error_for_status()?;
+    Ok(())
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare live-clock refusals while fixture errors propagate."
+)]
+#[tokio::test]
+async fn organization_link_refuses_a_stamp_once_the_live_fleet_clock_reaches_exp()
+-> ConformanceResult<()> {
+    // Wrong build caught: validity checked once at start and trusted afterwards,
+    // so today's commands keep running on the same live Fleet past exp.
+    let root = tempfile::tempdir()?;
+    let access = JwksFixtureServer::start().await?;
+    let keys = SignInKeys::start().await?;
+    let legacy = collaboration_central_conformance::legacy_organization();
+    let legacy = legacy.as_str().to_owned();
+    let statement = stamps::stamp(&legacy)?;
+    let central = start(root.path(), &access, &keys, NOW_SECONDS).await?;
+    let base = central.server.base_url().to_owned();
+    let provisioned = link_post(
+        &central.socket,
+        PROVISION,
+        &provision_body(&legacy, &statement),
+    )
+    .await?;
+    let enroll = |peer: &'static str| enroll_machine(&base, peer);
+    let before = enroll("019f0000-0000-7000-8000-00000000b2e1").await?;
+    let exp = chrono::DateTime::from_timestamp(NOW_SECONDS - 60 + stamps::LIFETIME_SECONDS, 0)
+        .ok_or("fixture exp")?;
+    control(
+        &base,
+        &legacy,
+        RuntimeControl::SetTime {
+            now: RegistryTime(exp),
+        },
+    )
+    .await?;
+    let after = enroll("019f0000-0000-7000-8000-00000000b2e2").await?;
+    let digest = link_post(&central.socket, DIGEST, &json!({"organizationId":legacy})).await?;
+    central.server.shutdown().await?;
+
+    assert_eq!(provisioned.0, 200);
+    assert_eq!(before, 200);
+    assert_eq!(
+        after, 503,
+        "the same live Fleet must refuse every command at exp"
+    );
+    assert_eq!(digest.0, 503);
+    keys.shutdown().await?;
+    access.shutdown().await?;
+    Ok(())
+}
+
+/// Today's Access-era owner command against the legacy Fleet: enroll a machine.
+async fn enroll_machine(base: &str, peer: &str) -> ConformanceResult<u16> {
+    let credential = format!("machine-credential-{peer}");
+    Ok(reqwest::Client::builder()
+        .no_proxy()
+        .build()?
+        .post(format!("{base}/admin/v1/machines/enroll"))
+        .header(
+            "Cf-Access-Jwt-Assertion",
+            collaboration_central_conformance::owner_assertion()?,
+        )
+        .json(&json!({"kind":"enrollMachine","value":{
+            "label":"stamp gate machine","installation":"550e8400-e29b-41d4-a716-44665544b2e0",
+            "peer":peer,
+            "access_client_id":collaboration_central_conformance::access_client_id(&credential)?,
+            "credential_hash":stamps::digest(&credential),"expires_at":"2033-05-18T03:33:20Z"
+        }}))
+        .send()
+        .await?
+        .status()
+        .as_u16())
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare the faulted and retried provisioning while fixture errors propagate."
+)]
+#[tokio::test]
+async fn organization_link_rolls_back_a_stamp_whose_record_fails_then_a_retry_commits_both()
+-> ConformanceResult<()> {
+    // Wrong build caught: the stamp committed without its record.
+    let root = tempfile::tempdir()?;
+    let access = JwksFixtureServer::start().await?;
+    let keys = SignInKeys::start().await?;
+    let statement = stamps::stamp(ORGANIZATION_A)?;
+    let central = start(root.path(), &access, &keys, NOW_SECONDS).await?;
+    let base = central.server.base_url().to_owned();
+    control(
+        &base,
+        ORGANIZATION_A,
+        RuntimeControl::FailNextOrganizationRecord,
+    )
+    .await?;
+    let failed = link_post(
+        &central.socket,
+        PROVISION,
+        &provision_body(ORGANIZATION_A, &statement),
+    )
+    .await?;
+    let unstamped = link_post(
+        &central.socket,
+        DIGEST,
+        &json!({"organizationId":ORGANIZATION_A}),
+    )
+    .await?;
+    let retried = link_post(
+        &central.socket,
+        PROVISION,
+        &provision_body(ORGANIZATION_A, &statement),
+    )
+    .await?;
+    central.server.shutdown().await?;
+    let (identity, records) = stored(root.path(), ORGANIZATION_A).await?;
+
+    assert_eq!(failed.0, 503);
+    assert_eq!(
+        unstamped.0, 404,
+        "the failed record must leave no stamp behind"
+    );
+    assert_eq!(retried.0, 200);
+    assert_eq!(identity.len(), 1);
+    assert_eq!(records.len(), 1);
+    keys.shutdown().await?;
+    access.shutdown().await?;
+    Ok(())
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare the preserved legacy store while fixture errors propagate."
+)]
+#[tokio::test]
+async fn organization_link_stamps_the_legacy_store_and_keeps_its_data_across_restart_and_repeats()
+-> ConformanceResult<()> {
+    // Wrong builds caught: a fresh store replacing the configured legacy
+    // fleet.db; a repeat after restart writing a second record; two first
+    // provisions at once leaving two stamps.
+    let root = tempfile::tempdir()?;
+    let access = JwksFixtureServer::start().await?;
+    let keys = SignInKeys::start().await?;
+    let legacy = collaboration_central_conformance::legacy_organization();
+    let legacy = legacy.as_str().to_owned();
+    let first = stamps::stamp(&legacy)?;
+    let mut second_claims = stamps::claims(&legacy);
+    stamps::set_claim(&mut second_claims, "iat", json!(NOW_SECONDS - 59))?;
+    let second = stamps::sign(&stamps::stamp_header(), &second_claims, 7)?;
+    let central = start(root.path(), &access, &keys, NOW_SECONDS).await?;
+    let base = central.server.base_url().to_owned();
+    // Today's data in the legacy store: an enrolled machine.
+    let credential = "legacy-machine-credential";
+    let enrolled = reqwest::Client::builder()
+        .no_proxy()
+        .build()?
+        .post(format!("{base}/admin/v1/machines/enroll"))
+        .header(
+            "Cf-Access-Jwt-Assertion",
+            collaboration_central_conformance::owner_assertion()?,
+        )
+        .json(&json!({"kind":"enrollMachine","value":{
+            "label":"legacy machine","installation":"550e8400-e29b-41d4-a716-44665544b2a7",
+            "peer":"019f0000-0000-7000-8000-00000000b2a7",
+            "access_client_id":collaboration_central_conformance::access_client_id(credential)?,
+            "credential_hash":stamps::digest(credential),"expires_at":"2033-05-18T03:33:20Z"
+        }}))
+        .send()
+        .await?
+        .status()
+        .as_u16();
+    let first_body = provision_body(&legacy, &first);
+    let second_body = provision_body(&legacy, &second);
+    let (one, two) = tokio::join!(
+        link_post(&central.socket, PROVISION, &first_body),
+        link_post(&central.socket, PROVISION, &second_body),
+    );
+    central.server.shutdown().await?;
+    let restarted = start(root.path(), &access, &keys, NOW_SECONDS).await?;
+    let repeat = link_post(
+        &restarted.socket,
+        PROVISION,
+        &provision_body(&legacy, &first),
+    )
+    .await?;
+    restarted.server.shutdown().await?;
+    let (identity, records) = stored_file(root.path(), "fleet.db").await?;
+    let mut store = sqlx_turso::TursoConnectOptions::new()
+        .filename(root.path().join("fleet.db"))
+        .connect()
+        .await?;
+    let machines: Vec<(String,)> = query_as("SELECT machine_id FROM machine_enrollments")
+        .fetch_all(&mut store)
+        .await?;
+    store.close().await?;
+
+    assert_eq!(enrolled, 200);
+    assert_eq!((one?.0, two?.0, repeat.0), (200, 200, 200));
+    assert_eq!(
+        identity.len(),
+        1,
+        "two first provisions must leave one stamp"
+    );
+    assert_eq!(records.len(), 1, "repeats must not add a setup record");
+    assert_eq!(
+        machines,
+        vec![("019f0000-0000-7000-8000-00000000b2a7".to_owned(),)]
+    );
+    assert!(
+        !root.path().join(format!("fleet-{legacy}.db")).exists(),
+        "the legacy organization must keep its original store name"
+    );
     keys.shutdown().await?;
     access.shutdown().await?;
     Ok(())

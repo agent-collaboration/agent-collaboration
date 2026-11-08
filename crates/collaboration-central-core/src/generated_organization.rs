@@ -255,3 +255,161 @@ where
             .collect()
     }
 }
+
+#[derive(Debug)]
+pub(crate) struct StoredOrganizationFloor {
+    pub id: Option<String>,
+    pub id_class: Option<String>,
+    pub minimum_revision: Option<String>,
+    pub minimum_revision_class: Option<String>,
+    pub state: Option<String>,
+    pub state_class: Option<String>,
+    pub permission_policy_digest: Option<String>,
+    pub permission_policy_digest_class: Option<String>,
+    pub request_reject_through_ms: Option<String>,
+    pub request_reject_through_ms_class: Option<String>,
+}
+pub(crate) fn read_organization_authorization_floor<S>(
+    scope: &mut S,
+    id: String,
+) -> impl std::future::Future<Output = Result<Option<StoredOrganizationFloor>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/organization_sql/read_organization_authorization_floor.sql"
+        )))
+        .bind(id);
+        let row = statement.fetch_optional(scope.executor()).await?;
+        row.as_ref()
+            .map(|row| {
+                Ok(StoredOrganizationFloor {
+                    id: row.try_get("id")?,
+                    id_class: row.try_get("id_class")?,
+                    minimum_revision: row.try_get("minimum_revision")?,
+                    minimum_revision_class: row.try_get("minimum_revision_class")?,
+                    state: row.try_get("state")?,
+                    state_class: row.try_get("state_class")?,
+                    permission_policy_digest: row.try_get("permission_policy_digest")?,
+                    permission_policy_digest_class: row
+                        .try_get("permission_policy_digest_class")?,
+                    request_reject_through_ms: row.try_get("request_reject_through_ms")?,
+                    request_reject_through_ms_class: row
+                        .try_get("request_reject_through_ms_class")?,
+                })
+            })
+            .transpose()
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct StoredPersonFloor {
+    pub id: Option<String>,
+    pub id_class: Option<String>,
+    pub organization_id: Option<String>,
+    pub organization_id_class: Option<String>,
+    pub person_id: Option<String>,
+    pub person_id_class: Option<String>,
+    pub minimum_revision: Option<String>,
+    pub minimum_revision_class: Option<String>,
+    pub state: Option<String>,
+    pub state_class: Option<String>,
+}
+pub(crate) fn read_person_authorization_floor<S>(
+    scope: &mut S,
+    organization_id: String,
+    person_id: String,
+) -> impl std::future::Future<Output = Result<Option<StoredPersonFloor>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/organization_sql/read_person_authorization_floor.sql"
+        )))
+        .bind(organization_id)
+        .bind(person_id);
+        let row = statement.fetch_optional(scope.executor()).await?;
+        row.as_ref()
+            .map(|row| {
+                Ok(StoredPersonFloor {
+                    id: row.try_get("id")?,
+                    id_class: row.try_get("id_class")?,
+                    organization_id: row.try_get("organization_id")?,
+                    organization_id_class: row.try_get("organization_id_class")?,
+                    person_id: row.try_get("person_id")?,
+                    person_id_class: row.try_get("person_id_class")?,
+                    minimum_revision: row.try_get("minimum_revision")?,
+                    minimum_revision_class: row.try_get("minimum_revision_class")?,
+                    state: row.try_get("state")?,
+                    state_class: row.try_get("state_class")?,
+                })
+            })
+            .transpose()
+    }
+}
+pub(crate) fn used_request_exists<S>(
+    scope: &mut S,
+    id: String,
+) -> impl std::future::Future<Output = Result<bool, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/organization_sql/used_request_exists.sql"
+        )))
+        .bind(id);
+        Ok(statement.fetch_optional(scope.executor()).await?.is_some())
+    }
+}
+pub(crate) fn insert_used_request<S>(
+    scope: &mut S,
+    id: String,
+    organization_id: String,
+    request_time_ms: String,
+    operation_id: Option<String>,
+    actor_person_id: String,
+    actor_session_id: String,
+    intent_digest: String,
+    proof_key_thumbprint: String,
+    now: String,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Encode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/organization_sql/insert_used_request.sql"
+        )))
+        .bind(id)
+        .bind(organization_id)
+        .bind(request_time_ms)
+        .bind(operation_id)
+        .bind(actor_person_id)
+        .bind(actor_session_id)
+        .bind(intent_digest)
+        .bind(proof_key_thumbprint)
+        .bind(now);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}

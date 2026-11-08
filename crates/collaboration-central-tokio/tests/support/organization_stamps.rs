@@ -9,6 +9,8 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 pub(crate) const ISSUER: &str = "https://sign-in.example.invalid";
 pub(crate) const AUDIENCE: &str = "https://central.example.invalid/identity";
+pub(crate) const ADMIN_AUDIENCE: &str = "https://central.example.invalid/admin";
+pub(crate) const PUBLIC_ORIGIN: &str = "https://central.example.invalid";
 /// The fixed business time every link test's Fleet objects run at.
 pub(crate) const NOW_SECONDS: i64 = 1_900_000_000;
 /// 120 days, the owner's statement lifetime.

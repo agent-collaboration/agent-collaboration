@@ -1,5 +1,5 @@
 //! Rules owned by an organization's Fleet object.
-mod change_records;
+pub(crate) mod change_records;
 mod fleet_statement;
 mod fleet_statement_refusal;
 #[cfg(test)]
@@ -9,7 +9,7 @@ mod identity;
 mod organization_stamp_store;
 mod project_ownership;
 mod provisioning;
-mod statement_check;
+mod sign_in_verification;
 mod statement_replacement;
 
 #[cfg(feature = "conformance")]
@@ -32,7 +32,7 @@ pub(crate) use provisioning::{
     ApplyProvisioning, ProvisioningOutcome, apply as apply_provisioning,
 };
 pub use provisioning::{OrganizationProvisioningFailure, OrganizationProvisioningPort};
-pub use statement_check::OrganizationStatementCheck;
+pub use sign_in_verification::{SignInVerification, SignInVerifiers};
 pub use statement_replacement::{
     CurrentStamp, OrganizationStatementReplacement, OrganizationStatementReplacementRefusal,
     decide_organization_statement_replacement,

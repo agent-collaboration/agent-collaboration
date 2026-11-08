@@ -5,7 +5,7 @@
 //! injected clock on every use. A stamp that fails the check refuses every
 //! command except a provisioning call that can replace it.
 use crate::organization_authority::{
-    FleetOrganizationStatementRefusal, OrganizationStatementCheck, StoredStampRead,
+    FleetOrganizationStatementRefusal, SignInVerification, StoredStampRead,
     VerifiedFleetOrganizationStatement,
 };
 use durable_steps::BoxFuture;
@@ -33,7 +33,7 @@ pub(crate) enum StampStanding {
 }
 
 pub(crate) struct FleetOrganizationAuthority {
-    check: RwLock<Arc<dyn OrganizationStatementCheck>>,
+    check: RwLock<Arc<dyn SignInVerification>>,
     health: Mutex<StampHealth>,
 }
 
@@ -47,14 +47,14 @@ impl Default for FleetOrganizationAuthority {
 }
 
 impl FleetOrganizationAuthority {
-    pub(crate) fn install_check(&self, check: Arc<dyn OrganizationStatementCheck>) {
+    pub(crate) fn install_check(&self, check: Arc<dyn SignInVerification>) {
         if let Ok(mut current) = self.check.write() {
             *current = check;
         }
         self.forget();
     }
 
-    pub(crate) fn check(&self) -> Option<Arc<dyn OrganizationStatementCheck>> {
+    pub(crate) fn check(&self) -> Option<Arc<dyn SignInVerification>> {
         self.check.read().ok().map(|check| check.clone())
     }
 
@@ -124,7 +124,7 @@ impl FleetOrganizationAuthority {
 
 /// A host that configured no sign-in trust can never accept a stamp.
 struct UnconfiguredStatementCheck;
-impl OrganizationStatementCheck for UnconfiguredStatementCheck {
+impl SignInVerification for UnconfiguredStatementCheck {
     fn verify_statement<'a>(
         &'a self,
         _statement: &'a str,
@@ -132,6 +132,20 @@ impl OrganizationStatementCheck for UnconfiguredStatementCheck {
     {
         Box::pin(std::future::ready(Err(
             FleetOrganizationStatementRefusal::InvalidConfiguration,
+        )))
+    }
+    fn verify_person_request<'a>(
+        &'a self,
+        _input: &'a crate::person_request::PersonRequestInput,
+    ) -> BoxFuture<
+        'a,
+        Result<
+            crate::person_request::VerifiedPersonRequest,
+            crate::person_request::PersonRequestRefusal,
+        >,
+    > {
+        Box::pin(std::future::ready(Err(
+            crate::person_request::PersonRequestRefusal::Policy,
         )))
     }
 }

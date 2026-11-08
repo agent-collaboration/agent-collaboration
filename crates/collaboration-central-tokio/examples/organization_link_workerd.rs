@@ -85,15 +85,14 @@ struct Caller {
 }
 impl Caller {
     /// One request through the fixture caller: "/link" over the CENTRAL
-    /// binding, "/public" to public central.
+    /// binding carries no Access assertion (the private entry must not need
+    /// one); "/public" observer reads carry the owner's.
     async fn post(&self, path: &str, body: &Value) -> ConformanceResult<(u16, String, Value)> {
-        let response = self
-            .http
-            .post(format!("{}{path}", self.base))
-            .header("Cf-Access-Jwt-Assertion", &self.owner)
-            .json(body)
-            .send()
-            .await?;
+        let mut request = self.http.post(format!("{}{path}", self.base)).json(body);
+        if path.starts_with("/public/") {
+            request = request.header("Cf-Access-Jwt-Assertion", &self.owner);
+        }
+        let response = request.send().await?;
         let status = response.status().as_u16();
         let entry = response
             .headers()
