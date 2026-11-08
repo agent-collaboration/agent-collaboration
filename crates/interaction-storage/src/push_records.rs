@@ -65,7 +65,7 @@ impl InteractionStore {
         let mut transaction = self
             .transaction(
                 &mut connection,
-                crate::interaction_transaction::TransactionStart::Immediate,
+                sqlite_storage_maintenance::TransactionStart::Immediate,
             )
             .await?;
         match insert_push_record_with_connection(&mut transaction, record).await {
@@ -198,7 +198,7 @@ impl InteractionStore {
         let mut transaction = self
             .transaction(
                 &mut connection,
-                crate::interaction_transaction::TransactionStart::Immediate,
+                sqlite_storage_maintenance::TransactionStart::Immediate,
             )
             .await?;
         let kind = push_record_rows::serialize_kind(PushKind::SubscriptionActivity)?;
@@ -303,7 +303,7 @@ impl InteractionStore {
         let mut transaction = self
             .transaction(
                 &mut connection,
-                crate::interaction_transaction::TransactionStart::Immediate,
+                sqlite_storage_maintenance::TransactionStart::Immediate,
             )
             .await?;
         let record = read_push_with_connection(&mut transaction, push_id)

@@ -12,7 +12,7 @@ impl InteractionStore {
         let mut transaction = self
             .transaction(
                 &mut connection,
-                crate::interaction_transaction::TransactionStart::Immediate,
+                sqlite_storage_maintenance::TransactionStart::Immediate,
             )
             .await?;
         let _ = crate::push_records::read_push_with_connection(&mut transaction, push_id).await?;
@@ -33,7 +33,7 @@ impl InteractionStore {
         let mut transaction = self
             .transaction(
                 &mut connection,
-                crate::interaction_transaction::TransactionStart::Immediate,
+                sqlite_storage_maintenance::TransactionStart::Immediate,
             )
             .await?;
         let _ = crate::push_records::read_push_with_connection(&mut transaction, push_id).await?;
@@ -55,7 +55,7 @@ impl InteractionStore {
         let mut transaction = self
             .transaction(
                 &mut connection,
-                crate::interaction_transaction::TransactionStart::Immediate,
+                sqlite_storage_maintenance::TransactionStart::Immediate,
             )
             .await?;
         if !matches!(
@@ -97,7 +97,7 @@ impl InteractionStore {
         let mut transaction = self
             .transaction(
                 &mut connection,
-                crate::interaction_transaction::TransactionStart::Immediate,
+                sqlite_storage_maintenance::TransactionStart::Immediate,
             )
             .await?;
         let _ = crate::push_records::read_push_with_connection(&mut transaction, push_id).await?;
@@ -126,7 +126,7 @@ impl InteractionStore {
         let mut transaction = self
             .transaction(
                 &mut connection,
-                crate::interaction_transaction::TransactionStart::Immediate,
+                sqlite_storage_maintenance::TransactionStart::Immediate,
             )
             .await?;
         let record = crate::push_records::read_push_with_connection(&mut transaction, push_id)
@@ -176,7 +176,7 @@ impl InteractionStore {
         let mut transaction = self
             .transaction(
                 &mut connection,
-                crate::interaction_transaction::TransactionStart::Immediate,
+                sqlite_storage_maintenance::TransactionStart::Immediate,
             )
             .await?;
         let _ = crate::push_records::read_push_with_connection(&mut transaction, push_id).await?;
@@ -202,7 +202,7 @@ impl InteractionStore {
 }
 
 async fn finish_transition(
-    mut transaction: crate::interaction_transaction::InteractionTransaction<'_>,
+    mut transaction: sqlite_storage_maintenance::SignaledTransaction<'_, sqlx_turso::Turso>,
     id: &PushId,
     changed: u64,
 ) -> Result<PushRecord, StorageError> {

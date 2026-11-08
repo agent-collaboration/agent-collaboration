@@ -40,7 +40,7 @@ pub(super) async fn prune(
     let mut transaction = store
         .transaction(
             &mut connection,
-            crate::interaction_transaction::TransactionStart::Immediate,
+            sqlite_storage_maintenance::TransactionStart::Immediate,
         )
         .await?;
     let pruned = async {

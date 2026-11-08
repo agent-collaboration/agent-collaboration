@@ -93,7 +93,7 @@ impl InteractionHistoryStore {
         let mut transaction = owner
             .transaction(
                 &mut connection,
-                crate::interaction_transaction::TransactionStart::Deferred,
+                sqlite_storage_maintenance::TransactionStart::Deferred,
             )
             .await
             .map_err(|_| {
@@ -166,7 +166,7 @@ impl InteractionHistoryStore {
             .owner
             .transaction(
                 &mut connection,
-                crate::interaction_transaction::TransactionStart::Immediate,
+                sqlite_storage_maintenance::TransactionStart::Immediate,
             )
             .await
             .map_err(|_| {

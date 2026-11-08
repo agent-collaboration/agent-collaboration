@@ -31,7 +31,7 @@ impl InteractionStore {
         let mut transaction = self
             .transaction(
                 &mut connection,
-                crate::interaction_transaction::TransactionStart::Immediate,
+                sqlite_storage_maintenance::TransactionStart::Immediate,
             )
             .await?;
         if read_retirement_progress(&mut transaction, project).await? > through {

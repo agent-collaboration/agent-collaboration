@@ -116,7 +116,7 @@ async fn read_answer(
 }
 
 pub(crate) async fn prune_settled_message_send_answers(
-    transaction: &mut crate::interaction_transaction::InteractionTransaction<'_>,
+    transaction: &mut sqlite_storage_maintenance::SignaledTransaction<'_, sqlx_turso::Turso>,
     cutoff_ms: i64,
     batch_size: i64,
 ) -> Result<u64, StorageError> {

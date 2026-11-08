@@ -223,7 +223,7 @@ enum HistoryRowDelta<'record> {
 }
 
 pub(super) async fn commit_delta(
-    transaction: &mut crate::interaction_transaction::InteractionTransaction<'_>,
+    transaction: &mut sqlite_storage_maintenance::SignaledTransaction<'_, sqlx_turso::Turso>,
     previous: &InteractionHistoryData,
     next: &InteractionHistoryData,
     revision: i64,

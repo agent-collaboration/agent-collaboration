@@ -15,7 +15,7 @@ impl InteractionStore {
         let mut transaction = self
             .transaction(
                 &mut connection,
-                crate::interaction_transaction::TransactionStart::Immediate,
+                sqlite_storage_maintenance::TransactionStart::Immediate,
             )
             .await?;
         let changed = async {
@@ -40,7 +40,7 @@ impl InteractionStore {
         let mut transaction = self
             .transaction(
                 &mut connection,
-                crate::interaction_transaction::TransactionStart::Immediate,
+                sqlite_storage_maintenance::TransactionStart::Immediate,
             )
             .await?;
         let changed = async {
@@ -86,7 +86,7 @@ impl InteractionStore {
         let mut transaction = self
             .transaction(
                 &mut connection,
-                crate::interaction_transaction::TransactionStart::Immediate,
+                sqlite_storage_maintenance::TransactionStart::Immediate,
             )
             .await?;
         let recovered = async {
@@ -145,7 +145,7 @@ async fn read_interaction_notice_push(
     Ok(record)
 }
 async fn finish_notice_transaction(
-    transaction: crate::interaction_transaction::InteractionTransaction<'_>,
+    transaction: sqlite_storage_maintenance::SignaledTransaction<'_, sqlx_turso::Turso>,
     result: Result<PushRecord, StorageError>,
 ) -> Result<PushRecord, StorageError> {
     match result {

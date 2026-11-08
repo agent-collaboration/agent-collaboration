@@ -1,9 +1,10 @@
 //! The host adapter borrows the file owner's transaction into the library scope.
-use crate::{InteractionStore, interaction_transaction::TransactionStart};
+use crate::InteractionStore;
 use durable_steps::{
     AtomicStore, BoxFuture, Host, ReborrowScope, StoreError,
     turso_store::{TursoScope, TursoStore},
 };
+use sqlite_storage_maintenance::TransactionStart;
 use std::sync::Arc;
 
 pub struct InteractionAtomicStore<THost: Host> {

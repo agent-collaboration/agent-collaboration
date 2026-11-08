@@ -1,8 +1,8 @@
 //! The interaction store's one transaction function signals only after a commit that
 //! changed rows, on the Turso writer.
-use super::TransactionStart;
 use crate::InteractionStore;
 use sqlite_storage_maintenance::CommitPoint;
+use sqlite_storage_maintenance::TransactionStart;
 use std::sync::Arc;
 use tokio::sync::watch;
 

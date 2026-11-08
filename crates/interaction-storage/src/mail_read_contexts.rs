@@ -75,7 +75,7 @@ async fn read_context(
 }
 
 pub(crate) async fn prune_old_mail_read_contexts(
-    transaction: &mut crate::interaction_transaction::InteractionTransaction<'_>,
+    transaction: &mut sqlite_storage_maintenance::SignaledTransaction<'_, sqlx_turso::Turso>,
     cutoff: &str,
     batch_size: i64,
 ) -> Result<u64, StorageError> {
