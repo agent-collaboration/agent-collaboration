@@ -332,11 +332,20 @@ impl SchedulerFixture {
         &self,
         configure: impl FnOnce(ScheduleTimingWorker) -> ScheduleTimingWorker,
     ) -> TestResult<RunningScheduler> {
+        self.start_on(None, configure)
+    }
+
+    /// Starts the scheduler with a native control backend, which summary steps use.
+    fn start_on(
+        &self,
+        backend: Option<crate::NativeControlBackend>,
+        configure: impl FnOnce(ScheduleTimingWorker) -> ScheduleTimingWorker,
+    ) -> TestResult<RunningScheduler> {
         let worker = ScheduleTimingWorker::new(
             Arc::clone(&self.store),
             Arc::clone(&self.interactions),
             Arc::clone(&self.route) as Arc<dyn ScheduledRunExecution>,
-            None,
+            backend,
             crate::AutomationConfigurationHandle::default(),
             collaboration_contracts::MachineIdentity::new(
                 "00000000-0000-4000-8000-000000000001"
@@ -464,6 +473,9 @@ mod capacity_tests;
 
 #[path = "schedule_timing_worker_preparation_test.rs"]
 mod preparation_tests;
+
+#[path = "schedule_timing_worker_summary_test.rs"]
+mod summary_tests;
 
 #[tokio::test(start_paused = true)]
 #[expect(
