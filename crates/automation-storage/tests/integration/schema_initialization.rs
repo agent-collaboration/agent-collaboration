@@ -40,7 +40,6 @@ macro_rules! ensure_eq {
     }};
 }
 
-#[path = "schema_initialization/fixtures.rs"]
 mod fixtures;
 use fixtures::{WakeFixture, assert_preserved_domain_state, seed_all_domain_tables};
 

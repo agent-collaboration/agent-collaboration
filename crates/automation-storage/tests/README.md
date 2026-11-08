@@ -12,7 +12,7 @@ run preparation and recovery, replay, retention and history. Library unit tests
 remain colocated with their implementations.
 
 The aggregate declares the shared wake-push draft helper once. Case expansions
-and fixture data stay in their existing directories. No empty e2e target is
+live under `integration/`; fixture data stay in their existing directories. No empty e2e target is
 declared because CI selects no separate e2e category for this crate.
 
 A former binary `<root>` and test `<case>` becomes binary `integration` and

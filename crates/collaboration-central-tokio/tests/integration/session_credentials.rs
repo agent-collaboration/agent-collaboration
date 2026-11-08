@@ -21,7 +21,6 @@ use std::time::Duration;
 
 #[path = "credential_expiry_fixture.rs"]
 mod credential_expiry_fixture;
-#[path = "session_credentials/transport_refusal.rs"]
 mod transport_refusal;
 
 const SERVICE: &str = "550e8400-e29b-41d4-a716-446655440751";

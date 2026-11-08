@@ -826,5 +826,4 @@ async fn run_resumed_prompt_after_load(load_error: Option<Value>) -> std::proces
     output
 }
 
-#[path = "conversation_fault_entry_paths/identity_override_tests.rs"]
 mod identity_override_tests;

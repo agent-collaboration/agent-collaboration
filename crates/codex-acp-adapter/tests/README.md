@@ -12,7 +12,7 @@ history; prompt execution, cancellation and settlement; and permission, content,
 progress and MCP projections. Library unit tests remain colocated.
 
 The aggregate declares shared permission-echo and conversation-recorder helpers
-once. Case expansions and fixture data retain their existing directories. No
+once. Case expansions live under `integration/`; fixture data retain their existing directories. No
 empty e2e target is declared because CI selects no separate e2e category here.
 
 A former binary `<root>` and test `<case>` becomes binary `integration` and

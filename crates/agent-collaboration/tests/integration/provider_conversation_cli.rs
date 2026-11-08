@@ -7,7 +7,6 @@ use serde_json::{Value, json};
 use std::{os::unix::fs::DirBuilderExt, sync::Arc};
 
 use agent_session_inventory::test_support::fake_api_support;
-#[path = "provider_conversation_cli/scripted_provider_backend.rs"]
 mod scripted_provider_backend;
 use fake_api_support::{FakeCollaborationApi, FakeReply};
 use scripted_provider_backend::{ScriptedAnswer, ScriptedProviderBackend, ScriptedStep};
@@ -22,7 +21,6 @@ const LOST_RESPONSE_OPERATION: &str = "019c6e27-e55b-73d1-87d8-4e01f1f75104";
 const LOAD_OPERATION: &str = "019c6e27-e55b-73d1-87d8-4e01f1f75105";
 const CANCEL_OPERATION: &str = "019c6e27-e55b-73d1-87d8-4e01f1f75106";
 
-#[path = "provider_conversation_cli/common_operation_tests.rs"]
 mod common_operation_tests;
 
 #[tokio::test]

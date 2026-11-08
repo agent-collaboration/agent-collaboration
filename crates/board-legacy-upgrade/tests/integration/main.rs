@@ -2,7 +2,6 @@
 
 #[path = "../support/upload_support/central_fixture.rs"]
 mod central_fixture;
-#[path = "message_support/mod.rs"]
 mod message_support;
 #[path = "../support/mod.rs"]
 mod support;

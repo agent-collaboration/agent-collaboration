@@ -22,18 +22,12 @@ use runtime_primitives::{Backoff, UuidV7Ids};
 use std::{path::Path, sync::Arc, time::Duration};
 use tokio::sync::watch;
 
-#[path = "fleet_client_cache/archive.rs"]
 mod archive;
 use crate::configuration;
-#[path = "fleet_client_cache/fixture.rs"]
 mod fixture;
-#[path = "fleet_client_cache/ingress.rs"]
 mod ingress;
-#[path = "fleet_client_cache/outbox.rs"]
 mod outbox;
-#[path = "fleet_client_cache/rebuild.rs"]
 mod rebuild;
-#[path = "fleet_client_cache/resync.rs"]
 mod resync;
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 const BOUND: Duration = Duration::from_secs(20);

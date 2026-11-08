@@ -22,7 +22,7 @@ cargo nextest run --locked --profile ci -p board-legacy-upgrade --test e2e --tes
 Each aggregate declares shared helper implementations once. The actual CLI
 publication fixture lives in legacy-upgrade-test-support; package tests and
 external consumers use that library through dev-dependencies. Case expansions
-and fixture data stay in their existing directories.
+live under `integration/`, `e2e/`, or `support/`; fixture data stay in their existing directories.
 
 A former binary `<root>` and test `<case>` becomes binary `integration` or
 `e2e` and test `<root>::<case>`. Unit-test identities do not change. CI retains

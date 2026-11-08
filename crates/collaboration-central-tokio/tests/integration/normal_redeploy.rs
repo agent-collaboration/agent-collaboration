@@ -3,7 +3,6 @@
 use crate::configuration;
 
 use crate::creation_scenarios;
-#[path = "normal_redeploy/grant_readback.rs"]
 mod grant_readback;
 
 use crate::imported_board_fixture;
@@ -11,9 +10,7 @@ use crate::imported_board_fixture;
 use crate::owner_registry_scenarios;
 
 use crate::registry_setup;
-#[path = "normal_redeploy/state.rs"]
 mod state;
-#[path = "normal_redeploy/transport.rs"]
 mod transport;
 
 use board_sync_protocol::{BoardAnnotation, BoardConsumerProtocol};

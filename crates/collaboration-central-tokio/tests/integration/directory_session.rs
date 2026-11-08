@@ -1,10 +1,8 @@
 //! Directory reads preserve native summaries and Registry-verified service identities.
 #![cfg(feature = "conformance")]
 
-#[path = "directory_session/annotation_setup.rs"]
 mod annotation_setup;
 use crate::{composed_fleet_fixture, native_fleet};
-#[path = "directory_session/claim_routes.rs"]
 mod claim_routes;
 use crate::configuration;
 use crate::directory_session_fixture as support;

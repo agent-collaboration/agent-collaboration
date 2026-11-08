@@ -10,16 +10,12 @@ use crate::forwarded_post_oracles;
 use crate::forwarded_post_scenarios;
 use crate::forwarded_post_wire;
 
-#[path = "forwarded_posts/identity.rs"]
 mod identity;
-#[path = "forwarded_posts/lifecycle.rs"]
 mod lifecycle;
-#[path = "forwarded_posts/reconnect.rs"]
 mod reconnect;
 use crate::registry_setup;
 
 use crate::session_publication_fixture as session_support;
-#[path = "forwarded_posts/support.rs"]
 mod support;
 
 use board_sync_protocol::*;

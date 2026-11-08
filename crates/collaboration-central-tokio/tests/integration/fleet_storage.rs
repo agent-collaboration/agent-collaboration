@@ -1,25 +1,15 @@
 //! Canonical Fleet metadata and its feed commit in one owned store transaction.
 #![cfg(feature = "conformance")]
 
-#[path = "fleet_storage/archive_inputs.rs"]
 mod archive_inputs;
-#[path = "fleet_storage/archive_settlement.rs"]
 mod archive_settlement;
-#[path = "fleet_storage/associations.rs"]
 mod associations;
-#[path = "fleet_storage/claim_admission.rs"]
 mod claim_admission;
-#[path = "fleet_storage/claim_settlement.rs"]
 mod claim_settlement;
-#[path = "fleet_storage/creation_decisions.rs"]
 mod creation_decisions;
-#[path = "fleet_storage/maximum_rows.rs"]
 mod maximum_rows;
-#[path = "fleet_storage/metadata.rs"]
 mod metadata;
-#[path = "fleet_storage/owned_ids.rs"]
 mod owned_ids;
-#[path = "fleet_storage/rollback.rs"]
 mod rollback;
 use crate::native_fleet as support;
 use fleet_admission::{FleetImportCounts, FleetImportResult};

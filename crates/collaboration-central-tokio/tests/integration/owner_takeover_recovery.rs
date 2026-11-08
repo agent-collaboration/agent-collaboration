@@ -3,7 +3,6 @@
 use crate::configuration;
 
 use crate::creation_scenarios;
-#[path = "owner_takeover_recovery/grant_readback.rs"]
 mod grant_readback;
 
 use crate::owner_registry_scenarios;

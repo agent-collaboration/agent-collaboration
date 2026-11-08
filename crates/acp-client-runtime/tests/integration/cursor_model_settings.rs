@@ -1,6 +1,5 @@
 //! R1–R4: real ACP wires and returned catalogs, without native provider state.
 
-#[path = "cursor_model_settings/acp_wire_fixture.rs"]
 mod acp_wire_fixture;
 
 use acp_client_runtime::{

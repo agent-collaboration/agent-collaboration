@@ -1,25 +1,17 @@
 //! Native process death preserves journaled work and replayable answers.
 #![cfg(all(feature = "conformance", unix))]
 
-#[path = "process_restart/archive_cleanup.rs"]
 mod archive_cleanup;
 use crate::configuration;
-#[path = "process_restart/copy_staged_parts.rs"]
 mod copy_staged_parts;
 use crate::creation_scenarios;
-#[path = "process_restart/fleet_notice_outbox.rs"]
 mod fleet_notice_outbox;
 use crate::{imported_board_fixture, imported_claim_scenarios, native_fleet};
-#[path = "process_restart/registration.rs"]
 mod registration;
-#[path = "process_restart/registry_notices.rs"]
 mod registry_notices;
 use crate::registry_setup;
-#[path = "process_restart/retirement.rs"]
 mod retirement;
-#[path = "process_restart/session_resume.rs"]
 mod session_resume;
-#[path = "process_restart/support.rs"]
 mod support;
 
 use board_sync_protocol::*;
