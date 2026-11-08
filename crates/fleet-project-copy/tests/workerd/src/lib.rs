@@ -122,11 +122,10 @@ impl DurableObject for ProbeObject {
             ProbeRequest::Initialize { create, journal } => {
                 if journal { copy_certainty::migrate_journal(&self.state).await?; }
                 conn.transaction(move |tx| async move {
-                for migration in [
-                    include_str!("../../../migrations/0001_copy_rules.sql"),
-                    include_str!("../../../migrations/0002_replicated_schema.sql"),
-                    include_str!("../../../migrations/0003_snapshot_install.sql"),
-                ] { (&tx).execute(migration).await?; }
+                // The production receiver corpus itself, so this list can't drift from it.
+                for migration in fleet_project_copy::RECEIVER_MIGRATOR.iter() {
+                    (&tx).execute(migration.sql.as_str()).await?;
+                }
                 let result = fleet_project_copy::create_copy(&mut WorkerScope(&tx), &create).await.map_err(storage_error)?;
                 Ok::<_, sqlx::Error>(serde_json::json!({"kind":"initialized", "result":format!("{result:?}")}))
             }).await.map_err(error)? },
@@ -151,11 +150,10 @@ impl DurableObject for ProbeObject {
                 serde_json::json!({"kind":"inspection", "results":results})
             }
             ProbeRequest::SnapshotPrepare { install, source } => conn.transaction(move |tx| async move {
-                for migration in [
-                    include_str!("../../../migrations/0001_copy_rules.sql"),
-                    include_str!("../../../migrations/0002_replicated_schema.sql"),
-                    include_str!("../../../migrations/0003_snapshot_install.sql"),
-                ] { (&tx).execute(migration).await?; }
+                // The production receiver corpus itself, so this list can't drift from it.
+                for migration in fleet_project_copy::RECEIVER_MIGRATOR.iter() {
+                    (&tx).execute(migration.sql.as_str()).await?;
+                }
                 SnapshotInstallRules(&mut WorkerScope(&tx)).prepare(&install,&source).await.map_err(storage_error)?;
                 Ok::<_,sqlx::Error>(serde_json::json!({"kind":"prepared"}))
             }).await.map_err(error)?,
