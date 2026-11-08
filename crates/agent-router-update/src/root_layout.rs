@@ -33,6 +33,10 @@ pub enum RouterUpdateError {
     )]
     CursorKeysDiffer { legacy: PathBuf, fleet: PathBuf },
     #[error(
+        "{path} is back after its update step, but {destination}, which holds what that step carried, is missing; restore {destination} or move {path} aside, then run agent-router-update again"
+    )]
+    StaleSourceWithoutDestination { path: PathBuf, destination: PathBuf },
+    #[error(
         "{path} still has a write-ahead log or shared-memory file after the checkpoint; the rename stopped so no committed row is lost"
     )]
     LogRemainsAfterCheckpoint { path: PathBuf },

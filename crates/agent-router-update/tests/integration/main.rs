@@ -34,6 +34,7 @@ mod native_inbox_fidelity;
 mod project_description;
 mod seed_integrity_refusal;
 mod source_schema_refusals;
+mod update_completed_step_sources;
 mod update_ledger_journey;
 mod update_moves_journey;
 mod update_proxy_store_journey;

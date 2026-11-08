@@ -54,6 +54,7 @@ uuid.workspace = true
 tempfile = "3.27.0"
 
 [dev-dependencies]
+agent-session-inventory = { path = "../agent-session-inventory", version = "0.1.105" }
 codex-router-core.workspace = true
 legacy-upgrade-test-support = { path = "../legacy-upgrade-test-support", version = "0.1.126" }
 owned-process-test-support = { path = "../owned-process-test-support", version = "0.1.126" }

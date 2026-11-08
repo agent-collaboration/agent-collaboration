@@ -239,3 +239,37 @@ async fn a_finished_root_with_an_older_store_left_beside_it_is_refused() -> Guar
     assert!(stderr.contains(&leftover.display().to_string()), "{stderr}");
     Ok(())
 }
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
+#[tokio::test]
+async fn a_root_with_only_the_older_machine_list_refuses_the_host_before_it_creates_a_store()
+-> GuardResult {
+    // Arrange: a root the picker used, holding its machine list only under the older
+    // name, with no Fleet database for the guard's ledger check to find.
+    let directory = tempfile::tempdir()?;
+    let root = directory.path().join("router");
+    std::fs::DirBuilder::new().mode(0o700).create(&root)?;
+    let legacy = root.join("routers.jsonc");
+    std::fs::write(&legacy, "{\"version\": 1, \"routers\": []}\n")?;
+    let before = snapshot(&root)?;
+
+    // Act
+    let output = run_router(&root, &["host"]).await?;
+
+    // Assert: refused, naming the list, before a Fleet database could be created and
+    // the update's steps recorded done.
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(2), "{stderr}");
+    assert!(stderr.contains("run agent-router-update"), "{stderr}");
+    assert!(stderr.contains(&legacy.display().to_string()), "{stderr}");
+    assert_eq!(
+        snapshot(&root)?,
+        before,
+        "the refused Host must not create a file"
+    );
+    assert!(!fleet_database(&root).exists());
+    Ok(())
+}

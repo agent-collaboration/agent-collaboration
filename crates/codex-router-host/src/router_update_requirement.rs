@@ -22,6 +22,9 @@ pub fn router_fleet_database(root: &Path) -> PathBuf {
 
 /// Settings files step 0007 carries into `settings.jsonc` and then removes.
 const LEGACY_SETTINGS_FILES: [&str; 2] = ["providers.json", "ports.json"];
+/// The picker's machine list under its older name, and the name step 0007 gives it.
+const LEGACY_MACHINE_LIST: &str = "routers.jsonc";
+const MACHINE_LIST: &str = "agent-sessions.jsonc";
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RouterUpdateRequirement {
@@ -44,6 +47,8 @@ pub enum RequiredRouterUpdate {
     LegacyStoreRemains { path: PathBuf },
     /// A settings file the update carries into `settings.jsonc` is still here.
     LegacySettingsFile { path: PathBuf },
+    /// The picker's machine list is here only under its older name.
+    LegacyMachineList { path: PathBuf },
     /// The provider proxy store, or its lock folder, is still under its former name.
     LegacyProviderProxyStore { path: PathBuf },
     /// A file nothing reads any more, which the update removes, is still here.
@@ -91,6 +96,11 @@ impl std::fmt::Display for RequiredRouterUpdate {
                 "{} is an older settings file the Host no longer reads; run agent-router-update with the Host stopped to carry it into settings.jsonc",
                 path.display()
             ),
+            Self::LegacyMachineList { path } => write!(
+                formatter,
+                "{} is the picker's machine list under its older name; run agent-router-update with the Host stopped to rename it to agent-sessions.jsonc",
+                path.display()
+            ),
             Self::DeadFileRemains { path } => write!(
                 formatter,
                 "{} is no longer read by the Router; run agent-router-update with the Host stopped, which removes it",
@@ -126,6 +136,16 @@ pub async fn inspect_router_update_requirement(
     {
         return Ok(RouterUpdateRequirement::Required(
             RequiredRouterUpdate::LegacySettingsFile { path },
+        ));
+    }
+    // The picker reads agent-sessions.jsonc only. The list under its older name alone
+    // means step 0007 hasn't renamed it, even on a root whose Fleet database was never
+    // opened, so a Host must not create one and record the step done first. With both
+    // names present the picker names both itself, so the guard leaves that to it.
+    let machine_list = root.join(LEGACY_MACHINE_LIST);
+    if exists(&machine_list) && !exists(&root.join(MACHINE_LIST)) {
+        return Ok(RouterUpdateRequirement::Required(
+            RequiredRouterUpdate::LegacyMachineList { path: machine_list },
         ));
     }
     // The proxy store is opened by its new name only; step 0008 renames it and its

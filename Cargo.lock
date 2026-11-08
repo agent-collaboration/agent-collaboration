@@ -296,6 +296,7 @@ dependencies = [
 name = "agent-router-update"
 version = "0.1.134"
 dependencies = [
+ "agent-session-inventory",
  "automation-storage",
  "board-fleet-sync",
  "board-sync-protocol",
