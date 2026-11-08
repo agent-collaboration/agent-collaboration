@@ -16,11 +16,12 @@ pub use conformance_bootstrap::BootstrapObject;
 mod cloudflare_transport;
 #[cfg(feature = "conformance")]
 mod conformance_scope_faults;
+mod event_deadline;
 mod http_body;
+mod object_alarm;
 mod object_location;
 mod object_shell;
 mod platform;
-mod reply_deadline;
 mod shared_object_store;
 mod storage_measurement;
 pub use object_shell::{FleetObject, ProjectCopyObject};

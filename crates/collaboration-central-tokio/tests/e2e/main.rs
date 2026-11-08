@@ -1,5 +1,8 @@
 //! One namespace per original central runtime test root.
 
+#[path = "../support/io_alarm.rs"]
+mod io_alarm;
+
 #[cfg(feature = "conformance")]
 #[path = "../support/fleet_ledger_rows.rs"]
 #[expect(

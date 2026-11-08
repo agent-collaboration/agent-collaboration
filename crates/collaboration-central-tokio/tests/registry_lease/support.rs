@@ -3,8 +3,7 @@
 use crate::native_fleet as fleet_fixture;
 pub(super) use fleet_fixture::Fixture as FleetFixture;
 
-use collaboration_central_core::{CoreHost, ObjectAddress, ObjectRuntime, PlatformIo};
-use collaboration_central_tokio::TokioStorageHost;
+use collaboration_central_core::{CoreHost, ObjectAddress, ObjectRuntime, ObjectIo};
 use durable_steps::{BoxFuture, CallFailure};
 use fleet_project_lease::{LeasePolicy, RegistryConfig};
 use fleet_tokio_objects::{ObjectKey, ObjectStore};
@@ -22,8 +21,7 @@ pub(super) type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send 
 pub(super) type RegistryStore = fleet_tokio_objects::TokioObject<CoreHost<RoutingIo>>;
 pub(super) type RegistryRuntime = ObjectRuntime<
     collaboration_central_core::FleetKind,
-    TokioStorageHost<CoreHost<RoutingIo>>,
-    RoutingIo,
+    crate::io_alarm::IoPlatform<RoutingIo>
 >;
 
 pub(super) struct RegistryFixture {
@@ -76,8 +74,7 @@ impl RegistryFixture {
             )
             .await?;
         let runtime = ObjectRuntime::fleet(
-            Arc::new(TokioStorageHost::new(registry.clone())),
-            io.clone(),
+            Arc::new(crate::io_alarm::io_platform(registry.clone(), std::sync::Arc::new(io.clone()))),
             config,
             collaboration_central_tokio::DeliveryConfig {
                 relay_peer: fleet_protocol::PeerId::try_from(
@@ -141,8 +138,8 @@ impl WakeScheduler for RoutingIo {
         Ok(())
     }
 }
-impl PlatformIo for RoutingIo {
-    fn reply_deadline(
+impl ObjectIo for RoutingIo {
+    fn event_deadline(
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {

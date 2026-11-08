@@ -2,9 +2,8 @@
 
 use collaboration_central_core::{
     AccessCaller, AccessClientId, AdmittedMachine, CoreHost, EnrollMachine, EnrollmentDecision,
-    EnrollmentRefusal, ObjectAddress, ObjectRuntime, OwnerIdentity, PlatformIo, RegistryKind,
+    EnrollmentRefusal, ObjectAddress, ObjectIo, ObjectRuntime, OwnerIdentity, RegistryKind,
 };
-use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{
     AtomicStore, CallFailure, NotSentReason, StoreError, storage::TransactionScope,
 };
@@ -44,8 +43,8 @@ impl WakeScheduler for Io {
         Ok(())
     }
 }
-impl PlatformIo for Io {
-    fn reply_deadline(
+impl ObjectIo for Io {
+    fn event_deadline(
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
@@ -59,7 +58,7 @@ impl PlatformIo for Io {
     }
 }
 type Runtime =
-    ObjectRuntime<collaboration_central_core::FleetKind, TokioStorageHost<CoreHost<Io>>, Io>;
+    ObjectRuntime<collaboration_central_core::FleetKind, crate::io_alarm::IoPlatform<Io>>;
 struct Fixture {
     objects: ObjectStore<CoreHost<Io>>,
     object: Arc<TokioObject<CoreHost<Io>>>,
@@ -77,8 +76,10 @@ impl Fixture {
             )
             .await?;
         let runtime = ObjectRuntime::fleet(
-            Arc::new(TokioStorageHost::new(object.clone())),
-            Io,
+            Arc::new(crate::io_alarm::io_platform(
+                object.clone(),
+                std::sync::Arc::new(Io),
+            )),
             RegistryConfig {
                 lease: LeasePolicy {
                     lease_duration: Duration::from_secs(60),

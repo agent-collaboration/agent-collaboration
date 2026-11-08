@@ -1,7 +1,7 @@
 //! The connection's existing journal makes old revocation calls harmless on replay.
 
 use crate::{
-    DeliveryKind, ObjectHost, ObjectRuntime, PlatformIo,
+    DeliveryKind, ObjectPlatform, ObjectRuntime,
     machine_enrollment::EndPeerSessions,
     object_call_envelope::{ObjectCallEnvelope, encode_refusal},
     object_runtime::ObjectWork,
@@ -27,8 +27,8 @@ pub(crate) struct EndSessionsInput {
     peer: PeerId,
 }
 
-pub(crate) struct EndSessionsTask<Host, Io>(pub PhantomData<fn() -> (Host, Io)>);
-impl<Host: ObjectHost, Io: PlatformIo> Task for EndSessionsTask<Host, Io>
+pub(crate) struct EndSessionsTask<Host>(pub PhantomData<fn() -> Host>);
+impl<Host: ObjectPlatform> Task for EndSessionsTask<Host>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -45,7 +45,7 @@ where
 {
     const KIND: &'static str = "central.end-sessions";
     const VERSION: u32 = 1;
-    type Store = CoreSessionStore<Host, Io>;
+    type Store = CoreSessionStore<Host>;
     type Input = EndSessionsInput;
     type Output = ();
 
@@ -83,7 +83,7 @@ where
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<DeliveryKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<DeliveryKind, Host>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -130,7 +130,7 @@ where
             .transaction(move |scope| {
                 Box::pin(async move {
                     let admitted = scope
-                        .admit::<EndSessionsTask<Host, Io>>(
+                        .admit::<EndSessionsTask<Host>>(
                             &key,
                             &EndSessionsInput { peer: target.peer },
                         )

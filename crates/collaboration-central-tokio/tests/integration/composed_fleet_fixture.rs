@@ -1,9 +1,8 @@
 //! Real Fleet and project owners with a manual injected clock and explicit alarm driving.
 use crate::fleet_fault_store as fault_store;
 use collaboration_central_core::{
-    CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectRuntime, PlatformIo,
+    CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectIo, ObjectRuntime,
 };
-use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{
     AtomicStore, BoxFuture, CallFailure, NotSentReason, StoreError, storage::TransactionScope,
 };
@@ -96,7 +95,7 @@ impl WakeScheduler for Io {
         Ok(())
     }
 }
-impl PlatformIo for Io {
+impl ObjectIo for Io {
     async fn before_local_call(&self, request: &[u8]) -> Result<(), CallFailure> {
         self.local_call_faults
             .before_dispatch(&ObjectAddress::Fleet, request)
@@ -134,7 +133,7 @@ impl PlatformIo for Io {
         clippy::expect_used,
         reason = "The fixture retains its injected clock for every active call."
     )]
-    fn reply_deadline(
+    fn event_deadline(
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
@@ -179,10 +178,10 @@ fn no_route() -> CallFailure {
     }
 }
 type Native = TokioObject<CoreHost<Io>>;
-type NativeHost = TokioStorageHost<CoreHost<Io>>;
+type NativeHost = crate::io_alarm::IoPlatform<Io>;
 type Host = fault_store::FaultHost<Io>;
-type Fleet = ObjectRuntime<FleetKind, Host, Io>;
-type Copy = ObjectRuntime<CopyKind, NativeHost, Io>;
+type Fleet = ObjectRuntime<FleetKind, Host>;
+type Copy = ObjectRuntime<CopyKind, NativeHost>;
 pub struct Fixture {
     objects: ObjectStore<CoreHost<Io>>,
     pub store: Arc<Native>,
@@ -205,7 +204,10 @@ impl Fixture {
                 Arc::new(CoreHost::for_store(io.clone(), receiver)),
             )
             .await?;
-        let host = Arc::new(NativeHost::new(store.clone()));
+        let host = Arc::new(crate::io_alarm::io_platform(
+            store.clone(),
+            store.host().io().clone(),
+        ));
         let faults = Arc::new(fault_store::FaultStore {
             object: store.clone(),
             armed: Arc::default(),
@@ -217,7 +219,6 @@ impl Fixture {
         });
         let runtime = Arc::new(ObjectRuntime::fleet(
             fault_host,
-            io.clone(),
             fleet_project_lease::RegistryConfig {
                 authoritative_receiver: receiver,
                 lease: fleet_project_lease::LeasePolicy {
@@ -247,8 +248,10 @@ impl Fixture {
             )
             .await?;
         let project = Arc::new(ObjectRuntime::copy(
-            Arc::new(NativeHost::new(project_store.clone())),
-            io.clone(),
+            Arc::new(crate::io_alarm::io_platform(
+                project_store.clone(),
+                std::sync::Arc::new(io.clone()),
+            )),
             receiver,
             database,
             Duration::from_secs(2),
@@ -391,7 +394,7 @@ impl Fixture {
             .await?;
         self.runtime.on_alarm().await?;
         self.runtime.on_socket_closed(binding).await?;
-        collaboration_central_core::ObjectHost::quarantine_connections(
+        collaboration_central_core::ObjectPlatform::quarantine_connections(
             self.host.as_ref(),
             vec![binding.connection],
         )

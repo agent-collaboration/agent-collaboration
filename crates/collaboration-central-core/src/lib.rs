@@ -36,17 +36,23 @@ mod conformance_fleet_entity;
 pub use conformance_access::{AccessCallerClass, AccessVerificationOutcome};
 mod connection_admission;
 pub use connection_admission::AdmissionOrigin;
+mod object_alarm;
+pub use object_alarm::ObjectAlarm;
+mod object_platform;
 mod platform_capabilities;
+pub use object_platform::{
+    LocalSectionFailure, ObjectCallFailure, ObjectIo, ObjectPlatform, RegistrationEdits,
+    RegistrationSnapshot, SocketFailure,
+};
 pub use platform_capabilities::{
-    CallOutcome, CentralPlatform, KeyFetchFailure, LocalSectionFailure, ObjectHost, RawJwks,
-    RegistrationEdits, RegistrationSnapshot, SocketFailure, UpgradeFailure, VerifyFailure,
+    CallOutcome, CentralPlatform, KeyFetchFailure, RawJwks, UpgradeFailure, VerifyFailure,
 };
 mod caller_context;
 pub use caller_context::CallerContext;
 mod core_host;
 #[cfg(feature = "conformance")]
 pub use core_host::ConformanceBoardState;
-pub use core_host::{CoreHost, PlatformIo};
+pub use core_host::CoreHost;
 mod copy_call_failure;
 mod copy_calls;
 mod copy_change_notifier;

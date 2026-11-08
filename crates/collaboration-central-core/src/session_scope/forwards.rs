@@ -1,8 +1,8 @@
 //! Forward slots are reserved and retired in the owning session transaction.
 use super::{
     AtomicStore, ColumnIndex, CoreSessionScope, Database, Decode, Encode, IntoArguments,
-    JournalScope, ObjectHost, PlatformIo, ReborrowScope, SessionTransportEffect, StoreError,
-    SyncTime, TransactionScope, Type,
+    JournalScope, ObjectPlatform, ReborrowScope, SessionTransportEffect, StoreError, SyncTime,
+    TransactionScope, Type,
 };
 use crate::{
     forward_calls::{ForwardDeliveryRequest, ForwardRouteResult},
@@ -15,7 +15,7 @@ use board_sync_protocol::{
 use fleet_protocol::{FrameId, OperationAnswer, ServerFrame};
 use fleet_session::SessionKey;
 
-impl<Host: ObjectHost, Io: PlatformIo> CoreSessionScope<'_, Host, Io>
+impl<Host: ObjectPlatform> CoreSessionScope<'_, Host>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:

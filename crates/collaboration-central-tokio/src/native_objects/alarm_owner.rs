@@ -1,6 +1,7 @@
 //! Redeliver failed native alarms even while their durable deadlines are unreadable.
 use super::{RuntimeFace, SharedClock};
-use runtime_primitives::{Clock, TokioWakeTimer, WakeScheduler};
+use crate::ObjectAlarmTimer;
+use runtime_primitives::{Clock, WakeScheduler};
 use std::{sync::Arc, time::Duration};
 use tokio_util::sync::CancellationToken;
 
@@ -9,7 +10,7 @@ const MAXIMUM_RETRY_DELAY: Duration = Duration::from_secs(30);
 
 pub(super) async fn run(
     runtime: Arc<RuntimeFace>,
-    wake: Arc<TokioWakeTimer<SharedClock>>,
+    wake: Arc<ObjectAlarmTimer>,
     clock: SharedClock,
     stop: CancellationToken,
     #[cfg(test)] generation: tokio::sync::watch::Sender<u64>,
@@ -36,7 +37,7 @@ pub(super) async fn run(
 
 async fn drive(
     runtime: &RuntimeFace,
-    wake: &TokioWakeTimer<SharedClock>,
+    wake: &ObjectAlarmTimer,
     clock: &SharedClock,
     retry_delay: &mut Duration,
 ) {

@@ -2,7 +2,7 @@
 use crate::FleetKind;
 
 use crate::{
-    CallerKind, DeliveryKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, DeliveryKind, ObjectAddress, ObjectIo, ObjectPlatform, ObjectRuntime,
     caller_context::CallAuthority,
     object_call_envelope::{ObjectCallEnvelope, encode_refusal},
     object_runtime::ObjectWork,
@@ -21,7 +21,7 @@ use sqlx_core::{
 };
 use std::{marker::PhantomData, sync::Arc};
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -36,7 +36,7 @@ where
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
 {
-    pub fn delivery(&self) -> Result<ObjectRuntime<DeliveryKind, Host, Io>, StoreError> {
+    pub fn delivery(&self) -> Result<ObjectRuntime<DeliveryKind, Host>, StoreError> {
         let ObjectWork::Fleet {
             host,
             io,
@@ -171,7 +171,7 @@ enum HolderReplyKind {
     Withdrawal,
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<DeliveryKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<DeliveryKind, Host>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -268,7 +268,7 @@ where
             holder,
             body,
             *holder_answer_timeout,
-            move |remaining| async move { deadline_io.reply_deadline(remaining).await },
+            move |remaining| async move { deadline_io.event_deadline(remaining).await },
         )
         .await?
         .answer()

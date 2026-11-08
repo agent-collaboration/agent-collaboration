@@ -4,10 +4,9 @@ use serde_json::{Value, json};
 
 const DATABASE: &str = "019f0000-0000-7000-8000-000000000603";
 
-fn runtime(fixture: &Fixture) -> Result<ObjectRuntime<CopyKind, NativeHost, ProbeIo>, TestError> {
+fn runtime(fixture: &Fixture) -> Result<ObjectRuntime<CopyKind, NativeHost>, TestError> {
     Ok(ObjectRuntime::copy(
         fixture.host.clone(),
-        ProbeIo,
         ReceiverId::try_from("019f0000-0000-7000-8000-000000000604".to_owned())?,
         DatabaseId::try_from(DATABASE.to_owned())?,
         std::time::Duration::from_secs(2),

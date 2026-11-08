@@ -2,9 +2,8 @@
 
 use collaboration_central_core::{
     BootstrapCommand, BootstrapProbe, BootstrapProbeReply, BootstrapReply, CopyKind, CoreHost,
-    EngineSchema, ObjectAddress, ObjectBootstrap, ObjectRuntime, PlatformIo,
+    EngineSchema, ObjectAddress, ObjectBootstrap, ObjectIo, ObjectRuntime,
 };
-use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{
     AtomicStore, CallFailure, NotSentReason, StoreError, storage::TransactionScope,
 };
@@ -18,7 +17,7 @@ use std::{path::Path, sync::Arc};
 
 type TestError = Box<dyn std::error::Error + Send + Sync>;
 type NativeObject = TokioObject<CoreHost<ProbeIo>>;
-type NativeHost = TokioStorageHost<CoreHost<ProbeIo>>;
+type NativeHost = crate::io_alarm::IoPlatform<ProbeIo>;
 
 struct ProbeIo;
 impl Clock for ProbeIo {
@@ -36,8 +35,8 @@ impl WakeScheduler for ProbeIo {
         Ok(())
     }
 }
-impl PlatformIo for ProbeIo {
-    fn reply_deadline(
+impl ObjectIo for ProbeIo {
+    fn event_deadline(
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
@@ -69,7 +68,10 @@ impl Fixture {
         let object = objects
             .object(ObjectKey::new("bootstrap")?, Default::default(), shared)
             .await?;
-        let host = Arc::new(TokioStorageHost::new(object.clone()));
+        let host = Arc::new(crate::io_alarm::io_platform(
+            object.clone(),
+            object.host().io().clone(),
+        ));
         Ok(Self {
             objects,
             host,
@@ -319,9 +321,8 @@ async fn receiver_rollback_is_unavailable_but_a_failed_store_boundary_is_unknown
     let directory = tempfile::tempdir()?;
     let fixture = Fixture::open(directory.path()).await?;
     let database = DatabaseId::new(durable_steps::Uuid::now_v7())?;
-    let runtime = ObjectRuntime::<CopyKind, _, ProbeIo>::copy(
+    let runtime = ObjectRuntime::<CopyKind, _>::copy(
         fixture.host.clone(),
-        ProbeIo,
         ReceiverId::new(durable_steps::Uuid::now_v7())?,
         database,
         std::time::Duration::from_secs(2),

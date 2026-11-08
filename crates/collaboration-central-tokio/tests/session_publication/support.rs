@@ -1,8 +1,8 @@
 use collaboration_central_core::{
-    CoreHost, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo, RegistrationEdits,
+    CoreHost, ObjectAddress, ObjectIo, ObjectPlatform, ObjectRuntime, RegistrationEdits,
     RegistrationSnapshot, SocketFailure,
 };
-use collaboration_central_tokio::{SocketCommand, TokioStorageHost};
+use collaboration_central_tokio::SocketCommand;
 use durable_steps::{
     AtomicStore, BoxFuture, CallFailure, NotSentReason, ReborrowScope, StoreError,
     storage::TransactionScope,
@@ -25,7 +25,7 @@ use std::{
 use tokio::sync::{Semaphore, mpsc};
 
 pub type TestError = Box<dyn std::error::Error + Send + Sync>;
-pub type Runtime = ObjectRuntime<collaboration_central_core::FleetKind, TestHost, Transport>;
+pub type Runtime = ObjectRuntime<collaboration_central_core::FleetKind, TestHost>;
 type NativeObject = TokioObject<CoreHost<Transport>>;
 
 #[derive(Clone, Default)]
@@ -60,8 +60,8 @@ impl WakeScheduler for Transport {
         Ok(())
     }
 }
-impl PlatformIo for Transport {
-    fn reply_deadline(
+impl ObjectIo for Transport {
+    fn event_deadline(
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
@@ -191,21 +191,25 @@ impl AtomicStore for TestStore {
 }
 
 pub struct TestHost {
-    pub native: Arc<TokioStorageHost<CoreHost<Transport>>>,
+    pub native: Arc<crate::io_alarm::IoPlatform<Transport>>,
     pub store: Arc<TestStore>,
     pub probe: Arc<PublicationProbe>,
     pub send_failure: Mutex<Option<ConnectionId>>,
     welcome: Arc<PublicationProbe>,
 }
-impl ObjectHost for TestHost {
+impl ObjectPlatform for TestHost {
     type Database = sqlx_turso::Turso;
     type Store = TestStore;
-    type Wake = CoreHost<Transport>;
+    type Alarm = crate::io_alarm::IoAlarm<Transport>;
+    type Io = Transport;
     fn store(&self) -> &Arc<Self::Store> {
         &self.store
     }
-    fn wake(&self) -> &Self::Wake {
-        self.native.wake()
+    fn alarm(&self) -> &Self::Alarm {
+        self.native.alarm()
+    }
+    fn io(&self) -> &std::sync::Arc<Self::Io> {
+        self.native.io()
     }
     async fn with_local_section<Output: Send + 'static>(
         &self,
@@ -346,7 +350,10 @@ impl Fixture {
         let object = objects
             .object(ObjectKey::new("fleet")?, Default::default(), shared)
             .await?;
-        let native = Arc::new(TokioStorageHost::new(object.clone()));
+        let native = Arc::new(crate::io_alarm::io_platform(
+            object.clone(),
+            object.host().io().clone(),
+        ));
         let host = Arc::new(TestHost {
             native,
             store: Arc::new(TestStore {
@@ -362,7 +369,6 @@ impl Fixture {
         // This route address is a test fixture only; no provenance is derived from PeerId.
         let runtime = Arc::new(Runtime::fleet(
             host.clone(),
-            io.clone(),
             fleet_project_lease::RegistryConfig {
                 authoritative_receiver: receiver,
                 lease: fleet_project_lease::LeasePolicy {

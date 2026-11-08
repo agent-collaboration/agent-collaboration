@@ -1,8 +1,10 @@
 //! Durable Object construction, physical addressing and hibernatable sockets.
 
 use crate::{CloudflareStorageHost, binding_attachment::BindingAttachment, cloudflare_transport};
+#[cfg(feature = "conformance")]
+use collaboration_central_core::ObjectPlatform;
 use collaboration_central_core::{
-    CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectIo, ObjectRuntime,
 };
 use durable_steps::{CallFailure, NotSentReason};
 use fleet_project_lease::RegistryConfig;
@@ -47,12 +49,12 @@ impl WakeScheduler for CloudflareObjectIo {
         self.wake.wake_at(at)
     }
 }
-impl PlatformIo for CloudflareObjectIo {
-    fn reply_deadline(
+impl ObjectIo for CloudflareObjectIo {
+    fn event_deadline(
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
-        worker::send::SendFuture::new(crate::reply_deadline::ReplyDeadline::new(remaining))
+        worker::send::SendFuture::new(crate::event_deadline::EventDeadline::new(remaining))
     }
 
     #[cfg(feature = "conformance")]
@@ -96,10 +98,10 @@ impl PlatformIo for CloudflareObjectIo {
         })
     }
 }
-type StoreHost = CloudflareStorageHost<CoreHost<CloudflareObjectIo>>;
+type StoreHost = CloudflareStorageHost<CloudflareObjectIo>;
 enum RuntimeFace {
-    Fleet(ObjectRuntime<FleetKind, StoreHost, CloudflareObjectIo>),
-    Copy(ObjectRuntime<CopyKind, StoreHost, CloudflareObjectIo>),
+    Fleet(ObjectRuntime<FleetKind, StoreHost>),
+    Copy(ObjectRuntime<CopyKind, StoreHost>),
 }
 impl RuntimeFace {
     async fn initialize(&self) -> Result<()> {
@@ -232,16 +234,9 @@ impl ShellActor {
         if let Some(runtime) = self.runtime.get() {
             return Ok((host, runtime.clone()));
         }
-        let io = CloudflareObjectIo {
-            env: self.env.clone(),
-            wake: host.wake().clone(),
-            #[cfg(feature = "conformance")]
-            faults: self.faults.clone(),
-        };
         let runtime = match address {
             ObjectAddress::Copy(project) => RuntimeFace::Copy(ObjectRuntime::copy(
                 host.clone(),
-                io,
                 config.authoritative_receiver,
                 project,
                 serde_json::from_str(&self.env.var("CENTRAL_COPY_ACK_WAIT")?.to_string())?,
@@ -249,7 +244,6 @@ impl ShellActor {
             ObjectAddress::Fleet => RuntimeFace::Fleet(
                 ObjectRuntime::fleet(
                     host.clone(),
-                    io,
                     config,
                     self.delivery_config()?,
                     serde_json::from_str(

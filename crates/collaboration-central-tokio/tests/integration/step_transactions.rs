@@ -1,7 +1,6 @@
 #![cfg(feature = "conformance")]
 
-use collaboration_central_core::{FleetDecisionFault, ObjectHost, StepConformance};
-use collaboration_central_tokio::TokioStorageHost;
+use collaboration_central_core::{FleetDecisionFault, ObjectPlatform, StepConformance};
 use durable_steps::storage::TransactionScope;
 use durable_steps::{AtomicStore, BoxFuture, CallFailure, CallId, CallTarget, Host, StoreError};
 use fleet_admission::FleetRequestResult;
@@ -14,7 +13,7 @@ use tokio::sync::{Semaphore, oneshot};
 
 type TestError = Box<dyn std::error::Error + Send + Sync>;
 type TestResult = Result<(), TestError>;
-type ReceiptDriver = StepConformance<TokioStorageHost<FixtureHost>>;
+type ReceiptDriver = StepConformance<crate::io_alarm::IoPlatform<FixtureHost, FixtureHost>>;
 
 #[path = "../step_transactions/native_unwind.rs"]
 mod native_unwind;
@@ -40,6 +39,20 @@ impl IdSource for FixtureHost {
 impl WakeScheduler for FixtureHost {
     async fn wake_at(&self, _at: SyncTime) -> Result<(), WakeFailure> {
         Ok(())
+    }
+}
+impl collaboration_central_core::ObjectIo for FixtureHost {
+    fn event_deadline(&self, remaining: Duration) -> impl std::future::Future<Output = ()> + Send {
+        tokio::time::sleep(remaining)
+    }
+    async fn object_call(
+        &self,
+        _: collaboration_central_core::ObjectAddress,
+        _: Vec<u8>,
+    ) -> Result<Vec<u8>, CallFailure> {
+        Err(CallFailure::NotSent {
+            reason: durable_steps::NotSentReason::Overloaded,
+        })
     }
 }
 impl Host for FixtureHost {
@@ -72,7 +85,10 @@ impl Fixture {
             )
             .await?;
         let driver = StepConformance::new(
-            Arc::new(TokioStorageHost::new(object.clone())),
+            Arc::new(crate::io_alarm::io_platform(
+                object.clone(),
+                std::sync::Arc::new(FixtureHost),
+            )),
             Arc::new(FixtureHost),
             runtime_primitives::Clock::now(&FixtureHost),
         );
@@ -384,14 +400,18 @@ impl AtomicStore for HeldStore {
 
 struct HeldHost {
     store: Arc<HeldStore>,
-    native: TokioStorageHost<FixtureHost>,
+    native: crate::io_alarm::IoPlatform<FixtureHost, FixtureHost>,
 }
-impl ObjectHost for HeldHost {
+impl ObjectPlatform for HeldHost {
     type Database = sqlx_turso::Turso;
     type Store = HeldStore;
-    type Wake = FixtureHost;
-    fn wake(&self) -> &Self::Wake {
-        self.native.wake()
+    type Alarm = crate::io_alarm::IoAlarm<FixtureHost>;
+    type Io = FixtureHost;
+    fn alarm(&self) -> &Self::Alarm {
+        self.native.alarm()
+    }
+    fn io(&self) -> &Arc<FixtureHost> {
+        self.native.io()
     }
     async fn with_local_section<Output: Send + 'static>(
         &self,
@@ -471,7 +491,10 @@ async fn effects_are_unavailable_while_the_real_transaction_waits_to_commit() ->
                 callback_finished: callback_finished.clone(),
                 allow_commit: allow_commit.clone(),
             }),
-            native: TokioStorageHost::new(fixture.object.clone()),
+            native: crate::io_alarm::io_platform(
+                fixture.object.clone(),
+                std::sync::Arc::new(FixtureHost),
+            ),
         }),
         Arc::new(FixtureHost),
         runtime_primitives::Clock::now(&FixtureHost),

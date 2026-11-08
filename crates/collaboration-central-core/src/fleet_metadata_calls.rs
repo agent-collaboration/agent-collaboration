@@ -1,8 +1,9 @@
 //! Canonical Fleet calls keep ServiceId distinct from the legacy installation type.
+use runtime_primitives::Clock as _;
 
 use crate::{
-    CallerKind, FleetCall, FleetKind, FleetResult, ObjectAddress, ObjectHost, ObjectRuntime,
-    PlatformIo, WireCall,
+    CallerKind, FleetCall, FleetKind, FleetResult, ObjectAddress, ObjectPlatform, ObjectRuntime,
+    WireCall,
     caller_context::CallAuthority,
     fleet_metadata_step::{DecideFleet, ImportFleet},
     object_call_envelope::ObjectCallEnvelope,
@@ -50,7 +51,7 @@ impl CallTarget for FleetMetadata {
     type Answer = FleetRequestResult;
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

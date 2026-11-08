@@ -2,8 +2,9 @@
 #![cfg(feature = "conformance")]
 
 use board_sync_protocol::BoardDeliveryTypes;
-use collaboration_central_core::{CoreHost, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo};
-use collaboration_central_tokio::TokioStorageHost;
+use collaboration_central_core::{
+    CoreHost, ObjectAddress, ObjectIo, ObjectPlatform, ObjectRuntime,
+};
 use durable_steps::{
     AtomicStore, CallFailure, CallId, OperationId, StepName, StoreError, Uuid,
     storage::TransactionScope,
@@ -30,8 +31,7 @@ type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 type Acceptance = <BoardDeliveryTypes as fleet_protocol::DeliveryTypes>::Acceptance;
 type Runtime = ObjectRuntime<
     collaboration_central_core::FleetKind,
-    TokioStorageHost<CoreHost<NoObjectCalls>>,
-    NoObjectCalls,
+    crate::io_alarm::IoPlatform<NoObjectCalls>,
 >;
 
 use crate::session_publication_fixture as session_fixture;
@@ -53,8 +53,8 @@ impl WakeScheduler for NoObjectCalls {
         Ok(())
     }
 }
-impl PlatformIo for NoObjectCalls {
-    fn reply_deadline(
+impl ObjectIo for NoObjectCalls {
+    fn event_deadline(
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
@@ -87,8 +87,10 @@ impl Fixture {
             )
             .await?;
         let runtime = ObjectRuntime::fleet(
-            Arc::new(TokioStorageHost::new(object.clone())),
-            io.clone(),
+            Arc::new(crate::io_alarm::io_platform(
+                object.clone(),
+                std::sync::Arc::new(io.clone()),
+            )),
             fleet_project_lease::RegistryConfig {
                 authoritative_receiver: receiver,
                 lease: fleet_project_lease::LeasePolicy {

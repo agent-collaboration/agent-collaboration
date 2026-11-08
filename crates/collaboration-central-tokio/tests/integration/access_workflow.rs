@@ -78,9 +78,7 @@ impl Clock for FixturePlatform {
     }
 }
 impl CentralPlatform for FixturePlatform {
-    type Host = collaboration_central_tokio::TokioStorageHost<
-        collaboration_central_core::CoreHost<collaboration_central_tokio::TokioObjectIo>,
-    >;
+    type Host = crate::io_alarm::IoPlatform<collaboration_central_tokio::TokioObjectIo>;
     fn clock(&self) -> &dyn Clock {
         self
     }

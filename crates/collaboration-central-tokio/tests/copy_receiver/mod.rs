@@ -1,7 +1,6 @@
 use collaboration_central_core::{
-    CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectRuntime, PlatformIo,
+    CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectIo, ObjectRuntime,
 };
-use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{
     AtomicStore, CallFailure, CallId, NotSentReason, StoreError, storage::TransactionScope,
 };
@@ -21,7 +20,7 @@ use std::{
 };
 
 pub type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
-type Fleet = ObjectRuntime<FleetKind, TokioStorageHost<CoreHost<Io>>, Io>;
+type Fleet = ObjectRuntime<FleetKind, crate::io_alarm::IoPlatform<Io>>;
 
 #[derive(Clone)]
 pub struct Io {
@@ -52,8 +51,8 @@ impl WakeScheduler for Io {
         Ok(())
     }
 }
-impl PlatformIo for Io {
-    fn reply_deadline(
+impl ObjectIo for Io {
+    fn event_deadline(
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
@@ -108,7 +107,7 @@ pub struct Fixture {
     pub objects: ObjectStore<CoreHost<Io>>,
     pub copy: Arc<TokioObject<CoreHost<Io>>>,
     pub fleet: Arc<TokioObject<CoreHost<Io>>>,
-    pub runtime: ObjectRuntime<CopyKind, TokioStorageHost<CoreHost<Io>>, Io>,
+    pub runtime: ObjectRuntime<CopyKind, crate::io_alarm::IoPlatform<Io>>,
     _fleet_runtime: Arc<Fleet>,
     pub database: DatabaseId,
     pub receiver: ReceiverId,
@@ -134,8 +133,10 @@ impl Fixture {
             )
             .await?;
         let fleet_runtime = Arc::new(ObjectRuntime::fleet(
-            Arc::new(TokioStorageHost::new(fleet.clone())),
-            io.clone(),
+            Arc::new(crate::io_alarm::io_platform(
+                fleet.clone(),
+                std::sync::Arc::new(io.clone()),
+            )),
             fleet_project_lease::RegistryConfig {
                 authoritative_receiver: receiver,
                 lease: fleet_project_lease::LeasePolicy {
@@ -178,8 +179,10 @@ impl Fixture {
             )
             .await?;
         let runtime = ObjectRuntime::copy(
-            Arc::new(TokioStorageHost::new(copy.clone())),
-            io.clone(),
+            Arc::new(crate::io_alarm::io_platform(
+                copy.clone(),
+                std::sync::Arc::new(io.clone()),
+            )),
             receiver,
             database,
             std::time::Duration::from_secs(2),

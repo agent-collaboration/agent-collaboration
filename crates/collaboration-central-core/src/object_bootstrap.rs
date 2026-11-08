@@ -1,7 +1,7 @@
 //! Apply library-owned corpora once, in central's one owned store transaction.
 
 use crate::{
-    ObjectHost, generated_bootstrap,
+    ObjectPlatform, generated_bootstrap,
     step_driver::{StepCallback, StepDriver, StepResult},
 };
 use durable_steps::{AtomicStore, BoxFuture, StoreError, storage::TransactionScope};
@@ -105,12 +105,12 @@ impl EngineSchema {
     }
 }
 
-pub struct ObjectBootstrap<Host: ObjectHost> {
+pub struct ObjectBootstrap<Host: ObjectPlatform> {
     clock: Arc<dyn Clock>,
     driver: StepDriver<Host>,
     now: runtime_primitives::SyncTime,
 }
-impl<Host: ObjectHost> ObjectBootstrap<Host>
+impl<Host: ObjectPlatform> ObjectBootstrap<Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

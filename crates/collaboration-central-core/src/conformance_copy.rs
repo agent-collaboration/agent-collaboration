@@ -2,8 +2,8 @@
 use crate::FleetKind;
 
 use crate::{
-    AccessCaller, CallerKind, CentralApplication, CentralPlatform, ObjectAddress, ObjectHost,
-    ObjectRuntime, PlatformIo,
+    AccessCaller, CallerKind, CentralApplication, CentralPlatform, ObjectAddress, ObjectPlatform,
+    ObjectRuntime,
     caller_context::CallAuthority,
     conformance_copy_wait::{ControlCopyWait, CopyWaitInput, CopyWaitTarget},
     conformance_holder::{ProbeAnswer, invoke_probe, probe_response},
@@ -228,7 +228,7 @@ pub(crate) async fn drive_tokens<Platform: CentralPlatform>(
     probe_response(invoke_probe(&application, caller, ObserveDriveTokens, ()).await)
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

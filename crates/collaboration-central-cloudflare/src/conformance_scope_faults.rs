@@ -125,12 +125,12 @@ async fn total_changes<'executor>(executor: impl DoExecutor<'executor>) -> Resul
 
 /// Consume the one armed connection barrier at the actual socket capability.
 #[cfg(feature = "conformance-faults")]
-pub(crate) async fn session_barrier<H: Host>(
-    host: &crate::CloudflareStorageHost<H>,
+pub(crate) async fn session_barrier<Io: collaboration_central_core::ObjectIo>(
+    host: &crate::CloudflareStorageHost<Io>,
     faults: &RuntimeFaults,
     connection: fleet_protocol::ConnectionId,
 ) -> worker::Result<()> {
-    use collaboration_central_core::ObjectHost;
+    use collaboration_central_core::ObjectPlatform;
     faults
         .consume_session_barrier(connection)
         .map_err(|error| worker::Error::RustError(error.to_string()))?;
@@ -150,11 +150,11 @@ pub(crate) struct SessionJournalObservation {
 
 /// Read the real journal using its public adapter contract, without private SQL.
 #[cfg(feature = "conformance-faults")]
-pub(crate) async fn session_journal<H: Host>(
-    host: &crate::CloudflareStorageHost<H>,
+pub(crate) async fn session_journal<Io: collaboration_central_core::ObjectIo>(
+    host: &crate::CloudflareStorageHost<Io>,
     operation: durable_steps::OperationId,
 ) -> worker::Result<SessionJournalObservation> {
-    use collaboration_central_core::ObjectHost;
+    use collaboration_central_core::ObjectPlatform;
     use durable_steps::storage::JournalStorage;
     host.store()
         .transaction(move |scope| {

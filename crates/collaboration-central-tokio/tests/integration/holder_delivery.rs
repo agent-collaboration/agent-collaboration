@@ -2,7 +2,7 @@
 
 use crate::session_publication_fixture as support;
 
-use collaboration_central_core::ObjectHost;
+use collaboration_central_core::ObjectPlatform;
 use collaboration_central_tokio::SocketCommand;
 use durable_steps::{CallFailure, CallId, OperationId, StepName, Uuid};
 use fleet_protocol::{FrameId, PeerId, ReleaseAnswer, ReleaseRequest, SessionId};

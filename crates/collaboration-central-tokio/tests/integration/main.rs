@@ -1,8 +1,10 @@
 //! One namespace per original central runtime test root.
 
-#[cfg(feature = "conformance")]
 #[path = "../support/fleet_record_rows.rs"]
 mod fleet_record_rows;
+#[cfg(feature = "conformance")]
+#[path = "../support/io_alarm.rs"]
+mod io_alarm;
 
 #[cfg(feature = "conformance")]
 #[path = "../support/clocked_server.rs"]

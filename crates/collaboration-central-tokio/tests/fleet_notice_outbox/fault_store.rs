@@ -1,8 +1,7 @@
 //! Inject a real uniqueness error after the Fleet callback, inside its transaction.
 use collaboration_central_core::{
-    CoreHost, ObjectHost, PlatformIo, RegistrationEdits, RegistrationSnapshot, SocketFailure,
+    CoreHost, ObjectIo, ObjectPlatform, RegistrationEdits, RegistrationSnapshot, SocketFailure,
 };
-use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{AtomicStore, BoxFuture, StoreError, storage::TransactionScope};
 use fleet_protocol::{CloseReason, ConnectionId};
 use fleet_session::Bytes;
@@ -15,19 +14,19 @@ use std::{
         atomic::{AtomicBool, Ordering},
     },
 };
-pub struct FaultStore<Io: PlatformIo> {
+pub struct FaultStore<Io: ObjectIo> {
     pub object: Arc<TokioObject<CoreHost<Io>>>,
     pub armed: Arc<AtomicBool>,
     pub injected: Arc<AtomicBool>,
 }
-impl<Io: PlatformIo> durable_steps::ReborrowScope for FaultStore<Io> {
+impl<Io: ObjectIo> durable_steps::ReborrowScope for FaultStore<Io> {
     fn reborrow<'scope, 'transaction: 'scope>(
         scope: &'scope mut Self::Scope<'transaction>,
     ) -> Self::Scope<'scope> {
         TokioObject::<CoreHost<Io>>::reborrow(scope)
     }
 }
-impl<Io: PlatformIo> AtomicStore for FaultStore<Io> {
+impl<Io: ObjectIo> AtomicStore for FaultStore<Io> {
     type Scope<'transaction> = <TokioObject<CoreHost<Io>> as AtomicStore>::Scope<'transaction>;
     async fn transaction<Output, Callback>(&self, run: Callback) -> Result<Output, StoreError>
     where
@@ -56,19 +55,23 @@ impl<Io: PlatformIo> AtomicStore for FaultStore<Io> {
         })).await
     }
 }
-pub struct FaultHost<Io: PlatformIo> {
-    pub native: Arc<TokioStorageHost<CoreHost<Io>>>,
+pub struct FaultHost<Io: ObjectIo> {
+    pub native: Arc<crate::io_alarm::IoPlatform<Io>>,
     pub store: Arc<FaultStore<Io>>,
 }
-impl<Io: PlatformIo> ObjectHost for FaultHost<Io> {
+impl<Io: ObjectIo> ObjectPlatform for FaultHost<Io> {
     type Database = sqlx_turso::Turso;
     type Store = FaultStore<Io>;
-    type Wake = CoreHost<Io>;
+    type Alarm = crate::io_alarm::IoAlarm<Io>;
+    type Io = Io;
     fn store(&self) -> &Arc<Self::Store> {
         &self.store
     }
-    fn wake(&self) -> &Self::Wake {
-        self.native.wake()
+    fn alarm(&self) -> &Self::Alarm {
+        self.native.alarm()
+    }
+    fn io(&self) -> &std::sync::Arc<Self::Io> {
+        self.native.io()
     }
     async fn with_local_section<Output: Send + 'static>(
         &self,

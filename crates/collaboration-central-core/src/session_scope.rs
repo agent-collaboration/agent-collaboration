@@ -3,8 +3,7 @@
 use crate::session_store::PendingWelcome;
 use crate::session_store::SessionTransportEffect;
 use crate::{
-    ObjectHost, PlatformIo, RegistrationEdits, RegistrationSnapshot,
-    session_store::CoreSessionStore,
+    ObjectPlatform, RegistrationEdits, RegistrationSnapshot, session_store::CoreSessionStore,
 };
 use durable_steps::{
     Admitted, AtomicStore, DriveLease, JournalScope, OperationId, ReborrowScope, RequestKey,
@@ -26,7 +25,7 @@ mod fleet_reads;
 mod forwards;
 mod operations;
 
-pub(crate) struct CoreSessionScope<'transaction, Host: ObjectHost, Io: PlatformIo>
+pub(crate) struct CoreSessionScope<'transaction, Host: ObjectPlatform>
 where
     Host::Store: ReborrowScope,
 {
@@ -36,11 +35,10 @@ where
     pub effects: Vec<PendingWelcome>,
     pub transport: Vec<SessionTransportEffect>,
     pub wake_at: Option<SyncTime>,
-    pub marker: PhantomData<fn() -> Io>,
+    pub marker: PhantomData<fn() -> Host::Io>,
 }
 
-impl<'transaction, Host: ObjectHost, Io: PlatformIo> TransactionScope
-    for CoreSessionScope<'transaction, Host, Io>
+impl<'transaction, Host: ObjectPlatform> TransactionScope for CoreSessionScope<'transaction, Host>
 where
     Host::Store: ReborrowScope,
     <Host::Store as AtomicStore>::Scope<'transaction>: TransactionScope<Database = Host::Database>,
@@ -55,7 +53,7 @@ where
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> SessionScope for CoreSessionScope<'_, Host, Io>
+impl<Host: ObjectPlatform> SessionScope for CoreSessionScope<'_, Host>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -89,11 +87,9 @@ where
         now: SyncTime,
     ) -> Result<(), fleet_session::StoreError> {
         let key = schema_support_request_key(&input.report).map_err(session_error)?;
-        self.admit::<PublishSchemaSupport<CoreSessionStore<Host, Io>, Host::Database>>(
-            &key, &input,
-        )
-        .await
-        .map_err(session_error)?;
+        self.admit::<PublishSchemaSupport<CoreSessionStore<Host>, Host::Database>>(&key, &input)
+            .await
+            .map_err(session_error)?;
         self.ensure_wake(now).await.map_err(session_error)
     }
     fn welcome_after_commit(
@@ -115,7 +111,7 @@ fn session_error(error: impl std::fmt::Display) -> fleet_session::StoreError {
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> CoreSessionScope<'_, Host, Io>
+impl<Host: ObjectPlatform> CoreSessionScope<'_, Host>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -175,7 +171,7 @@ where
                         &crate::fleet_sender_binding::FleetSenderBinding,
                     )
                     .recipient_report::<crate::fleet_mail_tasks::FleetStatusTask<
-                        crate::session_store::CoreSessionStore<Host, Io>,
+                        crate::session_store::CoreSessionStore<Host>,
                         Host::Database,
                     >>(session.peer, report, now)
                     .await
@@ -277,7 +273,7 @@ where
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> JournalScope for CoreSessionScope<'_, Host, Io>
+impl<Host: ObjectPlatform> JournalScope for CoreSessionScope<'_, Host>
 where
     Host::Store: ReborrowScope,
 {
@@ -306,7 +302,7 @@ where
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> JournalStorage for CoreSessionScope<'_, Host, Io>
+impl<Host: ObjectPlatform> JournalStorage for CoreSessionScope<'_, Host>
 where
     Host::Store: ReborrowScope,
 {
@@ -364,7 +360,7 @@ where
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> CoreSessionScope<'_, Host, Io>
+impl<Host: ObjectPlatform> CoreSessionScope<'_, Host>
 where
     Host::Store: ReborrowScope,
 {

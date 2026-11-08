@@ -2,7 +2,7 @@
 
 use super::{
     AdmissionOrigin, BindingAttachment, CloudflareStorageHost, ConnectionId,
-    ConnectionRegistration, Host, SocketFailure,
+    ConnectionRegistration, SocketFailure,
 };
 use fleet_protocol::{AttachSequence, PeerId, SchemaSupport, SessionId};
 use runtime_primitives::SyncTime;
@@ -67,14 +67,14 @@ impl SessionAlarmObservation {
     }
 }
 
-impl<SharedHost: Host> CloudflareStorageHost<SharedHost> {
+impl<Io: collaboration_central_core::ObjectIo> CloudflareStorageHost<Io> {
     #[cfg(feature = "conformance-faults")]
     pub(crate) async fn conformance_attachment_fault(
         &self,
         connection: ConnectionId,
         fault: crate::conformance_admission::AttachmentFault,
     ) -> Result<crate::shared_object_store::RegistrationSnapshot, SocketFailure> {
-        use collaboration_central_core::ObjectHost as _;
+        use collaboration_central_core::ObjectPlatform as _;
         let socket = self.socket(connection)?;
         match fault {
             crate::conformance_admission::AttachmentFault::Missing => {

@@ -1,6 +1,6 @@
 //! Register the library's registry workflows once at the core composition point.
 
-use crate::core_host::{CoreHost, PlatformIo};
+use crate::{CoreHost, ObjectIo};
 use durable_steps::{AtomicStore, Engine, StoreError, storage::TransactionScope};
 use fleet_project_lease::{
     HolderChangeCancelTask, HolderChangeTask, ImportTask, PreviewTakeoverTask, RegistrationTask,
@@ -22,7 +22,7 @@ where
     Store: AtomicStore,
     for<'transaction> Hook: fleet_project_lease::LeaseChangeHook<Store::Scope<'transaction>>,
     Driver: Database,
-    Io: PlatformIo,
+    Io: ObjectIo,
     for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
     Driver::Arguments: IntoArguments<Driver>,
     for<'value> String: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,

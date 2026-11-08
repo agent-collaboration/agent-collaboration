@@ -2,7 +2,7 @@
 
 use crate::conformance_core_store::{ControlIo, ReceiptStoreHost, new_host};
 use collaboration_central_core::{
-    AccessCaller, AccessClientId, BootstrapCommand, EnrollMachine, ObjectBootstrap, ObjectHost,
+    AccessCaller, AccessClientId, BootstrapCommand, EnrollMachine, ObjectBootstrap, ObjectPlatform,
     ObjectRuntime, OwnerIdentity,
 };
 use fleet_project_lease::{LeasePolicy, RegistryConfig};
@@ -79,19 +79,11 @@ enum Command {
 }
 fn registry(
     host: Arc<ReceiptStoreHost>,
-) -> Result<
-    ObjectRuntime<
-        collaboration_central_core::FleetKind,
-        ReceiptStoreHost,
-        crate::conformance_core_store::ControlIo,
-    >,
-> {
+) -> Result<ObjectRuntime<collaboration_central_core::FleetKind, ReceiptStoreHost>> {
     let receiver = ReceiverId::try_from("019f0000-0000-7000-8000-000000000010".to_owned())
         .map_err(|e| Error::RustError(e.to_string()))?;
-    let io = crate::conformance_core_store::ControlIo::new(host.wake().clone());
     ObjectRuntime::fleet(
         host,
-        io,
         RegistryConfig {
             lease: LeasePolicy {
                 lease_duration: Duration::from_secs(60),
@@ -203,14 +195,15 @@ impl DurableObject for BootstrapObject {
             return Response::error("store faults unavailable", 404);
         }
         let result = match body.command {
-            Command::Bootstrap(command) => {
-                ObjectBootstrap::new(host.clone(), Arc::new(ControlIo::new(host.wake().clone())))
-                    .execute(command)
-                    .await
-                    .and_then(|reply| {
-                        serde_json::to_value(reply).map_err(durable_steps::StoreError::backend)
-                    })
-            }
+            Command::Bootstrap(command) => ObjectBootstrap::new(
+                host.clone(),
+                Arc::new(ControlIo::new(host.alarm().owner().clone())),
+            )
+            .execute(command)
+            .await
+            .and_then(|reply| {
+                serde_json::to_value(reply).map_err(durable_steps::StoreError::backend)
+            }),
             Command::ImportedUnheld { .. } => Err(durable_steps::StoreError::backend(
                 "import fixture must use the composed Registry",
             )),

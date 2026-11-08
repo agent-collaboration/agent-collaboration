@@ -1,6 +1,6 @@
 //! Private conformance controls on the actual object and platform capabilities.
 use super::{
-    ObjectHost, Request, Response, Result, RuntimeFace, ShellActor, StoreHost, SyncTime,
+    ObjectPlatform, Request, Response, Result, RuntimeFace, ShellActor, StoreHost, SyncTime,
     WakeScheduler, error,
 };
 
@@ -23,7 +23,7 @@ impl ShellActor {
                 .transaction(move |scope| Box::pin(async move { scope.ensure_wake(at).await }))
                 .await
                 .map_err(error)?;
-            host.wake().wake_at(at).await.map_err(error)?;
+            host.alarm().wake_at(at).await.map_err(error)?;
             return Response::from_json(&host.conformance_session_alarm(connection).await?)
                 .map(Some);
         }
@@ -94,7 +94,7 @@ impl ShellActor {
                     .put(crate::composed_control::CLOCK_KEY, now)
                     .await?;
                 self.faults.restore_clock(Some(*now)).map_err(error)?;
-                host.wake()
+                host.alarm()
                     .wake_at(SyncTime::from_unix_millis(
                         chrono::Utc::now().timestamp_millis(),
                     ))

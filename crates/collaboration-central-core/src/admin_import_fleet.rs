@@ -1,7 +1,8 @@
 //! Only a copy's publication receipt can advance a reserved import to published.
+use runtime_primitives::Clock as _;
 
 use crate::{
-    CallerKind, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, FleetKind, ObjectAddress, ObjectPlatform, ObjectRuntime,
     admin_import_contract::{AdminImportRecord, AdminImportRefusal},
     admin_import_store::{AdminImportCommand, AdminImportStep},
     caller_context::CallAuthority,
@@ -26,7 +27,7 @@ impl CallTarget for AdminImportWorkflow {
     type Answer = Result<AdminImportRecord, AdminImportRefusal>;
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

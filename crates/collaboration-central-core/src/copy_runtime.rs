@@ -1,7 +1,8 @@
 //! Copy rules retain their transaction certainty at central's store boundary.
+use runtime_primitives::{Clock as _, IdSource as _};
 
 use crate::{
-    CopyKind, ObjectHost, ObjectRuntime, PlatformIo,
+    CopyKind, ObjectPlatform, ObjectRuntime,
     object_runtime::ObjectWork,
     step_driver::{StepCallback, StepDriver, StepResult},
 };
@@ -17,7 +18,7 @@ use sqlx_core::{
 };
 use std::{convert::Infallible, marker::PhantomData, sync::Arc};
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<CopyKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
@@ -40,16 +41,16 @@ where
 {
     pub fn copy(
         host: Arc<Host>,
-        io: Io,
         receiver: ReceiverId,
         database: DatabaseId,
         copy_ack_wait: std::time::Duration,
     ) -> Self {
+        let io = host.io().clone();
         Self {
             work: ObjectWork::Copy {
                 host,
                 database,
-                io: Arc::new(io),
+                io,
                 receiver,
                 changes: Arc::default(),
                 copy_ack_wait,
@@ -98,7 +99,7 @@ where
             // Subscribe first. A commit after this point either changes the
             // status we read, or leaves this waiter ready before we await it.
             let waiter = changes.subscribe(io.new_id(), deadline)?;
-            host.wake()
+            host.alarm()
                 .wake_at(deadline)
                 .await
                 .map_err(|_| CallFailure::AnswerLost)?;
@@ -184,7 +185,10 @@ where
         // Expired acknowledgement waits must not depend on follow-up success.
         changes.expire(io.now());
         if let Some(at) = changes.next_deadline() {
-            host.wake().wake_at(at).await.map_err(StoreError::backend)?;
+            host.alarm()
+                .wake_at(at)
+                .await
+                .map_err(StoreError::backend)?;
         }
         if matches!(
             self.inspection().await?,
@@ -197,7 +201,10 @@ where
             .run(crate::copy_staged_parts::ExpireStagedParts { now: io.now() })
             .await?;
         if let Some(at) = next_expiry {
-            host.wake().wake_at(at).await.map_err(StoreError::backend)?;
+            host.alarm()
+                .wake_at(at)
+                .await
+                .map_err(StoreError::backend)?;
         }
         self.drive_copy_followups().await
     }
@@ -213,7 +220,7 @@ where
     }
 }
 
-impl<Host: ObjectHost> StepDriver<Host>
+impl<Host: ObjectPlatform> StepDriver<Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

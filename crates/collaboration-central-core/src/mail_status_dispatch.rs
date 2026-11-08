@@ -1,7 +1,8 @@
 //! The status stream's peer hop is local socket I/O, never an object call.
+use runtime_primitives::Clock as _;
 
 use crate::{
-    ObjectHost, PlatformIo,
+    ObjectIo, ObjectPlatform,
     holder_reply_hub::HolderReplyHub,
     step_driver::{StepCallback, StepDriver, StepResult},
 };
@@ -46,15 +47,14 @@ pub(crate) type PublicationDispatcher = Arc<
         + Sync,
 >;
 
-pub(crate) fn bind<Host, Io>(
+pub(crate) fn bind<Host>(
     host: Weak<Host>,
-    io: Arc<Io>,
+    io: Arc<Host::Io>,
     replies: Arc<HolderReplyHub>,
     timeout: Duration,
 ) -> PublicationDispatcher
 where
-    Host: ObjectHost,
-    Io: PlatformIo,
+    Host: ObjectPlatform,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
@@ -117,7 +117,7 @@ where
                 peer,
                 ServerCall::PublishStatus { call, publication },
                 timeout,
-                move |remaining| async move { deadline_io.reply_deadline(remaining).await },
+                move |remaining| async move { deadline_io.event_deadline(remaining).await },
             )
             .await;
             match destination {
@@ -140,7 +140,7 @@ where
                         )
                         .unwrap_or(0),
                     );
-                    bounded_project_answer(waiter.answer(), io.reply_deadline(remaining)).await
+                    bounded_project_answer(waiter.answer(), io.event_deadline(remaining)).await
                 }
             }
         })

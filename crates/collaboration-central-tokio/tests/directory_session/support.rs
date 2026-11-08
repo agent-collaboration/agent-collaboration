@@ -8,7 +8,7 @@ use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, enroll_admitted_peer, fixture_policy,
 };
 use collaboration_central_core::{CopyDirectorySummary, CoreHost, ObjectRuntime};
-use collaboration_central_tokio::{TokioServer, TokioSettings, TokioStorageHost};
+use collaboration_central_tokio::{TokioServer, TokioSettings};
 use durable_steps::{AtomicStore, StoreError};
 use fleet_admission::{
     DirectoryEntry, DirectoryQuery, FleetOperation, FleetRequest, FleetRequestResult,
@@ -248,8 +248,10 @@ pub(super) async fn read_committed_owners(
             )
             .await?;
         let copy = ObjectRuntime::copy(
-            Arc::new(TokioStorageHost::new(copy_store)),
-            io,
+            Arc::new(crate::io_alarm::io_platform(
+                copy_store,
+                std::sync::Arc::new(io),
+            )),
             config.authoritative_receiver,
             database,
             Duration::from_secs(2),

@@ -1,9 +1,9 @@
 //! Conformance-only import of genuine consumer snapshots through the owning engines.
+use super::IdSource;
 use super::imported_unheld_fixture::{fixture_fleet, fixture_seed};
-use super::{IdSource, PlatformIo};
 use crate::FleetKind;
 use crate::{
-    ConformanceBoardState, ObjectHost, ObjectRuntime, OwnerIdentity,
+    ConformanceBoardState, ObjectPlatform, ObjectRuntime, OwnerIdentity,
     copy_write_calls::{AdminCopySeedRequest, CopyAdminSeed},
     object_runtime::ObjectWork,
 };
@@ -18,7 +18,7 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

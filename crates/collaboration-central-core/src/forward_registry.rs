@@ -1,7 +1,7 @@
 //! The Registry supplies forwarding provenance, holder presence and installation peers.
 use crate::FleetKind;
 use crate::{
-    CallerKind, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, ObjectPlatform, ObjectRuntime,
     caller_context::CallAuthority,
     forward_calls::{
         ForwardRoute, ForwardRouteRequest, ForwardRouteResult, InstallationPeerRegistry,
@@ -44,7 +44,7 @@ enum RegistryMachineReply {
     Refused,
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

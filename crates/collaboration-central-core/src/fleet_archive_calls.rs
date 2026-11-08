@@ -1,12 +1,13 @@
 //! The authenticated Session supplies the installation; Fleet supplies report time.
 use crate::{
-    CallerKind, FleetKind, ObjectHost, ObjectRuntime, PlatformIo, caller_context::CallAuthority,
+    CallerKind, FleetKind, ObjectPlatform, ObjectRuntime, caller_context::CallAuthority,
     fleet_archive_step::ReportArchive, object_call_envelope::ObjectCallEnvelope,
     object_runtime::ObjectWork, step_driver::StepDriver,
 };
 use durable_steps::{
     AtomicStore, CallFailure, CallTarget, NotSentReason, storage::TransactionScope,
 };
+use runtime_primitives::Clock as _;
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
@@ -21,7 +22,7 @@ impl CallTarget for FleetArchiveReport {
     type Answer = fleet_admission::ArchiveReportOutcome;
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

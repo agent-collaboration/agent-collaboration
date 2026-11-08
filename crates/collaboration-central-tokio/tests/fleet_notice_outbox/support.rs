@@ -1,7 +1,6 @@
 use super::session_fixture;
 use board_sync_protocol::BoardReadPage;
-use collaboration_central_core::{CoreHost, FleetKind, ObjectAddress, ObjectRuntime, PlatformIo};
-use collaboration_central_tokio::TokioStorageHost;
+use collaboration_central_core::{CoreHost, FleetKind, ObjectAddress, ObjectIo, ObjectRuntime};
 use durable_steps::{
     AtomicStore, CallFailure, NotSentReason, StoreError, storage::TransactionScope,
 };
@@ -75,8 +74,8 @@ impl WakeScheduler for Io {
         Ok(())
     }
 }
-impl PlatformIo for Io {
-    fn reply_deadline(
+impl ObjectIo for Io {
+    fn event_deadline(
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
@@ -127,7 +126,7 @@ impl PlatformIo for Io {
 pub struct Fixture {
     pub objects: ObjectStore<CoreHost<Io>>,
     pub object: Arc<Native>,
-    pub runtime: ObjectRuntime<FleetKind, FaultHost, Io>,
+    pub runtime: ObjectRuntime<FleetKind, FaultHost>,
 }
 impl Fixture {
     pub async fn open(root: &Path, io: Io) -> TestResult<Self> {
@@ -141,7 +140,10 @@ impl Fixture {
             )
             .await?;
         let host = Arc::new(FaultHost {
-            native: Arc::new(TokioStorageHost::new(object.clone())),
+            native: Arc::new(crate::io_alarm::io_platform(
+                object.clone(),
+                object.host().io().clone(),
+            )),
             store: Arc::new(FaultStore {
                 object: object.clone(),
                 armed: Arc::default(),
@@ -150,7 +152,6 @@ impl Fixture {
         });
         let runtime = ObjectRuntime::fleet(
             host.clone(),
-            io.clone(),
             fleet_project_lease::RegistryConfig {
                 authoritative_receiver: receiver,
                 lease: fleet_project_lease::LeasePolicy {

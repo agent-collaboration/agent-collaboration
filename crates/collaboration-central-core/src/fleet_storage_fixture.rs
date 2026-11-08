@@ -1,5 +1,5 @@
 //! Real owning-store fixture for Fleet's private query and domain-codec tests.
-use crate::{CoreHost, ObjectAddress, PlatformIo, generated_enrollment};
+use crate::{CoreHost, ObjectAddress, ObjectIo, generated_enrollment};
 use durable_steps::{
     AtomicStore, CallFailure, NotSentReason, StoreError, storage::TransactionScope,
 };
@@ -28,8 +28,17 @@ impl WakeScheduler for FixtureIo {
         Ok(())
     }
 }
-impl PlatformIo for FixtureIo {
-    fn reply_deadline(
+// Selection and gate fixtures never deliver alarms; their wakes are discarded.
+impl crate::ObjectAlarm for FixtureIo {
+    async fn set_exact(&self, _: Option<SyncTime>) -> Result<(), WakeFailure> {
+        Ok(())
+    }
+    async fn stored(&self) -> Result<Option<SyncTime>, WakeFailure> {
+        Ok(None)
+    }
+}
+impl ObjectIo for FixtureIo {
+    fn event_deadline(
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {

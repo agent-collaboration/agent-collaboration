@@ -1,6 +1,6 @@
 //! Test-only typed readback of the same decoder used by Fleet's wire reads.
 use crate::{
-    FleetKind, ObjectHost, ObjectRuntime, PlatformIo,
+    FleetKind, ObjectPlatform, ObjectRuntime,
     object_runtime::ObjectWork,
     step_driver::{StepCallback, StepDriver, StepResult},
 };
@@ -93,7 +93,7 @@ where
     crate::fleet_feed_store::read_range(scope, state.floor, state.head).await
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

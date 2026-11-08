@@ -1,5 +1,5 @@
 //! Claim settlement observes the projection already committed by the Fleet lease hook.
-use super::{CoreHost, PlatformIo, SharedTaskCaller, no_route};
+use super::{CoreHost, ObjectIo, SharedTaskCaller, no_route};
 use crate::{
     fleet_lease_calls::ClaimGranted,
     lease_projection::{ClaimGrantedUpdate, LeaseProjectionResult},
@@ -17,7 +17,7 @@ impl RegistryLeasePublication {
         Self { store }
     }
 }
-impl<Io: PlatformIo> CoreHost<Io> {
+impl<Io: ObjectIo> CoreHost<Io> {
     pub(super) async fn settle_granted_claim(
         &self,
         request: ClaimSettlement,

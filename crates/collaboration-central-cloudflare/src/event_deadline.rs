@@ -16,13 +16,13 @@ extern "C" {
     fn cancel_timeout(handle: &JsValue);
 }
 
-pub(crate) struct ReplyDeadline {
+pub(crate) struct EventDeadline {
     completed: oneshot::Receiver<()>,
     // Retain the callback until Drop has cancelled the corresponding timer.
     _callback: Closure<dyn FnMut()>,
     handle: JsValue,
 }
-impl ReplyDeadline {
+impl EventDeadline {
     pub(crate) fn new(remaining: Duration) -> Self {
         let (complete, completed) = oneshot::channel();
         let mut complete = Some(complete);
@@ -42,14 +42,14 @@ impl ReplyDeadline {
         }
     }
 }
-impl Future for ReplyDeadline {
+impl Future for EventDeadline {
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, context: &mut Context<'_>) -> Poll<()> {
         Pin::new(&mut self.completed).poll(context).map(|_| ())
     }
 }
-impl Drop for ReplyDeadline {
+impl Drop for EventDeadline {
     fn drop(&mut self) {
         cancel_timeout(&self.handle);
     }

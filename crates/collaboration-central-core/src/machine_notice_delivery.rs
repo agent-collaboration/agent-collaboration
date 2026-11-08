@@ -1,7 +1,7 @@
 //! One journaled append owns the machine position; session notices carry its live hint.
 use crate::machine_notice_contract::MachineNoticeAppend;
 use crate::{
-    CallerKind, DeliveryKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, DeliveryKind, ObjectAddress, ObjectPlatform, ObjectRuntime,
     caller_context::CallAuthority,
     object_call_envelope::{ObjectCallEnvelope, encode_refusal},
     object_runtime::ObjectWork,
@@ -31,8 +31,8 @@ impl CallTarget for DeliverMachineNotice {
     type Request = BoardNotice;
     type Answer = ();
 }
-pub(crate) struct MachineNoticeTask<Host, Io>(pub PhantomData<fn() -> (Host, Io)>);
-impl<Host: ObjectHost, Io: PlatformIo> Task for MachineNoticeTask<Host, Io>
+pub(crate) struct MachineNoticeTask<Host>(pub PhantomData<fn() -> Host>);
+impl<Host: ObjectPlatform> Task for MachineNoticeTask<Host>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -49,7 +49,7 @@ where
 {
     const KIND: &'static str = "central.machine-notice-append";
     const VERSION: u32 = 1;
-    type Store = CoreSessionStore<Host, Io>;
+    type Store = CoreSessionStore<Host>;
     type Input = MachineNoticeAppend;
     type Output = ();
     async fn run<Context: OperationContext<Store = Self::Store>>(
@@ -115,7 +115,7 @@ where
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<DeliveryKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<DeliveryKind, Host>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -196,7 +196,7 @@ where
                         notice,
                     };
                     let admitted = scope
-                        .admit::<MachineNoticeTask<Host, Io>>(&key, &input)
+                        .admit::<MachineNoticeTask<Host>>(&key, &input)
                         .await
                         .map_err(StoreError::backend)?;
                     let operation = scope

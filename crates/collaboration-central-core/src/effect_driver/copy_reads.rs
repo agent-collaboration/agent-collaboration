@@ -2,7 +2,7 @@
 
 use super::EffectDriver;
 use crate::{
-    ObjectHost, PlatformIo,
+    ObjectPlatform,
     copy_read_calls::{CopyReadRequest, CopySessionRead},
 };
 use board_sync_protocol::BoardConsumerProtocol;
@@ -10,7 +10,7 @@ use durable_steps::Host as _;
 use fleet_protocol::{ConnectionId, DatabaseId, FrameId, OperationAnswer, ServerFrame};
 use fleet_session::SessionKey;
 
-impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
+impl<Host: ObjectPlatform> EffectDriver<Host> {
     pub(super) async fn answer_copy_read(
         &self,
         connection: ConnectionId,

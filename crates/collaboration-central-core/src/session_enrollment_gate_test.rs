@@ -1,7 +1,7 @@
 //! Real Fleet transaction selection must refuse revoked callers before shared work is staged.
 use crate::fleet_storage_fixture::{FixtureIo, FleetStorageFixture, NOW, TestError};
 use crate::session_scope::CoreSessionScope;
-use crate::{LocalSectionFailure, ObjectHost, SocketFailure};
+use crate::{LocalSectionFailure, ObjectPlatform, SocketFailure};
 use durable_steps::storage::TransactionScope;
 use durable_steps::{AtomicStore, ReborrowScope, StoreError};
 use fleet_protocol::{ConnectionId, FrameId, OperationRequest, SessionId};
@@ -16,17 +16,21 @@ const PROJECT: &str = "019f0000-0000-7000-8000-00000000a103";
 // No socket or host method is used: the deciding transaction and its committed-effect selection are real.
 struct ScopeHost {
     store: Arc<Store>,
-    wake: FixtureIo,
+    wake: Arc<FixtureIo>,
 }
-impl ObjectHost for ScopeHost {
+impl ObjectPlatform for ScopeHost {
     type Database = sqlx_turso::Turso;
     type Store = Store;
-    type Wake = FixtureIo;
+    type Alarm = FixtureIo;
+    type Io = FixtureIo;
     fn store(&self) -> &Arc<Store> {
         &self.store
     }
-    fn wake(&self) -> &FixtureIo {
+    fn io(&self) -> &Arc<FixtureIo> {
         &self.wake
+    }
+    fn alarm(&self) -> &FixtureIo {
+        self.wake.as_ref()
     }
     async fn with_local_section<T: Send + 'static>(
         &self,
@@ -94,7 +98,7 @@ async fn selection_with_enrollment(
                         .await
                         .map_err(StoreError::backend)?;
                 }
-                let mut session_scope = CoreSessionScope::<ScopeHost, FixtureIo> {
+                let mut session_scope = CoreSessionScope::<ScopeHost> {
                     inner: Store::reborrow(scope),
                     registrations: Default::default(),
                     edits: Default::default(),

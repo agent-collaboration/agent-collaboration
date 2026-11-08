@@ -1,6 +1,6 @@
 //! The real library holder change commits its view and both ownership streams together.
 use super::composed_fleet_fixture::*;
-use collaboration_central_core::ObjectHost;
+use collaboration_central_core::ObjectPlatform;
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
 use fleet_protocol::{ClientFrame, ConnectionId, SchemaSupport, SessionId};
 use fleet_session::{ConnectionBinding, VerifiedPeer};

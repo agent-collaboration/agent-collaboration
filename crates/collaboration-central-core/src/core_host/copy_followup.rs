@@ -1,6 +1,6 @@
 //! The copy's journal invokes the board follow-up after its publication commits.
 use super::{
-    CallFailure, CallId, CallerContext, CoreHost, DatabaseId, PlatformIo, ReceiverId,
+    CallFailure, CallId, CallerContext, CoreHost, DatabaseId, ObjectIo, ReceiverId,
     SharedTaskCaller, decode, encode_refusal, no_route,
 };
 use crate::CopyDirectorySummary;
@@ -8,7 +8,7 @@ use fleet_project_copy::{
     FollowUpAnswer, FollowUpCall, FollowUpDone, FollowUpFailure, FollowUpHandler,
 };
 
-impl<Io: PlatformIo> CoreHost<Io> {
+impl<Io: ObjectIo> CoreHost<Io> {
     pub(crate) fn for_copy(
         io: std::sync::Arc<Io>,
         receiver: ReceiverId,
@@ -54,7 +54,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
         serde_json::to_value(answer).map_err(encode_refusal)
     }
 }
-impl<Io: PlatformIo> FollowUpHandler for CoreHost<Io> {
+impl<Io: ObjectIo> FollowUpHandler for CoreHost<Io> {
     type Item = CopyDirectorySummary;
     async fn follow_up(
         &self,

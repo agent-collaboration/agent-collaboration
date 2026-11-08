@@ -1,6 +1,6 @@
 //! Retirement admission reads the canonical parent board in Fleet's own step.
 use crate::{
-    CallerKind, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, FleetKind, ObjectAddress, ObjectPlatform, ObjectRuntime,
     caller_context::CallAuthority,
     fleet_record_codec::corrupt,
     fleet_record_store,
@@ -17,7 +17,7 @@ use sqlx_core::{
 };
 use std::convert::Infallible;
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

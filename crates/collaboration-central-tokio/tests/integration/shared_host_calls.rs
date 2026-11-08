@@ -1,6 +1,6 @@
 #![cfg(feature = "conformance")]
 
-use collaboration_central_core::{CoreHost, ObjectAddress, PlatformIo};
+use collaboration_central_core::{CoreHost, ObjectAddress, ObjectIo};
 use durable_steps::{CallFailure, CallId, CallTarget, Host, OperationId, StepName};
 use fleet_project_lease::CopyRead;
 use fleet_protocol::{CopyStatusAnswer, DatabaseId, ReceiverId};
@@ -31,8 +31,8 @@ impl WakeScheduler for RecordingIo {
         Ok(())
     }
 }
-impl PlatformIo for RecordingIo {
-    fn reply_deadline(
+impl ObjectIo for RecordingIo {
+    fn event_deadline(
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {

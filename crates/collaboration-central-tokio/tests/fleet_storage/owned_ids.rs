@@ -1,7 +1,6 @@
 //! Exact private row IDs prove the real writer used the injected capability.
 use super::support::{Fixture, Io, TestResult, bundle, import_bytes};
-use collaboration_central_core::{FleetKind, ObjectAddress, ObjectRuntime, PlatformIo};
-use collaboration_central_tokio::TokioStorageHost;
+use collaboration_central_core::{FleetKind, ObjectAddress, ObjectIo, ObjectRuntime};
 use durable_steps::{AtomicStore, CallFailure, StoreError, storage::TransactionScope};
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use sqlx_core::{query::query, row::Row};
@@ -29,8 +28,8 @@ impl WakeScheduler for TracedIds {
         Io::default().wake_at(at).await
     }
 }
-impl PlatformIo for TracedIds {
-    fn reply_deadline(
+impl ObjectIo for TracedIds {
+    fn event_deadline(
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
@@ -55,9 +54,11 @@ async fn injected_id_source_owns_the_repository_feed_state_and_feed_entry_ids() 
     let root = tempfile::tempdir()?;
     let fixture = Fixture::open(root.path()).await?;
     let next = Arc::new(AtomicU64::new(0xa90));
-    let runtime = ObjectRuntime::<FleetKind, _, _>::fleet(
-        Arc::new(TokioStorageHost::new(fixture.object.clone())),
-        TracedIds(next.clone()),
+    let runtime = ObjectRuntime::<FleetKind, _>::fleet(
+        Arc::new(crate::io_alarm::io_platform(
+            fixture.object.clone(),
+            std::sync::Arc::new(TracedIds(next.clone())),
+        )),
         fleet_project_lease::RegistryConfig {
             authoritative_receiver: fixture.receiver,
             lease: fleet_project_lease::LeasePolicy {

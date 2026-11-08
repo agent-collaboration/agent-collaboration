@@ -1,6 +1,6 @@
 //! Real-store transaction observations without exposing the production driver.
 
-use crate::{ObjectHost, fleet_decision_step::FleetDecisionFault, step_driver::StepDriver};
+use crate::{ObjectPlatform, fleet_decision_step::FleetDecisionFault, step_driver::StepDriver};
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
 use fleet_admission::FleetRequestResult;
 use message_board::{DecisionEffect, RequestId, RequestLedgerEntry};
@@ -15,14 +15,14 @@ mod claim_reservation;
 #[path = "step_conformance/native_callback.rs"]
 mod native_callback;
 
-pub struct StepConformance<Host: ObjectHost> {
+pub struct StepConformance<Host: ObjectPlatform> {
     driver: StepDriver<Host>,
     bootstrap: crate::ObjectBootstrap<Host>,
     ids: Arc<dyn runtime_primitives::IdSource>,
     now: runtime_primitives::SyncTime,
 }
 
-impl<Host: ObjectHost> StepConformance<Host>
+impl<Host: ObjectPlatform> StepConformance<Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

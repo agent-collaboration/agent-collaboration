@@ -20,16 +20,17 @@ pub(crate) struct SessionConnectionSnapshot {
 
 use crate::object_keys::{address_from_key, address_key};
 
+use crate::ObjectAlarmTimer;
 use crate::{SocketCommand, TokioStorageHost};
 use axum::extract::ws::{CloseFrame, Message, WebSocket};
 use collaboration_central_core::{
-    AdmissionOrigin, CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectRuntime, PlatformIo,
+    AdmissionOrigin, CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectIo, ObjectRuntime,
 };
 use durable_steps::{BoxFuture, CallFailure, NotSentReason, StoreError};
 use fleet_project_lease::RegistryConfig;
 use fleet_session::ConnectionBinding;
 use fleet_tokio_objects::{ObjectKey, ObjectOptions, ObjectStore};
-use runtime_primitives::{Clock, IdSource, SyncTime, TokioWakeTimer, WakeFailure, WakeScheduler};
+use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use std::{
     collections::BTreeMap,
     path::Path,
@@ -38,9 +39,9 @@ use std::{
 use tokio::sync::{Mutex, OnceCell};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
-type NativeHost = TokioStorageHost<CoreHost<TokioObjectIo>>;
-type CopyRuntime = ObjectRuntime<CopyKind, NativeHost, TokioObjectIo>;
-type FleetRuntime = ObjectRuntime<FleetKind, NativeHost, TokioObjectIo>;
+type NativeHost = TokioStorageHost<TokioObjectIo>;
+type CopyRuntime = ObjectRuntime<CopyKind, NativeHost>;
+type FleetRuntime = ObjectRuntime<FleetKind, NativeHost>;
 
 #[derive(Clone)]
 struct SharedClock(Arc<dyn Clock>);
@@ -54,7 +55,7 @@ impl Clock for SharedClock {
 pub struct TokioObjectIo {
     objects: Weak<NativeObjects>,
     clock: SharedClock,
-    wake: Arc<TokioWakeTimer<SharedClock>>,
+    wake: Arc<ObjectAlarmTimer>,
     #[cfg(feature = "conformance")]
     faults: Arc<collaboration_central_conformance::RuntimeFaults>,
 }
@@ -77,8 +78,8 @@ impl WakeScheduler for TokioObjectIo {
         self.wake.wake_at(at).await
     }
 }
-impl PlatformIo for TokioObjectIo {
-    fn reply_deadline(
+impl ObjectIo for TokioObjectIo {
+    fn event_deadline(
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
@@ -310,7 +311,7 @@ impl NativeObjects {
                         io: TokioObjectIo {
                             objects: Arc::downgrade(self),
                             clock: self.clock.clone(),
-                            wake: Arc::new(TokioWakeTimer::new(self.clock.clone())),
+                            wake: Arc::new(ObjectAlarmTimer::new(self.clock.0.clone())),
                             #[cfg(feature = "conformance")]
                             faults: self.startup_controls.faults_for(&key),
                         },
@@ -342,9 +343,15 @@ impl NativeObjects {
                     )
                     .await?;
                 #[cfg(feature = "conformance")]
-                let host = TokioStorageHost::with_faults(object, slot.io.faults.clone());
+                let host = TokioStorageHost::with_faults(
+                    object,
+                    slot.io.faults.clone(),
+                    Arc::new(slot.io.clone()),
+                    slot.io.wake.clone(),
+                );
                 #[cfg(not(feature = "conformance"))]
-                let host = TokioStorageHost::new(object);
+                let host =
+                    TokioStorageHost::new(object, Arc::new(slot.io.clone()), slot.io.wake.clone());
                 Ok::<_, StoreError>(Arc::new(host))
             })
             .await?
@@ -355,14 +362,12 @@ impl NativeObjects {
                 let runtime = match &address {
                     ObjectAddress::Copy(project) => RuntimeFace::Copy(ObjectRuntime::copy(
                         host,
-                        slot.io.clone(),
                         self.config.authoritative_receiver,
                         *project,
                         self.copy_ack_wait,
                     )),
                     ObjectAddress::Fleet => RuntimeFace::Fleet(ObjectRuntime::fleet(
                         host,
-                        slot.io.clone(),
                         self.config,
                         self.delivery,
                         self.holder_answer_timeout,
@@ -563,7 +568,7 @@ impl NativeObjects {
         &self,
         service: Option<&message_board::ServiceId>,
     ) -> Result<Vec<SessionConnectionSnapshot>, collaboration_central_core::SocketFailure> {
-        use collaboration_central_core::ObjectHost;
+        use collaboration_central_core::ObjectPlatform;
         let slot = self.slots.lock().await.get("fleet").cloned();
         let host = slot
             .as_ref()
@@ -588,7 +593,7 @@ impl NativeObjects {
     pub(crate) async fn socket_inventory(
         &self,
     ) -> Result<Vec<SocketOwnerSnapshot>, collaboration_central_core::SocketFailure> {
-        use collaboration_central_core::ObjectHost;
+        use collaboration_central_core::ObjectPlatform;
         let slots = self.slots.lock().await.clone();
         let mut inventory = Vec::new();
         for (key, slot) in slots {
@@ -614,7 +619,7 @@ impl NativeObjects {
         &self,
         service: &message_board::ServiceId,
     ) -> Result<Vec<AdmissionOrigin>, collaboration_central_core::SocketFailure> {
-        use collaboration_central_core::ObjectHost;
+        use collaboration_central_core::ObjectPlatform;
         let slot = self.slots.lock().await.get("fleet").cloned();
         let host = slot
             .as_ref()

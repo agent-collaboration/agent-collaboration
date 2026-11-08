@@ -11,11 +11,12 @@
 )]
 
 use crate::binding_attachment::BindingAttachment;
+use crate::object_alarm::CloudflareObjectAlarm;
 use collaboration_central_core::{
-    AdmissionOrigin, LocalSectionFailure, ObjectHost, RegistrationEdits, RegistrationSnapshot,
-    SocketFailure,
+    AdmissionOrigin, CoreHost, LocalSectionFailure, ObjectIo, ObjectPlatform, RegistrationEdits,
+    RegistrationSnapshot, SocketFailure,
 };
-use durable_steps::{Host, durable_object_store::DurableObjectStore};
+use durable_steps::durable_object_store::DurableObjectStore;
 use fleet_protocol::{CloseReason, ConnectionId};
 use fleet_session::{Bytes, ConnectionBinding, ConnectionRegistration};
 use runtime_primitives::AlarmOwner;
@@ -34,34 +35,35 @@ use worker::{
 mod session_capabilities;
 
 #[cfg(feature = "conformance")]
-type SharedStore<SharedHost> = crate::conformance_scope_faults::ScopeFaultStore<SharedHost>;
+type SharedStore<Io> = crate::conformance_scope_faults::ScopeFaultStore<CoreHost<Io>>;
 #[cfg(not(feature = "conformance"))]
-type SharedStore<SharedHost> = DurableObjectStore<SharedHost>;
+type SharedStore<Io> = DurableObjectStore<CoreHost<Io>>;
 
 #[cfg(feature = "conformance")]
-type RuntimeStore<SharedHost> =
-    collaboration_central_core::DriveTokenObserver<SharedStore<SharedHost>>;
+type RuntimeStore<Io> = collaboration_central_core::DriveTokenObserver<SharedStore<Io>>;
 #[cfg(not(feature = "conformance"))]
-type RuntimeStore<SharedHost> = SharedStore<SharedHost>;
+type RuntimeStore<Io> = SharedStore<Io>;
 
-pub struct CloudflareStorageHost<SharedHost: Host> {
-    store: Arc<RuntimeStore<SharedHost>>,
-    wake: AlarmOwner,
+pub struct CloudflareStorageHost<Io: ObjectIo> {
+    store: Arc<RuntimeStore<Io>>,
+    alarm: CloudflareObjectAlarm,
+    io: Arc<Io>,
     state: Arc<SendWrapper<State>>,
     quarantine: Mutex<BTreeSet<ConnectionId>>,
     #[cfg(feature = "conformance")]
     faults: Arc<collaboration_central_conformance::RuntimeFaults>,
 }
 
-impl<SharedHost: Host> CloudflareStorageHost<SharedHost> {
+impl<Io: ObjectIo> CloudflareStorageHost<Io> {
     /// Construct once for the object. The store, host and wake capability receive
     /// clones of this one alarm owner, never independent alarm arbiters.
     pub fn new(
         state: Arc<SendWrapper<State>>,
-        shared_host: impl FnOnce(AlarmOwner) -> Arc<SharedHost>,
+        shared_host: impl FnOnce(AlarmOwner) -> Arc<CoreHost<Io>>,
     ) -> Self {
         let wake = AlarmOwner::new(state.storage());
         let shared_host = shared_host(wake.clone());
+        let io = shared_host.io().clone();
         let store = DurableObjectStore::new(
             sqlx_durable_object::DoConnection::new(state.storage()),
             shared_host,
@@ -77,7 +79,8 @@ impl<SharedHost: Host> CloudflareStorageHost<SharedHost> {
         let store = Arc::new(collaboration_central_core::DriveTokenObserver::new(store));
         Self {
             store,
-            wake,
+            alarm: CloudflareObjectAlarm::new(wake, state.clone()),
+            io,
             state,
             quarantine: Mutex::default(),
             #[cfg(feature = "conformance")]
@@ -88,11 +91,12 @@ impl<SharedHost: Host> CloudflareStorageHost<SharedHost> {
     #[cfg(feature = "conformance")]
     pub(crate) fn with_faults(
         state: Arc<SendWrapper<State>>,
-        shared_host: impl FnOnce(AlarmOwner) -> Arc<SharedHost>,
+        shared_host: impl FnOnce(AlarmOwner) -> Arc<CoreHost<Io>>,
         faults: Arc<collaboration_central_conformance::RuntimeFaults>,
     ) -> Self {
         let wake = AlarmOwner::new(state.storage());
         let shared_host = shared_host(wake.clone());
+        let io = shared_host.io().clone();
         let store = DurableObjectStore::new(
             sqlx_durable_object::DoConnection::new(state.storage()),
             shared_host,
@@ -104,7 +108,8 @@ impl<SharedHost: Host> CloudflareStorageHost<SharedHost> {
         let store = Arc::new(collaboration_central_core::DriveTokenObserver::new(store));
         Self {
             store,
-            wake,
+            alarm: CloudflareObjectAlarm::new(wake, state.clone()),
+            io,
             state,
             quarantine: Mutex::default(),
             faults,
@@ -204,13 +209,17 @@ impl<SharedHost: Host> CloudflareStorageHost<SharedHost> {
     }
 }
 
-impl<SharedHost: Host> ObjectHost for CloudflareStorageHost<SharedHost> {
+impl<Io: ObjectIo> ObjectPlatform for CloudflareStorageHost<Io> {
     type Database = sqlx_durable_object::Do;
-    type Store = RuntimeStore<SharedHost>;
-    type Wake = AlarmOwner;
+    type Store = RuntimeStore<Io>;
+    type Alarm = CloudflareObjectAlarm;
+    type Io = Io;
 
     fn store(&self) -> &Arc<Self::Store> {
         &self.store
+    }
+    fn io(&self) -> &Arc<Io> {
+        &self.io
     }
     #[cfg(feature = "conformance")]
     fn session_finalize_fault(
@@ -236,8 +245,8 @@ impl<SharedHost: Host> ObjectHost for CloudflareStorageHost<SharedHost> {
     ) -> Result<Vec<durable_steps::OperationId>, durable_steps::StoreError> {
         self.store.rejected_operations()
     }
-    fn wake(&self) -> &Self::Wake {
-        &self.wake
+    fn alarm(&self) -> &CloudflareObjectAlarm {
+        &self.alarm
     }
     fn with_local_section<Output: Send + 'static>(
         &self,

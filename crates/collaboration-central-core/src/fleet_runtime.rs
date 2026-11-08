@@ -1,8 +1,9 @@
 //! The Fleet face owns central's nonreplicated application state.
+use runtime_primitives::Clock as _;
 
 use crate::{
-    CallerKind, CoreHost, EngineSchema, FleetKind, ObjectAddress, ObjectBootstrap, ObjectHost,
-    ObjectRuntime, PlatformIo,
+    CallerKind, CoreHost, EngineSchema, FleetKind, ObjectAddress, ObjectBootstrap, ObjectIo,
+    ObjectPlatform, ObjectRuntime,
     caller_context::CallAuthority,
     fleet_effects_read::ReadFleetEffects,
     holder_reply_hub::HolderReplyHub,
@@ -45,7 +46,7 @@ impl CallTarget for FleetRequestEffects {
     type Answer = board_sync_protocol::BoardReadPage;
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     Host::Store: durable_steps::ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -69,13 +70,12 @@ where
 {
     pub fn fleet(
         host: Arc<Host>,
-        io: Io,
         config: fleet_project_lease::RegistryConfig,
         delivery: crate::DeliveryConfig,
         holder_answer_timeout: std::time::Duration,
         honored_capabilities: fleet_protocol::FrameCapabilities,
     ) -> Result<Self, StoreError> {
-        let io = Arc::new(io);
+        let io = host.io().clone();
         let replies = Arc::new(crate::holder_reply_hub::HolderReplyHub::default());
         let mail_limits = crate::fleet_outbox_limits().map_err(StoreError::backend)?;
         let publication = crate::mail_status_dispatch::bind(
@@ -105,12 +105,12 @@ where
             shared_host.clone(),
             replies.clone(),
         ));
-        type NoticeTask<Host, Io> = crate::machine_notice_delivery::MachineNoticeTask<Host, Io>;
-        type LeaseHook<Host, Io> = crate::fleet_lease_projection_step::FleetLeaseChangeHook<
-            crate::session_store::CoreSessionStore<Host, Io>,
-            NoticeTask<Host, Io>,
+        type NoticeTask<Host> = crate::machine_notice_delivery::MachineNoticeTask<Host>;
+        type LeaseHook<Host> = crate::fleet_lease_projection_step::FleetLeaseChangeHook<
+            crate::session_store::CoreSessionStore<Host>,
+            NoticeTask<Host>,
         >;
-        let hook = Arc::new(LeaseHook::<Host, Io>::new(io.clone()));
+        let hook = Arc::new(LeaseHook::<Host>::new(io.clone()));
         let mut engine = crate::shared_task_registry::registry_engine::<_, Host::Database, _, _>(
             store,
             shared_host.clone(),
@@ -118,23 +118,24 @@ where
             hook,
         )?;
         engine.register(crate::machine_notice_outbox::FleetNoticeTask::<
-            crate::session_store::CoreSessionStore<Host, Io>,
+            crate::session_store::CoreSessionStore<Host>,
         >(PhantomData))?;
-        engine
-            .register(crate::machine_notice_delivery::MachineNoticeTask::<Host, Io>(PhantomData))?;
+        engine.register(crate::machine_notice_delivery::MachineNoticeTask::<Host>(
+            PhantomData,
+        ))?;
         engine.register(fleet_session::PublishSchemaSupport::<
-            crate::session_store::CoreSessionStore<Host, Io>,
+            crate::session_store::CoreSessionStore<Host>,
             Host::Database,
         >::default())?;
-        engine.register(crate::session_revocation::EndSessionsTask::<Host, Io>(
+        engine.register(crate::session_revocation::EndSessionsTask::<Host>(
             PhantomData,
         ))?;
         engine.register(crate::fleet_mail_tasks::FleetStatusTask::<
-            crate::session_store::CoreSessionStore<Host, Io>,
+            crate::session_store::CoreSessionStore<Host>,
             Host::Database,
         >::new())?;
         engine.register(crate::fleet_mail_tasks::FleetPushTask::<
-            crate::session_store::CoreSessionStore<Host, Io>,
+            crate::session_store::CoreSessionStore<Host>,
             Host::Database,
         >::new(
             mail_limits,
@@ -142,13 +143,11 @@ where
             Arc::new(crate::fleet_sender_binding::FleetSenderBinding),
         ))?;
         engine.register(crate::fleet_mail_tasks::FleetMailRemoval::<
-            crate::session_store::CoreSessionStore<Host, Io>,
+            crate::session_store::CoreSessionStore<Host>,
             Host::Database,
         >::new(fleet_mail_delivery::DeliveryHostRole::Relay))?;
         let engine =
-            crate::fleet_task_engine::own_engine::<_, _, Host::Database, LeaseHook<Host, Io>>(
-                engine,
-            );
+            crate::fleet_task_engine::own_engine::<_, _, Host::Database, LeaseHook<Host>>(engine);
         let weak_host = Arc::downgrade(&host);
         let weak_shared = Arc::downgrade(&shared_host);
         let weak_engine = Arc::downgrade(&engine);
@@ -161,7 +160,7 @@ where
             let io = local_io.clone();
             let replies = local_replies.clone();
             Box::pin(async move {
-                let runtime = ObjectRuntime::<FleetKind, Host, Io> {
+                let runtime = ObjectRuntime::<FleetKind, Host> {
                     work: ObjectWork::Fleet {
                         host: host.upgrade().ok_or(CallFailure::AnswerLost)?,
                         shared_host: shared.upgrade().ok_or(CallFailure::AnswerLost)?,
@@ -214,7 +213,7 @@ where
         let now = runtime_primitives::Clock::now(shared_host.as_ref());
         replies.expire(now);
         if let Some(at) = replies.next_deadline() {
-            let wake = host.wake().wake_at(at).await.map_err(StoreError::backend);
+            let wake = host.alarm().wake_at(at).await.map_err(StoreError::backend);
             maintenance_failure = maintenance_failure.or(wake.err());
         }
         let (store, shared) = self.session_store()?;
@@ -326,7 +325,7 @@ where
             .await
             .map_err(|_| CallFailure::AnswerLost)?;
         if let Some(at) = earliest {
-            host.wake()
+            host.alarm()
                 .wake_at(at)
                 .await
                 .map_err(|_| CallFailure::AnswerLost)?;
@@ -501,16 +500,15 @@ fn refused() -> CallFailure {
     }
 }
 
-fn bind_mail_push<Host, Io>(
+fn bind_mail_push<Host>(
     host: Weak<Host>,
-    io: Arc<Io>,
+    io: Arc<Host::Io>,
     replies: Arc<HolderReplyHub>,
     limits: DeliveryLimits,
     timeout: Duration,
 ) -> PushDispatcher
 where
-    Host: ObjectHost,
-    Io: PlatformIo,
+    Host: ObjectPlatform,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
@@ -565,7 +563,7 @@ where
                     item,
                 },
                 timeout,
-                move |remaining| async move { deadline_io.reply_deadline(remaining).await },
+                move |remaining| async move { deadline_io.event_deadline(remaining).await },
             )
             .await?;
             let remaining = Duration::from_millis(
@@ -577,7 +575,7 @@ where
                 )
                 .unwrap_or(0),
             );
-            crate::mail_push_dispatch::bounded_answer(waiter.answer(), io.reply_deadline(remaining))
+            crate::mail_push_dispatch::bounded_answer(waiter.answer(), io.event_deadline(remaining))
                 .await
         })
     })

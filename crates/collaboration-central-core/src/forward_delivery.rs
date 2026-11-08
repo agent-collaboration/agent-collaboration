@@ -1,6 +1,6 @@
 //! Delivery accepts verified object callers; opaque replies travel only after commit.
 use crate::{
-    CallerKind, DeliveryKind, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, DeliveryKind, ObjectPlatform, ObjectRuntime,
     caller_context::CallAuthority,
     forward_calls::{DeliverForward, ForwardDeliveryRequest, ForwardDeliveryResult},
     object_call_envelope::{ObjectCallEnvelope, encode_refusal},
@@ -21,7 +21,7 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<DeliveryKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<DeliveryKind, Host>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:

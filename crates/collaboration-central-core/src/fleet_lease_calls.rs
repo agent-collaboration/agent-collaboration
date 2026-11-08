@@ -1,6 +1,6 @@
 //! Registry calls publish lease facts and discharge claim debt at the Fleet owner.
 use crate::{
-    CallerKind, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, FleetKind, ObjectAddress, ObjectPlatform, ObjectRuntime,
     caller_context::CallAuthority,
     fleet_lease_step::StoreClaimGrant,
     lease_projection::{ClaimGrantedUpdate, LeaseProjectionResult},
@@ -11,6 +11,7 @@ use crate::{
 use durable_steps::{
     AtomicStore, CallFailure, CallTarget, NotSentReason, storage::TransactionScope,
 };
+use runtime_primitives::Clock as _;
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
@@ -25,7 +26,7 @@ impl CallTarget for ClaimGranted {
     type Answer = LeaseProjectionResult;
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

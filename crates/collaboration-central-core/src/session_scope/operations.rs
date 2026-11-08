@@ -1,8 +1,8 @@
 //! An admitted frame stages exactly one operation; consumer cases are exhaustive.
 use super::{
     AtomicStore, ColumnIndex, ConnectionId, CoreSessionScope, Database, Decode, Encode,
-    IntoArguments, ObjectHost, PlatformIo, ReborrowScope, SessionTransportEffect, StoreError,
-    SyncTime, TransactionScope, Type,
+    IntoArguments, ObjectPlatform, ReborrowScope, SessionTransportEffect, StoreError, SyncTime,
+    TransactionScope, Type,
 };
 use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerProtocol, BoardConsumerRequest, BoardReadCursor,
@@ -11,7 +11,7 @@ use board_sync_protocol::{
 use fleet_protocol::{FrameId, OperationAnswer, OperationRequest, ServerFrame};
 use fleet_session::SessionKey;
 
-impl<Host: ObjectHost, Io: PlatformIo> CoreSessionScope<'_, Host, Io>
+impl<Host: ObjectPlatform> CoreSessionScope<'_, Host>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:

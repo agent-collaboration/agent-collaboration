@@ -1,7 +1,7 @@
 //! Directory reads leave the connection's local section before entering Registry.
 use super::EffectDriver;
 use crate::{
-    ObjectHost, PlatformIo,
+    ObjectPlatform,
     forward_calls::InstallationPeerRegistry,
     installation_peer_reads::{
         InstallationPeerDirectory, InstallationPeerPageRead, InstallationPeerPageRequest,
@@ -15,7 +15,7 @@ use durable_steps::{CallFailure, Host as _};
 use fleet_protocol::{ConnectionId, FrameId, OperationAnswer, ServerFrame};
 use fleet_session::SessionKey;
 
-impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
+impl<Host: ObjectPlatform> EffectDriver<Host> {
     pub(super) async fn answer_installation_read(
         &self,
         connection: ConnectionId,

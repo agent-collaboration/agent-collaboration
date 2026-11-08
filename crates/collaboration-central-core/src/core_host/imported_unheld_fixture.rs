@@ -1,8 +1,8 @@
 //! Conformance setup only: public import and seed on the actual composed objects.
-use super::{CoreHost, DatabaseId, IdSource, PlatformIo};
+use super::{CoreHost, DatabaseId, IdSource, ObjectIo};
 use crate::FleetKind;
 use crate::{
-    CallerContext, EdgeKind, ObjectHost, ObjectRuntime, OwnerIdentity,
+    CallerContext, EdgeKind, ObjectPlatform, ObjectRuntime, OwnerIdentity,
     copy_write_calls::{AdminCopySeedRequest, CopyAdminSeed},
     object_runtime::ObjectWork,
 };
@@ -26,7 +26,7 @@ pub enum ConformanceBoardState {
     Open,
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
@@ -175,7 +175,7 @@ where
         Ok(position)
     }
 }
-pub(super) async fn fixture_seed<Io: PlatformIo>(
+pub(super) async fn fixture_seed<Io: ObjectIo>(
     host: &CoreHost<Io>,
     owner: &OwnerIdentity,
     target: &CopyAdminSeed,
@@ -203,7 +203,7 @@ pub(super) async fn fixture_seed<Io: PlatformIo>(
     serde_json::from_slice(&answer).map_err(StoreError::backend)
 }
 
-pub(super) async fn fixture_fleet<Io: PlatformIo>(
+pub(super) async fn fixture_fleet<Io: ObjectIo>(
     host: &CoreHost<Io>,
     owner: &OwnerIdentity,
     database: DatabaseId,

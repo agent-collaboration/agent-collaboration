@@ -1,11 +1,11 @@
 //! Fleet supplies a pure read; Registry compares the authenticated carrier mapping.
-use super::{CoreHost, PlatformIo, SharedTaskCaller, no_route};
+use super::{CoreHost, ObjectIo, SharedTaskCaller, no_route};
 use crate::fleet_creation_calls::ReadProjectCreationDecision;
 use durable_steps::{CallFailure, CallId};
 use fleet_protocol::{GateAnswer, GateReason, GateReasonCode, RegistrationAdmission};
 use message_board::{ProjectId, StoredDecision};
 
-impl<Io: PlatformIo> CoreHost<Io> {
+impl<Io: ObjectIo> CoreHost<Io> {
     pub(super) async fn admit_registration(
         &self,
         request: RegistrationAdmission,

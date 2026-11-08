@@ -1,8 +1,7 @@
 //! The production thirty-day rule is crossed through the existing Clock capability.
 #![cfg(feature = "conformance")]
 use board_sync_protocol::{BoardReadPage, FleetFeedRead, FleetSnapshotCursor};
-use collaboration_central_core::{CoreHost, FleetKind, ObjectAddress, ObjectRuntime, PlatformIo};
-use collaboration_central_tokio::TokioStorageHost;
+use collaboration_central_core::{CoreHost, FleetKind, ObjectAddress, ObjectIo, ObjectRuntime};
 use durable_steps::{CallFailure, NotSentReason, Uuid};
 use fleet_admission::{FleetOperation, FleetRequest, FleetRequestResult};
 use fleet_protocol::ReceiverId;
@@ -36,8 +35,8 @@ impl WakeScheduler for ClockIo {
         Ok(())
     }
 }
-impl PlatformIo for ClockIo {
-    fn reply_deadline(
+impl ObjectIo for ClockIo {
+    fn event_deadline(
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
@@ -52,7 +51,7 @@ impl PlatformIo for ClockIo {
 }
 struct Fixture {
     objects: ObjectStore<CoreHost<ClockIo>>,
-    runtime: ObjectRuntime<FleetKind, TokioStorageHost<CoreHost<ClockIo>>, ClockIo>,
+    runtime: ObjectRuntime<FleetKind, crate::io_alarm::IoPlatform<ClockIo>>,
     io: ClockIo,
 }
 impl Fixture {
@@ -68,8 +67,10 @@ impl Fixture {
             )
             .await?;
         let runtime = ObjectRuntime::fleet(
-            Arc::new(TokioStorageHost::new(object)),
-            io.clone(),
+            Arc::new(crate::io_alarm::io_platform(
+                object,
+                std::sync::Arc::new(io.clone()),
+            )),
             fleet_project_lease::RegistryConfig {
                 authoritative_receiver: receiver,
                 lease: fleet_project_lease::LeasePolicy {

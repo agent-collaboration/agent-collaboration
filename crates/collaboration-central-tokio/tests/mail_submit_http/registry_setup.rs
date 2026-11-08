@@ -3,8 +3,7 @@
 //! Fleet admission and an idle holder's release answer are setup stand-ins.
 //! They do not prove the unfinished normal Register/Move request composition.
 use collaboration_central_conformance::ConformanceResult;
-use collaboration_central_core::{CopyKind, CoreHost, ObjectAddress, ObjectRuntime, PlatformIo};
-use collaboration_central_tokio::TokioStorageHost;
+use collaboration_central_core::{CopyKind, CoreHost, ObjectAddress, ObjectIo, ObjectRuntime};
 use durable_steps::{
     AtomicStore, CallFailure, CallId, CallTarget, Engine, Host, OperationState, Uuid,
 };
@@ -37,7 +36,7 @@ pub(super) fn normal_record_key(id: i64) -> ConformanceResult<&'static str> {
 }
 
 type Store = TokioObject<CoreHost<SetupIo>>;
-type Copy = ObjectRuntime<CopyKind, TokioStorageHost<CoreHost<SetupIo>>, SetupIo>;
+type Copy = ObjectRuntime<CopyKind, crate::io_alarm::IoPlatform<SetupIo>>;
 
 pub(super) struct SetupIo;
 impl Clock for SetupIo {
@@ -55,8 +54,8 @@ impl WakeScheduler for SetupIo {
         Ok(())
     }
 }
-impl PlatformIo for SetupIo {
-    fn reply_deadline(
+impl ObjectIo for SetupIo {
+    fn event_deadline(
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
@@ -245,9 +244,11 @@ impl GrantFixture {
                 Arc::new(CoreHost::for_store(SetupIo, config.authoritative_receiver)),
             )
             .await?;
-        let runtime = ObjectRuntime::<collaboration_central_core::FleetKind, _, _>::fleet(
-            Arc::new(TokioStorageHost::new(registry.clone())),
-            SetupIo,
+        let runtime = ObjectRuntime::<collaboration_central_core::FleetKind, _>::fleet(
+            Arc::new(crate::io_alarm::io_platform(
+                registry.clone(),
+                std::sync::Arc::new(SetupIo),
+            )),
             config,
             collaboration_central_tokio::DeliveryConfig {
                 relay_peer: fleet_protocol::PeerId::try_from(
@@ -268,8 +269,10 @@ impl GrantFixture {
             )
             .await?;
         let copy = ObjectRuntime::copy(
-            Arc::new(TokioStorageHost::new(copy_store)),
-            SetupIo,
+            Arc::new(crate::io_alarm::io_platform(
+                copy_store,
+                std::sync::Arc::new(SetupIo),
+            )),
             config.authoritative_receiver,
             database,
             Duration::from_secs(2),

@@ -1,7 +1,7 @@
 //! Sender reconciliation enters the owning Fleet after the session transaction releases.
 use super::EffectDriver;
 use crate::{
-    ObjectHost, PlatformIo,
+    ObjectPlatform,
     mail_sender_calls::{SenderFleetMail, SenderMailRequest},
 };
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
@@ -9,7 +9,7 @@ use durable_steps::Host as _;
 use fleet_protocol::{ConnectionId, DeliveryRequest, FrameId, OperationAnswer, ServerFrame};
 use fleet_session::SessionKey;
 
-impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
+impl<Host: ObjectPlatform> EffectDriver<Host> {
     pub(super) async fn answer_sender_mail(
         &self,
         connection: ConnectionId,

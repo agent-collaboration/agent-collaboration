@@ -1,7 +1,7 @@
 //! Calls carry bodies transiently; every state transition rechecks the original deadline.
 use super::EffectDriver;
 use crate::{
-    ObjectHost, PlatformIo,
+    ObjectPlatform,
     forward_calls::{
         DeliverForward, ForwardDeliveryRequest, ForwardDeliveryResult, ForwardRoute,
         ForwardRouteRequest,
@@ -18,7 +18,7 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 
-impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io>
+impl<Host: ObjectPlatform> EffectDriver<Host>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:

@@ -22,8 +22,8 @@ impl WakeScheduler for PresenceIo {
         Ok(())
     }
 }
-impl PlatformIo for PresenceIo {
-    fn reply_deadline(
+impl ObjectIo for PresenceIo {
+    fn event_deadline(
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
@@ -51,13 +51,14 @@ fn config() -> TestResult<RegistryConfig> {
 }
 type PresenceRuntime = ObjectRuntime<
     collaboration_central_core::FleetKind,
-    TokioStorageHost<CoreHost<Io>>,
-    PresenceIo,
+    crate::io_alarm::IoPlatform<PresenceIo, collaboration_central_core::CoreHost<Io>>,
 >;
 fn runtime(fixture: &Fixture, clock: &PresenceIo) -> TestResult<PresenceRuntime> {
     Ok(ObjectRuntime::fleet(
-        Arc::new(TokioStorageHost::new(fixture.object.clone())),
-        clock.clone(),
+        Arc::new(crate::io_alarm::io_platform(
+            fixture.object.clone(),
+            std::sync::Arc::new(clock.clone()),
+        )),
         config()?,
         collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_protocol::PeerId::try_from(

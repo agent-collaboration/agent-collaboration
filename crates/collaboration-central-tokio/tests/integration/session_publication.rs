@@ -1,7 +1,7 @@
 #![cfg(feature = "conformance")]
 
 use crate::session_publication_fixture as support;
-use collaboration_central_core::ObjectHost;
+use collaboration_central_core::ObjectPlatform;
 use collaboration_central_tokio::SocketCommand;
 use fleet_protocol::{CloseReason, SchemaSupport};
 use fleet_session::ConnectionRegistration;

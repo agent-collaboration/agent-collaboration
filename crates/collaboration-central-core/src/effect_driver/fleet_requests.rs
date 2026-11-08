@@ -1,7 +1,7 @@
 //! Fleet request provenance is bound at admission before leaving the session owner.
 use super::EffectDriver;
 use crate::{
-    ObjectHost, PlatformIo,
+    ObjectPlatform,
     fleet_metadata_calls::{FleetMetadata, FleetMetadataRequest},
 };
 use board_sync_protocol::{
@@ -11,7 +11,7 @@ use durable_steps::Host as _;
 use fleet_protocol::{ConnectionId, FrameId, OperationAnswer, ServerFrame};
 use fleet_session::SessionKey;
 
-impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
+impl<Host: ObjectPlatform> EffectDriver<Host> {
     pub(super) async fn answer_fleet_request(
         &self,
         connection: ConnectionId,
