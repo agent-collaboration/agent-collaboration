@@ -71,7 +71,7 @@ async fn relay_retirement_preserves_relay_api_calls_across_reopen() {
             Box::pin(async move {
                 assert!(matches!(
                     Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                        .submit_relay::<RelayPush, RecordRemoval>(
+                        .submit_relay::<crate::JournaledWork<RelayPush, RecordRemoval>>(
                             Submitter::Machine(peer(1)),
                             item(1, "relay schema"),
                             peer(3),
@@ -125,7 +125,7 @@ async fn relay_retirement_preserves_relay_api_calls_across_reopen() {
             Box::pin(async move {
                 let mut outbox = Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings);
                 outbox
-                    .receipt::<RelayPublication>(
+                    .receipt::<crate::JournaledStatus<RelayPublication>>(
                         peer(2),
                         &reference,
                         answer,
@@ -134,7 +134,7 @@ async fn relay_retirement_preserves_relay_api_calls_across_reopen() {
                     .await
                     .map_err(delivery_rollback)?;
                 let answer = outbox
-                    .recipient_report::<RelayPublication>(
+                    .recipient_report::<crate::JournaledStatus<RelayPublication>>(
                         peer(2),
                         RecipientReport {
                             item: item_id(1),
@@ -151,7 +151,7 @@ async fn relay_retirement_preserves_relay_api_calls_across_reopen() {
                     .map_err(delivery_rollback)?;
                 assert!(matches!(answer, ReportResult::Ack { .. }));
                 let settled = outbox
-                    .relay_settle::<RecordRemoval>(
+                    .relay_settle::<crate::JournaledRemoval<RecordRemoval>>(
                         Submitter::Machine(peer(1)),
                         item_id(2),
                         ItemDigest::try_from("a".repeat(64)).unwrap(),

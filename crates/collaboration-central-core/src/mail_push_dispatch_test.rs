@@ -232,7 +232,9 @@ impl Host for DeliveryHost {
                                 limits,
                                 &FleetSenderBinding,
                             )
-                            .recipient_report::<Publication>(owner, report, now)
+                            .recipient_report::<fleet_mail_delivery::JournaledStatus<Publication>>(
+                                owner, report, now,
+                            )
                             .await
                             .map_err(fleet_mail_delivery::delivery_rollback)
                         })
@@ -356,7 +358,7 @@ impl Fixture {
                 Box::pin(async move {
                     let answer =
                         Outbox::<_, BoardDeliveryTypes, _>::new(scope, limits, &FleetSenderBinding)
-                            .submit_relay::<Push, Removal>(
+                            .submit_relay::<fleet_mail_delivery::JournaledWork<Push, Removal>>(
                                 Submitter::Machine(
                                     A.to_owned().try_into().map_err(StoreError::backend)?,
                                 ),

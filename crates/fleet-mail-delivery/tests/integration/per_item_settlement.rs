@@ -35,7 +35,10 @@ async fn ordinary_admission_uses_small_bound_while_large_kind_reserves_global() 
                         } else {
                             assert!(matches!(
                                 outbox
-                                    .submit_relay::<FixturePush<VariableTypes>, RecordRemoval>(
+                                    .submit_relay::<fleet_mail_delivery::JournaledWork<
+                                        FixturePush<VariableTypes>,
+                                        RecordRemoval,
+                                    >>(
                                         Submitter::Machine(peer(1)),
                                         DeliveryEnvelope::Item(variable_item(identity, "small")),
                                         peer(3),
@@ -68,7 +71,10 @@ async fn ordinary_admission_uses_small_bound_while_large_kind_reserves_global() 
                     } else {
                         assert!(matches!(
                             outbox
-                                .submit_relay::<FixturePush<VariableTypes>, RecordRemoval>(
+                                .submit_relay::<fleet_mail_delivery::JournaledWork<
+                                    FixturePush<VariableTypes>,
+                                    RecordRemoval,
+                                >>(
                                     Submitter::Machine(peer(1)),
                                     DeliveryEnvelope::Item(variable_item(4, "large")),
                                     peer(3),
@@ -113,21 +119,24 @@ async fn invalid_body_bound_is_refused_before_any_custody_write() {
                     Err(DeliveryError::Config(_))
                 ));
                 assert!(matches!(
-                    Outbox::<_, VariableTypes, _>::new(
-                        scope,
-                        variable_limits(100_000_000),
-                        &FixtureBindings
-                    )
-                    .submit_relay::<FixturePush<VariableTypes>, RecordRemoval>(
-                        Submitter::Machine(peer(1)),
-                        DeliveryEnvelope::Item(variable_item(1, "invalid")),
-                        peer(3),
-                        "route".into(),
-                        now()
-                    )
-                    .await,
-                    Err(DeliveryError::Config(_))
-                ));
+                        Outbox::<_, VariableTypes, _>::new(
+                            scope,
+                            variable_limits(100_000_000),
+                            &FixtureBindings
+                        )
+                        .submit_relay::<fleet_mail_delivery::JournaledWork<
+                            FixturePush<VariableTypes>,
+                            RecordRemoval,
+                        >>(
+                            Submitter::Machine(peer(1)),
+                            DeliveryEnvelope::Item(variable_item(1, "invalid")),
+                            peer(3),
+                            "route".into(),
+                            now()
+                        )
+                        .await,
+                        Err(DeliveryError::Config(_))
+                    ));
                 let row = sqlx_core::query::query::<sqlx_turso::Turso>(
                     "SELECT COUNT(*) AS count FROM _fleet_sync_outbox_items",
                 )
@@ -357,7 +366,7 @@ async fn relay_validates_stored_bound_after_push_receipt_releases_body() {
                     Outbox::<_, VariableTypes, _>::new(scope, configured, &FixtureBindings);
                 assert!(matches!(
                     relay
-                        .submit_relay::<FixturePush<VariableTypes>, RecordRemoval>(
+                        .submit_relay::<fleet_mail_delivery::JournaledWork<FixturePush<VariableTypes>, RecordRemoval>>(
                             Submitter::Machine(peer(1)),
                             envelope,
                             peer(3),
@@ -369,7 +378,7 @@ async fn relay_validates_stored_bound_after_push_receipt_releases_body() {
                     SubmitResult::Accepted { .. }
                 ));
                 relay
-                    .receipt::<FixturePublication<VariableTypes>>(
+                    .receipt::<fleet_mail_delivery::JournaledStatus<FixturePublication<VariableTypes>>>(
                         peer(2),
                         &reference,
                         PushResult::Accepted { accepted_at: now() },
@@ -386,7 +395,7 @@ async fn relay_validates_stored_bound_after_push_receipt_releases_body() {
                 assert_eq!(row.try_get::<i64, _>("acceptance_bound")?, 64);
                 assert!(matches!(
                     Outbox::<_, VariableTypes, _>::new(scope, configured, &FixtureBindings)
-                        .recipient_report::<FixturePublication<VariableTypes>>(
+                        .recipient_report::<fleet_mail_delivery::JournaledStatus<FixturePublication<VariableTypes>>>(
                             peer(2),
                             RecipientReport {
                                 item: item_id(1),
@@ -436,7 +445,10 @@ async fn cancel_consumes_original_small_reserve_without_global_charge() {
                             .map_err(storage_error)?;
                     } else {
                         outbox
-                            .submit_relay::<FixturePush<VariableTypes>, RecordRemoval>(
+                            .submit_relay::<fleet_mail_delivery::JournaledWork<
+                                FixturePush<VariableTypes>,
+                                RecordRemoval,
+                            >>(
                                 Submitter::Machine(peer(1)),
                                 DeliveryEnvelope::Item(variable_item(1, "small")),
                                 peer(3),
@@ -489,7 +501,10 @@ async fn cancel_consumes_original_small_reserve_without_global_charge() {
                     } else {
                         assert!(matches!(
                             outbox
-                                .submit_relay::<FixturePush<VariableTypes>, RecordRemoval>(
+                                .submit_relay::<fleet_mail_delivery::JournaledWork<
+                                    FixturePush<VariableTypes>,
+                                    RecordRemoval,
+                                >>(
                                     Submitter::Machine(peer(1)),
                                     control,
                                     peer(3),

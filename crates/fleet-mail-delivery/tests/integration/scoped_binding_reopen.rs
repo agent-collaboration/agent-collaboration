@@ -35,7 +35,7 @@ async fn compacted_custody_reopens_offline_using_persisted_host_truth_and_never_
                 };
                 let mut outbox = Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings);
                 outbox
-                    .submit_relay::<PushTask, RecordRemoval>(
+                    .submit_relay::<fleet_mail_delivery::JournaledWork<PushTask, RecordRemoval>>(
                         Submitter::Machine(peer(9)),
                         DeliveryEnvelope::Item(item),
                         peer(3),
@@ -45,7 +45,7 @@ async fn compacted_custody_reopens_offline_using_persisted_host_truth_and_never_
                     .await
                     .map_err(storage_error)?;
                 outbox
-                    .receipt::<PublishTask>(
+                    .receipt::<fleet_mail_delivery::JournaledStatus<PublishTask>>(
                         peer(2),
                         &reference,
                         PushResult::Accepted { accepted_at: now() },

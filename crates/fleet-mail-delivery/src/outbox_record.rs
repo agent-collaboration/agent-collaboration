@@ -1,4 +1,5 @@
 use crate::DeliveryError;
+pub(crate) mod owed_work;
 use fleet_protocol::*;
 use serde::{Deserialize, Serialize};
 

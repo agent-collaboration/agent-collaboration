@@ -1,9 +1,6 @@
 //! Sender reconciliation uses retained relay ownership after content release.
 use crate::{DeliveryError, Outbox, outbox_record::*};
-use durable_steps::{
-    JournalScope, Task,
-    storage::{JournalStorage, TransactionScope},
-};
+use durable_steps::storage::TransactionScope;
 use fleet_protocol::*;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
@@ -151,7 +148,7 @@ where
         clippy::manual_async_fn,
         reason = "explicit Send avoids async-fn/GAT lifetime generality errors in journal transactions"
     )]
-    pub fn relay_settle<'call, TRetention>(
+    pub fn relay_settle<'call, W>(
         &'call mut self,
         submitter: crate::Submitter,
         item: ItemId,
@@ -161,8 +158,7 @@ where
     + Send
     + 'call
     where
-        S: JournalScope + JournalStorage,
-        TRetention: Task<Input = ItemId>,
+        W: crate::OwedRemoval<S>,
     {
         async move {
             if now >= crate::removal_deadline(item) {
@@ -187,7 +183,7 @@ where
                 if record.submitter.is_none() {
                     record.submitter = Some(submitter);
                     self.save_recovered(&record, now).await?;
-                    crate::admit_record_removal::<_, TRetention>(self.scope, item).await?;
+                    W::owe_record_removal(self.scope, item, now).await?;
                 }
                 return Ok(SettleResult::Replayed {
                     status: record.status,
@@ -212,7 +208,7 @@ where
                 now,
             )
             .await?;
-            crate::admit_record_removal::<_, TRetention>(self.scope, item).await?;
+            W::owe_record_removal(self.scope, item, now).await?;
             Ok(SettleResult::Settled { reason, version })
         }
     }

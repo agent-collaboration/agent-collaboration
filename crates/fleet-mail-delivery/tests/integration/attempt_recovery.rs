@@ -239,7 +239,7 @@ async fn cancel_waiting_for_a_saved_held_answer_prevents_the_original_in_the_out
         .transaction(|scope| {
             Box::pin(async move {
                 Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .submit_relay::<FixturePush<TestTypes>, RecordRemoval>(
+                    .submit_relay::<fleet_mail_delivery::JournaledWork<FixturePush<TestTypes>, RecordRemoval>>(
                         Submitter::Machine(peer(1)),
                         cancel(2, 1),
                         peer(3),

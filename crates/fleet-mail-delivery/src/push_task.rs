@@ -133,7 +133,12 @@ where
             ctx.local(step("receipt")?, move |scope| {
                 Box::pin(async move {
                     match Outbox::<_, D, B>::new(scope, limits, binding.as_ref())
-                        .receipt::<TPublish>(input.recipient, &input.reference, answer, now)
+                        .receipt::<crate::JournaledStatus<TPublish>>(
+                            input.recipient,
+                            &input.reference,
+                            answer,
+                            now,
+                        )
                         .await
                         .map_err(step_error)?
                     {
@@ -187,7 +192,9 @@ where
                         None => CallReach::NeverSent,
                     };
                     Outbox::<_, D, B>::new(scope, self.limits, self.binding.as_ref())
-                        .finish_push_at_deadline::<TPublish>(item, reach, now)
+                        .finish_push_at_deadline::<crate::JournaledStatus<TPublish>>(
+                            item, reach, now,
+                        )
                         .await
                         .map_err(store_error)?;
                     Ok(Resume::Finish(()))

@@ -137,12 +137,9 @@ where
                     self.limits,
                     &crate::fleet_sender_binding::FleetSenderBinding,
                 )
-                .relay_settle::<crate::fleet_mail_tasks::FleetMailRemoval<Store, Driver>>(
-                    *submitter,
-                    *item,
-                    digest.clone(),
-                    self.now,
-                )
+                .relay_settle::<fleet_mail_delivery::JournaledRemoval<
+                    crate::fleet_mail_tasks::FleetMailRemoval<Store, Driver>,
+                >>(*submitter, *item, digest.clone(), self.now)
                 .await;
                 let answer = match answer {
                     Ok(result) => DeliveryAnswer::Settle(result),

@@ -58,7 +58,7 @@ async fn admit(
         }
         "relay" => {
             Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                .submit_relay::<super::support::network::PushTask, RecordRemoval>(
+                .submit_relay::<fleet_mail_delivery::JournaledWork<super::support::network::PushTask, RecordRemoval>>(
                     Submitter::Machine(peer(1)),
                     DeliveryEnvelope::Item(original),
                     peer(3),

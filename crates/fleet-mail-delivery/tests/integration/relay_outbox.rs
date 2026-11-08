@@ -31,7 +31,7 @@ async fn unadmitted_cancel_reports_return_typed_refusal_without_any_transaction_
                         .await?
                         .try_get::<i64, _>("changes")?;
                     let answer = Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                        .recipient_report::<PublishTask>(
+                        .recipient_report::<fleet_mail_delivery::JournaledStatus<PublishTask>>(
                             peer(2),
                             RecipientReport {
                                 item: item_id(1),
@@ -77,7 +77,7 @@ async fn unadmitted_cancel_reports_return_typed_refusal_without_any_transaction_
                 .await?;
                 assert!(matches!(
                     Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                        .recipient_report::<PublishTask>(
+                        .recipient_report::<fleet_mail_delivery::JournaledStatus<PublishTask>>(
                             peer(2),
                             RecipientReport {
                                 item: item_id(1),
@@ -100,7 +100,7 @@ async fn unadmitted_cancel_reports_return_typed_refusal_without_any_transaction_
                     .await?;
                 assert!(matches!(
                     Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                        .recipient_report::<PublishTask>(
+                        .recipient_report::<fleet_mail_delivery::JournaledStatus<PublishTask>>(
                             peer(2),
                             RecipientReport {
                                 item: item_id(1),
@@ -154,7 +154,7 @@ async fn admit(
                     .unwrap(),
                 );
                 Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .submit_relay::<PushTask, RecordRemoval>(
+                    .submit_relay::<fleet_mail_delivery::JournaledWork<PushTask, RecordRemoval>>(
                         fleet_mail_delivery::Submitter::Machine(peer(submitter)),
                         envelope,
                         peer(9),
@@ -206,7 +206,7 @@ async fn receipt(
         .transaction(move |scope| {
             Box::pin(async move {
                 Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .receipt::<PublishTask>(
+                    .receipt::<fleet_mail_delivery::JournaledStatus<PublishTask>>(
                         peer(caller),
                         &reference,
                         PushResult::Accepted {
@@ -232,7 +232,7 @@ async fn report(
         .transaction(move |scope| {
             Box::pin(async move {
                 Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .recipient_report::<PublishTask>(
+                    .recipient_report::<fleet_mail_delivery::JournaledStatus<PublishTask>>(
                         peer(caller),
                         RecipientReport {
                             item: item_id(identity),
@@ -377,7 +377,7 @@ async fn rolled_back_next_holder_acceptance_keeps_content_and_receipt_release_is
         .transaction(|scope| {
             Box::pin(async move {
                 Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .submit_relay::<PushTask, RecordRemoval>(
+                    .submit_relay::<fleet_mail_delivery::JournaledWork<PushTask, RecordRemoval>>(
                         fleet_mail_delivery::Submitter::Machine(peer(1)),
                         item(1, "body-a"),
                         peer(9),
@@ -473,7 +473,7 @@ async fn rolled_back_next_holder_acceptance_keeps_content_and_receipt_release_is
         .transaction(move |scope| {
             Box::pin(async move {
                 Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .receipt::<PublishTask>(
+                    .receipt::<fleet_mail_delivery::JournaledStatus<PublishTask>>(
                         peer(2),
                         &reference(1, "body-a"),
                         answer,

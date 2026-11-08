@@ -39,7 +39,7 @@ async fn admit_project(store: &TestStore, identity: u64, route: &'static str) {
         .transaction(move |scope| {
             Box::pin(async move {
                 let answer = Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .submit_relay::<PushTask, RecordRemoval>(
+                    .submit_relay::<fleet_mail_delivery::JournaledWork<PushTask, RecordRemoval>>(
                         project_owner(),
                         project_envelope(identity),
                         peer(9),
@@ -67,7 +67,7 @@ async fn report_project(store: &TestStore, identity: u64) -> Result<ReportResult
         .transaction(move |scope| {
             Box::pin(async move {
                 Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .recipient_report::<PublishTask>(
+                    .recipient_report::<fleet_mail_delivery::JournaledStatus<PublishTask>>(
                         peer(2),
                         RecipientReport {
                             item: item_id(identity),

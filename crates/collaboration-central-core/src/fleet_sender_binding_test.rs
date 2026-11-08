@@ -86,7 +86,7 @@ async fn submit(
                     crate::fleet_outbox_limits().map_err(StoreError::backend)?,
                     &FleetSenderBinding,
                 )
-                .submit_relay::<Push, Removal>(
+                .submit_relay::<fleet_mail_delivery::JournaledWork<Push, Removal>>(
                     submitter,
                     item,
                     "019f0000-0000-7000-8000-000000005240"

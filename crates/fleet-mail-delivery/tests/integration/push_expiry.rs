@@ -180,7 +180,12 @@ async fn payload_resolved_before_expiry_arrives_after_it_without_admitting_local
         .transaction(move |scope| {
             Box::pin(async move {
                 Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .receipt::<PublishTask>(peer(2), &reference, answer, at(DEADLINE))
+                    .receipt::<fleet_mail_delivery::JournaledStatus<PublishTask>>(
+                        peer(2),
+                        &reference,
+                        answer,
+                        at(DEADLINE),
+                    )
                     .await
                     .map_err(storage_error)?;
                 Ok(())

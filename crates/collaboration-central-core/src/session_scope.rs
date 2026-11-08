@@ -178,9 +178,11 @@ where
                         limits,
                         &crate::fleet_sender_binding::FleetSenderBinding,
                     )
-                    .recipient_report::<crate::fleet_mail_tasks::FleetStatusTask<
-                        crate::session_store::CoreSessionStore<Host>,
-                        Host::Database,
+                    .recipient_report::<fleet_mail_delivery::JournaledStatus<
+                        crate::fleet_mail_tasks::FleetStatusTask<
+                            crate::session_store::CoreSessionStore<Host>,
+                            Host::Database,
+                        >,
                     >>(session.peer, report, now)
                     .await
                     .map_err(fleet_mail_delivery::delivery_rollback)?;

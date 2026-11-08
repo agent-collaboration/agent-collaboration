@@ -173,10 +173,10 @@ where
             // Existing immutable custody still goes through the SDK's replay
             // and conflict rules, including while the recipient is revoked.
             let answer = outbox
-                .submit_relay::<
+                .submit_relay::<fleet_mail_delivery::JournaledWork<
                     crate::fleet_mail_tasks::FleetPushTask<Store, Driver>,
                     crate::fleet_mail_tasks::FleetMailRemoval<Store, Driver>,
-                >(submitter, *item, self.relay, origin.installation, now)
+                >>(submitter, *item, self.relay, origin.installation, now)
                 .await
                 .map_err(fleet_mail_delivery::delivery_rollback)?;
             Ok((

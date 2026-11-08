@@ -91,7 +91,7 @@ async fn forged_source_claims_are_refused_at_each_intake_without_writes() {
             Box::pin(async move {
                 assert!(matches!(
                     Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                        .submit_relay::<PushTask, RecordRemoval>(
+                        .submit_relay::<fleet_mail_delivery::JournaledWork<PushTask, RecordRemoval>>(
                             machine,
                             envelope(project, 10),
                             peer(3),
@@ -177,7 +177,7 @@ async fn both_owner_kinds_survive_three_custody_records_replay_and_payload_relea
                     );
                     assert!(matches!(
                         outbox
-                            .submit_relay::<PushTask, RecordRemoval>(
+                            .submit_relay::<fleet_mail_delivery::JournaledWork<PushTask, RecordRemoval>>(
                                 owner,
                                 envelope(owner, 11),
                                 peer(3),
@@ -197,7 +197,7 @@ async fn both_owner_kinds_survive_three_custody_records_replay_and_payload_relea
                     );
                     assert!(matches!(
                         outbox
-                            .submit_relay::<PushTask, RecordRemoval>(
+                            .submit_relay::<fleet_mail_delivery::JournaledWork<PushTask, RecordRemoval>>(
                                 owner,
                                 envelope(owner, 11),
                                 peer(3),
@@ -273,7 +273,7 @@ async fn both_owner_kinds_survive_three_custody_records_replay_and_payload_relea
                         digest: envelope(owner, 11).digest().clone(),
                     };
                     outbox
-                        .receipt::<PublishTask>(
+                        .receipt::<fleet_mail_delivery::JournaledStatus<PublishTask>>(
                             peer(2),
                             &reference,
                             PushResult::Accepted { accepted_at: now() },
@@ -312,7 +312,7 @@ async fn both_owner_kinds_survive_three_custody_records_replay_and_payload_relea
                     ));
                     assert!(matches!(
                         outbox
-                            .relay_settle::<RecordRemoval>(
+                            .relay_settle::<fleet_mail_delivery::JournaledRemoval<RecordRemoval>>(
                                 other,
                                 item_id(11),
                                 reference.digest.clone(),
@@ -324,7 +324,7 @@ async fn both_owner_kinds_survive_three_custody_records_replay_and_payload_relea
                     ));
                     assert!(matches!(
                         outbox
-                            .submit_relay::<PushTask, RecordRemoval>(
+                            .submit_relay::<fleet_mail_delivery::JournaledWork<PushTask, RecordRemoval>>(
                                 owner,
                                 envelope(owner, 11),
                                 peer(3),
@@ -605,7 +605,7 @@ async fn fleet_submitter_survives_internal_admission_push_payload_release_and_re
                 let mut outbox = Outbox::<_, TestTypes, _>::new(scope, limits(), &FleetBindings);
                 assert!(matches!(
                     outbox
-                        .submit_fleet::<PushTask, RecordRemoval>(
+                        .submit_fleet::<fleet_mail_delivery::JournaledWork<PushTask, RecordRemoval>>(
                             fleet_id(),
                             fleet_envelope(40),
                             peer(3),
@@ -628,7 +628,7 @@ async fn fleet_submitter_survives_internal_admission_push_payload_release_and_re
                 assert_eq!(pushed.submitter, Submitter::Fleet(fleet_id()));
                 assert!(matches!(
                     outbox
-                        .submit_fleet::<PushTask, RecordRemoval>(
+                        .submit_fleet::<fleet_mail_delivery::JournaledWork<PushTask, RecordRemoval>>(
                             fleet_id(),
                             fleet_envelope(40),
                             peer(3),
@@ -676,7 +676,7 @@ async fn fleet_submitter_survives_internal_admission_push_payload_release_and_re
                 };
                 assert!(matches!(
                     Outbox::<_, TestTypes, _>::new(scope, limits(), &FleetBindings)
-                        .receipt::<PublishTask>(
+                        .receipt::<fleet_mail_delivery::JournaledStatus<PublishTask>>(
                             peer(2),
                             &reference,
                             PushResult::Accepted { accepted_at: now() },
@@ -714,7 +714,7 @@ async fn fleet_submitter_survives_internal_admission_push_payload_release_and_re
         assert!(matches!(outbox.relay_query(Submitter::Fleet(fleet_id()), item_id(40)).await.map_err(storage_error)?.state,
             ItemStatusState::Known { status: DeliveryStatus::AtRecipient, .. }));
         assert!(outbox.resolve_push(&DeliveryItemRef { item: item_id(40), digest: fleet_envelope(40).digest().clone() }, now()).await.map_err(storage_error)?.is_none());
-        assert!(matches!(outbox.submit_fleet::<PushTask, RecordRemoval>(fleet_id(), fleet_envelope(40), peer(3), "fleet route".into(), now()).await.map_err(storage_error)?, SubmitResult::Replayed { .. }));
+        assert!(matches!(outbox.submit_fleet::<fleet_mail_delivery::JournaledWork<PushTask, RecordRemoval>>(fleet_id(), fleet_envelope(40), peer(3), "fleet route".into(), now()).await.map_err(storage_error)?, SubmitResult::Replayed { .. }));
         let publication = resolve_publication::<_, TestTypes>(scope, PublicationRef {
             item: item_id(40), version: StatusVersion::new(2),
             target: PublicationTarget::StatusStream { sender: Submitter::Fleet(fleet_id()), route: "fleet route".into() },
@@ -735,7 +735,7 @@ async fn machine_submit_refuses_fleet_submitters_without_writes() {
                 let mut outbox = Outbox::<_, TestTypes, _>::new(scope, limits(), &FleetBindings);
                 assert!(matches!(
                     outbox
-                        .submit_relay::<PushTask, RecordRemoval>(
+                        .submit_relay::<fleet_mail_delivery::JournaledWork<PushTask, RecordRemoval>>(
                             Submitter::Fleet(fleet_id()),
                             fleet_envelope(41),
                             peer(3),
@@ -919,7 +919,7 @@ async fn internal_fleet_admission_refuses_other_bound_owners_without_writes() {
                 ] {
                     assert!(matches!(
                         outbox
-                            .submit_fleet::<PushTask, RecordRemoval>(
+                            .submit_fleet::<fleet_mail_delivery::JournaledWork<PushTask, RecordRemoval>>(
                                 fleet,
                                 envelope,
                                 peer(3),

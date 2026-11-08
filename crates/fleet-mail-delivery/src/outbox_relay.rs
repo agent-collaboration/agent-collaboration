@@ -1,8 +1,8 @@
 use crate::{
-    DeliveryError, Outbox, OutboxAdmission, PublicationRef, StatusStream, custody_record::*,
+    DeliveryError, Outbox, OutboxAdmission, StatusStream, custody_record::*,
     delivery_storage_rows as queries, outbox_record::*,
 };
-use durable_steps::{JournalScope, Task, storage::TransactionScope};
+use durable_steps::storage::TransactionScope;
 use fleet_protocol::*;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
@@ -24,7 +24,7 @@ where
         clippy::manual_async_fn,
         reason = "explicit Send avoids async-fn/GAT lifetime generality errors in journal transactions"
     )]
-    pub fn submit_relay<'call, TPush, TRetention>(
+    pub fn submit_relay<'call, W>(
         &'call mut self,
         submitter: crate::Submitter,
         item: DeliveryEnvelope<D>,
@@ -35,9 +35,7 @@ where
     + Send
     + 'call
     where
-        S: JournalScope + durable_steps::storage::JournalStorage,
-        TRetention: Task<Input = ItemId>,
-        TPush: Task<Input = PushInput>,
+        W: crate::OwedPush<S> + crate::OwedRemoval<S>,
     {
         async move {
             if matches!(submitter, Submitter::Fleet(_)) {
@@ -45,7 +43,7 @@ where
                     reason: DeliveryRefusal::NotSubmitter,
                 });
             }
-            self.admit_relay::<TPush, TRetention>(submitter, item, relay, route, now)
+            self.admit_relay::<W>(submitter, item, relay, route, now)
                 .await
         }
     }
@@ -56,7 +54,7 @@ where
         clippy::manual_async_fn,
         reason = "explicit Send avoids async-fn/GAT lifetime generality errors in journal transactions"
     )]
-    pub fn submit_fleet<'call, TPush, TRetention>(
+    pub fn submit_fleet<'call, W>(
         &'call mut self,
         fleet: FleetId,
         item: DeliveryEnvelope<D>,
@@ -67,12 +65,10 @@ where
     + Send
     + 'call
     where
-        S: JournalScope + durable_steps::storage::JournalStorage,
-        TRetention: Task<Input = ItemId>,
-        TPush: Task<Input = PushInput>,
+        W: crate::OwedPush<S> + crate::OwedRemoval<S>,
     {
         async move {
-            self.admit_relay::<TPush, TRetention>(Submitter::Fleet(fleet), item, relay, route, now)
+            self.admit_relay::<W>(Submitter::Fleet(fleet), item, relay, route, now)
                 .await
         }
     }
@@ -81,7 +77,7 @@ where
         clippy::manual_async_fn,
         reason = "explicit Send avoids async-fn/GAT lifetime generality errors in journal transactions"
     )]
-    fn admit_relay<'call, TPush, TRetention>(
+    fn admit_relay<'call, W>(
         &'call mut self,
         submitter: crate::Submitter,
         item: DeliveryEnvelope<D>,
@@ -92,9 +88,7 @@ where
     + Send
     + 'call
     where
-        S: JournalScope + durable_steps::storage::JournalStorage,
-        TRetention: Task<Input = ItemId>,
-        TPush: Task<Input = PushInput>,
+        W: crate::OwedPush<S> + crate::OwedRemoval<S>,
     {
         async move {
             let verified = match crate::sender_binding::verify_sender::<S, D, B>(
@@ -155,7 +149,7 @@ where
                 }
                 OutboxAdmission::Queued { .. } => {}
             }
-            crate::admit_record_removal::<_, TRetention>(self.scope, reference.item).await?;
+            W::owe_record_removal(self.scope, reference.item, now).await?;
             let mut record = self
                 .load(reference.item)
                 .await?
@@ -177,10 +171,7 @@ where
                     reference,
                     recipient: record.header.recipient,
                 };
-                self.scope
-                    .admit::<TPush>(&crate::delivery_request_key(&input.reference.item)?, &input)
-                    .await
-                    .map_err(|error| DeliveryError::Storage(error.to_string()))?;
+                W::owe_push(self.scope, &input, now).await?;
             }
             Ok(SubmitResult::Accepted {
                 status,
@@ -213,15 +204,14 @@ where
         Ok(Some(crate::ResolvedPush { submitter, item }))
     }
 
-    pub(crate) async fn finish_push_at_deadline<TPublish>(
+    pub(crate) async fn finish_push_at_deadline<W>(
         &mut self,
         item: ItemId,
         reach: durable_steps::storage::CallReach,
         now: SyncTime,
     ) -> Result<(), DeliveryError>
     where
-        S: JournalScope,
-        TPublish: Task<Input = PublicationRef<D::StatusRoute>>,
+        W: crate::OwedStatus<S, D>,
     {
         let mut record = self
             .load(item)
@@ -242,8 +232,7 @@ where
         record.payload = None;
         self.save(&record, now).await?;
         if never_accepted {
-            self.owe_relay_status::<TPublish>(&record.header, now)
-                .await?;
+            self.owe_relay_status::<W>(&record.header, now).await?;
         }
         Ok(())
     }
@@ -252,7 +241,7 @@ where
         clippy::manual_async_fn,
         reason = "explicit Send avoids async-fn/GAT lifetime generality errors in journal transactions"
     )]
-    pub fn receipt<'call, TPublish>(
+    pub fn receipt<'call, W>(
         &'call mut self,
         recipient: PeerId,
         reference: &'call DeliveryItemRef,
@@ -260,8 +249,7 @@ where
         now: SyncTime,
     ) -> impl std::future::Future<Output = Result<StatusPublicationResult, DeliveryError>> + Send + 'call
     where
-        S: JournalScope,
-        TPublish: Task<Input = PublicationRef<D::StatusRoute>>,
+        W: crate::OwedStatus<S, D>,
     {
         async move {
             if now >= crate::removal_deadline(reference.item) {
@@ -352,8 +340,7 @@ where
             record.payload = None;
             self.save(&record, now).await?;
             if changed {
-                self.owe_relay_status::<TPublish>(&record.header, now)
-                    .await?;
+                self.owe_relay_status::<W>(&record.header, now).await?;
             }
             Ok(StatusPublicationResult::Applied)
         }
@@ -363,15 +350,14 @@ where
         clippy::manual_async_fn,
         reason = "explicit Send avoids async-fn/GAT lifetime generality errors in journal transactions"
     )]
-    pub fn recipient_report<'call, TPublish>(
+    pub fn recipient_report<'call, W>(
         &'call mut self,
         recipient: PeerId,
         report: RecipientReport<D>,
         now: SyncTime,
     ) -> impl std::future::Future<Output = Result<ReportResult, DeliveryError>> + Send + 'call
     where
-        S: JournalScope,
-        TPublish: Task<Input = PublicationRef<D::StatusRoute>>,
+        W: crate::OwedStatus<S, D>,
     {
         async move {
             if now >= crate::removal_deadline(report.item) {
@@ -478,8 +464,7 @@ where
             record.payload = None;
             self.save(&record, now).await?;
             if changed {
-                self.owe_relay_status::<TPublish>(&record.header, now)
-                    .await?;
+                self.owe_relay_status::<W>(&record.header, now).await?;
             }
             Ok(ReportResult::Ack {
                 report_seq: report.report_seq,
@@ -491,22 +476,21 @@ where
         clippy::manual_async_fn,
         reason = "explicit Send avoids async-fn/GAT lifetime generality errors in journal transactions"
     )]
-    fn owe_relay_status<'call, TPublish>(
+    fn owe_relay_status<'call, W>(
         &'call mut self,
         header: &'call OutboxHeader<D::Acceptance>,
         now: SyncTime,
     ) -> impl std::future::Future<Output = Result<(), DeliveryError>> + Send + 'call
     where
-        S: JournalScope,
-        TPublish: Task<Input = PublicationRef<D::StatusRoute>>,
+        W: crate::OwedStatus<S, D>,
     {
         async move {
             let sender = header.submitter.ok_or(DeliveryError::Corrupt {
                 field: "relay submitter",
             })?;
             let route: D::StatusRoute = decode(header.status_route.clone(), "relay status route")?;
-            StatusStream::<_, D>::new(self.scope, sender, route)
-                .append_and_admit::<TPublish>(
+            let (_, reference) = StatusStream::<_, D>::new(self.scope, sender, route)
+                .append(
                     &StatusPublication {
                         item: header.id,
                         status: copy_wire(&header.status)?,
@@ -516,6 +500,9 @@ where
                     now,
                 )
                 .await?;
+            if let Some(reference) = reference {
+                W::owe_status(self.scope, &reference, now).await?;
+            }
             Ok(())
         }
     }

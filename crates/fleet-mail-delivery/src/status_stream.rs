@@ -1,4 +1,5 @@
 use crate::status_row::PublicationRow;
+pub(crate) mod owed_status;
 use crate::{DeliveryError, custody_record::*, delivery_storage_rows as queries};
 use durable_steps::storage::TransactionScope;
 use fleet_protocol::*;

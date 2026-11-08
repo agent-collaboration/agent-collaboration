@@ -95,7 +95,7 @@ async fn successor_resend_delivers_through_push_report_and_current_project_holde
         .transaction(|scope| {
             Box::pin(async move {
                 Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .submit_relay::<PushTask, RecordRemoval>(
+                    .submit_relay::<fleet_mail_delivery::JournaledWork<PushTask, RecordRemoval>>(
                         Submitter::Project(project()),
                         envelope(),
                         peer(3),
@@ -193,7 +193,7 @@ async fn source_mismatch(report: bool) {
             Box::pin(async move {
                 let mut outbox = Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings);
                 outbox
-                    .submit_relay::<PushTask, RecordRemoval>(
+                    .submit_relay::<fleet_mail_delivery::JournaledWork<PushTask, RecordRemoval>>(
                         Submitter::Project(project()),
                         envelope(),
                         peer(3),
@@ -203,7 +203,7 @@ async fn source_mismatch(report: bool) {
                     .await
                     .map_err(storage_error)?;
                 outbox
-                    .receipt::<PublishTask>(
+                    .receipt::<fleet_mail_delivery::JournaledStatus<PublishTask>>(
                         peer(2),
                         &reference(),
                         PushResult::Accepted { accepted_at: now() },
@@ -233,7 +233,7 @@ async fn source_mismatch(report: bool) {
     fixture.store.transaction(move |scope|Box::pin(async move {
             let mut outbox=Outbox::<_,TestTypes, _>::new(scope,limits(), &FixtureBindings);
             let error=if report {
-                outbox.recipient_report::<PublishTask>(peer(2),RecipientReport::<TestTypes> {item:item_id(1),report_seq:ReportSeq::new(1),outcome:RecipientOutcome::Delivered {acceptance:Acceptance {receipt:"actual B receipt".into()}}},now()).await.err()
+                outbox.recipient_report::<fleet_mail_delivery::JournaledStatus<PublishTask>>(peer(2),RecipientReport::<TestTypes> {item:item_id(1),report_seq:ReportSeq::new(1),outcome:RecipientOutcome::Delivered {acceptance:Acceptance {receipt:"actual B receipt".into()}}},now()).await.err()
             } else {outbox.status(item_id(1)).await.err()};
             assert!(matches!(error,Some(DeliveryError::CorruptRow {table:"_fleet_sync_outbox_items",key,field:"submitter"}) if key==item_id(1).as_uuid().to_string()));
             Ok(())

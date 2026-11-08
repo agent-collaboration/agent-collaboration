@@ -21,7 +21,7 @@ async fn admit(store: &TestStore, caller: u128, identity: u64) -> SubmitResult<A
         .transaction(move |scope| {
             Box::pin(async move {
                 Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .submit_relay::<PushTask, RecordRemoval>(
+                    .submit_relay::<fleet_mail_delivery::JournaledWork<PushTask, RecordRemoval>>(
                         fleet_mail_delivery::Submitter::Machine(peer(caller)),
                         item(identity, "owned body"),
                         peer(3),
@@ -40,7 +40,7 @@ async fn settle(store: &TestStore, caller: u128, identity: u64) -> SettleResult<
         .transaction(move |scope| {
             Box::pin(async move {
                 Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .relay_settle::<RecordRemoval>(
+                    .relay_settle::<fleet_mail_delivery::JournaledRemoval<RecordRemoval>>(
                         fleet_mail_delivery::Submitter::Machine(peer(caller)),
                         item_id(identity),
                         digest(identity),
@@ -74,7 +74,7 @@ async fn query_and_settle_keep_submitter_authority_after_content_release() {
                 .transaction(|scope| {
                     Box::pin(async move {
                         Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                            .receipt::<PublishTask>(
+                            .receipt::<fleet_mail_delivery::JournaledStatus<PublishTask>>(
                                 peer(2),
                                 &DeliveryItemRef {
                                     item: item_id(1),
@@ -139,7 +139,7 @@ async fn query_and_settle_keep_submitter_authority_after_content_release() {
                     ));
                     assert!(matches!(
                         relay
-                            .relay_settle::<RecordRemoval>(
+                            .relay_settle::<fleet_mail_delivery::JournaledRemoval<RecordRemoval>>(
                                 fleet_mail_delivery::Submitter::Machine(peer(9)),
                                 item_id(1),
                                 digest(1),
@@ -151,7 +151,7 @@ async fn query_and_settle_keep_submitter_authority_after_content_release() {
                     ));
                     assert!(matches!(
                         relay
-                            .relay_settle::<RecordRemoval>(
+                            .relay_settle::<fleet_mail_delivery::JournaledRemoval<RecordRemoval>>(
                                 fleet_mail_delivery::Submitter::Machine(peer(1)),
                                 item_id(1),
                                 digest(2),
@@ -163,7 +163,7 @@ async fn query_and_settle_keep_submitter_authority_after_content_release() {
                     ));
                     assert!(matches!(
                         relay
-                            .relay_settle::<RecordRemoval>(
+                            .relay_settle::<fleet_mail_delivery::JournaledRemoval<RecordRemoval>>(
                                 fleet_mail_delivery::Submitter::Machine(peer(1)),
                                 item_id(1),
                                 digest(1),
@@ -358,7 +358,7 @@ async fn a_failed_caller_transaction_rolls_back_the_first_submitter_binding() {
         .transaction(|scope| {
             Box::pin(async move {
                 Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .relay_settle::<RecordRemoval>(
+                    .relay_settle::<fleet_mail_delivery::JournaledRemoval<RecordRemoval>>(
                         fleet_mail_delivery::Submitter::Machine(peer(1)),
                         item_id(1),
                         digest(1),
@@ -436,7 +436,7 @@ async fn cancellation_query_and_settlement_replay_the_saved_cancel_result() {
         .transaction(|scope| {
             Box::pin(async move {
                 Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .submit_relay::<PushTask, RecordRemoval>(
+                    .submit_relay::<fleet_mail_delivery::JournaledWork<PushTask, RecordRemoval>>(
                         fleet_mail_delivery::Submitter::Machine(peer(1)),
                         cancel(2, 1),
                         peer(3),
@@ -459,7 +459,7 @@ async fn cancellation_query_and_settlement_replay_the_saved_cancel_result() {
                         Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings);
                     if completed {
                         relay
-                            .recipient_report::<PublishTask>(
+                            .recipient_report::<fleet_mail_delivery::JournaledStatus<PublishTask>>(
                                 peer(2),
                                 RecipientReport::<TestTypes> {
                                     item: item_id(2),
@@ -477,7 +477,7 @@ async fn cancellation_query_and_settlement_replay_the_saved_cancel_result() {
                         .await
                         .map_err(storage_error)?;
                     let settled = relay
-                        .relay_settle::<RecordRemoval>(
+                        .relay_settle::<fleet_mail_delivery::JournaledRemoval<RecordRemoval>>(
                             fleet_mail_delivery::Submitter::Machine(peer(1)),
                             item_id(2),
                             digest,
@@ -531,7 +531,7 @@ async fn settlement_at_removal_deadline_cannot_recreate_custody() {
             Box::pin(async move {
                 let deadline = removal_deadline(item_id(1));
                 let result = Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .relay_settle::<RecordRemoval>(
+                    .relay_settle::<fleet_mail_delivery::JournaledRemoval<RecordRemoval>>(
                         fleet_mail_delivery::Submitter::Machine(peer(1)),
                         item_id(1),
                         digest(1),

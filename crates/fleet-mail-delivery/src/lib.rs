@@ -29,6 +29,8 @@ mod inbox_retirement;
 mod inbox_row;
 mod inbox_storage;
 mod outbox_outcome;
+pub use outbox_record::owed_work::{JournaledRemoval, JournaledWork, OwedPush, OwedRemoval};
+pub use status_stream::owed_status::{JournaledStatus, OwedStatus};
 mod outbox_record;
 mod outbox_rules;
 mod outbox_status;

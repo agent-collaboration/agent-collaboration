@@ -48,7 +48,7 @@ async fn binding_unresolvable_settlement_does_not_repeat_projection() {
                     .await
                     .map_err(storage_error)?;
                 outbox
-                    .relay_settle::<RecordRemoval>(
+                    .relay_settle::<fleet_mail_delivery::JournaledRemoval<RecordRemoval>>(
                         Submitter::Machine(peer(1)),
                         item_id(1),
                         submit_input().digest,
