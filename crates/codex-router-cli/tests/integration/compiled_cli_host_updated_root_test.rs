@@ -134,6 +134,12 @@ async fn a_host_starts_ready_on_a_never_connected_root_after_the_update() -> Tes
             std::env::current_exe()?,
         )
         .env("CODEX_ROUTER_COMPILED_CLI_APP_CHILD", "1")
+        // Each app-server stand-in records its pid here, so the directory's cleanup
+        // stops it even when this Host is killed instead of stopped.
+        .env(
+            "CODEX_ROUTER_COMPILED_CLI_PROCESS_LOG",
+            directory.path().join("app-generations.log"),
+        )
         .env("CODEX_ROUTER_COMPILED_CLI_MANAGED", &managed_executable)
         .env("CODEX_ROUTER_DEBUG_READINESS_TIMING", "1")
         // A fresh Host, not a handoff: it must not inherit a running Host's lock marker.
