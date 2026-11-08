@@ -293,3 +293,39 @@ async fn a_root_with_only_the_older_machine_list_refuses_the_host_before_it_crea
     assert!(!fleet_database(&root).exists());
     Ok(())
 }
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
+#[tokio::test]
+async fn both_machine_lists_on_a_root_without_a_fleet_store_refuse_the_host() -> GuardResult {
+    // Arrange: both lists and no Fleet database. Providers are disabled so that no
+    // real provider could start even if a Host got past the guard.
+    let directory = tempfile::tempdir()?;
+    let root = directory.path().join("router");
+    crate::compiled_cli_host_acceptance::write_providers_disabled(&root)?;
+    let legacy = root.join("routers.jsonc");
+    std::fs::write(&legacy, "{\"version\": 1, \"routers\": []}\n")?;
+    std::fs::write(
+        root.join("agent-sessions.jsonc"),
+        "{\"version\": 1, \"routers\": []}\n",
+    )?;
+    let before = snapshot(&root)?;
+
+    // Act
+    let output = run_router(&root, &["host"]).await?;
+
+    // Assert: refused, naming the older list, before a Fleet database could be created
+    // and step 0007 recorded done.
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(2), "{stderr}");
+    assert!(stderr.contains(&legacy.display().to_string()), "{stderr}");
+    assert_eq!(
+        snapshot(&root)?,
+        before,
+        "the refused Host must not create a file"
+    );
+    assert!(!fleet_database(&root).exists());
+    Ok(())
+}

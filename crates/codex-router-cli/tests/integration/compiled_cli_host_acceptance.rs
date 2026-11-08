@@ -776,7 +776,7 @@ fn prepend_path(directory: &Path) -> std::io::Result<std::ffi::OsString> {
 /// `router_root`. A Host that finds no providers section writes defaults that enable
 /// Claude and Cursor from the real PATH, and a logged-out real provider opens a login
 /// page; a failed fixture would also leave it running.
-fn write_providers_disabled(router_root: &Path) -> std::io::Result<()> {
+pub(crate) fn write_providers_disabled(router_root: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::DirBuilderExt;
     std::fs::DirBuilder::new()
         .recursive(true)

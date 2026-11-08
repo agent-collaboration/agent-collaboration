@@ -239,3 +239,69 @@ async fn a_root_with_only_the_older_machine_list_is_refused_then_renamed_for_the
     );
     Ok(())
 }
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
+#[tokio::test]
+async fn both_machine_lists_on_a_root_without_a_fleet_store_wait_for_the_owner_to_keep_one()
+-> UpdateResult {
+    // Arrange: the older list names a machine, a newer empty list sits beside it, and no
+    // Fleet database exists for a Host to record step 0007 done in.
+    let directory = tempfile::tempdir()?;
+    let root = directory.path().join("router");
+    std::fs::create_dir(&root)?;
+    let legacy = root.join("routers.jsonc");
+    std::fs::write(&legacy, MACHINE_LIST)?;
+    let current = root.join("agent-sessions.jsonc");
+    std::fs::write(&current, "{ \"version\": 1, \"routers\": [] }\n")?;
+    let before = snapshot(&root)?;
+    let refused_on = |path: &Path| {
+        RouterUpdateRequirement::Required(RequiredRouterUpdate::LegacyMachineList {
+            path: path.to_owned(),
+        })
+    };
+
+    // Act and assert: the Host is refused; the update refuses, naming both; nothing
+    // changes, and the older list keeps its bytes.
+    assert_eq!(
+        inspect_router_update_requirement(&root).await?,
+        refused_on(&legacy)
+    );
+    let refused = run_update(&root_argument(&root)).await?;
+    let stderr = String::from_utf8_lossy(&refused.stderr);
+    assert_eq!(refused.status.code(), Some(2), "{stderr}");
+    assert!(
+        stderr.contains(&format!(
+            "both {} and {} exist",
+            legacy.display(),
+            current.display()
+        )),
+        "{stderr}"
+    );
+    assert_eq!(snapshot(&root)?, before, "a refused update changes nothing");
+
+    // Act and assert: the owner keeps the older list; the Host is still refused until the
+    // update carries it, then the picker's list holds those bytes and the Host may start.
+    std::fs::remove_file(&current)?;
+    assert_eq!(
+        inspect_router_update_requirement(&root).await?,
+        refused_on(&legacy)
+    );
+    assert_eq!(std::fs::read_to_string(&legacy)?, MACHINE_LIST);
+    let carried = run_update(&root_argument(&root)).await?;
+    assert_eq!(
+        carried.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&carried.stderr)
+    );
+    assert!(!legacy.exists());
+    assert_eq!(std::fs::read_to_string(&current)?, MACHINE_LIST);
+    assert_eq!(
+        inspect_router_update_requirement(&root).await?,
+        RouterUpdateRequirement::NotRequired
+    );
+    Ok(())
+}

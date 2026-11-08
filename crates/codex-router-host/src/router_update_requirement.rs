@@ -138,12 +138,16 @@ pub async fn inspect_router_update_requirement(
             RequiredRouterUpdate::LegacySettingsFile { path },
         ));
     }
-    // The picker reads agent-sessions.jsonc only. The list under its older name alone
-    // means step 0007 hasn't renamed it, even on a root whose Fleet database was never
-    // opened, so a Host must not create one and record the step done first. With both
-    // names present the picker names both itself, so the guard leaves that to it.
+    // The picker reads agent-sessions.jsonc only. The list under its older name is old
+    // layout until step 0007 is recorded done, even on a root whose Fleet database was
+    // never opened, and even beside a newer list: a Host must not create the Fleet
+    // database and record the step done first, or a later update would remove the
+    // older list unread as stale. Alone it is old layout at any time. After step 0007
+    // carried it, both names together are the picker's own diagnostic to report.
     let machine_list = root.join(LEGACY_MACHINE_LIST);
-    if exists(&machine_list) && !exists(&root.join(MACHINE_LIST)) {
+    if exists(&machine_list)
+        && (!exists(&root.join(MACHINE_LIST)) || !machine_list_step_done(root).await)
+    {
         return Ok(RouterUpdateRequirement::Required(
             RequiredRouterUpdate::LegacyMachineList { path: machine_list },
         ));
@@ -207,6 +211,20 @@ pub async fn inspect_router_update_requirement(
         }
         None => RouterUpdateRequirement::NotRequired,
     })
+}
+
+/// Whether the ledger records step 0007 done. No Fleet database, a store without the
+/// ledger, or one that can't be read all count as not done, so the guard fails closed.
+async fn machine_list_step_done(root: &Path) -> bool {
+    let current = router_fleet_database(root);
+    let store = if current.try_exists().unwrap_or(true) {
+        current
+    } else {
+        router_fleet_cache_database(root)
+    };
+    read_update_ledger(&store)
+        .await
+        .is_ok_and(|ledger| ledger.step_done(RouterUpdateStep::CarrySettingsFiles.number()))
 }
 
 fn requirement_for_ledger(store: PathBuf, ledger: &StoredUpdateLedger) -> RouterUpdateRequirement {
