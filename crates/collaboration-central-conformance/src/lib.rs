@@ -65,7 +65,9 @@ pub use sender_revocation_scenario::run_sender_revocation_conformance;
 mod object_seam_controls;
 #[cfg(feature = "client")]
 mod runtime_control_scenarios;
-pub use object_seam_controls::{CursoredEvent, ObjectSeamControl, RuntimeControlAnswer};
+pub use object_seam_controls::{
+    CursoredEvent, FaultedEvent, ObjectFault, ObjectSeamControl, ObjectSeed, RuntimeControlAnswer,
+};
 mod runtime_controls;
 mod runtime_faults;
 #[cfg(feature = "client")]

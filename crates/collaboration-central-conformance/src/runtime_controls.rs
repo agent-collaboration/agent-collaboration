@@ -73,7 +73,10 @@ impl RuntimeControlRequest {
                 | RuntimeControl::ReadPending
                 | RuntimeControl::Barrier { .. }
                 | RuntimeControl::AwaitBarrier { .. }
-                | RuntimeControl::ReleaseBarrier { .. },
+                | RuntimeControl::ReleaseBarrier { .. }
+                | RuntimeControl::Seed { .. }
+                | RuntimeControl::ArmFault { .. }
+                | RuntimeControl::ReadFault { .. },
                 _,
             ) => Ok(()),
             _ => Err(RuntimeControlFailure::WrongObjectKind),
@@ -159,6 +162,16 @@ pub enum RuntimeControl {
     ReleaseBarrier {
         barrier_id: durable_steps::Uuid,
     },
+    Seed {
+        seed: crate::ObjectSeed,
+    },
+    ArmFault {
+        fault: crate::ObjectFault,
+        count: u32,
+    },
+    ReadFault {
+        fault_id: durable_steps::Uuid,
+    },
 }
 
 impl RuntimeControl {
@@ -177,6 +190,9 @@ impl RuntimeControl {
             Self::Barrier { point, unit_kind } => ObjectSeamControl::Barrier { point, unit_kind },
             Self::AwaitBarrier { barrier_id } => ObjectSeamControl::AwaitBarrier { barrier_id },
             Self::ReleaseBarrier { barrier_id } => ObjectSeamControl::ReleaseBarrier { barrier_id },
+            Self::Seed { seed } => ObjectSeamControl::Seed { seed },
+            Self::ArmFault { fault, count } => ObjectSeamControl::ArmFault { fault, count },
+            Self::ReadFault { fault_id } => ObjectSeamControl::ReadFault { fault_id },
             other => return Err(other),
         })
     }

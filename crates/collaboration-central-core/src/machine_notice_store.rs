@@ -174,15 +174,19 @@ where
     Ok(())
 }
 
+/// Expire each machine's notices as its own unit. A machine whose expiry fails
+/// backs off on its own attempt row; the others go on. Errors only when the
+/// machines can't be listed.
 pub(crate) async fn prune<Store: AtomicStore, Driver: Database>(
     store: Arc<Store>,
     now: SyncTime,
+    ids: &dyn runtime_primitives::IdSource,
 ) -> Result<(), StoreError>
 where
     for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
     Driver::Arguments: IntoArguments<Driver>,
     for<'value> String: Type<Driver> + Encode<'value, Driver>,
-    for<'value> Option<String>: Type<Driver> + Decode<'value, Driver>,
+    for<'value> Option<String>: Type<Driver> + Decode<'value, Driver> + Encode<'value, Driver>,
     for<'row> &'row str: ColumnIndex<Driver::Row>,
 {
     let peers = store
@@ -194,38 +198,46 @@ where
             })
         })
         .await?;
-    let mut first_failure = None;
     for row in peers {
-        let result = async {
-            let machine_id = required(
-                row.machine_id,
-                "machine_control_project_progress.machine_id",
-            )?;
-            check_private_id(&machine_id, "machine_control_project_progress.machine_id")?;
-            let peer = machine_id
-                .try_into()
-                .map_err(|error| corrupt("machine_control_project_progress.machine_id", error))?;
-            // A failed machine transaction cannot roll back another stream's
-            // floor, deletion or wake. Every row is validated before deletion.
-            store
-                .transaction(move |scope| {
-                    Box::pin(async move {
-                        prune_peer(scope, peer, now).await?;
-                        if let Some(at) = next_expiry(scope, peer).await? {
-                            scope.ensure_wake(at).await?;
-                        }
-                        Ok(())
-                    })
+        let peer = match machine(row.machine_id) {
+            Ok(peer) => peer,
+            Err(failure) => {
+                // No valid subject to keep an attempt row under: log only.
+                eprintln!("Fleet machine notice stream has no valid machine id: {failure}");
+                continue;
+            }
+        };
+        // A failed machine transaction cannot roll back another stream's
+        // floor, deletion or wake. Every row is validated before deletion.
+        crate::due_unit::run_due_unit(
+            store.as_ref(),
+            crate::due_unit::DueItem {
+                subject: peer.as_uuid(),
+                kind: crate::work_attempts::AttemptKind::NoticeExpiry,
+                now,
+                attempt_id: ids.new_id(),
+            },
+            move |scope| {
+                Box::pin(async move {
+                    prune_peer(scope, peer, now).await?;
+                    if let Some(at) = next_expiry(scope, peer).await? {
+                        scope.ensure_wake(at).await?;
+                    }
+                    Ok(())
                 })
-                .await
-        }
+            },
+        )
         .await;
-        if let Err(failure) = result {
-            eprintln!("Fleet machine notice maintenance failed: {failure}");
-            first_failure.get_or_insert(failure);
-        }
     }
-    first_failure.map_or(Ok(()), Err)
+    Ok(())
+}
+
+fn machine(machine_id: Option<String>) -> Result<PeerId, StoreError> {
+    let machine_id = required(machine_id, "machine_control_project_progress.machine_id")?;
+    check_private_id(&machine_id, "machine_control_project_progress.machine_id")?;
+    machine_id
+        .try_into()
+        .map_err(|error| corrupt("machine_control_project_progress.machine_id", error))
 }
 
 pub(crate) async fn append<Scope: TransactionScope>(
@@ -467,15 +479,20 @@ where
         .await
         .map_err(StoreError::backend)?
     {
-        let machine_id = required(
-            row.machine_id,
-            "machine_control_project_progress.machine_id",
-        )?;
-        check_private_id(&machine_id, "machine_control_project_progress.machine_id")?;
-        let peer = machine_id
-            .try_into()
-            .map_err(|error| corrupt("machine_control_project_progress.machine_id", error))?;
-        if let Some(at) = next_expiry(scope, peer).await? {
+        let peer = machine(row.machine_id)?;
+        // A machine whose expiry is failing is due when its attempt row says.
+        let due = match crate::work_attempts::schedule(
+            scope,
+            peer.as_uuid(),
+            crate::work_attempts::AttemptKind::NoticeExpiry,
+        )
+        .await?
+        {
+            crate::work_attempts::SubjectSchedule::Unscheduled => next_expiry(scope, peer).await?,
+            crate::work_attempts::SubjectSchedule::RetryAt(at) => Some(at),
+            crate::work_attempts::SubjectSchedule::NotDue => None,
+        };
+        if let Some(at) = due {
             earliest = Some(earliest.map_or(at, |current| current.min(at)));
         }
     }

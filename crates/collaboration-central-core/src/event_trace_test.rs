@@ -63,8 +63,8 @@ async fn a_nested_event_keeps_its_own_sends_and_restores_the_outer_scope()
 -> Result<(), Box<dyn std::error::Error>> {
     // Arrange: an outer event whose call is served inline by another object.
     let observer = Arc::new(CollectingObserver::default());
-    let outer = Arc::new(EventTrace::new(observer.clone()));
-    let inner = Arc::new(EventTrace::new(observer.clone()));
+    let outer = Arc::new(EventTrace::new(observer.clone(), EventClass::Alarm));
+    let inner = Arc::new(EventTrace::new(observer.clone(), EventClass::Alarm));
     let outer_connection = ConnectionId::new(Uuid::now_v7())?;
     let inner_connection = ConnectionId::new(Uuid::now_v7())?;
 
@@ -108,7 +108,7 @@ async fn a_nested_event_keeps_its_own_sends_and_restores_the_outer_scope()
 async fn a_call_the_event_stops_waiting_for_is_recorded_as_deadline_exceeded() {
     // Arrange
     let observer = Arc::new(CollectingObserver::default());
-    let trace = Arc::new(EventTrace::new(observer.clone()));
+    let trace = Arc::new(EventTrace::new(observer.clone(), EventClass::Alarm));
     trace.step(PipelineStep::LongOperations);
 
     // Act: one answered call, one failed, one abandoned at the event's deadline.
@@ -149,7 +149,7 @@ async fn a_call_the_event_stops_waiting_for_is_recorded_as_deadline_exceeded() {
 async fn alarm_writes_name_the_step_that_made_them() {
     // Arrange
     let observer = Arc::new(CollectingObserver::default());
-    let trace = Arc::new(EventTrace::new(observer.clone()));
+    let trace = Arc::new(EventTrace::new(observer.clone(), EventClass::Alarm));
 
     // Act
     scoped(trace.clone(), async {

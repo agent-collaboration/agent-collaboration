@@ -1,0 +1,68 @@
+{
+  "migrations": [
+    "work_migrations"
+  ],
+  "output": "src/generated_work_attempts.rs",
+  "metadata": "work-attempt-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_work_attempt",
+      "sql": "sql/work_attempts/read_work_attempt.sql",
+      "row": "StoredWorkAttempt",
+      "result": "many",
+      "parameters": [
+        { "name": "subject", "kind": "text", "nullable": false },
+        { "name": "kind", "kind": "text", "nullable": false }
+      ]
+    },
+    {
+      "name": "insert_work_attempt_failure",
+      "sql": "sql/work_attempts/insert_work_attempt_failure.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        { "name": "id", "kind": "text", "nullable": false },
+        { "name": "subject", "kind": "text", "nullable": false },
+        { "name": "kind", "kind": "text", "nullable": false },
+        { "name": "state", "kind": "text", "nullable": false },
+        { "name": "next_attempt_at", "kind": "text", "nullable": true },
+        { "name": "now", "kind": "text", "nullable": false },
+        { "name": "last_error_class", "kind": "text", "nullable": false },
+        { "name": "last_error", "kind": "text", "nullable": false }
+      ]
+    },
+    {
+      "name": "update_work_attempt_failure",
+      "sql": "sql/work_attempts/update_work_attempt_failure.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        { "name": "id", "kind": "text", "nullable": false },
+        { "name": "state", "kind": "text", "nullable": false },
+        { "name": "next_attempt_at", "kind": "text", "nullable": true },
+        { "name": "attempts", "kind": "text", "nullable": false },
+        { "name": "first_failed_at", "kind": "text", "nullable": false },
+        { "name": "last_error_class", "kind": "text", "nullable": false },
+        { "name": "last_error", "kind": "text", "nullable": false },
+        { "name": "now", "kind": "text", "nullable": false }
+      ]
+    },
+    {
+      "name": "delete_work_attempt",
+      "sql": "sql/work_attempts/delete_work_attempt.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        { "name": "subject", "kind": "text", "nullable": false },
+        { "name": "kind", "kind": "text", "nullable": false }
+      ]
+    },
+    {
+      "name": "read_next_work_retry",
+      "sql": "sql/work_attempts/read_next_work_retry.sql",
+      "row": "StoredNextWorkRetry",
+      "result": "many",
+      "parameters": []
+    }
+  ]
+}

@@ -36,8 +36,9 @@ where
         scope: &'scope mut Store::Scope<'transaction>,
     ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
         Box::pin(async move {
-            fleet_feed_store::prune(scope, self.as_of).await?;
+            // Reads never prune; they answer from the floor retention implies now.
             let state = fleet_feed_store::state(scope).await?;
+            let floor = fleet_feed_store::effective_floor(scope, &state, self.as_of).await?;
             let answer = match self.request {
                 FleetReadRequest::Directory { query } => BoardReadPage::Directory {
                     entries: crate::fleet_directory_read::records(scope, &query, self.as_of)
@@ -48,7 +49,7 @@ where
                         .map_err(StoreError::backend)?,
                     as_of: self.as_of,
                 },
-                FleetReadRequest::Feed { after } if after < state.floor => expired(state.floor),
+                FleetReadRequest::Feed { after } if after < floor => expired(floor),
                 FleetReadRequest::Feed { after } if after > state.head => invalid(),
                 FleetReadRequest::Feed { after } => {
                     let through = FleetPosition::try_from(
@@ -88,8 +89,8 @@ where
                         .map_or(state.head, |cursor| cursor.snapshot_at);
                     if snapshot_at > state.head {
                         invalid()
-                    } else if snapshot_at < state.floor {
-                        expired(state.floor)
+                    } else if snapshot_at < floor {
+                        expired(floor)
                     } else if cursor.as_ref().is_some_and(|cursor| {
                         crate::fleet_record_codec::kind_tag(cursor.after.kind).is_err()
                     }) {

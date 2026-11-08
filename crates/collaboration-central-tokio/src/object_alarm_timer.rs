@@ -26,6 +26,22 @@ pub struct ObjectAlarmTimer {
     changed: Notify,
     #[cfg(feature = "conformance")]
     settle: ClockSettle,
+    #[cfg(feature = "conformance")]
+    exact_faults: std::sync::Mutex<Vec<ExactWriteFault>>,
+    /// Conformance only: the stored alarm is a seeded one the platform lost,
+    /// so a clock move must not arm it. Any later alarm write clears this.
+    #[cfg(feature = "conformance")]
+    lost_delivery: std::sync::atomic::AtomicBool,
+}
+
+/// Conformance only: an armed failure of the exact write for one event kind.
+#[cfg(feature = "conformance")]
+struct ExactWriteFault {
+    id: durable_steps::Uuid,
+    on: collaboration_central_conformance::FaultedEvent,
+    armed: u32,
+    reached: u32,
+    consumed: u32,
 }
 
 /// Conformance only: lets a clock move wait until the alarm loop has acted on it.
@@ -48,6 +64,10 @@ impl ObjectAlarmTimer {
                 epoch: std::sync::atomic::AtomicU64::new(0),
                 settled: tokio::sync::watch::channel(0).0,
             },
+            #[cfg(feature = "conformance")]
+            exact_faults: std::sync::Mutex::default(),
+            #[cfg(feature = "conformance")]
+            lost_delivery: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -90,7 +110,13 @@ impl ObjectAlarmTimer {
     /// time is unchanged, so this never manufactures or postpones an alarm.
     pub async fn clock_changed(&self) -> Result<(), WakeFailure> {
         let mut pending = self.pending.lock().await;
-        if let Some(current) = *pending {
+        #[cfg(feature = "conformance")]
+        let lost = self.lost_delivery.load(std::sync::atomic::Ordering::SeqCst);
+        #[cfg(not(feature = "conformance"))]
+        let lost = false;
+        if let Some(current) = *pending
+            && !lost
+        {
             *pending = Some(PendingAlarm {
                 at: current.at,
                 trigger: self.trigger_for(current.at)?,
@@ -121,6 +147,82 @@ impl ObjectAlarmTimer {
         let _ = settled.wait_for(|settled| *settled >= epoch).await;
     }
 
+    /// S5 seed: store `at` without arming delivery, as a platform that lost
+    /// the alarm would. It stays until a recompute or repair replaces it.
+    #[cfg(feature = "conformance")]
+    pub(crate) async fn seed_stale(&self, at: SyncTime) -> Result<(), WakeFailure> {
+        let never = Instant::now()
+            .checked_add(Duration::from_secs(365 * 24 * 60 * 60))
+            .ok_or(WakeFailure::InvalidDeadline { at })?;
+        *self.pending.lock().await = Some(PendingAlarm { at, trigger: never });
+        self.lost_delivery
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        self.changed.notify_waiters();
+        Ok(())
+    }
+
+    #[cfg(feature = "conformance")]
+    fn delivery_restored(&self) {
+        self.lost_delivery
+            .store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    #[cfg(feature = "conformance")]
+    pub(crate) fn arm_exact_write_fault(
+        &self,
+        on: collaboration_central_conformance::FaultedEvent,
+        count: u32,
+    ) -> durable_steps::Uuid {
+        let id = durable_steps::Uuid::now_v7();
+        self.faults().push(ExactWriteFault {
+            id,
+            on,
+            armed: count,
+            reached: 0,
+            consumed: 0,
+        });
+        id
+    }
+
+    /// (armed, reached, consumed) for one armed fault.
+    #[cfg(feature = "conformance")]
+    pub(crate) fn exact_write_fault(&self, id: durable_steps::Uuid) -> Option<(u32, u32, u32)> {
+        self.faults()
+            .iter()
+            .find(|fault| fault.id == id)
+            .map(|fault| (fault.armed, fault.reached, fault.consumed))
+    }
+
+    #[cfg(feature = "conformance")]
+    fn faults(&self) -> std::sync::MutexGuard<'_, Vec<ExactWriteFault>> {
+        self.exact_faults
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Whether an armed fault refuses this exact write, by the running event's kind.
+    #[cfg(feature = "conformance")]
+    fn exact_write_refused(&self) -> bool {
+        use collaboration_central_conformance::FaultedEvent;
+        use collaboration_central_core::event_trace::{EventClass, current_event};
+        let on = match current_event() {
+            Some(EventClass::Frame) => FaultedEvent::Frame,
+            Some(EventClass::Call) => FaultedEvent::Call,
+            Some(EventClass::Alarm) => FaultedEvent::Alarm,
+            Some(EventClass::SocketOpened | EventClass::SocketClosed) | None => return false,
+        };
+        let mut faults = self.faults();
+        let mut refused = false;
+        for fault in faults.iter_mut().filter(|fault| fault.on == on) {
+            fault.reached = fault.reached.saturating_add(1);
+            if !refused && fault.consumed < fault.armed {
+                fault.consumed += 1;
+                refused = true;
+            }
+        }
+        refused
+    }
+
     fn trigger_for(&self, at: SyncTime) -> Result<Instant, WakeFailure> {
         let delay = u64::try_from(
             at.unix_millis()
@@ -144,6 +246,8 @@ impl WakeScheduler for ObjectAlarmTimer {
 
 impl ObjectAlarmTimer {
     async fn lower(&self, at: SyncTime) -> Result<(), WakeFailure> {
+        #[cfg(feature = "conformance")]
+        self.delivery_restored();
         let mut pending = self.pending.lock().await;
         let trigger = self.trigger_for(at)?;
         let next = match *pending {
@@ -169,6 +273,14 @@ impl ObjectAlarmTimer {
 
 impl ObjectAlarm for ObjectAlarmTimer {
     async fn set_exact(&self, at: Option<SyncTime>) -> Result<(), WakeFailure> {
+        #[cfg(feature = "conformance")]
+        if self.exact_write_refused() {
+            return Err(WakeFailure::Unavailable {
+                message: "conformance fault: exact alarm write".into(),
+            });
+        }
+        #[cfg(feature = "conformance")]
+        self.delivery_restored();
         let next = match at {
             Some(at) => Some(PendingAlarm {
                 at,

@@ -44,7 +44,9 @@ mod trace;
 #[cfg(feature = "conformance")]
 pub(crate) use trace::{EventBounds, EventTrace, scoped};
 #[cfg(feature = "conformance")]
-pub use trace::{EventContext, KernelObserver, record_lower, record_send, traced_call};
+pub use trace::{
+    EventClass, EventContext, KernelObserver, current_event, record_lower, record_send, traced_call,
+};
 
 #[cfg(feature = "conformance")]
 impl PipelineStep {

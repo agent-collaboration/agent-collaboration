@@ -40,6 +40,51 @@ pub enum ObjectSeamControl {
     AwaitBarrier { barrier_id: Uuid },
     /// Release the latch's event; the latch is spent. Tokio.
     ReleaseBarrier { barrier_id: Uuid },
+    /// Put the object into a state a journey needs, through its own writer.
+    Seed { seed: ObjectSeed },
+    /// Make the next `count` matching operations fail once each. Tokio.
+    ArmFault { fault: ObjectFault, count: u32 },
+    /// How an armed fault has been used. Tokio.
+    ReadFault { fault_id: Uuid },
+}
+
+/// S5 seeds. Slice 3 offers the stale alarm; the others arrive with their slices.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum ObjectSeed {
+    /// Store the alarm at `at` (Unix ms) without arming its delivery: on Tokio
+    /// it never fires until a recompute replaces it (the Nov 5 shape). On
+    /// workerd the platform alarm is written as is and delivered by its clock.
+    StaleAlarm { at: i64 },
+}
+
+/// S5 faults. Slice 3 offers the exact alarm write; the others arrive with their slices.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    content = "value",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum ObjectFault {
+    /// The exact alarm write (the recompute's or the repair's) made by an event
+    /// of this kind fails.
+    ExactAlarmWrite { on: FaultedEvent },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FaultedEvent {
+    Frame,
+    Call,
+    Alarm,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -82,6 +127,16 @@ pub enum RuntimeControlAnswer {
     ClockSettled {
         /// Alarm events (delivered or dropped) the move caused.
         alarm_events: u64,
+    },
+    FaultArmed {
+        fault_id: Uuid,
+    },
+    Fault {
+        armed: u32,
+        /// Matching operations that met the fault while it was armed.
+        reached: u32,
+        /// Of those, the ones it made fail (one each, up to `armed`).
+        consumed: u32,
     },
     Done,
 }

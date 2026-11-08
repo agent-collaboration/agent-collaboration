@@ -250,11 +250,16 @@ pub enum ConformanceLine<'line> {
 }
 
 impl ConformanceLine<'_> {
+    /// The one JSON line, for a shell whose platform has its own console.
+    pub fn encode(&self) -> String {
+        serde_json::to_string(self).unwrap_or_else(|error| {
+            format!("{{\"centralLineEncodeFailed\":{:?}}}", error.to_string())
+        })
+    }
+
+    /// Writes the line to stderr; native shells only (stderr goes nowhere on wasm).
     pub fn emit(&self) {
-        match serde_json::to_string(self) {
-            Ok(line) => eprintln!("{line}"),
-            Err(error) => eprintln!("central conformance line failed to encode: {error}"),
-        }
+        eprintln!("{}", self.encode());
     }
 }
 

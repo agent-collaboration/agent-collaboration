@@ -106,10 +106,11 @@ async fn exported_engine_corpora_initialize_once_and_reopen_without_reapplying_t
 -> Result<(), TestError> {
     for (schema, expected) in [
         (EngineSchema::Registry, 8),
-        (EngineSchema::Copy, 3),
+        // Copy and Fleet each also carry the one central-work migration.
+        (EngineSchema::Copy, 4),
         (EngineSchema::Session, 5),
         (EngineSchema::Delivery, 11),
-        (EngineSchema::Fleet, 10),
+        (EngineSchema::Fleet, 11),
     ] {
         let directory = tempfile::tempdir()?;
         let fixture = Fixture::open(directory.path()).await?;

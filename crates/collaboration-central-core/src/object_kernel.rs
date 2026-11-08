@@ -104,7 +104,7 @@ impl<Face: KernelFace> ObjectKernel<Face> {
         let Some(observer) = self.observer.clone() else {
             return self.run(event, Probe::off()).await;
         };
-        let trace = std::sync::Arc::new(EventTrace::new(observer));
+        let trace = std::sync::Arc::new(EventTrace::new(observer, event_class(&event)));
         let entered_at = self.face.now();
         let alarm_before = self.face.stored_alarm().await.ok().flatten();
         let kind = event_kind_record(&event, context);
@@ -240,6 +240,18 @@ fn event_kind_record(
         ObjectEvent::Alarm => EventKindRecord::Alarm {
             redelivery: context.redelivery,
         },
+    }
+}
+
+#[cfg(feature = "conformance")]
+const fn event_class(event: &ObjectEvent) -> crate::event_trace::EventClass {
+    use crate::event_trace::EventClass;
+    match event {
+        ObjectEvent::SocketOpened { .. } => EventClass::SocketOpened,
+        ObjectEvent::Frame { .. } => EventClass::Frame,
+        ObjectEvent::SocketClosed { .. } => EventClass::SocketClosed,
+        ObjectEvent::Call { .. } => EventClass::Call,
+        ObjectEvent::Alarm => EventClass::Alarm,
     }
 }
 

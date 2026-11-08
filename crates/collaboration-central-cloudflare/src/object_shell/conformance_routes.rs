@@ -31,7 +31,19 @@ impl ShellActor {
                     .await?;
                 Ok(RuntimeControlAnswer::Done)
             }
-            ObjectSeamControl::DuplicateAlarm
+            ObjectSeamControl::Seed {
+                seed: collaboration_central_conformance::ObjectSeed::StaleAlarm { at },
+            } => {
+                // Written as is: workerd delivers a past alarm by its own clock.
+                host.alarm()
+                    .set_exact(Some(SyncTime::from_unix_millis(at)))
+                    .await
+                    .map_err(error)?;
+                Ok(RuntimeControlAnswer::Done)
+            }
+            ObjectSeamControl::ArmFault { .. }
+            | ObjectSeamControl::ReadFault { .. }
+            | ObjectSeamControl::DuplicateAlarm
             | ObjectSeamControl::SettleClock { .. }
             | ObjectSeamControl::ReadEvents { .. }
             | ObjectSeamControl::RebuildAtQuiescence { .. }
@@ -67,11 +79,12 @@ impl ShellActor {
                 .await?
                 .map_or_else(chrono::Utc::now, |now| now.0)
                 .timestamp_millis();
-            ConformanceLine::CentralAlarmDropped(&AlarmDroppedLine {
-                object: address.clone(),
-                at,
-            })
-            .emit();
+            super::event_lines::console_line(ConformanceLine::CentralAlarmDropped(
+                &AlarmDroppedLine {
+                    object: address.clone(),
+                    at,
+                },
+            ));
         }
         Ok(enabled)
     }

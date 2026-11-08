@@ -29,6 +29,17 @@ pub trait KernelObserver: Send + Sync + 'static {
     ) -> BoxFuture<'static, ()>;
 }
 
+/// Which kind of event is running, for faults that target one kind.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum EventClass {
+    SocketOpened,
+    Frame,
+    SocketClosed,
+    Call,
+    Alarm,
+}
+
 /// What the shell knows about an event that the event itself doesn't carry.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct EventContext {
@@ -39,6 +50,7 @@ pub struct EventContext {
 pub(crate) struct EventTrace {
     observer: Arc<dyn KernelObserver>,
     event_id: Uuid,
+    class: EventClass,
     state: Mutex<TraceState>,
 }
 
@@ -63,10 +75,11 @@ pub(crate) struct EventBounds {
 }
 
 impl EventTrace {
-    pub(crate) fn new(observer: Arc<dyn KernelObserver>) -> Self {
+    pub(crate) fn new(observer: Arc<dyn KernelObserver>, class: EventClass) -> Self {
         Self {
             observer,
             event_id: Uuid::now_v7(),
+            class,
             state: Mutex::new(TraceState {
                 step: PipelineStep::Open,
                 units: Vec::new(),
@@ -184,6 +197,11 @@ impl Drop for RestoreOuter {
         let outer = self.0.take();
         CURRENT.with(|current| *current.borrow_mut() = outer);
     }
+}
+
+/// The kind of the event running on this task, if any.
+pub fn current_event() -> Option<EventClass> {
+    current().map(|trace| trace.class)
 }
 
 /// A frame the shell put on a socket for the running event.

@@ -1,5 +1,5 @@
 //! The Fleet face owns central's nonreplicated application state.
-use runtime_primitives::Clock as _;
+use runtime_primitives::{Clock as _, IdSource as _};
 
 use crate::{
     CallerKind, CoreHost, EngineSchema, FleetKind, ObjectAddress, ObjectBootstrap, ObjectIo,
@@ -193,9 +193,10 @@ where
     }
     /// Every Fleet due source except long operations, each failing alone.
     pub(crate) async fn run_fleet_due_sources(&self, now: runtime_primitives::SyncTime) {
-        if let Err(failure) = self.prune_feed().await {
-            eprintln!("Fleet feed retention failed: {failure}");
-        }
+        self.run_feed_retention(now).await;
+        let ObjectWork::Fleet { io, .. } = &self.work else {
+            return;
+        };
         let (store, _) = match self.session_store() {
             Ok(handles) => handles,
             Err(failure) => {
@@ -203,13 +204,63 @@ where
                 return;
             }
         };
-        // Each machine's stream fails alone and logs its own failure.
-        let _ = crate::machine_notice_store::prune::<_, Host::Database>(store, now).await;
+        // Each machine's stream is its own unit with its own attempt row.
+        if let Err(failure) =
+            crate::machine_notice_store::prune::<_, Host::Database>(store, now, io.as_ref()).await
+        {
+            eprintln!("Fleet machine notice maintenance could not list machines: {failure}");
+        }
+    }
+
+    /// The Fleet object's subject for failures with no row of their own: the
+    /// feed state row's id, which step 0 creates.
+    pub(crate) async fn fleet_subject(&self) -> Result<durable_steps::Uuid, StoreError> {
+        let ObjectWork::Fleet { host, .. } = &self.work else {
+            return Err(wrong_face());
+        };
+        host.store()
+            .transaction(|scope| {
+                Box::pin(async move { crate::fleet_feed_store::state_subject(scope).await })
+            })
+            .await
+    }
+
+    /// Feed retention as one unit, backing off while it fails.
+    async fn run_feed_retention(&self, now: runtime_primitives::SyncTime) {
+        let ObjectWork::Fleet { host, io, .. } = &self.work else {
+            return;
+        };
+        let subject = match self.fleet_subject().await {
+            Ok(subject) => subject,
+            Err(failure) => {
+                eprintln!("Fleet feed retention has no subject: {failure}");
+                return;
+            }
+        };
+        let Some(cutoff_clock) = chrono::DateTime::from_timestamp_millis(now.unix_millis()) else {
+            eprintln!("Fleet feed retention clock is out of range");
+            return;
+        };
+        crate::due_unit::run_due_unit(
+            host.store().as_ref(),
+            crate::due_unit::DueItem {
+                subject,
+                kind: crate::work_attempts::AttemptKind::FeedRetention,
+                now,
+                attempt_id: io.new_id(),
+            },
+            move |scope| Box::pin(crate::fleet_feed_store::prune(scope, cutoff_clock)),
+        )
+        .await;
     }
 
     /// Forwarded posts past their 30 s deadline end Unanswered and free their slot.
-    /// Never held by the cadence: the deadline is a protocol answer.
+    /// Never held by the cadence: the deadline is a protocol answer. While it
+    /// fails, it backs off on the Fleet object's forward_expiry row.
     pub(crate) async fn expire_fleet_forwards(&self, now: runtime_primitives::SyncTime) {
+        let ObjectWork::Fleet { io, .. } = &self.work else {
+            return;
+        };
         let store = match self.session_store() {
             Ok((store, _)) => store,
             Err(failure) => {
@@ -217,12 +268,68 @@ where
                 return;
             }
         };
-        if let Err(failure) = store
-            .transaction(move |scope| Box::pin(async move { scope.expire_forwards(now).await }))
-            .await
-        {
-            eprintln!("Fleet forward expiry failed: {failure}");
+        let subject = match self.fleet_subject().await {
+            Ok(subject) => subject,
+            Err(failure) => {
+                eprintln!("Fleet forward expiry has no subject: {failure}");
+                return;
+            }
+        };
+        crate::due_unit::run_due_unit(
+            store.as_ref(),
+            crate::due_unit::DueItem {
+                subject,
+                kind: crate::work_attempts::AttemptKind::ForwardExpiry,
+                now,
+                attempt_id: io.new_id(),
+            },
+            move |scope| Box::pin(async move { scope.expire_forwards(now).await }),
+        )
+        .await;
+    }
+
+    /// Step 0 for Fleet. A failure is kept on the object's open row when
+    /// storage can still be written, and only logged otherwise.
+    pub(crate) async fn open_fleet(&self) -> Result<(), StoreError> {
+        let ObjectWork::Fleet { host, io, .. } = &self.work else {
+            return Err(wrong_face());
+        };
+        let opened = self.initialize().await.map(|_applied| ());
+        let subject = match self.fleet_subject().await {
+            Ok(subject) => subject,
+            Err(missing) => {
+                if let Err(failure) = &opened {
+                    eprintln!("Fleet open failed before it had a subject ({missing}): {failure}");
+                }
+                return opened;
+            }
+        };
+        let now = io.now();
+        let attempt_id = io.new_id();
+        let failure = opened
+            .as_ref()
+            .err()
+            .map(crate::work_attempts::AttemptFailure::from);
+        let recorded = host
+            .store()
+            .transaction(move |scope| {
+                Box::pin(async move {
+                    let kind = crate::work_attempts::AttemptKind::Open;
+                    match failure {
+                        None => crate::work_attempts::succeeded(scope, subject, kind).await,
+                        Some(failure) => crate::work_attempts::failed(
+                            scope, attempt_id, subject, kind, &failure, now,
+                        )
+                        .await
+                        .map(|_| ()),
+                    }
+                })
+            })
+            .await;
+        if let Err(unwritten) = recorded {
+            eprintln!("Fleet open row could not be written: {unwritten}");
         }
+        opened
     }
 
     /// The long-operation engine. Until slice 4 it still carries every job kind.
@@ -262,7 +369,16 @@ where
         ] {
             applied += bootstrap.initialize(schema).await?;
         }
-        // Feed retention is its own due source; opening never prunes (#pipeline step 0).
+        // Feed retention is its own due source; opening never prunes, but it
+        // creates the feed state row that append and failures rely on (#pipeline step 0).
+        let now = chrono::DateTime::from_timestamp_millis(io.now().unix_millis())
+            .ok_or_else(|| StoreError::backend("invalid Fleet open clock"))?;
+        StepDriver::new(host.clone())
+            .run(crate::fleet_feed_maintenance::EnsureFeedState {
+                id: io.new_id(),
+                now,
+            })
+            .await?;
         Ok(applied)
     }
     #[cfg(feature = "conformance")]
@@ -291,17 +407,6 @@ where
                 )
             })
             .await
-    }
-    async fn prune_feed(&self) -> Result<(), StoreError> {
-        let ObjectWork::Fleet { host, io, .. } = &self.work else {
-            return Err(wrong_face());
-        };
-        let now = chrono::DateTime::from_timestamp_millis(io.now().unix_millis())
-            .ok_or_else(|| StoreError::backend("invalid Fleet retention clock"))?;
-        StepDriver::new(host.clone())
-            .run(crate::fleet_feed_maintenance::PruneFeed { now })
-            .await?;
-        Ok(())
     }
     pub async fn on_call(&self, bytes: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
         let envelope: ObjectCallEnvelope = serde_json::from_slice(&bytes).map_err(|_| refused())?;

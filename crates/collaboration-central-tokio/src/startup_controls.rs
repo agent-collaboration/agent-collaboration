@@ -37,7 +37,10 @@ impl PreparedRuntimeControls {
                 | RuntimeControl::ReadPending
                 | RuntimeControl::Barrier { .. }
                 | RuntimeControl::AwaitBarrier { .. }
-                | RuntimeControl::ReleaseBarrier { .. } => {
+                | RuntimeControl::ReleaseBarrier { .. }
+                | RuntimeControl::Seed { .. }
+                | RuntimeControl::ArmFault { .. }
+                | RuntimeControl::ReadFault { .. } => {
                     return Err(StoreError::backend(
                         "native conformance startup controls must only arm faults",
                     ));

@@ -4,7 +4,8 @@
 use super::event_seams::SEAM_WAIT_BOUND;
 use super::{NativeObjects, ObjectSlot, TokioObjectIo};
 use collaboration_central_conformance::{
-    ObjectSeamControl, RuntimeControl, RuntimeControlAnswer, RuntimeControlFailure,
+    ObjectFault, ObjectSeamControl, ObjectSeed, RuntimeControl, RuntimeControlAnswer,
+    RuntimeControlFailure,
 };
 use collaboration_central_core::ObjectAlarm;
 use runtime_primitives::WakeFailure;
@@ -91,6 +92,34 @@ impl NativeObjects {
             ObjectSeamControl::ReleaseBarrier { barrier_id } => {
                 seams.release_barrier(barrier_id)?;
                 RuntimeControlAnswer::Done
+            }
+            ObjectSeamControl::Seed {
+                seed: ObjectSeed::StaleAlarm { at },
+            } => {
+                slot.io
+                    .wake
+                    .seed_stale(runtime_primitives::SyncTime::from_unix_millis(at))
+                    .await
+                    .map_err(|_| RuntimeControlFailure::Poisoned)?;
+                RuntimeControlAnswer::Done
+            }
+            ObjectSeamControl::ArmFault {
+                fault: ObjectFault::ExactAlarmWrite { on },
+                count,
+            } => RuntimeControlAnswer::FaultArmed {
+                fault_id: slot.io.wake.arm_exact_write_fault(on, count),
+            },
+            ObjectSeamControl::ReadFault { fault_id } => {
+                let (armed, reached, consumed) = slot
+                    .io
+                    .wake
+                    .exact_write_fault(fault_id)
+                    .ok_or(RuntimeControlFailure::NotArmed)?;
+                RuntimeControlAnswer::Fault {
+                    armed,
+                    reached,
+                    consumed,
+                }
             }
         })
     }

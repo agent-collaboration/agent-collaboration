@@ -87,7 +87,7 @@ where
     }
 
     async fn open(&self) -> Result<(), StoreError> {
-        self.initialize().await.map(|_applied| ())
+        self.open_fleet().await
     }
 
     async fn handle(&self, event: ObjectEvent) -> EventReply {
@@ -233,9 +233,16 @@ where
         &self,
         next_batch_at: Option<SyncTime>,
     ) -> Result<Option<SyncTime>, StoreError> {
+        let ObjectWork::Copy { database, .. } = &self.work else {
+            return Err(StoreError::Aborted {
+                reason: "copy runtime has a different face".into(),
+            });
+        };
         crate::alarm_scheduler::recompute(
             self.platform(),
-            DueSources::Copy,
+            DueSources::Copy {
+                subject: database.as_uuid(),
+            },
             self.now(),
             next_batch_at,
         )

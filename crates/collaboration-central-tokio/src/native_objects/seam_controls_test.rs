@@ -354,3 +354,108 @@ async fn a_barrier_holds_its_event_inside_the_kernel_until_released() -> TestRes
     objects.shutdown().await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn a_seeded_stale_alarm_stays_stored_and_undelivered_until_an_event_replaces_it() -> TestResult
+{
+    // Arrange: the Nov 5 shape, an alarm stored 50 s in the past that never fired.
+    let root = tempfile::tempdir()?;
+    let objects = open(root.path()).await?;
+    quiet_fleet(&objects).await?;
+    seam(
+        &objects,
+        RuntimeControl::Seed {
+            seed: collaboration_central_conformance::ObjectSeed::StaleAlarm { at: T0 - 50_000 },
+        },
+    )
+    .await?;
+
+    // Act: time passes without delivering it, then one event runs.
+    let settled = seam(
+        &objects,
+        RuntimeControl::SettleClock {
+            now: at(T0 + 1_000)?,
+        },
+    )
+    .await?;
+    let still_stale = stored(&objects).await?;
+    seam(&objects, RuntimeControl::DuplicateAlarm).await?;
+
+    // Assert
+    assert_eq!(
+        settled,
+        RuntimeControlAnswer::ClockSettled { alarm_events: 0 }
+    );
+    assert_eq!(still_stale, Some(T0 - 50_000));
+    assert_ne!(stored(&objects).await?, Some(T0 - 50_000));
+    objects.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test]
+async fn an_armed_exact_write_fault_fails_one_alarm_event_and_keeps_an_alarm_write_row()
+-> TestResult {
+    // Arrange
+    let root = tempfile::tempdir()?;
+    let objects = open(root.path()).await?;
+    let slot = quiet_fleet(&objects).await?;
+    let RuntimeControlAnswer::FaultArmed { fault_id } = seam(
+        &objects,
+        RuntimeControl::ArmFault {
+            fault: collaboration_central_conformance::ObjectFault::ExactAlarmWrite {
+                on: collaboration_central_conformance::FaultedEvent::Alarm,
+            },
+            count: 1,
+        },
+    )
+    .await?
+    else {
+        return Err("fault not armed".into());
+    };
+
+    // Act: two alarm events; only the first meets an armed fault.
+    seam(&objects, RuntimeControl::DuplicateAlarm).await?;
+    seam(&objects, RuntimeControl::DuplicateAlarm).await?;
+
+    // Assert: the faulted event asked for redelivery; the next one wrote the alarm
+    // and cleared the failure row the first one left.
+    let records = records(&objects).await?;
+    let [.., faulted, recovered] = records.as_slice() else {
+        return Err("too few records".into());
+    };
+    assert_eq!(faulted.reply, ReplyRecord::AlarmRetry);
+    assert_eq!(recovered.reply, ReplyRecord::AlarmDone);
+    assert_eq!(
+        seam(&objects, RuntimeControl::ReadFault { fault_id }).await?,
+        RuntimeControlAnswer::Fault {
+            armed: 1,
+            reached: 2,
+            consumed: 1
+        }
+    );
+    let host = slot.host.get().ok_or("no host")?.clone();
+    use durable_steps::AtomicStore as _;
+    let rows: i64 = host
+        .object
+        .transaction(|scope| {
+            Box::pin(async move {
+                use durable_steps::storage::TransactionScope;
+                use sqlx_core::{query::query, row::Row};
+                query::<sqlx_turso::Turso>(
+                    "SELECT COUNT(*) AS rows FROM central_work_attempts WHERE kind='alarm_write'",
+                )
+                .fetch_one(scope.executor())
+                .await
+                .map_err(StoreError::backend)?
+                .try_get("rows")
+                .map_err(StoreError::backend)
+            })
+        })
+        .await?;
+    assert_eq!(
+        rows, 0,
+        "the successful write must forget the alarm_write row"
+    );
+    objects.shutdown().await?;
+    Ok(())
+}

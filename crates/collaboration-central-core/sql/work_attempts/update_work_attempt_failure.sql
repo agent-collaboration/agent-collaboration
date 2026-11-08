@@ -1,0 +1,1 @@
+UPDATE central_work_attempts SET state=?2,next_attempt_at=CAST(?3 AS INTEGER),attempts=CAST(?4 AS INTEGER),first_failed_at=CAST(?5 AS INTEGER),last_error_class=?6,last_error=?7,updated_at=CAST(?8 AS INTEGER) WHERE id=?1;

@@ -77,14 +77,20 @@ async fn injected_id_source_owns_the_repository_feed_state_and_feed_entry_ids() 
         fleet_protocol::FrameCapabilities::default(),
     )?;
     let proof=async {
+        // Step 0 creates the feed state row; let the traced runtime be the one that does.
+        fixture.object.transaction(|scope|Box::pin(async move {
+            query::<sqlx_turso::Turso>("DELETE FROM fleet_feed_state").execute(scope.executor()).await.map_err(StoreError::backend).map(|_| ())
+        })).await?;
+        runtime.initialize().await?;
         runtime.on_call(import_bytes(&bundle()?)?).await.map_err(|error|format!("import did not answer: {error:?}"))?;
         let ids=fixture.object.transaction(|scope|Box::pin(async move {
             query::<sqlx_turso::Turso>("SELECT row_id AS id,0 AS ordering FROM fleet_workspace_repository_refs UNION ALL SELECT attachment_id AS id,1 AS ordering FROM fleet_repository_attachments UNION ALL SELECT state_id AS id,2 AS ordering FROM fleet_feed_state UNION ALL SELECT entry_id AS id,position*2+1 AS ordering FROM fleet_feed UNION ALL SELECT child.row_id AS id,parent.position*2+2 AS ordering FROM fleet_feed_repository_refs AS child JOIN fleet_feed AS parent ON parent.entry_id=child.entry_id ORDER BY ordering")
                 .fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter().map(|row|row.try_get::<String,_>("id").map_err(StoreError::backend)).collect::<Result<Vec<_>,_>>()
         })).await?;
+        // The state row (ordering 2) holds the first traced id, minted by step 0.
         assert_eq!(ids, vec![
-            "019f0000-0000-7000-8000-000000000a90", "019f0000-0000-7000-8000-000000000a91",
-            "019f0000-0000-7000-8000-000000000a92", "019f0000-0000-7000-8000-000000000a93",
+            "019f0000-0000-7000-8000-000000000a91", "019f0000-0000-7000-8000-000000000a92",
+            "019f0000-0000-7000-8000-000000000a90", "019f0000-0000-7000-8000-000000000a93",
             "019f0000-0000-7000-8000-000000000a94", "019f0000-0000-7000-8000-000000000a95",
             "019f0000-0000-7000-8000-000000000a96",
         ]);

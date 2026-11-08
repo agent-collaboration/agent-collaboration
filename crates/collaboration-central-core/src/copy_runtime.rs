@@ -188,7 +188,10 @@ where
 
     /// The Copy's due source: initialize a live copy, then expire its staged parts.
     pub(crate) async fn expire_copy_staged_parts(&self) -> Result<(), StoreError> {
-        let ObjectWork::Copy { host, io, .. } = &self.work else {
+        let ObjectWork::Copy {
+            host, io, database, ..
+        } = &self.work
+        else {
             return Err(StoreError::Aborted {
                 reason: "copy runtime has a different face".into(),
             });
@@ -200,9 +203,25 @@ where
             return Ok(());
         }
         self.initialize().await?;
-        StepDriver::new(host.clone())
-            .run(crate::copy_staged_parts::ExpireStagedParts { now: io.now() })
-            .await?;
+        // One unit, backing off on the Copy's part_expiry row while it fails (Lead Q5).
+        let now = io.now();
+        crate::due_unit::run_due_unit(
+            host.store().as_ref(),
+            crate::due_unit::DueItem {
+                subject: database.as_uuid(),
+                kind: crate::work_attempts::AttemptKind::PartExpiry,
+                now,
+                attempt_id: io.new_id(),
+            },
+            move |scope| {
+                Box::pin(async move {
+                    crate::copy_staged_parts::expire(scope, now)
+                        .await
+                        .map(|_| ())
+                })
+            },
+        )
+        .await;
         Ok(())
     }
     pub async fn initialize(&self) -> Result<usize, StoreError> {

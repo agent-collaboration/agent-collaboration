@@ -92,6 +92,13 @@ impl FleetStorageFixture {
                         ))
                         .await
                         .map_err(StoreError::backend)?;
+                    scope
+                        .executor()
+                        .execute(include_str!(
+                            "../work_migrations/0001_central_work_attempts.sql"
+                        ))
+                        .await
+                        .map_err(StoreError::backend)?;
                     Ok(())
                 })
             })

@@ -68,6 +68,26 @@ async fn retained_stream(fixture: &Fixture, peer: PeerId) -> Result<(i64, Vec<i6
     })).await?)
 }
 
+/// The attempt row a subject has for one kind: (state, attempts, last error class, next attempt).
+async fn attempt_row(
+    fixture: &Fixture,
+    subject: PeerId,
+    kind: &'static str,
+) -> Result<Option<(String, i64, Option<String>, Option<i64>)>, TestError> {
+    Ok(fixture.host.store.object.transaction(move |scope| Box::pin(async move {
+        use durable_steps::storage::TransactionScope;
+        use sqlx_core::{query::query, row::Row};
+        let row = query::<sqlx_turso::Turso>("SELECT state, attempts, last_error_class, next_attempt_at FROM central_work_attempts WHERE subject=? AND kind=?")
+            .bind(subject.to_string()).bind(kind).fetch_optional(scope.executor()).await.map_err(StoreError::backend)?;
+        row.map(|row| Ok((
+            row.try_get::<String,_>("state").map_err(StoreError::backend)?,
+            row.try_get::<i64,_>("attempts").map_err(StoreError::backend)?,
+            row.try_get::<Option<String>,_>("last_error_class").map_err(StoreError::backend)?,
+            row.try_get::<Option<i64>,_>("next_attempt_at").map_err(StoreError::backend)?,
+        ))).transpose()
+    })).await?)
+}
+
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Assert the exact production retention window and admitted operation outcome."
@@ -173,6 +193,20 @@ async fn one_machine_hole_does_not_block_other_retention_jobs_or_future_wakes()
         retained_stream(&fixture, broken).await?,
         (98, (99..=120).filter(|position| *position != 105).collect())
     );
+    // The broken stream's failure is kept on its own attempt row (slice 3): it
+    // backs off 30 s from now, and the healthy stream has no row.
+    use runtime_primitives::Clock as _;
+    let retry_at = fixture.io.now().unix_millis() + 30_000;
+    assert_eq!(
+        attempt_row(&fixture, broken, "notice_expiry").await?,
+        Some((
+            "waiting".to_owned(),
+            1,
+            Some("corrupt_row".to_owned()),
+            Some(retry_at)
+        ))
+    );
+    assert_eq!(attempt_row(&fixture, healthy, "notice_expiry").await?, None);
     assert!(
         fixture
             .io

@@ -353,7 +353,7 @@ where
                             index,
                             acked,
                         } => {
-                            let at = crate::copy_staged_parts::next_expiry(scope)
+                            let at = crate::copy_staged_parts::next_part_deadline(scope)
                                 .await?
                                 .ok_or_else(|| {
                                     StoreError::backend("PartStaged has no staged-part expiry")

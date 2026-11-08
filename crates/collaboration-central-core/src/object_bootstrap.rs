@@ -305,6 +305,19 @@ where
                 .await?
                 .count;
             }
+            // Fleet and Copy both keep their failing and pending work in
+            // central_work_attempts, migrated with the object's own corpus.
+            if matches!(self.schema, EngineSchema::Fleet | EngineSchema::Copy) {
+                count += apply_corpus(
+                    scope,
+                    WORK_CORPUS,
+                    WORK_MIGRATIONS.iter().collect(),
+                    self.now,
+                    self.clock.as_ref(),
+                )
+                .await?
+                .count;
+            }
             if self.schema == EngineSchema::Session {
                 count += apply_corpus(
                     scope,
@@ -344,6 +357,24 @@ static SESSION_MIGRATIONS: std::sync::LazyLock<Vec<sqlx_core::migrate::Migration
                 false,
             ),
         ]
+    });
+
+/// The corpus that owns `central_work_attempts` in every Fleet and Copy store.
+pub(crate) const WORK_CORPUS: &str = "central-work";
+
+static WORK_MIGRATIONS: std::sync::LazyLock<Vec<sqlx_core::migrate::Migration>> =
+    std::sync::LazyLock::new(|| {
+        use sqlx_core::{
+            migrate::{Migration, MigrationType},
+            sql_str::SqlSafeStr,
+        };
+        vec![Migration::new(
+            1,
+            "central work attempts".into(),
+            MigrationType::Simple,
+            include_str!("../work_migrations/0001_central_work_attempts.sql").into_sql_str(),
+            false,
+        )]
     });
 
 static REGISTRY_MIGRATIONS: std::sync::LazyLock<Vec<sqlx_core::migrate::Migration>> =
