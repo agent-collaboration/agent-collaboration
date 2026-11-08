@@ -305,6 +305,27 @@ where
             })
             .await
     }
+    /// Conformance only: the stamp and change records exactly as the owning
+    /// Fleet object's store holds them.
+    #[cfg(feature = "conformance")]
+    pub async fn conformance_organization_records(
+        &self,
+    ) -> Result<crate::OrganizationRecordsObservation, StoreError> {
+        let ObjectWork::Fleet { host, .. } = &self.work else {
+            return Err(wrong_face());
+        };
+        host.store()
+            .transaction(|scope| {
+                Box::pin(async move {
+                    let stamp = crate::organization_authority::read_stored_stamp(scope).await?;
+                    let records =
+                        crate::organization_authority::read_change_record_page(scope, None, 100)
+                            .await?;
+                    Ok(crate::OrganizationRecordsObservation::new(stamp, records))
+                })
+            })
+            .await
+    }
     #[cfg(feature = "conformance")]
     pub async fn conformance_mail_custody(
         &self,

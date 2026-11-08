@@ -345,12 +345,13 @@ where
             return Err(refused());
         };
         let call = ObjectCallEnvelope::decode_copy_candidate(bytes, *database)?;
-        let (note, _) = crate::step_driver::StepDriver::new(host.clone())
+        // Owner Health and Repair must still reach a Copy whose store cannot be
+        // read; an unreadable note is no note, as before the note existed.
+        let note = crate::step_driver::StepDriver::new(host.clone())
             .run(crate::copy_fleet_reference::ReadCopyFleetReference { project: *database })
-            .await
-            .map_err(|_| refused())?;
+            .await;
         match note {
-            crate::copy_fleet_reference::CopyFleetReference::Bound(organization)
+            Ok((crate::copy_fleet_reference::CopyFleetReference::Bound(organization), _))
                 if organization != call.organization =>
             {
                 Err(refused())

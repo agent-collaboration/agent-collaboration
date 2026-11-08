@@ -65,6 +65,10 @@ pub async fn main(request: Request, env: Env, _context: Context) -> Result<Respo
         return conformance_admission::fleet_schema(request.try_into()?, env).await;
     }
     #[cfg(feature = "conformance")]
+    if request.uri().path() == collaboration_central_core::ORGANIZATION_RECORDS_PATH {
+        return conformance_admission::organization_records(request.try_into()?, env).await;
+    }
+    #[cfg(feature = "conformance")]
     if request.uri().path() == collaboration_central_core::FLEET_MAIL_CUSTODY_PATH {
         return conformance_admission::fleet_mail_custody(request.try_into()?, env).await;
     }
@@ -83,8 +87,16 @@ pub async fn main(request: Request, env: Env, _context: Context) -> Result<Respo
         access_verification::VerificationLayer::Edge,
     )
     .map_err(|error| worker::Error::RustError(error.to_string()))?;
-    let response = collaboration_central_core::central_router(application)
+    let mut response = collaboration_central_core::central_router(application)
         .call(request)
         .await?;
+    // Names the artifact: the bundle guard refuses this one as central-link.
+    response.headers_mut().insert(
+        ENTRY_HEADER,
+        http::HeaderValue::from_static("collaboration-central-public-entry"),
+    );
     response.try_into()
 }
+
+/// Every response names which of the crate's two Worker entries served it.
+pub(crate) const ENTRY_HEADER: &str = "x-collaboration-central-entry";

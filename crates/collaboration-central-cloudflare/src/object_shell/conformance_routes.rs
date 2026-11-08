@@ -60,6 +60,18 @@ impl ShellActor {
             )
             .map(Some);
         }
+        if request.path() == "/test/organization-records" {
+            let RuntimeFace::Fleet(runtime) = runtime else {
+                return Err(error("organization records require the Fleet owner"));
+            };
+            return Response::from_json(
+                &runtime
+                    .conformance_organization_records()
+                    .await
+                    .map_err(error)?,
+            )
+            .map(Some);
+        }
         if request.path() == "/test/fleet-schema" {
             let RuntimeFace::Fleet(runtime) = runtime else {
                 return Err(error("schema observation requires the Fleet owner"));

@@ -148,8 +148,19 @@ async fn organization_link_provisions_once_and_a_repeat_changes_nothing() -> Con
         &json!({"organizationId":ORGANIZATION_A}),
     )
     .await?;
+    // The public TCP listener has no private route, before any credential.
+    let public = reqwest::Client::builder()
+        .no_proxy()
+        .build()?
+        .post(format!("{}{PROVISION}", central.server.base_url()))
+        .json(&provision_body(ORGANIZATION_A, &statement))
+        .send()
+        .await?
+        .status()
+        .as_u16();
     central.server.shutdown().await?;
     let (identity, records) = stored(root.path(), ORGANIZATION_A).await?;
+    assert_eq!(public, 404);
 
     assert_eq!(first, (200, br#"{"result":"provisioned"}"#.to_vec()));
     assert_eq!(repeat, first);

@@ -24,7 +24,7 @@ impl OrganizationChangeKind {
         }
     }
     #[cfg_attr(
-        not(test),
+        not(any(test, feature = "conformance")),
         expect(dead_code, reason = "B2d's change-record lookups decode records")
     )]
     fn parse(value: &str) -> Result<Self, StoreError> {
@@ -165,7 +165,7 @@ where
 
 /// A bounded page of records in identity order, after the given record.
 #[cfg_attr(
-    not(test),
+    not(any(test, feature = "conformance")),
     expect(dead_code, reason = "B2d's change-record lookups read records back")
 )]
 pub(crate) async fn read_page<S: TransactionScope>(
@@ -201,12 +201,12 @@ where
 }
 
 #[cfg_attr(
-    not(test),
+    not(any(test, feature = "conformance")),
     expect(dead_code, reason = "B2d's change-record lookups read records back")
 )]
 type Column = (Option<String>, Option<String>);
 #[cfg_attr(
-    not(test),
+    not(any(test, feature = "conformance")),
     expect(dead_code, reason = "B2d's change-record lookups read records back")
 )]
 struct StoredColumns {
@@ -221,7 +221,7 @@ struct StoredColumns {
 }
 
 #[cfg_attr(
-    not(test),
+    not(any(test, feature = "conformance")),
     expect(dead_code, reason = "B2d's change-record lookups read records back")
 )]
 fn decode(columns: StoredColumns) -> Result<OrganizationChangeRecord, StoreError> {
@@ -268,7 +268,7 @@ fn decode(columns: StoredColumns) -> Result<OrganizationChangeRecord, StoreError
 }
 
 #[cfg_attr(
-    not(test),
+    not(any(test, feature = "conformance")),
     expect(dead_code, reason = "B2d's change-record lookups read records back")
 )]
 fn text((value, class): Column, field: &str) -> Result<String, StoreError> {
@@ -279,7 +279,7 @@ fn text((value, class): Column, field: &str) -> Result<String, StoreError> {
 }
 
 #[cfg_attr(
-    not(test),
+    not(any(test, feature = "conformance")),
     expect(dead_code, reason = "B2d's change-record lookups read records back")
 )]
 fn optional_text((value, class): Column, field: &str) -> Result<Option<String>, StoreError> {

@@ -247,6 +247,26 @@ pub(crate) async fn fleet_schema(request: Request, env: Env) -> Result<Response>
     forward_command(Command::FleetSchema, env).await
 }
 
+/// Read an organization's stamp and records through its owning Fleet object.
+pub(crate) async fn organization_records(mut request: Request, env: Env) -> Result<Response> {
+    if !owner_allowed(&request, &env).await? {
+        return Response::error("owner required", 401);
+    }
+    let input: collaboration_central_core::OrganizationRecordsRequest = match request.json().await {
+        Ok(input) => input,
+        Err(_) => return Response::error("invalid organization records request", 400),
+    };
+    crate::composed_control::forward(
+        &env,
+        &collaboration_central_core::ObjectAddress::Fleet {
+            organization: input.organization,
+        },
+        "/test/organization-records",
+        None,
+    )
+    .await
+}
+
 pub(crate) async fn fleet_mail_custody(mut request: Request, env: Env) -> Result<Response> {
     if !owner_allowed(&request, &env).await? {
         return Response::error("owner required", 401);

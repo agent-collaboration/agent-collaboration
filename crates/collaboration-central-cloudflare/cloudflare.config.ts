@@ -19,6 +19,11 @@ export default {
       CENTRAL_REGISTRY_CONFIG: { type: "text", value: "REPLACE_REGISTRY_CONFIG_JSON" },
       // JSON with the deployment's UUIDv7 relayPeer; required and validated by central.
       CENTRAL_DELIVERY_CONFIG: { type: "text", value: "REPLACE_DELIVERY_CONFIG_JSON" },
+      // The sign-in service that signs organization stamps, the audience its
+      // stamps name for this central, and where it publishes its keys.
+      CENTRAL_SIGN_IN_ISSUER: { type: "text", value: "REPLACE_SIGN_IN_ISSUER" },
+      CENTRAL_SIGN_IN_AUDIENCE: { type: "text", value: "REPLACE_CENTRAL_STAMP_AUDIENCE" },
+      CENTRAL_SIGN_IN_JWKS_URL: { type: "text", value: "REPLACE_SIGN_IN_JWKS_URL" },
       PROJECT_COPIES: {
         type: "durable-object",
         worker: "replace-worker-name",

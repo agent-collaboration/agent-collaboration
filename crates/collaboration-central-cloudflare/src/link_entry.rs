@@ -12,7 +12,11 @@ pub async fn main(request: Request, env: Env, _context: Context) -> Result<Respo
         .path()
         .starts_with(collaboration_central_core::PRIVATE_LINK_PREFIX)
     {
-        return Response::error("not found", 404);
+        let mut response = Response::empty()?.with_status(404);
+        response
+            .headers_mut()
+            .set(crate::ENTRY_HEADER, LINK_ENTRY)?;
+        return Ok(response);
     }
     let (parts, body) = request.into_parts();
     let body = match http_body::complete(body).await? {
@@ -35,8 +39,15 @@ pub async fn main(request: Request, env: Env, _context: Context) -> Result<Respo
         crate::conformance_capabilities::ConformanceCapabilities::from_env(&env)?,
     );
     use tower_service::Service;
-    let response = collaboration_central_core::organization_link_router(platform)
+    let mut response = collaboration_central_core::organization_link_router(platform)
         .call(request)
         .await?;
+    // Names the artifact: the bundle guard refuses this one as public central.
+    response.headers_mut().insert(
+        crate::ENTRY_HEADER,
+        http::HeaderValue::from_static(LINK_ENTRY),
+    );
     response.try_into()
 }
+
+const LINK_ENTRY: &str = "collaboration-central-link-entry";

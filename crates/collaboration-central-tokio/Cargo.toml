@@ -95,6 +95,10 @@ required-features = ["conformance"]
 name = "organization_location_workerd"
 required-features = ["conformance"]
 
+[[example]]
+name = "organization_link_workerd"
+required-features = ["conformance"]
+
 [[test]]
 name = "integration"
 path = "tests/integration/main.rs"

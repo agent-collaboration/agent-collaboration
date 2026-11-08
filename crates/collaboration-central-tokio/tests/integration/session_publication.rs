@@ -47,8 +47,11 @@ async fn closed_socket_cleanup_does_not_require_a_live_admission_and_other_sessi
         healthy_installation.as_str(),
     ] {
         let call = serde_json::to_vec(&serde_json::json!({
-            "source":{"kind":"fleet"},"sourceFace":"fleet","authority":{"kind":"object"},
-            "destination":{"kind":"fleet"},"destinationFace":"delivery",
+            "organization":"019f0000-0000-7000-8000-00000000ac01",
+            "source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},
+            "sourceFace":"fleet","authority":{"kind":"object"},
+            "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},
+            "destinationFace":"delivery",
             "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"fanout_notice"},
             "kind":"central.machine-notice","target":{"installation":installation},
             "request":{"kind":"projectListChanged","value":{}}

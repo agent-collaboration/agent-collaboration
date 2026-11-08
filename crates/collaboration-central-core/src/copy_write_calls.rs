@@ -300,15 +300,14 @@ where
                 reason: "copy alarm reached another face".into(),
             });
         };
-        // Pending follow-ups report to the Fleet the note names; a Copy without
-        // one cannot guess its organization and leaves the work pending.
+        // Follow-ups report to the Fleet the note names. A Copy without one has
+        // never been created or seeded by a Fleet, so it has no follow-up of its
+        // own to drive; it cannot guess an organization either.
         let (note, _) = crate::step_driver::StepDriver::new(host.clone())
             .run(crate::copy_fleet_reference::ReadCopyFleetReference { project: *database })
             .await?;
         let crate::copy_fleet_reference::CopyFleetReference::Bound(organization) = note else {
-            return Err(StoreError::Aborted {
-                reason: "Copy has no private Fleet reference".into(),
-            });
+            return Ok(());
         };
         let shared = CoreHost::for_copy(io.clone(), *receiver, *database, organization)
             .map_err(|error| StoreError::backend(format!("{error:?}")))?;

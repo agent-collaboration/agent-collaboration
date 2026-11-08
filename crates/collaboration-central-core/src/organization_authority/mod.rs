@@ -12,6 +12,8 @@ mod provisioning;
 mod statement_check;
 mod statement_replacement;
 
+#[cfg(feature = "conformance")]
+pub(crate) use change_records::read_page as read_change_record_page;
 pub use change_records::{
     ChangeRequestId, OrganizationChangeKind, OrganizationChangeOrigin, OrganizationChangeRecord,
 };

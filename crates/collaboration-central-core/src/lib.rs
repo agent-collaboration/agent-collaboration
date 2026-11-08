@@ -7,6 +7,12 @@ pub mod organization_authority;
 pub use fleet_location::{FleetLocationPolicy, FleetLocationRefusal};
 mod copy_fleet_reference;
 mod fleet_organization_authority;
+#[cfg(feature = "conformance")]
+mod organization_records_observation;
+#[cfg(feature = "conformance")]
+pub use organization_records_observation::{
+    ORGANIZATION_RECORDS_PATH, OrganizationRecordsObservation, OrganizationRecordsRequest,
+};
 mod organization_provisioning_calls;
 pub use organization_provisioning_calls::{
     FleetOrganizationStatementDigest, FleetProvisionOrganization, StatementDigestAnswer,
@@ -25,7 +31,7 @@ mod generated_copy_fleet_reference;
     reason = "Generated record statements bind the approved typed change-record row."
 )]
 #[cfg_attr(
-    not(test),
+    not(any(test, feature = "conformance")),
     expect(dead_code, reason = "B2d's change-record lookups read the record page")
 )]
 mod generated_organization;

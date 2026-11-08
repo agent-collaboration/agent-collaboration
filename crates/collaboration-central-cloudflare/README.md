@@ -15,6 +15,22 @@ worker-build crates/collaboration-central-cloudflare --profile worker-release --
 node verification/tooling/check-central-worker-bundle.ts production
 ```
 
+Build and check the central-link candidate, the second Worker that serves
+only the private sign-in link (provisioning and the renewal digest read):
+
+```sh
+worker-build crates/collaboration-central-cloudflare --profile worker-release --no-opt --out-dir build-link -- --locked --no-default-features --features link
+node verification/tooling/check-central-worker-bundle.ts link
+```
+
+Its template is `cloudflare-link.config.ts`: no route, workers.dev or preview
+URL, and no Durable Object class of its own. Its `FLEET` binding names
+central's existing `FleetObject` by central's deployed script name, so it
+reaches the same Fleet objects as central through the same location policy.
+Each entry names itself in an `x-collaboration-central-entry` response
+header, and the guard refuses either artifact checked as the other. Deploy
+central first, central-link next, and the sign-in binding last.
+
 The root `worker-release` profile preserves the former standalone Worker's
 `lto = true`, `opt-level = "s"` and `codegen-units = 1`. Native release builds
 continue to use Cargo's separate `release` profile.

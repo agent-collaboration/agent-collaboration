@@ -1,4 +1,5 @@
 /build/
+/build-link/
 /target/
 /.wrangler/
 .dev.vars*

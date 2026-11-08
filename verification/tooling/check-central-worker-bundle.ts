@@ -26,14 +26,47 @@ export function checkDeployTemplate(
   return undefined;
 }
 
+/** Each Worker entry names itself in its responses; the strings are in the wasm. */
+export const publicEntryMarker = "collaboration-central-public-entry";
+export const linkEntryMarker = "collaboration-central-link-entry";
+export const linkPrebuild =
+  "worker-build crates/collaboration-central-cloudflare --profile worker-release --no-opt --out-dir build-link -- --locked --no-default-features --features link";
+
+/** central-link: no public surface, no Durable Object class of its own. */
+export function checkLinkTemplate(linkConfig: string, toolingConfig: string): string | undefined {
+  for (const setting of ["workersDev: false", "previewUrls: false"])
+    if (!linkConfig.includes(setting)) return `central-link template must set ${setting}`;
+  if (/\b(accountId|domains|routes)\s*:/.test(linkConfig))
+    return "central-link template must omit private account and routing values";
+  if (/\bexports\s*:/.test(linkConfig) || linkConfig.includes("PROJECT_COPIES"))
+    return "central-link must declare no Durable Object class or Copy binding";
+  if (!linkConfig.includes('entrypoint: "build-link/index.js"'))
+    return "central-link template must upload the link artifact";
+  if (
+    !/FLEET:\s*\{\s*type:\s*"durable-object",\s*worker:\s*"replace-central-worker-name",\s*exportName:\s*"FleetObject",?\s*\}/.test(
+      linkConfig,
+    )
+  )
+    return "central-link must bind central's existing FleetObject class by central's script name";
+  const textValues = [...linkConfig.matchAll(/type:\s*"text",\s*value:\s*"([^"]*)"/g)].map(
+    (match) => match[1],
+  );
+  if (textValues.some((value) => value === undefined || !value.startsWith("REPLACE_")))
+    return "central-link template vars must be placeholders";
+  if (!toolingConfig.includes("noBundle: true"))
+    return "Worker deploy tooling must upload the guarded bundle without rebundling";
+  return undefined;
+}
+
 function booleanTuple(values: readonly boolean[]): string {
   return `(${values.map((value) => (value ? "True" : "False")).join(", ")}${values.length === 1 ? "," : ""})`;
 }
 
 export function checkWorkerBundle(
-  mode: "production" | "faults",
+  mode: "production" | "faults" | "link",
   repositoryRoot: string = process.cwd(),
 ): { readonly status: number; readonly message: string } {
+  if (mode === "link") return checkLinkBundle(repositoryRoot);
   const read = (path: string): string => readFileSync(join(repositoryRoot, path), "utf8");
   const manifest = z
     .object({ profile: z.record(z.string(), z.unknown()).default({}) })
@@ -80,6 +113,8 @@ export function checkWorkerBundle(
     read("crates/collaboration-central-cloudflare/wrangler.config.ts"),
   );
   if (failure !== undefined) return { status: 1, message: failure };
+  if (content.includes(linkEntryMarker))
+    return { status: 1, message: "Worker public bundle is the central-link entry" };
   if (mode === "production" && content.includes("_cf_test_directory_updates"))
     return { status: 1, message: "Worker production bundle contains the test-only Fleet receiver" };
   if (content.includes("central depth measurement"))
@@ -99,10 +134,38 @@ export function checkWorkerBundle(
   };
 }
 
+function checkLinkBundle(repositoryRoot: string): {
+  readonly status: number;
+  readonly message: string;
+} {
+  const read = (path: string): string => readFileSync(join(repositoryRoot, path), "utf8");
+  if (!read("crates/collaboration-central-cloudflare/README.md").includes(linkPrebuild))
+    return {
+      status: 1,
+      message: "central-link prebuild must select the link feature and build-link",
+    };
+  const artifacts = ["index.js", "index_bg.wasm"].map((name) =>
+    join(repositoryRoot, "crates/collaboration-central-cloudflare/build-link", name),
+  );
+  if (artifacts.some((path) => !existsSync(path) || !statSync(path).isFile()))
+    return { status: 1, message: "central-link bundle missing; build it before checking" };
+  const content = Buffer.concat(artifacts.map((path) => readFileSync(path)));
+  const failure = checkLinkTemplate(
+    read("crates/collaboration-central-cloudflare/cloudflare-link.config.ts"),
+    read("crates/collaboration-central-cloudflare/wrangler.config.ts"),
+  );
+  if (failure !== undefined) return { status: 1, message: failure };
+  if (!content.includes(linkEntryMarker) || content.includes(publicEntryMarker))
+    return { status: 1, message: "central-link bundle is not the link entry" };
+  if (conformanceMarkers.some((marker) => content.includes(marker)))
+    return { status: 1, message: "central-link bundle contains conformance controls" };
+  return { status: 0, message: "central-link bundle: link entry only, no conformance controls" };
+}
+
 export function main(arguments_: readonly string[] = process.argv.slice(2)): number {
   const [mode] = arguments_;
-  if (arguments_.length !== 1 || (mode !== "production" && mode !== "faults")) {
-    console.error("usage: check-central-worker-bundle.ts {production,faults}");
+  if (arguments_.length !== 1 || (mode !== "production" && mode !== "faults" && mode !== "link")) {
+    console.error("usage: check-central-worker-bundle.ts {production,faults,link}");
     return 2;
   }
   const result = checkWorkerBundle(mode);
