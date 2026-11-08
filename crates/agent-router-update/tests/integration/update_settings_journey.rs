@@ -22,6 +22,8 @@ use std::path::{Path, PathBuf};
 const OLD_PROVIDERS: &str = "{\n  \"version\": 1,\n  \"providers\": {\n    \"claude\": {\n      \"enabled\": false,\n      \"executable\": \"/opt/claude/claude-agent-acp\",\n      \"arguments\": []\n    },\n    \"cursor\": {\n      \"enabled\": true,\n      \"executable\": null,\n      \"arguments\": [\n        \"acp\"\n      ]\n    }\n  }\n}\n";
 /// `ports.json` as an owner wrote it by hand.
 const OLD_PORTS: &str = "{\"router\": 28741, \"mcp\": 28742, \"tailscaleHttps\": 28743}\n";
+/// An owner's machine list naming one machine, under its older name.
+const OWNERS_MACHINE_LIST: &str = "{\n  // the build box\n  \"version\": 1,\n  \"routers\": [{\n    \"name\": \"Sunbook\",\n    \"connection\": {\"kind\": \"remote\",\n      \"serviceId\": \"00000000-0000-4000-8000-000000000001\",\n      \"mcpUrl\": \"https://machine.example.invalid:443/mcp\",\n      \"nativeCodex\": {\"address\": \"wss://machine.example.invalid:443/\"}},\n    \"defaultRemoteCwd\": \"/remote/only/project\"\n  }],\n}\n";
 /// `routers.jsonc` with an owner's comment, carried byte for byte.
 const OLD_MACHINE_LIST: &str =
     "{\n  // machines I open sessions on\n  \"version\": 1,\n  \"routers\": [],\n}\n";
@@ -231,30 +233,60 @@ async fn a_malformed_old_settings_file_stops_the_update_naming_it() -> UpdateRes
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
-async fn both_machine_list_names_are_left_for_the_picker_to_name() -> UpdateResult {
-    // Arrange
+async fn both_machine_list_names_stop_the_update_until_the_owner_keeps_one() -> UpdateResult {
+    // Arrange: the older list names a machine; a newer, empty list sits beside it.
     let (_directory, root) = populated_root()?;
-    let old = write_old_settings(&root)?;
+    write_old_settings(&root)?;
+    let former = root.join("routers.jsonc");
+    std::fs::write(&former, OWNERS_MACHINE_LIST)?;
     let current = root.join("agent-sessions.jsonc");
-    let current_list = "{ \"version\": 1, \"routers\": [] }\n";
-    std::fs::write(&current, current_list)?;
+    std::fs::write(&current, "{ \"version\": 1, \"routers\": [] }\n")?;
+    let before = snapshot(&root)?;
 
-    // Act
-    let output = run_update(&root_argument(&root)).await?;
+    // Act: the update twice, as an owner retrying would.
+    let first = run_update(&root_argument(&root)).await?;
+    let after_first = snapshot(&root)?;
+    let second = run_update(&root_argument(&root)).await?;
+    let after_second = snapshot(&root)?;
 
-    // Assert
+    // Assert: each run stops before any change, naming both lists, so step 0007 is
+    // never recorded done and the older list is never removed unread as stale.
+    for (run, output) in [("first", &first), ("second", &second)] {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert_eq!(output.status.code(), Some(2), "{run}: {stderr}");
+        assert!(
+            stderr.contains(&format!(
+                "both {} and {} exist",
+                former.display(),
+                current.display()
+            )),
+            "{run}: {stderr}"
+        );
+    }
+    assert_eq!(after_first, before, "the first refusal changes nothing");
+    assert_eq!(after_second, before, "the second refusal changes nothing");
+
+    // Act: the owner keeps the older list by removing the newer one, and reruns.
+    std::fs::remove_file(&current)?;
+    let resolved = run_update(&root_argument(&root)).await?;
+
+    // Assert: the older list is carried byte for byte and the picker reads its machine.
     assert_eq!(
-        output.status.code(),
+        resolved.status.code(),
         Some(0),
         "{}",
-        String::from_utf8_lossy(&output.stderr)
+        String::from_utf8_lossy(&resolved.stderr)
     );
-    assert_eq!(
-        std::fs::read_to_string(&old.machine_list)?,
-        OLD_MACHINE_LIST
-    );
-    assert_eq!(std::fs::read_to_string(&current)?, current_list);
-    assert!(!old.providers.exists() && !old.ports.exists());
+    assert!(!former.exists());
+    assert_eq!(std::fs::read_to_string(&current)?, OWNERS_MACHINE_LIST);
+    let agent_session_inventory::sessions::router_connection_registry::RouterRegistryRead::Ready(
+        registry,
+    ) = agent_session_inventory::sessions::router_connection_registry::read_router_registry(&root)
+    else {
+        return Err("the picker must read the carried list".into());
+    };
+    assert_eq!(registry.routers.len(), 1);
+    assert_eq!(registry.routers[0].name.as_str(), "Sunbook");
     Ok(())
 }
 

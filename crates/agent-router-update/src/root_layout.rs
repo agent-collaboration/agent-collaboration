@@ -55,6 +55,10 @@ pub enum RouterUpdateError {
     )]
     MalformedSettingsFile { path: PathBuf, message: String },
     #[error(
+        "both {former} and {current} exist; keep the machine list you want as {current}, move {former} aside, then run agent-router-update again"
+    )]
+    BothMachineListNames { former: PathBuf, current: PathBuf },
+    #[error(
         "both {current} and {former} exist; keep the one that holds this Router's accounts, move the other aside, then run agent-router-update again"
     )]
     BothProviderProxyNames { current: PathBuf, former: PathBuf },

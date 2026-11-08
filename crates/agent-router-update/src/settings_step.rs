@@ -55,15 +55,7 @@ pub enum SettingsFileChange {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum MachineListChange {
     Nothing,
-    Rename {
-        from: PathBuf,
-        to: PathBuf,
-    },
-    /// Both names exist: neither is touched, and the picker names both.
-    BothNamesKept {
-        former: PathBuf,
-        current: PathBuf,
-    },
+    Rename { from: PathBuf, to: PathBuf },
 }
 
 impl std::fmt::Display for SettingsChange {
@@ -97,11 +89,6 @@ impl std::fmt::Display for SettingsChange {
             MachineListChange::Rename { from, to } => {
                 format!("; rename {} to {}", from.display(), to.display())
             }
-            MachineListChange::BothNamesKept { former, current } => format!(
-                "; both {} and {} exist and are left as they are",
-                current.display(),
-                former.display()
-            ),
         };
         write!(formatter, "{settings}{machine_list}")
     }
@@ -155,7 +142,12 @@ pub(crate) fn plan_settings_step(
             from: former,
             to: current,
         },
-        (true, true) => MachineListChange::BothNamesKept { former, current },
+        // Both names: the step cannot know which list is the owner's, and recording
+        // it done would let a later run remove the older one unread as stale. It stops
+        // before any change, naming both, and stays pending.
+        (true, true) => {
+            return Err(RouterUpdateError::BothMachineListNames { former, current });
+        }
         (false, _) => MachineListChange::Nothing,
     };
     Ok(SettingsChange {
