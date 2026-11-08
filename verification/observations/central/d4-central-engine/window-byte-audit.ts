@@ -75,8 +75,8 @@ export class WindowByteAudit {
     for (const audit of this.connections.values()) {
       audit.server.requireComplete();
       audit.client.requireComplete();
-      if (audit.server.snapshot().welcomes !== 1 || audit.client.snapshot().frames.hello !== 1)
-        throw new Error("D4 raw audit lacks one actual Hello/Welcome per socket");
+      if (audit.server.snapshot().welcomes < 1 || (audit.client.snapshot().frames.hello ?? 0) < 1)
+        throw new Error("D4 raw audit lacks actual Hello/Welcome per socket");
     }
     this.window.requireWindow();
   }

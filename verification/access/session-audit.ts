@@ -52,11 +52,11 @@ export interface SessionSnapshot {
   readonly invalidConnections: number;
 }
 export class SessionAudit {
-  private readonly observeFrame: ((value: unknown) => void) | undefined;
+  private readonly observeFrame: ((value: unknown, exactPayload: Buffer) => void) | undefined;
   private readonly direction: "server" | "client";
   private readonly protocol: "single" | "batches";
   constructor(
-    observeFrame?: (value: unknown) => void,
+    observeFrame?: (value: unknown, exactPayload: Buffer) => void,
     direction: "server" | "client" = "server",
     protocol: "single" | "batches" = "single",
   ) {
@@ -191,7 +191,7 @@ export class SessionAudit {
       if (new Set(items.map((item): string => item.sendId)).size !== items.length)
         throw new Error("duplicate batch send id");
     }
-    this.observeFrame?.(value);
+    this.observeFrame?.(value, Buffer.from(state.fragments));
     this.frames[message.kind] = (this.frames[message.kind] ?? 0) + 1;
     if (message.kind === "welcome") {
       this.welcomes += 1;

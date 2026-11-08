@@ -25,7 +25,10 @@ function answer(send: number, result: unknown = { kind: "accepted", value: {} })
 }
 function open(observation: SocketWindowObservation, connection = "socket-a"): void {
   observation.opened(connection);
-  observation.server(connection, { kind: "welcome", value: {} });
+  observation.server(connection, {
+    kind: "welcome",
+    value: { sessionId: identity(900), databases: [] },
+  });
 }
 function sendSingle(
   observation: SocketWindowObservation,
@@ -225,4 +228,20 @@ test("a late answer on another connection never closes a current request and clo
   assert.equal(observation.snapshot().connections[0]?.current, 0);
   sendSingle(observation, 1, 101, "socket-b");
   assert.equal(observation.snapshot().connections[1]?.current, 1);
+});
+
+test("a changed Welcome session cannot reset or relabel outstanding slots", (): void => {
+  const observation = new SocketWindowObservation();
+  open(observation);
+  sendSingle(observation, 1);
+  assert.throws(
+    (): void =>
+      observation.server("socket-a", {
+        kind: "welcome",
+        value: { sessionId: identity(901), databases: [] },
+      }),
+    /changed session/,
+  );
+  assert.equal(observation.snapshot().connections[0]?.current, 1);
+  assert.throws((): void => observation.requireWindow(), /invalid/);
 });

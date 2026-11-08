@@ -29,8 +29,14 @@ function opened(): WindowByteAudit {
   audit.opened("a");
   audit.client("a", Buffer.from("GET /v1/session HTTP/1.1\r\nHost: fixture\r\n\r\n"));
   audit.server("a", Buffer.from("HTTP/1.1 101 Switching Protocols\r\n\r\n"));
-  audit.client("a", frame({ kind: "hello", value: {} }, true));
-  audit.server("a", frame({ kind: "welcome", value: {} }));
+  audit.client(
+    "a",
+    frame(
+      { kind: "hello", value: { sessionId: identity(900), schemaSupport: { maxVersion: 1 } } },
+      true,
+    ),
+  );
+  audit.server("a", frame({ kind: "welcome", value: { sessionId: identity(900), databases: [] } }));
   return audit;
 }
 function batch(size: number, start = 1): unknown {
@@ -84,6 +90,22 @@ test("two legal encoded batches containing 33 unanswered items fail the deciding
   assert.throws((): void => audit.requireWindow(), /window exceeds 32: 33/);
 });
 
+test("a same-session Hello/Welcome replay retains every pending slot", (): void => {
+  const audit = opened();
+  audit.server("a", frame(batch(1)));
+  audit.client(
+    "a",
+    frame(
+      { kind: "hello", value: { sessionId: identity(900), schemaSupport: { maxVersion: 1 } } },
+      true,
+    ),
+  );
+  audit.server("a", frame({ kind: "welcome", value: { sessionId: identity(900), databases: [] } }));
+  audit.server("a", frame(batch(1, 2)));
+  audit.requireWindow();
+  assert.equal(audit.snapshot().window.connections[0]?.current, 2);
+});
+
 test("a partial fragmented batch cannot qualify while live or after disconnect", (): void => {
   const audit = opened();
   const bytes = Buffer.from(encode(batch(32)));
@@ -132,8 +154,17 @@ test("the standalone reader consumes its actual private JSONL byte format and ne
     { kind: "opened", connection: "a" },
     recordBytes("client", Buffer.from("GET /v1/session HTTP/1.1\r\nHost: fixture\r\n\r\n")),
     recordBytes("server", Buffer.from("HTTP/1.1 101 Switching Protocols\r\n\r\n")),
-    recordBytes("client", frame({ kind: "hello", value: {} }, true)),
-    recordBytes("server", frame({ kind: "welcome", value: {} })),
+    recordBytes(
+      "client",
+      frame(
+        { kind: "hello", value: { sessionId: identity(900), schemaSupport: { maxVersion: 1 } } },
+        true,
+      ),
+    ),
+    recordBytes(
+      "server",
+      frame({ kind: "welcome", value: { sessionId: identity(900), databases: [] } }),
+    ),
     recordBytes("server", frame(batch(1))),
     { kind: "ended", connection: "a" },
   ];

@@ -5,7 +5,7 @@ import { decode, encode } from "../../../exact-json.ts";
 import { WindowByteAudit, type WindowByteSnapshot } from "./window-byte-audit.ts";
 
 const connection = z.string().min(1).max(256);
-const recordSchema = z.discriminatedUnion("kind", [
+export const windowTraceRecordSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("opened"), connection }).strict(),
   z.object({ kind: z.literal("ended"), connection }).strict(),
   z
@@ -20,13 +20,19 @@ const recordSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("client"), connection, bytes: z.string().min(1) }).strict(),
 ]);
 const traceBound = 32 * 1024 * 1024;
+export type WindowTraceRecord = z.infer<typeof windowTraceRecordSchema>;
+
+export function decodeWindowTrace(contents: string): readonly WindowTraceRecord[] {
+  if (Buffer.byteLength(contents) > traceBound) throw new Error("window trace exceeds 32 MiB");
+  return contents
+    .split("\n")
+    .filter((line): boolean => line.trim() !== "")
+    .map((line): WindowTraceRecord => windowTraceRecordSchema.parse(decode(line)));
+}
 
 export function replayWindowBytes(contents: string): WindowByteSnapshot {
-  if (Buffer.byteLength(contents) > traceBound) throw new Error("window trace exceeds 32 MiB");
   const audit = new WindowByteAudit();
-  for (const line of contents.split("\n")) {
-    if (line.trim() === "") continue;
-    const record = recordSchema.parse(decode(line));
+  for (const record of decodeWindowTrace(contents)) {
     switch (record.kind) {
       case "opened":
         audit.opened(record.connection);

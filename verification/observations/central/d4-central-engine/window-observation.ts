@@ -24,7 +24,7 @@ interface WindowRequest {
 }
 interface ConnectionWindow {
   active: boolean;
-  welcomed: boolean;
+  welcomedSession: string | undefined;
   peak: number;
   sent: number;
   readonly requests: Map<string, WindowRequest>;
@@ -56,7 +56,7 @@ export class SocketWindowObservation {
       this.reject("physical connection identity missing or reused");
     this.connections.set(connection, {
       active: true,
-      welcomed: false,
+      welcomedSession: undefined,
       peak: 0,
       sent: 0,
       requests: new Map(),
@@ -90,8 +90,10 @@ export class SocketWindowObservation {
       if (!window.active) throw new Error("frame after physical connection ended");
       const frame = taggedValue.parse(raw);
       if (direction === "server" && frame.kind === "welcome") {
-        if (window.welcomed) throw new Error("duplicate Welcome on physical connection");
-        window.welcomed = true;
+        const session = z.object({ sessionId: z.uuidv7() }).parse(frame.value).sessionId;
+        if (window.welcomedSession !== undefined && window.welcomedSession !== session)
+          throw new Error("Welcome changed session on physical connection");
+        window.welcomedSession = session;
         return;
       }
       if (direction === "server" && frame.kind === "closed") {
@@ -104,7 +106,8 @@ export class SocketWindowObservation {
         (direction === "server" && ["answer", "answerBatch"].includes(frame.kind))
       )
         return;
-      if (!window.welcomed) throw new Error("owed wire observation before Welcome");
+      if (window.welcomedSession === undefined)
+        throw new Error("owed wire observation before Welcome");
       if (frame.kind === "request" || frame.kind === "answer") {
         const item = frameValue.parse(frame.value);
         if (direction === "server" && frame.kind === "request")
@@ -202,7 +205,7 @@ export class SocketWindowObservation {
     const connections = [...this.connections].map(([connection, window]) => ({
       connection,
       active: window.active,
-      welcomed: window.welcomed,
+      welcomed: window.welcomedSession !== undefined,
       current: window.requests.size,
       peak: window.peak,
       sent: window.sent,
