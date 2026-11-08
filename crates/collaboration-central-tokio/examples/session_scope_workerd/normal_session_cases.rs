@@ -24,7 +24,7 @@ pub(super) async fn hold_schema(session: &NormalSession, base: &str) -> Conforma
     session
         .control(
             base,
-            json!({"kind":"holdNextDispatch","value":{"key":{"destination":{"kind":"fleet"},"call":"any"}}}),
+            json!({"kind":"holdNextDispatch","value":{"key":{"destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"call":"any"}}}),
         )
         .await?;
     Ok(())
@@ -33,14 +33,14 @@ pub(super) async fn hold_schema(session: &NormalSession, base: &str) -> Conforma
 pub(super) async fn held_schema(session: &NormalSession, base: &str) -> ConformanceResult<Value> {
     session.pin(base, BASE_TIME).await?;
     let observed = session
-        .control(base, json!({"kind":"awaitHeldDispatch","value":{"key":{"destination":{"kind":"fleet"},"call":"any"}}}))
+        .control(base, json!({"kind":"awaitHeldDispatch","value":{"key":{"destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"call":"any"}}}))
         .await?;
     let observed: collaboration_central_conformance::RuntimeFaultObservation =
         serde_json::from_value(observed)?;
     let collaboration_central_conformance::DispatchFaultObservation::Held {
         request: bytes, ..
     } = observed.dispatch(&DispatchKey::any(
-        collaboration_central_core::ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
     ))
     else {
         return Err("schema dispatch bytes missing for the armed key".into());
@@ -66,7 +66,7 @@ async fn publication(base: &str) -> ConformanceResult<()> {
         failed.fault(base, json!({"kind":"failRegistrationPublication","value":{"connection":failed.connection}})).await?;
         failed.hello().await?;
         held_schema(&failed, base).await?;
-        failed.control(base, json!({"kind":"resumeDispatch","value":{"key":{"destination":{"kind":"fleet"},"call":"any"}}})).await?;
+        failed.control(base, json!({"kind":"resumeDispatch","value":{"key":{"destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"call":"any"}}})).await?;
         physical_close(&mut failed.socket).await?;
         let fault = failed.fault(base, json!({"kind":"observe"})).await?;
         if fault.get("publication") != Some(&json!({"kind":"triggered","value":{"connection":failed.connection}})) {
@@ -114,7 +114,7 @@ async fn rollback(base: &str, fault: &str) -> ConformanceResult<()> {
         session.hello().await?;
         let held = held_schema(&session, base).await?;
         let operation = held.pointer("/identity/operation").cloned().ok_or("schema CallId operation missing")?;
-        session.control(base, json!({"kind":"resumeDispatch","value":{"key":{"destination":{"kind":"fleet"},"call":"any"}}})).await?;
+        session.control(base, json!({"kind":"resumeDispatch","value":{"key":{"destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"call":"any"}}})).await?;
         let observed = tokio::time::timeout(Duration::from_secs(10), async {
             loop {
                 let observed = session.fault(base, json!({"kind":"observe"})).await?;

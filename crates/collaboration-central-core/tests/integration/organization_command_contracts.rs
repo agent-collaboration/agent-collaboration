@@ -2,10 +2,10 @@
 #[cfg(test)]
 use crate::contract_artifacts;
 use collaboration_central_core::identity_contract::{
-    AllowMachine, AllowSignIn, AllowanceState, CommandRefusal, CommandStatus, CreateOrganization,
-    CreateWorkspace, IdentityLookup, MachineAllowance, MachineLookup, OrganizationCommandResult,
-    RemoveSession, RemoveSignIn, RevokeMachineEnrollment, SetOrganizationOwner, SetTokenLifetime,
-    TokenLifetimeSeconds, WithdrawMachineAllowance, WorkspaceLookup,
+    AllowMachine, AllowanceState, CommandRefusal, CommandStatus, CreateWorkspace, IdentityLookup,
+    MachineAllowance, MachineLookup, OrganizationCommandResult, RemoveSession,
+    RevokeMachineEnrollment, SetTokenLifetime, TokenLifetimeSeconds, WithdrawMachineAllowance,
+    WorkspaceLookup,
 };
 use serde_json::json;
 
@@ -55,55 +55,11 @@ fn command_status_wire_contract() {
 }
 
 #[test]
-fn create_organization_wire_contract() {
-    contract_artifacts::assert_contract::<CreateOrganization>(
-        "CreateOrganization",
-        vec![
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","ownerVerifiedEmail":"owner@example.invalid"}),
-        ],
-        false,
-    );
-}
-
-#[test]
-fn set_organization_owner_wire_contract() {
-    contract_artifacts::assert_contract::<SetOrganizationOwner>(
-        "SetOrganizationOwner",
-        vec![
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","ownerVerifiedEmail":"owner@example.invalid"}),
-        ],
-        false,
-    );
-}
-
-#[test]
 fn create_workspace_wire_contract() {
     contract_artifacts::assert_contract::<CreateWorkspace>(
         "CreateWorkspace",
         vec![
             json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","name":"Fixture workspace"}),
-        ],
-        false,
-    );
-}
-
-#[test]
-fn allow_sign_in_wire_contract() {
-    contract_artifacts::assert_contract::<AllowSignIn>(
-        "AllowSignIn",
-        vec![
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","verifiedEmail":"member@example.invalid"}),
-        ],
-        false,
-    );
-}
-
-#[test]
-fn remove_sign_in_wire_contract() {
-    contract_artifacts::assert_contract::<RemoveSignIn>(
-        "RemoveSignIn",
-        vec![
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","verifiedEmail":"member@example.invalid"}),
         ],
         false,
     );

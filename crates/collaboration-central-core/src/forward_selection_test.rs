@@ -62,6 +62,9 @@ async fn run(revoked: bool, replay: bool) -> Result<(), TestError> {
     };
     let runtime = ObjectRuntime::<DeliveryKind, _, _> {
         work: ObjectWork::Fleet {
+            organization: "019f0000-0000-7000-8000-00000000ac01"
+                .to_owned()
+                .try_into()?,
             host: host.clone(),
             io: Arc::new(FixtureIo),
             engine: Arc::new(UnusedEngine),
@@ -90,12 +93,23 @@ async fn run(revoked: bool, replay: bool) -> Result<(), TestError> {
     };
     let invoke = || -> Result<ObjectCallEnvelope, TestError> {
         Ok(ObjectCallEnvelope {
-            source: ObjectAddress::Fleet,
+            organization: "019f0000-0000-7000-8000-00000000ac01"
+                .to_owned()
+                .try_into()?,
+            source: ObjectAddress::Fleet {
+                organization: "019f0000-0000-7000-8000-00000000ac01"
+                    .to_owned()
+                    .try_into()?,
+            },
             source_face: CallerKind::Session,
             authority: CallAuthority::Machine {
                 installation: SERVICE.to_owned().try_into()?,
             },
-            destination: ObjectAddress::Fleet,
+            destination: ObjectAddress::Fleet {
+                organization: "019f0000-0000-7000-8000-00000000ac01"
+                    .to_owned()
+                    .try_into()?,
+            },
             destination_face: CallerKind::Delivery,
             identity: durable_steps::CallId {
                 operation: OperationId::new(durable_steps::Uuid::now_v7())?,

@@ -48,6 +48,9 @@ enum CentralAction {
 pub(crate) struct ServeArguments {
     #[arg(long)]
     pub root: PathBuf,
+    /// Organization explicitly bound to legacy fleet.db and Access entrypoints.
+    #[arg(long)]
+    pub legacy_organization_id: String,
     #[arg(long, default_value = "127.0.0.1:19843")]
     pub listen: SocketAddr,
     /// Stable URL clients reach (required for a wildcard bind). Saved on first start.
@@ -78,3 +81,7 @@ pub(crate) struct MintArguments {
     #[arg(long, default_value_t = 365, value_parser = clap::value_parser!(u32).range(1..=3650))]
     pub machine_valid_for_days: u32,
 }
+
+#[cfg(test)]
+#[path = "arguments_test.rs"]
+mod tests;

@@ -9,25 +9,9 @@ use std::collections::BTreeMap;
 use std::{future::Future, sync::Arc};
 
 use crate::{
-    AccessJwk, AdmissionOrigin, CentralObservation, SerializedObjectCall, SignatureValidity,
+    AccessJwk, AdmissionOrigin, CentralObservation, KeyFetchFailure, RawJwks, SerializedObjectCall,
+    SignatureValidity, VerifyFailure,
 };
-
-pub struct RawJwks {
-    pub body: Vec<u8>,
-    pub cache_control: Option<String>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum KeyFetchFailure {
-    Unreachable,
-    BadResponse { status: u16 },
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum VerifyFailure {
-    UnsupportedKey,
-    Crypto,
-}
 
 #[derive(Debug)]
 pub enum CallOutcome<Reply> {

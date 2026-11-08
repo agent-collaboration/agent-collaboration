@@ -183,7 +183,7 @@ impl Fixture {
             ))
             .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
             .json(&collaboration_central_conformance::RuntimeControlRequest {
-                address: collaboration_central_core::ObjectAddress::Fleet,
+                address: collaboration_central_conformance::legacy_fleet_address(),
                 command,
             })
             .send()

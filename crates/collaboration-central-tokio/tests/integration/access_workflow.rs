@@ -164,6 +164,7 @@ async fn key_expiry_honors_max_age_with_the_default_and_one_hour_cap() -> TestRe
             platform.clone(),
             policy(),
             Arc::new(AccessKeyCache::default()),
+            collaboration_central_conformance::legacy_organization(),
         )?;
         let token = assertion(FIRST_HEADER, MACHINE_CLAIMS);
 
@@ -232,6 +233,7 @@ async fn zero_max_age_does_not_reuse_keys_at_the_same_clock_value() -> TestResul
         platform.clone(),
         policy(),
         Arc::new(AccessKeyCache::default()),
+        collaboration_central_conformance::legacy_organization(),
     )?;
     let token = assertion(FIRST_HEADER, MACHINE_CLAIMS);
     application
@@ -258,6 +260,7 @@ async fn an_unknown_key_refreshes_before_verifying_the_rotated_assertion() -> Te
         platform.clone(),
         policy(),
         Arc::new(AccessKeyCache::default()),
+        collaboration_central_conformance::legacy_organization(),
     )?;
     application
         .verify_access(
@@ -316,6 +319,7 @@ async fn missing_malformed_and_expired_assertions_are_refused_without_capabiliti
             platform.clone(),
             policy(),
             Arc::new(AccessKeyCache::default()),
+            collaboration_central_conformance::legacy_organization(),
         )?;
         assert_eq!(
             application.verify_access(token, "/v1/session").await,
@@ -357,6 +361,7 @@ async fn bad_signature_and_wrong_owner_never_release_an_authorized_caller() -> T
         platform.clone(),
         policy(),
         Arc::new(AccessKeyCache::default()),
+        collaboration_central_conformance::legacy_organization(),
     )?;
     platform.0.signature_valid.store(false, Ordering::SeqCst);
     assert_eq!(
@@ -375,6 +380,7 @@ async fn bad_signature_and_wrong_owner_never_release_an_authorized_caller() -> T
         platform.clone(),
         other_owner,
         Arc::new(AccessKeyCache::default()),
+        collaboration_central_conformance::legacy_organization(),
     )?;
     platform
         .0
@@ -441,6 +447,7 @@ async fn fetch_parse_and_key_selection_failures_refuse_before_crypto() -> TestRe
             platform.clone(),
             policy(),
             Arc::new(AccessKeyCache::default()),
+            collaboration_central_conformance::legacy_organization(),
         )?;
         assert_eq!(
             application

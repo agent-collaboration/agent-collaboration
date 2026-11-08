@@ -106,7 +106,7 @@ async fn prepare_notice_loss(
     let at = RegistryTime(chrono::Utc::now() - chrono::TimeDelta::seconds(1));
     control(
         base,
-        ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
         RuntimeControl::SetTime { now: at },
     )
     .await?;
@@ -160,13 +160,13 @@ async fn prepare_notice_loss(
         let (initial_feed, head) = read_complete_fleet_feed(&mut holder.socket).await?;
         assert_eq!(head, 3);
         assert_eq!(initial_feed.len(), 3);
-        let destination = ObjectAddress::Fleet;
+        let destination = collaboration_central_conformance::legacy_fleet_address();
         // Each released call arms the next hold atomically. A first receiver
         // call may only admit its async append; keep advancing until a real
         // successful reply is lost, then retain the next hold until SIGKILL.
-        control(base, ObjectAddress::Fleet, RuntimeControl::HoldNextDispatch { key: notice_key() }).await?;
+        control(base, collaboration_central_conformance::legacy_fleet_address(), RuntimeControl::HoldNextDispatch { key: notice_key() }).await?;
         if matches!(loss,NoticeLoss::Acknowledgement) {
-            control(base,ObjectAddress::Fleet,RuntimeControl::DropNextSelectedObjectReply {
+            control(base,collaboration_central_conformance::legacy_fleet_address(),RuntimeControl::DropNextSelectedObjectReply {
                 destination: destination.clone(),
                 call: collaboration_central_conformance::DispatchCallSelector::FleetMachineNotice,
             }).await?;
@@ -186,7 +186,7 @@ async fn prepare_notice_loss(
         let observed = tokio::time::timeout(Duration::from_secs(8), async {
             let recorded: ConformanceResult<Vec<u8>> = match loss {
                 NoticeLoss::Dispatch => {
-                    let observed = control(base, ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch { key: notice_key() }).await?;
+                    let observed = control(base, collaboration_central_conformance::legacy_fleet_address(), RuntimeControl::AwaitHeldDispatch { key: notice_key() }).await?;
                     match observed.dispatch(&notice_key()) {
                         DispatchFaultObservation::Held { destination: actual, request } if actual == destination => Ok(request),
                         other => Err(format!("actual notice dispatch did not reach its barrier: {other:?}").into()),
@@ -194,7 +194,7 @@ async fn prepare_notice_loss(
                 }
                 NoticeLoss::Acknowledgement => {
                     loop {
-                        let observed=control(base,ObjectAddress::Fleet,RuntimeControl::AwaitHeldDispatch { key: notice_key() }).await?;
+                        let observed=control(base,collaboration_central_conformance::legacy_fleet_address(),RuntimeControl::AwaitHeldDispatch { key: notice_key() }).await?;
                         let DispatchFaultObservation::Held {destination:actual,request:held} = observed.dispatch(&notice_key()) else {
                             return Err("notice ACK-loss handoff lost its real next-dispatch hold".into());
                         };
@@ -307,7 +307,7 @@ async fn verify_recovered_notices(
         assert_eq!(read_complete_fleet_feed(&mut socket).await?, (prepared.feed.clone(), 6));
         // Preserve the old later-time no-repeat checkpoint through the current
         // native clock/wake capability, after the journal debt is terminal.
-        control(base, ObjectAddress::Fleet, RuntimeControl::SetTime {
+        control(base, collaboration_central_conformance::legacy_fleet_address(), RuntimeControl::SetTime {
             now: RegistryTime(chrono::Utc::now() + chrono::TimeDelta::seconds(60)),
         }).await?;
         assert_eq!(read_machine_notices(&mut socket, None).await?, expected_history);
@@ -534,7 +534,10 @@ async fn observe_failed_preparation(base: &str, root: &std::path::Path) -> Confo
         query::query,
         row::Row,
     };
-    for (address, file) in [(ObjectAddress::Fleet, "fleet.db")] {
+    for (address, file) in [(
+        collaboration_central_conformance::legacy_fleet_address(),
+        "fleet.db",
+    )] {
         let observed = control(base, address, RuntimeControl::Observe).await?;
         eprintln!(
             "FLEET_NOTICE_RESTART_DIAGNOSTIC file={file} clock={:?} wall_ms={}",

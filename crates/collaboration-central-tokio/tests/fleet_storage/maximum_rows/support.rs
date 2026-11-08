@@ -157,8 +157,8 @@ pub(super) async fn maximum_directory_summary(
     // The repeated real call decodes the stored value through its own owner.
     for _ in 0..2 {
         fixture.runtime.on_call(serde_json::to_vec(&json!({
-            "source":{"kind":"copy","value":project},"sourceFace":"copy","authority":{"kind":"object"},
-            "destination":{"kind":"fleet"},"destinationFace":"fleet",
+            "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"copy","value":project},"sourceFace":"copy","authority":{"kind":"object"},
+            "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"fleet",
             "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"maximum_directory_summary"},
             "kind":"central.directory-summary","target":null,"request":summary
         }))?).await.map_err(|error|format!("maximum directory summary did not answer: {error:?}"))?;
@@ -197,8 +197,8 @@ pub(super) fn envelope(
 }
 async fn read(fixture: &Fixture, request: Value) -> TestResult<BoardReadPage> {
     let bytes = fixture.runtime.on_call(serde_json::to_vec(&json!({
-        "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":SERVICE}},
-        "destination":{"kind":"fleet"},"destinationFace":"fleet",
+        "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":SERVICE}},
+        "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"fleet",
         "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"maximum_row_read"},
         "kind":"central.fleet-read","target":null,"request":request
     }))?).await.map_err(|error|format!("canonical maximum-row read failed: {error:?}"))?;

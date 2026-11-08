@@ -11,7 +11,7 @@ pub(crate) const CLOCK_KEY: &str = "_cf_composed_clock";
 pub(crate) const PROJECT_FAULT_KEY: &str = "_cf_composed_project_unavailable";
 
 pub(crate) async fn fetch(mut request: Request, env: Env) -> Result<Response> {
-    let labels = access_verification::InvocationLabels::for_request(&request)?;
+    let labels = access_verification::InvocationLabels::for_request(&request, &env)?;
     let assertion = request.headers().get("Cf-Access-Jwt-Assertion")?;
     match access_verification::verify(
         &env,

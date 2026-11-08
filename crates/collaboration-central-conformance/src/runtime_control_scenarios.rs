@@ -34,9 +34,12 @@ pub async fn run_runtime_control_conformance(client: &ConformanceClient) -> Conf
     let copy = ObjectAddress::Copy(fleet_sync_protocol::DatabaseId::try_from(
         fixture.database.to_string(),
     )?);
-    let session = ObjectAddress::Fleet;
+    let session = crate::legacy_fleet_address();
     let copy_key = DispatchKey::new(copy.clone(), DispatchCallSelector::CopyWrite);
-    let route_key = DispatchKey::new(ObjectAddress::Fleet, DispatchCallSelector::ForwardRoute);
+    let route_key = DispatchKey::new(
+        crate::legacy_fleet_address(),
+        DispatchCallSelector::ForwardRoute,
+    );
     let proof = async {
         refused_controls(client, session.clone()).await?;
         control(client, copy.clone(), RuntimeControl::CopyFull { after_writes: NonZeroU64::new(2).ok_or("positive write threshold")? }).await?;
@@ -112,7 +115,7 @@ pub async fn run_runtime_control_conformance(client: &ConformanceClient) -> Conf
         let DispatchFaultObservation::Held {destination, request} = control(client, session.clone(), RuntimeControl::AwaitHeldDispatch { key: route_key.clone() }).await?.dispatch(&route_key)
             else {return Err("the local Session-to-Fleet call bypassed its dispatch hold".into());};
         let held: serde_json::Value = serde_json::from_slice(&request)?;
-        if destination != ObjectAddress::Fleet || held.get("kind") != Some(&serde_json::json!("central.forward-route"))
+        if destination != crate::legacy_fleet_address() || held.get("kind") != Some(&serde_json::json!("central.forward-route"))
             || held.get("sourceFace") != Some(&serde_json::json!("session"))
             || held.pointer("/request/session/peer") != Some(&serde_json::json!(fixture.peer))
             || held.pointer("/request/project") != Some(&serde_json::json!(project)) {
@@ -302,7 +305,7 @@ async fn pin_fleet_clock(
     );
     control(
         client,
-        ObjectAddress::Fleet,
+        crate::legacy_fleet_address(),
         RuntimeControl::SetTime { now },
     )
     .await?;

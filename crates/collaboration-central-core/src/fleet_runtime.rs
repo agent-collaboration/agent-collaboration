@@ -70,6 +70,7 @@ where
     pub fn fleet(
         host: Arc<Host>,
         io: Io,
+        organization: fleet_identity_protocol::OrganizationId,
         config: fleet_sync_lease::RegistryConfig,
         delivery: crate::DeliveryConfig,
         holder_answer_timeout: std::time::Duration,
@@ -86,6 +87,7 @@ where
         let shared_host = Arc::new(
             CoreHost::registry(
                 io.clone(),
+                organization.clone(),
                 config.authoritative_receiver,
                 crate::registry_peer_lookup::bind(Arc::downgrade(&host)),
                 Some(crate::registry_lease_store::bind(Arc::downgrade(&host))),
@@ -153,15 +155,18 @@ where
         let weak_engine = Arc::downgrade(&engine);
         let local_io = io.clone();
         let local_replies = replies.clone();
+        let local_organization = organization.clone();
         shared_host.install_local_calls(Arc::new(move |bytes| {
             let host = weak_host.clone();
             let shared = weak_shared.clone();
             let engine = weak_engine.clone();
             let io = local_io.clone();
             let replies = local_replies.clone();
+            let organization = local_organization.clone();
             Box::pin(async move {
                 let runtime = ObjectRuntime::<FleetKind, Host, Io> {
                     work: ObjectWork::Fleet {
+                        organization,
                         host: host.upgrade().ok_or(CallFailure::AnswerLost)?,
                         shared_host: shared.upgrade().ok_or(CallFailure::AnswerLost)?,
                         engine: engine.upgrade().ok_or(CallFailure::AnswerLost)?,
@@ -178,6 +183,7 @@ where
         }))?;
         Ok(Self {
             work: ObjectWork::Fleet {
+                organization,
                 host,
                 io,
                 engine,
@@ -411,7 +417,14 @@ where
     }
 
     async fn dispatch_call(&self, bytes: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
-        let call = ObjectCallEnvelope::decode(&bytes, ObjectAddress::Fleet, CallerKind::Fleet)?;
+        let call = ObjectCallEnvelope::decode(
+            &bytes,
+            ObjectAddress::Fleet {
+                organization: self.fleet_address()?.organization,
+            },
+            CallerKind::Fleet,
+            &self.fleet_address()?.organization,
+        )?;
         if call.kind == crate::mail_submit_calls::FleetMailSubmit::KIND {
             return self.mail_submit_call(call).await;
         }
@@ -467,7 +480,7 @@ where
         }
         if !matches!(call.authority, CallAuthority::Machine { .. })
             || call.source_face != CallerKind::Session
-            || !matches!(call.source, ObjectAddress::Fleet)
+            || !call.has_fleet_source()
             || call.kind != FleetRequestEffects::KIND
         {
             return Err(refused());

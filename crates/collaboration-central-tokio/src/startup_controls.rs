@@ -8,7 +8,10 @@ use std::{collections::BTreeMap, sync::Arc};
 pub(crate) struct PreparedRuntimeControls(BTreeMap<String, Arc<RuntimeFaults>>);
 
 impl PreparedRuntimeControls {
-    pub(crate) async fn prepare(requests: Vec<RuntimeControlRequest>) -> Result<Self, StoreError> {
+    pub(crate) async fn prepare(
+        requests: Vec<RuntimeControlRequest>,
+        locations: &collaboration_central_core::FleetLocationPolicy,
+    ) -> Result<Self, StoreError> {
         // Reject the whole profile before creating stores or arming any fault.
         for request in &requests {
             request.validate().map_err(StoreError::backend)?;
@@ -36,7 +39,7 @@ impl PreparedRuntimeControls {
         }
         let mut prepared = Self::default();
         for request in requests {
-            let key = address_key(&request.address)?;
+            let key = address_key(&request.address, locations)?;
             let faults = prepared.0.entry(key).or_default();
             faults
                 .control(request.command)

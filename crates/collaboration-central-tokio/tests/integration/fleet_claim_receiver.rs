@@ -50,8 +50,8 @@ pub(super) fn claim_gate_call(
         )
     };
     Ok(serde_json::to_vec(&json!({
-        "source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},
-        "destination":{"kind":"fleet"},"destinationFace":"fleet",
+        "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"registry","authority":{"kind":"object"},
+        "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"fleet",
         "identity":{"operation":operation,"step":"claim_gate"},"kind":kind,"target":null,"request":request
     }))?)
 }
@@ -211,8 +211,8 @@ async fn untrusted_source_and_invalid_snapshot_digest_create_no_claim_or_receipt
     let fixture = prepare_fleet(root.path(), false).await?;
     let before = fixture.lease_and_notices().await?;
     let valid = json!({
-        "source":{"kind":"fleet"},"sourceFace":"registry","authority":{"kind":"object"},
-        "destination":{"kind":"fleet"},"destinationFace":"fleet",
+        "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"registry","authority":{"kind":"object"},
+        "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"fleet",
         "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"negative_claim"},
         "kind":"central.claim-granted","target":null,"request":{"attempt":durable_steps::Uuid::now_v7(),"projection":projection(&before.1)?}
     });

@@ -11,6 +11,7 @@ async fn owner_observes_one_committed_item_and_refusal_preserves_the_count() -> 
     let jwks = JwksFixtureServer::start().await?;
     let root = tempfile::tempdir()?;
     let server = TokioServer::start(TokioSettings {
+        legacy_organization: collaboration_central_conformance::legacy_organization(),
         root: root.path().into(),
         access_policy: fixture_policy(),
         jwks_url: jwks.url.clone(),

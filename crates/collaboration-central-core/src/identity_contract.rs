@@ -3,11 +3,13 @@ mod enrollment_records;
 mod identity_decisions;
 mod identity_lookups;
 mod organization_commands;
+mod organization_provisioning;
 
 pub use enrollment_records::*;
 pub use identity_decisions::*;
 pub use identity_lookups::*;
 pub use organization_commands::*;
+pub use organization_provisioning::*;
 
 use message_board::{IdentityValidationError, RecordId};
 use schemars::JsonSchema;

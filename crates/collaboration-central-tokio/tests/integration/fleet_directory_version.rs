@@ -44,8 +44,8 @@ async fn directory_keeps_epoch_first_registry_version_across_late_repeated_and_r
     // A supplied Copy summary is this Directory receiver component's input.
     // Its epoch9 deliberately disagrees with the actual project fence and both lease epochs.
     fixture.runtime.on_call(serde_json::to_vec(&json!({
-        "source":{"kind":"copy","value":PROJECT},"sourceFace":"copy","authority":{"kind":"object"},
-        "destination":{"kind":"fleet"},"destinationFace":"fleet",
+        "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"copy","value":PROJECT},"sourceFace":"copy","authority":{"kind":"object"},
+        "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"fleet",
         "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"copy_directory_version"},
         "kind":"central.directory-summary","target":null,"request":{
             "database":PROJECT,"position":{"epoch":9,"sequence":50},"ackedAt":NOW-1,

@@ -73,12 +73,17 @@ impl Fixture {
             .object(
                 ObjectKey::new("fleet")?,
                 Default::default(),
-                Arc::new(CoreHost::conformance_registry(Io, receiver)),
+                Arc::new(CoreHost::conformance_registry(
+                    Io,
+                    collaboration_central_conformance::legacy_organization(),
+                    receiver,
+                )),
             )
             .await?;
         let runtime = ObjectRuntime::fleet(
             Arc::new(TokioStorageHost::new(object.clone())),
             Io,
+            collaboration_central_conformance::legacy_organization(),
             RegistryConfig {
                 lease: LeasePolicy {
                     lease_duration: Duration::from_secs(60),
@@ -108,9 +113,9 @@ impl Fixture {
         control: collaboration_central_core::RevocationControl,
     ) -> TestResult<collaboration_central_core::RevocationObservation> {
         let call = serde_json::json!({
-            "source":{"kind":"fleet"},"sourceFace":"edge",
+            "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"edge",
             "authority":{"kind":"owner","value":"owner@example.test"},
-            "destination":{"kind":"fleet"},"destinationFace":"registry",
+            "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"registry",
             "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"readmission_window"},
             "kind":"central.conformance-revocation","target":null,
             "request":collaboration_central_core::RevocationControlInput {service,control},
@@ -469,6 +474,7 @@ async fn verified_edge_authority_reaches_the_shared_registry_and_forged_sources_
         platform.clone(),
         fixture_policy(),
         Arc::new(AccessKeyCache::default()),
+        collaboration_central_conformance::legacy_organization(),
     )?;
     let request = request("550e8400-e29b-41d4-a716-446655440005", "unused", "hash")?;
     let mut request = request;
@@ -476,7 +482,9 @@ async fn verified_edge_authority_reaches_the_shared_registry_and_forged_sources_
     let dispatch = |call| -> TestResult<Dispatch<RegistryKind>> {
         Ok(Dispatch {
             call_id: ObjectCallId::new(durable_steps::Uuid::now_v7().to_string())?,
-            to: (),
+            to: collaboration_central_core::FleetAddress::new(
+                collaboration_central_conformance::legacy_organization(),
+            ),
             call,
         })
     };

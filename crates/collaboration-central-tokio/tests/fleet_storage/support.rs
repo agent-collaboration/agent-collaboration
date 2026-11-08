@@ -93,8 +93,8 @@ impl Fixture {
         origin: message_board::ActorOrigin,
     ) -> TestResult<fleet_admission::FleetRequestResult> {
         let bytes = self.runtime.on_call(serde_json::to_vec(&json!({
-            "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":origin.installation}},
-            "destination":{"kind":"fleet"},"destinationFace":"fleet",
+            "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":origin.installation}},
+            "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"fleet",
             "identity":{"operation":operation,"step":step},
             "kind":"central.fleet-metadata","target":null,"request":{
                 "request":request,"origin":origin
@@ -121,6 +121,7 @@ impl Fixture {
         let runtime = ObjectRuntime::fleet(
             Arc::new(TokioStorageHost::new(object.clone())),
             io,
+            collaboration_central_conformance::legacy_organization(),
             fleet_sync_lease::RegistryConfig {
                 authoritative_receiver: receiver,
                 lease: fleet_sync_lease::LeasePolicy {
@@ -202,8 +203,8 @@ pub fn import_bytes(offered: &FleetImportBundle) -> TestResult<Vec<u8>> {
         email: "fixture@example.test".into(),
     })?;
     Ok(serde_json::to_vec(&json!({
-        "source":{"kind":"fleet"},"sourceFace":"edge","authority":{"kind":"owner","value":owner},
-        "destination":{"kind":"fleet"},"destinationFace":"fleet",
+        "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"edge","authority":{"kind":"owner","value":owner},
+        "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"fleet",
         "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"import_fleet"},
         "kind":"central.object","target":null,"request":{
             "kind":"fleet","value":{"kind":"import","value":{"bundle":offered}}

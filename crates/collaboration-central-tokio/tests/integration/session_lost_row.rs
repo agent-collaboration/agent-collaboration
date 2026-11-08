@@ -10,7 +10,7 @@ use collaboration_central_conformance::{
     RuntimeControl, RuntimeControlRequest, RuntimeFaultObservation, enroll_admitted_peer,
     fixture_policy, machine_assertion, owner_assertion,
 };
-use collaboration_central_core::{ObjectAddress, RegistryTime};
+use collaboration_central_core::RegistryTime;
 use collaboration_central_tokio::{TokioServer, TokioSettings};
 use durable_steps::Uuid;
 use fleet_admission::FleetOperation;
@@ -53,7 +53,7 @@ async fn control(
         .post(format!("{base}/admin/v1/conformance/runtime"))
         .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
         .json(&RuntimeControlRequest {
-            address: ObjectAddress::Fleet,
+            address: collaboration_central_conformance::legacy_fleet_address(),
             command,
         })
         .send()
@@ -241,6 +241,7 @@ async fn lost_nonempty_piece_is_read_without_new_hello_and_reconciles_across_two
     let root = tempfile::tempdir()?;
     let keys = JwksFixtureServer::start().await?;
     let server = TokioServer::start(TokioSettings {
+        legacy_organization: collaboration_central_conformance::legacy_organization(),
         root: root.path().into(),
         access_policy: fixture_policy(),
         jwks_url: keys.url.clone(),

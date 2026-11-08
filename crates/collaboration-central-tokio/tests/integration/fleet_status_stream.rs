@@ -89,6 +89,7 @@ impl Fixture {
         let runtime = ObjectRuntime::fleet(
             Arc::new(TokioStorageHost::new(object.clone())),
             io.clone(),
+            collaboration_central_conformance::legacy_organization(),
             fleet_sync_lease::RegistryConfig {
                 authoritative_receiver: receiver,
                 lease: fleet_sync_lease::LeasePolicy {

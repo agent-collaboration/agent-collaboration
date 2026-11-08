@@ -1,0 +1,10 @@
+[
+null,
+{"reason":{"kind":"notPermitted"},"result":"refused"},
+{"result":"admitted","role":"member"},
+{"result":"admitted","role":"owner"},
+{"result":"awaitingOwner"},
+{"result":"notAdmitted"},
+{"result":"provisioned","unexpectedField":true},
+{"result":"unrecognizedVariant"}
+]

@@ -54,6 +54,7 @@ async fn start_clocked(
 ) -> ConformanceResult<TokioServer> {
     Ok(TokioServer::start_with_controls(
         TokioSettings {
+            legacy_organization: collaboration_central_conformance::legacy_organization(),
             delivery: collaboration_central_tokio::DeliveryConfig {
                 relay_peer: "019f0000-0000-7000-8000-000000005240"
                     .to_owned()
@@ -67,7 +68,7 @@ async fn start_clocked(
             copy_ack_wait: Duration::from_secs(2),
         },
         vec![RuntimeControlRequest {
-            address: collaboration_central_core::ObjectAddress::Fleet,
+            address: collaboration_central_conformance::legacy_fleet_address(),
             command: RuntimeControl::SetTime {
                 now: collaboration_central_core::RegistryTime(
                     chrono::DateTime::from_timestamp_millis(now).ok_or("invalid injected clock")?,
@@ -185,7 +186,7 @@ async fn wake_released_retry(server: &TokioServer, root: &Path) -> ConformanceRe
                 reqwest::Client::new().post(format!("{}/admin/v1/conformance/runtime",server.base_url()))
                     .header("Cf-Access-Jwt-Assertion",collaboration_central_conformance::owner_assertion()?)
                     .timeout(Duration::from_secs(5))
-                    .json(&RuntimeControlRequest {address:collaboration_central_core::ObjectAddress::Fleet,command:RuntimeControl::SetTime {now:collaboration_central_core::RegistryTime(chrono::DateTime::from_timestamp_millis(next).ok_or("retry clock outside UTC range")?)}})
+                    .json(&RuntimeControlRequest {address:collaboration_central_conformance::legacy_fleet_address(),command:RuntimeControl::SetTime {now:collaboration_central_core::RegistryTime(chrono::DateTime::from_timestamp_millis(next).ok_or("retry clock outside UTC range")?)}})
                     .send().await?.error_for_status()?;
                 return Ok(());
             }

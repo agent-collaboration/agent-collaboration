@@ -180,7 +180,7 @@ impl NormalSession {
             base,
             "runtime",
             json!({
-                "address":{"kind":"fleet"},"command":command
+                "address":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"command":command
             }),
         )
         .await

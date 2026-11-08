@@ -1,6 +1,6 @@
 //! Registry reads the first creation decision; admission stays in Registry.
 use crate::{
-    CallerKind, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, FleetKind, ObjectHost, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     object_call_envelope::ObjectCallEnvelope,
     object_runtime::ObjectWork,
@@ -42,7 +42,7 @@ where
         &self,
         call: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
-        if call.source != ObjectAddress::Fleet
+        if !call.has_fleet_source()
             || call.source_face != CallerKind::Registry
             || !matches!(call.authority, CallAuthority::Object)
         {

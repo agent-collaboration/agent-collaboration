@@ -2,7 +2,7 @@
 
 use crate::{
     AccessCaller, CallerContext, CallerKind, CentralApplication, CentralPlatform, EdgeKind,
-    FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo, StepConformance, StepControl,
+    FleetKind, ObjectHost, ObjectRuntime, PlatformIo, StepConformance, StepControl,
     StepControlReply,
     caller_context::CallAuthority,
     object_call_envelope::{ObjectCallEnvelope, encode_shared_call},
@@ -39,8 +39,11 @@ pub(crate) async fn control<Platform: CentralPlatform>(
         return StatusCode::UNAUTHORIZED.into_response();
     }
     let result = async {
-        let caller = CallerContext::<EdgeKind>::for_verified_edge(caller)
-            .map_err(|_| CallFailure::AnswerLost)?;
+        let caller = CallerContext::<EdgeKind>::for_verified_edge(
+            caller,
+            application.legacy_fleet_address().organization,
+        )
+        .map_err(|_| CallFailure::AnswerLost)?;
         let identity = durable_steps::CallId {
             operation: durable_steps::OperationId::new(application.platform.ids().new_id())
                 .map_err(|_| CallFailure::AnswerLost)?,
@@ -49,7 +52,7 @@ pub(crate) async fn control<Platform: CentralPlatform>(
         };
         let call = encode_shared_call::<EdgeKind, FleetKind, FleetReceiptProbe>(
             &caller,
-            (),
+            application.legacy_fleet_address(),
             FleetReceiptProbe,
             input,
             identity,
@@ -86,7 +89,7 @@ where
         &self,
         call: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
-        if call.source != ObjectAddress::Fleet
+        if !call.has_fleet_source()
             || call.source_face != CallerKind::Edge
             || !matches!(call.authority, CallAuthority::Owner(_))
         {

@@ -2,7 +2,7 @@ use super::*;
 use collaboration_central_conformance::{
     RuntimeControl, RuntimeControlRequest, RuntimeFaultObservation, owner_assertion,
 };
-use collaboration_central_core::{ObjectAddress, RegistryTime};
+use collaboration_central_core::RegistryTime;
 
 use super::forwarded_post_lifecycle_oracles::{
     self as lifecycle_oracle, POST_MARKER, answer, holder_frame, outcome, post,
@@ -22,7 +22,7 @@ async fn control(
         ))
         .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
         .json(&RuntimeControlRequest {
-            address: ObjectAddress::Fleet,
+            address: collaboration_central_conformance::legacy_fleet_address(),
             command,
         })
         .send()

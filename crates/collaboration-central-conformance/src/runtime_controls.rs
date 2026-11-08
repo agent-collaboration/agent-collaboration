@@ -34,8 +34,7 @@ impl RuntimeControlRequest {
                 call,
                 DispatchCallSelector::FleetMailSubmit
                     | DispatchCallSelector::FleetMailSubmitFor { .. }
-            ) && (!matches!(self.address, ObjectAddress::Fleet)
-                || !matches!(destination, ObjectAddress::Fleet))
+            ) && !matches!((&self.address, destination), (ObjectAddress::Fleet { organization: source }, ObjectAddress::Fleet { organization: target }) if source == target)
             {
                 return Err(RuntimeControlFailure::WrongObjectKind);
             }
@@ -49,7 +48,7 @@ impl RuntimeControlRequest {
             )
             | (
                 RuntimeControl::DropNextAnswer { .. } | RuntimeControl::AwaitDroppedAnswer { .. },
-                ObjectAddress::Fleet,
+                ObjectAddress::Fleet { .. },
             )
             | (
                 RuntimeControl::SetTime { .. }

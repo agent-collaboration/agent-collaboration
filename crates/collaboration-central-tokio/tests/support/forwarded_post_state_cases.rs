@@ -97,8 +97,10 @@ async fn routing_request(
     use collaboration_central_conformance::{
         DispatchCallSelector, DispatchFaultObservation, DispatchKey, RuntimeControl,
     };
-    use collaboration_central_core::ObjectAddress;
-    let key = DispatchKey::new(ObjectAddress::Fleet, DispatchCallSelector::ForwardRoute);
+    let key = DispatchKey::new(
+        collaboration_central_conformance::legacy_fleet_address(),
+        DispatchCallSelector::ForwardRoute,
+    );
     control(base, RuntimeControl::HoldNextDispatch { key: key.clone() }).await?;
     let proof: ConformanceResult<(FrameId, Value)> = async {
         let request = wire::post(sender, database).await?;
@@ -107,9 +109,9 @@ async fn routing_request(
         if !matches!(
             observed.dispatch(&key),
             DispatchFaultObservation::Held {
-                destination: ObjectAddress::Fleet,
+                destination,
                 ..
-            }
+            } if destination == collaboration_central_conformance::legacy_fleet_address()
         ) {
             return Err("request did not reach its original route barrier".into());
         }

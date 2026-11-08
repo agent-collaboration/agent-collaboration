@@ -33,7 +33,7 @@ pub(crate) async fn fleet<Platform: CentralPlatform>(
     match application
         .call_from_edge::<FleetKind>(
             caller,
-            (),
+            application.legacy_fleet_address(),
             FleetCall::Import {
                 bundle: Box::new(bundle),
             },
@@ -93,7 +93,7 @@ async fn project_request<Platform: CentralPlatform>(
     let loaded = invoke::<_, FleetKind, _>(
         application,
         caller.clone(),
-        (),
+        application.legacy_fleet_address(),
         AdminImportWorkflow,
         AdminImportCommand::Read { database, digest },
     )
@@ -109,7 +109,7 @@ async fn project_request<Platform: CentralPlatform>(
             match invoke::<_, FleetKind, _>(
                 application,
                 caller.clone(),
-                (),
+                application.legacy_fleet_address(),
                 AdminImportWorkflow,
                 AdminImportCommand::Reserve {
                     header: Box::new(header.clone()),
@@ -156,7 +156,7 @@ async fn project_request<Platform: CentralPlatform>(
     match invoke::<_, FleetKind, _>(
         application,
         caller.clone(),
-        (),
+        application.legacy_fleet_address(),
         FleetAdminCopySeed { database },
         AdminSeedRequest::ReconcilePublication(Box::new(record.clone())),
     )
@@ -173,7 +173,7 @@ async fn project_request<Platform: CentralPlatform>(
         record = match invoke::<_, FleetKind, _>(
             application,
             caller.clone(),
-            (),
+            application.legacy_fleet_address(),
             AdminImportWorkflow,
             AdminImportCommand::Reserve {
                 header: Box::new(header.clone()),
@@ -194,7 +194,7 @@ async fn project_request<Platform: CentralPlatform>(
             match invoke::<_, FleetKind, _>(
                 application,
                 caller,
-                (),
+                application.legacy_fleet_address(),
                 FleetAdminCopySeed { database },
                 AdminSeedRequest::Begin { import_id },
             )
@@ -225,7 +225,7 @@ async fn project_request<Platform: CentralPlatform>(
             match invoke::<_, FleetKind, _>(
                 application,
                 caller,
-                (),
+                application.legacy_fleet_address(),
                 FleetAdminCopySeed { database },
                 AdminSeedRequest::Page {
                     import_id,
@@ -250,7 +250,7 @@ async fn project_request<Platform: CentralPlatform>(
             match invoke::<_, FleetKind, _>(
                 application,
                 caller.clone(),
-                (),
+                application.legacy_fleet_address(),
                 FleetAdminCopySeed { database },
                 AdminSeedRequest::Complete(Box::new(record.clone())),
             )
@@ -278,7 +278,7 @@ async fn reservation<Platform: CentralPlatform>(
         match invoke::<_, RegistryKind, _>(
             application,
             caller,
-            (),
+            application.legacy_fleet_address(),
             AdminImportReservation,
             Import {
                 attempt,
@@ -317,7 +317,7 @@ async fn finish_import<Platform: CentralPlatform>(
     match invoke::<_, FleetKind, _>(
         application,
         caller,
-        (),
+        application.legacy_fleet_address(),
         AdminImportWorkflow,
         AdminImportCommand::Complete {
             database: record.header.database(),
@@ -371,7 +371,11 @@ where
     if !matches!(caller, AccessCaller::Owner { .. }) {
         return Err(refused());
     }
-    let caller = CallerContext::<EdgeKind>::for_verified_edge(caller).map_err(|_| refused())?;
+    let caller = CallerContext::<EdgeKind>::for_verified_edge(
+        caller,
+        application.legacy_fleet_address().organization,
+    )
+    .map_err(|_| refused())?;
     let identity = CallId {
         operation: OperationId::new(application.platform.ids().new_id()).map_err(|_| refused())?,
         step: StepName::new("admin_import").map_err(|_| refused())?,

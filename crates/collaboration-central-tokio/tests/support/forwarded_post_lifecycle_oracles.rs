@@ -8,7 +8,7 @@ use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::{
     ConformanceResult, RuntimeControl, RuntimeFaultObservation,
 };
-use collaboration_central_core::{ObjectAddress, RegistryTime};
+use collaboration_central_core::RegistryTime;
 use fleet_sync_protocol::{
     ClientAnswer, ClientFrame, DatabaseId, FrameId, OperationAnswer, ServerFrame, ServerRequest,
 };
@@ -89,12 +89,12 @@ where
         outstanding.push((post(sender, database).await?, holder_frame(holder).await?));
     }
     control(RuntimeControl::HoldNextDispatch {
-        key: DispatchKey::any(ObjectAddress::Fleet),
+        key: DispatchKey::any(collaboration_central_conformance::legacy_fleet_address()),
     })
     .await?;
     let sixteenth = post(sender, database).await?;
     control(RuntimeControl::AwaitHeldDispatch {
-        key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
+        key: DispatchKey::any(collaboration_central_conformance::legacy_fleet_address()),
     })
     .await?;
     let seventeenth = post(sender, database).await?;
@@ -102,7 +102,7 @@ where
     if observed.is_err() {
         // A wrong build must still release the exact barrier this oracle owns.
         let _ = control(RuntimeControl::ResumeDispatch {
-            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
+            key: DispatchKey::any(collaboration_central_conformance::legacy_fleet_address()),
         })
         .await;
     }
@@ -111,13 +111,13 @@ where
     })?;
     if refused != ForwardOutcome::Overloaded {
         let _ = control(RuntimeControl::ResumeDispatch {
-            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
+            key: DispatchKey::any(collaboration_central_conformance::legacy_fleet_address()),
         })
         .await;
         return Err("seventeenth forward lost its exact Overloaded outcome".into());
     }
     control(RuntimeControl::ResumeDispatch {
-        key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
+        key: DispatchKey::any(collaboration_central_conformance::legacy_fleet_address()),
     })
     .await?;
     let delivered = holder_frame(holder).await?;

@@ -18,7 +18,7 @@ async fn retirement_resumes_its_stored_step_after_the_server_process_dies() -> C
     let retirement_key = DispatchKey::any(ObjectAddress::Copy(database));
     control(
         &first.base,
-        ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
         RuntimeControl::HoldNextDispatch {
             key: retirement_key.clone(),
         },
@@ -33,7 +33,7 @@ async fn retirement_resumes_its_stored_step_after_the_server_process_dies() -> C
     let pending = tokio::spawn(async move { post(&base, &pending_route, &pending_request).await });
     let held = control(
         &first.base,
-        ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
         RuntimeControl::AwaitHeldDispatch {
             key: retirement_key.clone(),
         },

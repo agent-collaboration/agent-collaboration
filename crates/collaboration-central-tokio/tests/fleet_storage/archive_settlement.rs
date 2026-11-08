@@ -160,8 +160,8 @@ async fn final_report_and_archive_completion_roll_back_and_retry_together() -> T
 
 fn archive_report_call(project: &str) -> TestResult<Vec<u8>> {
     Ok(serde_json::to_vec(&json!({
-        "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":"550e8400-e29b-41d4-a716-4466554400a9"}},
-        "destination":{"kind":"fleet"},"destinationFace":"fleet",
+        "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":"550e8400-e29b-41d4-a716-4466554400a9"}},
+        "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"fleet",
         "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"archive_report"},
         "kind":"central.archive-report","target":null,"request":{
             "board":"019f0000-0000-7000-8000-000000000a82","project":project,

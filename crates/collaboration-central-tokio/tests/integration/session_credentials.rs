@@ -11,7 +11,7 @@ use collaboration_central_conformance::{
     ConformanceResult, RuntimeControl, RuntimeControlRequest, RuntimeFaultObservation,
     machine_assertion, owner_assertion,
 };
-use collaboration_central_core::{AccessRefusal, ObjectAddress, RegistryTime};
+use collaboration_central_core::{AccessRefusal, RegistryTime};
 use durable_steps::Uuid;
 use fleet_sync_protocol::*;
 use futures_util::{SinkExt, StreamExt};
@@ -186,7 +186,7 @@ async fn connection_control(
         .post(format!("{base}/admin/v1/conformance/runtime"))
         .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
         .json(&RuntimeControlRequest {
-            address: ObjectAddress::Fleet,
+            address: collaboration_central_conformance::legacy_fleet_address(),
             command,
         })
         .send()
@@ -208,22 +208,22 @@ async fn replace_registered_socket_before_revocation(
     connection_control(
         fixture.base(),
         RuntimeControl::HoldNextDispatch {
-            key: DispatchKey::any(ObjectAddress::Fleet),
+            key: DispatchKey::any(collaboration_central_conformance::legacy_fleet_address()),
         },
     )
     .await?;
     let proof=async {
         let frame=creation_scenarios::send(&mut fixture.old,OperationRequest::Lease(LeaseRequest::Renew(request.clone()))).await?;
-        let observation=connection_control(fixture.base(),RuntimeControl::AwaitHeldDispatch { key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet) }).await?;
-        let collaboration_central_conformance::DispatchFaultObservation::Held {destination,request:bytes}=observation.dispatch(&DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet)) else {return Err("credential replacement did not hold its real renewal".into());};
+        let observation=connection_control(fixture.base(),RuntimeControl::AwaitHeldDispatch { key: DispatchKey::any(collaboration_central_conformance::legacy_fleet_address()) }).await?;
+        let collaboration_central_conformance::DispatchFaultObservation::Held {destination,request:bytes}=observation.dispatch(&DispatchKey::any(collaboration_central_conformance::legacy_fleet_address())) else {return Err("credential replacement did not hold its real renewal".into());};
         let held:Value=serde_json::from_slice(&bytes)?;
-        if destination!=ObjectAddress::Fleet || held.get("kind")!=Some(&json!("central.session-lease"))
+        if destination!=collaboration_central_conformance::legacy_fleet_address() || held.get("kind")!=Some(&json!("central.session-lease"))
             || held.pointer("/request/session/peer")!=Some(&json!(fixture::OLD_PEER))
             || held.pointer("/request/request")!=Some(&serde_json::to_value(LeaseRequest::Renew(request))?) {
             return Err("credential replacement captured another holder renewal".into());
         }
         let session_id:SessionId=serde_json::from_value(held.pointer("/request/session/sessionId").cloned().ok_or("credential renewal omitted current session ID")?)?;
-        connection_control(fixture.base(),RuntimeControl::ResumeDispatch { key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet) }).await?;
+        connection_control(fixture.base(),RuntimeControl::ResumeDispatch { key: DispatchKey::any(collaboration_central_conformance::legacy_fleet_address()) }).await?;
         if !matches!(next_data(&mut fixture.old).await?,ServerFrame::Answer {frame:actual,body:OperationAnswer::Lease(LeaseAnswer::Renew(answer))} if actual==frame && answer==expected_renewal(fixture.database)?) {return Err("captured current-session renewal did not complete exactly".into());}
         let mut replacement=upgrade(&fixture.http,fixture.base(),CREDENTIAL).await?.into_websocket().await?;
         replacement.send(Message::Binary(serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Hello {session_id,schema_support:SchemaSupport {max_version:1}})?.into())).await?;
@@ -240,7 +240,7 @@ async fn replace_registered_socket_before_revocation(
     let _ = connection_control(
         fixture.base(),
         RuntimeControl::ResumeDispatch {
-            key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
+            key: DispatchKey::any(collaboration_central_conformance::legacy_fleet_address()),
         },
     )
     .await;
@@ -362,7 +362,7 @@ async fn expired_machine_credential_closes_on_frame_and_refuses_a_fresh_access_v
         // The reused normal enrollment verifies its requested2033 expiry. Only
         // the owning Registry and old Connection clocks advance beyond it.
         let now=RegistryTime("2033-05-18T03:33:20.001Z".parse()?);
-        for address in [ObjectAddress::Fleet,ObjectAddress::Fleet] {
+        for address in [collaboration_central_conformance::legacy_fleet_address(),collaboration_central_conformance::legacy_fleet_address()] {
             let observed:RuntimeFaultObservation=fixture.http.post(format!("{}/admin/v1/conformance/runtime",fixture.base()))
                 .header("Cf-Access-Jwt-Assertion",owner_assertion()?)
                 .json(&RuntimeControlRequest {address,command:RuntimeControl::SetTime {now}})

@@ -10,6 +10,8 @@ mod conformance_admission;
 #[cfg(feature = "conformance")]
 mod conformance_bootstrap;
 #[cfg(feature = "conformance")]
+mod conformance_capabilities;
+#[cfg(feature = "conformance")]
 mod conformance_core_store;
 #[cfg(feature = "conformance")]
 pub use conformance_bootstrap::BootstrapObject;
@@ -28,7 +30,7 @@ pub use shared_object_store::CloudflareStorageHost;
 use worker::{Context, Env, Request, Response, Result, event};
 #[event(fetch)]
 pub async fn main(request: Request, env: Env, _context: Context) -> Result<Response> {
-    let labels = access_verification::InvocationLabels::for_request(&request)?;
+    let labels = access_verification::InvocationLabels::for_request(&request, &env)?;
     let request: worker::HttpRequest = request.try_into()?;
     let (parts, body) = request.into_parts();
     let body = match http_body::complete(body).await? {

@@ -11,10 +11,9 @@ async fn registry_public_call_refuses_copy_authority_and_allows_session_peer_rea
     let directory = tempfile::tempdir()?;
     let fixture = Fixture::open(directory.path()).await?;
     let mut envelope = json!({
-        "source": {"kind": "copy", "value": "019f0000-0000-7000-8000-000000000806"},
-        "sourceFace": "copy",
+        "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind": "copy", "value": "019f0000-0000-7000-8000-000000000806"},"sourceFace": "copy",
         "authority": {"kind": "object"},
-        "destination": {"kind":"fleet"},
+        "destination": {"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},
         "destinationFace": "registry",
         "identity": {"operation": "019f0000-0000-7000-8000-000000000806", "step": "object"},
         "kind": "central.installation-peer",
@@ -34,9 +33,7 @@ async fn registry_public_call_refuses_copy_authority_and_allows_session_peer_rea
 
         // This otherwise identical permitted source reaches the real Registry
         // read. Its absence is a serialized Option<PeerId>, not a refusal.
-        envelope["source"] = json!({
-            "kind": "fleet"
-        });
+        envelope["source"] = json!({"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}});
         envelope["sourceFace"] = json!("session");
         envelope["authority"] = json!({"kind":"machine","value":{"installation":"550e8400-e29b-41d4-a716-446655440806"}});
         let reply = fixture

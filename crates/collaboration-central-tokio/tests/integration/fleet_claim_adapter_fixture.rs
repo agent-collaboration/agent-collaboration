@@ -1,7 +1,7 @@
 //! Typed settlement debt is a component input; the Fleet engine, hook and receiver are real.
 use super::composed_fleet_fixture::*;
 use collaboration_central_conformance::{DispatchFaultObservation, DispatchKey, RuntimeControl};
-use collaboration_central_core::{CoreHost, ObjectAddress};
+use collaboration_central_core::CoreHost;
 use durable_steps::{
     AtomicStore, JournalScope, OperationId, RequestKey, StoreError, storage::TransactionScope,
 };
@@ -126,7 +126,7 @@ pub async fn claim_counts(fixture: &Fixture) -> TestResult<(i64, i64)> {
 }
 
 pub fn settlement_key() -> DispatchKey {
-    DispatchKey::any(ObjectAddress::Fleet)
+    DispatchKey::any(collaboration_central_conformance::legacy_fleet_address())
 }
 
 pub async fn hold_next_settlement(fixture: &Fixture) -> TestResult {

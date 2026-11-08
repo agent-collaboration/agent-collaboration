@@ -10,7 +10,7 @@ use super::super::{
     takeover_recipients::{self as recipients, Recipients},
 };
 use super::{HeldFollow, assert_end_groups};
-use board_central_test_support::{DispatchCallSelector, ObjectAddress};
+use board_central_test_support::DispatchCallSelector;
 use board_sync_protocol::BoardDeliveryTypes;
 use codex_router_test_support::FixtureResult;
 use collaboration_protocol::PushDeliveryState;
@@ -51,7 +51,7 @@ async fn prove_local(
     let (HeldFollow { follow, item, .. }, held_sequence) = held_local_follow(fixture).await?;
     controls::hold_selected(
         fixture,
-        ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
         controls::copy(fixture)?,
         DispatchCallSelector::CopyWrite,
     )
@@ -60,7 +60,7 @@ async fn prove_local(
     let end = follow.unsubscribe(fixture).await?;
     controls::held(
         fixture,
-        ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
         controls::copy_write_key(fixture)?,
     )
     .await?;
@@ -94,7 +94,7 @@ async fn prove_local(
     transfer_to_second(fixture, second, TransferKind::Takeover).await?;
     controls::resume(
         fixture,
-        ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
         controls::copy_write_key(fixture)?,
     )
     .await?;

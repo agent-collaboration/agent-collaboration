@@ -11,6 +11,7 @@ use tokio_util::sync::CancellationToken;
 
 pub struct TokioSettings {
     pub root: PathBuf,
+    pub legacy_organization: fleet_identity_protocol::OrganizationId,
     pub access_policy: AccessPolicy,
     pub jwks_url: String,
     pub registry: RegistryConfig,
@@ -54,6 +55,7 @@ impl TokioServer {
             Arc::new(SystemClock),
             crate::native_logging::observe,
             &settings.root,
+            settings.legacy_organization.clone(),
             settings.registry,
             settings.delivery,
             settings.holder_answer_timeout,
@@ -74,6 +76,7 @@ impl TokioServer {
             Arc::new(SystemClock),
             crate::native_logging::observe,
             &settings.root,
+            settings.legacy_organization.clone(),
             settings.registry,
             settings.delivery,
             settings.holder_answer_timeout,
@@ -93,6 +96,7 @@ impl TokioServer {
             Arc::new(SystemClock),
             crate::native_logging::observe,
             &settings.root,
+            settings.legacy_organization.clone(),
             settings.registry,
             settings.delivery,
             settings.holder_answer_timeout,
@@ -119,6 +123,7 @@ impl TokioServer {
             platform.clone(),
             settings.access_policy.clone(),
             Arc::new(AccessKeyCache::default()),
+            platform.legacy_organization.clone(),
         ) {
             Ok(application) => application,
             Err(error) => {

@@ -41,6 +41,7 @@ mod bookkeeping_identity;
 
 fn settings(root: &Path, jwks: &str) -> ConformanceResult<TokioSettings> {
     Ok(TokioSettings {
+        legacy_organization: collaboration_central_conformance::legacy_organization(),
         root: root.into(),
         access_policy: fixture_policy(),
         jwks_url: jwks.into(),

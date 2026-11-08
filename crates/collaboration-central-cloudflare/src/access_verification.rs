@@ -42,9 +42,19 @@ pub(crate) struct InvocationLabels {
 }
 
 impl InvocationLabels {
-    pub(crate) fn for_request(request: &worker::Request) -> worker::Result<Self> {
+    pub(crate) fn for_request(
+        request: &worker::Request,
+        _env: &worker::Env,
+    ) -> worker::Result<Self> {
+        #[cfg(feature = "conformance")]
+        let invocation = runtime_primitives::IdSource::new_id(
+            &crate::conformance_capabilities::ConformanceCapabilities::from_env(_env)?,
+        )
+        .to_string();
+        #[cfg(not(feature = "conformance"))]
+        let invocation = uuid::Uuid::now_v7().to_string();
         Ok(Self {
-            invocation: uuid::Uuid::now_v7().to_string(),
+            invocation,
             ray: request.headers().get("cf-ray")?.unwrap_or_default(),
         })
     }
@@ -88,8 +98,22 @@ pub(crate) fn application(
     layer: VerificationLayer,
 ) -> Result<CentralApplication<CloudflareCentralPlatform>, AccessRefusal> {
     let policy = policy(env).map_err(|_| AccessRefusal::InvalidCaller)?;
-    let platform = CloudflareCentralPlatform::new(policy.certs_url(), labels, layer, env.clone());
-    CentralApplication::new(platform, policy, Arc::clone(&ACCESS_KEYS))
+    let locations =
+        crate::cloudflare_transport::locations(env).map_err(|_| AccessRefusal::InvalidCaller)?;
+    let organization = locations.legacy_organization().clone();
+    let platform = CloudflareCentralPlatform::new(
+        policy.certs_url(),
+        labels,
+        layer,
+        env.clone(),
+        organization.clone(),
+    );
+    #[cfg(feature = "conformance")]
+    let platform = platform.with_capabilities(
+        crate::conformance_capabilities::ConformanceCapabilities::from_env(env)
+            .map_err(|_| AccessRefusal::InvalidCaller)?,
+    );
+    CentralApplication::new(platform, policy, Arc::clone(&ACCESS_KEYS), organization)
 }
 
 fn log_safe(value: &str) -> &str {

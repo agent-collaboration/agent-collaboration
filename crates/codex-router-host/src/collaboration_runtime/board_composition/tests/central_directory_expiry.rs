@@ -1,6 +1,6 @@
 //! Native Directory time changes must remain healthy through the Host's A9 reader.
 use super::*;
-use board_central_test_support::{ObjectAddress, RuntimeControl};
+use board_central_test_support::RuntimeControl;
 use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerRequest, BoardPayload, BoardReadPage, BoardReadScope,
     ProjectClaimReply,
@@ -116,7 +116,7 @@ async fn native_directory_expiry_refresh_keeps_the_host_read_generation() -> Tes
         fixture
             .central
             .runtime_control(
-                ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 RuntimeControl::SetTime {
                     now: serde_json::from_value(serde_json::to_value(
                         expires_at - chrono::Duration::milliseconds(1),
@@ -162,7 +162,7 @@ async fn native_directory_expiry_refresh_keeps_the_host_read_generation() -> Tes
         fixture
             .central
             .runtime_control(
-                ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 RuntimeControl::SetTime {
                     now: serde_json::from_value(serde_json::to_value(expires_at)?)?,
                 },

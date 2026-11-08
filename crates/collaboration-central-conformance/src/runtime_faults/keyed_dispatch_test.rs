@@ -130,7 +130,7 @@ async fn four_keys_bound_retained_holds_and_each_releases_at_its_own_causal_end(
 )]
 async fn overlapping_selections_refuse_the_call_without_consuming_either_key() -> TestResult {
     let faults = RuntimeFaults::default();
-    let destination = ObjectAddress::Fleet;
+    let destination = crate::legacy_fleet_address();
     for call in [DispatchCallSelector::Any, DispatchCallSelector::CopyFence] {
         faults
             .control(RuntimeControl::HoldNextDispatch {

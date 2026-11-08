@@ -1,7 +1,9 @@
 //! The only synchronous object edges. Rank checks and wire checks share this table.
-use crate::{FleetCall, FleetResult, ObjectAddress, RegistryCall, RegistryResult};
-use fleet_sync_protocol::DatabaseId;
-use message_board::ServiceId;
+use crate::{
+    CopyAddress, FleetAddress, FleetCall, FleetResult, ObjectAddress, RegistryCall, RegistryResult,
+    SessionAddress,
+};
+use fleet_identity_protocol::OrganizationId;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -50,6 +52,7 @@ pub trait ObjectKind:
         + Sync
         + 'static;
     fn address(target: &Self::Address) -> ObjectAddress;
+    fn organization(target: &Self::Address) -> &OrganizationId;
 }
 
 /// Compile-time permission to issue a synchronous call. A lower-ranked target
@@ -77,6 +80,9 @@ macro_rules! object_kind {
             fn address(target: &Self::Address) -> ObjectAddress {
                 ($physical)(target)
             }
+            fn organization(target: &Self::Address) -> &OrganizationId {
+                &target.organization
+            }
         }
     };
 }
@@ -88,47 +94,73 @@ pub enum EdgeResult {}
 pub enum SharedCallOnly {}
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum SharedAnswerOnly {}
-object_kind!(EdgeKind, 0, Edge, (), EdgeCall, EdgeResult, |_: &()| {
-    ObjectAddress::Fleet
-});
+object_kind!(
+    EdgeKind,
+    0,
+    Edge,
+    FleetAddress,
+    EdgeCall,
+    EdgeResult,
+    |address: &FleetAddress| {
+        ObjectAddress::Fleet {
+            organization: address.organization.clone(),
+        }
+    }
+);
 object_kind!(
     SessionKind,
     1,
     Session,
-    ServiceId,
+    SessionAddress,
     SharedCallOnly,
     SharedAnswerOnly,
-    |_: &ServiceId| ObjectAddress::Fleet
+    |address: &SessionAddress| ObjectAddress::Fleet {
+        organization: address.organization.clone()
+    }
 );
 object_kind!(
     RegistryKind,
     2,
     Registry,
-    (),
+    FleetAddress,
     RegistryCall,
     RegistryResult,
-    |_: &()| ObjectAddress::Fleet
+    |address: &FleetAddress| ObjectAddress::Fleet {
+        organization: address.organization.clone()
+    }
 );
 object_kind!(
     CopyKind,
     6,
     Copy,
-    DatabaseId,
+    CopyAddress,
     SharedCallOnly,
     SharedAnswerOnly,
-    |v: &DatabaseId| ObjectAddress::Copy(*v)
+    |address: &CopyAddress| ObjectAddress::Copy(address.database)
 );
-object_kind!(FleetKind, 4, Fleet, (), FleetCall, FleetResult, |_: &()| {
-    ObjectAddress::Fleet
-});
+object_kind!(
+    FleetKind,
+    4,
+    Fleet,
+    FleetAddress,
+    FleetCall,
+    FleetResult,
+    |address: &FleetAddress| {
+        ObjectAddress::Fleet {
+            organization: address.organization.clone(),
+        }
+    }
+);
 object_kind!(
     DeliveryKind,
     5,
     Delivery,
-    (),
+    FleetAddress,
     SharedCallOnly,
     SharedAnswerOnly,
-    |_: &()| ObjectAddress::Fleet
+    |address: &FleetAddress| ObjectAddress::Fleet {
+        organization: address.organization.clone()
+    }
 );
 
 macro_rules! allowed_edges {

@@ -1,5 +1,7 @@
 //! Shared scenarios over the one asynchronous application on each runtime.
 #![forbid(unsafe_code)]
+mod legacy_fleet_fixture;
+pub use legacy_fleet_fixture::{legacy_fleet_address, legacy_organization};
 #[cfg(feature = "client")]
 mod admin_import_scenario;
 #[cfg(feature = "client")]
@@ -142,4 +144,8 @@ mod mutation_revocation_scenario;
 pub use mutation_revocation_scenario::run_mutation_revocation_conformance;
 
 #[cfg(feature = "client")]
+pub mod workerd_event_process;
+#[cfg(feature = "client")]
 pub mod workerd_process;
+#[cfg(feature = "client")]
+pub mod workerd_settings;

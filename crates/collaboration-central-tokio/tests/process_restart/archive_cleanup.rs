@@ -65,7 +65,7 @@ struct SavedJournal {
 
 fn settlement_key() -> DispatchKey {
     DispatchKey::new(
-        ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
         collaboration_central_conformance::DispatchCallSelector::FleetClaimSettlement,
     )
 }
@@ -116,13 +116,13 @@ async fn run_cleanup_restart(loss: CleanupLoss) -> ConformanceResult<()> {
     let ledger = read_ledger(root.path()).await?;
     let controls = [
         RuntimeControlRequest {
-            address: ObjectAddress::Fleet,
+            address: collaboration_central_conformance::legacy_fleet_address(),
             command: RuntimeControl::SetTime {
                 now: journal.ready_at,
             },
         },
         RuntimeControlRequest {
-            address: ObjectAddress::Fleet,
+            address: collaboration_central_conformance::legacy_fleet_address(),
             command: RuntimeControl::HoldNextDispatch {
                 key: settlement_key(),
             },
@@ -132,7 +132,7 @@ async fn run_cleanup_restart(loss: CleanupLoss) -> ConformanceResult<()> {
     let proof = verify::verify_cleanup(&second.base, root.path(), &input, &journal, loss).await;
     let _ = control(
         &second.base,
-        ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
         RuntimeControl::ResumeDispatch {
             key: settlement_key(),
         },

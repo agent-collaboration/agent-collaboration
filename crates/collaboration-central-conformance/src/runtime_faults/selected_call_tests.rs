@@ -33,7 +33,7 @@ async fn fleet_submit_selector_holds_only_its_authenticated_peer_and_item() -> T
     let other_item = serde_json::to_vec(&submission(peer, "019f0000-0000-7000-8000-000000000914"))?;
     let other_peer = serde_json::to_vec(&submission("019f0000-0000-7000-8000-000000000915", item))?;
     let faults = RuntimeFaults::default();
-    let destination = ObjectAddress::Fleet;
+    let destination = crate::legacy_fleet_address();
     let key = DispatchKey::new(
         destination.clone(),
         DispatchCallSelector::FleetMailSubmitFor {
@@ -194,7 +194,7 @@ async fn fleet_submit_hold_ignores_sender_requests_and_preserves_the_selected_by
         (DispatchCallSelector::FleetMailSubmit, "central.mail-submit"),
         (DispatchCallSelector::ForwardRoute, "central.forward-route"),
     ] {
-        selected_hold(call, kind, ObjectAddress::Fleet).await?;
+        selected_hold(call, kind, crate::legacy_fleet_address()).await?;
     }
     Ok(())
 }
@@ -205,7 +205,7 @@ async fn installation_peer_hold_ignores_other_outer_kinds_and_releases_only_the_
     selected_hold(
         DispatchCallSelector::InstallationPeer,
         "central.installation-peer",
-        ObjectAddress::Fleet,
+        crate::legacy_fleet_address(),
     )
     .await
 }
@@ -235,7 +235,7 @@ async fn copy_write_hold_ignores_status_and_unknown_calls_without_freezing_later
 
 async fn selected_drop(call: DispatchCallSelector, kind: &str) -> TestResult {
     let faults = RuntimeFaults::default();
-    let destination = ObjectAddress::Fleet;
+    let destination = crate::legacy_fleet_address();
     faults
         .control(RuntimeControl::DropNextSelectedObjectReply {
             destination: destination.clone(),
@@ -307,7 +307,7 @@ async fn copy_write_reply_drop_selects_only_the_outer_write_kind_once() -> TestR
 async fn existing_any_controls_still_accept_opaque_calls_and_resume_before_the_next_hold()
 -> TestResult {
     let faults = Arc::new(RuntimeFaults::default());
-    let destination = ObjectAddress::Fleet;
+    let destination = crate::legacy_fleet_address();
     let key = DispatchKey::any(destination.clone());
     faults
         .control(RuntimeControl::HoldNextDispatch { key: key.clone() })
@@ -387,7 +387,7 @@ async fn fleet_item_selection_ignores_other_peers_items_cancels_and_queries() ->
     );
     let selector = serde_json::from_value(serde_json::to_value(selector)?)?;
     let faults = RuntimeFaults::default();
-    let destination = ObjectAddress::Fleet;
+    let destination = crate::legacy_fleet_address();
     let key = DispatchKey::new(destination.clone(), selector);
     faults
         .control(RuntimeControl::HoldNextDispatch { key: key.clone() })
@@ -451,7 +451,7 @@ async fn fleet_item_selection_ignores_other_peers_items_cancels_and_queries() ->
 )]
 async fn held_reply_binding_rejects_unheld_states_and_preserves_an_armed_fault() -> TestResult {
     let faults = RuntimeFaults::default();
-    let destination = ObjectAddress::Fleet;
+    let destination = crate::legacy_fleet_address();
     let key = DispatchKey::any(destination.clone());
     assert!(matches!(
         faults
@@ -508,7 +508,7 @@ async fn held_reply_binding_rejects_unheld_states_and_preserves_an_armed_fault()
 async fn held_reply_binding_ignores_a_bypassing_submit_and_same_item_with_new_call_bytes()
 -> TestResult {
     let faults = RuntimeFaults::default();
-    let destination = ObjectAddress::Fleet;
+    let destination = crate::legacy_fleet_address();
     let key = DispatchKey::any(destination.clone());
     let expected = fleet_submit_identity(
         "019f0000-0000-7000-8000-000000000810",

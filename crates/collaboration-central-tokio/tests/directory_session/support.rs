@@ -24,6 +24,7 @@ use std::{path::Path, time::Duration};
 
 pub(super) async fn start(root: &Path, jwks: &str) -> ConformanceResult<TokioServer> {
     Ok(TokioServer::start(TokioSettings {
+        legacy_organization: collaboration_central_conformance::legacy_organization(),
         delivery: collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
@@ -252,6 +253,7 @@ pub(super) async fn read_committed_owners(
             config.authoritative_receiver,
             database,
             Duration::from_secs(2),
+            std::sync::Arc::new(collaboration_central_core::InMemoryCopyFleetReferences::default()),
         );
         copy.initialize().await?;
         observed.push((copy.copy_summary().await?, snapshot));

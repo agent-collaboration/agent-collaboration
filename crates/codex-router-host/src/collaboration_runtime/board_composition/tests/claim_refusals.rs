@@ -118,7 +118,7 @@ async fn claim_observes_real_retirement_in_progress_then_retired_without_seeding
     fixture
         .central
         .runtime_control(
-            ObjectAddress::Fleet,
+            collaboration_central_conformance::legacy_fleet_address(),
             RuntimeControl::HoldNextDispatch {
                 key: board_central_test_support::DispatchKey::any(ObjectAddress::Copy(database)),
             },
@@ -134,18 +134,18 @@ async fn claim_observes_real_retirement_in_progress_then_retired_without_seeding
     let mut first_reply = None;
     let proof = async {
         let observed = tokio::select! {
-            observation = fixture.central.runtime_control(ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch { key: board_central_test_support::DispatchKey::any(ObjectAddress::Copy(database)) }) => observation?,
+            observation = fixture.central.runtime_control(collaboration_central_conformance::legacy_fleet_address(), RuntimeControl::AwaitHeldDispatch { key: board_central_test_support::DispatchKey::any(ObjectAddress::Copy(database)) }) => observation?,
             answer = &mut retiring => {
                 let answer = answer??;
                 if answer["kind"] != "pending" { return Err(format!("retirement returned before selected dispatch: {answer}").into()); }
                 first_reply = Some(answer);
-                fixture.central.runtime_control(ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch { key: board_central_test_support::DispatchKey::any(ObjectAddress::Copy(database)) }).await?
+                fixture.central.runtime_control(collaboration_central_conformance::legacy_fleet_address(), RuntimeControl::AwaitHeldDispatch { key: board_central_test_support::DispatchKey::any(ObjectAddress::Copy(database)) }).await?
             },
         };
         assert!(matches!(observed.dispatch(&board_central_test_support::DispatchKey::any(ObjectAddress::Copy(database))), DispatchFaultObservation::Held {destination: ObjectAddress::Copy(actual), ..} if actual == database));
         assert_eq!(fixture.claim(&project).await?, ProjectClaimReply::Refused(ProjectClaimRefusal::TransferInProgress { transfer: TransferId::new(retirement.as_uuid())? }));
         assert!(fixture.registry.existing_project(&project).await?.is_none());
-        fixture.central.runtime_control(ObjectAddress::Fleet, RuntimeControl::ResumeDispatch { key: board_central_test_support::DispatchKey::any(ObjectAddress::Copy(database)) }).await?;
+        fixture.central.runtime_control(collaboration_central_conformance::legacy_fleet_address(), RuntimeControl::ResumeDispatch { key: board_central_test_support::DispatchKey::any(ObjectAddress::Copy(database)) }).await?;
         let first = match first_reply.take() { Some(reply) => reply, None => timeout(BOUND, &mut retiring).await??? };
         let terminal = timeout(BOUND, async {
             let mut reply = first;
@@ -162,7 +162,7 @@ async fn claim_observes_real_retirement_in_progress_then_retired_without_seeding
     let _ = fixture
         .central
         .runtime_control(
-            ObjectAddress::Fleet,
+            collaboration_central_conformance::legacy_fleet_address(),
             RuntimeControl::ResumeDispatch {
                 key: board_central_test_support::DispatchKey::any(ObjectAddress::Copy(database)),
             },

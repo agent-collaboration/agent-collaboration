@@ -52,12 +52,14 @@ impl PlatformIo for ControlIo {
 }
 pub(crate) fn new_host(
     state: Arc<worker::send::SendWrapper<worker::State>>,
+    organization: fleet_identity_protocol::OrganizationId,
 ) -> worker::Result<Arc<ReceiptStoreHost>> {
     let receiver = ReceiverId::new(durable_steps::Uuid::now_v7())
         .map_err(|error| worker::Error::RustError(error.to_string()))?;
     Ok(Arc::new(CloudflareStorageHost::new(state, move |wake| {
         Arc::new(CoreHost::conformance_registry(
             ControlIo::new(wake),
+            organization.clone(),
             receiver,
         ))
     })))

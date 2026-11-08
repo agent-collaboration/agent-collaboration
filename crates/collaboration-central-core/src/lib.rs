@@ -1,7 +1,31 @@
 //! One asynchronous application core shared by every runtime.
 #![forbid(unsafe_code)]
 
+mod fleet_location;
 pub mod identity_contract;
+pub mod organization_authority;
+pub use fleet_location::{FleetLocationPolicy, FleetLocationRefusal};
+mod copy_fleet_reference;
+pub use copy_fleet_reference::{
+    CopyFleetReferencePort, CopyFleetReferenceRefusal, InMemoryCopyFleetReferences,
+};
+mod organization_addresses;
+pub use organization_addresses::{CopyAddress, FleetAddress, SessionAddress};
+mod organization_provisioning_http;
+pub use organization_provisioning_http::organization_provisioning_router;
+
+mod issuer_key_cache;
+mod issuer_key_resolution;
+mod issuer_signature_verifier;
+mod key_source_capabilities;
+mod signature_verification;
+pub use issuer_key_cache::{
+    IssuerKeyCache, IssuerKeyId, IssuerKeyRefusal, IssuerKeySet, IssuerVerificationKey,
+};
+pub use issuer_key_resolution::{IssuerKeyResolutionRefusal, IssuerKeySource, resolve_issuer_key};
+pub use issuer_signature_verifier::{IssuerSignatureRefusal, IssuerSignatureVerifier};
+pub use key_source_capabilities::{KeyFetchFailure, RawJwks};
+pub use signature_verification::{Ed25519Verification, SignatureValidity, VerifyFailure};
 
 mod admin_import_columns;
 mod admin_import_contract;
@@ -38,8 +62,8 @@ mod connection_admission;
 pub use connection_admission::AdmissionOrigin;
 mod platform_capabilities;
 pub use platform_capabilities::{
-    CallOutcome, CentralPlatform, KeyFetchFailure, LocalSectionFailure, ObjectHost, RawJwks,
-    RegistrationEdits, RegistrationSnapshot, SocketFailure, UpgradeFailure, VerifyFailure,
+    CallOutcome, CentralPlatform, LocalSectionFailure, ObjectHost, RegistrationEdits,
+    RegistrationSnapshot, SocketFailure, UpgradeFailure,
 };
 mod caller_context;
 pub use caller_context::CallerContext;

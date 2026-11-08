@@ -1,22 +1,12 @@
 use crate::ConformanceResult;
-use std::{path::PathBuf, process::Stdio, time::Duration};
+pub use crate::workerd_settings::WorkerdSettings;
+use std::time::Duration;
 use tokio::{
     io::{AsyncBufReadExt, BufReader},
     process::{Child, Command},
     task::JoinHandle,
 };
 
-pub struct WorkerdSettings {
-    pub node: PathBuf,
-    /// The pinned Miniflare package's entrypoint (`dist/src/index.js`).
-    pub miniflare: PathBuf,
-    pub persistence: PathBuf,
-    pub port: u16,
-    pub jwks_url: String,
-    pub holder_answer_timeout: Duration,
-    pub copy_ack_wait: Duration,
-    pub relay_peer: fleet_sync_protocol::PeerId,
-}
 pub struct WorkerdProcess {
     child: Child,
     output: JoinHandle<ConformanceResult<()>>,
@@ -30,20 +20,7 @@ impl WorkerdProcess {
         settings: &WorkerdSettings,
         relay: &str,
     ) -> ConformanceResult<Self> {
-        let mut child = Command::new(&settings.node)
-            .current_dir(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."))
-            .arg("scripts/tooling/run-central-workerd.mjs")
-            .arg(&settings.miniflare)
-            .arg(&settings.persistence)
-            .arg(settings.port.to_string())
-            .arg(&settings.jwks_url)
-            .arg(serde_json::to_string(&settings.holder_answer_timeout)?)
-            .arg(serde_json::to_string(&settings.copy_ack_wait)?)
-            .arg(relay)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
-            .kill_on_drop(true)
-            .spawn()?;
+        let mut child = settings.command(relay)?.spawn()?;
         let mut lines =
             BufReader::new(child.stdout.take().ok_or("Miniflare harness stdout")?).lines();
         // Observe the platform's own ready event. No sleep-based readiness or

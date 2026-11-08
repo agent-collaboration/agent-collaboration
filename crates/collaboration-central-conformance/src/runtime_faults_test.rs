@@ -57,7 +57,7 @@ fn project_fault_controls_refuse_the_fleet_owner() {
         RuntimeControl::ClearProjectFault,
     ] {
         let request = crate::RuntimeControlRequest {
-            address: ObjectAddress::Fleet,
+            address: crate::legacy_fleet_address(),
             command,
         };
         assert!(matches!(
@@ -90,7 +90,7 @@ fn fleet_submit_controls_require_the_fleet_owner_and_destination()
         DispatchCallSelector::FleetMailSubmit,
         DispatchCallSelector::FleetMailSubmitFor { peer, item },
     ] {
-        for destination in [ObjectAddress::Fleet, non_fleet.clone()] {
+        for destination in [crate::legacy_fleet_address(), non_fleet.clone()] {
             for command in [
                 RuntimeControl::HoldNextDispatch {
                     key: DispatchKey::new(destination.clone(), call),
@@ -104,7 +104,7 @@ fn fleet_submit_controls_require_the_fleet_owner_and_destination()
                     call,
                 },
             ] {
-                for address in [ObjectAddress::Fleet, non_fleet.clone()] {
+                for address in [crate::legacy_fleet_address(), non_fleet.clone()] {
                     let request = RuntimeControlRequest {
                         address: address.clone(),
                         command: command.clone(),
@@ -113,7 +113,7 @@ fn fleet_submit_controls_require_the_fleet_owner_and_destination()
                         request.validate().is_ok(),
                         matches!(
                             (&address, &destination),
-                            (ObjectAddress::Fleet, ObjectAddress::Fleet)
+                            (ObjectAddress::Fleet { .. }, ObjectAddress::Fleet { .. })
                         )
                     );
                 }

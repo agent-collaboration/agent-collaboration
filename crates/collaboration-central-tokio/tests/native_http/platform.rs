@@ -17,6 +17,7 @@ pub async fn native_platform(
         Arc::new(runtime_primitives::SystemClock),
         |_| {},
         directory.path(),
+        collaboration_central_conformance::legacy_organization(),
         registry_config()?,
         collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(

@@ -43,11 +43,7 @@ where
         let ObjectWork::Copy { database, .. } = &self.work else {
             return Err(CallFailure::AnswerLost);
         };
-        let call = ObjectCallEnvelope::decode(
-            bytes,
-            crate::ObjectAddress::Copy(*database),
-            CallerKind::Copy,
-        )?;
+        let call = ObjectCallEnvelope::decode_copy_candidate(bytes, *database)?;
         if call.kind != CopyOperations::KIND {
             return Ok(CopyCallClass::Ordinary);
         }
@@ -81,6 +77,7 @@ where
         if !matches!(self.copy_call_class(&bytes)?, CopyCallClass::Health) {
             return Err(CallFailure::AnswerLost);
         }
+        self.admit_copy_call(&bytes).await?;
         let ObjectWork::Copy { host, .. } = &self.work else {
             return Err(CallFailure::AnswerLost);
         };

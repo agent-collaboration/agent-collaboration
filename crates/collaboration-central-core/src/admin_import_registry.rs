@@ -2,7 +2,7 @@
 use crate::FleetKind;
 
 use crate::{
-    CallerKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, ObjectHost, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     object_call_envelope::ObjectCallEnvelope,
     object_runtime::ObjectWork,
@@ -60,7 +60,7 @@ where
         call: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if call.source_face != CallerKind::Edge
-            || call.source != ObjectAddress::Fleet
+            || !call.has_fleet_source()
             || !matches!(call.authority, CallAuthority::Owner(_))
         {
             return Err(refused());

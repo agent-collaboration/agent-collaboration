@@ -12,7 +12,7 @@ use collaboration_central_conformance::{
     ConformanceResult, DispatchCallSelector, DispatchFaultObservation, RuntimeControl,
     RuntimeFaultObservation,
 };
-use collaboration_central_core::{ObjectAddress, RegistryTime};
+use collaboration_central_core::RegistryTime;
 use fleet_sync_protocol::{DatabaseId, FrameId};
 use reqwest_websocket::WebSocket;
 use serde_json::{Value, json};
@@ -40,7 +40,10 @@ where
     })
     .await?;
     control(RuntimeControl::HoldNextDispatch {
-        key: DispatchKey::new(ObjectAddress::Fleet, DispatchCallSelector::ForwardRoute),
+        key: DispatchKey::new(
+            collaboration_central_conformance::legacy_fleet_address(),
+            DispatchCallSelector::ForwardRoute,
+        ),
     })
     .await?;
     let proof = overlap_sequence(
@@ -56,7 +59,7 @@ where
         Ok(state)
             if matches!(
                 state.dispatch(&DispatchKey::new(
-                    collaboration_central_core::ObjectAddress::Fleet,
+                    collaboration_central_conformance::legacy_fleet_address(),
                     collaboration_central_conformance::DispatchCallSelector::ForwardRoute
                 )),
                 DispatchFaultObservation::Held { .. }
@@ -64,7 +67,7 @@ where
         {
             control(RuntimeControl::ResumeDispatch {
                 key: DispatchKey::new(
-                    collaboration_central_core::ObjectAddress::Fleet,
+                    collaboration_central_conformance::legacy_fleet_address(),
                     collaboration_central_conformance::DispatchCallSelector::ForwardRoute,
                 ),
             })
@@ -101,7 +104,7 @@ where
     require_route_hold(
         control(RuntimeControl::AwaitHeldDispatch {
             key: DispatchKey::new(
-                collaboration_central_core::ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 collaboration_central_conformance::DispatchCallSelector::ForwardRoute,
             ),
         })
@@ -130,7 +133,7 @@ where
     }
     control(RuntimeControl::ResumeDispatch {
         key: DispatchKey::new(
-            collaboration_central_core::ObjectAddress::Fleet,
+            collaboration_central_conformance::legacy_fleet_address(),
             collaboration_central_conformance::DispatchCallSelector::ForwardRoute,
         ),
     })
@@ -160,7 +163,7 @@ fn require_route_hold(
         destination,
         request,
     } = held.dispatch(&DispatchKey::new(
-        collaboration_central_core::ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
         collaboration_central_conformance::DispatchCallSelector::ForwardRoute,
     ))
     else {
@@ -169,9 +172,15 @@ fn require_route_hold(
     let envelope: Value = serde_json::from_slice(&request)?;
     for (field, expected) in [
         ("kind", json!("central.forward-route")),
-        ("source", json!({"kind":"fleet"})),
+        (
+            "source",
+            json!({"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}}),
+        ),
         ("sourceFace", json!("session")),
-        ("destination", json!({"kind":"fleet"})),
+        (
+            "destination",
+            json!({"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}}),
+        ),
         ("destinationFace", json!("registry")),
         (
             "request",
@@ -192,7 +201,7 @@ fn require_route_hold(
         "FORWARD_ROUTE_HOLD call={}",
         serde_json::to_string(&identity)?
     );
-    if destination != ObjectAddress::Fleet {
+    if destination != collaboration_central_conformance::legacy_fleet_address() {
         return Err("held forwarding call lost destination or CallId".into());
     }
     Ok(())

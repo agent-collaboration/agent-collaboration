@@ -52,8 +52,8 @@ async fn read_hook_incarnation(fixture: &Fixture) -> TestResult<String> {
 
 fn renew_call(attempt: RequestId) -> TestResult<Vec<u8>> {
     Ok(serde_json::to_vec(&json!({
-        "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":SERVICE}},
-        "destination":{"kind":"fleet"},"destinationFace":"registry",
+        "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":SERVICE}},
+        "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"registry",
         "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"renew_atomicity"},
         "kind":"central.session-lease","target":null,"request":{
             "session":SessionKey {peer:PeerId::try_from(PEER.to_owned())?, session_id:SessionId::new(durable_steps::Uuid::now_v7())?},

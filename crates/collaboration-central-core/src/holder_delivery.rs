@@ -38,6 +38,7 @@ where
 {
     pub fn delivery(&self) -> Result<ObjectRuntime<DeliveryKind, Host, Io>, StoreError> {
         let ObjectWork::Fleet {
+            organization,
             host,
             io,
             engine,
@@ -52,10 +53,15 @@ where
         };
         Ok(ObjectRuntime {
             work: ObjectWork::Fleet {
+                organization: organization.clone(),
                 host: host.clone(),
                 io: io.clone(),
                 engine: engine.clone(),
-                shared_host: Arc::new(shared_host.delivery()),
+                shared_host: Arc::new(
+                    shared_host
+                        .delivery()
+                        .map_err(|_| StoreError::backend("Fleet delivery context unavailable"))?,
+                ),
                 replies: replies.clone(),
                 config: *config,
                 delivery: *delivery,
@@ -79,8 +85,8 @@ where
             DeliveryKind,
             HolderRelease,
         >(
-            &crate::CallerContext::for_object(()),
-            (),
+            &crate::CallerContext::for_object(self.fleet_address()?),
+            self.fleet_address()?,
             HolderRelease {
                 holder,
                 database: request.database,
@@ -195,8 +201,14 @@ where
         else {
             return Err(unsent());
         };
-        let invocation =
-            ObjectCallEnvelope::decode(&bytes, ObjectAddress::Fleet, CallerKind::Delivery)?;
+        let invocation = ObjectCallEnvelope::decode(
+            &bytes,
+            ObjectAddress::Fleet {
+                organization: self.fleet_address()?.organization,
+            },
+            CallerKind::Delivery,
+            &self.fleet_address()?.organization,
+        )?;
         if matches!(
             invocation.kind.as_str(),
             crate::forward_calls::DeliverForward::KIND
@@ -207,7 +219,7 @@ where
             return self.receive_machine_notice(invocation).await;
         }
         if !matches!(invocation.authority, CallAuthority::Object)
-            || invocation.source != ObjectAddress::Fleet
+            || !invocation.has_fleet_source()
             || invocation.source_face != CallerKind::Registry
         {
             return Err(unsent());

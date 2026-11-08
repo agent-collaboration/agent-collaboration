@@ -58,6 +58,7 @@ async fn injected_id_source_owns_the_repository_feed_state_and_feed_entry_ids() 
     let runtime = ObjectRuntime::<FleetKind, _, _>::fleet(
         Arc::new(TokioStorageHost::new(fixture.object.clone())),
         TracedIds(next.clone()),
+        collaboration_central_conformance::legacy_organization(),
         fleet_sync_lease::RegistryConfig {
             authoritative_receiver: fixture.receiver,
             lease: fleet_sync_lease::LeasePolicy {

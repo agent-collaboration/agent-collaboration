@@ -56,6 +56,8 @@ async fn workerd_publication_case(readers: FleetReaderSetup) -> TestResult {
         .port();
     let target = format!("http://127.0.0.1:{port}");
     let settings = workerd_process::WorkerdSettings {
+        fixed_access_time: None,
+        legacy_organization: collaboration_central_conformance::legacy_organization(),
         node,
         miniflare,
         persistence: persistence.path().to_owned(),

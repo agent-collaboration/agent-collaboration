@@ -10,7 +10,7 @@ pub(super) async fn drop_held_reply(
         .holder
         .central
         .runtime_control(
-            ObjectAddress::Fleet,
+            collaboration_central_conformance::legacy_fleet_address(),
             RuntimeControl::DropHeldDispatchReply { key },
         )
         .await?;
@@ -31,7 +31,7 @@ async fn lost_receipt_hold_targets_submit_while_sender_query_completes() -> Test
     let proof = async {
         let seed = arrange_sent_follow(&mut fixture).await?;
         let dispatch_key = RuleFixture::submit_key(fixture.holder.projects.peer, seed.item.id());
-        let fleet = ObjectAddress::Fleet;
+        let fleet = collaboration_central_conformance::legacy_fleet_address();
         hold_lost_receipt_submit(
             &fixture,
             fleet,
@@ -52,7 +52,7 @@ async fn lost_receipt_hold_targets_submit_while_sender_query_completes() -> Test
         timeout(BOUND, async {
             tokio::select! {
                 held = fixture.holder.central.runtime_control(
-                    ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch { key: dispatch_key.clone() },
+                    collaboration_central_conformance::legacy_fleet_address(), RuntimeControl::AwaitHeldDispatch { key: dispatch_key.clone() },
                 ) => { held?; }
                 completed = query_ready.wait_for(|ready| *ready) => { completed?; }
             }
@@ -78,7 +78,7 @@ async fn lost_receipt_hold_targets_submit_while_sender_query_completes() -> Test
         let held = fixture
             .holder
             .central
-            .runtime_control(ObjectAddress::Fleet, RuntimeControl::AwaitHeldDispatch { key: dispatch_key.clone() })
+            .runtime_control(collaboration_central_conformance::legacy_fleet_address(), RuntimeControl::AwaitHeldDispatch { key: dispatch_key.clone() })
             .await?;
         let board_central_test_support::DispatchFaultObservation::Held { request, .. } =
             held.dispatch(&dispatch_key)
@@ -101,7 +101,7 @@ async fn lost_receipt_hold_targets_submit_while_sender_query_completes() -> Test
     let _ = fixture
         .holder
         .central
-        .release_held_dispatches(ObjectAddress::Fleet)
+        .release_held_dispatches(collaboration_central_conformance::legacy_fleet_address())
         .await;
     if proof.is_err() {
         competing_calls.shutdown().await;
@@ -174,7 +174,10 @@ async fn lost_receipt_reply_stays_bound_when_a_cancel_submit_finishes_first() ->
         let state = fixture
             .holder
             .central
-            .runtime_control(ObjectAddress::Fleet, RuntimeControl::Observe)
+            .runtime_control(
+                collaboration_central_conformance::legacy_fleet_address(),
+                RuntimeControl::Observe,
+            )
             .await?;
         assert!(
             matches!(
@@ -187,7 +190,7 @@ async fn lost_receipt_reply_stays_bound_when_a_cancel_submit_finishes_first() ->
             .holder
             .central
             .runtime_control(
-                ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 RuntimeControl::ResumeDispatch {
                     key: dispatch_key.clone(),
                 },
@@ -197,7 +200,7 @@ async fn lost_receipt_reply_stays_bound_when_a_cancel_submit_finishes_first() ->
             .holder
             .central
             .runtime_control(
-                ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 RuntimeControl::AwaitDroppedObjectReply,
             )
             .await?;
@@ -226,7 +229,7 @@ async fn lost_receipt_reply_stays_bound_when_a_cancel_submit_finishes_first() ->
     let _ = fixture
         .holder
         .central
-        .release_held_dispatches(ObjectAddress::Fleet)
+        .release_held_dispatches(collaboration_central_conformance::legacy_fleet_address())
         .await;
     held_calls.shutdown().await;
     let closed = fixture.close().await;
@@ -281,7 +284,7 @@ async fn hold_original_with_cancel(
         None,
         CancelBody { target: item },
     )?);
-    let fleet = ObjectAddress::Fleet;
+    let fleet = collaboration_central_conformance::legacy_fleet_address();
     hold_lost_receipt_submit(fixture, fleet.clone(), fixture.holder.projects.peer, item).await?;
     let submit = BoardConsumerRequest::mail_submit(
         DeliveryEnvelope::Item(seed.item),
@@ -300,7 +303,7 @@ async fn hold_original_with_cancel(
         .holder
         .central
         .runtime_control(
-            ObjectAddress::Fleet,
+            collaboration_central_conformance::legacy_fleet_address(),
             RuntimeControl::AwaitHeldDispatch {
                 key: dispatch_key.clone(),
             },

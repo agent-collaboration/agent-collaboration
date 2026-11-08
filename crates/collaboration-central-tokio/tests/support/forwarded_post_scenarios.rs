@@ -220,7 +220,7 @@ pub(super) async fn control(
         base,
         "runtime",
         serde_json::to_value(collaboration_central_conformance::RuntimeControlRequest {
-            address: collaboration_central_core::ObjectAddress::Fleet,
+            address: collaboration_central_conformance::legacy_fleet_address(),
             command,
         })?,
     )

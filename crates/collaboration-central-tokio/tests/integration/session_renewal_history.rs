@@ -89,7 +89,7 @@ async fn pin_registry(base: &str, elapsed_ms: i64) -> ConformanceResult<()> {
         .ok_or("renewal fixture time is outside range")?;
     runtime_control(
         base,
-        ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
         RuntimeControl::SetTime {
             now: RegistryTime(now),
         },
@@ -216,7 +216,7 @@ async fn lost_replay_fresh_extension_and_supersession(
     let connection = ConformanceClient::new(base)?
         .active_connection(SERVICE, PeerId::try_from(PEER.to_owned())?)
         .await?;
-    let session = ObjectAddress::Fleet;
+    let session = collaboration_central_conformance::legacy_fleet_address();
     runtime_control(
         base,
         session.clone(),
@@ -439,6 +439,7 @@ async fn run_native_case(case: RenewalCase) -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
     let server = TokioServer::start(TokioSettings {
+        legacy_organization: collaboration_central_conformance::legacy_organization(),
         root: root.path().into(),
         access_policy: fixture_policy(),
         jwks_url: jwks.url.clone(),

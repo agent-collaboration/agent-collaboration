@@ -1,6 +1,6 @@
 //! Public identity conflicts and a real lost mailbox reply preserve one recipient effect.
 use super::{messaging_fixture::MessagingCase, messaging_stopped_owner};
-use board_central_test_support::{DispatchCallSelector, ObjectAddress, RuntimeControl};
+use board_central_test_support::{DispatchCallSelector, RuntimeControl};
 use codex_router_test_support::FixtureResult;
 use serde_json::{Value, json};
 
@@ -62,9 +62,9 @@ pub async fn mailbox_retry_keeps_one_effect(scope: &mut MessagingCase<'_>) -> Fi
     let text = "B+ one remote effect despite lost mailbox custody answer";
     scope
         .control(
-            ObjectAddress::Fleet,
+            collaboration_central_conformance::legacy_fleet_address(),
             RuntimeControl::DropNextSelectedObjectReply {
-                destination: ObjectAddress::Fleet,
+                destination: collaboration_central_conformance::legacy_fleet_address(),
                 call: DispatchCallSelector::FleetMailSubmit,
             },
         )
@@ -72,7 +72,7 @@ pub async fn mailbox_retry_keeps_one_effect(scope: &mut MessagingCase<'_>) -> Fi
     scope.send_cli(item, text).await?;
     let lost = scope
         .control(
-            ObjectAddress::Fleet,
+            collaboration_central_conformance::legacy_fleet_address(),
             RuntimeControl::AwaitDroppedObjectReply,
         )
         .await?;

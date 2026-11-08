@@ -26,6 +26,7 @@ pub(crate) fn mount(
         platform.clone(),
         policy,
         Arc::new(AccessKeyCache::default()),
+        platform.legacy_organization.clone(),
     )?;
     Ok(router.merge(
         Router::new()

@@ -30,7 +30,7 @@ async fn execute<Platform: CentralPlatform>(
     match app
         .call_from_owner::<RegistryKind, _>(
             owner,
-            (),
+            app.legacy_fleet_address(),
             OwnerRegistryOperations { database },
             request,
         )

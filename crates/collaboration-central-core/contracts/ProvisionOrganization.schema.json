@@ -12,15 +12,11 @@
   "properties": {
     "organizationId": {
       "$ref": "#/$defs/OrganizationId"
-    },
-    "ownerVerifiedEmail": {
-      "type": "string"
     }
   },
   "required": [
-    "organizationId",
-    "ownerVerifiedEmail"
+    "organizationId"
   ],
-  "title": "SetOrganizationOwner",
+  "title": "ProvisionOrganization",
   "type": "object"
 }

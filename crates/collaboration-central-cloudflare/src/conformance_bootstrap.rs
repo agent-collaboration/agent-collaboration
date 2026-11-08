@@ -79,6 +79,7 @@ enum Command {
 }
 fn registry(
     host: Arc<ReceiptStoreHost>,
+    organization: fleet_identity_protocol::OrganizationId,
 ) -> Result<
     ObjectRuntime<
         collaboration_central_core::FleetKind,
@@ -92,6 +93,7 @@ fn registry(
     ObjectRuntime::fleet(
         host,
         io,
+        organization,
         RegistryConfig {
             lease: LeasePolicy {
                 lease_duration: Duration::from_secs(60),
@@ -121,7 +123,7 @@ enum Fault {
 pub(crate) const IMPORTED_UNHELD_PATH: &str = "/test/imported-unheld-fixture";
 pub(crate) const CONTROL_PATH: &str = "/admin/v1/conformance/bootstrap";
 pub(crate) async fn forward(env: &Env, mut request: Request) -> Result<Response> {
-    let labels = crate::access_verification::InvocationLabels::for_request(&request)?;
+    let labels = crate::access_verification::InvocationLabels::for_request(&request, env)?;
     let assertion = request.headers().get("Cf-Access-Jwt-Assertion")?;
     let caller = crate::access_verification::verify(
         env,
@@ -148,7 +150,7 @@ pub(crate) async fn forward(env: &Env, mut request: Request) -> Result<Response>
         };
         return crate::composed_control::forward(
             env,
-            &collaboration_central_core::ObjectAddress::Fleet,
+            &crate::cloudflare_transport::legacy_address(env)?,
             IMPORTED_UNHELD_PATH,
             Some(serde_json::to_string(&(database, owner, board_state))?),
         )
@@ -172,12 +174,14 @@ pub(crate) async fn forward(env: &Env, mut request: Request) -> Result<Response>
 pub struct BootstrapObject {
     state: Arc<SendWrapper<State>>,
     host: OnceCell<Arc<ReceiptStoreHost>>,
+    env: Arc<SendWrapper<Env>>,
 }
 impl DurableObject for BootstrapObject {
-    fn new(state: State, _env: Env) -> Self {
+    fn new(state: State, env: Env) -> Self {
         Self {
             state: Arc::new(SendWrapper::new(state)),
             host: OnceCell::new(),
+            env: Arc::new(SendWrapper::new(env)),
         }
     }
     async fn fetch(&self, mut request: Request) -> Result<Response> {
@@ -185,7 +189,12 @@ impl DurableObject for BootstrapObject {
         let host = match self.host.get() {
             Some(host) => host.clone(),
             None => {
-                let host = new_host(self.state.clone())?;
+                let host = new_host(
+                    self.state.clone(),
+                    crate::cloudflare_transport::locations(&self.env)?
+                        .legacy_organization()
+                        .clone(),
+                )?;
                 self.host
                     .set(host.clone())
                     .map_err(|_| Error::RustError("bootstrap fixture initialized twice".into()))?;
@@ -214,7 +223,12 @@ impl DurableObject for BootstrapObject {
                 "import fixture must use the composed Registry",
             )),
             Command::Enroll(request) => {
-                let runtime = registry(host.clone())?;
+                let runtime = registry(
+                    host.clone(),
+                    crate::cloudflare_transport::locations(&self.env)?
+                        .legacy_organization()
+                        .clone(),
+                )?;
                 let owner = OwnerIdentity::from_access(AccessCaller::Owner {
                     email: "fixture@example.test".into(),
                 })
@@ -229,12 +243,17 @@ impl DurableObject for BootstrapObject {
             Command::Authenticate {
                 access_client_id,
                 credential_hash,
-            } => registry(host.clone())?
-                .authenticate_machine(access_client_id, credential_hash)
-                .await
-                .and_then(|reply| {
-                    serde_json::to_value(reply).map_err(durable_steps::StoreError::backend)
-                }),
+            } => registry(
+                host.clone(),
+                crate::cloudflare_transport::locations(&self.env)?
+                    .legacy_organization()
+                    .clone(),
+            )?
+            .authenticate_machine(access_client_id, credential_hash)
+            .await
+            .and_then(|reply| {
+                serde_json::to_value(reply).map_err(durable_steps::StoreError::backend)
+            }),
         };
         #[cfg(feature = "conformance-faults")]
         let observed = host.store().inner().reply_loss_observed();

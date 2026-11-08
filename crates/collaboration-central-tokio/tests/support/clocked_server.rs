@@ -4,7 +4,7 @@ use collaboration_central_conformance::{
     ClockObservation, ConformanceResult, RuntimeControl, RuntimeControlRequest,
     RuntimeFaultObservation, fixture_policy, owner_assertion,
 };
-use collaboration_central_core::{ObjectAddress, RegistryTime};
+use collaboration_central_core::RegistryTime;
 use collaboration_central_tokio::{TokioServer, TokioSettings};
 
 use crate::configuration;
@@ -20,7 +20,7 @@ impl SuppliedClock {
             .post(format!("{}/admin/v1/conformance/runtime", self.base))
             .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
             .json(&RuntimeControlRequest {
-                address: ObjectAddress::Fleet,
+                address: collaboration_central_conformance::legacy_fleet_address(),
                 command: RuntimeControl::SetTime { now: at },
             })
             .send()
@@ -42,6 +42,7 @@ pub struct ClockedServer {
 impl ClockedServer {
     pub async fn start(root: &std::path::Path, jwks: &str) -> ConformanceResult<Self> {
         let server = TokioServer::start(TokioSettings {
+            legacy_organization: collaboration_central_conformance::legacy_organization(),
             root: root.into(),
             access_policy: fixture_policy(),
             jwks_url: jwks.into(),

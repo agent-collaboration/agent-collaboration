@@ -44,8 +44,8 @@ async fn held_remote(fixture: &mut BoardFixture, second: &SecondHost) -> Fixture
     settled_view(fixture.host()?, &fixture.project).await?;
     controls::hold_selected(
         fixture,
-        ObjectAddress::Fleet,
-        ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
+        collaboration_central_conformance::legacy_fleet_address(),
         DispatchCallSelector::FleetMailSubmit,
     )
     .await?;
@@ -56,7 +56,12 @@ async fn held_remote(fixture: &mut BoardFixture, second: &SecondHost) -> Fixture
     follow.assert_frozen(&item, &range)?;
     copy_project(fixture).await?;
     settled_view(fixture.host()?, &fixture.project).await?;
-    controls::resume(fixture, ObjectAddress::Fleet, controls::submit_key()).await?;
+    controls::resume(
+        fixture,
+        collaboration_central_conformance::legacy_fleet_address(),
+        controls::submit_key(),
+    )
+    .await?;
     sender_status(fixture.host()?, &item.id().as_uuid().to_string(), "held").await?;
     native_state(
         second.host()?,
@@ -204,7 +209,7 @@ async fn release_predecessor_frontier(fixture: &BoardFixture, prefix: EndPrefix)
         // conformance dispatch only after the successor seed is installed.
         let observed = super::central_pair::central(fixture)?
             .runtime_control(
-                board_central_test_support::ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 RuntimeControl::Observe,
             )
             .await?;
@@ -214,7 +219,7 @@ async fn release_predecessor_frontier(fixture: &BoardFixture, prefix: EndPrefix)
         ) {
             controls::resume(
                 fixture,
-                board_central_test_support::ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 controls::copy_write_key(fixture)?,
             )
             .await?;
@@ -230,12 +235,12 @@ async fn arrange_remote_end(
     remote_prefix: RemoteEndPrefix,
 ) -> FixtureResult<RemoteEndCut> {
     let prefix = remote_prefix.end_prefix();
-    let fleet = ObjectAddress::Fleet;
+    let fleet = collaboration_central_conformance::legacy_fleet_address();
     match prefix {
         EndPrefix::Discarded => {
             controls::hold_selected(
                 fixture,
-                board_central_test_support::ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 controls::copy(fixture)?,
                 DispatchCallSelector::CopyWrite,
             )
@@ -244,7 +249,7 @@ async fn arrange_remote_end(
         EndPrefix::LostReceipt => {
             controls::hold_selected(
                 fixture,
-                ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 fleet.clone(),
                 DispatchCallSelector::FleetMailSubmit,
             )
@@ -253,7 +258,7 @@ async fn arrange_remote_end(
         EndPrefix::Retained => {
             controls::hold_selected(
                 fixture,
-                board_central_test_support::ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 controls::copy(fixture)?,
                 DispatchCallSelector::CopyWrite,
             )
@@ -266,7 +271,7 @@ async fn arrange_remote_end(
         EndPrefix::Discarded => {
             let held = controls::held(
                 fixture,
-                board_central_test_support::ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 controls::copy_write_key(fixture)?,
             )
             .await?;
@@ -313,8 +318,12 @@ async fn lose_cancel_answer(
 ) -> FixtureResult<Value> {
     tokio::time::timeout(BOUND, async {
         loop {
-            let request =
-                controls::held(fixture, ObjectAddress::Fleet, controls::submit_key()).await?;
+            let request = controls::held(
+                fixture,
+                collaboration_central_conformance::legacy_fleet_address(),
+                controls::submit_key(),
+            )
+            .await?;
             if request.get("kind") == Some(&json!("central.mail-submit")) {
                 let item: DeliveryEnvelope<BoardDeliveryTypes> =
                     serde_json::from_value(at(&request, "/request/item")?.clone())?;
@@ -322,7 +331,7 @@ async fn lose_cancel_answer(
                     assert_eq!(cancel.target().as_uuid().to_string(), original);
                     let dropped = controls::release_and_drop_selected_reply(
                         fixture,
-                        ObjectAddress::Fleet,
+                        collaboration_central_conformance::legacy_fleet_address(),
                         fleet.clone(),
                         DispatchCallSelector::FleetMailSubmit,
                     )
@@ -333,7 +342,7 @@ async fn lose_cancel_answer(
             }
             super::central_pair::central(fixture)?
                 .runtime_control(
-                    ObjectAddress::Fleet,
+                    collaboration_central_conformance::legacy_fleet_address(),
                     RuntimeControl::ResumeDispatchAndHoldNext {
                         key: controls::submit_key(),
                         next: controls::submit_key(),

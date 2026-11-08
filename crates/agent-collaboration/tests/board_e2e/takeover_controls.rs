@@ -213,10 +213,16 @@ pub fn copy_write_key(fixture: &BoardFixture) -> FixtureResult<DispatchKey> {
     ))
 }
 pub fn submit_key() -> DispatchKey {
-    DispatchKey::new(ObjectAddress::Fleet, DispatchCallSelector::FleetMailSubmit)
+    DispatchKey::new(
+        collaboration_central_conformance::legacy_fleet_address(),
+        DispatchCallSelector::FleetMailSubmit,
+    )
 }
 pub fn peer_lookup_key() -> DispatchKey {
-    DispatchKey::new(ObjectAddress::Fleet, DispatchCallSelector::InstallationPeer)
+    DispatchKey::new(
+        collaboration_central_conformance::legacy_fleet_address(),
+        DispatchCallSelector::InstallationPeer,
+    )
 }
 
 pub async fn held(
@@ -448,13 +454,21 @@ where
         async |(fixture, second): (&mut BoardFixture, &mut SecondHost)| {
             // Let blocked calls finish before graceful shutdown, then check
             // again after every caller is joined. Keep all independent errors.
-            let before_fleet = release_if_held(fixture, ObjectAddress::Fleet).await;
+            let before_fleet = release_if_held(
+                fixture,
+                collaboration_central_conformance::legacy_fleet_address(),
+            )
+            .await;
             let first = match fixture.host.take() {
                 Some(host) => host.stop().await,
                 None => Ok(()),
             };
             let second = second.stop_host().await;
-            let fleet = release_if_held(fixture, ObjectAddress::Fleet).await;
+            let fleet = release_if_held(
+                fixture,
+                collaboration_central_conformance::legacy_fleet_address(),
+            )
+            .await;
             let failures = [
                 ("initial Fleet release", before_fleet),
                 ("first Host", first),

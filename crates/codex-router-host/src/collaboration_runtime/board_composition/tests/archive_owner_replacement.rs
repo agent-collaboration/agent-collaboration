@@ -146,7 +146,7 @@ impl ReplacementFixture {
     async fn close(mut self) -> TestResult {
         let mut failures = Vec::new();
         if let Some(central) = &self.central {
-            let address = ObjectAddress::Fleet;
+            let address = collaboration_central_conformance::legacy_fleet_address();
             if let Err(error) = central.release_held_dispatches(address).await {
                 failures.push(format!("held dispatch cleanup: {error}"));
             }
@@ -285,7 +285,7 @@ async fn record_unacknowledged(
     first.fleet.upgrade().ok_or("Fleet")?.synchronize().await?;
     central
         .runtime_control(
-            ObjectAddress::Fleet,
+            collaboration_central_conformance::legacy_fleet_address(),
             RuntimeControl::HoldNextDispatch {
                 key: board_central_test_support::DispatchKey::new(
                     ObjectAddress::Copy(DatabaseId::try_from(project.as_str().to_owned())?),
@@ -301,7 +301,7 @@ async fn record_unacknowledged(
         .ok_or("archive observation")?;
     central
         .runtime_control(
-            ObjectAddress::Fleet,
+            collaboration_central_conformance::legacy_fleet_address(),
             RuntimeControl::AwaitHeldDispatch {
                 key: board_central_test_support::DispatchKey::new(
                     ObjectAddress::Copy(DatabaseId::try_from(project.as_str().to_owned())?),

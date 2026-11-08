@@ -16,7 +16,7 @@ pub(super) async fn prepare_cleanup(
     );
     control(
         base,
-        ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
         RuntimeControl::SetTime { now: at },
     )
     .await?;
@@ -86,7 +86,7 @@ pub(super) async fn prepare_cleanup(
     let copy = ObjectAddress::Copy(database);
     control(
         base,
-        ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
         RuntimeControl::HoldNextDispatch {
             key: DispatchKey::any(copy.clone()),
         },
@@ -117,7 +117,7 @@ pub(super) async fn prepare_cleanup(
     }
     control(
         base,
-        ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
         RuntimeControl::ResumeDispatchAndHoldNext {
             key: DispatchKey::any(copy.clone()),
             next: DispatchKey::any(copy.clone()),
@@ -159,7 +159,7 @@ pub(super) async fn prepare_cleanup(
         CleanupLoss::Dispatch => {
             control(
                 base,
-                ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 RuntimeControl::ResumeDispatchAndHoldNext {
                     key: DispatchKey::any(ObjectAddress::Copy(database)),
                     next: settlement_key(),
@@ -170,16 +170,16 @@ pub(super) async fn prepare_cleanup(
         CleanupLoss::Acknowledgement => {
             control(
                 base,
-                ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 RuntimeControl::DropNextSelectedObjectReply {
-                    destination: ObjectAddress::Fleet,
+                    destination: collaboration_central_conformance::legacy_fleet_address(),
                     call: collaboration_central_conformance::DispatchCallSelector::FleetClaimSettlement,
                 },
             )
             .await?;
             control(
                 base,
-                ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 RuntimeControl::ResumeDispatch {
                     key: DispatchKey::any(ObjectAddress::Copy(database)),
                 },
@@ -188,11 +188,17 @@ pub(super) async fn prepare_cleanup(
         }
     }
     let call = match loss {
-        CleanupLoss::Dispatch => await_call(base, &ObjectAddress::Fleet).await?,
+        CleanupLoss::Dispatch => {
+            await_call(
+                base,
+                &collaboration_central_conformance::legacy_fleet_address(),
+            )
+            .await?
+        }
         CleanupLoss::Acknowledgement => {
             let observed = control(
                 base,
-                ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 RuntimeControl::AwaitDroppedObjectReply,
             )
             .await?;
@@ -203,7 +209,7 @@ pub(super) async fn prepare_cleanup(
             else {
                 return Err("actual refused-settlement reply was not dropped".into());
             };
-            if destination != ObjectAddress::Fleet {
+            if destination != collaboration_central_conformance::legacy_fleet_address() {
                 return Err("dropped another object's reply".into());
             }
             serde_json::from_slice(&request)?
@@ -281,7 +287,7 @@ pub(super) async fn prepare_cleanup(
 }
 
 async fn await_call(base: &str, destination: &ObjectAddress) -> ConformanceResult<Value> {
-    let key = if *destination == ObjectAddress::Fleet {
+    let key = if *destination == collaboration_central_conformance::legacy_fleet_address() {
         settlement_key()
     } else {
         DispatchKey::any(destination.clone())
@@ -290,7 +296,7 @@ async fn await_call(base: &str, destination: &ObjectAddress) -> ConformanceResul
         Duration::from_secs(8),
         control(
             base,
-            ObjectAddress::Fleet,
+            collaboration_central_conformance::legacy_fleet_address(),
             RuntimeControl::AwaitHeldDispatch { key: key.clone() },
         ),
     )

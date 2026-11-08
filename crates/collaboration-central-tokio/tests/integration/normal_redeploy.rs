@@ -33,6 +33,7 @@ use std::time::Duration;
 
 fn settings(root: &std::path::Path, keys: &JwksFixtureServer) -> ConformanceResult<TokioSettings> {
     Ok(TokioSettings {
+        legacy_organization: collaboration_central_conformance::legacy_organization(),
         root: root.into(),
         access_policy: fixture_policy(),
         jwks_url: keys.url.clone(),

@@ -41,7 +41,7 @@ async fn pin_registry(base: &str, millis: i64) -> ConformanceResult<()> {
         &bounded_http_client()?,
         base,
         "runtime",
-        json!({"address":{"kind":"fleet"},"command":{"kind":"setTime","value":{"now":now}}}),
+        json!({"address":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"command":{"kind":"setTime","value":{"now":now}}}),
     )
     .await?;
     Ok(())
@@ -178,7 +178,7 @@ async fn readiness(base: &str) -> ConformanceResult<()> {
         held_schema(&session, base).await?;
         refused(&mut session, base).await?;
         session.barrier(base).await?;
-        session.control(base, json!({"kind":"resumeDispatch","value":{"key":{"destination":{"kind":"fleet"},"call":"any"}}})).await?;
+        session.control(base, json!({"kind":"resumeDispatch","value":{"key":{"destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"call":"any"}}})).await?;
         session.welcome().await?;
         session.pin(base, 2_000_000_000_000).await?;
         refused(&mut session, base).await?;
@@ -339,11 +339,11 @@ pub(super) async fn beside_schema(base: &str) -> ConformanceResult<()> {
         completed(base, call.operation, answer).await?;
         let observed = attaching.control(base, json!({"kind":"observe"})).await?;
         let observed: collaboration_central_conformance::RuntimeFaultObservation = serde_json::from_value(observed)?;
-        if !matches!(observed.dispatch(&DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet)), collaboration_central_conformance::DispatchFaultObservation::Held { .. }) {
+        if !matches!(observed.dispatch(&DispatchKey::any(collaboration_central_conformance::legacy_fleet_address())), collaboration_central_conformance::DispatchFaultObservation::Held { .. }) {
             return Err("schema publication was not held beside the completed answer".into());
         }
         attaching
-            .control(base, json!({"kind":"resumeDispatch","value":{"key":{"destination":{"kind":"fleet"},"call":"any"}}}))
+            .control(base, json!({"kind":"resumeDispatch","value":{"key":{"destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"call":"any"}}}))
             .await?;
         attaching.welcome().await?;
         println!(

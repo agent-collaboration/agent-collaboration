@@ -33,6 +33,7 @@ async fn the_core_application_uses_real_native_key_fetch_and_signature_verificat
         platform.clone(),
         fixture_policy(),
         Arc::new(AccessKeyCache::default()),
+        collaboration_central_conformance::legacy_organization(),
     )?;
     let owner = owner_assertion()?;
     let proof = async {
@@ -114,6 +115,7 @@ async fn the_core_application_refetches_zero_age_keys_through_the_native_capabil
         platform.clone(),
         fixture_policy(),
         Arc::new(AccessKeyCache::default()),
+        collaboration_central_conformance::legacy_organization(),
     )?;
     let owner = owner_assertion()?;
 

@@ -32,7 +32,10 @@ fn validate_fence(
             .ok_or("held floor-repair Fence omitted request")?,
     )?;
     if envelope.get("kind") != Some(&json!("fleet-sync.copy-fence"))
-        || envelope.get("source") != Some(&json!(ObjectAddress::Fleet))
+        || envelope.get("source")
+            != Some(&json!(
+                collaboration_central_conformance::legacy_fleet_address()
+            ))
         || envelope.get("destination") != Some(&json!(ObjectAddress::Copy(database)))
         || envelope.pointer("/target/copy")
             != Some(&json!(

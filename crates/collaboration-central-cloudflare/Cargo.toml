@@ -17,6 +17,7 @@ conformance = [ "dep:collaboration-central-conformance", "collaboration-central-
 conformance-faults = ["conformance", "durable-steps/test-support"]
 
 [dependencies]
+fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.118" }
 axum = { version = "0.8.9", default-features = false, features = ["json"] }
 http = "1.4.1"
 tower-service = "0.3.3"

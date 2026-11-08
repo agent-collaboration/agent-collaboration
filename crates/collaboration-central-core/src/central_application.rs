@@ -11,6 +11,7 @@ pub struct CentralApplication<Platform: CentralPlatform> {
     pub(crate) platform: Platform,
     policy: AccessPolicy,
     access_keys: Arc<AccessKeyCache>,
+    legacy_organization: fleet_identity_protocol::OrganizationId,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -26,13 +27,19 @@ impl<Platform: CentralPlatform> CentralApplication<Platform> {
         platform: Platform,
         policy: AccessPolicy,
         access_keys: Arc<AccessKeyCache>,
+        legacy_organization: fleet_identity_protocol::OrganizationId,
     ) -> Result<Self, AccessRefusal> {
         policy.validate()?;
         Ok(Self {
             platform,
             policy,
             access_keys,
+            legacy_organization,
         })
+    }
+
+    pub(crate) fn legacy_fleet_address(&self) -> crate::FleetAddress {
+        crate::FleetAddress::new(self.legacy_organization.clone())
     }
 
     pub async fn verify_access(
@@ -67,7 +74,8 @@ impl<Platform: CentralPlatform> CentralApplication<Platform> {
         crate::EdgeKind: crate::MayCall<To>,
     {
         let caller = self.verify_access(header, path).await?;
-        let context = crate::CallerContext::for_verified_edge(caller)?;
+        let context =
+            crate::CallerContext::for_verified_edge(caller, self.legacy_organization.clone())?;
         crate::serialize_object_call(&context, dispatch).map_err(ApplicationCallFailure::Transport)
     }
 
@@ -82,8 +90,9 @@ impl<Platform: CentralPlatform> CentralApplication<Platform> {
         crate::EdgeKind: crate::MayCall<To>,
     {
         let prepared = (|| {
-            let context = crate::CallerContext::for_verified_edge(caller)
-                .map_err(crate::object_call_envelope::encode_refusal)?;
+            let context =
+                crate::CallerContext::for_verified_edge(caller, self.legacy_organization.clone())
+                    .map_err(crate::object_call_envelope::encode_refusal)?;
             let call_id = crate::ObjectCallId::new(self.platform.ids().new_id().to_string())
                 .map_err(crate::object_call_envelope::encode_refusal)?;
             crate::serialize_object_call(&context, crate::Dispatch::<To> { call_id, to, call })
@@ -115,7 +124,10 @@ impl<Platform: CentralPlatform> CentralApplication<Platform> {
         crate::EdgeKind: crate::MayCall<To>,
     {
         let prepared = (|| {
-            let caller = crate::CallerContext::<crate::EdgeKind>::for_owner(owner);
+            let caller = crate::CallerContext::<crate::EdgeKind>::for_owner(
+                owner,
+                self.legacy_organization.clone(),
+            );
             let identity = durable_steps::CallId {
                 operation: durable_steps::OperationId::new(self.platform.ids().new_id())
                     .map_err(crate::object_call_envelope::encode_refusal)?,

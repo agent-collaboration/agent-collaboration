@@ -5,7 +5,6 @@ use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, RuntimeControl, RuntimeControlRequest,
     enroll_admitted_peer, owner_assertion,
 };
-use collaboration_central_core::ObjectAddress;
 use fleet_sync_protocol::{
     DeliveryEnvelope, DeliveryItem, DeliveryStatus, FrameId, ItemId, PeerId, ServerCall,
     ServerFrame, ServerRequest, StatusPublication, StatusVersion, Submitter,
@@ -29,7 +28,7 @@ async fn set_time(base: &str, millis: i64) -> ConformanceResult<()> {
         .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
         .timeout(Duration::from_secs(10))
         .json(&RuntimeControlRequest {
-            address: ObjectAddress::Fleet,
+            address: collaboration_central_conformance::legacy_fleet_address(),
             command: RuntimeControl::SetTime {
                 now: collaboration_central_core::RegistryTime(
                     chrono::DateTime::from_timestamp_millis(millis)

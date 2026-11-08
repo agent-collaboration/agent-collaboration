@@ -1,7 +1,7 @@
 //! Admin continuation composes the shared Copy seed entry and its committed summary.
 
 use crate::{
-    CallerKind, CopyKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, CopyKind, ObjectHost, ObjectRuntime, PlatformIo,
     admin_import_contract::AdminImportRecord,
     caller_context::CallAuthority,
     copy_write_calls::{AdminCopySeedRequest, CopyAdminSeed},
@@ -87,7 +87,7 @@ where
         mut call: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if call.source_face != CallerKind::Fleet
-            || call.source != ObjectAddress::Fleet
+            || !call.has_fleet_source()
             || !matches!(call.authority, CallAuthority::Owner(_))
         {
             return Err(refused());
@@ -248,6 +248,7 @@ where
         // Preserve the verified owner edge envelope. The shared entry owns all
         // receiver mutations, rollback classification and follow-up admission.
         let invocation = ObjectCallEnvelope {
+            organization: call.organization.clone(),
             source: call.source.clone(),
             source_face: call.source_face,
             authority: call.authority.clone(),

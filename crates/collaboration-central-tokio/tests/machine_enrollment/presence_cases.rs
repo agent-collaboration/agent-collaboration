@@ -58,6 +58,7 @@ fn runtime(fixture: &Fixture, clock: &PresenceIo) -> TestResult<PresenceRuntime>
     Ok(ObjectRuntime::fleet(
         Arc::new(TokioStorageHost::new(fixture.object.clone())),
         clock.clone(),
+        collaboration_central_conformance::legacy_organization(),
         config()?,
         collaboration_central_tokio::DeliveryConfig {
             relay_peer: fleet_sync_protocol::PeerId::try_from(
@@ -89,8 +90,8 @@ async fn invoke(
     request: serde_json::Value,
 ) -> TestResult<Vec<u8>> {
     Ok(runtime.on_call(serde_json::to_vec(&json!({
-        "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":service}},
-        "destination":{"kind":"fleet"},"destinationFace":"registry",
+        "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":service}},
+        "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"registry",
         "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"presence_case"},
         "kind":kind,"target":null,"request":request
     }))?).await?)
@@ -212,8 +213,8 @@ async fn only_a_new_verified_admission_sets_presence_and_a_renewal_does_not() ->
         },
     ] {
         let answer = registry.on_call(serde_json::to_vec(&json!({
-            "source":{"kind":"fleet"},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":request.installation}},
-            "destination":{"kind":"fleet"},"destinationFace":"fleet",
+            "organization":"019f0000-0000-7000-8000-00000000ac01","source":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"sourceFace":"session","authority":{"kind":"machine","value":{"installation":request.installation}},
+            "destination":{"kind":"fleet","value":{"organization":"019f0000-0000-7000-8000-00000000ac01"}},"destinationFace":"fleet",
             "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"presence_directory"},
             "kind":"central.fleet-metadata","target":null,"request":{
                 "origin":{"installation":request.installation,"machine":"presence fixture"},

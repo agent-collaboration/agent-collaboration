@@ -216,7 +216,7 @@ where
         invocation: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if invocation.source_face != CallerKind::Edge
-            || invocation.source != ObjectAddress::Fleet
+            || !invocation.has_fleet_source()
             || !matches!(invocation.authority, CallAuthority::Owner(_))
         {
             return Err(CallFailure::AnswerLost);

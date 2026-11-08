@@ -72,7 +72,7 @@ impl ConformanceClient {
         }
         let observed = crate::composed_client::control(
             self,
-            collaboration_central_core::ObjectAddress::Fleet,
+            crate::legacy_fleet_address(),
             crate::RuntimeControl::Observe,
         )
         .await?;
@@ -96,7 +96,7 @@ impl ConformanceClient {
         }).await??;
         crate::composed_client::control(
             self,
-            collaboration_central_core::ObjectAddress::Fleet,
+            crate::legacy_fleet_address(),
             crate::RuntimeControl::SetTime { now },
         )
         .await?;

@@ -53,7 +53,10 @@ impl Clock for SharedClock {
 #[derive(Clone)]
 pub struct TokioObjectIo {
     objects: Weak<NativeObjects>,
+    #[cfg(feature = "conformance")]
+    address: ObjectAddress,
     clock: SharedClock,
+    ids: Arc<dyn IdSource>,
     wake: Arc<TokioWakeTimer<SharedClock>>,
     #[cfg(feature = "conformance")]
     faults: Arc<collaboration_central_conformance::RuntimeFaults>,
@@ -69,7 +72,7 @@ impl Clock for TokioObjectIo {
 }
 impl IdSource for TokioObjectIo {
     fn new_id(&self) -> durable_steps::Uuid {
-        durable_steps::Uuid::now_v7()
+        self.ids.new_id()
     }
 }
 impl WakeScheduler for TokioObjectIo {
@@ -88,14 +91,14 @@ impl PlatformIo for TokioObjectIo {
     #[cfg(feature = "conformance")]
     async fn before_local_call(&self, request: &[u8]) -> Result<(), CallFailure> {
         self.faults
-            .before_dispatch(&ObjectAddress::Fleet, request)
+            .before_dispatch(&self.address, request)
             .await
             .map_err(|_| CallFailure::AnswerLost)
     }
     #[cfg(feature = "conformance")]
     fn drop_local_reply(&self, request: &[u8]) -> Result<bool, CallFailure> {
         self.faults
-            .drop_successful_object_reply(&ObjectAddress::Fleet, request)
+            .drop_successful_object_reply(&self.address, request)
             .map_err(|_| CallFailure::AnswerLost)
     }
     async fn object_call(
@@ -165,7 +168,10 @@ pub(crate) struct NativeObjects {
     store: ObjectStore<CoreHost<TokioObjectIo>>,
     slots: Mutex<BTreeMap<String, Arc<ObjectSlot>>>,
     clock: SharedClock,
+    ids: Arc<dyn IdSource>,
     config: RegistryConfig,
+    locations: collaboration_central_core::FleetLocationPolicy,
+    fleet_references: Arc<dyn collaboration_central_core::CopyFleetReferencePort>,
     delivery: crate::DeliveryConfig,
     holder_answer_timeout: std::time::Duration,
     copy_ack_wait: std::time::Duration,
@@ -177,6 +183,11 @@ pub(crate) struct NativeObjects {
     health_samples: Mutex<BTreeMap<fleet_sync_protocol::DatabaseId, Vec<HealthFileSample>>>,
 }
 impl NativeObjects {
+    fn legacy_address(&self) -> ObjectAddress {
+        ObjectAddress::Fleet {
+            organization: self.locations.legacy_organization().clone(),
+        }
+    }
     #[cfg(feature = "conformance")]
     pub(crate) async fn runtime_control(
         self: &Arc<Self>,
@@ -204,9 +215,15 @@ impl NativeObjects {
         Ok(observed)
     }
     #[cfg(not(feature = "conformance"))]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Native composition keeps clock, IDs and deployment policies explicit."
+    )]
     pub(crate) async fn open(
         root: &Path,
         clock: Arc<dyn Clock>,
+        ids: Arc<dyn IdSource>,
+        locations: collaboration_central_core::FleetLocationPolicy,
         config: RegistryConfig,
         delivery: crate::DeliveryConfig,
         holder_answer_timeout: std::time::Duration,
@@ -215,6 +232,8 @@ impl NativeObjects {
         Self::open_prepared(
             root,
             clock,
+            ids,
+            locations,
             config,
             delivery,
             holder_answer_timeout,
@@ -226,19 +245,28 @@ impl NativeObjects {
     }
 
     #[cfg(feature = "conformance")]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Native composition keeps capabilities, policies and initial test controls explicit."
+    )]
     pub(crate) async fn open_with_controls(
         root: &Path,
         clock: Arc<dyn Clock>,
+        ids: Arc<dyn IdSource>,
+        locations: collaboration_central_core::FleetLocationPolicy,
         config: RegistryConfig,
         delivery: crate::DeliveryConfig,
         holder_answer_timeout: std::time::Duration,
         copy_ack_wait: std::time::Duration,
         controls: Vec<collaboration_central_conformance::RuntimeControlRequest>,
     ) -> Result<Arc<Self>, StoreError> {
-        let prepared = crate::startup_controls::PreparedRuntimeControls::prepare(controls).await?;
+        let prepared =
+            crate::startup_controls::PreparedRuntimeControls::prepare(controls, &locations).await?;
         Self::open_prepared(
             root,
             clock,
+            ids,
+            locations,
             config,
             delivery,
             holder_answer_timeout,
@@ -248,9 +276,15 @@ impl NativeObjects {
         .await
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "This constructor receives the explicit host capabilities and deployment policies."
+    )]
     async fn open_prepared(
         root: &Path,
         clock: Arc<dyn Clock>,
+        ids: Arc<dyn IdSource>,
+        locations: collaboration_central_core::FleetLocationPolicy,
         config: RegistryConfig,
         delivery: crate::DeliveryConfig,
         holder_answer_timeout: std::time::Duration,
@@ -262,6 +296,11 @@ impl NativeObjects {
             store: ObjectStore::open(root).await?,
             slots: Mutex::default(),
             clock: SharedClock(clock),
+            ids,
+            locations,
+            fleet_references: Arc::new(
+                collaboration_central_core::InMemoryCopyFleetReferences::default(),
+            ),
             config,
             delivery,
             holder_answer_timeout,
@@ -285,7 +324,7 @@ impl NativeObjects {
                     .ok_or_else(|| StoreError::Aborted {
                         reason: "invalid native object filename".into(),
                     })?;
-                let address = address_from_key(key)?;
+                let address = address_from_key(key, &objects.locations)?;
                 let copy = matches!(address, ObjectAddress::Copy(_));
                 let slot = objects.slot(address).await?;
                 if copy {
@@ -300,7 +339,7 @@ impl NativeObjects {
     }
 
     async fn slot(self: &Arc<Self>, address: ObjectAddress) -> Result<Arc<ObjectSlot>, StoreError> {
-        let key = address_key(&address)?;
+        let key = address_key(&address, &self.locations)?;
         let slot = {
             let mut slots = self.slots.lock().await;
             slots
@@ -309,7 +348,10 @@ impl NativeObjects {
                     Arc::new(ObjectSlot {
                         io: TokioObjectIo {
                             objects: Arc::downgrade(self),
+                            #[cfg(feature = "conformance")]
+                            address: address.clone(),
                             clock: self.clock.clone(),
+                            ids: self.ids.clone(),
                             wake: Arc::new(TokioWakeTimer::new(self.clock.clone())),
                             #[cfg(feature = "conformance")]
                             faults: self.startup_controls.faults_for(&key),
@@ -359,14 +401,18 @@ impl NativeObjects {
                         self.config.authoritative_receiver,
                         *project,
                         self.copy_ack_wait,
+                        self.fleet_references.clone(),
                     )),
-                    ObjectAddress::Fleet => RuntimeFace::Fleet(ObjectRuntime::fleet(
-                        host,
-                        slot.io.clone(),
-                        self.config,
-                        self.delivery,
-                        self.holder_answer_timeout,
-                    )?),
+                    ObjectAddress::Fleet { organization } => {
+                        RuntimeFace::Fleet(ObjectRuntime::fleet(
+                            host,
+                            slot.io.clone(),
+                            organization.clone(),
+                            self.config,
+                            self.delivery,
+                            self.holder_answer_timeout,
+                        )?)
+                    }
                 };
                 runtime.initialize().await?;
                 Ok::<_, StoreError>(Arc::new(runtime))
@@ -442,7 +488,7 @@ impl NativeObjects {
         if self.stop.is_cancelled() {
             return;
         }
-        let Ok(slot) = self.slot(ObjectAddress::Fleet).await else {
+        let Ok(slot) = self.slot(self.legacy_address()).await else {
             return;
         };
         let Some(host) = slot.host.get() else {
@@ -594,7 +640,7 @@ impl NativeObjects {
             let Some(host) = slot.host.get() else {
                 continue;
             };
-            let address = address_from_key(&key)
+            let address = address_from_key(&key, &self.locations)
                 .map_err(|_| collaboration_central_core::SocketFailure::NotConnected)?;
             let mut admissions = Vec::new();
             for connection in host.registrations().await?.keys() {
@@ -634,7 +680,7 @@ impl NativeObjects {
         self: &Arc<Self>,
         peer: fleet_sync_protocol::PeerId,
     ) -> Result<Option<fleet_sync_protocol::ReportSchemaSupport>, StoreError> {
-        let slot = self.slot(ObjectAddress::Fleet).await?;
+        let slot = self.slot(self.legacy_address()).await?;
         match slot.runtime.get().map(Arc::as_ref) {
             Some(RuntimeFace::Fleet(runtime)) => runtime.conformance_schema_report(peer).await,
             _ => Err(StoreError::Aborted {
@@ -647,7 +693,7 @@ impl NativeObjects {
     pub(crate) async fn prune_fleet_feed(self: &Arc<Self>) -> Result<(u64, i64), StoreError> {
         use durable_steps::{AtomicStore, storage::TransactionScope};
         use sqlx_core::{query::query, row::Row};
-        let slot = self.slot(ObjectAddress::Fleet).await?;
+        let slot = self.slot(self.legacy_address()).await?;
         let host = slot.host.get().ok_or_else(|| StoreError::Aborted {
             reason: "Fleet owner missing".into(),
         })?;
@@ -680,3 +726,10 @@ mod alarm_owner;
 #[cfg(feature = "conformance")]
 #[path = "conformance_board_import.rs"]
 mod conformance_board_import;
+#[cfg(all(test, feature = "conformance"))]
+#[path = "native_objects/organization_routing_test.rs"]
+mod organization_routing_test;
+
+#[cfg(all(test, feature = "conformance"))]
+#[path = "../tests/native_http/support.rs"]
+mod configuration;

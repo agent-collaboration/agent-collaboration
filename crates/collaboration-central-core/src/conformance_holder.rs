@@ -1,9 +1,9 @@
 //! A test-only task exercises the real Registry host and durable call journal.
-use crate::FleetKind;
+use crate::{FleetKind, ObjectAddress};
 
 use crate::{
     AccessCaller, CallerContext, CallerKind, CentralApplication, CentralPlatform, EdgeKind,
-    ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo, RegistryKind,
+    ObjectHost, ObjectRuntime, PlatformIo, RegistryKind,
     caller_context::CallAuthority,
     object_call_envelope::{ObjectCallEnvelope, encode_shared_call},
     object_runtime::ObjectWork,
@@ -172,13 +172,22 @@ pub(crate) async fn invoke_probe<Platform: CentralPlatform, Call: CallTarget>(
     target: Call,
     input: Call::Request,
 ) -> Result<Call::Answer, CallFailure> {
-    let caller = CallerContext::<EdgeKind>::for_verified_edge(caller).map_err(|_| refused())?;
+    let caller = CallerContext::<EdgeKind>::for_verified_edge(
+        caller,
+        application.legacy_fleet_address().organization,
+    )
+    .map_err(|_| refused())?;
     let identity = durable_steps::CallId {
         operation: OperationId::new(application.platform.ids().new_id()).map_err(|_| refused())?,
         step: durable_steps::StepName::new("holder_probe").map_err(|_| refused())?,
     };
-    let call =
-        encode_shared_call::<EdgeKind, RegistryKind, Call>(&caller, (), target, input, identity)?;
+    let call = encode_shared_call::<EdgeKind, RegistryKind, Call>(
+        &caller,
+        application.legacy_fleet_address(),
+        target,
+        input,
+        identity,
+    )?;
     let answer = application.platform.transport_object(call).await?;
     serde_json::from_slice(&answer).map_err(|_| CallFailure::AnswerLost)
 }
@@ -209,7 +218,7 @@ where
         invocation: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if invocation.source_face != CallerKind::Edge
-            || invocation.source != ObjectAddress::Fleet
+            || !invocation.has_fleet_source()
             || !matches!(invocation.authority, CallAuthority::Owner(_))
         {
             return Err(refused());
@@ -245,7 +254,7 @@ where
         invocation: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if invocation.source_face != CallerKind::Edge
-            || invocation.source != ObjectAddress::Fleet
+            || !invocation.has_fleet_source()
             || !matches!(invocation.authority, CallAuthority::Owner(_))
         {
             return Err(refused());
@@ -267,7 +276,7 @@ where
         invocation: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
         if invocation.source_face != CallerKind::Edge
-            || invocation.source != ObjectAddress::Fleet
+            || !invocation.has_fleet_source()
             || !matches!(invocation.authority, CallAuthority::Owner(_))
         {
             return Err(refused());

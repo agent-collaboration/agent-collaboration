@@ -41,7 +41,7 @@ async fn hold_lost_receipt_submit(
         .holder
         .central
         .runtime_control(
-            ObjectAddress::Fleet,
+            collaboration_central_conformance::legacy_fleet_address(),
             RuntimeControl::HoldNextDispatch {
                 key: board_central_test_support::DispatchKey::new(
                     fleet,
@@ -67,11 +67,11 @@ async fn prove_remote_cancel(case: CancelPrefix) -> TestResult {
         let seed = Box::pin(arrange_sent_follow(&mut fixture))
             .await
             .map_err(|error| format!("arrange sent follow: {error}"))?;
-        let connection = ObjectAddress::Fleet;
+        let connection = collaboration_central_conformance::legacy_fleet_address();
         let (group, cancel) = arrange_remote_end(&fixture, &seed, case)
             .await
             .map_err(|error| format!("arrange remote end: {error}"))?;
-        let fleet = ObjectAddress::Fleet;
+        let fleet = collaboration_central_conformance::legacy_fleet_address();
         if matches!(case, CancelPrefix::LostReceipt) {
             hold_lost_receipt_submit(
                 &fixture,
@@ -137,7 +137,7 @@ async fn prove_remote_cancel(case: CancelPrefix) -> TestResult {
     let _ = fixture
         .holder
         .central
-        .release_held_dispatches(ObjectAddress::Fleet)
+        .release_held_dispatches(collaboration_central_conformance::legacy_fleet_address())
         .await;
     let closed = fixture.close().await;
     match (proof, closed) {
@@ -236,7 +236,7 @@ async fn arrange_remote_end(
     (MailCancelGroup, DeliveryEnvelope<BoardDeliveryTypes>),
     Box<dyn std::error::Error + Send + Sync>,
 > {
-    let connection = ObjectAddress::Fleet;
+    let connection = collaboration_central_conformance::legacy_fleet_address();
     if matches!(case, CancelPrefix::Discarded) {
         fixture
             .holder
@@ -394,7 +394,7 @@ async fn lose_actual_submit_answer(
             .holder
             .central
             .runtime_control(
-                ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 RuntimeControl::AwaitHeldDispatch {
                     key: dispatch_key.clone(),
                 },
@@ -433,7 +433,7 @@ async fn lose_actual_submit_answer(
             .holder
             .central
             .runtime_control(
-                ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 RuntimeControl::ResumeDispatch {
                     key: dispatch_key.clone(),
                 },
@@ -443,7 +443,7 @@ async fn lose_actual_submit_answer(
             .holder
             .central
             .runtime_control(
-                ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 RuntimeControl::AwaitDroppedObjectReply,
             )
             .await?;
@@ -470,7 +470,10 @@ async fn successor_publication_evidence(
     let fault = fixture
         .holder
         .central
-        .runtime_control(ObjectAddress::Fleet, RuntimeControl::Observe)
+        .runtime_control(
+            collaboration_central_conformance::legacy_fleet_address(),
+            RuntimeControl::Observe,
+        )
         .await?;
     let marks = fixture
         .successor

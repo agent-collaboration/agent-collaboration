@@ -15,7 +15,7 @@ use collaboration_central_conformance::{
     enroll_admitted_peer, fixture_policy, owner_assertion,
 };
 use collaboration_central_core::{
-    ObjectAddress, RegistryTime, RevocationControl, RevocationControlInput, RevocationObservation,
+    RegistryTime, RevocationControl, RevocationControlInput, RevocationObservation,
 };
 use collaboration_central_tokio::{TokioServer, TokioSettings};
 use fleet_sync_protocol::{
@@ -51,7 +51,7 @@ async fn advance(client: &reqwest::Client, base: &str, now: &mut i64) -> TestRes
         base,
         "/admin/v1/conformance/runtime",
         &RuntimeControlRequest {
-            address: ObjectAddress::Fleet,
+            address: collaboration_central_conformance::legacy_fleet_address(),
             command: RuntimeControl::SetTime {
                 now: RegistryTime(
                     chrono::DateTime::from_timestamp_millis(*now)
@@ -134,6 +134,7 @@ async fn same_peer_readmission_pushes_and_receipts_the_pre_revoke_item_once() ->
     let jwks = JwksFixtureServer::start().await?;
     let server = TokioServer::start_with_controls(
         TokioSettings {
+            legacy_organization: collaboration_central_conformance::legacy_organization(),
             root: root.path().join("central"),
             access_policy: fixture_policy(),
             jwks_url: jwks.url.clone(),
@@ -147,7 +148,7 @@ async fn same_peer_readmission_pushes_and_receipts_the_pre_revoke_item_once() ->
             copy_ack_wait: Duration::from_secs(2),
         },
         vec![RuntimeControlRequest {
-            address: ObjectAddress::Fleet,
+            address: collaboration_central_conformance::legacy_fleet_address(),
             command: RuntimeControl::SetTime {
                 now: RegistryTime(
                     chrono::DateTime::from_timestamp_millis(NOW)

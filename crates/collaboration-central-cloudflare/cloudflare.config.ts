@@ -15,6 +15,7 @@ export default {
       ACCESS_OWNER_IDENTITY: { type: "text", value: "REPLACE_OWNER_IDENTITY" },
       CENTRAL_HOLDER_ANSWER_TIMEOUT: { type: "text", value: '{"secs":20,"nanos":0}' },
       CENTRAL_COPY_ACK_WAIT: { type: "text", value: '{"secs":20,"nanos":0}' },
+      CENTRAL_LEGACY_ORGANIZATION_ID: { type: "text", value: "REPLACE_LEGACY_ORGANIZATION_UUIDV7" },
       CENTRAL_REGISTRY_CONFIG: { type: "text", value: "REPLACE_REGISTRY_CONFIG_JSON" },
       // JSON with the deployment's UUIDv7 relayPeer; required and validated by central.
       CENTRAL_DELIVERY_CONFIG: { type: "text", value: "REPLACE_DELIVERY_CONFIG_JSON" },

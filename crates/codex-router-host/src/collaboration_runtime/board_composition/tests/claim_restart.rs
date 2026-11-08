@@ -244,10 +244,10 @@ async fn run_restart_journey(journey: RestartJourney) -> TestResult {
         if graceful {
             central
                 .runtime_control(
-                    board_central_test_support::ObjectAddress::Fleet,
+                    collaboration_central_conformance::legacy_fleet_address(),
                     board_central_test_support::RuntimeControl::HoldNextDispatch {
                         key: board_central_test_support::DispatchKey::any(
-                            board_central_test_support::ObjectAddress::Fleet,
+                            collaboration_central_conformance::legacy_fleet_address(),
                         ),
                     },
                 )
@@ -326,10 +326,10 @@ async fn run_restart_journey(journey: RestartJourney) -> TestResult {
     if graceful {
         let _ = central
             .runtime_control(
-                board_central_test_support::ObjectAddress::Fleet,
+                collaboration_central_conformance::legacy_fleet_address(),
                 board_central_test_support::RuntimeControl::ResumeDispatch {
                     key: board_central_test_support::DispatchKey::any(
-                        board_central_test_support::ObjectAddress::Fleet,
+                        collaboration_central_conformance::legacy_fleet_address(),
                     ),
                 },
             )

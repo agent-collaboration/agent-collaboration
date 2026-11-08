@@ -211,6 +211,7 @@ pub async fn run(plan: D1CentralPlan) -> DriverResult<()> {
         .try_into()
         .map_err(fixture_error)?;
     let started = TokioServer::start(TokioSettings {
+        legacy_organization: collaboration_central_conformance::legacy_organization(),
         root: stores.clone(),
         access_policy: fixture_policy(),
         jwks_url: jwks.url.clone(),

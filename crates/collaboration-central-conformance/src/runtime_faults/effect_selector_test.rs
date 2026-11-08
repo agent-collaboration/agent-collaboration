@@ -17,13 +17,14 @@ fn invocation(kind: &str) -> serde_json::Result<Vec<u8>> {
 
 async fn selected_effect(call: DispatchCallSelector, kind: &str, wire_name: &str) -> TestResult {
     assert_eq!(serde_json::to_value(call)?, json!(wire_name));
-    let key = DispatchKey::new(ObjectAddress::Fleet, call);
+    let key = DispatchKey::new(crate::legacy_fleet_address(), call);
     let faults = RuntimeFaults::default();
     faults
         .control(RuntimeControl::HoldNextDispatch { key: key.clone() })
         .await?;
     let expected = invocation(kind)?;
-    let dispatch = faults.before_dispatch(&ObjectAddress::Fleet, &expected);
+    let destination = crate::legacy_fleet_address();
+    let dispatch = faults.before_dispatch(&destination, &expected);
     tokio::pin!(dispatch);
     assert!(
         futures_util::poll!(&mut dispatch).is_pending(),
@@ -40,14 +41,14 @@ async fn selected_effect(call: DispatchCallSelector, kind: &str, wire_name: &str
         .control(RuntimeControl::ResumeDispatch { key: key.clone() })
         .await?;
     tokio::time::timeout(BOUND, dispatch).await??;
-    assert!(faults.drop_successful_object_reply(&ObjectAddress::Fleet, &expected)?);
-    assert!(!faults.drop_successful_object_reply(&ObjectAddress::Fleet, &expected)?);
+    assert!(faults.drop_successful_object_reply(&crate::legacy_fleet_address(), &expected)?);
+    assert!(!faults.drop_successful_object_reply(&crate::legacy_fleet_address(), &expected)?);
     assert!(faults.observe()?.dispatches.is_empty());
     Ok(())
 }
 
 async fn unrelated_effects(call: DispatchCallSelector, kind: &str, other: &str) -> TestResult {
-    let key = DispatchKey::new(ObjectAddress::Fleet, call);
+    let key = DispatchKey::new(crate::legacy_fleet_address(), call);
     let faults = RuntimeFaults::default();
     faults
         .control(RuntimeControl::HoldNextDispatch { key: key.clone() })
@@ -60,7 +61,7 @@ async fn unrelated_effects(call: DispatchCallSelector, kind: &str, other: &str) 
     ] {
         tokio::time::timeout(
             BOUND,
-            faults.before_dispatch(&ObjectAddress::Fleet, &invocation(unrelated)?),
+            faults.before_dispatch(&crate::legacy_fleet_address(), &invocation(unrelated)?),
         )
         .await??;
         assert!(matches!(
@@ -70,7 +71,7 @@ async fn unrelated_effects(call: DispatchCallSelector, kind: &str, other: &str) 
     }
     tokio::time::timeout(
         BOUND,
-        faults.before_dispatch(&ObjectAddress::Fleet, b"malformed"),
+        faults.before_dispatch(&crate::legacy_fleet_address(), b"malformed"),
     )
     .await??;
     let other_destination = ObjectAddress::Copy(

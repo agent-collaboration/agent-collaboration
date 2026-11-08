@@ -76,14 +76,19 @@ enum SharedTaskCaller {
     },
     StoreOnly,
     Session(CallerContext<SessionKind>),
-    Delivery,
+    Delivery(CallerContext<DeliveryKind>),
 }
 
 impl<Io: PlatformIo> CoreHost<Io> {
     #[cfg(feature = "conformance")]
-    pub fn conformance_registry(io: Io, authoritative_receiver: ReceiverId) -> Self {
+    pub fn conformance_registry(
+        io: Io,
+        organization: fleet_identity_protocol::OrganizationId,
+        authoritative_receiver: ReceiverId,
+    ) -> Self {
         Self::registry(
             std::sync::Arc::new(io),
+            organization,
             authoritative_receiver,
             std::sync::Arc::new(|_peer| Box::pin(std::future::ready(Err(no_route())))),
             None,
@@ -92,6 +97,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
 
     pub(crate) fn registry(
         io: std::sync::Arc<Io>,
+        organization: fleet_identity_protocol::OrganizationId,
         authoritative_receiver: ReceiverId,
         peer_directory: PeerDirectory,
         lease_store: Option<std::sync::Arc<dyn crate::registry_lease_store::RegistryLeaseStore>>,
@@ -99,7 +105,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
         Self {
             io,
             caller: SharedTaskCaller::Registry {
-                caller: CallerContext::for_object(()),
+                caller: CallerContext::for_object(crate::FleetAddress::new(organization)),
                 peer_directory,
                 lease_publication: lease_store.map(lease_settlement::RegistryLeasePublication::new),
             },
@@ -137,10 +143,12 @@ impl<Io: PlatformIo> CoreHost<Io> {
         }
     }
 
-    pub(crate) fn delivery(&self) -> Self {
-        Self {
+    pub(crate) fn delivery(&self) -> Result<Self, CallFailure> {
+        Ok(Self {
             io: self.io.clone(),
-            caller: SharedTaskCaller::Delivery,
+            caller: SharedTaskCaller::Delivery(CallerContext::for_object(
+                crate::FleetAddress::new(self.organization()?.clone()),
+            )),
             authoritative_receiver: self.authoritative_receiver,
             publication: self.publication.clone(),
             push: self.push.clone(),
@@ -151,13 +159,16 @@ impl<Io: PlatformIo> CoreHost<Io> {
             forward_route_probe: self.forward_route_probe.clone(),
             #[cfg(feature = "conformance")]
             revocation_probe: self.revocation_probe.clone(),
-        }
+        })
     }
 
-    pub(crate) fn session_for(&self, installation: ServiceId) -> Self {
-        Self {
+    pub(crate) fn session_for(&self, installation: ServiceId) -> Result<Self, CallFailure> {
+        Ok(Self {
             io: self.io.clone(),
-            caller: SharedTaskCaller::Session(CallerContext::for_machine(installation)),
+            caller: SharedTaskCaller::Session(CallerContext::for_machine(
+                self.organization()?.clone(),
+                installation,
+            )),
             authoritative_receiver: self.authoritative_receiver,
             publication: self.publication.clone(),
             push: self.push.clone(),
@@ -168,6 +179,18 @@ impl<Io: PlatformIo> CoreHost<Io> {
             forward_route_probe: self.forward_route_probe.clone(),
             #[cfg(feature = "conformance")]
             revocation_probe: self.revocation_probe.clone(),
+        })
+    }
+
+    pub(crate) fn organization(
+        &self,
+    ) -> Result<&fleet_identity_protocol::OrganizationId, CallFailure> {
+        match &self.caller {
+            SharedTaskCaller::Registry { caller, .. } => Ok(caller.organization()),
+            SharedTaskCaller::Session(caller) => Ok(caller.organization()),
+            SharedTaskCaller::Copy { caller, .. } => Ok(caller.organization()),
+            SharedTaskCaller::Delivery(caller) => Ok(caller.organization()),
+            SharedTaskCaller::StoreOnly => Err(no_route()),
         }
     }
     pub(crate) fn with_publication(
@@ -291,7 +314,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
                 identity,
             ),
             SharedTaskCaller::StoreOnly
-            | SharedTaskCaller::Delivery
+            | SharedTaskCaller::Delivery(_)
             | SharedTaskCaller::Copy { .. } => Err(no_route()),
             SharedTaskCaller::Registry {
                 caller,
@@ -307,7 +330,11 @@ impl<Io: PlatformIo> CoreHost<Io> {
                         let request: <$target as CallTarget>::Request = decode(request)?;
                         let database: DatabaseId = ($database)(&target, &request);
                         encode_shared_call::<RegistryKind, CopyKind, $target>(
-                            caller, database, target, request, identity,
+                            caller,
+                            caller.copy_address(database),
+                            target,
+                            request,
+                            identity,
                         )
                     }};
                 }
@@ -315,7 +342,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
                     ($target:ty) => {
                         encode_shared_call::<RegistryKind, FleetKind, $target>(
                             caller,
-                            (),
+                            caller.fleet_address(),
                             decode(target)?,
                             decode(request)?,
                             identity,
@@ -330,8 +357,10 @@ impl<Io: PlatformIo> CoreHost<Io> {
                     } else {
                         decode::<PeerId>(request.clone())?
                     };
-                    let source =
-                        CallerContext::<SessionKind>::for_machine(peer_directory(peer).await?);
+                    let source = CallerContext::<SessionKind>::for_machine(
+                        caller.organization().clone(),
+                        peer_directory(peer).await?,
+                    );
                     return session_routes::classify_session(
                         Call::KIND,
                         &source,
@@ -345,7 +374,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
                     crate::machine_notice_delivery::DeliverMachineNotice::KIND => {
                         let target: crate::machine_notice_delivery::DeliverMachineNotice = decode(target)?;
                         encode_shared_call::<RegistryKind, DeliveryKind, crate::machine_notice_delivery::DeliverMachineNotice>(
-                            caller, (), target, decode(request)?, identity,
+                            caller, caller.fleet_address(), target, decode(request)?, identity,
                         )
                     }
                     #[cfg(feature = "conformance")]
@@ -379,8 +408,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
                     crate::machine_enrollment::EndPeerSessions::KIND => {
                         let target: crate::machine_enrollment::EndPeerSessions = decode(target)?;
                         encode_shared_call::<RegistryKind, DeliveryKind, crate::machine_enrollment::EndPeerSessions>(
-                            caller,
-                            (),
+                            caller, caller.fleet_address(),
                             target,
                             decode(request)?,
                             identity,
@@ -393,8 +421,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
                             return Err(no_route());
                         }
                         encode_shared_call::<RegistryKind, DeliveryKind, HolderRelease>(
-                            caller,
-                            (),
+                            caller, caller.fleet_address(),
                             target,
                             request,
                             identity,
@@ -403,8 +430,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
                     HolderWithdrawal::KIND => {
                         let target: HolderWithdrawal = decode(target)?;
                         encode_shared_call::<RegistryKind, DeliveryKind, HolderWithdrawal>(
-                            caller,
-                            (),
+                            caller, caller.fleet_address(),
                             target,
                             decode(request)?,
                             identity,
@@ -421,7 +447,10 @@ impl<Io: PlatformIo> CoreHost<Io> {
         }
     }
     async fn transmit(&self, call: SerializedObjectCall) -> Result<Vec<u8>, CallFailure> {
-        if call.destination == ObjectAddress::Fleet
+        if call.destination
+            == (ObjectAddress::Fleet {
+                organization: self.organization()?.clone(),
+            })
             && let Some(local) = self.local_calls.get()
         {
             #[cfg(feature = "conformance")]

@@ -1,7 +1,7 @@
 //! Only a copy's publication receipt can advance a reserved import to published.
 
 use crate::{
-    CallerKind, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, FleetKind, ObjectHost, ObjectRuntime, PlatformIo,
     admin_import_contract::{AdminImportRecord, AdminImportRefusal},
     admin_import_store::{AdminImportCommand, AdminImportStep},
     caller_context::CallAuthority,
@@ -44,6 +44,7 @@ where
         &self,
         call: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
+        let fleet_source = call.has_fleet_source();
         let _: AdminImportWorkflow = serde_json::from_value(call.target).map_err(|_| refused())?;
         let command: AdminImportCommand =
             serde_json::from_value(call.request).map_err(|_| refused())?;
@@ -51,7 +52,7 @@ where
             AdminImportCommand::Published { .. } => false,
             _ => {
                 call.source_face == CallerKind::Edge
-                    && call.source == ObjectAddress::Fleet
+                    && fleet_source
                     && matches!(call.authority, CallAuthority::Owner(_))
             }
         };

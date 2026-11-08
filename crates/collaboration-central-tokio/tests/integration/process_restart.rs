@@ -4,6 +4,7 @@
 #[path = "../process_restart/archive_cleanup.rs"]
 mod archive_cleanup;
 use crate::configuration;
+use collaboration_central_core::ObjectAddress;
 #[path = "../process_restart/copy_staged_parts.rs"]
 mod copy_staged_parts;
 use crate::creation_scenarios;
@@ -28,7 +29,6 @@ use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, DispatchFaultObservation, JwksFixtureServer,
     RuntimeControl, enroll_admitted_peer, fixture_policy,
 };
-use collaboration_central_core::ObjectAddress;
 use collaboration_central_tokio::{TokioServer, TokioSettings};
 use durable_steps::Uuid;
 use fleet_admission::{FleetOperation, FleetRequest, FleetRequestResult};
@@ -44,6 +44,7 @@ use support::*;
 #[ignore = "child entry for the process restart tests; requires its isolated root and JWKS"]
 async fn native_central_process() -> ConformanceResult<()> {
     let settings = TokioSettings {
+        legacy_organization: collaboration_central_conformance::legacy_organization(),
         root: std::env::var("CENTRAL_RESTART_ROOT")?.into(),
         jwks_url: std::env::var("CENTRAL_RESTART_JWKS")?,
         access_policy: fixture_policy(),
@@ -76,7 +77,7 @@ async fn native_central_process() -> ConformanceResult<()> {
 
 fn notice_key() -> DispatchKey {
     DispatchKey::new(
-        ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
         collaboration_central_conformance::DispatchCallSelector::FleetMachineNotice,
     )
 }
@@ -122,7 +123,7 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
     );
     control(
         &first.base,
-        ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
         RuntimeControl::HoldNextDispatch { key: notice_key() },
     )
     .await?;
@@ -149,7 +150,7 @@ async fn fleet_notice_finishes_once_after_the_server_process_dies_before_dispatc
     ));
     let held = control(
         &first.base,
-        ObjectAddress::Fleet,
+        collaboration_central_conformance::legacy_fleet_address(),
         RuntimeControl::AwaitHeldDispatch { key: notice_key() },
     )
     .await?;

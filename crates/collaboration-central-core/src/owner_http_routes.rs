@@ -46,7 +46,7 @@ pub(crate) async fn health<Platform: CentralPlatform>(
     match app
         .call_from_owner::<FleetKind, _>(
             owner,
-            (),
+            app.legacy_fleet_address(),
             FleetProjectOperations { database },
             CopyOpsCall::Health,
         )
@@ -83,7 +83,7 @@ pub(crate) async fn copies<Platform: CentralPlatform>(
     match app
         .call_from_owner::<FleetKind, _>(
             owner,
-            (),
+            app.legacy_fleet_address(),
             ReadCopyDirectoryPage,
             CopyPageRequest {
                 after: query.after,
@@ -112,7 +112,7 @@ pub(crate) async fn repair<Platform: CentralPlatform>(
     match app
         .call_from_owner::<FleetKind, _>(
             owner,
-            (),
+            app.legacy_fleet_address(),
             FleetProjectOperations { database },
             CopyOpsCall::Repair,
         )
@@ -166,7 +166,7 @@ pub(crate) async fn migrate<Platform: CentralPlatform>(
     let page = match app
         .call_from_owner::<FleetKind, _>(
             owner.clone(),
-            (),
+            app.legacy_fleet_address(),
             ReadCopyDirectoryPage,
             CopyPageRequest {
                 after: query.after,
@@ -194,7 +194,7 @@ pub(crate) async fn migrate<Platform: CentralPlatform>(
         let result = match app
             .call_from_owner::<FleetKind, _>(
                 owner.clone(),
-                (),
+                app.legacy_fleet_address(),
                 FleetProjectOperations { database },
                 CopyOpsCall::Migrate,
             )

@@ -243,6 +243,7 @@ impl TestCentral {
             observe_jwks(&jwks.url);
             let server = match TokioServer::start_with_controls(
                 TokioSettings {
+                    legacy_organization: collaboration_central_conformance::legacy_organization(),
                     delivery: collaboration_central_tokio::DeliveryConfig { relay_peer },
                     root: root.into(),
                     access_policy: fixture_policy(),

@@ -4,7 +4,7 @@ use super::super::{
     fixture::BoardFixture,
     takeover_controls::{self as controls, BOUND},
 };
-use board_central_test_support::{DispatchFaultObservation, ObjectAddress, RuntimeControl};
+use board_central_test_support::{DispatchFaultObservation, RuntimeControl};
 use codex_router_test_support::FixtureResult;
 use serde_json::Value;
 
@@ -27,7 +27,10 @@ pub async fn held_submit(fixture: &mut BoardFixture) -> FixtureResult<Value> {
         loop {
             copy_project(fixture).await?;
             let observed = central(fixture)?
-                .runtime_control(ObjectAddress::Fleet, RuntimeControl::Observe)
+                .runtime_control(
+                    collaboration_central_conformance::legacy_fleet_address(),
+                    RuntimeControl::Observe,
+                )
                 .await?;
             if matches!(
                 observed.dispatch(&controls::submit_key()),
@@ -35,7 +38,7 @@ pub async fn held_submit(fixture: &mut BoardFixture) -> FixtureResult<Value> {
             ) {
                 return controls::held_call(
                     fixture,
-                    ObjectAddress::Fleet,
+                    collaboration_central_conformance::legacy_fleet_address(),
                     controls::submit_key(),
                     "central.mail-submit",
                 )
