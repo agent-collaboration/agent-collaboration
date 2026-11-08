@@ -70,9 +70,15 @@ pub struct ScheduledRunWorker {
     pub backend: Option<NativeControlBackend>,
     pub configuration: crate::AutomationConfigurationHandle,
     pub machine_identity: collaboration_contracts::MachineIdentity,
+    /// The wall clock deadlines and record times compare against.
+    pub clock: Arc<dyn runtime_primitives::Clock>,
 }
 
 impl ScheduledRunWorker {
+    fn now_ms(&self) -> i64 {
+        self.clock.now().unix_millis()
+    }
+
     pub async fn step(&self, id: RunId) -> Result<(), StorageError> {
         let record = self
             .store
@@ -163,6 +169,7 @@ impl ScheduledRunWorker {
             source,
             record,
             timeout_seconds: seconds,
+            clock: &*self.clock,
         })
         .await
     }
@@ -187,14 +194,17 @@ impl ScheduledRunWorker {
             return Ok(());
         }
         if record.phase == RunPhase::Stopping
-            || !record.evidence.timing.as_ref().is_some_and(|timing| {
-                timing.deadline_at_ms <= chrono::Utc::now().timestamp_millis()
-            })
+            || !record
+                .evidence
+                .timing
+                .as_ref()
+                .is_some_and(|timing| timing.deadline_at_ms <= self.now_ms())
         {
             return Ok(());
         }
         let sink = crate::scheduled_run_evidence_sink::StoredRunEvidenceSink::new(
             Arc::clone(&self.store),
+            Arc::clone(&self.clock),
             self.configuration.clone(),
             record.run_id.clone(),
             record.schedule_id.clone(),
@@ -272,7 +282,7 @@ impl ScheduledRunWorker {
                         run_id: id,
                         effects: selected_evidence,
                         explanation: "Combined instructions and continuity exceed the supported request size; no input was submitted; any earlier preparation effects remain recorded. Shorten instructions or continuity for future runs.".into(),
-                        now_ms: chrono::Utc::now().timestamp_millis(),
+                        now_ms: self.now_ms(),
                     },
                 ).await?;
                 return Ok(());
@@ -291,6 +301,7 @@ impl ScheduledRunWorker {
         };
         let sink = crate::scheduled_run_evidence_sink::StoredRunEvidenceSink::new(
             Arc::clone(&self.store),
+            Arc::clone(&self.clock),
             self.configuration.clone(),
             id.clone(),
             record.schedule_id.clone(),
@@ -445,7 +456,8 @@ impl ScheduledRunWorker {
             },
             body: Some(body),
             activity: None,
-            created_at: chrono::Utc::now(),
+            created_at: chrono::DateTime::from_timestamp_millis(self.now_ms())
+                .ok_or(StorageError::InvalidRecord)?,
         };
         let record = self
             .interactions
@@ -574,6 +586,7 @@ impl ScheduledRunWorker {
         let destination = preparation_destination(&inputs)?;
         let sink = crate::scheduled_run_evidence_sink::StoredRunEvidenceSink::new(
             Arc::clone(&self.store),
+            Arc::clone(&self.clock),
             self.configuration.clone(),
             record.run_id.clone(),
             record.schedule_id.clone(),
@@ -618,7 +631,7 @@ impl ScheduledRunWorker {
                             run_id: record.run_id,
                             effects: evidence,
                             explanation: "Route preparation could not confirm its target; no worker input was submitted.".into(),
-                            now_ms: chrono::Utc::now().timestamp_millis(),
+                            now_ms: self.now_ms(),
                         },
                     ).await?;
                 }

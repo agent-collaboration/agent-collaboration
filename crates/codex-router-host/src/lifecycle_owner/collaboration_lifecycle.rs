@@ -178,7 +178,10 @@ impl CollaborationLifecycle {
             );
             let retention_started_at = std::time::Instant::now();
             if let Err(error) = runtime
-                .configure_provider_operation_retention(self.provider_operation_retention_days)
+                .configure_provider_operation_retention(
+                    self.provider_operation_retention_days,
+                    std::sync::Arc::new(runtime_primitives::SystemClock),
+                )
                 .await
             {
                 let cleanup = runtime.shutdown().await;

@@ -97,6 +97,7 @@ async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestR
             execution: Arc::clone(&fake),
             backend: None,
             configuration: collaboration_runtime::AutomationConfigurationHandle::default(),
+            clock: std::sync::Arc::new(runtime_primitives::SystemClock),
             machine_identity: collaboration_contracts::MachineIdentity::new(
                 target.endpoint.service_id.clone(),
                 Some("Schedule Fixture"),

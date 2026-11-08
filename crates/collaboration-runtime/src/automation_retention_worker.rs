@@ -6,13 +6,18 @@ use tokio_util::sync::CancellationToken;
 
 pub struct AutomationRetentionWorker {
     store: Arc<Mutex<AutomationStore>>,
+    clock: Arc<dyn runtime_primitives::Clock>,
     interaction_broker: Option<Arc<crate::ServiceInteractionBroker>>,
     native_push_store: Option<Arc<interaction_storage::InteractionStore>>,
 }
 impl AutomationRetentionWorker {
-    pub fn new(store: Arc<Mutex<AutomationStore>>) -> Self {
+    pub fn new(
+        store: Arc<Mutex<AutomationStore>>,
+        clock: Arc<dyn runtime_primitives::Clock>,
+    ) -> Self {
         Self {
             store,
+            clock,
             interaction_broker: None,
             native_push_store: None,
         }
@@ -104,7 +109,7 @@ impl AutomationRetentionWorker {
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             tokio::select! { biased; _ = shutdown.cancelled() => return, _ = interval.tick() => {} }
-            let now = chrono::Utc::now().timestamp_millis();
+            let now = self.clock.now().unix_millis();
             loop {
                 let result = tokio::select! { biased; _ = shutdown.cancelled() => return, result = self.prune_batch(now) => result };
                 match result {
@@ -194,7 +199,11 @@ mod tests {
         let shared_store = Arc::new(Mutex::new(store));
         let shutdown = CancellationToken::new();
         let task = tokio::spawn(
-            AutomationRetentionWorker::new(Arc::clone(&shared_store)).run(shutdown.clone()),
+            AutomationRetentionWorker::new(
+                Arc::clone(&shared_store),
+                Arc::new(runtime_primitives::SystemClock),
+            )
+            .run(shutdown.clone()),
         );
         tokio::time::timeout(std::time::Duration::from_secs(1), async {
             loop {
@@ -295,10 +304,13 @@ mod tests {
         assert_eq!(before_freelist, 0);
 
         let shared_store = Arc::new(Mutex::new(store));
-        let removed = AutomationRetentionWorker::new(Arc::clone(&shared_store))
-            .prune_batch(now_ms)
-            .await
-            .expect("automation prune batch should complete");
+        let removed = AutomationRetentionWorker::new(
+            Arc::clone(&shared_store),
+            Arc::new(runtime_primitives::SystemClock),
+        )
+        .prune_batch(now_ms)
+        .await
+        .expect("automation prune batch should complete");
         let after_pages: i64 = sqlx::query_scalar("PRAGMA page_count")
             .fetch_one(&mut observer)
             .await
@@ -320,10 +332,13 @@ mod tests {
         assert!(after_freelist > 0);
 
         assert_eq!(
-            AutomationRetentionWorker::new(Arc::clone(&shared_store))
-                .prune_batch(now_ms)
-                .await
-                .expect("empty automation prune batch should complete"),
+            AutomationRetentionWorker::new(
+                Arc::clone(&shared_store),
+                Arc::new(runtime_primitives::SystemClock)
+            )
+            .prune_batch(now_ms)
+            .await
+            .expect("empty automation prune batch should complete"),
             0
         );
         let after_empty_pass_pages: i64 = sqlx::query_scalar("PRAGMA page_count")
@@ -416,11 +431,14 @@ mod tests {
             .expect("close fixture writer");
         let shared_store = Arc::new(Mutex::new(store));
         assert_eq!(
-            AutomationRetentionWorker::new(shared_store.clone())
-                .with_native_push_store(interactions.clone())
-                .prune_batch(now_ms)
-                .await
-                .expect("bounded retention"),
+            AutomationRetentionWorker::new(
+                shared_store.clone(),
+                Arc::new(runtime_primitives::SystemClock)
+            )
+            .with_native_push_store(interactions.clone())
+            .prune_batch(now_ms)
+            .await
+            .expect("bounded retention"),
             1
         );
         assert!(
@@ -474,11 +492,14 @@ mod tests {
         observer.close().await.expect("close observer");
         native_retention_faults::execute(interactions.clone(), "CREATE TRIGGER fail_push_prune BEFORE DELETE ON router_pushes BEGIN SELECT RAISE(FAIL, 'push prune failure'); END", None).await.expect("native push fault");
         let shared_store = Arc::new(Mutex::new(store));
-        let removed = AutomationRetentionWorker::new(shared_store.clone())
-            .with_native_push_store(interactions.clone())
-            .prune_batch(now_ms)
-            .await
-            .expect("independent prune succeeds");
+        let removed = AutomationRetentionWorker::new(
+            shared_store.clone(),
+            Arc::new(runtime_primitives::SystemClock),
+        )
+        .with_native_push_store(interactions.clone())
+        .prune_batch(now_ms)
+        .await
+        .expect("independent prune succeeds");
         assert_eq!(removed, 1);
         assert!(
             interactions

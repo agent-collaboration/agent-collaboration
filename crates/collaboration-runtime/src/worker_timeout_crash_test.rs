@@ -455,5 +455,6 @@ async fn fixture_worker(
         backend: Some(backend),
         configuration: crate::AutomationConfigurationHandle::default(),
         machine_identity,
+        clock: std::sync::Arc::new(runtime_primitives::SystemClock),
     })
 }

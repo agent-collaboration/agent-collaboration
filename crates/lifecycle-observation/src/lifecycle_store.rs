@@ -2,7 +2,7 @@
 use crate::{JournalError, JournalPage, JournalPosition, JournalRow, ObservationJournal};
 use collaboration_protocol::{EndpointRef, LifecycleObservation};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 #[cfg(test)]
 use tokio::sync::mpsc;
 use tokio::sync::{Mutex, watch};
@@ -199,15 +199,24 @@ impl LifecycleStore {
         Ok(())
     }
     /// Internal retention maintenance only; this does not schedule agent work.
-    pub async fn run_maintenance(&self, shutdown: CancellationToken) -> Result<(), JournalError> {
+    pub async fn run_maintenance(
+        &self,
+        clock: std::sync::Arc<dyn runtime_primitives::Clock>,
+        shutdown: CancellationToken,
+    ) -> Result<(), JournalError> {
         let mut interval = tokio::time::interval(Duration::from_secs(3600));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        self.run_maintenance_with_ticks(shutdown, MaintenanceTickSource::Interval(interval))
-            .await
+        self.run_maintenance_with_ticks(
+            &*clock,
+            shutdown,
+            MaintenanceTickSource::Interval(interval),
+        )
+        .await
     }
 
     async fn run_maintenance_with_ticks(
         &self,
+        clock: &dyn runtime_primitives::Clock,
         shutdown: CancellationToken,
         mut ticks: MaintenanceTickSource,
     ) -> Result<(), JournalError> {
@@ -218,9 +227,9 @@ impl LifecycleStore {
                     if !tick_available {
                         return Ok(());
                     }
-                    let now=SystemTime::now().duration_since(UNIX_EPOCH).map_err(|_|JournalError::InvalidRecord)?.as_secs();
+                    let now = clock.now().unix_millis().div_euclid(1_000);
                     if let Err(error) = self
-                        .maintain(i64::try_from(now).map_err(|_| JournalError::InvalidRecord)?)
+                        .maintain(now)
                         .await
                     {
                         tracing::warn!(
@@ -320,6 +329,20 @@ mod tests {
     #[path = "maintenance_signal_tests.rs"]
     mod maintenance_signal_tests;
 
+    /// The system wall clock, as the Host injects it.
+    struct WallClock;
+
+    impl runtime_primitives::Clock for WallClock {
+        fn now(&self) -> runtime_primitives::SyncTime {
+            let elapsed = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default();
+            runtime_primitives::SyncTime::from_unix_millis(
+                i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX),
+            )
+        }
+    }
+
     #[tokio::test]
     async fn new_journal_database_uses_incremental_auto_vacuum() {
         let directory = tempfile::tempdir().expect("temporary directory should be created");
@@ -371,6 +394,7 @@ mod tests {
             async move {
                 store
                     .run_maintenance_with_ticks(
+                        &WallClock,
                         shutdown,
                         MaintenanceTickSource::Test(tick_receiver),
                     )

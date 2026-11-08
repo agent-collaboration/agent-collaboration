@@ -29,6 +29,8 @@ pub(crate) struct SummaryStep<'a> {
         crate::stored_run_receipt::StoredRunReceipt,
     >,
     pub timeout_seconds: u32,
+    /// The wall clock the summary deadline and admission time compare against.
+    pub clock: &'a dyn runtime_primitives::Clock,
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SummaryWork {
@@ -54,7 +56,7 @@ pub(crate) async fn step(input: SummaryStep<'_>) -> Result<(), StorageError> {
                 &SummaryAdmission {
                     run_id: id,
                     timeout_seconds: input.timeout_seconds,
-                    now_ms: chrono::Utc::now().timestamp_millis(),
+                    now_ms: input.clock.now().unix_millis(),
                 },
             )
             .await?;
@@ -118,7 +120,7 @@ pub(crate) async fn step(input: SummaryStep<'_>) -> Result<(), StorageError> {
                         attempt_id: attempt.attempt_id,
                         native_turn_id: turn_id.clone(),
                         text,
-                        now_ms: chrono::Utc::now().timestamp_millis(),
+                        now_ms: input.clock.now().unix_millis(),
                     })
                     .await?;
                 return Ok(());
@@ -140,7 +142,7 @@ pub(crate) async fn step(input: SummaryStep<'_>) -> Result<(), StorageError> {
         if input.work == SummaryWork::ObserveOnly {
             return Ok(());
         }
-        if attempt.deadline_at_ms <= chrono::Utc::now().timestamp_millis()
+        if attempt.deadline_at_ms <= input.clock.now().unix_millis()
             && attempt.phase != SummaryPhase::Stopping
         {
             let target = target.clone();
@@ -172,7 +174,7 @@ pub(crate) async fn step(input: SummaryStep<'_>) -> Result<(), StorageError> {
     if input.work == SummaryWork::ObserveOnly {
         return Ok(());
     }
-    if attempt.deadline_at_ms <= chrono::Utc::now().timestamp_millis() {
+    if attempt.deadline_at_ms <= input.clock.now().unix_millis() {
         let unknown = attempt.effects.allocation == PreparationEffect::Unknown
             || matches!(
                 attempt.effects.submission,
@@ -284,7 +286,7 @@ pub(crate) async fn step(input: SummaryStep<'_>) -> Result<(), StorageError> {
                 service_id: String::from(summary_target.endpoint.service_id.clone()),
                 endpoint_id: String::from(summary_target.endpoint.endpoint_id.clone()),
                 thread_id: String::from(summary_target.session_id.clone()),
-                now_ms: chrono::Utc::now().timestamp_millis(),
+                now_ms: input.clock.now().unix_millis(),
             })
             .await?;
         persist(input.store, &id, &attempt).await?;

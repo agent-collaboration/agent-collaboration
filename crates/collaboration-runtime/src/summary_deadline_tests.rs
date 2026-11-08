@@ -179,6 +179,7 @@ async fn unavailable_native_source_blocks_summary_and_keeps_worker_outcome() -> 
         source: None,
         record,
         timeout_seconds: 900,
+        clock: &runtime_primitives::SystemClock,
     })
     .await
     .map_err(|error| format!("unavailable source step: {error}"))?;
@@ -422,6 +423,7 @@ async fn exercise_timeout_connection(fail_connection: bool) -> TestResult<()> {
         source: None,
         record,
         timeout_seconds: 1,
+        clock: &runtime_primitives::SystemClock,
     })
     .await?;
     tokio::time::timeout(Duration::from_secs(2), server).await???;

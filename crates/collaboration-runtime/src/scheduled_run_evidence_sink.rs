@@ -17,6 +17,7 @@ use tokio::sync::Mutex;
 
 pub struct StoredRunEvidenceSink {
     store: Arc<Mutex<AutomationStore>>,
+    clock: Arc<dyn runtime_primitives::Clock>,
     configuration: AutomationConfigurationHandle,
     run_id: RunId,
     schedule_id: ScheduleId,
@@ -26,6 +27,7 @@ pub struct StoredRunEvidenceSink {
 impl StoredRunEvidenceSink {
     pub fn new(
         store: Arc<Mutex<AutomationStore>>,
+        clock: Arc<dyn runtime_primitives::Clock>,
         configuration: AutomationConfigurationHandle,
         run_id: RunId,
         schedule_id: ScheduleId,
@@ -33,6 +35,7 @@ impl StoredRunEvidenceSink {
     ) -> Self {
         Self {
             store,
+            clock,
             configuration,
             run_id,
             schedule_id,
@@ -61,7 +64,7 @@ impl StoredRunEvidenceSink {
                     run_id: self.run_id.clone(),
                     effects: evidence,
                     configured_timeout_seconds: u32::from(configuration.execution_timeout_seconds),
-                    now_ms: chrono::Utc::now().timestamp_millis(),
+                    now_ms: self.clock.now().unix_millis(),
                 },
             )
             .await
@@ -134,7 +137,7 @@ impl RunEvidenceSink for StoredRunEvidenceSink {
                                     service_id: String::from(target.endpoint.service_id.clone()),
                                     endpoint_id: String::from(target.endpoint.endpoint_id.clone()),
                                     thread_id: String::from(target.session_id.clone()),
-                                    now_ms: chrono::Utc::now().timestamp_millis(),
+                                    now_ms: self.clock.now().unix_millis(),
                                 },
                             },
                         )

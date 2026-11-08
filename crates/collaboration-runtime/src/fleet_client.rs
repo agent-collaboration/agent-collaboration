@@ -149,7 +149,11 @@ impl FleetClient {
     }
 
     /// Keeps terminal fleet request replay history within the owner's retention window.
-    pub async fn run_outbox_retention(&self, shutdown: CancellationToken) {
+    pub async fn run_outbox_retention(
+        &self,
+        clock: Arc<dyn runtime_primitives::Clock>,
+        shutdown: CancellationToken,
+    ) {
         let mut interval = tokio::time::interval(Duration::from_secs(60 * 60));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
@@ -158,7 +162,7 @@ impl FleetClient {
                 () = shutdown.cancelled() => return,
                 _ = interval.tick() => {},
             }
-            let now_ms = chrono::Utc::now().timestamp_millis();
+            let now_ms = clock.now().unix_millis();
             loop {
                 let result = tokio::select! {
                     biased;

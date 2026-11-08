@@ -153,6 +153,7 @@ async fn exercise_input_validation(
         backend: Some(backend),
         configuration: crate::AutomationConfigurationHandle::default(),
         machine_identity,
+        clock: std::sync::Arc::new(runtime_primitives::SystemClock),
     };
     Box::pin(worker.step(run.clone())).await?;
     let failed = store

@@ -4264,6 +4264,7 @@ dependencies = [
  "codex-native-integration",
  "collaboration-protocol",
  "futures-util",
+ "runtime-primitives",
  "serde",
  "serde_json",
  "sqlite-storage-maintenance",
