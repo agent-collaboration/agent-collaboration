@@ -9,6 +9,7 @@ use crate::organization_admin_link::{
 };
 use crate::organization_stamps::{self as stamps, NOW_SECONDS, ProofKey, SignInKeys, link_post};
 use collaboration_central_conformance::{ConformanceResult, JwksFixtureServer};
+use collaboration_central_core::AccessCaller;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -17,7 +18,7 @@ const UNOPENED: &str = "019f0000-0000-7000-8000-00000000d2ff";
 async fn observe(
     base_url: &str,
     organization: &str,
-    owner: bool,
+    assertion: Option<String>,
 ) -> ConformanceResult<(u16, Value)> {
     let mut request = reqwest::Client::builder()
         .no_proxy()
@@ -27,11 +28,8 @@ async fn observe(
             collaboration_central_core::ORGANIZATION_RECORDS_PATH
         ))
         .json(&json!({"organization":organization}));
-    if owner {
-        request = request.header(
-            "Cf-Access-Jwt-Assertion",
-            collaboration_central_conformance::owner_assertion()?,
-        );
+    if let Some(assertion) = assertion {
+        request = request.header("Cf-Access-Jwt-Assertion", assertion);
     }
     let response = request.send().await?;
     let status = response.status().as_u16();
@@ -42,6 +40,18 @@ async fn observe(
         serde_json::from_slice(&bytes).unwrap_or(Value::Null)
     };
     Ok((status, body))
+}
+
+/// A fixture-signed assertion with the admin audience for `caller`.
+fn admin_assertion(caller: AccessCaller) -> ConformanceResult<String> {
+    collaboration_central_conformance::sign_assertion(
+        &collaboration_central_conformance::fixture_claims(caller, true),
+        collaboration_central_conformance::FIXTURE_KID,
+    )
+}
+
+fn owner_access() -> Option<String> {
+    collaboration_central_conformance::owner_assertion().ok()
 }
 
 fn length(observed: &Value, field: &str) -> ConformanceResult<i64> {
@@ -98,18 +108,45 @@ async fn the_owner_observer_reports_what_the_fleet_store_holds_across_a_restart(
     )
     .await?;
 
-    let refused = observe(server.base_url(), ORGANIZATION, false).await?;
-    let (live_status, live) = observe(server.base_url(), ORGANIZATION, true).await?;
-    let (unopened_status, unopened) = observe(server.base_url(), UNOPENED, true).await?;
+    let refused = observe(server.base_url(), ORGANIZATION, None).await?;
+    // Valid assertions from the same Access with the admin audience, from
+    // callers who are not the owner: another person, and a machine.
+    let other_person = observe(
+        server.base_url(),
+        ORGANIZATION,
+        Some(admin_assertion(AccessCaller::Owner {
+            email: "someone-else@example.test".into(),
+        })?),
+    )
+    .await?;
+    let machine = observe(
+        server.base_url(),
+        ORGANIZATION,
+        Some(admin_assertion(AccessCaller::Machine {
+            client_id: collaboration_central_conformance::access_client_id("observer-machine")?,
+        })?),
+    )
+    .await?;
+    let (live_status, live) = observe(server.base_url(), ORGANIZATION, owner_access()).await?;
+    let (unopened_status, unopened) = observe(server.base_url(), UNOPENED, owner_access()).await?;
     server.shutdown().await?;
     let stored = counts(root.path()).await?;
     let (server, _socket) = start(root.path(), &access, &keys).await?;
-    let (restarted_status, restarted) = observe(server.base_url(), ORGANIZATION, true).await?;
+    let (restarted_status, restarted) =
+        observe(server.base_url(), ORGANIZATION, owner_access()).await?;
     server.shutdown().await?;
 
     assert_eq!(provisioned.0, 200, "provisioning");
     assert_eq!(created.0, 200, "workspace creation: {}", created.1);
-    assert_eq!(refused.0, 401, "a non-owner observes nothing");
+    assert_eq!(refused.0, 401, "no assertion observes nothing");
+    assert_eq!(
+        other_person.0, 401,
+        "another person's valid admin assertion observes nothing"
+    );
+    assert_eq!(
+        machine.0, 401,
+        "a machine's valid admin-audience assertion observes nothing"
+    );
     assert_eq!(live_status, 200, "{live}");
     assert_eq!(live["complete"], true);
     assert_eq!(live["statement"], json!(statement));

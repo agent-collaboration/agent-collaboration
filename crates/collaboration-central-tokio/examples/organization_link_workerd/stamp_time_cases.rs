@@ -16,6 +16,9 @@ const EXPIRY_CONTROL: &str = "019f0000-0000-7000-8000-00000000b2c9";
 const EXPIRY_STORED: &str = "019f0000-0000-7000-8000-00000000b2ca";
 const WARM: &str = "019f0000-0000-7000-8000-00000000b2cb";
 const WARM_CONTROL: &str = "019f0000-0000-7000-8000-00000000b2cc";
+/// Stored under a setup that expires before a held, different setup does.
+const STORED_EXPIRY: &str = "019f0000-0000-7000-8000-00000000b2cd";
+const STORED_CONTROL: &str = "019f0000-0000-7000-8000-00000000b2ce";
 
 async fn set_time_millis(
     caller: &Caller,
@@ -90,6 +93,18 @@ fn short_renewal(
     stamps::sign(&stamps::stamp_header(), &claims, 7)
 }
 
+/// A setup statement, valid now, that expires `shorter_by` seconds before the
+/// default statement does.
+fn short_setup(organization: &str, shorter_by: i64) -> ConformanceResult<String> {
+    let mut claims = stamps::claims(organization);
+    stamps::set_claim(
+        &mut claims,
+        "exp",
+        json!(NOW_SECONDS - 60 + stamps::LIFETIME_SECONDS - shorter_by),
+    )?;
+    stamps::sign(&stamps::stamp_header(), &claims, 7)
+}
+
 fn unprovisioned(records: &Value) -> bool {
     records.get("statement") == Some(&Value::Null) && summary(records).is_empty()
 }
@@ -146,6 +161,34 @@ pub(crate) async fn run(caller: &Caller, keys: &SignInKeys) -> ConformanceResult
             && after_replay == before,
         "a renewal (predecessor still valid) or a byte-identical replay released at its exp is refused and changes nothing",
         &(stored, renewal, replay, before, after_replay),
+    )?;
+
+    // Provisioned means a usable stored stamp at apply time: a different valid
+    // setup held while the stored stamp expires gets the not-trusted refusal.
+    let stored_exp_millis = exp_millis - 1_000_000;
+    let mut stored_cases = Vec::new();
+    for (organization, released_at) in [
+        (STORED_EXPIRY, stored_exp_millis),
+        (STORED_CONTROL, stored_exp_millis - 1000),
+    ] {
+        let provisioned = caller
+            .provision(organization, &short_setup(organization, 1_000)?)
+            .await?;
+        let before = caller.records(organization).await?;
+        let answer = held_across(
+            caller,
+            organization,
+            stamps::stamp(organization)?,
+            released_at,
+        )
+        .await?;
+        let after = caller.records(organization).await?;
+        stored_cases.push((provisioned, answer, after == before));
+    }
+    require(
+        stored_cases == vec![(200, 409, true), (200, 200, true)],
+        "a different setup held while the stored stamp expires is refused and changes nothing; released one second before, Provisioned and unchanged",
+        &stored_cases,
     )?;
 
     // Warm cache, one Fleet object: K verifies, K is retired, it still verifies

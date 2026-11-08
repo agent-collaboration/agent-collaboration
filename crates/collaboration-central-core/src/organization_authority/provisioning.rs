@@ -1,4 +1,5 @@
 //! Provisioning stamps a Fleet store once, and swaps its statement only by CAS.
+use super::fleet_statement_wire::ParsedFleetStatement;
 use super::{
     CurrentStamp, OrganizationChangeKind, OrganizationChangeOrigin, OrganizationChangeRecord,
     OrganizationStatementReplacement, OrganizationStatementReplacementRefusal, StoredStampRead,
@@ -126,7 +127,11 @@ where
         Err(OrganizationStatementReplacementRefusal::StaleOrganizationStatement) => {
             return Ok(unchanged(ProvisioningApplied::StaleStatement, stored));
         }
-        Ok(OrganizationStatementReplacement::AlreadyProvisioned) if !input.stored_trusted => {
+        // Provisioned means a usable stored stamp at apply time: key trust was
+        // sampled outside (`stored_trusted`), expiry is decided here, at `now`.
+        Ok(OrganizationStatementReplacement::AlreadyProvisioned)
+            if !input.stored_trusted || !stored_unexpired_at(&stored, now) =>
+        {
             return Ok(unchanged(ProvisioningApplied::StaleStatement, stored));
         }
         Ok(OrganizationStatementReplacement::AlreadyProvisioned) => {
@@ -176,6 +181,17 @@ where
     Ok(ProvisioningOutcome {
         applied: ProvisioningApplied::Provisioned,
     })
+}
+
+/// The stored stamp's own `exp` is still ahead of `now`. Its signature and
+/// key were checked when it was stored and by `stored_trusted`; this reads
+/// only its expiry, without I/O, inside the applying transaction.
+fn stored_unexpired_at(stored: &StoredStampRead, now: runtime_primitives::SyncTime) -> bool {
+    let StoredStampRead::Stamped(stamp) = stored else {
+        return false;
+    };
+    ParsedFleetStatement::parse(stamp.statement())
+        .is_ok_and(|parsed| now.unix_millis().div_euclid(1000) < parsed.claims.exp.0)
 }
 
 fn unchanged(applied: ProvisioningApplied, _stored: StoredStampRead) -> ProvisioningOutcome {

@@ -31,4 +31,8 @@ export const conformanceMarkers: readonly string[] = [
   "BootstrapObject",
   "/admin/v1/conformance/fleet-schema",
   "/test/fleet-schema",
+  "/admin/v1/conformance/organization-records",
+  "/test/organization-records",
+  "/admin/v1/conformance/organization-statement-tamper",
+  "/test/organization-statement-tamper",
 ];

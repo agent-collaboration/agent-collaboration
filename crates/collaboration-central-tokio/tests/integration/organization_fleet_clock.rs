@@ -39,6 +39,17 @@ async fn observe(server: &TokioServer, organization: &str) -> ConformanceResult<
         .await?)
 }
 
+/// A renewal of `predecessor` issued after the clock moves, so a Fleet still
+/// reading t0 finds it not yet valid.
+fn renewal_after_move(organization: &str, predecessor: &str) -> ConformanceResult<String> {
+    let issued = NOW_SECONDS + MOVE_SECONDS - 10;
+    let mut claims = stamps::claims(organization);
+    stamps::set_claim(&mut claims, "iat", json!(issued))?;
+    stamps::set_claim(&mut claims, "exp", json!(issued + 86_400))?;
+    stamps::set_claim(&mut claims, "replaces", json!(stamps::digest(predecessor)))?;
+    stamps::sign(&stamps::stamp_header(), &claims, 7)
+}
+
 fn record_times(observed: &Value) -> Vec<Value> {
     observed["records"]
         .as_array()
@@ -106,6 +117,15 @@ async fn a_new_organization_runs_on_the_injected_fleet_clock_and_follows_it()
     )
     .await?;
     let later_rows = observe(&server, LATER_NEW).await?;
+    // The already-live Fleet acts on the moved time: a renewal issued after t0
+    // is not yet valid on a clock still at t0.
+    let renewal = link_post(
+        &socket,
+        "/internal/organization-provisioning",
+        &json!({"organizationId":FIRST_NEW,
+            "organizationStatement":renewal_after_move(FIRST_NEW, &stamps::stamp(FIRST_NEW)?)?}),
+    )
+    .await?;
     let first_after = observe(&server, FIRST_NEW).await?;
     server.shutdown().await?;
 
@@ -125,6 +145,14 @@ async fn a_new_organization_runs_on_the_injected_fleet_clock_and_follows_it()
         vec![json!(start + MOVE_SECONDS * 1000)],
         "{later_rows}"
     );
-    assert_eq!(first_after, first_rows, "moving the clock rewrites nothing");
+    assert_eq!(
+        renewal.0, 200,
+        "the live Fleet accepts a renewal issued after t0"
+    );
+    assert_eq!(
+        record_times(&first_after),
+        vec![json!(start), json!(start + MOVE_SECONDS * 1000)],
+        "the live Fleet records its renewal at the moved time: {first_after}"
+    );
     Ok(())
 }

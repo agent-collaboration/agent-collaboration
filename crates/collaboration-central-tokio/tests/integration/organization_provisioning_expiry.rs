@@ -181,3 +181,73 @@ async fn a_renewal_or_replay_held_past_its_exp_changes_nothing() -> ConformanceR
     );
     Ok(())
 }
+
+/// A setup statement for organization A, valid now, whose own `exp` comes
+/// `shorter_by` seconds before the default statement's.
+fn short_setup(shorter_by: i64) -> ConformanceResult<String> {
+    let mut claims = stamps::claims(ORGANIZATION_A);
+    stamps::set_claim(
+        &mut claims,
+        "exp",
+        json!(NOW_SECONDS - 60 + stamps::LIFETIME_SECONDS - shorter_by),
+    )?;
+    stamps::sign(&stamps::stamp_header(), &claims, 7)
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions compare the held answers and the exact stored rows while fixture errors propagate."
+)]
+#[tokio::test]
+async fn a_setup_held_while_the_stored_stamp_expires_is_refused_and_changes_nothing()
+-> ConformanceResult<()> {
+    // Wrong build caught: the stored stamp's readiness sampled before the hold
+    // and carried in, so a different valid setup released once the stored
+    // stamp expired answers Provisioned over a stamp nothing can use. The
+    // control is released one second before the stored stamp's exp. The held
+    // setup outlives the stored one, so only the stored expiry differs.
+    let stored_statement = short_setup(1_000)?;
+    let stored_exp = NOW_SECONDS - 60 + stamps::LIFETIME_SECONDS - 1_000;
+    let held_setup = stamps::stamp(ORGANIZATION_A)?;
+    let mut cases = Vec::new();
+    for released_at in [stored_exp, stored_exp - 1] {
+        let root = tempfile::tempdir()?;
+        let access = JwksFixtureServer::start().await?;
+        let keys = SignInKeys::start().await?;
+        let central = start(root.path(), &access, &keys, NOW_SECONDS).await?;
+        let provisioned = link_post(
+            &central.socket,
+            PROVISION,
+            &provision_body(ORGANIZATION_A, &stored_statement),
+        )
+        .await?;
+        central.server.shutdown().await?;
+        let before = stored(root.path(), ORGANIZATION_A).await?;
+        let central = start(root.path(), &access, &keys, NOW_SECONDS).await?;
+        let base = central.server.base_url().to_owned();
+        let answer = held_across(&base, &central.socket, held_setup.clone(), released_at).await?;
+        central.server.shutdown().await?;
+        let after = stored(root.path(), ORGANIZATION_A).await?;
+        cases.push((
+            provisioned.0,
+            answer.0,
+            before == after,
+            after.0.len(),
+            after.1.len(),
+        ));
+        keys.shutdown().await?;
+        access.shutdown().await?;
+    }
+
+    assert_eq!(
+        cases.first(),
+        Some(&(200, 409, true, 1, 1)),
+        "released at the stored stamp's exp: the not-trusted refusal, rows exactly unchanged"
+    );
+    assert_eq!(
+        cases.get(1),
+        Some(&(200, 200, true, 1, 1)),
+        "released one second before it: Provisioned over the still-valid stored stamp, rows unchanged"
+    );
+    Ok(())
+}
