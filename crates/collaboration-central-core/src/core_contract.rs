@@ -37,12 +37,3 @@ pub enum ObjectAddress {
     Copy(DatabaseId),
     Fleet,
 }
-impl ObjectAddress {
-    #[must_use]
-    pub const fn primary_face(&self) -> crate::CallerKind {
-        match self {
-            Self::Copy(_) => crate::CallerKind::Copy,
-            Self::Fleet => crate::CallerKind::Fleet,
-        }
-    }
-}
