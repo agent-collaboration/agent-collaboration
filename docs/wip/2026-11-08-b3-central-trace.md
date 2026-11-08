@@ -37,16 +37,103 @@ Proof:
   - the UUIDv7 installation check removed;
   - the former-service version check removed.
 
+## The decisions
+
+`organization_authority/machine_login/` holds them. It sits outside the module cycle and
+depends on `identity_contract`, `person_request` (B2's JWT parsing, header and audience
+types) and the issuer key cache and verifier. Each decision is a pure function over one
+transaction's `EnrollmentFacts`. It returns its answer plus a closed list of
+`EnrollmentChange`s, which the port applies all or nothing. The clock is read inside the
+transaction, and IDs come from the injected source; a non-UUIDv7 ID is refused.
+
+| Public entry | Rules |
+| --- | --- |
+| `decide_device_login` | SD8 (within 5 s of receipt, on the clock read in the transaction); idempotent on the request ID, where a different body is `notPermitted`; a machine claimed by another organization; unknown workspaces; the second factor within 900 s unless the organization never had an enrollment; base generation; allowances and `allowanceChanged`; re-key once |
+| `decide_machine_token` | BA1 fence at the first Grant; supersession (`machineRevoked`, reason superseded) and `machineEnrolled` in that transaction; repeat Grants read live and only move `last_grant_at`; client = enrollment ID at the first Grant, the recorded client after; idle expiry at 30 days; approval lapse at the device-code lifetime; `grant_expires_at = now + lifetime` |
+| `admit_machine_connection` | the token, enrollment and presented installation and peer name one machine; organization; superseded; not active; client; idle expiry on read |
+| `revoke_machine_enrollment` | revoked (owner), generation bumped, allowances withdrawn, `machineRevoked` + `allowanceChanged`; answers `Applied { ended }` and a close instruction; `notFound` with nothing written |
+| `MachineTokenVerifier::verify`, `admit_machine_token` | C9 in order: EdDSA header and kid; pinned issuer (before any key fetch); signature; audience; the clock read after the fetch: `now < exp + 60`, `iat ≤ now + 60`, `now < grant_expires_at`; typed machine claims (other registered claims unread) |
+| `renew_machine_token` | the fresh token through C9, naming the connection's own installation and enrollment, then admission; `MachineTokenRenewal` (`fleet-identity-protocol`) answers it |
+
 ## Assumptions for the owner page
 
+Each of these was added by an agent or ruled by the Lead; the PD doesn't state them.
+
 - **`formerServiceLinkedElsewhere {}`** is a new bounded device-login refusal. It answers a
-  re-key whose former service id is already linked to a different installation or
-  organization. It says nothing beyond "not linkable here": no organization, enrollment
-  or installation. The switchboard B3a Implementer has the variant.
+  re-key whose former service id is already linked to a different installation, or that
+  would merge into an installation that already has rows here. It says nothing beyond
+  "not linkable here": no organization, enrollment or installation. The switchboard B3a
+  Implementer has the variant.
 - **`allowedWorkspaces` holds at most 100 workspaces.** The PD (PD:881) states no bound.
   The issuer and central both enforce 100.
+- **A repeat request ID with a different body** is refused `notPermitted`, with nothing
+  written.
+- **SD8** is measured from the host's receipt to the clock read in the applying
+  transaction. Exactly 5 s is within.
+- **"The organization's first machine"** (PD:882) means the organization has no
+  enrollment in any state, ever.
+- **Idle expiry withdraws the machine's allowances.** It doesn't move the generation and
+  writes no record.
+  - Owner question: idle expiry has no change kind of its own.
+- **Records:**
+  - `machineEnrolled` is written at the first Grant, never at approval.
+  - Supersession writes `machineRevoked` (reason superseded) in the same transaction.
+  - Records from approvals and first Grants carry the approver as origin, with
+    `machine:enroll`. Revocation's carry the revoker, with `machine:revoke`.
+- **A former service id that names no installation here** links nothing.
+- **An approval lapses** once `now ≥ approved_at + device-code lifetime`. `approved_at` is
+  central's own clock in the approving transaction; the lifetime is one setting,
+  10 minutes (PD:1292).
+- **The renewal answer's mapping:**
+  - a fresh token for another installation → `wrongInstallation`;
+  - one for another enrollment of the same machine → `enrollmentNotActive`;
+  - admission's `unknownMachine` → `wrongInstallation`;
+  - superseded, another organization or inactive → `enrollmentNotActive`;
+  - a token refused for time → `tokenExpired`;
+  - any other check refusal → `tokenInvalid`.
 
 ## Stand-ins
 
-Each entry gives the seam, what stands in, the assumptions it encodes and what closes it.
-Each entry is added as its stand-in lands.
+### The Fleet store behind `MachineEnrollmentPort`
+
+- **Seam:** `MachineEnrollmentPort::transact(query, decide)`: one transaction reads the
+  facts a query names and applies the decision's changes, in order, all or none.
+- **Stand-in:** `InMemoryEnrollments` (test-only). It applies the changes to a copy. It
+  checks the port contract against the state before: at most one enrolled enrollment per
+  installation, which is the installation's active one, and a generation that moves by
+  one, only beside a first-Grant activation or an owner revocation. It swaps the copy in
+  only if those hold.
+- **Assumptions it encodes:**
+  - Workspaces, other organizations' claims and former-id links are readable in the same
+    transaction.
+  - Re-keying moves the installation row, its enrollments and its allowances.
+  - Sessions and board relationships aren't modelled.
+- **What closes it:** the reviewed SQL for `machine_enrollments` (reshaped),
+  `machine_allowances`, the generation and former-id home, and the D1/SQLite adapters
+  passing these same decision tests.
+
+### The grant lifetime
+
+- **Seam:** `MachineLoginSettings::grant_lifetime`.
+- **Stand-in:** a value the host supplies, until `SetTokenLifetime` has a home.
+- **What closes it:** the organization's stored lifetime.
+
+### The close instruction
+
+- **Seam:** `MachineRevocation::close`.
+- **Stand-in:** a returned value; nothing closes a connection yet.
+- **What closes it:** the host's outbox and the existing close path (FL-12).
+
+### Clock sampling and the host entry
+
+The decisions read the injected clock inside `transact`, and the stand-in's
+`before_next_decision` hook proves a wait counts. Proving the real host's
+post-wait sampling barrier belongs to the core/host callback entry, when that entry is in
+a slice.
+
+## Not established here
+
+- No SQL, persistence, restart or host run: no Tokio or workerd code calls these
+  decisions yet.
+- Disabling the client on the sign-in side, removing sessions at revocation, and the real
+  close.
