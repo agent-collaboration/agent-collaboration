@@ -61,7 +61,7 @@ All rows below remain unobserved until their real scenario is driven on a declar
 | J5 | Tokio: 100→one batch, 1,200→three 500-cap batches, singleton by T+30s, duplicate alarm and separate resident/reconstruction controls, S2/S4/S7. |
 | J5b | Alarm delivery off; due work completes on prescribed one-second Frames within a cadence interval, S1/S2. |
 | J6 | B offline then Welcome; ten real Router inbox receipts once and sender Report/status routing, S6/S8/S9. |
-| J6b | 1,001 inbox items; per-connection peak ≤32 and C↔A progresses during B drain; shrinking Health backlog, S1/S8/S9. Agent order stays D5. |
+| J6b | 1,001 inbox items; per-connection peak ≤32, central Push order per sender and C↔A progress during B drain; shrinking Health backlog, S1/S8/S9. Agent order stays D5. |
 | J7 | Six owner cuts after receiver commit/before saved answer, exact process death/reopen, one effect and finished debt; reconcile nonrepeatable local delivery, S6/S8. |
 | J7b status | Drop final status, keep socket, disable fixture polls; quiet retry converges, ack deletes debt and stops retries, S1/S3/S6. Notice half stays D5. |
 | J7c | First physical close fails; quiet revoked peer later closes and old frames refuse, S5/S8/S9. |
@@ -99,3 +99,5 @@ Each journey needs its own named wrong-product artifact in an isolated source co
 Keep the declaration, original raw streams, passive event/alarm/construction sequence, arm/reached/consumed records, consistent owner/attempt snapshots, public Health/Report/inbox readbacks, per-J results, wrong-build semantic failures and restored positive results. Name every unknown or absent control. Cleanup closes only recorded owned peers/central/edges after causal settlement and retains evidence; incomplete cleanup prevents a passing journey.
 
 Return each J as supported, unsupported or unknown at its actual target, the exact failed assertion for each seed, source/artifact equivalence, command/count/exit evidence and retained gaps. Until the actual local controller and product controls exist, report this recipe as a draft and only the byte reader as executable apparatus. Independent skill stage review and the live pass remain separate evidence.
+
+`journey-coverage.ts` supplies the required per-shell record keys to the controller and the shared D4 journey-id schema to the seed reader. It keeps each J2b fault, J7 owner cut, J22 window/hour/cause carry, J27 cursor edge, per-journey Tokio rebuild and seeded/restored control explicit. Missing or unknown keys cannot silently complete coverage; a completed record map still has `runtimeQualified: false` until its linked live evidence and target are checked.

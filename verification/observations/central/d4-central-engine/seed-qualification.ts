@@ -5,42 +5,10 @@ import { resolve, sep } from "node:path";
 import { z } from "zod";
 import { isDeepStrictEqual } from "node:util";
 
-const journeySchema = z.enum([
-  "J1",
-  "J1b",
-  "J1c",
-  "J2",
-  "J2b",
-  "J2c",
-  "J3",
-  "J3b",
-  "J4",
-  "J5",
-  "J5b",
-  "J6",
-  "J6b",
-  "J7",
-  "J7b",
-  "J7c",
-  "J8",
-  "J9",
-  "J10",
-  "J13",
-  "J14",
-  "J15",
-  "J17",
-  "J18",
-  "J19",
-  "J20",
-  "J21",
-  "J22",
-  "J23",
-  "J25",
-  "J26",
-  "J27",
-]);
+import { d4JourneySchema } from "./journey-coverage.ts";
+
 const caseIdentity = z.object({
-  journey: journeySchema,
+  journey: d4JourneySchema,
   scenario: z.string().min(1),
   shell: z.enum(["tokio", "workerd"]),
 });
