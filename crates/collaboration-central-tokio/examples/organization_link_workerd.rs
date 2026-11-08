@@ -2,6 +2,8 @@
 //! the compiled central-link artifact, which reaches central's own Fleet
 //! objects. Public central reads the same rows back, before and after an owned
 //! workerd restart. The clock is the conformance build's fixed time.
+#[path = "organization_link_workerd/admin_edge_cases.rs"]
+mod admin_edge_cases;
 #[path = "organization_link_workerd/link_client.rs"]
 mod link_client;
 #[path = "../tests/support/organization_stamps.rs"]
@@ -730,6 +732,7 @@ async fn main() -> ConformanceResult<()> {
             "a damaged stored stamp refuses every call naming its organization after the restart and stays as stored",
             &(damaged_digest, damaged_setup, damaged_push, damaged_rows),
         )?;
+        admin_edge_cases::run(&caller).await?;
         wrong_stamp_case::check(&caller, &wrong_before).await?;
         let sent = refusal_cases::send(&caller, keys).await?;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(sent)

@@ -166,7 +166,27 @@ impl Caller {
         person: &AdminPerson,
         jti_serial: u16,
     ) -> ConformanceResult<(u16, Value)> {
-        let token = person.token()?;
+        self.admin_with(
+            path,
+            intent,
+            body,
+            &person.token()?,
+            &person.key,
+            jti_serial,
+        )
+        .await
+    }
+    /// One admin request with an already signed token.
+    pub(crate) async fn admin_with(
+        &self,
+        path: &str,
+        intent: &Value,
+        body: &Value,
+        token: &str,
+        key: &ProofKey,
+        jti_serial: u16,
+    ) -> ConformanceResult<(u16, Value)> {
+        let token = token.to_owned();
         let millis = NOW_SECONDS * 1000 - 1000;
         let jti = format!(
             "{:08x}-{:04x}-7000-8000-{:012x}",
@@ -174,7 +194,7 @@ impl Caller {
             millis & 0xffff,
             jti_serial
         );
-        let proof = person.key.proof(&json!({
+        let proof = key.proof(&json!({
             "jti":jti,"htm":"POST","htu":format!("{PUBLIC_ORIGIN}{path}"),"iat":NOW_SECONDS - 1,
             "ath":stamps::sha256_url(token.as_bytes()),
             "intent":stamps::sha256_url(stamps::canonical(intent).as_bytes())
@@ -223,20 +243,26 @@ pub(crate) struct AdminPerson {
 }
 impl AdminPerson {
     pub(crate) fn token(&self) -> ConformanceResult<String> {
+        self.token_with(&|_| {})
+    }
+    /// A token whose claims `adjust` changes before signing.
+    pub(crate) fn token_with(&self, adjust: &dyn Fn(&mut Value)) -> ConformanceResult<String> {
+        let mut claims = json!({
+            "iss":ISSUER,"aud":[ADMIN_AUDIENCE],"sub":self.id,
+            "sid":"019f0000-0000-7000-8000-00000000b2f0",
+            "iat":NOW_SECONDS - 10,"exp":NOW_SECONDS + 290,"cnf":{"jkt":self.key.thumbprint()?},
+            "token_profile":"person-fleet","organization_id":self.organization,
+            "authorization_subject_id":self.subject,"person_revision":1,"organization_revision":self.organization_revision,
+            "permission_policy_digest":ADMIN_POLICY,"permissions":self.permissions,
+            "second_factor_at":NOW_SECONDS - 60,"second_factor_method":"app",
+            "session_expires_at_ms":(NOW_SECONDS + 86_400) * 1000,
+            "authorization_snapshot_at_ms":NOW_SECONDS * 1000 - 10_000,
+            "authorization_snapshot_valid_until_ms":NOW_SECONDS * 1000 + 200_000
+        });
+        adjust(&mut claims);
         stamps::sign(
             &json!({"typ":"at+jwt","alg":"EdDSA","kid":"stamp-a"}),
-            &json!({
-                "iss":ISSUER,"aud":[ADMIN_AUDIENCE],"sub":self.id,
-                "sid":"019f0000-0000-7000-8000-00000000b2f0",
-                "iat":NOW_SECONDS - 10,"exp":NOW_SECONDS + 290,"cnf":{"jkt":self.key.thumbprint()?},
-                "token_profile":"person-fleet","organization_id":self.organization,
-                "authorization_subject_id":self.subject,"person_revision":1,"organization_revision":self.organization_revision,
-                "permission_policy_digest":ADMIN_POLICY,"permissions":self.permissions,
-                "second_factor_at":NOW_SECONDS - 60,"second_factor_method":"app",
-                "session_expires_at_ms":(NOW_SECONDS + 86_400) * 1000,
-                "authorization_snapshot_at_ms":NOW_SECONDS * 1000 - 10_000,
-                "authorization_snapshot_valid_until_ms":NOW_SECONDS * 1000 + 200_000
-            }),
+            &claims,
             7,
         )
     }
