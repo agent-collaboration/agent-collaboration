@@ -2,8 +2,8 @@
 //! the scheduler's wake, a completion that arrives while its Run is being checked, and
 //! stop requests whose outcome is unknown.
 use super::{
-    INTERVAL_SECONDS, RunPhase, SchedulerFixture, TIMEOUT_SECONDS, TestResult, WAIT_LIMIT, advance,
-    at, observe, settled, turn_completed,
+    CollectionLimit, INTERVAL_SECONDS, RunPhase, SchedulerFixture, TIMEOUT_SECONDS, TestResult,
+    advance, at, observe, settled, settled_holding, turn_completed, wait_until,
 };
 use runtime_primitives::Clock;
 use std::{
@@ -28,7 +28,7 @@ async fn a_step_whose_commit_woke_the_loop_before_its_report_still_continues() -
     // The preparation step records its route, a commit, and is held before it reports;
     // the commit wakes a pass that finds the Run still active and goes back to sleep.
     advance(interval).await;
-    settled(&scheduler).await?;
+    settled_holding(&scheduler.observation).await?;
     let (_, phase_while_held) = fixture.run_phase().await?.ok_or("the Run was admitted")?;
     drop(held);
     let run = fixture.executing_and_asleep(&scheduler).await?;
@@ -155,29 +155,25 @@ async fn a_completion_consumed_while_its_run_is_being_checked_still_settles_the_
     // The restarted scheduler checks the Run, finds its turn running and is held before
     // it reports; the completion arrives and is consumed by a pass that skips the Run.
     let scheduler = fixture.start_with(|worker| worker.hold_step_reports(gate))?;
-    for _ in 0..WAIT_LIMIT {
-        if fixture.route.settlement_reads.load(Ordering::Acquire) > reads_before {
-            break;
-        }
-        tokio::task::yield_now().await;
-    }
-    settled(&scheduler).await?;
+    wait_until("the restarted scheduler checked the Run", || {
+        fixture.route.settlement_reads.load(Ordering::Acquire) > reads_before
+    })
+    .await?;
+    settled_holding(&scheduler.observation).await?;
     let started_at = fixture.clock.now();
     fixture.route.turn_completed.store(true, Ordering::Release);
     let sleeps_before_completion = scheduler.observation.snapshot().sleeps;
     observe(&fixture, turn_completed()).await?;
-    scheduler
-        .observation
-        .asleep_at_least(sleeps_before_completion + 1)
-        .await;
-    settled(&scheduler).await?;
+    wait_until("the completion woke a pass", || {
+        scheduler.observation.snapshot().sleeps > sleeps_before_completion
+    })
+    .await?;
+    settled_holding(&scheduler.observation).await?;
     let phase_while_held = fixture.read_phase(&run).await?;
     drop(held);
-    for _ in 0..WAIT_LIMIT {
-        if fixture.read_phase(&run).await? != RunPhase::Executing {
-            break;
-        }
-        tokio::task::yield_now().await;
+    let limit = CollectionLimit::start("the completed Run settled");
+    while fixture.read_phase(&run).await? == RunPhase::Executing {
+        limit.next().await?;
     }
 
     assert_eq!(phase_while_held, RunPhase::Executing);

@@ -4,7 +4,9 @@ use super::WakeTimingWorker;
 use crate::{
     AutomationConfigurationHandle, PushHandoffWorker, WorkerObservation,
     paused_wall_clock::PausedWallClock,
-    paused_worker_test_support::{NoAutoAdvance, TestResult, WAIT_LIMIT, advance, settled},
+    paused_worker_test_support::{
+        NoAutoAdvance, TestResult, advance, settled, settled_holding, wait_until,
+    },
 };
 use agent_automation::{ExpiryRule, OperationId, TimingRule, WakeState};
 use automation_storage::{AutomationStore, WakeAction, WakeCreate, WakeMutation};
@@ -207,22 +209,11 @@ impl WakeFixture {
     /// Waits, without moving the clock, until `count` deliveries happened and the worker
     /// is asleep again. It fails once no delivery happened for a whole wait limit.
     async fn delivered(&self, wakes: &RunningWakes, count: usize) -> TestResult {
-        let mut seen = self.deliveries().len();
-        let mut idle = 0;
-        while idle < WAIT_LIMIT {
-            let now_seen = self.deliveries().len();
-            if now_seen >= count {
-                return settled(&wakes.observation).await;
-            }
-            if now_seen == seen {
-                idle += 1;
-            } else {
-                seen = now_seen;
-                idle = 0;
-            }
-            tokio::task::yield_now().await;
-        }
-        Err(format!("deliveries stalled at {seen} of {count}").into())
+        wait_until("every expected delivery happened", || {
+            self.deliveries().len() >= count
+        })
+        .await?;
+        settled(&wakes.observation).await
     }
 }
 
@@ -493,12 +484,10 @@ async fn a_push_admitted_while_its_dispatch_is_in_flight_is_still_delivered() ->
     // and is held before it reports. The hand-off then admits the push; the commit wakes
     // a pass that skips the in-flight delivery.
     advance(Duration::from_secs(60)).await;
-    for _ in 0..WAIT_LIMIT {
-        if arrivals.load(Ordering::SeqCst) > 0 {
-            break;
-        }
-        tokio::task::yield_now().await;
-    }
+    wait_until("the dispatch was held", || {
+        arrivals.load(Ordering::SeqCst) > 0
+    })
+    .await?;
     let delivered_while_unadmitted = fixture.deliveries();
     let sleeps_before_admission = wakes.observation.snapshot().sleeps;
     PushHandoffWorker::new(
@@ -507,11 +496,11 @@ async fn a_push_admitted_while_its_dispatch_is_in_flight_is_still_delivered() ->
     )
     .apply_pending()
     .await?;
-    wakes
-        .observation
-        .asleep_at_least(sleeps_before_admission + 1)
-        .await;
-    settled(&wakes.observation).await?;
+    wait_until("the admission woke a pass", || {
+        wakes.observation.snapshot().sleeps > sleeps_before_admission
+    })
+    .await?;
+    settled_holding(&wakes.observation).await?;
     drop(held);
     fixture.delivered(&wakes, 1).await?;
 
@@ -521,6 +510,66 @@ async fn a_push_admitted_while_its_dispatch_is_in_flight_is_still_delivered() ->
         fixture.deliveries(),
         [at(Duration::from_secs(60))],
         "the dispatch owed a recheck is redispatched once admitted, with no clock advance"
+    );
+    wakes.stop().await;
+    Ok(())
+}
+
+#[tokio::test(start_paused = true)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
+async fn pushes_admitted_while_every_dispatch_slot_is_taken_are_all_delivered() -> TestResult {
+    const WAKES: usize = 20;
+    const DISPATCH_SLOTS: usize = 16;
+    let fixture = WakeFixture::new().await?;
+    for session in 0..WAKES {
+        fixture
+            .create_wake(&format!("woken-session-{session}"), 60, ExpiryRule::None)
+            .await?;
+    }
+    let gate = Arc::new(Mutex::new(()));
+    let held = Arc::clone(&gate).lock_owned().await;
+    let arrivals = Arc::new(AtomicUsize::new(0));
+    let wakes = fixture.start_wakes_only(|worker| {
+        worker.hold_dispatch_reports(Arc::clone(&gate), Arc::clone(&arrivals))
+    })?;
+    settled(&wakes.observation).await?;
+
+    // At their time sixteen dispatches find their pushes not yet admitted, write nothing
+    // and are held, so every slot is taken. The hand-off then admits all twenty: its
+    // commit wakes a pass that can start nothing.
+    advance(Duration::from_secs(60)).await;
+    wait_until("every dispatch slot was taken", || {
+        arrivals.load(Ordering::SeqCst) >= DISPATCH_SLOTS
+    })
+    .await?;
+    settled_holding(&wakes.observation).await?;
+    let sleeps_before_admission = wakes.observation.snapshot().sleeps;
+    PushHandoffWorker::new(
+        Arc::clone(&fixture.store),
+        Arc::clone(&fixture.interactions),
+    )
+    .apply_pending()
+    .await?;
+    wait_until("the admission woke a pass", || {
+        wakes.observation.snapshot().sleeps > sleeps_before_admission
+    })
+    .await?;
+    settled_holding(&wakes.observation).await?;
+    let delivered_while_full = fixture.deliveries().len();
+    drop(held);
+    fixture.delivered(&wakes, WAKES).await?;
+
+    assert_eq!(delivered_while_full, 0);
+    assert_eq!(fixture.deliveries().len(), WAKES);
+    assert!(
+        fixture
+            .deliveries()
+            .iter()
+            .all(|delivered| *delivered == at(Duration::from_secs(60))),
+        "the freed slots redispatch every admitted push, with no clock advance"
     );
     wakes.stop().await;
     Ok(())

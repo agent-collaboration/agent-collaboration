@@ -5,7 +5,9 @@
 //! its next timer. Each fixture holds a blocking task, which stops Tokio's auto-advance, so
 //! time moves only when a test advances it.
 use super::ScheduleTimingWorker;
-use crate::paused_worker_test_support::{self, NoAutoAdvance, WAIT_LIMIT, advance};
+use crate::paused_worker_test_support::{
+    self, CollectionLimit, NoAutoAdvance, advance, settled_holding, wait_until,
+};
 use crate::{
     paused_wall_clock::PausedWallClock,
     scheduled_route_fixture::{
@@ -63,6 +65,8 @@ struct ControlledRoute {
     unreachable_targets: AtomicUsize,
     /// Fresh-session submissions, answered by the preparation tests.
     fresh: preparation_tests::FreshSubmissions,
+    /// Runs whose turn the capacity tests completed one by one.
+    completed_runs: capacity_tests::CompletedRuns,
     /// How many settlement reads still answer that the client is unreachable.
     unreachable_settlements: AtomicUsize,
     /// How many stop requests still answer that the client is unreachable.
@@ -153,9 +157,10 @@ impl ScheduledRunExecution for ControlledRoute {
         context: RunObservationContext,
     ) -> DeliveryFuture<'_, RunSettlement> {
         self.settlement_reads.fetch_add(1, Ordering::AcqRel);
+        let completed = self.turn_completed.load(Ordering::Acquire)
+            || self.completed_runs.contains(&context.run_id);
         self.observed_runs.lock().unwrap().push(context.run_id);
         let unreachable = take_unreachable(&self.unreachable_settlements);
-        let completed = self.turn_completed.load(Ordering::Acquire);
         Box::pin(async move {
             if unreachable {
                 return Err(DeliveryContractError::ClientOperation);
@@ -279,6 +284,7 @@ impl SchedulerFixture {
             observed_runs: std::sync::Mutex::default(),
             unreachable_targets: AtomicUsize::new(0),
             fresh: preparation_tests::FreshSubmissions::default(),
+            completed_runs: capacity_tests::CompletedRuns::default(),
             unreachable_settlements: AtomicUsize::new(0),
             unreachable_stops: AtomicUsize::new(0),
             stop_records_intent: AtomicBool::new(false),
@@ -418,7 +424,8 @@ impl SchedulerFixture {
         let mut handoff =
             crate::PushHandoffWorker::new(Arc::clone(&self.store), Arc::clone(&self.interactions));
         let mut target_went_idle = false;
-        for _ in 0..WAIT_LIMIT {
+        let limit = CollectionLimit::start("the Run was executing and checked");
+        loop {
             handoff.apply_pending().await?;
             if !target_went_idle
                 && self.route.inner.submissions.load(Ordering::Acquire) == 1
@@ -436,9 +443,8 @@ impl SchedulerFixture {
             {
                 return Ok(id);
             }
-            tokio::task::yield_now().await;
+            limit.next().await?;
         }
-        Err("the Run never reached a checked, executing state".into())
     }
 }
 
@@ -599,11 +605,9 @@ async fn a_running_turn_is_checked_once_and_its_completion_settles_the_run_with_
         .journal
         .append(&turn_completed, BASE_MS / 1_000)
         .await?;
-    for _ in 0..WAIT_LIMIT {
-        if fixture.read_phase(&run).await? != RunPhase::Executing {
-            break;
-        }
-        tokio::task::yield_now().await;
+    let limit = CollectionLimit::start("the completed Run settled");
+    while fixture.read_phase(&run).await? == RunPhase::Executing {
+        limit.next().await?;
     }
 
     assert_eq!(

@@ -93,6 +93,11 @@ struct TaskReporter<TKey> {
     key: Option<TKey>,
     outcome: TaskOutcome,
     state: Arc<TaskState>,
+    /// Asks the loop for another full sweep: a key owed a recheck reported.
+    sweep_requested: Arc<AtomicBool>,
+    /// Counts tasks that have not reported, for tests deciding the worker is idle.
+    #[cfg(any(test, feature = "test-support"))]
+    running: Arc<std::sync::atomic::AtomicUsize>,
     reports: mpsc::UnboundedSender<TaskReport<TKey>>,
     wakes: watch::Sender<u64>,
     capacity_exhausted: Arc<AtomicBool>,
@@ -116,11 +121,17 @@ impl<TKey> Drop for TaskReporter<TKey> {
         // The report is queued before either mark is read.
         fence(Ordering::SeqCst);
         let recheck_owed = self.state.reported();
+        if recheck_owed {
+            self.sweep_requested.store(true, Ordering::SeqCst);
+        }
         let slot_awaited = self.capacity_exhausted.swap(false, Ordering::SeqCst);
         if self.outcome != TaskOutcome::Pending || recheck_owed || slot_awaited {
             self.wakes
                 .send_modify(|revision| *revision = revision.wrapping_add(1));
         }
+        // Counted down only once the report and its wake are published.
+        #[cfg(any(test, feature = "test-support"))]
+        self.running.fetch_sub(1, Ordering::SeqCst);
     }
 }
 
@@ -134,6 +145,9 @@ pub(crate) struct KeyedWorkerTasks<TKey> {
     finished: mpsc::UnboundedReceiver<TaskReport<TKey>>,
     wakes: watch::Sender<u64>,
     capacity_exhausted: Arc<AtomicBool>,
+    sweep_requested: Arc<AtomicBool>,
+    #[cfg(any(test, feature = "test-support"))]
+    running: Arc<std::sync::atomic::AtomicUsize>,
     /// Each task compares this commit counter before and after its work.
     commits: watch::Receiver<u64>,
     retries: HashMap<TKey, TaskRetry>,
@@ -165,6 +179,9 @@ impl<TKey: Clone + Eq + Hash + Send + 'static> KeyedWorkerTasks<TKey> {
                 finished,
                 wakes,
                 capacity_exhausted: Arc::new(AtomicBool::new(false)),
+                sweep_requested: Arc::new(AtomicBool::new(false)),
+                #[cfg(any(test, feature = "test-support"))]
+                running: Arc::default(),
                 commits,
                 retries: HashMap::new(),
                 failure_warning,
@@ -228,13 +245,27 @@ impl<TKey: Clone + Eq + Hash + Send + 'static> KeyedWorkerTasks<TKey> {
         full
     }
 
+    /// Whether a key owed a recheck has reported since the last call: the loop owes
+    /// another full sweep.
+    pub(crate) fn take_sweep_request(&self) -> bool {
+        self.sweep_requested.swap(false, Ordering::SeqCst)
+    }
+
+    /// The count of tasks that have not reported, for tests.
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn running_tasks(&self) -> Arc<std::sync::atomic::AtomicUsize> {
+        Arc::clone(&self.running)
+    }
+
     /// A task for this key is running, or its retry time has not come. A running key is
-    /// owed a recheck: whatever woke this pass may concern it, so its task wakes the loop
-    /// when it reports. A key whose report is queued but not yet taken wakes the loop
-    /// now.
+    /// owed a recheck: whatever woke this pass may concern it, so its task asks for
+    /// another sweep and wakes the loop when it reports. A key whose report is queued but
+    /// not yet taken asks for that sweep and wakes the loop now: the pass that takes the
+    /// report may have passed the key.
     pub(crate) fn skip_busy(&self, key: &TKey, now: SyncTime) -> bool {
         if let Some(state) = self.active.get(key) {
             if !state.owe_recheck() {
+                self.sweep_requested.store(true, Ordering::SeqCst);
                 self.wakes
                     .send_modify(|revision| *revision = revision.wrapping_add(1));
             }
@@ -263,12 +294,17 @@ impl<TKey: Clone + Eq + Hash + Send + 'static> KeyedWorkerTasks<TKey> {
             key: Some(key.clone()),
             outcome: TaskOutcome::Failed,
             state: Arc::clone(&state),
+            sweep_requested: Arc::clone(&self.sweep_requested),
+            #[cfg(any(test, feature = "test-support"))]
+            running: Arc::clone(&self.running),
             reports: self.reports.clone(),
             wakes: self.wakes.clone(),
             capacity_exhausted: Arc::clone(&self.capacity_exhausted),
         };
         let mut commits = self.commits.clone();
         commits.borrow_and_update();
+        #[cfg(any(test, feature = "test-support"))]
+        self.running.fetch_add(1, Ordering::SeqCst);
         #[cfg(test)]
         let gate = self.gate.as_ref().map(TaskGate::shared);
         self.active.insert(key, state);

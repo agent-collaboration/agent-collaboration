@@ -1,7 +1,8 @@
 //! What a [`crate::WakeDrivenWorkerLoop`] reports about itself. Production keeps
 //! nothing; under test-support a test sees each store read at its read site, every pass,
-//! the deadline armed before each sleep, a barrier for "asleep" and a gate that holds
-//! the loop after it decided to sleep and before it waits.
+//! the deadline armed before each sleep, whether the loop is asleep now, how many of the
+//! worker's tasks have not reported yet, a barrier for "asleep" and a gate that holds the
+//! loop after it decided to sleep and before it waits.
 use runtime_primitives::SyncTime;
 
 #[derive(Clone, Default)]
@@ -22,6 +23,23 @@ impl WorkerObservation {
     pub(crate) fn pass_started(&self) {
         #[cfg(any(test, feature = "test-support"))]
         self.observed.pass_started();
+    }
+
+    /// The loop woke from its sleep and is about to run a pass.
+    pub(crate) fn woke(&self) {
+        #[cfg(any(test, feature = "test-support"))]
+        self.observed.update(|snapshot| snapshot.asleep = false);
+    }
+
+    /// Reports how many of the worker's tasks are still running, until each reports.
+    #[cfg(any(test, feature = "test-support"))]
+    pub(crate) fn track_running_tasks(
+        &self,
+        running: std::sync::Arc<std::sync::atomic::AtomicUsize>,
+    ) {
+        if let Ok(mut counters) = self.observed.running.lock() {
+            counters.push(running);
+        }
     }
 
     /// The loop stopped waiting on a source that can never change again.
@@ -66,6 +84,10 @@ mod observed {
         pub closed_sources: u64,
         /// The deadline armed before the latest sleep; `None` means no timer.
         pub armed_deadline: Option<SyncTime>,
+        /// The loop is waiting now, not running a pass.
+        pub asleep: bool,
+        /// The worker's tasks that have not reported yet.
+        pub tasks_running: usize,
     }
 
     struct HeldSleep {
@@ -77,6 +99,8 @@ mod observed {
         snapshot: Mutex<LoopSnapshot>,
         sleeps: watch::Sender<u64>,
         held: Mutex<Option<HeldSleep>>,
+        /// One counter per task set the worker runs.
+        pub(super) running: Mutex<Vec<std::sync::Arc<std::sync::atomic::AtomicUsize>>>,
     }
 
     impl Default for ObservedLoop {
@@ -85,6 +109,7 @@ mod observed {
                 snapshot: Mutex::default(),
                 sleeps: watch::channel(0).0,
                 held: Mutex::default(),
+                running: Mutex::default(),
             }
         }
     }
@@ -101,7 +126,19 @@ mod observed {
         }
 
         pub(super) fn pass_started(&self) {
-            self.update(|snapshot| snapshot.passes += 1);
+            self.update(|snapshot| {
+                snapshot.passes += 1;
+                snapshot.asleep = false;
+            });
+        }
+
+        fn tasks_running(&self) -> usize {
+            self.running.lock().map_or(0, |counters| {
+                counters
+                    .iter()
+                    .map(|running| running.load(std::sync::atomic::Ordering::SeqCst))
+                    .sum()
+            })
         }
 
         pub(super) async fn armed(&self, deadline: Option<SyncTime>) {
@@ -114,6 +151,7 @@ mod observed {
             self.update(|snapshot| {
                 snapshot.sleeps += 1;
                 snapshot.armed_deadline = deadline;
+                snapshot.asleep = true;
                 sleeps = snapshot.sleeps;
             });
             self.sleeps.send_replace(sleeps);
@@ -141,11 +179,14 @@ mod observed {
     impl WorkerObservation {
         #[must_use]
         pub fn snapshot(&self) -> LoopSnapshot {
-            self.observed
+            let mut snapshot = self
+                .observed
                 .snapshot
                 .lock()
                 .map(|snapshot| snapshot.clone())
-                .unwrap_or_default()
+                .unwrap_or_default();
+            snapshot.tasks_running = self.observed.tasks_running();
+            snapshot
         }
 
         /// Resolves once the loop has gone to sleep at least `count` times; a loop that

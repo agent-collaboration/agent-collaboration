@@ -103,6 +103,9 @@ impl WakeTimingWorker {
         );
         #[cfg(test)]
         deliveries.hold(self.dispatch_gate);
+        #[cfg(any(test, feature = "test-support"))]
+        self.observation
+            .track_running_tasks(deliveries.running_tasks());
         let worker = WakeDrivenWorkerLoop::new("wake-ups", Arc::clone(&self.native.clock))
             .with_observation(self.observation)
             .wake_on(commits)

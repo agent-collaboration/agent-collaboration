@@ -98,6 +98,22 @@ impl ScheduleTimingWorker {
         self
     }
 
+    /// As [`Self::hold_step_reports`], counting in `arrivals` each step held.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn hold_step_reports_counting(
+        mut self,
+        gate: Arc<Mutex<()>>,
+        arrivals: Arc<std::sync::atomic::AtomicUsize>,
+    ) -> Self {
+        self.step_gate = Some(crate::keyed_worker_tasks::TaskGate::counting(
+            crate::keyed_worker_tasks::TaskGatePoint::BeforeReport,
+            gate,
+            arrivals,
+        ));
+        self
+    }
+
     /// The first time every step slot is taken, holds the scheduler before it waits for
     /// a slot until all of those steps have queued their reports.
     #[cfg(test)]
@@ -117,6 +133,9 @@ impl ScheduleTimingWorker {
         let commits = self.store.lock().await.subscribe_commits();
         let step_commits = self.store.lock().await.subscribe_commits();
         let configuration = self.runner.configuration.subscribe_changes();
+        // The pass tells an event from its own steps' reports through its own copies.
+        let mut events = vec![commits.clone(), configuration.clone()];
+        events.extend(self.completion_sources.iter().cloned());
         #[cfg_attr(not(test), expect(unused_mut, reason = "only tests hold step tasks"))]
         let (mut steps, step_wakes) = KeyedWorkerTasks::new(
             MAX_ACTIVE_STEPS,
@@ -129,6 +148,8 @@ impl ScheduleTimingWorker {
         if self.hold_full_table {
             steps.hold_full_table_until_reports_queued();
         }
+        #[cfg(any(test, feature = "test-support"))]
+        self.observation.track_running_tasks(steps.running_tasks());
         let mut worker = WakeDrivenWorkerLoop::new("schedules", Arc::clone(&self.runner.clock))
             .with_observation(self.observation)
             .wake_on(commits)
@@ -141,6 +162,8 @@ impl ScheduleTimingWorker {
             store: self.store,
             runner: self.runner,
             steps,
+            events,
+            sweep_owed: false,
             run_cursor: None,
             waiting_cursor: None,
         };
@@ -154,12 +177,28 @@ struct SchedulePass {
     runner: ScheduledRunWorker,
     /// Run steps in flight, their reports and their per-Run retries.
     steps: KeyedWorkerTasks<RunId>,
+    /// Automation commits, configuration changes and completions: anything that may
+    /// concern a Run, unlike a step's report or a freed slot.
+    events: Vec<watch::Receiver<u64>>,
+    /// An event, or a report a step was owed, arrived during a sweep that may already
+    /// have passed the Run it concerns: another full sweep follows this one.
+    sweep_owed: bool,
     // Scan progress is only a fairness hint; durable Run state still owns exclusion.
     run_cursor: Option<RunId>,
     waiting_cursor: Option<ScheduleId>,
 }
 
 impl SchedulePass {
+    /// Marks every event seen and reports whether any arrived since the last pass.
+    fn take_events(&mut self) -> bool {
+        let mut arrived = false;
+        for event in &mut self.events {
+            arrived |= event.has_changed().unwrap_or(false);
+            event.borrow_and_update();
+        }
+        arrived
+    }
+
     async fn enqueue_due(
         &mut self,
         now_ms: i64,
@@ -265,13 +304,27 @@ impl WorkerPass for SchedulePass {
         observation: &WorkerObservation,
     ) -> Result<BatchOutcome, StorageError> {
         self.steps.reap(now);
+        // Whatever an event concerns, the next full sweep reaches: it steps an idle Run,
+        // and owes a Run still being stepped a recheck when it reports.
+        if self.take_events() {
+            self.sweep_owed = true;
+        }
+        if self.steps.take_sweep_request() {
+            self.sweep_owed = true;
+        }
+        if self.run_cursor.is_none() {
+            // This pass begins a full sweep from the first Run.
+            self.sweep_owed = false;
+        }
         let now_ms = now.unix_millis();
         let due = self.enqueue_due(now_ms, observation).await?;
         let waiting = self.admit_waiting(now_ms, observation).await?;
         let runs = self.start_observable_steps(now, observation).await?;
+        // A sweep that reached the last Run with another owed starts again from the first.
         let more = due == INVENTORY_BATCH
             || waiting == INVENTORY_BATCH
-            || matches!(runs, RunScan::MoreRuns);
+            || matches!(runs, RunScan::MoreRuns)
+            || (matches!(runs, RunScan::Complete) && self.sweep_owed);
         Ok(if more {
             BatchOutcome::MoreWork
         } else {

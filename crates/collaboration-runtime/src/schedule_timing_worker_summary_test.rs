@@ -1,7 +1,7 @@
 //! A running summary turn through the scheduler and a fake native app-server: the summary's
 //! deadline arms the scheduler's timer, and at that time, not before, the scheduler stores
 //! the stop and interrupts the summary turn once.
-use super::{BASE_MS, SchedulerFixture, TestResult, WAIT_LIMIT, advance, at, settled};
+use super::{BASE_MS, SchedulerFixture, TestResult, advance, at, settled, wait_until};
 use agent_automation::{
     CessationEvidence, PreparationEffect, RunId, SubmissionEffect, SummaryAttempt, SummaryPhase,
 };
@@ -222,22 +222,11 @@ impl SchedulerFixture {
 /// Waits, without moving the clock, until the server answered `count` requests. It fails
 /// once no request arrived for a whole wait limit.
 async fn answered(requests: &std::sync::Mutex<Vec<NativeRequest>>, count: usize) -> TestResult<()> {
-    let mut seen = requests.lock().unwrap().len();
-    let mut idle = 0;
-    while idle < WAIT_LIMIT {
-        let now_seen = requests.lock().unwrap().len();
-        if now_seen >= count {
-            return Ok(());
-        }
-        if now_seen == seen {
-            idle += 1;
-        } else {
-            seen = now_seen;
-            idle = 0;
-        }
-        tokio::task::yield_now().await;
-    }
-    Err(format!("native requests stalled at {seen} of {count}").into())
+    wait_until(
+        "the fake app-server answered every expected request",
+        || requests.lock().unwrap().len() >= count,
+    )
+    .await
 }
 
 /// A seeded running summary, its fake app-server and a scheduler with a native backend.

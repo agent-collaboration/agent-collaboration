@@ -8,7 +8,6 @@ use tokio::sync::{Mutex, watch};
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
 const NOW: SyncTime = SyncTime::from_unix_millis(1_800_000_000_000);
-const WAIT_LIMIT: usize = 5_000;
 
 struct Tasks {
     tasks: KeyedWorkerTasks<&'static str>,
@@ -30,13 +29,10 @@ fn tasks(capacity: usize) -> Tasks {
 impl Tasks {
     /// Waits until `count` reports are queued.
     async fn reports_queued(&self, count: usize) -> TestResult {
-        for _ in 0..WAIT_LIMIT {
-            if self.tasks.finished.len() >= count {
-                return Ok(());
-            }
-            tokio::task::yield_now().await;
-        }
-        Err("the task never reported".into())
+        crate::paused_worker_test_support::wait_until("the tasks reported", || {
+            self.tasks.finished.len() >= count
+        })
+        .await
     }
 
     fn woken(&mut self) -> bool {
@@ -107,6 +103,10 @@ async fn a_task_skipped_after_it_reported_wakes_the_loop_at_once() -> TestResult
     assert!(
         fixture.woken(),
         "the loop runs again to take the report and recheck the key"
+    );
+    assert!(
+        fixture.tasks.take_sweep_request(),
+        "a pass past the key sweeps again"
     );
     Ok(())
 }

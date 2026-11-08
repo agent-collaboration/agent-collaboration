@@ -6,7 +6,7 @@ use crate::{
     WorkerObservation,
     captured_warnings_test_support::CapturedWarnings,
     paused_wall_clock::PausedWallClock,
-    paused_worker_test_support::{NoAutoAdvance, TestResult, WAIT_LIMIT, advance, settled},
+    paused_worker_test_support::{CollectionLimit, NoAutoAdvance, TestResult, advance, settled},
 };
 use agent_automation::{ExpiryRule, OperationId, TimingRule};
 use automation_storage::{AutomationStore, MAX_OWED_PUSH_OPERATION_BATCH, WakeCreate};
@@ -154,12 +154,10 @@ async fn a_committed_push_admission_wakes_the_handoff_with_no_clock_advance() ->
     let started_at = fixture.clock.now();
 
     fixture.owe_one_push().await?;
+    let limit = CollectionLimit::start("the owed admission was applied");
     let mut owed = fixture.owed().await?;
-    for _ in 0..WAIT_LIMIT {
-        if owed == 0 {
-            break;
-        }
-        tokio::task::yield_now().await;
+    while owed > 0 {
+        limit.next().await?;
         owed = fixture.owed().await?;
     }
     settled(&fixture.observation).await?;
