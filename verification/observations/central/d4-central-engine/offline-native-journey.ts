@@ -6,7 +6,6 @@ import { z } from "zod";
 import type { D1HarnessJourney, D1Machine } from "../d1-harness-plan.ts";
 import type { Receipt } from "../../../receipt.ts";
 import type { OwnedProcess } from "../../../machines/owned-process.ts";
-import { CentralOwner } from "../../../clients/central-owner.ts";
 import { decode } from "../../../exact-json.ts";
 import { withinFixtureDeadline } from "../../../fixtures/fixture-control-socket.ts";
 import { nativeTurnStarts } from "../d1-native-activity.ts";
@@ -21,6 +20,7 @@ import { driveOfflineTen, type OfflineHeldReadbacks } from "./offline-custody-dr
 import { custodyManifestFromSender, observeHeldCustody } from "./custody-observation.ts";
 import { observePerSenderPushOrder } from "./push-order-observation.ts";
 import type { D4OfflineHarnessPlan } from "./offline-harness-plan.ts";
+import { readNativeSessionInventory } from "./native-session-inventory.ts";
 
 type MachineName = "a" | "b" | "c";
 interface MachineCapture {
@@ -107,16 +107,12 @@ export class OfflineNativeJourney implements D1HarnessJourney {
     const fixture = z
       .object({ origin: z.literal(input.origin), assertion: z.string().min(1) })
       .parse(decode(await readFile(`${input.centralRoot}/owner-fixture.json`, "utf8")));
-    const owner = new CentralOwner(input.origin, { "Cf-Access-Jwt-Assertion": fixture.assertion });
-    const readAdmission = async (): Promise<unknown> => {
-      const reply = await owner.response({
-        path: "/__conformance/admission",
-        method: "POST",
-        body: { kind: "sessionConnections", value: { service: input.serviceId } },
+    const readAdmission = (): Promise<unknown> =>
+      readNativeSessionInventory({
+        origin: input.origin,
+        assertion: fixture.assertion,
+        service: input.serviceId,
       });
-      if (reply.status !== 200) throw new Error("actual owner admission read failed");
-      return reply.body;
-    };
     const capture = this.capture(input.name),
       deadline = Date.now() + 20_000;
     while (Date.now() < deadline) {
