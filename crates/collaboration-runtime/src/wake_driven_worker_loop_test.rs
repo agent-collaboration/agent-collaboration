@@ -370,3 +370,87 @@ async fn a_closed_source_is_removed_and_does_not_keep_waking_the_loop() {
     shutdown.cancel();
     task.await.unwrap();
 }
+
+/// Always has more work. It cancels shutdown during the batch it was told to, and stops
+/// at a cap so a loop that ignores shutdown fails the test instead of hanging it.
+struct EndlessWork {
+    batches: Arc<Mutex<u32>>,
+    cancel_during_batch: Option<u32>,
+    shutdown: CancellationToken,
+}
+
+const ENDLESS_WORK_CAP: u32 = 1_000;
+
+impl WorkerPass for EndlessWork {
+    type Error = &'static str;
+
+    async fn drain_batch(
+        &mut self,
+        _now: SyncTime,
+        _observation: &WorkerObservation,
+    ) -> Result<BatchOutcome, &'static str> {
+        let batch = {
+            let mut batches = self.batches.lock().map_err(|_| "poisoned")?;
+            *batches += 1;
+            *batches
+        };
+        if self.cancel_during_batch == Some(batch) {
+            self.shutdown.cancel();
+        }
+        tokio::task::yield_now().await;
+        Ok(if batch < ENDLESS_WORK_CAP {
+            BatchOutcome::MoreWork
+        } else {
+            BatchOutcome::Drained
+        })
+    }
+
+    async fn next_due(
+        &mut self,
+        _now: SyncTime,
+        _observation: &WorkerObservation,
+    ) -> Result<Option<SyncTime>, &'static str> {
+        Ok(None)
+    }
+}
+
+async fn batches_run_with(cancel_during_batch: Option<u32>, shutdown: CancellationToken) -> u32 {
+    let batches = Arc::new(Mutex::new(0));
+    let mut pass = EndlessWork {
+        batches: Arc::clone(&batches),
+        cancel_during_batch,
+        shutdown: shutdown.clone(),
+    };
+    let worker = WakeDrivenWorkerLoop::new(
+        "endless",
+        Arc::new(PausedWallClock::starting_at(at(Duration::ZERO))),
+    );
+    let started = tokio::time::Instant::now();
+
+    worker.run(&mut pass, shutdown).await;
+
+    assert_eq!(
+        tokio::time::Instant::now(),
+        started,
+        "shutdown needs no clock advance"
+    );
+    let ran = *batches.lock().unwrap();
+    ran
+}
+
+#[tokio::test(start_paused = true)]
+async fn shutdown_during_a_batch_lets_it_finish_and_starts_no_other() {
+    let ran = batches_run_with(Some(1), CancellationToken::new()).await;
+
+    assert_eq!(ran, 1, "no batch starts after shutdown");
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_loop_started_after_shutdown_runs_no_pass() {
+    let shutdown = CancellationToken::new();
+    shutdown.cancel();
+
+    let ran = batches_run_with(None, shutdown).await;
+
+    assert_eq!(ran, 0, "a cancelled worker starts no pass");
+}

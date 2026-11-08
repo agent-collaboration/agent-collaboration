@@ -111,14 +111,20 @@ impl WakeDrivenWorkerLoop {
     pub async fn run<TPass: WorkerPass>(mut self, pass: &mut TPass, shutdown: CancellationToken) {
         let mut consecutive_failures: u32 = 0;
         loop {
+            // Shutdown is checked between units of work: a pass never starts after it, and
+            // a batch already running finishes its transactions first.
+            if shutdown.is_cancelled() {
+                return;
+            }
             for source in &mut self.sources {
                 source.mark_seen();
             }
             self.observation.pass_started();
             let now = self.clock.now();
-            let result = drain_and_read_next_due(pass, now, &self.observation).await;
+            let result = drain_and_read_next_due(pass, now, &self.observation, &shutdown).await;
             let deadline = match result {
-                Ok(next_due) => {
+                Ok(PassEnd::ShutDown) => return,
+                Ok(PassEnd::Drained { next_due }) => {
                     consecutive_failures = 0;
                     next_due
                 }
@@ -205,13 +211,29 @@ enum SourceEvent {
     Closed { index: usize },
 }
 
+/// How one pass ended.
+enum PassEnd {
+    Drained {
+        next_due: Option<SyncTime>,
+    },
+    /// Shutdown arrived; the batch that was running finished first.
+    ShutDown,
+}
+
 async fn drain_and_read_next_due<TPass: WorkerPass>(
     pass: &mut TPass,
     now: SyncTime,
     observation: &WorkerObservation,
-) -> Result<Option<SyncTime>, TPass::Error> {
-    while pass.drain_batch(now, observation).await? == BatchOutcome::MoreWork {}
-    pass.next_due(now, observation).await
+    shutdown: &CancellationToken,
+) -> Result<PassEnd, TPass::Error> {
+    while pass.drain_batch(now, observation).await? == BatchOutcome::MoreWork {
+        if shutdown.is_cancelled() {
+            return Ok(PassEnd::ShutDown);
+        }
+    }
+    Ok(PassEnd::Drained {
+        next_due: pass.next_due(now, observation).await?,
+    })
 }
 
 #[cfg(test)]
