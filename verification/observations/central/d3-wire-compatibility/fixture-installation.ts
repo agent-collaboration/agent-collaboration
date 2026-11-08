@@ -283,21 +283,43 @@ export class FixtureInstallation {
   }
   private async createRecipient(serviceId: string): Promise<void> {
     if (this.native === undefined) throw new Error("native connection absent");
-    const started = z.object({ thread: z.object({ id: z.string() }) }).parse(
-      await this.native.rpc("thread/start", {
-        cwd: this.root,
-        model: "gpt-6-luna",
-        modelProvider: "codex-router-debug",
-        approvalPolicy: "never",
-        sandbox: "read-only",
-        config: { model_reasoning_effort: "low", thread_unload_delay_secs: 0 },
-        developerInstructions: "Passive compatibility recipient. No model input is authorized.",
-      }),
-    );
+    const started = z
+      .object({
+        model: z.literal("gpt-6-luna"),
+        modelProvider: z.literal("codex-router-debug"),
+        reasoningEffort: z.literal("low"),
+        thread: z.object({ id: z.string(), ephemeral: z.literal(false) }),
+      })
+      .parse(
+        await this.native.rpc("thread/start", {
+          cwd: this.root,
+          model: "gpt-6-luna",
+          modelProvider: "codex-router-debug",
+          approvalPolicy: "never",
+          sandbox: "read-only",
+          config: { model_reasoning_effort: "low", thread_unload_delay_secs: 0 },
+          developerInstructions: "Passive compatibility recipient. No model input is authorized.",
+        }),
+      );
     this.recipient = {
       endpoint: { serviceId, endpointId: "codex-local" },
       sessionId: started.thread.id,
     };
+    await this.persistRecipientWithoutInput(started.thread.id);
+  }
+  private async persistRecipientWithoutInput(threadId: string): Promise<void> {
+    if (this.native === undefined) throw new Error("native connection absent");
+    // Actual Codex0.166 archive persists a loaded empty thread; unarchive
+    // restores it without inference. No rollout contents are synthesized.
+    const archived = await this.native.rpc("thread/archive", { threadId });
+    const restored = await this.native.rpc("thread/unarchive", { threadId });
+    z.object({ thread: z.object({ id: z.literal(threadId) }) }).parse(restored);
+    await this.input.receipt.record("d3RecipientPersistedWithoutInput", {
+      recipient: this.recipient,
+      route: "thread/archive then thread/unarchive",
+      archived,
+      restored,
+    });
   }
   async unload(): Promise<void> {
     if (this.native === undefined || this.recipient === undefined)
@@ -308,7 +330,26 @@ export class FixtureInstallation {
       const loaded = z
         .object({ data: z.array(z.string()) })
         .parse(await this.native.rpc("thread/loaded/list", {}));
-      if (!loaded.data.includes(this.recipient.sessionId)) return;
+      if (!loaded.data.includes(this.recipient.sessionId)) {
+        const stored = await this.native.rpc("thread/read", {
+          threadId: this.recipient.sessionId,
+          includeTurns: false,
+        });
+        z.object({
+          thread: z.object({
+            id: z.literal(this.recipient.sessionId),
+            status: z.object({ type: z.literal("notLoaded") }),
+            path: z.string().startsWith(`${this.home}/sessions/`),
+            ephemeral: z.literal(false),
+          }),
+        }).parse(stored);
+        await this.input.receipt.record("d3UnloadedRecipientReadback", {
+          recipient: this.recipient,
+          stored,
+        });
+        this.requireNoTurns();
+        return;
+      }
       await setTimeout(25);
     }
     throw new Error("compatibility recipient did not unload");

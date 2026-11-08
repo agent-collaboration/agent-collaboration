@@ -10,6 +10,7 @@ export const compatibilityPlanSchema = z
     suite: z.literal("d3-wire-compatibility"),
     repository: absolutePath,
     sourceHead: z.string().regex(/^[a-f0-9]{40}$/),
+    apparatusHead: z.string().regex(/^[a-f0-9]{40}$/),
     productHead: z.string().regex(/^[a-f0-9]{40}$/),
     oldSourceHead: z.literal(releasedSourceHead),
     oldSourceDirectory: absolutePath,

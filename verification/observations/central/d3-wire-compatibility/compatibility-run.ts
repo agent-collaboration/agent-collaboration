@@ -27,8 +27,8 @@ async function prepareCompatibility(plan: CompatibilityPlan): Promise<{
   await mkdir(receipt.directory, { mode: 0o700 });
   await receipt.save("declaration.json", plan);
   const source = await command("/usr/bin/git", ["rev-parse", "HEAD"], { cwd: plan.repository });
-  if (source.exit !== 0 || source.stdout.trim() !== plan.sourceHead)
-    throw new Error("central source pin changed");
+  if (source.exit !== 0 || source.stdout.trim() !== plan.apparatusHead)
+    throw new Error("apparatus source pin changed");
   await requireFrozenProduct(plan);
   if ((await fingerprint(plan.oldSourceArchive.path)) !== plan.oldSourceArchive.sha256)
     throw new Error("old-source archive hash mismatch");
@@ -122,7 +122,7 @@ export async function runCompatibility(plan: CompatibilityPlan): Promise<void> {
     for (const artifact of [plan.oldRouter, plan.oldCli, plan.centralDriver])
       await qualifyArtifact(artifact);
     const final = await command("/usr/bin/git", ["rev-parse", "HEAD"], { cwd: plan.repository });
-    if (final.stdout.trim() !== plan.sourceHead)
+    if (final.stdout.trim() !== plan.apparatusHead)
       throw new Error("target changed during observation");
     await requireFrozenProduct(plan);
   } catch (error: unknown) {
@@ -154,6 +154,13 @@ export async function runCompatibility(plan: CompatibilityPlan): Promise<void> {
 }
 
 async function requireFrozenProduct(plan: CompatibilityPlan): Promise<void> {
+  const inherited = await command(
+    "/usr/bin/git",
+    ["merge-base", "--is-ancestor", plan.sourceHead, plan.apparatusHead],
+    { cwd: plan.repository },
+  );
+  if (inherited.exit !== 0)
+    throw new Error("apparatus does not extend declared stacked source target");
   const checked = await command(
     "/usr/bin/git",
     [

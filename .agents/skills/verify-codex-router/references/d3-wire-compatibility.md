@@ -30,7 +30,7 @@ node verification/run.ts --d3-wire "$D3_PLAN"
 
 `verification/observations/central/d3-wire-compatibility/compatibility-plan.ts`
 owns the strict owner-private JSON declaration. It names the repository and full
-controller source commit and frozen `productHead` used for the central build,
+stacked `sourceHead`, current `apparatusHead`, and frozen `productHead` used for the central build,
 exact old source commit `247570818a922535043bd935f3eb3d93f3ec5a67`, old source directory and Git archive
 path/hash, old Router/CLI, native executable and central driver artifacts
 (path/hash/identifier/team), fresh evidence directory under repository `tmp/`,
@@ -74,7 +74,24 @@ The old debug CLI's actual `fleet enroll --allow-plaintext-file-secrets` initial
 its isolated plaintext roots. The fixture Access edge translates only synthetic
 auth; the real central admits the machine and the SessionGate forwards real
 WebSocket bytes. The old Host then connects normally. Native initialize and
-metadata-only thread creation/unload provide an actual recipient address.
+metadata-only thread creation provide an actual recipient address. Before
+unloading it, call the real `thread/archive`, then `thread/unarchive` in that
+fixture's isolated Codex home. Codex 0.166.0's archive implementation explicitly
+persists a fresh loaded non-ephemeral thread before archiving; unarchive restores
+that empty persisted thread without inference. Afterward require its absence
+from `thread/loaded/list` and a successful `thread/read` with the exact id,
+`status.type: notLoaded`, non-ephemeral state and path inside that fixture's
+sessions directory. Create no rollout by hand. Stop if any condition fails.
+
+This route is version-bound to the actual native artifact and its schema.
+Source: `openai/codex` `rust-v0.166.0`, commit
+`6ff1e1ca3b30fc8b914720681fcf5fe62e95f856`,
+`codex-rs/app-server/src/request_processors/thread_processor.rs`,
+`thread_archive_response` and `thread_unarchive_response`. Qualify a new native
+version before reuse. The fixture is an empty persisted recipient, with zero
+model turns; it proves central↔Router wire and inbox custody, not inference or
+model-created conversation persistence. Keep the actual method replies and
+turn-start count. A guard's blocked startup connection is not a model response.
 
 Require pre-D3 source version 0.1.134 health, service publication, actual native
 endpoint readiness, distinct installation identities and observed Welcome on
