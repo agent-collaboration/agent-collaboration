@@ -46,6 +46,13 @@ pub struct FleetOutbox {
     database: Arc<RouterLocalDatabase>,
 }
 impl FleetOutbox {
+    /// A receiver that wakes after each committed transaction that changed rows in the
+    /// Fleet database this outbox is a view over.
+    #[must_use]
+    pub fn subscribe_commits(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.database.subscribe_commits()
+    }
+
     pub(crate) const fn over(database: Arc<RouterLocalDatabase>) -> Self {
         Self { database }
     }
@@ -116,7 +123,7 @@ impl FleetOutbox {
         request: &FleetRequest,
     ) -> Result<FleetOutboxEntry, RouterLocalStorageError> {
         let _guard = self.database.writer.lock().await;
-        let mut transaction = self.database.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self.database.write_transaction().await?;
         let result = enqueue_request(&mut transaction, request).await;
         match result {
             Ok(entry) => {
@@ -146,7 +153,7 @@ impl FleetOutbox {
             return Err(RouterLocalStorageError::InvalidRecord);
         }
         let _guard = self.database.writer.lock().await;
-        let mut transaction = self.database.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self.database.write_transaction().await?;
         let id = request.as_str();
         let row = sqlx::query::<sqlx_turso::Turso>(
             "SELECT canonical_hash,request,state,settled_at_ms FROM fleet_outbox_requests WHERE request_id=?",
@@ -221,7 +228,7 @@ impl FleetOutbox {
         }
         let cutoff_ms = fleet_outbox_retention_cutoff_ms(now_ms)?;
         let _guard = self.database.writer.lock().await;
-        let mut transaction = self.database.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self.database.write_transaction().await?;
         let invalid_pending = sqlx::query::<sqlx_turso::Turso>(
             "SELECT request_id,canonical_hash,request,state,settled_at_ms FROM fleet_outbox_requests WHERE json_extract(state,'$.kind')='pending' AND settled_at_ms IS NOT NULL ORDER BY request_id LIMIT 1",
         )
@@ -322,7 +329,7 @@ pub(crate) fn decode_entry(
 }
 
 async fn enqueue_request(
-    transaction: &mut sqlx::Transaction<'_, sqlx_turso::Turso>,
+    transaction: &mut crate::router_local_database::LocalTransaction<'_>,
     request: &FleetRequest,
 ) -> Result<FleetOutboxEntry, RouterLocalStorageError> {
     let id = request.request_id.as_str();

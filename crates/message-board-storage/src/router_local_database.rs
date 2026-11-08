@@ -1,7 +1,8 @@
 //! Shared native opening policy for three separate, never-replicated Router files.
+use sqlite_storage_maintenance::{CommitSignal, SignaledTransaction, TransactionStart};
 use sqlx::{Connection, Pool, migrate::Migrator, pool::PoolOptions};
-use sqlx_turso::{Turso, TursoConnectOptions};
-use std::path::Path;
+use sqlx_turso::{Turso, TursoConnectOptions, TursoConnection};
+use std::{future::Future, path::Path, pin::Pin};
 use tokio::sync::Mutex;
 
 #[derive(Debug, thiserror::Error)]
@@ -51,7 +52,12 @@ pub enum RouterLocalStorageError {
 pub(crate) struct RouterLocalDatabase {
     pub(crate) pool: Pool<Turso>,
     pub(crate) writer: Mutex<()>,
+    commits: CommitSignal,
 }
+
+/// One transaction on the Router-local database; committing it signals subscribers only
+/// when it changed rows.
+pub(crate) type LocalTransaction<'database> = SignaledTransaction<'database, Turso>;
 
 impl RouterLocalDatabase {
     pub(crate) async fn open(
@@ -120,11 +126,45 @@ impl RouterLocalDatabase {
         Ok(Self {
             pool,
             writer: Mutex::new(()),
+            commits: CommitSignal::new(),
         })
     }
+
+    /// The one transaction function for writes on the pool's single connection.
+    pub(crate) async fn write_transaction(&self) -> Result<LocalTransaction<'_>, sqlx::Error> {
+        let transaction = self
+            .pool
+            .begin_with(TransactionStart::Immediate.statement())
+            .await?;
+        SignaledTransaction::counting(transaction, turso_total_changes, &self.commits).await
+    }
+
+    /// The same function for a caller that already holds the pooled connection.
+    pub(crate) async fn write_transaction_on<'connection>(
+        &'connection self,
+        connection: &'connection mut TursoConnection,
+    ) -> Result<LocalTransaction<'connection>, sqlx::Error> {
+        let transaction = connection
+            .begin_with(TransactionStart::Immediate.statement())
+            .await?;
+        SignaledTransaction::counting(transaction, turso_total_changes, &self.commits).await
+    }
+
+    /// A receiver that wakes after each committed transaction that changed rows.
+    pub(crate) fn subscribe_commits(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.commits.subscribe()
+    }
+
     pub(crate) async fn close(self) {
         self.pool.close().await;
     }
+}
+
+/// The Turso driver's change counter for [`SignaledTransaction`].
+fn turso_total_changes(
+    connection: &mut TursoConnection,
+) -> Pin<Box<dyn Future<Output = Result<i64, sqlx::Error>> + Send + '_>> {
+    Box::pin(sqlx::query_scalar::<Turso, i64>("SELECT total_changes()").fetch_one(connection))
 }
 
 #[cfg(test)]

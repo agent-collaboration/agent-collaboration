@@ -100,7 +100,7 @@ impl CursorStore {
         candidate: &CursorSigningKey,
     ) -> Result<CursorSigningKey, RouterLocalStorageError> {
         let _guard = self.database.writer.lock().await;
-        let mut transaction = self.database.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self.database.write_transaction().await?;
         let stored = load_stored_signing_key(&mut *transaction).await?;
         let key = match stored {
             Some(key) => key,
