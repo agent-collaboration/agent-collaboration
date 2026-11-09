@@ -74,10 +74,12 @@ After reducing cycles or their edges, update `architecture/module-cycle-baseline
 - Before merging a user-facing code change, advance the workspace package
   version to the next unused semantic version and update `Cargo.lock`. Do not
   merge releasable code while leaving Homebrew on an older version.
-- After the versioned change reaches `main`, publish the matching `v<version>`
-  tag and require `.github/workflows/release.yml` to publish the GitHub release
-  artifact, update `ShravanSunder/homebrew-taps`, and verify the Homebrew
-  installation.
+- After the versioned change reaches `main`, push the matching `v<version>`
+  tag, then start the release from `main`:
+  `gh workflow run release.yml --ref main -f tag=v<version> -f dry_run=false`.
+  Pushing the tag alone starts nothing. Require `.github/workflows/release.yml`
+  to publish the GitHub release artifact, update `ShravanSunder/homebrew-taps`,
+  and verify the Homebrew installation.
 - The release workflow's tap job waits for a second macOS runner. Once its
   build job has published the release asset, run
   `node verification/tooling/publish-homebrew-tap-local.ts` from the repository root on

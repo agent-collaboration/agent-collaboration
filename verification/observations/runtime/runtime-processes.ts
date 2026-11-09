@@ -53,8 +53,11 @@ export function parseProcessTable(stdout: string): Map<number, ProcessIdentity> 
 }
 
 export function processTable(): Map<number, ProcessIdentity> {
+  // ps prints lstart in the caller's locale and identity compares birth exactly, so this and
+  // lookupProcessIdentity pin C: a capture and its recheck agree whoever launches them.
   const result = spawnSync("/bin/ps", ["-axo", "pid=,ppid=,ruid=,uid=,pgid=,lstart=,comm="], {
     encoding: "utf8",
+    env: { ...process.env, LC_ALL: "C" },
     timeout: 5000,
     maxBuffer: Number.MAX_SAFE_INTEGER,
   });

@@ -29,7 +29,14 @@ async fn codex_conversation_cancel_names_turn_interrupt_without_sending_acp_canc
     let acp =
         tokio::net::UnixListener::bind(root.path().join("codex-acp.sock")).expect("ACP listener");
     let acp_peer = tokio::spawn(async move {
-        for operation in ["cancel", "prompt", "load", "human load"] {
+        for operation in [
+            "cancel",
+            "prompt",
+            "load",
+            "human load",
+            "human prompt",
+            "human cancel",
+        ] {
             let (stream, _) = acp.accept().await.expect("ACP accept");
             let (reader, mut writer) = stream.into_split();
             let mut lines = BufReader::new(reader).lines();
@@ -206,6 +213,53 @@ async fn codex_conversation_cancel_names_turn_interrupt_without_sending_acp_canc
         human_load["result"]["structuredContent"]["field"],
         "requestedBy"
     );
+    for (id, name, arguments, field) in [
+        (
+            6,
+            "conversation_prompt",
+            json!({
+                "target":target,"workingDirectory":root.path(),
+                "requestedBy":{"kind":"human","humanId":"fixture-operator"},
+                "message":{"kind":"humanUser","text":"must not submit"},"timeoutSeconds":1
+            }),
+            "requestedBy",
+        ),
+        (
+            7,
+            "conversation_cancel",
+            json!({
+                "operationId":collaboration_protocol::OperationId::generate(),
+                "targetOperationId":collaboration_protocol::OperationId::generate(),
+                "target":target,"requestedBy":{"kind":"human","humanId":"fixture-operator"}
+            }),
+            "cancel",
+        ),
+    ] {
+        let response = client
+            .post(listener.url())
+            .header(CONTENT_TYPE, "application/json")
+            .header(ACCEPT, "application/json, text/event-stream")
+            .header("mcp-protocol-version", "2025-11-25")
+            .json(&json!({"jsonrpc":"2.0","id":id,"method":"tools/call",
+                "params":{"name":name,"arguments":arguments}}))
+            .send()
+            .await
+            .expect("Human native refusal");
+        let body = response.text().await.expect("refusal body");
+        let encoded = body
+            .lines()
+            .filter_map(|line| line.strip_prefix("data: "))
+            .find(|line| !line.is_empty())
+            .unwrap_or(&body);
+        let refusal: Value = serde_json::from_str(encoded).expect("refusal JSON");
+        assert_eq!(refusal["result"]["isError"], true, "{refusal}");
+        assert_eq!(
+            refusal["result"]["structuredContent"]["kind"], "unsupportedCapability",
+            "{refusal}"
+        );
+        assert_eq!(refusal["result"]["structuredContent"]["field"], field);
+        assert_eq!(refusal["result"]["structuredContent"]["effect"], "none");
+    }
     // The ACP peer above observes EOF after initialize for every branch,
     // including Human Load: rejection must precede native session effects.
     acp_peer.await.expect("ACP peer");

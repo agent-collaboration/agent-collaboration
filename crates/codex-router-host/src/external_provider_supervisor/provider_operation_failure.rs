@@ -169,6 +169,14 @@ pub(super) fn runtime_failure(
     error: ExternalProviderRuntimeError,
 ) -> ConversationOperationFailure {
     match error {
+        ExternalProviderRuntimeError::HistoryReplayAdmissionFailed => failure(
+            ConversationOperationFailureKind::Unavailable,
+            ConversationOperationFailureStage::Dispatch,
+            ProviderOperationEffect::None,
+            "session history replay admission failed before provider load was dispatched",
+            operation_id,
+            target,
+        ),
         ExternalProviderRuntimeError::Behavior(error) => {
             let kind = match error {
                 acp_client_runtime::ProviderError::InvalidSelection

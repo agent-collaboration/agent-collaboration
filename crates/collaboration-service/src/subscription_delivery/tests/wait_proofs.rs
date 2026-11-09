@@ -295,14 +295,33 @@ async fn finite_wait_budget_hands_oldest_root_then_preserves_remaining_due_root(
             collaboration_protocol::PushDeliveryState::Delivered,
         )
         .await;
-    // The remaining range now has frozen SDK custody, rather than an unallocated
-    // C5 window. Keep the same pending-root oracle at that owning boundary.
+    // First delivery does not join publication of the later root. Observe that
+    // root's frozen item reaching SDK custody before checking its pending state.
     let target = super::super::subscription_push::target_session(&fixture.reader).unwrap();
-    let still_pending = fixture
-        .interactions
-        .pending_poll_mail(&target)
-        .await
-        .unwrap();
+    let still_pending = tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            let frozen =
+                super::local_mail_proofs::native_follow_mail_proofs::frozen_follow(&fixture).await;
+            let later_item = frozen.iter().find(|item| {
+                matches!(item.body(), board_sync_protocol::BoardDeliveryBody::Notification(body)
+                    if matches!(&body.source, collaboration_mail_protocol::NotificationSource::FollowBatch { roots, .. }
+                        if roots.len() == 1 && roots[0].root() == &later_root))
+            });
+            if let Some(later_item) = later_item {
+                let pending = fixture
+                    .interactions
+                    .pending_poll_mail(&target)
+                    .await
+                    .unwrap();
+                if pending.iter().any(|row| row.item == later_item.id()) {
+                    break pending;
+                }
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("the later root's frozen item reached SDK custody");
     assert_eq!(still_pending.len(), 1);
     let pending_push: collaboration_protocol::PushId = still_pending[0]
         .item
