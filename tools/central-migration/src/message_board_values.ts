@@ -49,12 +49,15 @@ function identity(
     return bytes >= min && bytes <= max && valid(value) ? null : requirement;
   };
 }
-/** ServiceId: a canonical lowercase RFC UUID of any version. */
+/**
+ * ServiceId (board_identity.rs:154–164): any UUID that parses and is already in
+ * canonical lowercase hyphenated spelling, of any version and variant.
+ */
 export const serviceId = identity(
   36,
   36,
-  (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(value),
-  "must be a canonical lowercase RFC UUID",
+  (value) => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value),
+  "must be a canonical lowercase UUID",
 );
 export const endpointId = identity(
   1,

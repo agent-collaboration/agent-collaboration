@@ -44,6 +44,13 @@ export class JsonFloat {
  * integer, and any other number token (1.0, 1e0) becomes a JsonFloat, so a
  * decoder expecting an integer refuses it as serde's integer visitors do.
  */
+/** A string held an unpaired surrogate escape, which serde_json refuses. */
+export class UnpairedSurrogate extends Error {
+  constructor() {
+    super("a string holds an unpaired UTF-16 surrogate escape");
+  }
+}
+
 export function parseSerdeJson(text: string): unknown {
   return JSON.parse(text, function (
     this: unknown,
@@ -51,9 +58,14 @@ export function parseSerdeJson(text: string): unknown {
     value: unknown,
     context?: { source?: string },
   ) {
+    // serde_json refuses an unpaired UTF-16 escape while reading any string (read.rs:908–959).
+    if ((typeof value === "string" && !value.isWellFormed()) || !_key.isWellFormed()) {
+      throw new UnpairedSurrogate();
+    }
     if (typeof value !== "number") return value;
     const source = context?.source ?? String(value);
-    if (!INTEGER_SOURCE.test(source)) return new JsonFloat(source, value);
+    // serde_json reads -0 as the float -0.0 (de.rs:519), so integer fields refuse it.
+    if (!INTEGER_SOURCE.test(source) || source === "-0") return new JsonFloat(source, value);
     return Number.isSafeInteger(value) ? value : BigInt(source);
   } as (this: unknown, key: string, value: unknown) => unknown);
 }

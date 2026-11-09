@@ -377,6 +377,38 @@ const CONTRADICTIONS: Contradiction[] = [
       `boards/${IDS.board}\\.name: has surrounding whitespace its type would trim`,
     ),
   },
+  // serde_json reads -0 as a float and refuses an unpaired surrogate escape in any string.
+  {
+    name: "a registry record's change time is written -0",
+    edit: (production) =>
+      production.registry.push(
+        `UPDATE _fleet_sync_databases SET record = replace(record, '"changed_at":1794225600000', '"changed_at":-0') WHERE database = ${quote(IDS.projectHeld3)}`,
+      ),
+    object: "registry",
+    subject: `_fleet_sync_databases ${IDS.projectHeld3} [row 1]`,
+    reason: /record\.changed_at: expected i64, found the float -0/,
+  },
+  {
+    name: "a copy record's schema fingerprint is an unpaired surrogate",
+    edit: (production) =>
+      copyOf(production, IDS.projectHeld1).push(
+        `UPDATE _fleet_sync_copy SET record = replace(record, '"fingerprint":"schema-fingerprint"', '"fingerprint":"\\uD800"')`,
+      ),
+    object: `copy ${IDS.projectHeld1}`,
+    subject: `project ${IDS.projectHeld1}`,
+    reason:
+      /main refuses the copy record: _fleet_sync_copy\.record: a string holds an unpaired UTF-16 surrogate escape/,
+  },
+  {
+    name: "a cancel record's reason ends in an unpaired surrogate",
+    edit: (production) =>
+      production.registry.push(
+        `UPDATE _fleet_sync_transfer_cancels SET record = replace(record, '"changed my mind"', '"changed my mind\\uDC00"')`,
+      ),
+    object: "registry",
+    subject: `_fleet_sync_transfer_cancels ${IDS.cancelledMove} [row 1]`,
+    reason: /record: a string holds an unpaired UTF-16 surrogate escape/,
+  },
   // I5: incarnation counters main can't parse or store.
   {
     name: "an incarnation counter is not canonical decimal",

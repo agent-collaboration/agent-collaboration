@@ -5,7 +5,7 @@
 // newtypes' `try_from` checks. Values arrive from exact JSON (integers beyond
 // 2^53 as bigints).
 
-import { I64_MAX, JsonFloat, U64_MAX } from "./exact_json.ts";
+import { I64_MAX, JsonFloat, U64_MAX, UnpairedSurrogate } from "./exact_json.ts";
 
 export class Invalid extends Error {}
 export const invalid = (path: string, why: string): never => {
@@ -207,8 +207,8 @@ export function fromJsonText<T>(parse: (text: string) => unknown, decoder: Decod
     let parsed: unknown;
     try {
       parsed = parse(textValue);
-    } catch {
-      return invalid(path, "not JSON");
+    } catch (error) {
+      return invalid(path, error instanceof UnpairedSurrogate ? error.message : "not JSON");
     }
     // serde's derived structs refuse a repeated field; JSON.parse would keep the last.
     const duplicate = duplicateKey(textValue);

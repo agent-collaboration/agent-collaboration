@@ -191,6 +191,18 @@ for (const [name, statements] of [
     "a blank directory name",
     [`UPDATE fleet_project_directory SET name = '   ' WHERE project_id = '${IDS.projectHeld1}'`],
   ],
+  [
+    "a lease-table time written -0",
+    [
+      `UPDATE _fleet_sync_databases SET record = replace(record, '"changed_at":1794225600000', '"changed_at":-0') WHERE database = '${IDS.projectHeld3}'`,
+    ],
+  ],
+  [
+    "a lease-table string with an unpaired surrogate",
+    [
+      `UPDATE _fleet_sync_transfer_cancels SET record = replace(record, '"changed my mind"', '"changed my mind\\uDC00"')`,
+    ],
+  ],
 ] as const) {
   test(`main's central refuses ${name} the preflight refuses`, async () => {
     const build = process.env.MAIN_CENTRAL_BUILD;

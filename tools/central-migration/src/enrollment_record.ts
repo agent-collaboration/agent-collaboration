@@ -8,8 +8,8 @@ import { machineLabel } from "./message_board_values.ts";
 import type { ReadRow } from "./storage_objects.ts";
 
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-/** message_board ServiceId: a canonical lowercase RFC UUID of any version. */
-const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+/** message_board ServiceId (board_identity.rs:154–164): a canonical lowercase UUID of any version and variant. */
+const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 // Rust's char::is_control: the Cc category.
 const CONTROL = /\p{Cc}/u;
 
@@ -47,7 +47,7 @@ export function enrollmentRow(row: ReadRow, runTimeText: string): NewRow | strin
   if (peer === null || !UUID_V7.test(peer)) return "peer_id is not a canonical UUIDv7";
   const service = field("service_id");
   if (service === null || !CANONICAL_UUID.test(service))
-    return "service_id is not a canonical UUID";
+    return "service_id is not a canonical lowercase UUID";
   const label = field("machine_label");
   // message_board::MachineLabel (board_metadata.rs:80): main refuses a label its type would change.
   const labelRefusal = label === null ? "is missing" : machineLabel(label);
