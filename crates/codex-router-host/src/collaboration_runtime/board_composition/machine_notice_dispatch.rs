@@ -1,7 +1,7 @@
 //! One movable reaction owner serializes its durable cursor outside the transport loop.
 use super::{MachineNoticeReactions, MachineSessionEventOwners, SessionCompletion};
 use board_sync_protocol::BoardConsumerProtocol;
-use fleet_sync_protocol::{Notice, NoticePosition};
+use fleet_sync_protocol::{Notice, NoticePosition, SessionId};
 use fleet_sync_tokio_runner::SessionRequests;
 use std::{collections::VecDeque, io};
 use tokio::task::JoinSet;
@@ -9,6 +9,7 @@ use tokio::task::JoinSet;
 enum ReactionInput {
     CatchUp,
     Notice {
+        session_id: SessionId,
         position: NoticePosition,
         body: Notice<BoardConsumerProtocol>,
     },
@@ -27,6 +28,7 @@ enum ReactionOwner {
 pub(super) enum ReactionOutcome {
     CatchUp(io::Result<()>),
     Notice {
+        session_id: SessionId,
         position: NoticePosition,
         outcome: io::Result<()>,
     },
@@ -61,12 +63,17 @@ impl NoticeReactionQueue {
     pub fn notice(
         &mut self,
         generation: u64,
+        session_id: SessionId,
         position: NoticePosition,
         body: Notice<BoardConsumerProtocol>,
     ) {
         self.queued.push_back(QueuedReaction {
             generation,
-            input: ReactionInput::Notice { position, body },
+            input: ReactionInput::Notice {
+                session_id,
+                position,
+                body,
+            },
         });
     }
 
@@ -112,12 +119,20 @@ impl NoticeReactionQueue {
                         .catch_up_notices(&projects, &admission, &fleet, &mail, &requests)
                         .await,
                 ),
-                ReactionInput::Notice { position, body } => {
+                ReactionInput::Notice {
+                    session_id,
+                    position,
+                    body,
+                } => {
                     let outcome = handle_notice(
                         &mut owner, &projects, &admission, &fleet, &mail, &requests, body,
                     )
                     .await;
-                    ReactionOutcome::Notice { position, outcome }
+                    ReactionOutcome::Notice {
+                        session_id,
+                        position,
+                        outcome,
+                    }
                 }
             };
             SessionCompletion::Reaction(ReactionCompletion {

@@ -134,10 +134,15 @@ async fn initial_create_grant_notice_preserves_pending_registration_and_first_re
         assert!(Arc::ptr_eq(&original, &projects.ensure(&project).await?));
         assert!(database.installed_snapshot().await?.is_none());
         assert!(
-            !root
-                .join("snapshot-install-attempts")
-                .join(format!("{}-e1.json", project.as_str()))
-                .exists()
+            crate::collaboration_runtime::board_composition::tests::attempt_record(
+                &crate::collaboration_runtime::board_composition::tests::attempt_key(
+                    &root,
+                    &project,
+                    Epoch::new(1)?
+                )
+            )
+            .await?
+            .is_none()
         );
         registration.release()?;
         assert!(matches!(

@@ -122,7 +122,7 @@ async fn inline_install_renewal_survives_revocation_readmission_and_a_fresh_sess
     let mut owner = slot.lock().await;
     let install_attempt =
         crate::collaboration_runtime::board_composition::install_attempts::recorded_attempt(
-            &projects.directory,
+            &projects.cache,
             &project,
             epoch,
         )
@@ -210,9 +210,15 @@ async fn inline_install_renewal_survives_revocation_readmission_and_a_fresh_sess
     })
     .await?;
     let terminal = running.shutdown().await;
+    let terminal = terminal.expect_err("normal pump must report its terminal revocation");
     assert!(
-        terminal.is_err(),
-        "normal pump must report its terminal revocation"
+        matches!(
+            terminal
+                .get_ref()
+                .and_then(|error| error.downcast_ref::<fleet_sync_session::ClientError>()),
+            Some(fleet_sync_session::ClientError::Revoked)
+        ),
+        "terminal result was not typed Revoked: {terminal}"
     );
     grant_notice.release()?;
     drop(grant_notice);

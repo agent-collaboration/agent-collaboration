@@ -2,7 +2,7 @@
 #![deny(clippy::too_many_lines)]
 use super::{
     forwarded_post_lifecycle_oracles::POST_MARKER,
-    forwarded_post_scenarios::{HOLDER_PEER, HOLDER_SERVICE, SENDER_PEER, SENDER_SESSION},
+    forwarded_post_scenarios::{HOLDER_PEER, SENDER_PEER, SENDER_SESSION},
 };
 use collaboration_central_conformance::ConformanceResult;
 use fleet_sync_protocol::{ConnectionId, DatabaseId, FrameId};
@@ -28,7 +28,7 @@ pub(super) fn no_body(state: &Value) -> ConformanceResult<()> {
 pub(super) fn no_retained_state(sender: &Value, holder: &Value) -> ConformanceResult<()> {
     for state in [sender, holder] {
         no_body(state)?;
-        if !records(state, "pending")?.is_empty() || !records(state, "delivered")?.is_empty() {
+        if !records(state, "requests")?.is_empty() {
             return Err("terminal forwarding retained durable correlation state".into());
         }
     }
@@ -42,11 +42,10 @@ pub(super) fn typed_records(state: &Value, field: &str) -> ConformanceResult<Vec
         .map(|row| {
             for column in [
                 "id",
-                "forwardFrameId",
                 "requestFrameId",
-                "originMachineId",
-                "originSessionId",
-                "connectionId",
+                "requesterMachineId",
+                "requesterSessionId",
+                "requesterConnectionId",
                 "projectId",
             ] {
                 let value = row
@@ -68,14 +67,6 @@ pub(super) fn typed_records(state: &Value, field: &str) -> ConformanceResult<Vec
                     return Err("noncanonical owning integer column".into());
                 }
             }
-            let side = if field == "pending" {
-                "origin"
-            } else {
-                "holder"
-            };
-            if row.get("side") != Some(&json!(side)) {
-                return Err("owning correlation has the wrong side".into());
-            }
             Ok(row.clone())
         })
         .collect()
@@ -87,7 +78,7 @@ pub(super) fn pending_record(
     request: FrameId,
     phase: Value,
 ) -> ConformanceResult<Value> {
-    let pending = typed_records(state, "pending")?;
+    let pending = typed_records(state, "requests")?;
     if pending.len() != 1 {
         return Err("sender owning state did not contain exactly its one pending request".into());
     }
@@ -97,15 +88,13 @@ pub(super) fn pending_record(
         .ok_or("original pending row absent")?;
     if row.get("requestFrameId") != Some(&json!(request))
         || row.get("projectId") != Some(&json!(database))
-        || row.get("originMachineId") != Some(&json!(SENDER_PEER))
-        || row.get("originSessionId") != Some(&json!(SENDER_SESSION))
+        || row.get("requesterMachineId") != Some(&json!(SENDER_PEER))
+        || row.get("requesterSessionId") != Some(&json!(SENDER_SESSION))
         || row.get("phase")
             != Some(&json!(if phase.get("kind") == Some(&json!("routing")) {
                 "routing"
-            } else if phase
-                == json!({"kind":"awaitingHolder","value":{"installation":HOLDER_SERVICE}})
-            {
-                "awaiting_holder"
+            } else if phase == json!({"kind":"atHolder","value":{"holder":HOLDER_PEER}}) {
+                "at_holder"
             } else {
                 return Err("unexpected oracle phase".into());
             }))
@@ -113,7 +102,7 @@ pub(super) fn pending_record(
         return Err("pending row changed the actual request, project, session or phase".into());
     }
     let connection = row
-        .get("connectionId")
+        .get("requesterConnectionId")
         .and_then(Value::as_str)
         .ok_or("connection identity absent")?;
     let _valid_connection = ConnectionId::try_from(connection.to_owned())?;
@@ -143,19 +132,19 @@ pub(super) fn live_records(
         sender,
         database,
         request,
-        json!({"kind":"awaitingHolder","value":{"installation":HOLDER_SERVICE}}),
+        json!({"kind":"atHolder","value":{"holder":HOLDER_PEER}}),
     )?;
-    let delivered = typed_records(holder, "delivered")?;
-    if delivered.len() != 1 || records(holder, "pending")? != records(sender, "pending")? {
+    let delivered = typed_records(holder, "requests")?;
+    if delivered.len() != 1 || records(holder, "requests")? != records(sender, "requests")? {
         return Err(
             "holder owning state did not contain exactly its actual delivered request".into(),
         );
     }
     let delivered = delivered.first().ok_or("delivered row absent")?;
-    if pending.get("forwardFrameId") != Some(&json!(frame))
-        || delivered.get("forwardFrameId") != Some(&json!(frame))
-        || delivered.get("originMachineId") != Some(&json!(SENDER_PEER))
-        || delivered.get("expectedHolderMachineId") != Some(&json!(HOLDER_PEER))
+    if pending.get("id") != Some(&json!(frame))
+        || delivered.get("id") != Some(&json!(frame))
+        || delivered.get("requesterMachineId") != Some(&json!(SENDER_PEER))
+        || delivered.get("holderMachineId") != Some(&json!(HOLDER_PEER))
         || delivered.get("projectId") != Some(&json!(database))
         || delivered.get("deadlineAt") != pending.get("deadlineAt")
     {

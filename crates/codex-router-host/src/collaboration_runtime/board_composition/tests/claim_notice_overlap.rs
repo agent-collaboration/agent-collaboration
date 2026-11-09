@@ -2,7 +2,10 @@
 use super::*;
 use crate::collaboration_runtime::board_composition::{
     open_board_admission,
-    tests::{identity, origin, project_claim::imported_snapshot, wait_welcome},
+    tests::{
+        attempt_bytes, attempt_key, attempt_record, identity, origin,
+        project_claim::imported_snapshot, wait_welcome,
+    },
 };
 use board_central_test_support::TestCentral;
 use board_sync_protocol::{ProjectClaimReply, ProjectClaimRequest};
@@ -169,13 +172,13 @@ async fn claim_and_received_notice_join_one_record_and_publication_while_seed_is
         assert!(matches!(original.status, InstallStatus::Running { .. }));
         let slot = projects.writer_slot(&project).await;
         let owner = slot.lock().await;
-        let selected = crate::collaboration_runtime::board_composition::install_attempts::recorded_attempt(&root, &project, epoch).await?;
+        let selected = crate::collaboration_runtime::board_composition::install_attempts::recorded_attempt(&projects.cache, &project, epoch).await?;
         drop(owner);
         drop(slot);
         assert_eq!(original.request.attempt, selected);
         assert_eq!(original.install_id, InstallId::new(selected.as_uuid())?);
-        let record_path = root.join("snapshot-install-attempts").join(format!("{}-e{}.json", project.as_str(), epoch.value()));
-        let record_bytes = std::fs::read(&record_path)?;
+        let record_path = attempt_key(&root, &project, epoch);
+        let record_bytes = attempt_bytes(&record_path).await?;
         assert!(matches!(registry.existing_project(&project).await, Err(collaboration_runtime::ProjectRegistryError::Installing { .. })));
         gate.release()?;
         let session_store = board_fleet_sync::MachineSessionStore::open(&root).await?;
@@ -191,7 +194,7 @@ async fn claim_and_received_notice_join_one_record_and_publication_while_seed_is
         assert_eq!(joined.request, original.request);
         assert_eq!(joined.generation, 1);
         assert!(matches!(joined.status, InstallStatus::Running { .. }));
-        assert_eq!(std::fs::read(&record_path)?, record_bytes);
+        assert_eq!(attempt_bytes(&record_path).await?, record_bytes);
         assert!(!claimed.is_finished());
         println!("CLAIM_NOTICE_JOIN acknowledged-mid-seed position={} generation=1 same-attempt same-install-id unpublished", position.value());
         // A different project's later real Superseded notice must be handled
@@ -242,7 +245,7 @@ async fn claim_and_received_notice_join_one_record_and_publication_while_seed_is
         }).await??;
         assert!(!claimed.is_finished());
         assert!(matches!(observer.install_record(original.install_id).await?.status, InstallStatus::Running { .. }));
-        assert_eq!(std::fs::read(&record_path)?, record_bytes);
+        assert_eq!(attempt_bytes(&record_path).await?, record_bytes);
         println!("CLAIM_NOTICE_JOIN later-project-superseded-handled-and-acked-while-first-seed-held position={}", later_position.value());
         let second_registry = second_projects.registry()?;
         timeout(BOUND, async {
@@ -268,7 +271,7 @@ async fn claim_and_received_notice_join_one_record_and_publication_while_seed_is
         assert!(receipt.verified && receipt.ready);
         assert_eq!(receipt.install.install_id, original.install_id);
         assert_eq!(std::fs::metadata(database.path())?.ino(), inode, "another publication replaced the held file");
-        assert_eq!(std::fs::read(&record_path)?, record_bytes);
+        assert!(attempt_record(&record_path).await?.is_none(), "completed attempt was retained");
         println!("CLAIM_NOTICE_JOIN ready generation=1 same-file-publication same-durable-root-record");
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }.await;

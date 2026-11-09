@@ -157,8 +157,10 @@ const FLEET_ALARM_QUERIES: [(&str, &str); 11] = [
         include_str!("../../../collaboration-central-core/sql/fleet/read_expired_fleet_feed.sql"),
     ),
     (
-        "forwards.rows",
-        include_str!("../../../collaboration-central-core/sql/forwards/read_forward_rows.sql"),
+        "project_requests.rows",
+        include_str!(
+            "../../../collaboration-central-core/sql/project_requests/read_project_requests.sql"
+        ),
     ),
     (
         "notices.peers",
@@ -179,9 +181,9 @@ const FLEET_ALARM_QUERIES: [(&str, &str); 11] = [
         ),
     ),
     (
-        "notices.expired",
+        "notices.rows",
         include_str!(
-            "../../../collaboration-central-core/sql/machine_notices/read_expired_machine_notices.sql"
+            "../../../collaboration-central-core/sql/machine_notices/read_machine_notices.sql"
         ),
     ),
     (
@@ -211,7 +213,7 @@ const FLEET_ALARM_QUERIES: [(&str, &str); 11] = [
 const NOTICE_APPEND_QUERY_OWNERS: [&str; 8] = [
     "notices.state",
     "notices.bounds",
-    "notices.expired",
+    "notices.rows",
     "notices.state",
     "notices.bounds",
     "notices.append",
@@ -238,12 +240,12 @@ pub fn fixed_fleet_maintenance_profiles(
     let expected = BTreeMap::from([
         ("feed.state", 1),
         ("feed.expired", 1),
-        // SessionScope::expire_forwards reads origin and holder sides once each.
-        ("forwards.rows", 2),
+        // One Fleet row per request needs one maintenance scan.
+        ("project_requests.rows", 1),
         ("notices.peers", 1),
         ("notices.state", 1),
         ("notices.bounds", 1),
-        ("notices.expired", 1),
+        ("notices.rows", 1),
         ("notices.next_expiry", 1),
     ]);
     let mut observed = BTreeSet::new();
@@ -258,8 +260,8 @@ pub fn fixed_fleet_maintenance_profiles(
                         .expect("unclassified alarm SQL changed the bounded owner inventory")
                 })
                 .collect::<Vec<_>>();
-            assert!(labels.len() >= 9, "Fleet alarm omitted a maintenance owner");
-            let (maintenance, mut dynamic) = labels.split_at(9);
+            assert!(labels.len() >= 8, "Fleet alarm omitted a maintenance owner");
+            let (maintenance, mut dynamic) = labels.split_at(8);
             let mut counts = BTreeMap::new();
             for owner in maintenance {
                 *counts.entry(*owner).or_insert(0_u64) += 1;
@@ -291,7 +293,7 @@ pub fn fixed_fleet_maintenance_profiles(
             }
             assert_eq!(
                 owners,
-                BTreeMap::from([("feed", 2), ("forwards", 2), ("notices", 5)])
+                BTreeMap::from([("feed", 2), ("project_requests", 1), ("notices", 5)])
             );
             observed.insert(owners);
         }

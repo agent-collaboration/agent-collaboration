@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "acp-client-runtime"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "agent-client-protocol",
  "futures-util",
@@ -23,7 +23,7 @@ dependencies = [
 
 [[package]]
 name = "acp-provider-adapters"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "acp-client-runtime",
  "serde",
@@ -124,7 +124,7 @@ dependencies = [
 
 [[package]]
 name = "agent-automation"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -189,7 +189,7 @@ dependencies = [
 
 [[package]]
 name = "agent-collaboration"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "agent-automation",
  "agent-collaboration-tui",
@@ -260,7 +260,7 @@ dependencies = [
 
 [[package]]
 name = "agent-collaboration-tui"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "futures-util",
  "iocraft",
@@ -274,7 +274,7 @@ dependencies = [
 
 [[package]]
 name = "agent-router-quota-tui"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "agent-collaboration-tui",
  "chrono",
@@ -294,7 +294,7 @@ dependencies = [
 
 [[package]]
 name = "agent-session-inventory"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "axum",
  "chrono",
@@ -328,7 +328,7 @@ dependencies = [
 
 [[package]]
 name = "agent-session-tui"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "agent-collaboration-tui",
  "agent-session-inventory",
@@ -446,7 +446,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -457,7 +457,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -679,7 +679,7 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "automation-storage"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "agent-automation",
  "chrono",
@@ -898,7 +898,7 @@ dependencies = [
 
 [[package]]
 name = "board-central-test-support"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "axum",
  "board-fleet-sync",
@@ -930,10 +930,11 @@ dependencies = [
 
 [[package]]
 name = "board-fleet-sync"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "axum",
  "board-sync-protocol",
+ "chrono",
  "durable-steps",
  "fleet-admission",
  "fleet-sync-delivery",
@@ -962,7 +963,7 @@ dependencies = [
 
 [[package]]
 name = "board-legacy-upgrade"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "automation-storage",
  "board-fleet-sync",
@@ -1011,7 +1012,7 @@ dependencies = [
 
 [[package]]
 name = "board-staging-cutover"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "axum",
  "board-central-test-support",
@@ -1063,7 +1064,7 @@ dependencies = [
 
 [[package]]
 name = "board-sync-protocol"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "chrono",
  "collaboration-mail-protocol",
@@ -1318,7 +1319,7 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "claude-code-peer-messaging"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "agent-automation",
  "collaboration-protocol",
@@ -1349,7 +1350,7 @@ checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 
 [[package]]
 name = "codex-acp-adapter"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -1371,7 +1372,7 @@ dependencies = [
 
 [[package]]
 name = "codex-native-integration"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "futures-util",
  "jsonschema",
@@ -1391,7 +1392,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-auth"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "base64 0.22.1",
  "codex-router-core",
@@ -1411,7 +1412,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-cli"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "agent-collaboration-tui",
  "agent-router-quota-tui",
@@ -1474,7 +1475,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-core"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "hmac 0.12.1",
  "serde",
@@ -1486,7 +1487,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-host"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "acp-client-runtime",
  "acp-provider-adapters",
@@ -1559,7 +1560,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-proxy"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "async-compression",
  "bytes",
@@ -1594,7 +1595,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-quota"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "codex-router-core",
  "thiserror 2.0.18",
@@ -1602,7 +1603,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-quota-reset-test-harness"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "agent-collaboration",
  "axum",
@@ -1623,7 +1624,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-quota-service"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "chrono",
  "codex-router-auth",
@@ -1648,7 +1649,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-secret-store"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "aes-gcm 0.11.1",
  "apple-native-keyring-store",
@@ -1671,7 +1672,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-selection"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "base64 0.22.1",
  "codex-router-core",
@@ -1686,7 +1687,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-state"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "codex-router-core",
  "codex-router-selection",
@@ -1700,7 +1701,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-tailnet-verification-host"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "axum",
  "board-fleet-sync",
@@ -1730,7 +1731,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-test-support"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "codex-native-integration",
  "codex-router-cli",
@@ -1754,14 +1755,14 @@ dependencies = [
 
 [[package]]
 name = "codex-router-ux-prototype"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "iocraft",
 ]
 
 [[package]]
 name = "collaboration-application-test-support"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "automation-storage",
  "board-central-test-support",
@@ -1796,7 +1797,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-admin-protocol"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "board-sync-protocol",
  "chrono",
@@ -1809,7 +1810,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-cloudflare"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1843,7 +1844,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-conformance"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1870,7 +1871,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-core"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1909,7 +1910,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-tokio"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "aws-lc-rs",
  "axum",
@@ -1954,7 +1955,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-client"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "automation-storage",
  "board-central-test-support",
@@ -1993,7 +1994,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-contracts"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -2017,7 +2018,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-mail-protocol"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "chrono",
  "message-board",
@@ -2030,7 +2031,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-mcp"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "agent-collaboration",
  "automation-storage",
@@ -2076,9 +2077,10 @@ dependencies = [
 
 [[package]]
 name = "collaboration-protocol"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "agent-automation",
+ "board-sync-protocol",
  "chrono",
  "collaboration-mail-protocol",
  "fleet-identity-protocol",
@@ -2097,7 +2099,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-runtime"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -2142,7 +2144,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-service"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -2726,7 +2728,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 [[package]]
 name = "durable-steps"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
  "futures-util",
  "runtime-primitives",
@@ -2805,7 +2807,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -2915,7 +2917,7 @@ dependencies = [
 
 [[package]]
 name = "fleet-admission"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "chrono",
  "fleet-sync-protocol",
@@ -2928,7 +2930,7 @@ dependencies = [
 
 [[package]]
 name = "fleet-identity-protocol"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "chrono",
  "jsonschema",
@@ -2941,7 +2943,7 @@ dependencies = [
 [[package]]
 name = "fleet-sync-delivery"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
  "durable-steps",
  "fleet-sync-protocol",
@@ -2958,7 +2960,7 @@ dependencies = [
 [[package]]
 name = "fleet-sync-lease"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
  "durable-steps",
  "fleet-sync-protocol",
@@ -2975,7 +2977,7 @@ dependencies = [
 [[package]]
 name = "fleet-sync-protocol"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
  "runtime-primitives",
  "serde",
@@ -2989,7 +2991,7 @@ dependencies = [
 [[package]]
 name = "fleet-sync-query-gen"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
  "serde",
  "serde_json",
@@ -3000,7 +3002,7 @@ dependencies = [
 [[package]]
 name = "fleet-sync-receiver"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
  "durable-steps",
  "fleet-sync-protocol",
@@ -3017,7 +3019,7 @@ dependencies = [
 [[package]]
 name = "fleet-sync-service"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
  "axum",
  "durable-steps",
@@ -3042,7 +3044,7 @@ dependencies = [
 [[package]]
 name = "fleet-sync-session"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
  "bytes",
  "durable-steps",
@@ -3060,7 +3062,7 @@ dependencies = [
 [[package]]
 name = "fleet-sync-tokio-runner"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
  "durable-steps",
  "fleet-sync-protocol",
@@ -3084,7 +3086,7 @@ dependencies = [
 [[package]]
 name = "fleet-sync-transport-websocket"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
  "axum",
  "fleet-sync-protocol",
@@ -3098,7 +3100,7 @@ dependencies = [
 [[package]]
 name = "fleet-sync-writer"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
  "durable-steps",
  "either",
@@ -3948,7 +3950,7 @@ dependencies = [
 
 [[package]]
 name = "interaction-storage"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -4205,7 +4207,7 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "legacy-upgrade-test-support"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "message-board",
  "owned-process-test-support",
@@ -4248,7 +4250,7 @@ dependencies = [
 
 [[package]]
 name = "lifecycle-observation"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -4393,7 +4395,7 @@ dependencies = [
 
 [[package]]
 name = "message-board"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "chrono",
  "petgraph",
@@ -4409,7 +4411,7 @@ dependencies = [
 
 [[package]]
 name = "message-board-storage"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "base64 0.22.1",
  "board-fleet-sync",
@@ -4421,6 +4423,7 @@ dependencies = [
  "fleet-sync-lease",
  "fleet-sync-protocol",
  "fleet-sync-receiver",
+ "fleet-sync-session",
  "fleet-sync-writer",
  "hmac 0.12.1",
  "message-board",
@@ -4514,7 +4517,7 @@ dependencies = [
 
 [[package]]
 name = "node-test-fixture"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "serde_json",
 ]
@@ -4535,7 +4538,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -4740,7 +4743,7 @@ checksum = "1a80800c0488c3a21695ea981a54918fbb37abf04f4d0720c453632255e2ff0e"
 
 [[package]]
 name = "owned-process-test-support"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "futures-util",
  "tokio",
@@ -5488,7 +5491,7 @@ dependencies = [
 [[package]]
 name = "runtime-primitives"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
  "chrono",
  "futures-util",
@@ -5567,7 +5570,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -5899,7 +5902,7 @@ dependencies = [
 
 [[package]]
 name = "session-event-model"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "base64 0.22.1",
  "message-board",
@@ -6105,7 +6108,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52d1cfed4120b4d927bf7c0f86d2087a4a7d6027c906d9f9d525a80573b9be51"
 dependencies = [
  "libc",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6125,7 +6128,7 @@ dependencies = [
 
 [[package]]
 name = "sqlite-storage-maintenance"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "fs2",
  "sqlx",
@@ -6187,7 +6190,7 @@ dependencies = [
 [[package]]
 name = "sqlx-durable-object"
 version = "0.3.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
  "futures-core",
  "futures-util",
@@ -6202,7 +6205,7 @@ dependencies = [
 [[package]]
 name = "sqlx-durable-object-core"
 version = "0.2.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
  "js-sys",
  "sqlx-core",
@@ -6334,7 +6337,7 @@ dependencies = [
 [[package]]
 name = "sqlx-turso"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
  "sqlx",
  "sqlx-turso-core",
@@ -6344,7 +6347,7 @@ dependencies = [
 [[package]]
 name = "sqlx-turso-core"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
  "chrono",
  "either",
@@ -6365,7 +6368,7 @@ dependencies = [
 [[package]]
 name = "sqlx-turso-macros"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=84935efdab03615843611bb5723983d7655e6e26#84935efdab03615843611bb5723983d7655e6e26"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
@@ -6558,7 +6561,7 @@ dependencies = [
  "getrandom 0.4.3",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -6568,7 +6571,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
 dependencies = [
  "rustix 1.1.4",
- "windows-sys 0.61.2",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
@@ -7299,7 +7302,7 @@ checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 
 [[package]]
 name = "ui-preference-store"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "sqlx",
  "tempfile",
@@ -7994,7 +7997,7 @@ dependencies = [
 
 [[package]]
 name = "workspace-architecture-check"
-version = "0.1.134"
+version = "0.1.135"
 dependencies = [
  "proc-macro2",
  "serde",

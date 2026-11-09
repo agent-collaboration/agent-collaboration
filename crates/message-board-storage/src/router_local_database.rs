@@ -6,6 +6,8 @@ use tokio::sync::Mutex;
 
 #[derive(Debug, thiserror::Error)]
 pub enum RouterLocalStorageError {
+    #[error("Router-local legacy state file is unavailable: {0}")]
+    LegacyFile(#[from] std::io::Error),
     #[error("Router-local storage is unavailable: {0}")]
     Database(#[from] sqlx::Error),
     #[error("Router-local migration failed: {0}")]

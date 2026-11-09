@@ -10,6 +10,15 @@ mod scenarios;
 #[tokio::test]
 async fn committed_feed_advancement_delivers_one_positioned_notice_to_its_reader()
 -> ConformanceResult<()> {
+    run(false).await
+}
+
+#[tokio::test]
+async fn matched_client_protocol_keeps_mail_after_one_fleet_write() -> ConformanceResult<()> {
+    run(true).await
+}
+
+async fn run(pairing: bool) -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
     let server = TokioServer::start(TokioSettings {
@@ -26,7 +35,11 @@ async fn committed_feed_advancement_delivers_one_positioned_notice_to_its_reader
         copy_ack_wait: Duration::from_secs(2),
     })
     .await?;
-    let proof = scenarios::feed_advancement_reaches_reader_once(server.base_url()).await;
+    let proof = if pairing {
+        scenarios::one_write_then_mail(server.base_url()).await
+    } else {
+        scenarios::feed_advancement_reaches_reader_once(server.base_url()).await
+    };
     let stopped = server.shutdown().await;
     let fixture = jwks.shutdown().await;
     stopped?;

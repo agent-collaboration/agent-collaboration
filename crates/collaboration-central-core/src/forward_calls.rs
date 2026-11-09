@@ -1,4 +1,4 @@
-//! Closed calls for routing a post and returning its transient opaque answer.
+//! Closed calls for routing and delivering forwarded posts.
 use board_sync_protocol::VerifiedForwardedPost;
 use durable_steps::CallTarget;
 use fleet_sync_protocol::{FrameId, PeerId};
@@ -65,24 +65,6 @@ impl CallTarget for DeliverForward {
     const KIND: &'static str = "central.deliver-forward";
     type Request = ForwardDeliveryRequest;
     type Answer = ForwardDeliveryResult;
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct AnswerForward {
-    pub installation: ServiceId,
-}
-#[derive(Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(crate) struct ForwardAnswerRequest {
-    pub forward_frame: FrameId,
-    pub project: ProjectId,
-    pub reply: board_sync_protocol::BoardPayload,
-}
-impl CallTarget for AnswerForward {
-    const KIND: &'static str = "central.answer-forward";
-    type Request = ForwardAnswerRequest;
-    type Answer = ();
 }
 
 #[derive(Serialize, Deserialize)]

@@ -3,10 +3,10 @@ use super::EffectDriver;
 use crate::{
     ObjectHost, PlatformIo,
     forward_calls::{
-        AnswerForward, DeliverForward, ForwardAnswerRequest, ForwardDeliveryRequest,
-        ForwardDeliveryResult, ForwardRoute, ForwardRouteRequest,
+        DeliverForward, ForwardDeliveryRequest, ForwardDeliveryResult, ForwardRoute,
+        ForwardRouteRequest,
     },
-    forward_store::PendingForward,
+    project_request_store::ProjectRequest,
     session_store::CoreSessionStore,
 };
 use board_sync_protocol::{ForwardOutcome, ForwardedPost};
@@ -35,7 +35,7 @@ where
 {
     pub(super) fn route_forward(
         &self,
-        pending: PendingForward,
+        pending: ProjectRequest,
         post: ForwardedPost,
     ) -> durable_steps::BoxFuture<'static, ()> {
         let driver = self.clone();
@@ -123,19 +123,5 @@ where
             }))
             .await;
         })
-    }
-    pub(super) async fn reply_forward(
-        &self,
-        installation: ServiceId,
-        request: ForwardAnswerRequest,
-    ) {
-        if let Ok(identity) = self.shared_host.call_identity("forward_answer") {
-            // A lost callback is intentionally not a content-bearing retry row.
-            // The sender's original deadline resolves it as Unanswered.
-            let _ = self
-                .shared_host
-                .dispatch(AnswerForward { installation }, request, identity)
-                .await;
-        }
     }
 }

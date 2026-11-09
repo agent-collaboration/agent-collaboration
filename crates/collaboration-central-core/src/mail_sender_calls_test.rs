@@ -250,3 +250,41 @@ async fn unauthorized_settlement_claims_never_create_negative_custody_or_removal
     assert_eq!(counts(&fixture).await?, baseline);
     fixture.close().await
 }
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The real claim owner and sender callback must refuse Fleet authority even when its UUID equals the enrolled peer."
+)]
+async fn enrolled_machine_cannot_settle_as_fleet_with_matching_uuid() -> TestResult {
+    let fixture = prepare().await?;
+    let peer = B.to_owned().try_into()?;
+    let claim = Submitter::Fleet(B.to_owned().try_into()?);
+    let authorized = fixture
+        .object
+        .transaction(move |scope| {
+            Box::pin(async move {
+                crate::mail_sender_authority::claim_is_authorized(scope, peer, claim, NOW).await
+            })
+        })
+        .await?;
+    assert!(
+        !authorized,
+        "machine enrollment granted Fleet claim authority"
+    );
+    let baseline = counts(&fixture).await?;
+    let item = ItemId::new(durable_steps::Uuid::now_v7())?;
+    let digest = ItemDigest::try_from("c".repeat(64))?;
+    assert!(matches!(
+        answer(&fixture, B, SERVICE_B, settle(claim, item, digest)?, NOW).await?,
+        DeliveryAnswer::DeliveryUnavailable {
+            reason: DeliveryRefusal::NotSubmitter
+        }
+    ));
+    assert_eq!(
+        counts(&fixture).await?,
+        baseline,
+        "refusal created custody or removal work"
+    );
+    fixture.close().await
+}

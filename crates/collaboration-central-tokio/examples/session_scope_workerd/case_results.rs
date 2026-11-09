@@ -5,6 +5,9 @@ use super::{Scenario, forwarded_post_scenarios::ForwardCase};
 impl Scenario {
     pub(super) fn print_success(self) {
         match self {
+            Scenario::SocketIsolation => println!(
+                "SESSION_ISOLATION_RESULT 1 scenario passed; 0 failed (missing/invalid actual attachments, healthy socket and replacement; local Worker only)"
+            ),
             Scenario::MailboxReportTerminal => println!(
                 "MAILBOX_REPORT_TERMINAL_RESULT 1 passed; 0 failed; 0 ignored (real SDK report task and central socket; terminal refusal stops retries)"
             ),
@@ -79,6 +82,9 @@ impl Scenario {
             ),
             Scenario::SessionCapabilities => println!(
                 "SESSION_CAPABILITY_RESULT 2 passed; 0 failed; 0 ignored (normal enrollment and session, real workers-rs attachment roundtrip and original origin, actual same-Connection-object alarm; old SqlTx pointer identity retired)"
+            ),
+            Scenario::StaleAlarm => println!(
+                "STALE_ALARM_RESULT 1 passed; 0 failed; 0 ignored (injected clock, real Fleet platform alarm, transactional and direct wake; no hosted claim)"
             ),
             Scenario::OwnerRetirement => println!(
                 "OWNER_RETIREMENT_RESULT 1 passed; 0 failed; 0 ignored (conformance import/unheld/seed setup on actual composed stores, normal HTTP retirement, before-row/read-after-retired, exact Fleet acknowledgement and stable receipt/replay/Migrate; D1b HTTP import, physical file row count and process restart unobserved)"

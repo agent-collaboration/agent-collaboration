@@ -16,6 +16,7 @@ pub struct ApplicationFixture {
     pub(crate) subscription_clock: std::sync::Arc<dyn crate::SubscriptionClock>,
     pub(crate) service_id: UuidIdentity,
     pub(crate) installation_peer: Option<fleet_sync_protocol::PeerId>,
+    pub(crate) fleet_link: board_fleet_sync::FleetLinkObservation,
     pub(crate) machine_identity: collaboration_contracts::MachineIdentity,
     pub(crate) configuration: collaboration_runtime::AutomationConfigurationHandle,
     pub(crate) configuration_backend:
@@ -49,6 +50,11 @@ pub struct ApplicationFixture {
         Option<std::sync::Arc<dyn collaboration_contracts::ProviderConversationBackend>>,
 }
 impl ApplicationFixture {
+    pub fn with_fleet_link(mut self, observation: board_fleet_sync::FleetLinkObservation) -> Self {
+        self.fleet_link = observation;
+        self
+    }
+
     pub fn with_mail_delivery_runtime(
         mut self,
         runtime: std::sync::Arc<crate::MailDeliveryRuntime>,
@@ -389,6 +395,7 @@ impl ApplicationFixture {
             configuration_backend: None,
             service_id: service_id.clone(),
             installation_peer: None,
+            fleet_link: board_fleet_sync::FleetLinkObservation::Unconfigured,
             mail_delivery: None,
             machine_identity,
             service_epoch: UuidIdentity::try_from(service_epoch.to_owned())
@@ -474,7 +481,8 @@ impl ApplicationFixture {
             codex_inventory,
             provider_inventory,
             journal_operations,
-        );
+        )
+        .with_fleet_link(self.fleet_link.clone());
         let board = crate::collaboration_application::BoardOperations::new(
             self.router_identity(),
             self.project_admission.clone(),

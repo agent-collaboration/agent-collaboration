@@ -6,13 +6,14 @@ use crate::{
     generated_machine_notices as queries,
 };
 use board_sync_protocol::{BoardNotice, NoticeRead, PositionedBoardNotice};
-use durable_steps::{StoreError, storage::TransactionScope};
+use durable_steps::{AtomicStore, JournalScope, StoreError, storage::TransactionScope};
 use fleet_sync_protocol::{NoticePosition, PeerId, SyncTime};
 use notice_columns::{NoticeColumns, decode_notice};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
 };
+use std::sync::Arc;
 
 const RETENTION_MILLIS: i64 = 7 * 24 * 60 * 60 * 1_000;
 struct NoticeState {
@@ -48,24 +49,28 @@ where
         }
         return Ok(None);
     };
-    if required(row.machine_id, "machine_control_progress.machine_id")? != peer.to_string() {
+    if required(
+        row.machine_id,
+        "machine_control_project_progress.machine_id",
+    )? != peer.to_string()
+    {
         return Err(corrupt(
-            "machine_control_progress.machine_id",
+            "machine_control_project_progress.machine_id",
             "identity differs",
         ));
     }
     integer(
         row.created_at,
         row.created_class,
-        "machine_control_progress.created_at",
+        "machine_control_project_progress.created_at",
     )?;
     integer(
         row.updated_at,
         row.updated_class,
-        "machine_control_progress.updated_at",
+        "machine_control_project_progress.updated_at",
     )?;
-    let head = position(row.last_position, row.position_class)?;
-    let floor = position(row.pruned_through, row.floor_class)?;
+    let head = position(row.last_issued_position, row.position_class)?;
+    let floor = position(row.expired_through, row.floor_class)?;
     if floor > head {
         return Err(corrupt("machine_notices.floor", "floor exceeds head"));
     }
@@ -122,24 +127,36 @@ where
         return Ok(());
     };
     let mut floor = stored.floor;
-    for row in queries::read_expired_machine_notices(
-        scope,
-        peer.to_string(),
-        now.unix_millis().to_string(),
-    )
-    .await
-    .map_err(StoreError::backend)?
+    let mut previous = stored.floor;
+    let mut expired_prefix = true;
+    for row in queries::read_machine_notices(scope, peer.to_string(), stored.floor.to_string())
+        .await
+        .map_err(StoreError::backend)?
     {
+        let expires = integer(
+            row.expires_at.clone(),
+            row.expiry_class.clone(),
+            "machine_notices.expires_at",
+        )?;
         let notice = decode(row)?;
-        if floor.checked_add(1) != Some(notice.position.value())
+        if previous.checked_add(1) != Some(notice.position.value())
             || notice.position.value() > stored.head
         {
             return Err(corrupt(
-                "machine_notices.retention",
-                "expired notices are not a contiguous prefix",
+                "machine_notices.range",
+                "stored notices are not the exact contiguous range",
             ));
         }
-        floor = notice.position.value();
+        previous = notice.position.value();
+        // Position order is authoritative even when callers sampled time in
+        // another order. Validate the suffix, but only prune an expired prefix.
+        expired_prefix &= expires <= now.unix_millis();
+        if expired_prefix {
+            floor = previous;
+        }
+    }
+    if previous != stored.head {
+        return Err(corrupt("machine_notices.range", "missing notice"));
     }
     if floor != stored.floor {
         queries::advance_machine_notice_floor(
@@ -157,28 +174,58 @@ where
     Ok(())
 }
 
-pub(crate) async fn prune<Scope: TransactionScope>(
-    scope: &mut Scope,
+pub(crate) async fn prune<Store: AtomicStore, Driver: Database>(
+    store: Arc<Store>,
     now: SyncTime,
 ) -> Result<(), StoreError>
 where
-    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
-    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
-    for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
-    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+    for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
+    Driver::Arguments: IntoArguments<Driver>,
+    for<'value> String: Type<Driver> + Encode<'value, Driver>,
+    for<'value> Option<String>: Type<Driver> + Decode<'value, Driver>,
+    for<'row> &'row str: ColumnIndex<Driver::Row>,
 {
-    for row in queries::read_machine_notice_peers(scope)
-        .await
-        .map_err(StoreError::backend)?
-    {
-        let machine_id = required(row.machine_id, "machine_control_progress.machine_id")?;
-        check_private_id(&machine_id, "machine_control_progress.machine_id")?;
-        let peer = machine_id
-            .try_into()
-            .map_err(|error| corrupt("machine_control_progress.machine_id", error))?;
-        prune_peer(scope, peer, now).await?;
+    let peers = store
+        .transaction(|scope| {
+            Box::pin(async move {
+                queries::read_machine_notice_peers(scope)
+                    .await
+                    .map_err(StoreError::backend)
+            })
+        })
+        .await?;
+    let mut first_failure = None;
+    for row in peers {
+        let result = async {
+            let machine_id = required(
+                row.machine_id,
+                "machine_control_project_progress.machine_id",
+            )?;
+            check_private_id(&machine_id, "machine_control_project_progress.machine_id")?;
+            let peer = machine_id
+                .try_into()
+                .map_err(|error| corrupt("machine_control_project_progress.machine_id", error))?;
+            // A failed machine transaction cannot roll back another stream's
+            // floor, deletion or wake. Every row is validated before deletion.
+            store
+                .transaction(move |scope| {
+                    Box::pin(async move {
+                        prune_peer(scope, peer, now).await?;
+                        if let Some(at) = next_expiry(scope, peer).await? {
+                            scope.ensure_wake(at).await?;
+                        }
+                        Ok(())
+                    })
+                })
+                .await
+        }
+        .await;
+        if let Err(failure) = result {
+            eprintln!("Fleet machine notice maintenance failed: {failure}");
+            first_failure.get_or_insert(failure);
+        }
     }
-    Ok(())
+    first_failure.map_or(Ok(()), Err)
 }
 
 pub(crate) async fn append<Scope: TransactionScope>(
@@ -225,10 +272,8 @@ where
         peer.to_string(),
         next.to_string(),
         columns.kind.into(),
-        columns.board,
         columns.project,
         columns.epoch,
-        columns.feed_through,
         now.unix_millis().to_string(),
         expires_at.to_string(),
     )
@@ -304,6 +349,7 @@ where
 
 pub(crate) async fn next_expiry<Scope: TransactionScope>(
     scope: &mut Scope,
+    peer: PeerId,
 ) -> Result<Option<SyncTime>, StoreError>
 where
     <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
@@ -311,7 +357,7 @@ where
     for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
-    queries::read_machine_notice_expiry(scope)
+    queries::read_machine_notice_expiry(scope, peer.to_string())
         .await
         .map_err(StoreError::backend)?
         .and_then(|row| row.expires_at)
@@ -355,8 +401,8 @@ fn bound_position(value: Option<String>, class: Option<String>) -> Result<Option
 }
 fn decode(row: queries::StoredMachineNotice) -> Result<PositionedBoardNotice, StoreError> {
     check_private_id(
-        &required(row.machine_id, "machine_control_notices.machine_id")?,
-        "machine_control_notices.machine_id",
+        &required(row.machine_id, "machine_control_project_notices.machine_id")?,
+        "machine_control_project_notices.machine_id",
     )?;
     check_private_id(
         &required(row.notice_id, "machine_notices.notice_id")?,
@@ -382,11 +428,11 @@ fn decode(row: queries::StoredMachineNotice) -> Result<PositionedBoardNotice, St
     if integer(
         row.updated_at,
         row.updated_class,
-        "machine_control_notices.updated_at",
+        "machine_control_project_notices.updated_at",
     )? != created
     {
         return Err(corrupt(
-            "machine_control_notices.updated_at",
+            "machine_control_project_notices.updated_at",
             "an immutable notice has a different update time",
         ));
     }
@@ -398,13 +444,7 @@ fn decode(row: queries::StoredMachineNotice) -> Result<PositionedBoardNotice, St
     }
     Ok(PositionedBoardNotice {
         position: NoticePosition::new(position),
-        kind: decode_notice(
-            row.kind,
-            row.board_id,
-            row.project_id,
-            row.epoch,
-            row.feed_through,
-        )?,
+        kind: decode_notice(row.kind, row.project_id, row.epoch)?,
     })
 }
 
