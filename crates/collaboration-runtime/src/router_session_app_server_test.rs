@@ -548,6 +548,7 @@ async fn turn_methods_forward_input_and_actor_to_the_port() -> Result<(), Box<dy
     let thread_id = started["thread"]["id"].as_str().ok_or("thread id")?;
     let turn = handle_app_server_turn_request(
         "turn/start",
+        session_event_model::InputId::generate(),
         json!({"threadId":thread_id,"input":[{"type":"text","text":"hello"}]}),
         Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
         Arc::clone(&backend) as Arc<dyn SessionEventHub>,
@@ -573,6 +574,7 @@ async fn turn_methods_forward_input_and_actor_to_the_port() -> Result<(), Box<dy
 
     let steered = handle_app_server_turn_request(
         "turn/steer",
+        session_event_model::InputId::generate(),
         json!({"threadId":thread_id,"expectedTurnId":"turn-1",
                 "input":[{"type":"text","text":"more"}]}),
         Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
@@ -590,6 +592,7 @@ async fn turn_methods_forward_input_and_actor_to_the_port() -> Result<(), Box<dy
 
     let interrupted = handle_app_server_turn_request(
         "turn/interrupt",
+        session_event_model::InputId::generate(),
         json!({"threadId":thread_id,"turnId":"turn-1"}),
         Arc::clone(&backend) as Arc<dyn SessionCommandPort>,
         Arc::clone(&backend) as Arc<dyn SessionEventHub>,

@@ -138,6 +138,8 @@ enum ThreadMethodError {
     InvalidSelection,
     #[error("provider operation is unsupported")]
     Unsupported,
+    #[error("thread/list is not available through the Router: {reason}")]
+    UnavailableThreadOrdering { reason: &'static str },
     #[error("provider session is busy")]
     Busy,
     #[error("invalid thread parameters")]
@@ -188,6 +190,7 @@ pub enum AppServerConnectionError {
 
 struct HandledAppServerRequest {
     binding_attempt: Option<u64>,
+    input_id: Option<session_event_model::InputId>,
     method: String,
     response: Value,
     post_response_frames: Vec<Value>,
@@ -203,14 +206,24 @@ pub async fn serve_router_session_app_server_connection(
         mpsc::channel::<(SessionRef, Result<HubEvent, ()>)>(64);
     let (response_sender, mut response_receiver) =
         mpsc::channel::<Result<HandledAppServerRequest, AppServerConnectionError>>(32);
-    let (turn_sender, mut turn_receiver) = mpsc::channel::<Value>(64);
+    let (turn_sender, mut turn_receiver) =
+        mpsc::channel::<(Value, session_event_model::InputId)>(64);
     let mut event_tasks = JoinSet::new();
     let mut request_tasks = JoinSet::new();
     let turn_context = Arc::clone(&context);
     let turn_response_sender = response_sender.clone();
     request_tasks.spawn(async move {
-        while let Some(request) = turn_receiver.recv().await {
-            let result = handle_app_server_rpc(Arc::clone(&turn_context), request).await;
+        while let Some((request, input_id)) = turn_receiver.recv().await {
+            let result = request_dispatch::handle_app_server_rpc_with_input(
+                Arc::clone(&turn_context),
+                request,
+                input_id.clone(),
+            )
+            .await
+            .map(|mut handled| {
+                handled.input_id = Some(input_id);
+                handled
+            });
             if turn_response_sender.send(result).await.is_err() {
                 break;
             }
@@ -238,6 +251,9 @@ pub async fn serve_router_session_app_server_connection(
             handled = response_receiver.recv() => {
                 let Some(handled) = handled else { break; };
                 let mut handled = handled?;
+                if handled.response.get("error").is_some()
+                    && let Some(input_id) = &handled.input_id
+                { forwarding.user_receipts.refuse(input_id); }
                 websocket.send(Message::Text(handled.response.to_string().into())).await?;
                 for notification in handled.post_response_frames {
                     websocket.send(Message::Text(notification.to_string().into())).await?;
@@ -277,6 +293,9 @@ pub async fn serve_router_session_app_server_connection(
                     if let Some(session) = session
                         && attached_sessions.insert(session.clone())
                     {
+                        if let Some(cwd) = handled.response.pointer("/result/thread/cwd").and_then(Value::as_str) {
+                            forwarding.register_working_directory(session.clone(), PathBuf::from(cwd));
+                        }
                         let attachment = if let Some((_, attachment)) = handled.session_attachment.take() {
                             attachment
                         } else {
@@ -325,6 +344,7 @@ pub async fn serve_router_session_app_server_connection(
                     }
                     for notification in forwarding.project(&session, &event) {
                         websocket.send(Message::Text(notification.to_string().into())).await?;
+                        forwarding.user_receipts.delivered(&notification);
                     }
                 }
                 continue;
@@ -379,6 +399,7 @@ pub async fn serve_router_session_app_server_connection(
                 let _sent = sender
                     .send(Ok(HandledAppServerRequest {
                         binding_attempt: None,
+                        input_id: None,
                         method: "model/list".into(),
                         response,
                         post_response_frames: Vec::new(),
@@ -412,9 +433,20 @@ pub async fn serve_router_session_app_server_connection(
                     | "thread/settings/update"
             )
         ) {
-            match turn_sender.try_send(request) {
+            // Register before dispatch: provider events may arrive before the RPC reply.
+            let input_id = session_event_model::InputId::generate();
+            if matches!(
+                request.get("method").and_then(Value::as_str),
+                Some("turn/start" | "turn/steer")
+            ) {
+                forwarding
+                    .user_receipts
+                    .register(&request, input_id.clone());
+            }
+            match turn_sender.try_send((request, input_id)) {
                 Ok(()) => {}
-                Err(mpsc::error::TrySendError::Full(request)) => {
+                Err(mpsc::error::TrySendError::Full((request, input_id))) => {
+                    forwarding.user_receipts.refuse(&input_id);
                     websocket
                         .send(Message::Text(
                             json!({
@@ -473,6 +505,7 @@ async fn attach_session_events(
     let pending_requests = pending_snapshot_requests(&attachment.snapshot);
     let epoch = attachment.epoch;
     let mut latest_sequence = 0;
+    let mut initial_settings = None;
     for event in attachment.snapshot {
         latest_sequence = latest_sequence.max(event.sequence);
         let request_still_pending = matches!(
@@ -481,6 +514,13 @@ async fn attach_session_events(
                 if pending_requests.contains(interaction.request_id())
         );
         for notification in forwarding.project(&session, &event) {
+            if replay_after.is_none() && matches!(event.event, SessionEvent::SettingsChanged { .. })
+            {
+                // The new window needs current effort/model, including settings
+                // omitted from the thread summary. Do not replay obsolete values.
+                initial_settings = Some(notification);
+                continue;
+            }
             let missed_event = replay_after.is_some_and(|(previous_epoch, sequence)| {
                 previous_epoch != epoch || event.sequence > sequence
             });
@@ -490,8 +530,14 @@ async fn attach_session_events(
                 websocket
                     .send(Message::Text(notification.to_string().into()))
                     .await?;
+                forwarding.user_receipts.delivered(&notification);
             }
         }
+    }
+    if let Some(notification) = initial_settings {
+        websocket
+            .send(Message::Text(notification.to_string().into()))
+            .await?;
     }
     let mut receiver = attachment.receiver;
     let sender = event_sender.clone();
@@ -563,3 +609,22 @@ mod tests;
 #[cfg(test)]
 #[path = "router_session_app_server_tui_test.rs"]
 mod tui_tests;
+#[cfg(test)]
+#[path = "native_user_receipt_test.rs"]
+mod user_receipt_tests;
+
+#[cfg(test)]
+#[path = "router_session_app_server_unsupported_test.rs"]
+mod unsupported_tests;
+
+#[cfg(test)]
+#[path = "router_session_app_server_sync_test.rs"]
+mod sync_tests;
+
+#[cfg(test)]
+#[path = "router_session_app_server_activity_test.rs"]
+mod activity_tests;
+
+#[cfg(test)]
+#[path = "native_provider_service_tier_test.rs"]
+mod service_tier_tests;

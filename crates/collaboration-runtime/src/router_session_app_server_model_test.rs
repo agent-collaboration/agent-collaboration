@@ -364,6 +364,7 @@ async fn turn_model_uses_only_provider_advertised_choices() -> Result<(), Box<dy
         .await?;
         let turn = handle_app_server_turn_request(
             "turn/start",
+            session_event_model::InputId::generate(),
             json!({"threadId":started["thread"]["id"],
                 "model":requested_model,
                 "input":[{"type":"text","text":"hello"}]}),
@@ -430,7 +431,8 @@ async fn unmapped_native_plan_has_zero_effect_while_default_metadata_keeps_ordin
             &catalog,
         )
         .await?;
-        let result = handle_app_server_turn_request("turn/start", json!({"threadId":started["thread"]["id"],"model":"sonnet","collaborationMode":{"mode":mode,"settings":{"model":"sonnet","reasoning_effort":"low","developer_instructions":null}},"input":[{"type":"text","text":"ordinary text"}]}), backend.clone(), backend.clone(), backend.endpoint.clone(), actor, &catalog).await;
+        let result = handle_app_server_turn_request("turn/start",
+        session_event_model::InputId::generate(), json!({"threadId":started["thread"]["id"],"model":"sonnet","collaborationMode":{"mode":mode,"settings":{"model":"sonnet","reasoning_effort":"low","developer_instructions":null}},"input":[{"type":"text","text":"ordinary text"}]}), backend.clone(), backend.clone(), backend.endpoint.clone(), actor, &catalog).await;
         if mode == "plan" {
             assert!(matches!(result, Err(ThreadMethodError::Unsupported)));
             assert!(
