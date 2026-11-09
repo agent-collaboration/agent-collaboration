@@ -41,7 +41,8 @@ struct Case {
     reason = "The assertions are the check; fixture errors propagate through Result."
 )]
 #[test]
-fn every_seed_digest_case_matches_the_library_table_digest() -> Result<(), Box<dyn std::error::Error>> {
+fn every_seed_digest_case_matches_the_library_table_digest()
+-> Result<(), Box<dyn std::error::Error>> {
     let fixture: Fixture = serde_json::from_str(include_str!(
         "../../../../verification/central-seed-worker/test/fixtures/table-digest-cases.json"
     ))?;

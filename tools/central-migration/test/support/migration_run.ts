@@ -23,9 +23,9 @@ export interface MigrationRun {
   readonly production: ProductionSeed;
   /** One owner call; migrate carries the fixture's Mac-file facts unless `body` is given. */
   call(path: string, method?: string, body?: unknown): Promise<CallReply>;
-  /** The real migrate or revert, at a fixed run time, interrupted after `afterWrites` object writes. */
+  /** The real inventory, migrate or revert at a fixed run time; writes stop after `afterWrites` object writes. */
   interrupted(
-    call: "migrate" | "revert",
+    call: "inventory" | "migrate" | "revert",
     options: { readonly afterWrites: number; readonly runTime: number },
   ): Promise<CallReply>;
   oldStorage(): Promise<Record<string, unknown>>;

@@ -149,3 +149,31 @@ where
         })
     }
 }
+
+/// Decode every stored enrollment of one machine with the production decoder
+/// (`StoredMachine::decode`) in this scope; answers how many rows decoded.
+pub async fn decode_machine_enrollments_in_scope<S: TransactionScope>(
+    scope: &mut S,
+    machine: &str,
+) -> Result<usize, StoreError>
+where
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Option<String>:
+        Type<S::Database> + Encode<'value, S::Database> + Decode<'value, S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+{
+    let rows = crate::generated_enrollment::read_enrollments(
+        scope,
+        None,
+        None,
+        None,
+        Some(machine.to_owned()),
+    )
+    .await
+    .map_err(StoreError::backend)?;
+    let decoded = rows.len();
+    for row in rows {
+        crate::machine_enrollment_record::StoredMachine::decode(row)?;
+    }
+    Ok(decoded)
+}

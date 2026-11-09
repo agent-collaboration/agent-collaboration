@@ -279,8 +279,8 @@ mod machine_notice_store;
 mod registration_refusal;
 #[cfg(feature = "conformance")]
 pub use fleet_record_observer::{
-    FleetRecordReadFailure, read_fleet_copy_summary_in_scope, read_fleet_feed_in_scope,
-    read_fleet_lease_projection_in_scope, read_fleet_record_in_scope,
+    FleetRecordReadFailure, decode_machine_enrollments_in_scope, read_fleet_copy_summary_in_scope,
+    read_fleet_feed_in_scope, read_fleet_lease_projection_in_scope, read_fleet_record_in_scope,
 };
 mod fleet_scope_apply;
 mod fleet_scope_snapshot;

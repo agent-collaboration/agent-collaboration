@@ -62,6 +62,15 @@ board-central-test-support = { path = "../board-central-test-support", version =
 fleet-sync-receiver.workspace = true
 fleet-sync-tokio-runner.workspace = true
 fleet-sync-session.workspace = true
+sqlx-core.workspace = true
+collaboration-central-core = { path = "../collaboration-central-core", version = "0.1.123", features = ["conformance"] }
+
+# PD7 decode gate (verification only): its tests decode the committed
+# candidate fixture with main's real decoders.
+[[example]]
+name = "migration_decode_gate"
+path = "examples/migration_decode_gate/main.rs"
+test = true
 
 [[test]]
 name = "integration"
