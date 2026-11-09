@@ -3,8 +3,8 @@
 //! `contracts/issuer-mirror/machine-login-validation-vectors.json` is a byte-exact
 //! copy of switchboard's
 //! `packages/sign-in-core/contract-fixtures/machine-login/validation-vectors.json`
-//! at commit de59e3c4b92d4d8c76524cda92cbf93347070dcf (SHA-256
-//! f3d317be0268ecf0efa289b46d181dc3fb455847faddcdfc88fe46ec1fdcc847). Each vector
+//! at commit 227e6217fa48a59f44a5bc8c3c22ea39a785691b (SHA-256
+//! ff6e8cc4a36e70ad27cb64fffe9504c2426f8999bf9a7af0a03b260e10d130b0). Each vector
 //! is an input the issuer's Zod schema accepts or refuses. For an accepted one,
 //! `output` is the issuer's exact serialization of what it parsed.
 //!

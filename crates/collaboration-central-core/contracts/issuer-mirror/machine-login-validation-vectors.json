@@ -1,5 +1,5 @@
 {
-	"source": "machine-login-contracts.ts and fleet-admin-client.ts; PD boundary encoding and Fleet access Lead rulings, 2026-11-08; OrganizationChangeRecord producer dcbb13fedb41233362a9fe061fb1946006d52224; literal expected JSON output in schema field order",
+	"source": "machine-login-contracts.ts and fleet-admin-client.ts; owner N07/N10, producer 0fd8a869af7c0441e2c8acb365f64d5daf99b1b1; literal expected JSON output in producer field order",
 	"vectors": [
 		{
 			"contract": "DecideDeviceLogin",
@@ -13,9 +13,10 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "Router",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			},
-			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null}"
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null,\"codeExpiresAt\":1793448600}"
 		},
 		{
 			"contract": "DecideDeviceLogin",
@@ -29,9 +30,10 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			},
-			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"a\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null}"
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"a\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null,\"codeExpiresAt\":1793448600}"
 		},
 		{
 			"contract": "DecideDeviceLogin",
@@ -45,9 +47,10 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			},
-			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null}"
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null,\"codeExpiresAt\":1793448600}"
 		},
 		{
 			"contract": "DecideDeviceLogin",
@@ -61,9 +64,10 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			},
-			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null}"
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null,\"codeExpiresAt\":1793448600}"
 		},
 		{
 			"contract": "DecideDeviceLogin",
@@ -77,9 +81,10 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			},
-			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null}"
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null,\"codeExpiresAt\":1793448600}"
 		},
 		{
 			"contract": "DecideDeviceLogin",
@@ -93,7 +98,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -108,7 +114,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "ééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééa",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -123,7 +130,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀😀a",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -138,7 +146,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": " \t\n ",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -153,9 +162,10 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": " \tRouter\n ",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			},
-			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null}"
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null,\"codeExpiresAt\":1793448600}"
 		},
 		{
 			"contract": "DecideDeviceLogin",
@@ -169,9 +179,10 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\tb",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			},
-			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"a\\tb\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null}"
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"a\\tb\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null,\"codeExpiresAt\":1793448600}"
 		},
 		{
 			"contract": "DecideDeviceLogin",
@@ -185,9 +196,10 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\nb",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			},
-			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"a\\nb\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null}"
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"a\\nb\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null,\"codeExpiresAt\":1793448600}"
 		},
 		{
 			"contract": "DecideDeviceLogin",
@@ -201,7 +213,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u0000b",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -216,7 +229,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u0001b",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -231,7 +245,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u0002b",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -246,7 +261,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u0003b",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -261,7 +277,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u0004b",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -276,7 +293,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u0005b",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -291,7 +309,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u0006b",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -306,7 +325,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u0007b",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -321,7 +341,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\bb",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -336,7 +357,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u000bb",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -351,7 +373,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\fb",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -366,7 +389,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\rb",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -381,7 +405,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u000eb",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -396,7 +421,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u000fb",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -411,7 +437,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u0010b",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -426,7 +453,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u0011b",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -441,7 +469,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u0012b",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -456,7 +485,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u0013b",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -471,7 +501,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u0014b",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -486,7 +517,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u0015b",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -501,7 +533,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u0016b",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -516,7 +549,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u0017b",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -531,7 +565,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u0018b",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -546,7 +581,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u0019b",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -561,7 +597,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u001ab",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -576,7 +613,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u001bb",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -591,7 +629,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u001cb",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -606,7 +645,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u001db",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -621,7 +661,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u001eb",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -636,7 +677,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "a\u001fb",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -651,7 +693,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "Router",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -666,7 +709,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "Router",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -681,7 +725,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "Router",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -696,7 +741,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "Router",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -711,7 +757,8 @@
 				"peer": "019A61BB-0000-7000-8000-000000000001",
 				"label": "Router",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -726,7 +773,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "Router",
 				"allowedWorkspaces": ["019A61BB-0000-7000-8000-000000000001"],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -741,7 +789,8 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "Router",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -757,9 +806,10 @@
 				"label": "Router",
 				"allowedWorkspaces": [],
 				"approverSecondFactorAt": null,
-				"formerServiceId": "a77d3c10-cc03-4528-a5b3-6b1566cb4b91"
+				"formerServiceId": "a77d3c10-cc03-4528-a5b3-6b1566cb4b91",
+				"codeExpiresAt": 1793448600
 			},
-			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null,\"formerServiceId\":\"a77d3c10-cc03-4528-a5b3-6b1566cb4b91\"}"
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null,\"formerServiceId\":\"a77d3c10-cc03-4528-a5b3-6b1566cb4b91\",\"codeExpiresAt\":1793448600}"
 		},
 		{
 			"contract": "DecideDeviceLogin",
@@ -774,9 +824,10 @@
 				"label": "Router",
 				"allowedWorkspaces": [],
 				"approverSecondFactorAt": null,
-				"formerServiceId": "019a61bb-0000-7000-8000-000000000001"
+				"formerServiceId": "019a61bb-0000-7000-8000-000000000001",
+				"codeExpiresAt": 1793448600
 			},
-			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null,\"formerServiceId\":\"019a61bb-0000-7000-8000-000000000001\"}"
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null,\"formerServiceId\":\"019a61bb-0000-7000-8000-000000000001\",\"codeExpiresAt\":1793448600}"
 		},
 		{
 			"contract": "DecideDeviceLogin",
@@ -791,7 +842,8 @@
 				"label": "Router",
 				"allowedWorkspaces": [],
 				"approverSecondFactorAt": null,
-				"formerServiceId": "A77D3C10-CC03-4528-A5B3-6B1566CB4B91"
+				"formerServiceId": "A77D3C10-CC03-4528-A5B3-6B1566CB4B91",
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -807,7 +859,8 @@
 				"label": "Router",
 				"allowedWorkspaces": [],
 				"approverSecondFactorAt": null,
-				"formerServiceId": "019A61BB-0000-7000-8000-000000000001"
+				"formerServiceId": "019A61BB-0000-7000-8000-000000000001",
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -823,7 +876,8 @@
 				"label": "Router",
 				"allowedWorkspaces": [],
 				"approverSecondFactorAt": null,
-				"formerServiceId": "550e8400-e29b-11d4-a716-446655440000"
+				"formerServiceId": "550e8400-e29b-11d4-a716-446655440000",
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -839,7 +893,8 @@
 				"label": "Router",
 				"allowedWorkspaces": [],
 				"approverSecondFactorAt": null,
-				"formerServiceId": "550e8400-e29b-51d4-a716-446655440000"
+				"formerServiceId": "550e8400-e29b-51d4-a716-446655440000",
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -855,7 +910,8 @@
 				"label": "Router",
 				"allowedWorkspaces": [],
 				"approverSecondFactorAt": null,
-				"formerServiceId": "a77d3c10-cc03-4528-75b3-6b1566cb4b91"
+				"formerServiceId": "a77d3c10-cc03-4528-75b3-6b1566cb4b91",
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -871,7 +927,8 @@
 				"label": "Router",
 				"allowedWorkspaces": [],
 				"approverSecondFactorAt": null,
-				"formerServiceId": "019a61bb-0000-7000-c000-000000000001"
+				"formerServiceId": "019a61bb-0000-7000-c000-000000000001",
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -987,9 +1044,10 @@
 					"019a61bb-0000-7000-8000-000000000001",
 					"019a61bb-0000-7000-8000-000000000001"
 				],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			},
-			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\"],\"approverSecondFactorAt\":null}"
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\",\"019a61bb-0000-7000-8000-000000000001\"],\"approverSecondFactorAt\":null,\"codeExpiresAt\":1793448600}"
 		},
 		{
 			"contract": "DecideDeviceLogin",
@@ -1105,7 +1163,8 @@
 					"019a61bb-0000-7000-8000-000000000001",
 					"019a61bb-0000-7000-8000-000000000001"
 				],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			}
 		},
 		{
@@ -1120,9 +1179,10 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "Router",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": 1794110400
+				"approverSecondFactorAt": 1794110400,
+				"codeExpiresAt": 1793448600
 			},
-			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":1794110400}"
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":1794110400,\"codeExpiresAt\":1793448600}"
 		},
 		{
 			"contract": "DeviceLoginDecision",
@@ -1459,9 +1519,10 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "Router",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			},
-			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null}"
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null,\"codeExpiresAt\":1793448600}"
 		},
 		{
 			"contract": "DecideDeviceLogin",
@@ -1475,16 +1536,17 @@
 				"peer": "019a61bb-0000-7000-8000-000000000001",
 				"label": "﻿Router﻿",
 				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600
 			},
-			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"﻿Router﻿\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null}"
+			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"﻿Router﻿\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null,\"codeExpiresAt\":1793448600}"
 		},
 		{
 			"contract": "OrganizationChangeRecord",
 			"verdict": "accept",
 			"input": {
 				"id": "019a3dce-2000-7000-8000-0000000000d1",
-				"requestId": "019a3dce-2000-7000-8000-0000000000e1",
+				"requestId": "019a3dce-2000-7000-8000-0000000000e1:allowanceChanged:019a3dce-2000-7000-8000-0000000000f1",
 				"kind": "allowanceChanged",
 				"origin": {
 					"kind": "person",
@@ -1494,14 +1556,14 @@
 				"targetId": "019a3dce-2000-7000-8000-0000000000f1",
 				"createdAtMillis": 1800000000002
 			},
-			"output": "{\"id\":\"019a3dce-2000-7000-8000-0000000000d1\",\"requestId\":\"019a3dce-2000-7000-8000-0000000000e1\",\"kind\":\"allowanceChanged\",\"origin\":{\"kind\":\"person\",\"personId\":\"019a3dce-2000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\"},\"targetId\":\"019a3dce-2000-7000-8000-0000000000f1\",\"createdAtMillis\":1800000000002}"
+			"output": "{\"id\":\"019a3dce-2000-7000-8000-0000000000d1\",\"requestId\":\"019a3dce-2000-7000-8000-0000000000e1:allowanceChanged:019a3dce-2000-7000-8000-0000000000f1\",\"kind\":\"allowanceChanged\",\"origin\":{\"kind\":\"person\",\"personId\":\"019a3dce-2000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\"},\"targetId\":\"019a3dce-2000-7000-8000-0000000000f1\",\"createdAtMillis\":1800000000002}"
 		},
 		{
 			"contract": "OrganizationChangeRecord",
 			"verdict": "accept",
 			"input": {
 				"id": "019a3dce-2000-7000-8000-0000000000d2",
-				"requestId": "019a3dce-2000-7000-8000-0000000000e1",
+				"requestId": "019a3dce-2000-7000-8000-0000000000e1:machineRevoked:019a3dce-2000-7000-8000-0000000000f2",
 				"kind": "machineRevoked",
 				"origin": {
 					"kind": "person",
@@ -1511,14 +1573,14 @@
 				"targetId": "019a3dce-2000-7000-8000-0000000000f2",
 				"createdAtMillis": 1800000000003
 			},
-			"output": "{\"id\":\"019a3dce-2000-7000-8000-0000000000d2\",\"requestId\":\"019a3dce-2000-7000-8000-0000000000e1\",\"kind\":\"machineRevoked\",\"origin\":{\"kind\":\"person\",\"personId\":\"019a3dce-2000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\"},\"targetId\":\"019a3dce-2000-7000-8000-0000000000f2\",\"createdAtMillis\":1800000000003}"
+			"output": "{\"id\":\"019a3dce-2000-7000-8000-0000000000d2\",\"requestId\":\"019a3dce-2000-7000-8000-0000000000e1:machineRevoked:019a3dce-2000-7000-8000-0000000000f2\",\"kind\":\"machineRevoked\",\"origin\":{\"kind\":\"person\",\"personId\":\"019a3dce-2000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\"},\"targetId\":\"019a3dce-2000-7000-8000-0000000000f2\",\"createdAtMillis\":1800000000003}"
 		},
 		{
 			"contract": "OrganizationChangeRecord",
 			"verdict": "accept",
 			"input": {
 				"id": "019a3dce-2000-7000-8000-0000000000d3",
-				"requestId": "019a3dce-2000-7000-8000-0000000000e1",
+				"requestId": "019a3dce-2000-7000-8000-0000000000e1:machineEnrolled:019a3dce-2000-7000-8000-0000000000f3",
 				"kind": "machineEnrolled",
 				"origin": {
 					"kind": "person",
@@ -1528,14 +1590,14 @@
 				"targetId": "019a3dce-2000-7000-8000-0000000000f3",
 				"createdAtMillis": 1800000000003
 			},
-			"output": "{\"id\":\"019a3dce-2000-7000-8000-0000000000d3\",\"requestId\":\"019a3dce-2000-7000-8000-0000000000e1\",\"kind\":\"machineEnrolled\",\"origin\":{\"kind\":\"person\",\"personId\":\"019a3dce-2000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\"},\"targetId\":\"019a3dce-2000-7000-8000-0000000000f3\",\"createdAtMillis\":1800000000003}"
+			"output": "{\"id\":\"019a3dce-2000-7000-8000-0000000000d3\",\"requestId\":\"019a3dce-2000-7000-8000-0000000000e1:machineEnrolled:019a3dce-2000-7000-8000-0000000000f3\",\"kind\":\"machineEnrolled\",\"origin\":{\"kind\":\"person\",\"personId\":\"019a3dce-2000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\"},\"targetId\":\"019a3dce-2000-7000-8000-0000000000f3\",\"createdAtMillis\":1800000000003}"
 		},
 		{
 			"contract": "OrganizationChangeRecord",
 			"verdict": "accept",
 			"input": {
 				"id": "019a3dce-2000-7000-8000-0000000000d4",
-				"requestId": "019a3dce-2000-7000-8000-0000000000e2",
+				"requestId": "019a3dce-2000-7000-8000-0000000000e2:machineRevoked:019a3dce-2000-7000-8000-0000000000f3",
 				"kind": "machineRevoked",
 				"origin": {
 					"kind": "person",
@@ -1545,14 +1607,14 @@
 				"targetId": "019a3dce-2000-7000-8000-0000000000f3",
 				"createdAtMillis": 1800000000004
 			},
-			"output": "{\"id\":\"019a3dce-2000-7000-8000-0000000000d4\",\"requestId\":\"019a3dce-2000-7000-8000-0000000000e2\",\"kind\":\"machineRevoked\",\"origin\":{\"kind\":\"person\",\"personId\":\"019a3dce-2000-7000-8000-000000000003\",\"permissionChecked\":\"machine:revoke\"},\"targetId\":\"019a3dce-2000-7000-8000-0000000000f3\",\"createdAtMillis\":1800000000004}"
+			"output": "{\"id\":\"019a3dce-2000-7000-8000-0000000000d4\",\"requestId\":\"019a3dce-2000-7000-8000-0000000000e2:machineRevoked:019a3dce-2000-7000-8000-0000000000f3\",\"kind\":\"machineRevoked\",\"origin\":{\"kind\":\"person\",\"personId\":\"019a3dce-2000-7000-8000-000000000003\",\"permissionChecked\":\"machine:revoke\"},\"targetId\":\"019a3dce-2000-7000-8000-0000000000f3\",\"createdAtMillis\":1800000000004}"
 		},
 		{
 			"contract": "OrganizationChangeRecord",
 			"verdict": "accept",
 			"input": {
 				"id": "019a3dce-2000-7000-8000-0000000000d5",
-				"requestId": "019a3dce-2000-7000-8000-0000000000e2",
+				"requestId": "019a3dce-2000-7000-8000-0000000000e2:allowanceChanged:019a3dce-2000-7000-8000-0000000000f1",
 				"kind": "allowanceChanged",
 				"origin": {
 					"kind": "person",
@@ -1562,15 +1624,15 @@
 				"targetId": "019a3dce-2000-7000-8000-0000000000f1",
 				"createdAtMillis": 1800000000004
 			},
-			"output": "{\"id\":\"019a3dce-2000-7000-8000-0000000000d5\",\"requestId\":\"019a3dce-2000-7000-8000-0000000000e2\",\"kind\":\"allowanceChanged\",\"origin\":{\"kind\":\"person\",\"personId\":\"019a3dce-2000-7000-8000-000000000003\",\"permissionChecked\":\"machine:revoke\"},\"targetId\":\"019a3dce-2000-7000-8000-0000000000f1\",\"createdAtMillis\":1800000000004}"
+			"output": "{\"id\":\"019a3dce-2000-7000-8000-0000000000d5\",\"requestId\":\"019a3dce-2000-7000-8000-0000000000e2:allowanceChanged:019a3dce-2000-7000-8000-0000000000f1\",\"kind\":\"allowanceChanged\",\"origin\":{\"kind\":\"person\",\"personId\":\"019a3dce-2000-7000-8000-000000000003\",\"permissionChecked\":\"machine:revoke\"},\"targetId\":\"019a3dce-2000-7000-8000-0000000000f1\",\"createdAtMillis\":1800000000004}"
 		},
 		{
 			"contract": "OrganizationChangeRecord",
 			"verdict": "refuse",
 			"input": {
 				"id": "019a3dce-2000-7000-8000-0000000000d1",
-				"requestId": "019a3dce-2000-7000-8000-0000000000e1",
-				"kind": "machineExpired",
+				"requestId": "019a3dce-2000-7000-8000-0000000000e1:allowanceChanged:019a3dce-2000-7000-8000-0000000000f1",
+				"kind": "unknownChangeKind",
 				"origin": {
 					"kind": "person",
 					"personId": "019a3dce-2000-7000-8000-000000000002",
@@ -1585,7 +1647,7 @@
 			"verdict": "refuse",
 			"input": {
 				"id": "019a3dce-2000-7000-8000-0000000000d1",
-				"requestId": "019a3dce-2000-7000-8000-0000000000e1",
+				"requestId": "019a3dce-2000-7000-8000-0000000000e1:allowanceChanged:019a3dce-2000-7000-8000-0000000000f1",
 				"kind": "allowanceChanged",
 				"origin": {
 					"kind": "person",
@@ -1602,7 +1664,7 @@
 			"verdict": "refuse",
 			"input": {
 				"id": "019a3dce-2000-7000-8000-0000000000d1",
-				"requestId": "019a3dce-2000-7000-8000-0000000000e1",
+				"requestId": "019a3dce-2000-7000-8000-0000000000e1:allowanceChanged:019a3dce-2000-7000-8000-0000000000f1",
 				"kind": "allowanceChanged",
 				"origin": {
 					"kind": "person",
@@ -1612,6 +1674,129 @@
 				},
 				"targetId": "019a3dce-2000-7000-8000-0000000000f1",
 				"createdAtMillis": 1800000000002
+			}
+		},
+		{
+			"contract": "OrganizationChangeRecord",
+			"verdict": "accept",
+			"input": {
+				"id": "019a3dce-2000-7000-8000-0000000000d6",
+				"requestId": "019a3dce-2000-7000-8000-0000000000f3:machineExpired:019a3dce-2000-7000-8000-0000000000f3",
+				"kind": "machineExpired",
+				"origin": {
+					"kind": "automatic"
+				},
+				"targetId": "019a3dce-2000-7000-8000-0000000000f3",
+				"createdAtMillis": 1800000000005
+			},
+			"output": "{\"id\":\"019a3dce-2000-7000-8000-0000000000d6\",\"requestId\":\"019a3dce-2000-7000-8000-0000000000f3:machineExpired:019a3dce-2000-7000-8000-0000000000f3\",\"kind\":\"machineExpired\",\"origin\":{\"kind\":\"automatic\"},\"targetId\":\"019a3dce-2000-7000-8000-0000000000f3\",\"createdAtMillis\":1800000000005}"
+		},
+		{
+			"contract": "OrganizationChangeRecord",
+			"verdict": "accept",
+			"input": {
+				"id": "019a3dce-2000-7000-8000-0000000000d7",
+				"requestId": "019a3dce-2000-7000-8000-0000000000f3:allowanceChanged:019a3dce-2000-7000-8000-0000000000f1",
+				"kind": "allowanceChanged",
+				"origin": {
+					"kind": "automatic"
+				},
+				"targetId": "019a3dce-2000-7000-8000-0000000000f1",
+				"createdAtMillis": 1800000000005
+			},
+			"output": "{\"id\":\"019a3dce-2000-7000-8000-0000000000d7\",\"requestId\":\"019a3dce-2000-7000-8000-0000000000f3:allowanceChanged:019a3dce-2000-7000-8000-0000000000f1\",\"kind\":\"allowanceChanged\",\"origin\":{\"kind\":\"automatic\"},\"targetId\":\"019a3dce-2000-7000-8000-0000000000f1\",\"createdAtMillis\":1800000000005}"
+		},
+		{
+			"contract": "OrganizationChangeRecord",
+			"verdict": "refuse",
+			"input": {
+				"id": "019a3dce-2000-7000-8000-0000000000d6",
+				"requestId": "019a3dce-2000-7000-8000-0000000000f3:machineExpired:019a3dce-2000-7000-8000-0000000000f3",
+				"kind": "machineExpired",
+				"origin": {
+					"kind": "automatic",
+					"personId": "must-not-be-present"
+				},
+				"targetId": "019a3dce-2000-7000-8000-0000000000f3",
+				"createdAtMillis": 1800000000005
+			}
+		},
+		{
+			"contract": "OrganizationChangeRecord",
+			"verdict": "refuse",
+			"input": {
+				"id": "019a3dce-2000-7000-8000-0000000000d6",
+				"requestId": "019a3dce-2000-7000-8000-0000000000f3:machineExpired:019a3dce-2000-7000-8000-0000000000f3",
+				"kind": "machineExpired",
+				"origin": {
+					"kind": "automatic",
+					"permissionChecked": "must-not-be-present"
+				},
+				"targetId": "019a3dce-2000-7000-8000-0000000000f3",
+				"createdAtMillis": 1800000000005
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": null
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": "1793448600"
+			}
+		},
+		{
+			"contract": "DecideDeviceLogin",
+			"verdict": "refuse",
+			"input": {
+				"organizationId": "019a61bb-0000-7000-8000-000000000001",
+				"approver": "019a61bb-0000-7000-8000-000000000002",
+				"permissionChecked": "machine:enroll",
+				"requestId": "019a61bb-0000-7000-8000-000000000003",
+				"installation": "019a61bb-0000-7000-8000-000000000001",
+				"peer": "019a61bb-0000-7000-8000-000000000001",
+				"label": "Router",
+				"allowedWorkspaces": [],
+				"approverSecondFactorAt": null,
+				"codeExpiresAt": 1793448600.5
 			}
 		}
 	]
