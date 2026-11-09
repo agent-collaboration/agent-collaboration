@@ -275,9 +275,29 @@ pub(super) async fn first_grant_wins<Host: CaseHost>(host: &Host) -> CaseResult 
     expect_unchanged(host, &rows, "a's late Grant").await
 }
 
-/// N10: approved at minute 9, the code expires at minute 10. A Grant 1 ms
-/// before the deadline activates; at it and after, the approval lapses and
-/// only its own row changes. One machine per instant.
+/// An approval of `machine` at `approved_at` with a second factor taken then
+/// (only the organization's first machine is exempt) and this code deadline.
+fn approval_at(
+    request: u64,
+    machine: u64,
+    approved_at: i64,
+    code_expires_at_s: i64,
+) -> CaseResult<DecideDeviceLogin> {
+    Ok(DecideDeviceLogin {
+        code_expires_at: fleet_identity_protocol::UnixSeconds(code_expires_at_s),
+        approver_second_factor_at: Some(fleet_identity_protocol::UnixSeconds(
+            approved_at.div_euclid(1000),
+        )),
+        ..approval(request, machine, &[WORKSPACE_A])?
+    })
+}
+
+/// N10 beside a working machine: each installation already has an older,
+/// working enrollment when a later login, approved at minute 9 with its code
+/// expiring at minute 10, makes its first Grant. 1 ms before the deadline the
+/// Grant activates and supersedes the older one; at the deadline and after,
+/// the late approval lapses, only its own row changes, and the older working
+/// enrollment is left exactly as it was. One machine per instant.
 pub(super) async fn code_deadline_lapses<Host: CaseHost>(host: &Host) -> CaseResult {
     b3_store(host, &[WORKSPACE_A]).await?;
     for (offset, at_ms, lapses) in [
@@ -287,65 +307,115 @@ pub(super) async fn code_deadline_lapses<Host: CaseHost>(host: &Host) -> CaseRes
     ] {
         let machine = MACHINE + offset;
         let block = 0xa000 + offset * 0x100;
-        let approved_at = NOW_MS - 60_000;
-        let request = DecideDeviceLogin {
-            code_expires_at: fleet_identity_protocol::UnixSeconds(NOW_S),
-            // A second factor taken at approval: only the first machine is exempt.
-            approver_second_factor_at: Some(fleet_identity_protocol::UnixSeconds(
-                approved_at.div_euclid(1000),
-            )),
-            ..approval(REQUEST + offset, machine, &[WORKSPACE_A])?
-        };
+        let older_request = 0x40 + offset;
+        let older_at = NOW_MS - 120_000;
+
+        // The older, working enrollment: approved, then granted.
         let rows = before(host).await?;
-        let id = approved(host, request, approved_at, block).await?;
-        let (installation, enrollment, approval_rows) = first_approval_rows(
+        let older_id = approved(
+            host,
+            approval_at(older_request, machine, older_at, NOW_S + CODE_LIFETIME_S)?,
+            older_at,
+            block,
+        )
+        .await?;
+        let (installation, older, approval_rows) = first_approval_rows(
             block,
             machine,
-            REQUEST + offset,
+            older_request,
             &[WORKSPACE_A],
-            approved_at,
-            NOW_S,
+            older_at,
+            NOW_S + CODE_LIFETIME_S,
         );
-        let rows = expect_changes(host, &rows, approval_rows, "the approval").await?;
+        let rows = expect_changes(host, &rows, approval_rows, "the older approval").await?;
+        grant(host, &older_id, older_at + 1000, 0xb000 + offset * 0x100).await?;
+        let older = older.granted(older_at + 1000);
+        let rows = expect_changes(
+            host,
+            &rows,
+            vec![
+                older.entry(),
+                installation.at(1, older_at + 1000).entry(),
+                record(
+                    0xb000 + offset * 0x100,
+                    older_request,
+                    "machineEnrolled",
+                    Origin::Approver,
+                    block,
+                    older_at + 1000,
+                ),
+            ],
+            "the older first Grant",
+        )
+        .await?;
 
-        let answer = grant(host, &id, at_ms, 0xb000 + offset * 0x100).await?;
+        // The late login: same label, allowance already active, so only its
+        // enrollment, at generation 1.
+        let late_at = NOW_MS - 60_000;
+        let late_id = approved(
+            host,
+            approval_at(REQUEST + offset, machine, late_at, NOW_S)?,
+            late_at,
+            block + 0x80,
+        )
+        .await?;
+        let late = Enrollment::approved(block + 0x80, machine, REQUEST + offset, 1, late_at, NOW_S);
+        let rows = expect_changes(host, &rows, vec![late.entry()], "the late approval").await?;
 
+        let answer = grant(host, &late_id, at_ms, 0xb080 + offset * 0x100).await?;
+
+        let step = format!("the late Grant at {at_ms}");
         if lapses {
             check_eq!(
                 answer,
                 MachineTokenDecision::Refuse {
                     reason: MachineTokenRefusal::EnrollmentNotActive {},
                 },
-                "a Grant at {at_ms}"
+                "{step}"
             );
-            expect_changes(
+            let after = expect_changes(
                 host,
                 &rows,
-                vec![enrollment.ended("lapsed", None, at_ms).entry()],
-                &format!("a Grant at {at_ms}"),
+                vec![late.ended("lapsed", None, at_ms).entry()],
+                &step,
             )
             .await?;
+            let (key, working) = older.entry();
+            check_eq!(
+                after.get(&key),
+                Some(&working),
+                "{step}: the older working enrollment"
+            );
         } else {
             check!(
                 matches!(answer, MachineTokenDecision::Grant { .. }),
-                "a Grant at {at_ms} answered {answer:?}"
+                "{step} answered {answer:?}"
             );
             expect_changes(
                 host,
                 &rows,
                 vec![
-                    enrollment.granted(at_ms).entry(),
-                    installation.at(1, at_ms).entry(),
+                    older.ended("revoked", Some("superseded"), at_ms).entry(),
                     record(
-                        0xb000 + offset * 0x100,
+                        0xb080 + offset * 0x100,
                         REQUEST + offset,
-                        "machineEnrolled",
+                        "machineRevoked",
                         Origin::Approver,
                         block,
                         at_ms,
                     ),
+                    late.granted(at_ms).entry(),
+                    installation.at(2, at_ms).entry(),
+                    record(
+                        0xb081 + offset * 0x100,
+                        REQUEST + offset,
+                        "machineEnrolled",
+                        Origin::Approver,
+                        block + 0x80,
+                        at_ms,
+                    ),
                 ],
-                &format!("a Grant at {at_ms}"),
+                &step,
             )
             .await?;
         }

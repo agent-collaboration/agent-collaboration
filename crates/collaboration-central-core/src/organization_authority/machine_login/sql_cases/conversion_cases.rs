@@ -5,6 +5,7 @@ use super::case_values::{NOW_MS, uuid7};
 use super::expected_rows::{Installation, expect_rows};
 use super::sql_case_host::{CaseHost, LegacyMachine};
 use super::{CaseFailure, CaseResult, check, check_eq};
+use crate::machine_enrollment_record::REVOKE_TASK_KIND;
 use crate::migration_failure::MigrationFailure;
 
 const V4_SERVICE: &str = "0b6a1c5e-2f3d-4a8b-9c1d-2e3f4a5b6c7d";
@@ -22,22 +23,101 @@ fn machine(peer: u64, service: &str, last_seen: Option<&str>, created_at: &str) 
 async fn history<Host: CaseHost>(host: &Host) -> CaseResult<Vec<String>> {
     Ok(host
         .select(
-            "SELECT json_array(version, hex(checksum)) AS value FROM central_schema_migrations \
-             WHERE corpus = 'central-registry' ORDER BY version"
+            "SELECT json_array(row_id, version, description, installed_on, success, \
+             hex(checksum), execution_time, created_at, updated_at) AS value \
+             FROM central_schema_migrations WHERE corpus = 'central-registry' ORDER BY version"
                 .to_owned(),
         )
         .await?)
 }
 
-async fn legacy_rows<Host: CaseHost>(host: &Host) -> CaseResult<Vec<String>> {
-    Ok(host
+/// The journal's completed history, every column: what a switch, refused or
+/// applied, must leave exactly as it was.
+async fn journal<Host: CaseHost>(host: &Host) -> CaseResult<Vec<String>> {
+    let mut rows = host
         .select(
-            "SELECT json_array(machine_id, service_id, machine_label, access_client_id, \
-             credential_hash, state, last_seen_at, created_at) AS value FROM machine_enrollments \
-             ORDER BY machine_id"
+            "SELECT json_array('operation', operation_id, kind, kind_version, request_key, \
+             hex(input), hex(input_digest), state, hex(result), failure, finished_at, \
+             next_attempt_at, attempt, drive_token, drive_until, created_at, updated_at) AS value \
+             FROM _fleet_sync_operations ORDER BY operation_id"
                 .to_owned(),
         )
-        .await?)
+        .await?;
+    rows.extend(
+        host.select(
+            "SELECT json_array('step', id, operation_id, position, step_name, kind, intent, \
+             hex(output), first_attempt_at, may_have_reached, created_at, updated_at) AS value \
+             FROM _fleet_sync_steps ORDER BY operation_id, position"
+                .to_owned(),
+        )
+        .await?,
+    );
+    Ok(rows)
+}
+
+/// Everything today's switch could touch, every column: the schema, today's
+/// machine rows, the lease table, the migration history and its failures, and
+/// the journal. A refused switch must leave all of it as it was.
+async fn old_state<Host: CaseHost>(host: &Host) -> CaseResult<Vec<String>> {
+    let mut state = Vec::new();
+    for statement in [
+        "SELECT json_array('schema', type, name, tbl_name, sql) AS value FROM sqlite_schema \
+         WHERE name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cf_%' ORDER BY type, name",
+        "SELECT json_array('machine', machine_id, service_id, machine_label, access_client_id, \
+         credential_hash, state, expires_at, last_seen_at, last_revocation_operation_id, \
+         last_enrollment_operation_id, created_at, updated_at) AS value \
+         FROM machine_enrollments ORDER BY machine_id",
+        "SELECT json_array('lease', row_id, name, incarnation, created_at, updated_at) AS value \
+         FROM lease_incarnation ORDER BY row_id",
+        "SELECT json_array('migration', row_id, corpus, version, description, installed_on, \
+         success, hex(checksum), execution_time, created_at, updated_at) AS value \
+         FROM central_schema_migrations ORDER BY corpus, version",
+        "SELECT json_array('failure', row_id, corpus, version, reason, created_at, updated_at, \
+         failed_at) AS value FROM central_schema_migration_failures ORDER BY corpus",
+    ] {
+        state.extend(host.select(statement.to_owned()).await?);
+    }
+    state.extend(journal(host).await?);
+    Ok(state)
+}
+
+/// Today's rows as 0001/0002 code leaves them after real use: both operation
+/// ids set, and a legacy revocation that completed, with its step.
+async fn seed_legacy_history<Host: CaseHost>(host: &Host) -> CaseResult {
+    host.execute(format!(
+        "UPDATE machine_enrollments SET last_revocation_operation_id = '{}', \
+         last_enrollment_operation_id = '{}'",
+        uuid7(0x501),
+        uuid7(0x502)
+    ))
+    .await?;
+    host.execute(format!(
+        "INSERT INTO _fleet_sync_operations(operation_id, kind, kind_version, request_key, input, \
+         input_digest, state, result, failure, finished_at, next_attempt_at, attempt, drive_token, \
+         drive_until, created_at, updated_at) VALUES('{}', '{REVOKE_TASK_KIND}', 2, \
+         'legacy:completed', NULL, zeroblob(32), 'completed', X'6e756c6c', NULL, {NOW_MS}, NULL, 1, \
+         NULL, NULL, {NOW_MS}, {NOW_MS})",
+        uuid7(0x503)
+    ))
+    .await?;
+    host.execute(format!(
+        "INSERT INTO _fleet_sync_steps(id, operation_id, position, step_name, kind, intent, output, \
+         first_attempt_at, may_have_reached, created_at, updated_at) VALUES('{}', '{}', 0, \
+         'disable access', 'effect', NULL, X'01', {NOW_MS}, 1, {NOW_MS}, {NOW_MS})",
+        uuid7(0x504),
+        uuid7(0x503)
+    ))
+    .await?;
+    check!(
+        journal(host)
+            .await?
+            .iter()
+            .filter(|row| row.contains(&uuid7(0x503)))
+            .count()
+            == 2,
+        "the completed legacy revocation was not seeded"
+    );
+    Ok(())
 }
 
 pub(super) async fn todays_machines_convert_once<Host: CaseHost>(host: &Host) -> CaseResult {
@@ -51,9 +131,16 @@ pub(super) async fn todays_machines_convert_once<Host: CaseHost>(host: &Host) ->
         ),
     ])
     .await?;
+    seed_legacy_history(host).await?;
     let old_history = history(host).await?;
+    let old_journal = journal(host).await?;
 
     check_eq!(host.initialize_b3().await?, 2, "the switch");
+    check_eq!(
+        journal(host).await?,
+        old_journal,
+        "the completed journal history"
+    );
 
     // Ids, labels, former ids and exact-millisecond times are kept; the new
     // enrollment and allowance tables start empty; nothing else is written.
@@ -85,7 +172,7 @@ pub(super) async fn todays_machines_convert_once<Host: CaseHost>(host: &Host) ->
             .is_err(),
         "the Access columns survived the switch"
     );
-    // Versions 1 and 2 keep their checksums; 3 and 4 are recorded.
+    // Versions 1 and 2 keep every column; 3 and 4 are recorded.
     let new_history = history(host).await?;
     check_eq!(new_history.get(..2), old_history.get(..), "today's history");
     check_eq!(new_history.len(), 4, "the history's length");
@@ -97,6 +184,11 @@ pub(super) async fn todays_machines_convert_once<Host: CaseHost>(host: &Host) ->
         history(host).await?,
         new_history,
         "the history after a second switch"
+    );
+    check_eq!(
+        journal(host).await?,
+        old_journal,
+        "the completed journal history after a second switch"
     );
     Ok(())
 }
@@ -116,8 +208,8 @@ async fn conversion_refused<Host: CaseHost>(
     version: u64,
     cause: &str,
 ) -> CaseResult<String> {
-    let rows = legacy_rows(host).await?;
-    let old_history = history(host).await?;
+    seed_legacy_history(host).await?;
+    let before = old_state(host).await?;
 
     let Err(refused) = host.initialize_b3().await else {
         return Err(CaseFailure("the switch applied".to_owned()));
@@ -138,8 +230,11 @@ async fn conversion_refused<Host: CaseHost>(
         failure.reason
     );
 
-    check_eq!(legacy_rows(host).await?, rows, "today's machine rows");
-    check_eq!(history(host).await?, old_history, "today's history");
+    check_eq!(
+        old_state(host).await?,
+        before,
+        "today's schema, machine rows, history and journal"
+    );
     check!(
         host.select("SELECT id AS value FROM machine_installations".to_owned())
             .await
