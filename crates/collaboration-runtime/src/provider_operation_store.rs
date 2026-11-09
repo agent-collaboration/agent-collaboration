@@ -44,10 +44,39 @@ pub fn provider_operation_retention_cutoff_ms(
     }
     let now = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(now_ms)
         .ok_or(ProviderOperationStoreError::InvalidRecord)?;
-    let cutoff = now
-        .checked_sub_months(chrono::Months::new(PROVIDER_OPERATION_RETENTION_MONTHS))
-        .ok_or(ProviderOperationStoreError::InvalidRecord)?;
+    let cutoff =
+        sqlite_storage_maintenance::months_before(now, PROVIDER_OPERATION_RETENTION_MONTHS)
+            .ok_or(ProviderOperationStoreError::InvalidRecord)?;
     Ok(cutoff.timestamp_millis())
+}
+
+/// The first moment at or after `now_ms` when [`provider_operation_retention_cutoff_ms`]
+/// passes an operation that settled at `terminal_at_ms`: its cutoff must be strictly after
+/// the settlement.
+fn first_retention_ms(
+    terminal_at_ms: i64,
+    retention_days_override: Option<NonZeroU32>,
+    now_ms: i64,
+) -> Result<i64, ProviderOperationStoreError> {
+    if let Some(days) = retention_days_override {
+        return i64::from(days.get())
+            .checked_mul(24 * 60 * 60 * 1_000)
+            .and_then(|duration_ms| terminal_at_ms.checked_add(duration_ms))
+            .and_then(|cutoff_equals_stamp_ms| cutoff_equals_stamp_ms.checked_add(1))
+            .map(|first_ms| first_ms.max(now_ms))
+            .ok_or(ProviderOperationStoreError::InvalidRecord);
+    }
+    let moment = |millis: i64| {
+        chrono::DateTime::<chrono::Utc>::from_timestamp_millis(millis)
+            .ok_or(ProviderOperationStoreError::InvalidRecord)
+    };
+    sqlite_storage_maintenance::first_deletable_at(
+        moment(terminal_at_ms)?,
+        PROVIDER_OPERATION_RETENTION_MONTHS,
+        moment(now_ms)?,
+    )
+    .map(|due| due.timestamp_millis())
+    .ok_or(ProviderOperationStoreError::InvalidRecord)
 }
 const EXPECTED_COLUMNS: [&str; 14] = [
     "operation_id",
@@ -452,31 +481,85 @@ impl ProviderOperationStore {
         .await
     }
 
+    /// Terminal operations retention may delete, oldest first, settled before `before_ms`:
+    /// the one rule the prune deletes by and the due read arms by.
+    async fn retention_candidates(
+        &mut self,
+        before_ms: i64,
+        limit: i64,
+    ) -> Result<Vec<(OperationId, i64)>, ProviderOperationStoreError> {
+        sqlx::query!(
+            r#"SELECT operation_id, terminal_at_ms AS "terminal_at_ms!" FROM provider_operations
+             WHERE stage=? AND reconciliation_state!=? AND effect!=? AND terminal_at_ms<?
+             ORDER BY terminal_at_ms,operation_id LIMIT ?"#,
+            encode_enum(ProviderOperationStage::Terminal)?,
+            encode_enum(ProviderReconciliationState::Unresolved)?,
+            encode_enum(ProviderOperationEffect::Unknown)?,
+            before_ms,
+            limit,
+        )
+        .fetch_all(&mut self.connection)
+        .await?
+        .into_iter()
+        .map(|row| {
+            OperationId::try_from(row.operation_id)
+                .map(|operation_id| (operation_id, row.terminal_at_ms))
+                .map_err(|_| ProviderOperationStoreError::InvalidRecord)
+        })
+        .collect()
+    }
+
+    /// The first moment at or after `now_ms` when retention may delete an operation the
+    /// store holds now, or `None` when it holds none retention could ever delete. An
+    /// operation in `protected_operation_ids` is still live in the supervisor and is
+    /// skipped; the supervisor's completion signal tells the caller when that ends.
+    pub async fn retention_due_ms(
+        &mut self,
+        now_ms: i64,
+        retention_days_override: Option<NonZeroU32>,
+        protected_operation_ids: &HashSet<OperationId>,
+    ) -> Result<Option<i64>, ProviderOperationStoreError> {
+        if now_ms < 0 {
+            return Err(ProviderOperationStoreError::InvalidRecord);
+        }
+        // Only protected operations can come before the oldest one retention may take.
+        let limit = i64::try_from(protected_operation_ids.len())
+            .ok()
+            .and_then(|protected| protected.checked_add(1))
+            .ok_or(ProviderOperationStoreError::InvalidRecord)?;
+        self.retention_candidates(i64::MAX, limit)
+            .await?
+            .into_iter()
+            .find(|(operation_id, _)| !protected_operation_ids.contains(operation_id))
+            .map(|(_, terminal_at_ms)| {
+                first_retention_ms(terminal_at_ms, retention_days_override, now_ms)
+            })
+            .transpose()
+    }
+
     pub async fn prune_terminal_before(
         &mut self,
         cutoff_ms: i64,
         protected_operation_ids: &HashSet<OperationId>,
     ) -> Result<u64, ProviderOperationStoreError> {
-        let candidates = sqlx::query_scalar!(
-            "SELECT operation_id FROM provider_operations
-             WHERE stage=? AND reconciliation_state!=? AND effect!=? AND terminal_at_ms<?
-             ORDER BY terminal_at_ms,operation_id LIMIT ?",
-            encode_enum(ProviderOperationStage::Terminal)?,
-            encode_enum(ProviderReconciliationState::Unresolved)?,
-            encode_enum(ProviderOperationEffect::Unknown)?,
-            cutoff_ms,
-            RETENTION_BATCH_LIMIT,
-        )
-        .fetch_all(&mut self.connection)
-        .await?;
+        // Protected operations are read past, so they can never use up the batch: the
+        // operation the due read found is always among the candidates. A batch still
+        // removes at most RETENTION_BATCH_LIMIT operations.
+        let limit = i64::try_from(protected_operation_ids.len())
+            .ok()
+            .and_then(|protected| protected.checked_add(RETENTION_BATCH_LIMIT))
+            .ok_or(ProviderOperationStoreError::InvalidRecord)?;
+        let batch = usize::try_from(RETENTION_BATCH_LIMIT)
+            .map_err(|_| ProviderOperationStoreError::InvalidRecord)?;
+        let candidates = self.retention_candidates(cutoff_ms, limit).await?;
         let mut transaction = self.transaction(TransactionStart::Deferred).await?;
         let mut removed = 0_u64;
-        for operation_id in candidates {
-            let typed_id = OperationId::try_from(operation_id.clone())
-                .map_err(|_| ProviderOperationStoreError::InvalidRecord)?;
-            if protected_operation_ids.contains(&typed_id) {
-                continue;
-            }
+        for (typed_id, _) in candidates
+            .into_iter()
+            .filter(|(operation_id, _)| !protected_operation_ids.contains(operation_id))
+            .take(batch)
+        {
+            let operation_id = typed_id.as_str();
             removed = removed.saturating_add(
                 sqlx::query!(
                     "DELETE FROM provider_operations
