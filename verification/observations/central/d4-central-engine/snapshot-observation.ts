@@ -1,4 +1,4 @@
-/** S8 v3.6 and S10 views; raw responses remain the authoritative evidence. */
+/** S8 v3.7 and S10 views; raw responses remain the authoritative evidence. */
 import { z } from "zod";
 import {
   epochMillisecondsSchema,
@@ -55,16 +55,25 @@ const attemptSchema = z
     if (
       row.state === "in_flight" &&
       ["push", "status"].includes(row.kind) &&
-      (row.sendId === null ||
-        row.connectionId === null ||
-        row.sessionId === null ||
-        row.nextAttemptAt === null)
+      (row.connectionId === null || row.sessionId === null || row.nextAttemptAt === null)
     )
       context.addIssue({
         code: "custom",
-        message: "in_flight socket attempt lacks send/session/deadline",
+        message: "in_flight socket attempt lacks connection/session/deadline",
       });
-    if (row.kind === "status" && row.state === "in_flight" && row.sentVersion === null)
+    if (
+      row.state === "in_flight" &&
+      ["push", "status"].includes(row.kind) &&
+      row.sendId === null &&
+      row.sentVersion !== null
+    )
+      context.addIssue({ code: "custom", message: "Refused socket attempt has sentVersion" });
+    if (
+      row.kind === "status" &&
+      row.state === "in_flight" &&
+      row.sendId !== null &&
+      row.sentVersion === null
+    )
       context.addIssue({ code: "custom", message: "in_flight status lacks sentVersion" });
     if (row.kind !== "status" && row.sentVersion !== null)
       context.addIssue({ code: "custom", message: "non-status attempt has sentVersion" });

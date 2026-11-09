@@ -129,6 +129,30 @@ test("v3.6 windows cover exactly the current attached inventory, including zero 
   );
 });
 
+test("v3.7 Refused keeps a slot with no current send or version", (): void => {
+  for (const kind of ["push", "status"]) {
+    const refused = {
+      ...attempt(),
+      kind,
+      sendId: null,
+      sentVersion: null,
+      firstFailedAt: 1792281600000n,
+      lastErrorClass: "retryable_refusal",
+      lastError: "recipient mailbox full",
+    };
+    const decoded = parse({ ...snapshot(), attempts: [refused] });
+    assert.equal(decoded.attempts[0]?.sendId, null);
+    requireWindowSnapshotAgreement(decoded, new Map([[identity(4), 1n]]));
+    for (const broken of [
+      { connectionId: null },
+      { sessionId: null },
+      { nextAttemptAt: null },
+      { sentVersion: 1n },
+    ])
+      assert.throws(() => parse({ ...snapshot(), attempts: [{ ...refused, ...broken }] }));
+  }
+});
+
 test("literal snake_case attempt states, explicit null and exact versions survive wire decoding", (): void => {
   const value = snapshot();
   value.attempts.push({

@@ -90,21 +90,25 @@ test("answers free slots item by item and independent connections each have thei
 });
 
 test("retryable refusal retains the slot, a retry replaces its send id, and an old answer cannot release it", (): void => {
-  const observation = new SocketWindowObservation();
-  open(observation);
-  sendSingle(observation, 1);
-  observation.client(
-    "socket-a",
-    answer(1, { kind: "refused", value: { reason: { kind: "mailboxFull" } } }),
-  );
-  assert.equal(observation.snapshot().connections[0]?.current, 1);
-  sendSingle(observation, 1, 101);
-  observation.client("socket-a", answer(1));
-  assert.equal(observation.snapshot().connections[0]?.current, 1);
-  observation.client("socket-a", answer(101));
-  assert.equal(observation.snapshot().connections[0]?.current, 0);
-  assert.equal(observation.snapshot().staleAnswers, 1);
-  observation.requireWindow();
+  for (const retryable of [
+    { kind: "refused", value: { reason: { kind: "mailboxFull" } } },
+    { kind: "bindingUnavailable", value: { reason: "unavailable" } },
+  ]) {
+    const observation = new SocketWindowObservation();
+    open(observation);
+    sendSingle(observation, 1);
+    observation.client("socket-a", answer(1, retryable));
+    assert.equal(observation.snapshot().connections[0]?.current, 1);
+    observation.client("socket-a", answer(1));
+    assert.equal(observation.snapshot().connections[0]?.current, 1);
+    sendSingle(observation, 1, 101);
+    observation.client("socket-a", answer(1));
+    assert.equal(observation.snapshot().connections[0]?.current, 1);
+    observation.client("socket-a", answer(101));
+    assert.equal(observation.snapshot().connections[0]?.current, 0);
+    assert.equal(observation.snapshot().staleAnswers, 2);
+    observation.requireWindow();
+  }
 });
 
 test("status versions share a slot and a superseded version's answer is stale", (): void => {

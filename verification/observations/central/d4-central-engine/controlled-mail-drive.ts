@@ -5,6 +5,8 @@ import type { Receipt } from "../../../receipt.ts";
 import { encode, field, textField } from "../../../exact-json.ts";
 import { ControlledPeer } from "./controlled-peer.ts";
 import type { D4Snapshot } from "./snapshot-observation.ts";
+import type { D4ControlClient } from "./control-client.ts";
+import type { D4EventRecord } from "./event-observation.ts";
 
 export interface ControlledMailActor {
   readonly service: string;
@@ -215,9 +217,12 @@ export async function driveControlledMail(input: {
       (row) =>
         row.subject === firstItem &&
         row.state === "in_flight" &&
-        row.sendId === field(first, "value", "frame"),
+        row.sendId === null &&
+        row.sentVersion === null &&
+        row.connectionId === binding.connection &&
+        row.sessionId === binding.session,
     ),
-    "MailboxFull lost the original in-flight send binding",
+    "MailboxFull lost its Refused connection/session slot",
   );
   const cItem = await submit(a, c, "C continues during full B window", receipt);
   const cPush = await c.connection.receive(push);
@@ -245,4 +250,234 @@ export async function driveControlledMail(input: {
   assert.equal(field(pushValue(last), "item", "value", "id"), items[32]);
   await finishTerminalReport(a, b, firstItem, receipt, snapshot);
   if (reconstruct) await control({ kind: "rebuildAtQuiescence", value: { enabled: false } });
+}
+
+export type CompleteClientFrame = <TOutcome>(input: {
+  readonly peer: ControlledPeer;
+  readonly action: () => Promise<TOutcome>;
+}) => Promise<{ readonly outcome: TOutcome; readonly event: D4EventRecord }>;
+
+interface RefusalBackoffInput {
+  readonly sender: ControlledMailActor;
+  readonly recipient: ControlledMailActor;
+  readonly controls: D4ControlClient;
+  readonly receipt: Receipt;
+  /** Executes once and waits for the exact original client bytes' completed S1 event. */
+  readonly completeClientFrame: CompleteClientFrame;
+}
+
+type PushAttempt = D4Snapshot["attempts"][number];
+function findPushAttempt(snapshot: D4Snapshot, item: string): PushAttempt {
+  const matching = snapshot.attempts.filter((row) => row.kind === "push" && row.subject === item);
+  assert.equal(matching.length, 1, "expected one owning push attempt");
+  const row = matching[0];
+  assert.ok(row);
+  return row;
+}
+function requireHeldSlot(input: {
+  readonly snapshot: D4Snapshot;
+  readonly recipient: ControlledMailActor;
+  readonly row: PushAttempt;
+  readonly count: bigint;
+}): void {
+  const registrations = input.snapshot.sessions.filter(
+    (row) =>
+      row.peer === input.recipient.peer &&
+      row.session === input.recipient.connection.session &&
+      row.registration === "attached" &&
+      input.snapshot.inventory.includes(row.connection),
+  );
+  assert.equal(registrations.length, 1, "one actual attached recipient required");
+  const registration = registrations[0];
+  assert.ok(registration);
+  assert.equal(
+    input.snapshot.windows.find((row) => row.connection === registration.connection)?.inFlight,
+    input.count,
+  );
+  if (input.count > 0n) {
+    assert.equal(input.row.connectionId, registration.connection);
+    assert.equal(input.row.sessionId, registration.session);
+  }
+}
+function epochIso(milliseconds: bigint): string {
+  assert.ok(milliseconds >= 0n && milliseconds <= BigInt(Number.MAX_SAFE_INTEGER));
+  return new Date(Number(milliseconds)).toISOString();
+}
+async function backoffSnapshot(
+  input: RefusalBackoffInput,
+  item: string,
+  label: string,
+): Promise<{ snapshot: D4Snapshot; row: PushAttempt }> {
+  const snapshot = await input.controls.snapshot();
+  await input.receipt.save(`o3-${label}-snapshot.json`, snapshot);
+  return { snapshot, row: findPushAttempt(snapshot, item) };
+}
+async function proveStalePushAnswer(
+  input: RefusalBackoffInput & {
+    readonly item: string;
+    readonly sendId: string;
+    readonly label: string;
+    readonly unchanged: PushAttempt;
+  },
+): Promise<void> {
+  await input.completeClientFrame({
+    peer: input.recipient.connection,
+    action: async (): Promise<void> =>
+      input.recipient.connection.answer(input.sendId, {
+        kind: "crate",
+        value: { kind: "pushed", value: accepted() },
+      }),
+  });
+  const observed = await backoffSnapshot(input, input.item, input.label);
+  assert.deepEqual(observed.row, input.unchanged, "stale answer changed the owning attempt");
+  requireHeldSlot({ ...observed, recipient: input.recipient, count: 1n });
+  assert.equal(
+    observed.snapshot.owners.outbox.find((row) => row.item === input.item)?.custody,
+    "sent",
+  );
+}
+async function observeBackoffRetry(
+  input: RefusalBackoffInput & {
+    readonly item: string;
+    readonly previousSendId: string;
+    readonly callIdentity: unknown;
+    readonly firstFailedAt: bigint;
+    readonly expectedAttempts: bigint;
+    readonly expectedDelay: bigint;
+  },
+): Promise<{ readonly sendId: string; readonly row: PushAttempt }> {
+  const before = await input.controls.snapshot();
+  const deadline = findPushAttempt(before, input.item).nextAttemptAt;
+  assert.notEqual(deadline, null);
+  assert.ok(deadline !== null);
+  const now = deadline + 1n;
+  await input.receipt.record("o3ClockDrain", { now, expectedAttempts: input.expectedAttempts });
+  assert.ok((await input.controls.settleClock(epochIso(now))) > 0n, "no causal Alarm completed");
+  const frame = await input.recipient.connection.receive(push);
+  assert.equal(field(pushValue(frame), "item", "value", "id"), input.item);
+  assert.deepEqual(field(pushValue(frame), "call"), input.callIdentity);
+  const sendId = textField(frame, "value", "frame");
+  assert.notEqual(sendId, input.previousSendId, "retry reused a send id");
+  const observed = await backoffSnapshot(input, input.item, `retry-${input.expectedAttempts}`);
+  assert.equal(observed.row.state, "in_flight");
+  assert.equal(observed.row.sendId, sendId);
+  assert.equal(observed.row.sentVersion, null);
+  assert.equal(
+    observed.row.attempts,
+    input.expectedAttempts,
+    "silence failure count did not advance once",
+  );
+  assert.equal(observed.row.firstFailedAt, input.firstFailedAt);
+  assert.equal(
+    observed.row.nextAttemptAt,
+    now + input.expectedDelay,
+    "refusal followed by silence did not double backoff",
+  );
+  assert.equal(await input.controls.readAlarm(), observed.row.nextAttemptAt);
+  requireHeldSlot({ ...observed, recipient: input.recipient, count: 1n });
+  await proveStalePushAnswer({
+    ...input,
+    sendId: input.previousSendId,
+    label: `stale-${input.expectedAttempts}`,
+    unchanged: observed.row,
+  });
+  return { sendId, row: observed.row };
+}
+async function proveBackoffRetirement(
+  input: RefusalBackoffInput & { readonly item: string; readonly firstFailedAt: bigint },
+): Promise<bigint> {
+  const at = input.firstFailedAt + 86_400_000n;
+  await input.receipt.record("o3RetirementClockDrain", { at });
+  assert.ok((await input.controls.settleClock(epochIso(at))) > 0n);
+  const observed = await backoffSnapshot(input, input.item, "retired");
+  assert.equal(observed.row.state, "given_up", "24h failure history did not retire the attempt");
+  assert.equal(observed.row.firstFailedAt, input.firstFailedAt);
+  assert.equal(observed.row.nextAttemptAt, null);
+  assert.deepEqual(
+    [
+      observed.row.sendId,
+      observed.row.sentVersion,
+      observed.row.connectionId,
+      observed.row.sessionId,
+    ],
+    [null, null, null, null],
+  );
+  requireHeldSlot({ ...observed, recipient: input.recipient, count: 0n });
+  assert.equal(
+    observed.snapshot.owners.outbox.find((row) => row.item === input.item)?.custody,
+    "sent",
+  );
+  // The central slot retires without a wire answer. Raw-byte history alone
+  // cannot infer that transition; the final S8 cut is its separate evidence.
+  return at;
+}
+
+/** O3: real refused slot, fresh retries under silence and its 24h central retirement. */
+export async function driveRefusalSilenceBackoff(input: RefusalBackoffInput): Promise<{
+  readonly item: string;
+  readonly sendIds: readonly string[];
+  readonly firstFailedAt: bigint;
+  readonly retiredAt: bigint;
+  readonly runtimeQualified: false;
+}> {
+  const admitted = await input.completeClientFrame({
+    peer: input.sender.connection,
+    action: (): Promise<string> =>
+      submit(input.sender, input.recipient, "O3 refusal then silence", input.receipt),
+  });
+  const item = admitted.outcome;
+  const original = await input.recipient.connection.receive(push);
+  assert.equal(field(pushValue(original), "item", "value", "id"), item);
+  const originalSend = textField(original, "value", "frame"),
+    callIdentity = field(pushValue(original), "call");
+  const refusal = await input.completeClientFrame({
+    peer: input.recipient.connection,
+    action: async (): Promise<void> =>
+      answerPush(input.recipient.connection, original, {
+        kind: "refused",
+        value: { reason: { kind: "mailboxFull" } },
+      }),
+  });
+  const firstFailedAt = refusal.event.exitedAt;
+  const refused = await backoffSnapshot(input, item, "refused");
+  assert.equal(refused.row.state, "in_flight");
+  assert.equal(refused.row.sendId, null);
+  assert.equal(refused.row.sentVersion, null);
+  assert.equal(refused.row.attempts, 1n);
+  assert.equal(refused.row.firstFailedAt, firstFailedAt);
+  assert.equal(refused.row.lastErrorClass, "retryable_refusal");
+  assert.equal(refused.row.nextAttemptAt, firstFailedAt + 30_000n);
+  requireHeldSlot({ ...refused, recipient: input.recipient, count: 1n });
+  await proveStalePushAnswer({
+    ...input,
+    item,
+    sendId: originalSend,
+    label: "stale-before-resend",
+    unchanged: refused.row,
+  });
+  await input.controls.alarmDelivery(true);
+  const sendIds = [originalSend];
+  let previousSendId = originalSend;
+  for (const [expectedAttempts, expectedDelay] of [
+    [1n, 30_000n],
+    [2n, 60_000n],
+    [3n, 120_000n],
+  ] as const) {
+    const retry = await observeBackoffRetry({
+      ...input,
+      item,
+      previousSendId,
+      callIdentity,
+      firstFailedAt,
+      expectedAttempts,
+      expectedDelay,
+    });
+    sendIds.push(retry.sendId);
+    previousSendId = retry.sendId;
+  }
+  assert.equal(new Set(sendIds).size, 4);
+  const retiredAt = await proveBackoffRetirement({ ...input, item, firstFailedAt });
+  const observation = { item, sendIds, firstFailedAt, retiredAt, runtimeQualified: false as const };
+  await input.receipt.save("o3-observation.json", observation);
+  return observation;
 }

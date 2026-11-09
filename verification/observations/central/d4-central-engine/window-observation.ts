@@ -29,7 +29,7 @@ export type OwedSendBinding = z.infer<typeof owedSendBindingSchema>;
 interface WindowRequest {
   readonly subject: string;
   readonly kind: "push" | "publishStatus";
-  readonly sendId: string;
+  readonly send: { readonly kind: "sent"; readonly sendId: string } | { readonly kind: "refused" };
 }
 interface ConnectionWindow {
   active: boolean;
@@ -174,7 +174,7 @@ export class SocketWindowObservation {
     const previous = window.requests.get(key);
     if (previous !== undefined && (previous.subject !== binding.subject || previous.kind !== kind))
       throw new Error("attempt identity changed its subject or kind");
-    window.requests.set(key, { subject: binding.subject, kind, sendId });
+    window.requests.set(key, { subject: binding.subject, kind, send: { kind: "sent", sendId } });
     window.sends.set(sendId, key);
     window.sent += 1;
     window.peak = Math.max(window.peak, window.requests.size);
@@ -182,7 +182,7 @@ export class SocketWindowObservation {
   private answered(window: ConnectionWindow, sendId: string, body: unknown): void {
     const key = window.sends.get(sendId);
     const pending = key === undefined ? undefined : window.requests.get(key);
-    if (pending === undefined || pending.sendId !== sendId) {
+    if (pending === undefined || pending.send.kind !== "sent" || pending.send.sendId !== sendId) {
       this.staleAnswers += 1;
       return;
     }
@@ -214,6 +214,13 @@ export class SocketWindowObservation {
       }
     }
     if (finished && key !== undefined) window.requests.delete(key);
+    else if (key !== undefined)
+      // v3.7 retains the slot but makes its refused send immediately stale.
+      window.requests.set(key, {
+        subject: pending.subject,
+        kind: pending.kind,
+        send: { kind: "refused" },
+      });
   }
   snapshot(): SocketWindowSnapshot {
     const connections = [...this.connections].map(([connection, window]) => ({
