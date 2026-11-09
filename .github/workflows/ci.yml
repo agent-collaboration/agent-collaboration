@@ -322,7 +322,7 @@ jobs:
       - name: Build test binaries
         if: matrix.shard == 1
         run: |
-          cargo nextest archive --locked --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness --archive-file "$RUNNER_TEMP/workspace-tests.tar.zst"
+          cargo nextest archive --locked --workspace --features codex-router-cli/keychain-test-support,fleet-native-services/test-support,fleet-native-services/test-fault --exclude codex-router-quota-reset-test-harness --archive-file "$RUNNER_TEMP/workspace-tests.tar.zst"
           ls -l "$RUNNER_TEMP/workspace-tests.tar.zst"
           df -h /
       - name: Share test binaries with shard 2
@@ -340,7 +340,7 @@ jobs:
         run: |
           # Exercise private fixture setup under the ordinary Unix mask.
           umask 022
-          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E "$WORKSPACE_TEST_FILTER" --partition count:1/2
+          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support,fleet-native-services/test-support,fleet-native-services/test-fault --exclude codex-router-quota-reset-test-harness -E "$WORKSPACE_TEST_FILTER" --partition count:1/2
       # Shard 2 builds and runs the quota-reset harness and the default-port
       # cutover while shard 1 is still building. Each keeps its own package and
       # feature selection, and both finish before the archive lands in target/.
@@ -497,7 +497,7 @@ jobs:
   wasm:
     name: Central Worker build and local workerd conformance
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 38
     env:
       CARGO_TERM_COLOR: always
       RUST_TOOLCHAIN: 1.98.1
@@ -505,6 +505,8 @@ jobs:
       CARGO_PROFILE_TEST_DEBUG: "0"
       CARGO_INCREMENTAL: "0"
     steps:
+      - name: Start combined Worker proof clock
+        run: echo "CENTRAL_WORKER_JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
       - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -516,6 +518,7 @@ jobs:
           shared-key: wasm
           workspaces: |
             . -> target
+            crates/fleet-project-copy/tests/workerd -> target
           save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - uses: actions/setup-node@v4
         with:
@@ -525,22 +528,36 @@ jobs:
           package_json_file: verification/package.json
       - name: Install TypeScript bundle guard dependencies
         run: pnpm --dir verification install --frozen-lockfile
+      - name: Restore pinned Rust test tools
+        id: rust_tools
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            tmp/rust-tools/bin/cargo-nextest
+            tmp/rust-tools/bin/cargo-deny
+            tmp/rust-tools/bin/cargo-audit
+          key: ${{ runner.os }}-${{ runner.arch }}-rust-tools-${{ hashFiles('scripts/tooling/tool-versions.tsv', 'scripts/tooling/bootstrap-tools.sh', '.github/actions/install-ci-tools/action.yml', 'rust-toolchain.toml') }}
+      - name: Verify and install pinned Rust test tools
+        uses: ./.github/actions/install-ci-tools
+        with:
+          cache-hit: ${{ steps.rust_tools.outputs.cache-hit }}
       - name: Restore pinned Worker build tool
         id: worker_tools
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/central-worker-tools
-          key: ${{ runner.os }}-${{ runner.arch }}-worker-build-0.8.7-${{ env.RUST_TOOLCHAIN }}
+          key: ${{ runner.os }}-${{ runner.arch }}-worker-build-0.8.7-bindgen-0.2.129-${{ env.RUST_TOOLCHAIN }}
       # worker-build publishes no prebuilt release asset at this version.
       - name: Compile pinned Worker build tool
         if: steps.worker_tools.outputs.cache-hit != 'true'
-        run: cargo install worker-build --version 0.8.7 --locked --root "$RUNNER_TEMP/central-worker-tools"
+        run: |
+          cargo install worker-build --version 0.8.7 --locked --root "$RUNNER_TEMP/central-worker-tools"
+          cargo install wasm-bindgen-cli --version 0.2.129 --locked --root "$RUNNER_TEMP/central-worker-tools"
       - name: Install pinned local Worker tools
         run: |
           test "$("$RUNNER_TEMP/central-worker-tools/bin/worker-build" --version)" = '0.8.7'
           du -sb "$RUNNER_TEMP/central-worker-tools"
-          mkdir -p "$RUNNER_TEMP/central-node-tools"
-          pnpm --dir "$RUNNER_TEMP/central-node-tools" add --save-exact --allow-build workerd miniflare@5.20261012.0-beta
+          test "$("$RUNNER_TEMP/central-worker-tools/bin/wasm-bindgen" --version)" = 'wasm-bindgen 0.2.129'
           echo "$RUNNER_TEMP/central-worker-tools/bin" >> "$GITHUB_PATH"
       - name: Check the workspace wasm shell and portable test contract
         run: |
@@ -560,24 +577,31 @@ jobs:
           node verification/tooling/check-central-worker-bundle.ts faults
           for scenario in runtime-controls composed-copy-suite composed-transactions composed-numeric composed-fleet-conflict; do
             TIMEFORMAT=$'WORKERD_TEST\t%3R\tcomposed_scope_workerd/'"$scenario"
-            time cargo run --locked -p collaboration-central-tokio --features conformance --example composed_scope_workerd -- "$scenario" node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957
+            time cargo run --locked -p collaboration-central-tokio --features conformance --example composed_scope_workerd -- "$scenario" node "$GITHUB_WORKSPACE/verification/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957
           done
           for example in step_scope_workerd bootstrap_scope_workerd; do
             TIMEFORMAT=$'WORKERD_TEST\t%3R\t'"$example"
-            time cargo run --locked -p collaboration-central-tokio --features conformance --example "$example" -- node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$example" 8957
+            time cargo run --locked -p collaboration-central-tokio --features conformance --example "$example" -- node "$GITHUB_WORKSPACE/verification/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$example" 8957
           done
       - name: Prove bounded normal Access and session cases
         run: |
           for scenario in access-sessions access-carryover session-carryover; do
             TIMEFORMAT=$'WORKERD_TEST\t%3R\tsession_scope_workerd/'"$scenario"
-            time cargo run --locked -p collaboration-central-tokio --features conformance --example session_scope_workerd -- node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957 "$scenario"
+            time cargo run --locked -p collaboration-central-tokio --features conformance --example session_scope_workerd -- node "$GITHUB_WORKSPACE/verification/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957 "$scenario"
           done
       - name: Prove forwarding and mailbox rules on workerd
         run: |
           for scenario in forward-boundary forward-overlap forward-state forward-terminal forward-real-timer mailbox-identity mailbox-capacity mailbox-cancel fleet-mail-expiry mailbox-held-retention mailbox-report-terminal; do
             TIMEFORMAT=$'WORKERD_TEST\t%3R\tsession_scope_workerd/'"$scenario"
-            time cargo run --locked -p collaboration-central-tokio --features conformance --example session_scope_workerd -- node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957 "$scenario"
+            time cargo run --locked -p collaboration-central-tokio --features conformance --example session_scope_workerd -- node "$GITHUB_WORKSPACE/verification/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957 "$scenario"
           done
+      - name: Prove all fleet adapter and raw SQL controls on workerd
+        env:
+          WASM_BINDGEN: ${{ runner.temp }}/central-worker-tools/bin/wasm-bindgen
+        run: |
+          cargo fmt --manifest-path crates/fleet-project-copy/tests/workerd/Cargo.toml -- --check
+          cargo clippy --locked --manifest-path crates/fleet-project-copy/tests/workerd/Cargo.toml --target wasm32-unknown-unknown -- -D warnings
+          node verification/tooling/run-fleet-workerd.ts "$RUNNER_TEMP/fleet-workerd-evidence"
       - name: Build the deployment candidate without test features
         run: |
           worker-build crates/collaboration-central-cloudflare --profile worker-release --no-opt -- --locked --no-default-features
@@ -588,6 +612,22 @@ jobs:
         with:
           path: ${{ runner.temp }}/central-worker-tools
           key: ${{ steps.worker_tools.outputs.cache-primary-key }}
+
+      - name: Record combined Worker proof duration
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/fleet-workerd-evidence"
+          worker_job_elapsed=$(( $(date +%s) - CENTRAL_WORKER_JOB_STARTED_AT ))
+          printf '{"proofPhaseElapsedSeconds":%s,"toolCacheHit":"%s","scope":"Use completed GitHub job start/end timestamps for whole-job cold/warm timing"}\n' "$worker_job_elapsed" '${{ steps.worker_tools.outputs.cache-hit }}' > "$RUNNER_TEMP/fleet-workerd-evidence/combined-job-timing.json"
+          printf 'Central and fleet workerd proof phase: %s seconds; tool cache hit: %s. Whole-job timing uses completed GitHub job timestamps.\n' "$worker_job_elapsed" '${{ steps.worker_tools.outputs.cache-hit }}' >> "$GITHUB_STEP_SUMMARY"
+          test "$worker_job_elapsed" -le 1800
+      - name: Retain fleet cases and combined Worker timing
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fleet-workerd-cases-and-job-timing
+          path: ${{ runner.temp }}/fleet-workerd-evidence
+          if-no-files-found: error
 
   prune-caches:
     name: Prune superseded main caches

@@ -1,6 +1,12 @@
 [profile.default]
 retries = 0
 
+# Retained consumer children keep their semantic deadlines apart from host load.
+[[profile.ci.overrides]]
+filter = "package(=fleet-native-services) & binary(=e2e)"
+test-group = "process-runtime"
+threads-required = "num-test-threads"
+
 [profile.ci]
 test-threads = "num-cpus"
 fail-fast = false

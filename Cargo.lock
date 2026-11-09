@@ -2980,9 +2980,11 @@ dependencies = [
  "fleet-native-writer",
  "fleet-project-copy",
  "fleet-project-lease",
+ "fleet-project-writer",
  "fleet-protocol",
  "fleet-session",
  "fleet-session-client",
+ "fleet-sync-query-gen",
  "fleet-tokio-objects",
  "fleet-websocket-transport",
  "runtime-primitives",
@@ -3170,7 +3172,11 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sqlx-core",
+ "sqlx-turso",
  "thiserror 2.0.18",
+ "tokio",
+ "turso_parser",
 ]
 
 [[package]]

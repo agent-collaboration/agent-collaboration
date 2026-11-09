@@ -1,0 +1,43 @@
+{
+  "sourceRevision": "b9470dcbfc177afc061203365b6bd6edbec35aa1",
+  "rename": ["warm_rename", "reopened_rename", "fresh_rename", "fresh_chain", "dropped_local"],
+  "certainty": [
+    "rollbackAfterApply",
+    "lostRollbackReply",
+    "lostCommitReply",
+    "unknownRollbackCode"
+  ],
+  "foreignKeys": [
+    "child-page-before-parent",
+    "orphan-seed-rollback",
+    "affinity-seed-text-integer-valid",
+    "affinity-apply-text-integer-valid",
+    "affinity-seed-text-integer-orphan",
+    "affinity-apply-text-integer-orphan",
+    "affinity-seed-numeric-text-valid",
+    "affinity-apply-numeric-text-valid",
+    "affinity-seed-numeric-text-orphan",
+    "affinity-apply-numeric-text-orphan",
+    "affinity-seed-blob-integer-orphan",
+    "affinity-apply-blob-integer-orphan",
+    "affinity-seed-blob-integer-valid",
+    "affinity-apply-blob-integer-valid",
+    "affinity-seed-parent-collation-valid",
+    "affinity-apply-parent-collation-valid",
+    "apply-NO-ACTION-false",
+    "apply-NO-ACTION-true",
+    "apply-RESTRICT-false",
+    "apply-RESTRICT-true",
+    "nullable-composite-and-self-reference",
+    "real-writer-captured-order"
+  ],
+  "migrationSql": [
+    "delivery/fresh",
+    "delivery/v0.4.0",
+    "delivery/typed-intermediate",
+    "lease/fresh",
+    "lease/v0.4.0",
+    "session/fresh",
+    "session/v0.4.0"
+  ]
+}
