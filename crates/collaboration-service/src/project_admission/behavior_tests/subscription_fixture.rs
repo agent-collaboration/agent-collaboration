@@ -43,7 +43,7 @@ impl SubscriptionFixture {
         let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
             registry: registry.clone(),
             fleet: Arc::new(FleetClient::new(
-                message_board_storage::FleetStore::open(
+                &message_board_storage::FleetStore::open(
                     &(directory.path()).join(message_board_storage::FleetStore::FILE_NAME),
                 )
                 .await?,

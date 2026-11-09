@@ -129,7 +129,7 @@ async fn an_acknowledged_remote_handoff_is_published_without_another_board_write
     board.attach_publisher(&publisher);
     let app = (identity.with_notification_publisher(publisher.clone())).build();
     let (piece_entered, release_piece) = central.notifications.hold_next_piece().await?;
-    let running = board.start().ok_or("session start")?;
+    let running = board.start().session.ok_or("session start")?;
     wait_welcome(welcomed).await?;
     timeout(BOUND, piece_entered)
         .await

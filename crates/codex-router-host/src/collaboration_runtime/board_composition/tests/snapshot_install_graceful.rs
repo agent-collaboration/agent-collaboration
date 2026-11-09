@@ -151,7 +151,15 @@ async fn stop_held_install(
             .parse()?,
     );
     let installed = timeout(BOUND, database.wait_bootstrap_published()).await??;
-    let session_store = board_fleet_sync::MachineSessionStore::open(&inputs.root).await?;
+    let session_store = board_fleet_sync::MachineSessionStore::from_cache(std::sync::Arc::new(
+        message_board_storage::FleetStore::open(
+            &inputs
+                .root
+                .join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await?
+        .cache(),
+    ));
     timeout(BOUND, async {
         loop {
             if session_store
@@ -230,6 +238,9 @@ async fn resume_and_post(
         grant.epoch.value(),
     )
     .await?;
+    let owner = projects.ensure(project).await?;
+    assert!(Arc::ptr_eq(&owner.store, &store));
+    drop(owner);
     eprintln!("RECEIVING_RESTART_STAGE phase=receive-graceful-resume stage=project-ready");
     let database = registry.database(project).await?;
     let receipt = database
@@ -246,6 +257,7 @@ async fn resume_and_post(
         record.status,
         fleet_sync_tokio_runner::InstallStatus::Ready { .. }
     ));
+    timeout(BOUND, projects.settle_operations()).await??;
     emit(
         "CLAIM_RESTART_READY ",
         serde_json::json!({"record":record,"start":receipt.install.position,"epoch":grant.epoch.value(),"verified":receipt.verified,"ready":receipt.ready,"receivingOnly":true}),

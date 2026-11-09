@@ -287,7 +287,7 @@ async fn failed_history_replay_never_sends_session_load() {
 
     assert!(matches!(
         result,
-        Err(ExternalProviderRuntimeError::HistoryReplayUnavailable)
+        Err(ExternalProviderRuntimeError::HistoryReplayAdmissionFailed)
     ));
     assert!(!marker.with_extension("early").exists(), "no ACP load sent");
 }

@@ -556,6 +556,11 @@ impl CollaborationClient {
                 "installation identity belongs to another Router",
             ));
         }
+        if identity.central.record().is_some_and(|link| {
+            !link.is_valid() || link.peer.to_string() != identity.peer_id.as_str()
+        }) {
+            return Err(ClientError::Protocol("invalid central link record"));
+        }
         Ok(identity)
     }
 }

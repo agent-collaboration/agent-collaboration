@@ -26,6 +26,7 @@ mod local_automation_pushes;
 mod local_cancel_deliveries;
 mod local_delivery_retries;
 mod mail_delivery_observations;
+mod stuck_sent_mail;
 pub use local_cancel_deliveries::{
     LocalCancelDelivery, LocalCancelPreparation, delete_tentative_local_cancel_in_scope,
     prepare_local_cancel_in_scope, read_local_cancel_in_scope,

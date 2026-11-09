@@ -52,6 +52,7 @@ name = "integration"
 path = "tests/integration/main.rs"
 
 [dev-dependencies]
+node-test-fixture = { version = "0.1.105", path = "../node-test-fixture" }
 sqlx = { workspace = true, features = ["sqlite"] }
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
 axum = { workspace = true, features = ["http1", "tokio", "json"] }

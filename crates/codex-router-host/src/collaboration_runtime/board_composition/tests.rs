@@ -9,6 +9,16 @@ use message_board::*;
 use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, path::Path, sync::atomic::Ordering};
 use tokio::{sync::watch, time::timeout};
+#[path = "tests/install_attempt_completion_test.rs"]
+mod install_attempt_completion_test;
+#[path = "tests/install_attempt_observer.rs"]
+mod install_attempt_observer;
+pub(super) use install_attempt_observer::{
+    attempt_bytes, attempt_count, attempt_key, attempt_record,
+};
+#[path = "tests/cache_write_failure.rs"]
+mod cache_write_failure;
+use cache_write_failure::{CacheWriteFailure, CacheWriteTarget};
 
 #[path = "tests/archive_observation.rs"]
 mod archive_observation;
@@ -32,6 +42,8 @@ mod claim_refusals;
 mod claim_restart;
 #[path = "tests/directory_inputs.rs"]
 mod directory_inputs;
+#[path = "tests/duplicate_machine_identity.rs"]
+mod duplicate_machine_identity;
 #[cfg(feature = "runtime-test-support")]
 #[path = "tests/forwarded_notification_fixture.rs"]
 mod forwarded_notification_fixture;
@@ -60,6 +72,8 @@ mod reenrollment_projects;
 #[cfg(feature = "runtime-test-support")]
 #[path = "tests/returning_holder_expiry.rs"]
 mod returning_holder_expiry;
+#[path = "tests/shared_fleet_store_close.rs"]
+mod shared_fleet_store_close;
 #[path = "tests/snapshot_restart.rs"]
 mod snapshot_restart;
 use super::fleet_service::{BOUND, TestFleet};
@@ -209,17 +223,22 @@ async fn a_machine_session_resumes_its_identity_without_bootstrapping_a_project(
         .welcomed
         .subscribe();
     let admission = board.admission.clone();
-    let running = board.start().ok_or("session not started")?;
+    let running = board.start().session.ok_or("session not started")?;
     timeout(BOUND, service.auth.entered.notified()).await?;
     assert!(!root.join("projects").exists());
     service.release()?;
     wait_welcome(ready).await?;
-    let original = board_fleet_sync::MachineSessionStore::open(&root)
+    let original = board_fleet_sync::MachineSessionStore::from_cache(std::sync::Arc::new(
+        message_board_storage::FleetStore::open(
+            &root.join(message_board_storage::FleetStore::FILE_NAME),
+        )
         .await?
-        .load()
-        .await?
-        .ok_or("session not saved")?
-        .session_id;
+        .cache(),
+    ))
+    .load()
+    .await?
+    .ok_or("session not saved")?
+    .session_id;
     assert!(!root.join("projects").exists());
     running.shutdown().await?;
     Arc::try_unwrap(admission)
@@ -235,13 +254,18 @@ async fn a_machine_session_resumes_its_identity_without_bootstrapping_a_project(
         .welcomed
         .subscribe();
     let admission = board.admission.clone();
-    let running = board.start().ok_or("resumed session not started")?;
+    let running = board.start().session.ok_or("resumed session not started")?;
     wait_welcome(ready).await?;
-    let resumed = board_fleet_sync::MachineSessionStore::open(&root)
+    let resumed = board_fleet_sync::MachineSessionStore::from_cache(std::sync::Arc::new(
+        message_board_storage::FleetStore::open(
+            &root.join(message_board_storage::FleetStore::FILE_NAME),
+        )
         .await?
-        .load()
-        .await?
-        .ok_or("resumed state missing")?;
+        .cache(),
+    ))
+    .load()
+    .await?
+    .ok_or("resumed state missing")?;
     assert_eq!(resumed.session_id, original);
     assert_eq!(service.auth.upgrades.load(Ordering::SeqCst), 2);
     assert!(!root.join("projects").exists());
@@ -293,7 +317,7 @@ async fn accepted_directory_registration_waits_for_welcome_and_grant_before_the_
         "directory request created a native file"
     );
     let admission = board.admission.clone();
-    let running = board.start().ok_or("session not started")?;
+    let running = board.start().session.ok_or("session not started")?;
     timeout(BOUND, service.auth.entered.notified()).await?;
     assert_eq!(
         settle_fixture_directory(&fleet, &request).await?,
@@ -503,7 +527,7 @@ async fn assert_native_registration_refusal(cleanup_first: bool) -> TestResult {
     let project_directory = root.join("projects").join(request.project_id.as_str());
     assert!(!project_directory.exists());
     let admission = board.admission.clone();
-    let running = board.start().ok_or("session not started")?;
+    let running = board.start().session.ok_or("session not started")?;
     timeout(BOUND, service.auth.entered.notified())
         .await
         .map_err(|error| io::Error::other(format!("Host never reached authentication: {error}")))?;
@@ -602,14 +626,11 @@ async fn assert_native_registration_refusal(cleanup_first: bool) -> TestResult {
     assert_eq!(durable_file_hashes(&moved)?, before);
     // A separate caller owns its synchronization lease, so the background
     // refresh cannot make this error assertion pass through coalescing.
-    let refresh = FleetClient::new(
-        message_board_storage::FleetStore::open(
-            &root.join(message_board_storage::FleetStore::FILE_NAME),
-        )
-        .await?,
-        projects.clone(),
-        Some(requests),
-    );
+    let refresh_store = message_board_storage::FleetStore::open(
+        &root.join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?;
+    let refresh = FleetClient::new(&refresh_store, projects.clone(), Some(requests));
     assert!(
         matches!(
             refresh.synchronize().await,
@@ -619,7 +640,8 @@ async fn assert_native_registration_refusal(cleanup_first: bool) -> TestResult {
         ),
         "the real rejected Read must remain an error after durable recovery"
     );
-    refresh.close().await;
+    drop(refresh);
+    refresh_store.close().await;
     drop(database);
     drop(writer);
     drop(fleet);
@@ -640,6 +662,7 @@ async fn assert_native_registration_refusal(cleanup_first: bool) -> TestResult {
     let admission = board.admission.clone();
     board
         .start()
+        .session
         .ok_or("resumed session missing")?
         .shutdown()
         .await?;

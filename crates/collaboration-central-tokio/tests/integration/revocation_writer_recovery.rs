@@ -245,7 +245,13 @@ async fn run_recovery(case: RecoveryCase) -> ConformanceResult<()> {
     let state_dir = root.path().join("machine");
     let session = SessionClient::<_, _, BoardConsumerProtocol>::load(
         transport,
-        MachineSessionStore::open(&state_dir).await?,
+        MachineSessionStore::from_cache(std::sync::Arc::new(
+            message_board_storage::FleetStore::open(
+                &state_dir.join(message_board_storage::FleetStore::FILE_NAME),
+            )
+            .await?
+            .cache(),
+        )),
         &UuidV7Ids,
         SchemaSupport { max_version: 7 },
         Backoff {
@@ -363,8 +369,8 @@ async fn run_recovery(case: RecoveryCase) -> ConformanceResult<()> {
     control(base, RevocationControl::ReleaseDelivery).await?;
     tokio::time::timeout(BOUND, revoke).await???;
     let terminal = tokio::time::timeout(BOUND, pump_task).await??;
-    if !matches!(terminal, Err(fleet_sync_session::ClientError::SessionEnded)) {
-        return Err(format!("pump did not terminate on revoke: {terminal:?}").into());
+    if !matches!(terminal, Err(fleet_sync_session::ClientError::Revoked)) {
+        return Err(format!("pump did not return terminal Revoked: {terminal:?}").into());
     }
     stop.send_replace(true);
     tokio::time::timeout(BOUND, runner_task).await???;
@@ -399,7 +405,13 @@ async fn run_recovery(case: RecoveryCase) -> ConformanceResult<()> {
     .await??;
     let mut session = SessionClient::<_, _, BoardConsumerProtocol>::load(
         transport::FixtureTransport::default(),
-        MachineSessionStore::open(&state_dir).await?,
+        MachineSessionStore::from_cache(std::sync::Arc::new(
+            message_board_storage::FleetStore::open(
+                &state_dir.join(message_board_storage::FleetStore::FILE_NAME),
+            )
+            .await?
+            .cache(),
+        )),
         &UuidV7Ids,
         SchemaSupport { max_version: 7 },
         Backoff {

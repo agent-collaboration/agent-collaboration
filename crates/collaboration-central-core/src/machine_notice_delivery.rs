@@ -102,9 +102,11 @@ where
                             .await
                             .map_err(StoreError::backend)?;
                             scope.stage_transport(effects, None)?;
-                        }
-                        if let Some(at) = crate::machine_notice_store::next_expiry(scope).await? {
-                            scope.ensure_wake(at).await?;
+                            if let Some(at) =
+                                crate::machine_notice_store::next_expiry(scope, peer).await?
+                            {
+                                scope.ensure_wake(at).await?;
+                            }
                         }
                         Ok(())
                     })

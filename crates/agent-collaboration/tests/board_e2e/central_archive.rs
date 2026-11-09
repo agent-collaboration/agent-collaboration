@@ -5,6 +5,7 @@ use super::{
     fixture::{BoardFixture, at, fields, header, identity},
 };
 use codex_router_test_support::FixtureResult;
+use message_board_storage::{MachineNoticeProgressObservation, observe_machine_notice_progress};
 use serde_json::{Value, json};
 use std::{path::Path, time::Duration};
 
@@ -16,7 +17,7 @@ pub async fn archive(fixture: &mut BoardFixture, reader: &mut SecondHost) -> Fix
         .await?;
     let view = settled_view(fixture.host()?, &fixture.project).await?;
     await_view(reader.host()?, &fixture.project, at(&view, "/asOf")?).await?;
-    let before = notice_position(&reader.directory)?;
+    let before = await_notice_progress(&reader.directory, None).await?;
     let empty = identity();
     fixture
         .accept(
@@ -43,30 +44,26 @@ pub async fn archive(fixture: &mut BoardFixture, reader: &mut SecondHost) -> Fix
         )
         .await?;
     await_archived(reader, &fixture.board).await?;
-    let after = tokio::time::timeout(Duration::from_secs(30), async {
-        loop {
-            let position = notice_position(&reader.directory)?;
-            if position > before {
-                return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(position);
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await??;
+    let after = await_notice_progress(&reader.directory, Some(before)).await?;
     assert!(
         after > before,
         "native notice progress must advance durably"
     );
+    println!("BC03 canonical handled notice progress advanced {before} -> {after}");
     let archived = work_view(reader.host()?, &fixture.project).await?;
     assert_eq!(archived.get("workstreams"), view.get("workstreams"));
     assert_eq!(archived.get("source"), Some(&json!({"kind":"readCopy"})));
     let post = archived_post(reader, &fixture.project, at(&request, "/postId")?).await?;
     let stopped = reader.stop_for_readback().await?;
-    let durable = notice_position(stopped.directory())?;
+    let durable = notice_position(stopped.directory())
+        .await?
+        .ok_or("joined Host has no canonical notice-progress row")?;
     drop(stopped);
     reader.reopen_host().await?;
     await_archived(reader, &fixture.board).await?;
-    assert!(notice_position(&reader.directory)? >= durable);
+    let reopened_progress = await_notice_progress(&reader.directory, None).await?;
+    assert!(reopened_progress >= durable);
+    println!("BC03 owning reopen retained handled progress {durable} -> {reopened_progress}");
     await_view(reader.host()?, &fixture.project, at(&archived, "/asOf")?).await?;
     let reopened = archived_post(reader, &fixture.project, at(&request, "/postId")?).await?;
     assert_eq!(reopened, post);
@@ -114,18 +111,34 @@ async fn await_archived(reader: &SecondHost, board: &str) -> FixtureResult<Value
     .await?
 }
 
-fn notice_position(directory: &Path) -> FixtureResult<u64> {
-    let path = directory.join("machine-session/machine-notice-progress.json");
-    match std::fs::read(path) {
-        Ok(bytes) => {
-            let progress: Value = serde_json::from_slice(&bytes)?;
-            let position = at(&progress, "/handledThrough")?;
-            if let Some(number) = position.as_u64() {
-                return Ok(number);
-            }
-            Ok(position.as_str().ok_or("notice position absent")?.parse()?)
+async fn notice_position(directory: &Path) -> FixtureResult<Option<u64>> {
+    match observe_machine_notice_progress(
+        &directory.join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?
+    {
+        MachineNoticeProgressObservation::NotYet => Ok(None),
+        MachineNoticeProgressObservation::Present { handled_through } => {
+            Ok(Some(handled_through.value()))
         }
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(0),
-        Err(error) => Err(error.into()),
     }
+}
+
+async fn await_notice_progress(directory: &Path, after: Option<u64>) -> FixtureResult<u64> {
+    let mut last = None;
+    tokio::time::timeout(Duration::from_secs(30), async {
+        loop {
+            last = notice_position(directory).await?;
+            if let Some(position) = last
+                && after.is_none_or(|previous| position > previous)
+            {
+                return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(position);
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .map_err(|error| {
+        format!("canonical notice progress did not advance after {after:?}; last={last:?}: {error}")
+    })?
 }

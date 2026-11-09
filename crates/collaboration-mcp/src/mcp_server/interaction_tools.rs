@@ -94,7 +94,7 @@ impl CollaborationMcpServer {
         &self,
         Parameters(request): Parameters<ConversationResumeRequest>,
     ) -> CallToolResult {
-        application_result(
+        typed_failure_result::<collaboration_protocol::ConversationOperationFailure, _, _>(
             self.application
                 .conversations()
                 .conversation_resume(request)
@@ -108,7 +108,7 @@ impl CollaborationMcpServer {
         &self,
         Parameters(request): Parameters<ConversationCloseRequest>,
     ) -> CallToolResult {
-        application_result(
+        typed_failure_result::<collaboration_protocol::ConversationOperationFailure, _, _>(
             self.application
                 .conversations()
                 .conversation_close(request)

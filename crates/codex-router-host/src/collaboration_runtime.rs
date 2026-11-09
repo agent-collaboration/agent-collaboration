@@ -12,6 +12,8 @@ use collaboration_runtime::new_service_uuid;
 use std::{io, net::SocketAddr, path::PathBuf};
 use tokio::task::JoinSet;
 use tokio_util::sync::CancellationToken;
+#[path = "collaboration_runtime/fleet_observation.rs"]
+mod fleet_observation;
 
 pub struct CollaborationRuntimeInputs {
     /// Enrollment/configuration supplies inputs; this Host owns the session itself.
@@ -110,6 +112,8 @@ pub enum CollaborationFailure {
     TailnetExposure(#[source] io::Error),
 }
 pub struct CollaborationRuntime {
+    fleet_link: board_fleet_sync::FleetLinkObservation,
+    interactions: std::sync::Weak<interaction_storage::InteractionStore>,
     #[cfg(test)]
     startup_test_mail: Option<std::sync::Weak<collaboration_service::MailDeliveryRuntime>>,
     #[cfg(test)]
@@ -120,6 +124,8 @@ pub struct CollaborationRuntime {
     runtime_test_mail: Option<std::sync::Weak<collaboration_service::MailDeliveryRuntime>>,
     notification_publisher: Option<std::sync::Arc<collaboration_service::NotificationPublisher>>,
     board_session: Option<board_composition::RunningMachineSession>,
+    /// The Host's one Fleet database, closed after every user of its connection stops.
+    fleet_store: Option<message_board_storage::FleetStore>,
     owner_human_id: Option<message_board::HumanId>,
     project_admission: Option<std::sync::Arc<collaboration_service::ProjectAdmission>>,
     subscription_delivery: Option<collaboration_service::SubscriptionDeliveryService>,
@@ -157,7 +163,16 @@ pub struct CollaborationRuntime {
     collaboration_api: ServedCollaborationApi,
     tailscale_exposure: Option<crate::tailscale_exposure::TailscaleExposure>,
 }
+pub(crate) use fleet_observation::FleetObservationFuture;
+
 impl CollaborationRuntime {
+    pub(crate) fn observe_fleet(&self) -> FleetObservationFuture {
+        let link = self.fleet_link.clone();
+        let interactions = self.interactions.clone();
+        Box::pin(
+            async move { fleet_observation::observe_fleet_sources(&link, &interactions).await },
+        )
+    }
     pub(crate) const fn mcp_listen_address(&self) -> std::net::SocketAddr {
         self.collaboration_api.local_address()
     }

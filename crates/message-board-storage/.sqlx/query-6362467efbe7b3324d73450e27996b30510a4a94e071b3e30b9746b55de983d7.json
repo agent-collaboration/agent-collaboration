@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "UPDATE fleet_session SET handled_through = ?, updated_at = ?",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "6362467efbe7b3324d73450e27996b30510a4a94e071b3e30b9746b55de983d7"
+}

@@ -36,6 +36,8 @@ mod central_read_copy;
 mod fleet_service;
 #[path = "board_composition/install_attempts.rs"]
 mod install_attempts;
+#[path = "board_composition/machine_link.rs"]
+mod machine_link;
 #[path = "board_composition/machine_notice_reactions.rs"]
 mod machine_notice_reactions;
 #[path = "board_composition/machine_session.rs"]
@@ -63,6 +65,11 @@ mod tests;
 pub(super) use machine_session::RunningMachineSession;
 
 pub(super) struct BoardComposition {
+    /// The Host's one Fleet database. The link owner, the session and progress
+    /// stores and the Fleet client hold views; the runtime closes it last.
+    fleet_store: FleetStore,
+    link: board_fleet_sync::FleetLinkObservation,
+    link_tasks: tokio::task::JoinSet<io::Result<()>>,
     pub admission: Arc<ProjectAdmission>,
     pub replication: Option<Arc<dyn ProjectReplicationPosition>>,
     pub claim: Option<Arc<dyn collaboration_contracts::ProjectClaim>>,
@@ -73,6 +80,9 @@ pub(super) struct BoardComposition {
 }
 
 impl BoardComposition {
+    pub fn link_observation(&self) -> board_fleet_sync::FleetLinkObservation {
+        self.link.clone()
+    }
     pub fn fleet_client(&self) -> Option<Arc<FleetClient>> {
         self.fleet.upgrade()
     }
@@ -94,16 +104,28 @@ impl BoardComposition {
         self.publisher = Arc::downgrade(publisher);
     }
 
-    pub fn start(self) -> Option<RunningMachineSession> {
-        self.session.map(|session| {
+    pub fn start(self) -> StartedBoard {
+        let session = self.session.map(|session| {
             session.start(
                 Arc::downgrade(&self.admission),
                 self.fleet,
                 self.mail,
                 self.publisher,
+                self.link_tasks,
             )
-        })
+        });
+        StartedBoard {
+            session,
+            fleet_store: self.fleet_store,
+        }
     }
+}
+
+/// A started board: its running session, and the Fleet database its owner closes
+/// after that session and every other user of the connection have stopped.
+pub(super) struct StartedBoard {
+    pub session: Option<RunningMachineSession>,
+    pub fleet_store: FleetStore,
 }
 
 // No session is constructed for the production None input. Directory decisions
@@ -136,15 +158,128 @@ pub(super) async fn open_board_admission(
     session_inputs: Option<BoardSessionInputs>,
 ) -> io::Result<BoardComposition> {
     crate::enrollment_reset::resume_enrollment_reset(directory, directory).await?;
-    open_board_admission_with_enrollment(directory, identity, session_inputs, directory).await
+    Box::pin(open_board_admission_with_enrollment(
+        directory,
+        identity,
+        session_inputs,
+        directory,
+    ))
+    .await
 }
 
+#[cfg(test)]
 pub(super) async fn open_board_admission_with_enrollment(
     directory: &Path,
     identity: MachineIdentity,
     session_inputs: Option<BoardSessionInputs>,
     enrollment_directory: &Path,
 ) -> io::Result<BoardComposition> {
+    Box::pin(open_observed_board_admission(
+        directory,
+        identity,
+        session_inputs,
+        enrollment_directory,
+    ))
+    .await
+    .0
+}
+
+pub(super) async fn open_observed_board_admission(
+    directory: &Path,
+    identity: MachineIdentity,
+    session_inputs: Option<BoardSessionInputs>,
+    enrollment_directory: &Path,
+) -> (
+    io::Result<BoardComposition>,
+    board_fleet_sync::FleetLinkObservation,
+) {
+    use board_fleet_sync::FleetLinkObservation;
+    // The Host's one Fleet database opens first; every user below gets a view of it.
+    let fleet_store = match FleetStore::open(&directory.join(FleetStore::FILE_NAME)).await {
+        Ok(store) => store,
+        Err(error) => {
+            let error = io::Error::other(error);
+            tracing::error!(event = "fleet.link.preparationFailed", %error, "Fleet database unavailable");
+            let observation = FleetLinkObservation::Unavailable {
+                message: error.to_string(),
+            };
+            return (Err(error), observation);
+        }
+    };
+    let link = match &session_inputs {
+        Some(inputs) => {
+            match machine_link::PreparedMachineLink::prepare(Arc::new(fleet_store.cache()), inputs)
+                .await
+            {
+                Ok(link) => Some(link),
+                Err(error) => {
+                    tracing::error!(event = "fleet.link.preparationFailed", %error, "FleetCache link observation unavailable");
+                    fleet_store.close().await;
+                    let observation = FleetLinkObservation::Unavailable {
+                        message: error.to_string(),
+                    };
+                    return (Err(error), observation);
+                }
+            }
+        }
+        None => None,
+    };
+    let result = prepare_board_admission(
+        &fleet_store,
+        directory,
+        identity,
+        session_inputs,
+        enrollment_directory,
+        link.as_ref(),
+    )
+    .await;
+    match result {
+        Ok(prepared) => {
+            let (link, link_tasks) = match link {
+                Some(link) => (FleetLinkObservation::Live(link.reader), link.tasks),
+                None => (
+                    FleetLinkObservation::Unconfigured,
+                    tokio::task::JoinSet::new(),
+                ),
+            };
+            let board = BoardComposition {
+                fleet_store,
+                link,
+                link_tasks,
+                admission: prepared.admission,
+                replication: prepared.replication,
+                claim: prepared.claim,
+                session: prepared.session,
+                fleet: prepared.fleet,
+                mail: Weak::new(),
+                publisher: Weak::new(),
+            };
+            let observation = board.link_observation();
+            (Ok(board), observation)
+        }
+        Err(error) => {
+            tracing::error!(event = "fleet.link.preparationFailed", %error, "BoardComposition preparation failed");
+            // The link owner drains its final record before the database closes.
+            let observation = match link {
+                Some(link) => link.failed(&error).await,
+                None => FleetLinkObservation::Unavailable {
+                    message: error.to_string(),
+                },
+            };
+            fleet_store.close().await;
+            (Err(error), observation)
+        }
+    }
+}
+
+async fn prepare_board_admission(
+    fleet_store: &FleetStore,
+    directory: &Path,
+    identity: MachineIdentity,
+    session_inputs: Option<BoardSessionInputs>,
+    enrollment_directory: &Path,
+    link: Option<&machine_link::PreparedMachineLink>,
+) -> io::Result<PreparedAdmission> {
     let marker = enrollment_directory.to_owned();
     if tokio::task::spawn_blocking(move || {
         crate::enrollment_reset::reset_pending_in_directory(&marker)
@@ -154,11 +289,8 @@ pub(super) async fn open_board_admission_with_enrollment(
     {
         return Err(io::Error::other(crate::ENROLLMENT_RESTART_INSTRUCTION));
     }
-    // The Host's one Fleet database: it keeps the board cursor key, and the Fleet
-    // client's cache and outbox are views over it; the Fleet client closes it.
-    let fleet_store = FleetStore::open(&directory.join(FleetStore::FILE_NAME))
-        .await
-        .map_err(io::Error::other)?;
+    // The Fleet database keeps the board cursor key; the Fleet client's cache and
+    // outbox are views over it.
     let cursor_key = install_board_cursor_key(&fleet_store.cursors())
         .await
         .map_err(io::Error::other)?;
@@ -177,6 +309,7 @@ pub(super) async fn open_board_admission_with_enrollment(
                     inputs,
                     &registry,
                     enrollment_directory,
+                    link.ok_or_else(|| io::Error::other("configured link observation is missing"))?,
                 ))
                 .await?,
             )
@@ -208,13 +341,20 @@ pub(super) async fn open_board_admission_with_enrollment(
     let claim = session.as_ref().map(
         |session| -> Arc<dyn collaboration_contracts::ProjectClaim> { session.projects.clone() },
     );
-    Ok(BoardComposition {
+    Ok(PreparedAdmission {
         claim,
         admission: Arc::new(admission),
         replication,
         session,
         fleet: Arc::downgrade(&fleet),
-        mail: Weak::new(),
-        publisher: Weak::new(),
     })
+}
+
+/// Admission prepared over the Fleet database's views, before the link is attached.
+struct PreparedAdmission {
+    admission: Arc<ProjectAdmission>,
+    replication: Option<Arc<dyn ProjectReplicationPosition>>,
+    claim: Option<Arc<dyn collaboration_contracts::ProjectClaim>>,
+    session: Option<PreparedMachineSession>,
+    fleet: Weak<FleetClient>,
 }

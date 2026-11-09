@@ -55,8 +55,8 @@ pub enum FleetClientError {
 
 pub struct FleetClient {
     session: Option<SessionRequests<BoardConsumerProtocol>>,
-    /// The Router's one Fleet database; the outbox and cache below are views over it.
-    store: FleetStore,
+    /// Views over the Router's one Fleet database. Its owner closes it, never this
+    /// client: the link owner and the machine-session stores share the connection.
     outbox: FleetOutbox,
     cache: FleetCache,
     admission_mutex: Mutex<()>,
@@ -103,10 +103,11 @@ impl FleetClient {
         Ok(payload.decode::<fleet_admission::ArchiveReportOutcome>()?)
     }
 
-    /// Takes the Host's Fleet database; the client closes it when it closes.
+    /// Takes views over the Host's Fleet database. The store's owner closes it, after
+    /// every other user of the shared connection has stopped.
     #[must_use]
     pub fn new(
-        store: FleetStore,
+        store: &FleetStore,
         registration: Arc<dyn collaboration_contracts::ProjectRegistration>,
         session: Option<SessionRequests<BoardConsumerProtocol>>,
     ) -> Self {
@@ -114,7 +115,6 @@ impl FleetClient {
             session,
             outbox: store.outbox(),
             cache: store.cache(),
-            store,
             admission_mutex: Mutex::new(()),
             synchronization: SynchronizationRequests::default(),
             registration,
@@ -254,7 +254,9 @@ impl FleetClient {
         if matches!(reply.result, RequestResult::PendingUnreachable) {
             return Ok(reply);
         }
-        self.refresh_cache().await?;
+        if let Err(error) = self.refresh_cache().await {
+            tracing::warn!(%error, "Fleet projection refresh failed; submission reply retained");
+        }
         Ok(reply)
     }
 
@@ -296,7 +298,9 @@ impl FleetClient {
         if matches!(reply.result, RequestResult::PendingUnreachable) {
             return Ok(reply);
         }
-        self.refresh_cache().await?;
+        if let Err(error) = self.refresh_cache().await {
+            tracing::warn!(%error, "Fleet projection refresh failed; creation reply retained");
+        }
         Ok(reply)
     }
 
@@ -533,9 +537,6 @@ impl FleetClient {
     }
     pub async fn pending_requests(&self) -> Result<Vec<FleetOutboxEntry>, FleetClientError> {
         Ok(self.outbox.pending().await?)
-    }
-    pub async fn close(self) {
-        self.store.close().await;
     }
 }
 

@@ -65,7 +65,7 @@ async fn observe(fixture: &Fixture) -> TestResult<(Value, Option<String>, i64, i
     Ok(fixture.object.transaction(|scope| Box::pin(async move {
         let snapshot = fleet_sync_lease::registry_snapshot(scope, PROJECT.to_owned().try_into().map_err(StoreError::backend)?).await.map_err(StoreError::backend)?;
         let projection = collaboration_central_core::read_fleet_lease_projection_in_scope(scope,PROJECT.parse().map_err(StoreError::backend)?).await?;
-        let row = query::<sqlx_turso::Turso>("SELECT project_id,(SELECT count(*) FROM lease_incarnation) AS versions,(SELECT count(*) FROM machine_control_notices) AS notices FROM fleet_project_directory WHERE project_id=?")
+        let row = query::<sqlx_turso::Turso>("SELECT project_id,(SELECT count(*) FROM lease_incarnation) AS versions,(SELECT count(*) FROM machine_control_project_notices) AS notices FROM fleet_project_directory WHERE project_id=?")
             .bind(PROJECT).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
         Ok((serde_json::to_value(snapshot).map_err(StoreError::backend)?,projection,row.try_get("versions").map_err(StoreError::backend)?,row.try_get("notices").map_err(StoreError::backend)?))
     })).await?)

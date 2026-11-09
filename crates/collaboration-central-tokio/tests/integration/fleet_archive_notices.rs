@@ -86,16 +86,16 @@ async fn drain(fixture: &Fixture) -> TestResult {
 struct Notice {
     position: i64,
     kind: String,
-    board: Option<String>,
-    through: Option<i64>,
+    project: Option<String>,
+    epoch: Option<i64>,
 }
 async fn notices(fixture: &Fixture) -> TestResult<Vec<Notice>> {
     Ok(fixture.store.transaction(|scope|Box::pin(async move {
-        let rows=query::<sqlx_turso::Turso>("SELECT machine_id,position,kind,board_id,feed_through FROM machine_control_notices ORDER BY position")
+        let rows=query::<sqlx_turso::Turso>("SELECT machine_id,position,kind,project_id,epoch FROM machine_control_project_notices ORDER BY position")
             .fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
         rows.into_iter().map(|row| {
             if row.try_get::<String,_>("machine_id").map_err(StoreError::backend)?!=A {return Err(StoreError::backend("archive notified another holder"));}
-            Ok(Notice {position:row.try_get("position").map_err(StoreError::backend)?,kind:row.try_get("kind").map_err(StoreError::backend)?,board:row.try_get("board_id").map_err(StoreError::backend)?,through:row.try_get("feed_through").map_err(StoreError::backend)?})
+            Ok(Notice {position:row.try_get("position").map_err(StoreError::backend)?,kind:row.try_get("kind").map_err(StoreError::backend)?,project:row.try_get("project_id").map_err(StoreError::backend)?,epoch:row.try_get("epoch").map_err(StoreError::backend)?})
         }).collect()
     })).await?)
 }
@@ -182,9 +182,9 @@ async fn board_archiving_notifies_its_shared_holder_once_and_final_reports_hint_
     drain(&fixture).await?;
     let archiving = Notice {
         position: 1,
-        kind: "board_archiving".into(),
-        board: Some(BOARD.into()),
-        through: None,
+        kind: "project_list_changed".into(),
+        project: None,
+        epoch: None,
     };
     assert_eq!(notices(&fixture).await?, vec![archiving]);
     assert_eq!(head(&fixture).await?, before + 2);
@@ -213,15 +213,15 @@ async fn board_archiving_notifies_its_shared_holder_once_and_final_reports_hint_
         vec![
             Notice {
                 position: 1,
-                kind: "board_archiving".into(),
-                board: Some(BOARD.into()),
-                through: None
+                kind: "project_list_changed".into(),
+                project: None,
+                epoch: None
             },
             Notice {
                 position: 2,
-                kind: "fleet_feed_advanced".into(),
-                board: None,
-                through: Some(before + 3)
+                kind: "project_list_changed".into(),
+                project: None,
+                epoch: None
             },
         ]
     );

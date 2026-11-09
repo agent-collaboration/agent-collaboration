@@ -95,7 +95,7 @@ async fn future_schema_public_posts_keep_the_typed_refusal_without_forwarding() 
             .expect("32-byte fixture cursor key"),
     ));
     let fleet = Arc::new(FleetClient::new(
-        message_board_storage::FleetStore::open(
+        &message_board_storage::FleetStore::open(
             &(directory.path()).join(message_board_storage::FleetStore::FILE_NAME),
         )
         .await?,

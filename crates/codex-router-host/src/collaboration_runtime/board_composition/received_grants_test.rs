@@ -43,7 +43,7 @@ async fn initial_create_grant_notice_preserves_pending_registration_and_first_re
     let registry = projects.registry()?;
     let fleet = board.fleet.upgrade().ok_or("Fleet client")?;
     let admission = board.admission.clone();
-    let running = board.start().ok_or("machine runtime")?;
+    let running = board.start().session.ok_or("machine runtime")?;
     wait_welcome(projects.welcomed.clone()).await?;
     fleet.synchronize().await?;
     let application = (collaboration_service::ApplicationFixture::new(
@@ -134,10 +134,15 @@ async fn initial_create_grant_notice_preserves_pending_registration_and_first_re
         assert!(Arc::ptr_eq(&original, &projects.ensure(&project).await?));
         assert!(database.installed_snapshot().await?.is_none());
         assert!(
-            !root
-                .join("snapshot-install-attempts")
-                .join(format!("{}-e1.json", project.as_str()))
-                .exists()
+            crate::collaboration_runtime::board_composition::tests::attempt_record(
+                &crate::collaboration_runtime::board_composition::tests::attempt_key(
+                    &root,
+                    &project,
+                    Epoch::new(1)?
+                )
+            )
+            .await?
+            .is_none()
         );
         registration.release()?;
         assert!(matches!(

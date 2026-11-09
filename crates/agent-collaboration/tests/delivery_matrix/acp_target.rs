@@ -7,8 +7,8 @@ use super::{
     schedule_send, wake_send,
 };
 use collaboration_client::{
-    ConversationClient, ConversationCreateActor, ConversationCreateInput,
-    ConversationOperationResult, ConversationPromptInput, PublicPromptContent,
+    ConversationActor, ConversationClient, ConversationCreateInput, ConversationOperationResult,
+    ConversationPromptInput, PublicPromptContent,
     board::Identity,
     protocol::{
         ApprovalDecideParams, ConversationCreateOutcome, OperationId, RouterAccess, SessionRef,
@@ -122,7 +122,7 @@ pub(super) async fn exercise_acp_target_matrix(config_guard: &ConfigHashGuard) -
                     operation_id: Some(OperationId::generate()),
                     target: target_for_prompt,
                     working_directory: None,
-                    requested_by: sender_for_prompt.clone(),
+                    requested_by: sender_for_prompt.clone().into(),
                     approver: Some(sender_for_prompt.clone().into()),
                     message: PublicPromptContent::Agent {
                         sender: sender_for_prompt,
@@ -213,8 +213,8 @@ async fn create_provider_session(
                 endpoint,
                 working_directory: proof.workspace.clone(),
                 access: RouterAccess::WriteRestricted,
-                created_by: ConversationCreateActor::Session(creator.clone()),
-                approver: Some(ConversationCreateActor::Session(approver.clone())),
+                created_by: ConversationActor::Session(creator.clone()),
+                approver: Some(ConversationActor::Session(approver.clone())),
                 generation: None,
                 model: None,
                 mode: None,
@@ -263,7 +263,7 @@ async fn deliver_pending_approval(
                     operation_id: Some(OperationId::generate()),
                     target: requester_for_prompt,
                     working_directory: None,
-                    requested_by: creator_for_prompt.clone(),
+                    requested_by: creator_for_prompt.clone().into(),
                     approver: Some(approver_for_prompt.into()),
                     message: PublicPromptContent::Agent {
                         sender: creator_for_prompt,

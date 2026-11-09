@@ -1,6 +1,7 @@
 //! Reader-only registries borrow the authenticated session and refetch disposable generations.
 use super::*;
 use crate::collaboration_runtime::board_composition::central_read_copy::CentralReadCopies;
+use std::os::unix::fs::PermissionsExt;
 
 async fn replicated_head(
     runtime: &Runtime,

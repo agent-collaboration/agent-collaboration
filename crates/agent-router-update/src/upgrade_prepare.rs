@@ -13,8 +13,6 @@ use fleet_sync_lease::{LeaseHolder, LeasePolicy};
 use fleet_sync_protocol::{DatabaseId, PeerId};
 use fleet_sync_writer::{ReplicatedDatabase, WriterOptions};
 use message_board::{HumanId, RecordId, RecordTime, RepositoryRef, ResourceName};
-#[cfg(test)]
-use message_board::{MachineLabel, Record, RecordKind, RecordedActor, ServiceId};
 use message_board_storage::{ProjectStore, apply_project_import};
 use std::{
     collections::BTreeMap,
@@ -350,95 +348,5 @@ fn find_collisions(stores: &[LegacyStore]) -> Vec<NameCollision> {
 }
 
 #[cfg(test)]
-mod preparation_tests {
-    use super::*;
-
-    #[tokio::test]
-    #[expect(
-        clippy::panic_in_result_fn,
-        reason = "Contract asserts; setup may fail."
-    )]
-    async fn empty_legacy_project_roundtrips_unknown_metadata_without_a_creation_fact()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let source = read_legacy(
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/role-history.sqlite"),
-        )
-        .await?;
-        let project = source
-            .projects
-            .iter()
-            .find(|project| project.topic_id.as_str().ends_with("0016"))
-            .ok_or("empty project missing")?;
-        let provenance = ImportProvenance {
-            installation: ServiceId::try_from("550e8400-e29b-41d4-a716-446655440000".to_owned())?,
-            machine: MachineLabel::try_from("offline import".to_owned())?,
-        };
-        let owner = HumanId::try_from("explicit-owner".to_owned())?;
-        let directory = tempfile::tempdir()?;
-        let (prepared, report) = prepare_project(
-            &source,
-            project,
-            &provenance,
-            &owner,
-            &directory.path().join("project.sqlite"),
-        )
-        .await?;
-        assert_eq!(report.feed_rows, 1);
-        assert_eq!(report.posts, 0);
-        let mut snapshot = prepared.store.snapshot().await?;
-        let Some(Record::Project(state)) =
-            snapshot.record(&project.topic_id.clone().into()).await?
-        else {
-            return Err("metadata missing".into());
-        };
-        assert_eq!(state.envelope.time, RecordTime::LegacyUnknown);
-        assert_eq!(state.description, project.description);
-        assert_eq!(
-            state.envelope.actor,
-            RecordedActor::Human { human_id: owner }
-        );
-        assert_eq!(
-            state
-                .envelope
-                .position
-                .project_cursor()
-                .ok_or("placement missing")?
-                .position
-                .get(),
-            1
-        );
-        assert!(
-            snapshot
-                .record_keys(RecordKind::Fact, "", 100)
-                .await?
-                .is_empty()
-        );
-        snapshot.finish().await?;
-        prepared.database.close().await;
-        Ok(())
-    }
-
-    #[tokio::test]
-    #[expect(
-        clippy::panic_in_result_fn,
-        reason = "Contract asserts; setup may fail."
-    )]
-    async fn collision_detection_keeps_both_ids_and_never_renames()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-        let sources = vec![
-            read_legacy(root.join("legacy-complete.sqlite")).await?,
-            read_legacy(root.join("collision.sqlite")).await?,
-        ];
-        let collisions = find_collisions(&sources);
-        assert!(collisions.iter().any(|collision| matches!(
-            collision.location,
-            CollisionLocation::Workspace
-        ) && collision.ids.len() == 2));
-        assert!(collisions.iter().any(|collision| matches!(
-            collision.location,
-            CollisionLocation::Board { .. }
-        ) && collision.ids.len() == 2));
-        Ok(())
-    }
-}
+#[path = "upgrade_prepare_test.rs"]
+mod preparation_tests;

@@ -59,7 +59,13 @@ async fn sdk_generated_notice_before_welcome_allows_a_real_durable_client_acknow
     );
     let client = SessionClient::<_, _, BoardConsumerProtocol>::load(
         transport,
-        MachineSessionStore::open(&root).await?,
+        MachineSessionStore::from_cache(std::sync::Arc::new(
+            message_board_storage::FleetStore::open(
+                &root.join(message_board_storage::FleetStore::FILE_NAME),
+            )
+            .await?
+            .cache(),
+        )),
         &UuidV7Ids,
         SchemaSupport { max_version: 1 },
         Backoff {
@@ -81,16 +87,30 @@ async fn sdk_generated_notice_before_welcome_allows_a_real_durable_client_acknow
     let event = tokio::time::timeout(BOUND, events.recv())
         .await?
         .ok_or("notice event missing")?;
+    let ClientEvent::Notice {
+        session_id,
+        position,
+        body,
+    } = event
+    else {
+        return Err("SDK did not produce the notice".into());
+    };
     assert!(
-        matches!(event, ClientEvent::Notice { position, body: Notice::Consumer(ref notice) }
-        if position == NoticePosition::new(1) && matches!(notice.kind, board_sync_protocol::BoardNotice::LeaseSuperseded { .. }))
+        position == NoticePosition::new(1)
+            && matches!(body,
+        Notice::Consumer(ref notice) if matches!(notice.kind, board_sync_protocol::BoardNotice::LeaseSuperseded { .. }))
     );
-    requests.acknowledge_notice(NoticePosition::new(1)).await?;
-    let resumed = MachineSessionStore::open(&root)
+    requests.acknowledge_notice(session_id, position).await?;
+    let resumed = MachineSessionStore::from_cache(std::sync::Arc::new(
+        message_board_storage::FleetStore::open(
+            &root.join(message_board_storage::FleetStore::FILE_NAME),
+        )
         .await?
-        .load()
-        .await?
-        .ok_or("resume state missing")?;
+        .cache(),
+    ))
+    .load()
+    .await?
+    .ok_or("resume state missing")?;
     assert_eq!(resumed.notice_cursor, NoticePosition::new(1));
     assert!(matches!(
         tokio::time::timeout(BOUND, events.recv()).await?,

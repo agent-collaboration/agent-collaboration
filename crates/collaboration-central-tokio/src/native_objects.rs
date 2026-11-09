@@ -677,9 +677,6 @@ fn no_route() -> CallFailure {
 
 #[path = "native_objects/alarm_owner.rs"]
 mod alarm_owner;
-#[cfg(all(test, feature = "conformance"))]
-#[path = "native_objects/alarm_recovery_tests.rs"]
-mod alarm_recovery_tests;
 #[cfg(feature = "conformance")]
 #[path = "conformance_board_import.rs"]
 mod conformance_board_import;

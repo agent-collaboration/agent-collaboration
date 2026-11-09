@@ -3,6 +3,8 @@
 mod board_consumer;
 mod board_delivery;
 mod board_payloads;
+mod fleet_link_failure;
+mod fleet_link_status;
 mod fleet_reads;
 mod holder_refusal;
 mod project_claim;
@@ -12,6 +14,8 @@ mod surface_names;
 pub use board_consumer::*;
 pub use board_delivery::*;
 pub use board_payloads::*;
+pub use fleet_link_failure::*;
+pub use fleet_link_status::*;
 pub use fleet_reads::*;
 pub use holder_refusal::*;
 pub use project_claim::*;

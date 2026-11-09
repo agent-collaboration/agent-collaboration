@@ -95,7 +95,7 @@ async fn cold_welcome_and_notice_recovery_skip_superseded_project_and_initialize
     let ready = session.welcomed.subscribe();
     let admission = board.admission.clone();
     let fleet = board.fleet.upgrade().ok_or("resumed fleet")?;
-    let running = board.start().ok_or("resumed start")?;
+    let running = board.start().session.ok_or("resumed start")?;
     wait_welcome(ready).await?;
     timeout(BOUND, async {
         loop {
@@ -131,7 +131,37 @@ async fn cold_welcome_and_notice_recovery_skip_superseded_project_and_initialize
     // hint, must save machine progress without reopening the terminal writer.
     central.wait_notice_reads(2).await?;
     let progress_root = directory.path().join("cold-component-progress");
-    let mut reactions = MachineNoticeReactions::open(&progress_root).await?;
+    let native = board_fleet_sync::MachineSessionStore::from_cache(std::sync::Arc::new(
+        message_board_storage::FleetStore::open(
+            &directory
+                .path()
+                .join("router")
+                .join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await?
+        .cache(),
+    ));
+    let state = native
+        .load()
+        .await?
+        .ok_or("actual cold native session missing")?;
+    let component = board_fleet_sync::MachineSessionStore::from_cache(std::sync::Arc::new(
+        message_board_storage::FleetStore::open(
+            &progress_root.join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await?
+        .cache(),
+    ));
+    component.save(&state).await?;
+    let mut reactions = MachineNoticeReactions::open(
+        message_board_storage::FleetStore::open(
+            &progress_root.join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await
+        .map_err(std::io::Error::other)?
+        .cache(),
+    )
+    .await?;
     central
         .script_notice_answers(vec![
             NoticeRead::CursorExpired {
@@ -147,9 +177,7 @@ async fn cold_welcome_and_notice_recovery_skip_superseded_project_and_initialize
                 },
                 PositionedBoardNotice {
                     position: NoticePosition::new(6),
-                    kind: BoardNotice::FleetFeedAdvanced {
-                        through: FleetPosition::ZERO,
-                    },
+                    kind: BoardNotice::ProjectListChanged {},
                 },
             ]),
             page(Vec::new()),
@@ -165,10 +193,15 @@ async fn cold_welcome_and_notice_recovery_skip_superseded_project_and_initialize
         )
         .await?;
     assert_eq!(
-        MachineNoticeProgressStore::open(&progress_root)
+        MachineNoticeProgressStore::from_cache(
+            message_board_storage::FleetStore::open(
+                &progress_root.join(message_board_storage::FleetStore::FILE_NAME)
+            )
             .await?
-            .load()
-            .await?,
+            .cache()
+        )
+        .load()
+        .await?,
         NoticePosition::new(6)
     );
     central
@@ -184,9 +217,7 @@ async fn cold_welcome_and_notice_recovery_skip_superseded_project_and_initialize
                 },
                 PositionedBoardNotice {
                     position: NoticePosition::new(2),
-                    kind: BoardNotice::FleetFeedAdvanced {
-                        through: FleetPosition::ZERO,
-                    },
+                    kind: BoardNotice::ProjectListChanged {},
                 },
             ]),
             page(Vec::new()),
@@ -202,10 +233,15 @@ async fn cold_welcome_and_notice_recovery_skip_superseded_project_and_initialize
         )
         .await?;
     assert_eq!(
-        MachineNoticeProgressStore::open(&progress_root)
+        MachineNoticeProgressStore::from_cache(
+            message_board_storage::FleetStore::open(
+                &progress_root.join(message_board_storage::FleetStore::FILE_NAME)
+            )
             .await?
-            .load()
-            .await?,
+            .cache()
+        )
+        .load()
+        .await?,
         NoticePosition::new(2)
     );
     assert!(projects.writer_is_terminal(&project).await?);

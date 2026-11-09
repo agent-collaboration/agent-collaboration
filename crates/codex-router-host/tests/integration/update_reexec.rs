@@ -395,7 +395,21 @@ async fn host_restart_exec_failure_releases_singleton_after_settling_children()
             !process_is_running(app_server_pid),
             "failed replacement exec must occur after app-server settlement",
         )?;
-        let reacquired = HostInstance::acquire(coordination_paths.clone())?;
+        let reacquired = HostInstance::acquire(coordination_paths.clone()).inspect_err(
+            |acquire_error| {
+                use std::io::Write as _;
+                use std::os::unix::fs::MetadataExt as _;
+
+                let lock_identity = std::fs::metadata(coordination_paths.instance_lock())
+                    .map(|metadata| (metadata.dev(), metadata.ino()));
+                let stdin_identity = rustix::fs::fstat(rustix::stdio::stdin())
+                    .map(|metadata| (metadata.st_dev, metadata.st_ino));
+                let _ = writeln!(
+                    std::io::stderr(),
+                    "immediate HostInstance::acquire failed: {acquire_error:?}; after-failure lock-file dev/inode: {lock_identity:?}; actual stdin fstat dev/inode: {stdin_identity:?}; other descriptors and holder identity are unobserved"
+                );
+            },
+        )?;
         drop(reacquired);
         Ok(())
     }

@@ -21,7 +21,7 @@ impl OwnerFixture {
                 ProjectAdmission::new(ProjectAdmissionProps {
                     registry: registry.clone(),
                     fleet: Arc::new(FleetClient::new(
-                        message_board_storage::FleetStore::open(
+                        &message_board_storage::FleetStore::open(
                             &(directory.path()).join(message_board_storage::FleetStore::FILE_NAME),
                         )
                         .await
@@ -162,7 +162,7 @@ impl OwnerFixture {
             // Unit tests construct their own crate type with the shared session;
             // the support crate's compiled FleetClient is a distinct Rust type.
             let fleet = Arc::new(FleetClient::new(
-                message_board_storage::FleetStore::open(
+                &message_board_storage::FleetStore::open(
                     &(self.directory.path()).join(message_board_storage::FleetStore::FILE_NAME),
                 )
                 .await
@@ -185,10 +185,9 @@ impl OwnerFixture {
                 .unwrap();
             drop(admission);
             runtime.shutdown().await.unwrap();
-            Arc::try_unwrap(fleet)
-                .unwrap_or_else(|_| panic!("additional-project setup still owns its Fleet client"))
-                .close()
-                .await;
+            drop(Arc::try_unwrap(fleet).unwrap_or_else(|_| {
+                panic!("additional-project setup still owns its Fleet client")
+            }));
         }))
         .await;
     }

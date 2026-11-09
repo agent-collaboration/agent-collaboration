@@ -67,8 +67,11 @@ async fn real_host_central_and_cli_mcp_share_the_persisted_installation() -> Fix
                 suite.stop_host().await?;
                 suite.reopen_host().await?;
             }
-            assert_eq!(suite.host()?.mcp("installation_show", json!({})).await?,
-                serde_json::to_value(suite.installation.as_ref().ok_or("installation identity absent")?)?);
+            fixture::assert_enrolled_installation(
+                suite.installation.as_ref().ok_or("installation identity absent")?,
+                suite.host()?.mcp("installation_show", json!({})).await?,
+                suite.central.as_ref().ok_or("central absent")?.session_inputs()?.endpoint.as_str(),
+            )?;
             let cli = suite.cli(&["workspace", "list"]).await?;
             let mcp = suite.host()?.mcp("workspace_list",
                 json!({"repository":null,"page":{"limit":50,"cursor":null}})).await?;

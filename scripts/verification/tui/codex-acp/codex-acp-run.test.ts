@@ -100,10 +100,43 @@ const REFRESH = {
 const PROMPT = {
 	kind: 'prompt',
 	provider: 'cursor',
+	selection: {
+		model: 'grok-4.7',
+		selectOnCreate: false,
+		selectOnRestore: false,
+		requiredOptions: { reasoning_effort: 'low', fast: 'false' },
+	},
 	prompt: 'Reply with only the product of 4321 and 5678, digits only',
 	completion: '24534638',
 	reply_deadline_ms: 120_000,
 };
+test('an ordinary provider prompt without a declared selection is refused before effects', async () => {
+	const { plan } = await runPlan(CURSOR_SKILL);
+	const { selection: _selection, ...undeclared } = PROMPT;
+	expect(() => codexAcpRunPlanSchema.parse({ ...plan, journey: undeclared })).toThrow();
+});
+
+test('ordinary provider plans accept a complete catalog selection without fixed provider model names', async () => {
+	const { plan } = await runPlan(PROMPT);
+	const selection = {
+		model: 'other-catalog-model',
+		selectOnCreate: false,
+		selectOnRestore: false,
+		requiredOptions: { optional_mode: 'exact-value' },
+	};
+	const parsed = codexAcpRunPlanSchema.parse({ ...plan, journey: { ...PROMPT, selection } });
+	expect(parsed.journey).toMatchObject({ selection });
+	for (const incomplete of [
+		{ model: 'grok-4.7', selectOnCreate: false, requiredOptions: {} },
+		{ model: 'grok-4.7', requiredOptions: {} },
+		{ model: 'grok-4.7', selectOnCreate: false },
+		{ model: '', selectOnCreate: false, selectOnRestore: false, requiredOptions: {} },
+	])
+		expect(() =>
+			codexAcpRunPlanSchema.parse({ ...plan, journey: { ...PROMPT, selection: incomplete } }),
+		).toThrow();
+});
+
 const MODEL = {
 	kind: 'model',
 	provider: 'cursor',
@@ -298,6 +331,7 @@ const typed = ${JSON.stringify(typed)};
 const frame = ${JSON.stringify(frame)};
 const effects = ${JSON.stringify(effects === null ? null : { ...effects, replyFrame: standInFrame(effects.replyRows) })};
 process.stdout.write('TUI_GRID READY 120 36 STREAM\\n');
+process.stdout.write('TUI_GRID BYTES ' + ${JSON.stringify(standInFrame(['› Ask Codex to do anything\x1b[1;3H']))} + '\\n');
 let pending = '';
 process.stdin.on('data', (chunk) => {
 	pending += chunk.toString('utf8');
@@ -460,7 +494,11 @@ const CLAUDE_ROUTE = {
 	max_segment_bytes: 4096,
 	collaboration_cli: { path: '/tmp/cxr-agent-collaboration', sha256: 'a'.repeat(64) },
 };
-const CLAUDE_PROMPT = { ...PROMPT, provider: 'claude' };
+const CLAUDE_PROMPT = {
+	...PROMPT,
+	provider: 'claude',
+	selection: { model: 'haiku', selectOnCreate: true, selectOnRestore: true, requiredOptions: {} },
+};
 
 test('a Claude route proof is admitted only for a bounded Claude prompt or selected-skill plan', async () => {
 	const { plan } = await runPlan(CURSOR_SKILL);

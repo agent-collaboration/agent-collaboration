@@ -23,7 +23,7 @@ impl Lifetime {
             .clone();
         let admission = board.admission.clone();
         let fleet = board.fleet.upgrade().ok_or("Fleet client")?;
-        let running = board.start().ok_or("machine runtime")?;
+        let running = board.start().session.ok_or("machine runtime")?;
         wait_welcome(projects.welcomed.clone()).await?;
         fleet.synchronize().await?;
         Ok(Self {

@@ -115,19 +115,20 @@ async fn received_move_then_takeover_round_trip_seeds_each_new_epoch_from_copy()
     let second_registry = second_projects.registry()?;
     let ready = session.welcomed.subscribe();
     let second_admission = second_board.admission.clone();
-    let second_running = second_board.start().ok_or("second runtime")?;
+    let second_running = second_board.start().session.ok_or("second runtime")?;
     wait_welcome(ready).await?;
     let proof = async {
         assert!(matches!(fixture.claim(&project).await?, ProjectClaimReply::Claimed { epoch, start, .. } if epoch.value() == 2 && start == prefix.position));
         write_and_replicate(&fixture.projects, &fixture.registry, &project, 2, &expected, origin()?).await?;
         let old_store = fixture.registry.existing_project(&project).await?.ok_or("old owner")?;
         let old_subject = Arc::downgrade(&old_store);
-        let old_attempt_path = fixture.projects.directory.join("snapshot-install-attempts").join(format!("{}-e2.json", project.as_str()));
-        let old_attempt_bytes = std::fs::read(&old_attempt_path)?;
+        let old_attempt_path = attempt_key(&fixture.projects.directory, &project, Epoch::new(2)?);
+        assert!(attempt_record(&old_attempt_path).await?.is_none());
+        let original_install = fixture.registry.database(&project).await?.installed_snapshot().await?.ok_or("original completed SDK receipt")?;
         let database = DatabaseId::try_from(project.as_str().to_owned())?;
         // A hint naming the actual fence but another holder is still no grant.
         second_projects.receive_grant(&project, Epoch::new(2)?).await?;
-        assert!(!second_root.join("snapshot-install-attempts").exists());
+        assert_eq!(attempt_count(&second_root).await?, 0);
         assert!(second_registry.existing_project(&project).await?.is_none());
         let moved = fixture.central.move_project(database, &second_origin.installation, fleet_sync_protocol::TransferId::new(durable_steps::Uuid::now_v7())?).await?;
         assert_eq!(moved.get("kind"), Some(&serde_json::json!("moved")), "{moved}");
@@ -139,19 +140,20 @@ async fn received_move_then_takeover_round_trip_seeds_each_new_epoch_from_copy()
         read.finish().await?;
         assert!(matches!(&record, Record::Project(record) if record.description.as_str() == "written by live epoch 2"));
         let installed = second_registry.database(&project).await?.installed_snapshot().await?.ok_or("moved native receipt")?;
-        let selected_path = second_root.join("snapshot-install-attempts").join(format!("{}-e3.json", project.as_str()));
-        let selected_bytes = std::fs::read(&selected_path)?;
+        timeout(BOUND, second_projects.settle_operations()).await??;
+        let selected_path = attempt_key(&second_root, &project, Epoch::new(3)?);
+        assert!(attempt_record(&selected_path).await?.is_none());
         second_projects.receive_grant(&project, Epoch::new(3)?).await?;
         second_projects.receive_grant(&project, Epoch::new(2)?).await?;
         second_projects.receive_grant(&project, Epoch::new(4)?).await?;
         let unknown = ProjectId::generate();
         assert!(second_projects.receive_grant(&unknown, Epoch::new(2)?).await.is_err(), "unknown uninitialized Copy must stay fail-closed");
         fixture.projects.receive_grant(&project, Epoch::new(3)?).await?;
-        assert_eq!(std::fs::read(&selected_path)?, selected_bytes);
-        assert_eq!(std::fs::read_dir(second_root.join("snapshot-install-attempts"))?.count(), 1);
+        assert!(attempt_record(&selected_path).await?.is_none());
+        assert_eq!(attempt_count(&second_root).await?, 0);
         assert!(Arc::ptr_eq(&second_registry.existing_project(&project).await?.ok_or("current moved owner")?, &store));
         assert_eq!(second_registry.database(&project).await?.installed_snapshot().await?.ok_or("duplicate moved receipt")?, installed);
-        assert!(!fixture.projects.directory.join("snapshot-install-attempts").join(format!("{}-e3.json", project.as_str())).exists());
+        assert!(attempt_record(&attempt_key(&fixture.projects.directory, &project, Epoch::new(3)?)).await?.is_none());
         println!("RECEIVED_GRANT_CASE other_holder_unknown_stale_future_and_duplicate_hints_install_nothing");
         drop(store);
         write_and_replicate(&second_projects, &second_registry, &project, 3, &record, second_origin.clone()).await?;
@@ -172,14 +174,12 @@ async fn received_move_then_takeover_round_trip_seeds_each_new_epoch_from_copy()
         assert!(matches!(&returned, Record::Project(record) if record.description.as_str() == "written by live epoch 3"));
         let new_database = fixture.registry.database(&project).await?;
         assert_eq!(new_database.path().file_name().and_then(|name| name.to_str()), Some("e4.sqlite"));
-        let new_attempt_path = fixture.projects.directory.join("snapshot-install-attempts").join(format!("{}-e4.json", project.as_str()));
-        let old_record: serde_json::Value = serde_json::from_slice(&old_attempt_bytes)?;
-        let new_record: serde_json::Value = serde_json::from_slice(&std::fs::read(&new_attempt_path)?)?;
-        let new_attempt: InstallAttemptId = serde_json::from_value(new_record.get("attempt").cloned().ok_or("new attempt")?)?;
-        assert_ne!(old_record.get("attempt"), new_record.get("attempt"));
+        timeout(BOUND, fixture.projects.settle_operations()).await??;
+        let new_attempt_path = attempt_key(&fixture.projects.directory, &project, Epoch::new(4)?);
         let installed = new_database.installed_snapshot().await?.ok_or("e4 installed receipt")?;
-        assert_eq!(installed.install.install_id, InstallId::new(new_attempt.as_uuid())?);
-        assert_eq!(std::fs::read(&old_attempt_path)?, old_attempt_bytes);
+        assert_ne!(original_install.install.install_id, installed.install.install_id);
+        assert!(attempt_record(&new_attempt_path).await?.is_none());
+        assert!(attempt_record(&old_attempt_path).await?.is_none());
         // Replay the e2 subject after e4 is live. A project-only close would
         // stop the replacement even though this old source still upgrades.
         fixture.projects.supersede_project(&project, old_subject).await?;
@@ -334,7 +334,7 @@ async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> Test
         .projects
         .clone();
     let second_admission = second_board.admission.clone();
-    let second_running = second_board.start().ok_or("second runtime")?;
+    let second_running = second_board.start().session.ok_or("second runtime")?;
     wait_welcome(second_projects.welcomed.clone()).await?;
     let proof = async {
         let installed = timeout(BOUND, database.wait_bootstrap_published()).await??;
@@ -347,15 +347,15 @@ async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> Test
         let mut draining = install.stop_requested();
         drop(owner);
         drop(slot);
-        let root_record = fixture.projects.directory.join("snapshot-install-attempts").join(format!("{}-e2.json", project.as_str()));
-        let root_bytes = std::fs::read(&root_record)?;
+        let root_record = attempt_key(&fixture.projects.directory, &project, Epoch::new(2)?);
+        let root_bytes = attempt_bytes(&root_record).await?;
         // Await the real bounded completion response while native publication
         // remains held. Pending is not admission; replay the same attempt below.
         let pending_reply = timeout(BOUND, &mut claimed).await?;
         claim_joined = true;
         assert!(matches!(pending_reply??, ProjectClaimReply::Pending { attempt } if attempt == original_request.request_id));
         gate.release()?;
-        let session_store = board_fleet_sync::MachineSessionStore::open(&fixture.projects.directory).await?;
+        let session_store = board_fleet_sync::MachineSessionStore::from_cache(std::sync::Arc::new(message_board_storage::FleetStore::open(&fixture.projects.directory.join(message_board_storage::FleetStore::FILE_NAME)).await?.cache()));
         timeout(BOUND, async {
             loop {
                 if session_store.load().await?.is_some_and(|state| state.notice_cursor >= grant_position) { return Ok::<_, fleet_sync_session::StoreError>(()); }
@@ -367,7 +367,7 @@ async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> Test
         let back = fixture.central.take_over_project(database_id, &origin()?.installation, fleet_sync_protocol::TransferId::new(durable_steps::Uuid::now_v7())?).await?;
         assert_eq!(back.pointer("/value/newEpoch"), Some(&serde_json::json!(4)), "{back}");
         assert!(matches!(observer.install_record(old.install_id).await?.status, InstallStatus::Running { .. }));
-        assert_eq!(std::fs::read(&root_record)?, root_bytes);
+        assert_eq!(attempt_bytes(&root_record).await?, root_bytes);
         timeout(BOUND, draining.wait_for(|requested| *requested)).await??;
         assert!(matches!(observer.install_record(old.install_id).await?.status, InstallStatus::Running { .. }));
         println!("RECEIVED_GRANT_CASE e2_still_held_after_real_takeovers_e3_e4_replacement_drain_requested");
@@ -385,14 +385,14 @@ async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> Test
         assert!(old_reply.is_err(), "the obsolete e2 claimant was admitted");
         let retained = fleet_sync_writer::inspect_native_file(database.path()).await?;
         assert!(matches!(retained.authority, Some(fleet_sync_writer::RetainedAuthority::Superseded { current: Some(current), .. }) if current.value() == 4), "e2 authority did not retain actual supersession: {:?}", retained.authority);
+        timeout(BOUND, fixture.projects.settle_operations()).await??;
         let new = observer.install_record(ready.install.install_id).await?;
         assert!(matches!(new.status, InstallStatus::Ready { .. }));
         assert_ne!(new.request.attempt, old.request.attempt);
         assert_ne!(new.install_id, old.install_id);
         assert_eq!(new.generation, old.generation + 1);
-        assert_eq!(std::fs::read(&root_record)?, root_bytes);
-        let new_root: serde_json::Value = serde_json::from_slice(&std::fs::read(fixture.projects.directory.join("snapshot-install-attempts").join(format!("{}-e4.json", project.as_str())))?)?;
-        assert_eq!(serde_json::from_value::<InstallAttemptId>(new_root.get("attempt").cloned().ok_or("e4 attempt")?)?, new.request.attempt);
+        assert_eq!(attempt_bytes(&root_record).await?, root_bytes);
+        assert!(attempt_record(&attempt_key(&fixture.projects.directory, &project, Epoch::new(4)?)).await?.is_none());
         drop(current);
         write_and_replicate(&fixture.projects, &fixture.registry, &project, 4, &expected, origin()?).await?;
         println!("RECEIVED_GRANT_CASE e4_fresh_ready_old_sdk_ready_root_record_immutable_e2_never_admitted");
@@ -518,7 +518,7 @@ async fn received_idle_holder_move_preserves_claimed_prefix_without_an_interveni
         .clone();
     let registry = projects.registry()?;
     let admission = board.admission.clone();
-    let running = board.start().ok_or("idle target running")?;
+    let running = board.start().session.ok_or("idle target running")?;
     let result = async {
         wait_welcome(projects.welcomed.clone()).await?;
         assert!(

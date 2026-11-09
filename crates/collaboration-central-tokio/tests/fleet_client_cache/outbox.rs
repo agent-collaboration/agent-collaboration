@@ -3,6 +3,74 @@ use fixture::{Live, Reader, assert_visible, create};
 
 #[expect(
     clippy::panic_in_result_fn,
+    reason = "Behavioral assertions must fail while fixture errors propagate."
+)]
+#[tokio::test]
+async fn decided_write_survives_refused_cache_refresh_and_same_key_replay() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let router_root = directory.path().join("router");
+    let jwks = JwksFixtureServer::start().await?;
+    let live = Live::start(&directory.path().join("central"), &jwks.url).await?;
+    let reader = Reader::start(&router_root, live.server.base_url()).await?;
+    let offered = create()?;
+    let origin = ActorOrigin {
+        installation: READER_SERVICE.to_owned().try_into()?,
+        machine: "cache-reader".to_owned().try_into()?,
+    };
+    reader.ingress.controls.refuse_feed_reads();
+    let returned = reader.fleet.submit(&offered, &origin).await;
+    let fleet_store = message_board_storage::FleetStore::open(
+        &router_root.join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?;
+    let outbox = fleet_store.outbox();
+    let saved = outbox
+        .request(&offered.request_id)
+        .await?
+        .ok_or("decided outbox entry missing")?;
+    let message_board_storage::FleetOutboxState::Decided { decision } = saved.state else {
+        return Err("central's accepted write was not durably decided".into());
+    };
+    assert!(
+        matches!(&decision, RequestDecision::Accepted { effects, change: ChangeOutcome::Changed }
+        if matches!(effects.entries(), [(reference, RecordPlacement::Fleet(position))]
+            if reference == &offered.workspace.clone().into() && position.position.get() == 1 && position.origin == origin))
+    );
+    assert!(
+        returned.is_ok(),
+        "durably accepted decision was replaced by refresh failure: {returned:?}"
+    );
+    let returned = returned?;
+    assert_eq!(returned.result, RequestResult::Decided(decision));
+    assert!(
+        reader.ingress.controls.refused_feed_count() > 0,
+        "remote feed refusal was not reached"
+    );
+    let cache = fleet_store.cache();
+    assert_eq!(cache.checkpoint().await?, FleetPosition::try_from(0)?);
+    assert!(
+        reader
+            .fleet
+            .record(&offered.workspace.clone().into())
+            .await?
+            .is_none()
+    );
+    assert_eq!(reader.fleet.submit(&offered, &origin).await?, returned);
+    assert_eq!(
+        reader.ingress.controls.fleet_write_count(),
+        1,
+        "keyed replay sent another write"
+    );
+    drop((cache, outbox));
+    fleet_store.close().await;
+    reader.shutdown().await?;
+    live.shutdown().await?;
+    jwks.shutdown().await?;
+    Ok(())
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
@@ -16,14 +84,11 @@ async fn pending_request_replays_through_the_session_and_keeps_central_provenanc
         installation: ServiceId::try_from(WRITER_SERVICE.to_owned())?,
         machine: MachineLabel::try_from("caller supplied label must be ignored".to_owned())?,
     };
-    let offline = FleetClient::new(
-        message_board_storage::FleetStore::open(
-            &router_root.join(message_board_storage::FleetStore::FILE_NAME),
-        )
-        .await?,
-        Arc::new(NoRegistration),
-        None,
-    );
+    let offline_store = message_board_storage::FleetStore::open(
+        &router_root.join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?;
+    let offline = FleetClient::new(&offline_store, Arc::new(NoRegistration), None);
     assert_eq!(
         offline.submit(&offered, &forged_origin).await?.result,
         RequestResult::PendingUnreachable
@@ -35,7 +100,8 @@ async fn pending_request_replays_through_the_session_and_keeps_central_provenanc
         offered
     );
     fixture::assert_no_local_fleet_authority(&router_root).await?;
-    offline.close().await;
+    drop(offline);
+    offline_store.close().await;
 
     let jwks = JwksFixtureServer::start().await?;
     let live = Live::start(&server_root, &jwks.url).await?;

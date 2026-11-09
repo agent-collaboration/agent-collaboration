@@ -1,0 +1,52 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT session_id AS \"session_id!: String\", notice_cursor AS \"notice_cursor!: String\", handled_through AS \"handled_through!: String\", created_at AS \"created_at!: String\", updated_at AS \"updated_at!: String\" FROM fleet_session",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "session_id!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "notice_cursor!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "handled_through!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "created_at!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "updated_at!: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "b7f095369c34fd2d0b6f7fb1981c6672cc06d9a4b3a24034e89c0debb9a1d8cb"
+}

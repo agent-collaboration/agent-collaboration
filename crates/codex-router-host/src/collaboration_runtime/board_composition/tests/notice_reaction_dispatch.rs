@@ -5,6 +5,7 @@ use fleet_sync_protocol::{OperationAnswer, OperationRequest};
 
 fn event_owners(harness: &MailHarness) -> MachineSessionEventOwners {
     MachineSessionEventOwners {
+        link_failures: None,
         projects: harness.projects.clone(),
         admission: harness.admission.clone(),
         fleet: harness.fleet.clone(),
@@ -28,9 +29,17 @@ async fn welcomed_manual() -> Result<(tempfile::TempDir, MailHarness), TestError
 async fn actual_notice(
     harness: &mut MailHarness,
     position: u64,
-) -> Result<(NoticePosition, Notice<BoardConsumerProtocol>), TestError> {
+) -> Result<
+    (
+        fleet_sync_protocol::SessionId,
+        NoticePosition,
+        Notice<BoardConsumerProtocol>,
+    ),
+    TestError,
+> {
     harness.transport.publish(position).await?;
     let ClientEvent::Notice {
+        session_id,
         position: actual,
         body,
     } = harness.next_manual_event().await?
@@ -40,7 +49,7 @@ async fn actual_notice(
     assert!(
         matches!(&body, Notice::Consumer(notice) if notice.position == NoticePosition::new(position))
     );
-    Ok((actual, body))
+    Ok((session_id, actual, body))
 }
 
 async fn completion(
@@ -64,8 +73,19 @@ async fn one_reaction_owner_defers_y_while_x_waits_on_notice_catch_up_and_reques
 -> Result<(), TestError> {
     let (_directory, mut harness) = welcomed_manual().await?;
     let owners = event_owners(&harness);
-    let mut reactions =
-        NoticeReactionQueue::new(MachineNoticeReactions::open(&harness.root).await?);
+    let mut reactions = NoticeReactionQueue::new(
+        MachineNoticeReactions::open(
+            message_board_storage::FleetStore::open(
+                &harness
+                    .root
+                    .join(message_board_storage::FleetStore::FILE_NAME),
+            )
+            .await
+            .map_err(std::io::Error::other)?
+            .cache(),
+        )
+        .await?,
+    );
     let mut receipts = NoticeReceipts::default();
     let mut handlers = JoinSet::new();
     // Hold the real notice-read reply needed to fill the first notice's gap.
@@ -78,12 +98,26 @@ async fn one_reaction_owner_defers_y_while_x_waits_on_notice_catch_up_and_reques
             as_of: chrono::Utc::now(),
         }])
         .await;
-    let (first, first_body) = actual_notice(&mut harness, 2).await?;
-    queue_notice(&mut reactions, &mut receipts, 1, first, first_body);
+    let (first_session, first, first_body) = actual_notice(&mut harness, 2).await?;
+    queue_notice(
+        &mut reactions,
+        &mut receipts,
+        1,
+        first_session,
+        first,
+        first_body,
+    );
     reactions.dispatch_next(&mut handlers, &owners, &harness.requests);
     tokio::time::timeout(BOUND, entered).await??;
-    let (later, later_body) = actual_notice(&mut harness, 3).await?;
-    queue_notice(&mut reactions, &mut receipts, 1, later, later_body);
+    let (later_session, later, later_body) = actual_notice(&mut harness, 3).await?;
+    queue_notice(
+        &mut reactions,
+        &mut receipts,
+        1,
+        later_session,
+        later,
+        later_body,
+    );
     reactions.dispatch_next(&mut handlers, &owners, &harness.requests);
     assert_eq!(
         handlers.len(),
@@ -116,6 +150,7 @@ async fn one_reaction_owner_defers_y_while_x_waits_on_notice_catch_up_and_reques
         &mut receipts,
         &harness.requests,
         &harness.projects,
+        None,
     )
     .await?;
     assert_eq!(harness.ack().await?, NoticePosition::new(1));
@@ -128,15 +163,23 @@ async fn one_reaction_owner_defers_y_while_x_waits_on_notice_catch_up_and_reques
         &mut receipts,
         &harness.requests,
         &harness.projects,
+        None,
     )
     .await?;
     assert_eq!(harness.ack().await?, NoticePosition::new(2));
 
     assert_eq!(
-        board_fleet_sync::MachineNoticeProgressStore::open(&harness.root)
+        board_fleet_sync::MachineNoticeProgressStore::from_cache(
+            message_board_storage::FleetStore::open(
+                &harness
+                    .root
+                    .join(message_board_storage::FleetStore::FILE_NAME)
+            )
             .await?
-            .load()
-            .await?,
+            .cache()
+        )
+        .load()
+        .await?,
         NoticePosition::new(3)
     );
     println!("NOTICE_DISPATCH_CASE one_owner_x_then_y_real_catch_up_hold_requests_continue");
@@ -154,13 +197,24 @@ async fn stale_generation_completion_returns_the_owner_without_acknowledging_new
 -> Result<(), TestError> {
     let (_directory, mut harness) = welcomed_manual().await?;
     let owners = event_owners(&harness);
-    let mut reactions =
-        NoticeReactionQueue::new(MachineNoticeReactions::open(&harness.root).await?);
+    let mut reactions = NoticeReactionQueue::new(
+        MachineNoticeReactions::open(
+            message_board_storage::FleetStore::open(
+                &harness
+                    .root
+                    .join(message_board_storage::FleetStore::FILE_NAME),
+            )
+            .await
+            .map_err(std::io::Error::other)?
+            .cache(),
+        )
+        .await?,
+    );
     let mut receipts = NoticeReceipts::default();
     let mut handlers = JoinSet::new();
-    let (position, body) = actual_notice(&mut harness, 1).await?;
+    let (session_id, position, body) = actual_notice(&mut harness, 1).await?;
     let replayed = serde_json::from_slice(&serde_json::to_vec(&body)?)?;
-    queue_notice(&mut reactions, &mut receipts, 1, position, body);
+    queue_notice(&mut reactions, &mut receipts, 1, session_id, position, body);
     reactions.dispatch_next(&mut handlers, &owners, &harness.requests);
     let completed = completion(&mut handlers).await?;
     // Model the exact completion boundary after connection generation changes:
@@ -174,6 +228,7 @@ async fn stale_generation_completion_returns_the_owner_without_acknowledging_new
         &mut receipts,
         &harness.requests,
         &harness.projects,
+        None,
     )
     .await?;
     assert_eq!(
@@ -181,7 +236,7 @@ async fn stale_generation_completion_returns_the_owner_without_acknowledging_new
         NoticePosition::new(0),
         "old completion acknowledged the new generation"
     );
-    reactions.notice(2, position, replayed);
+    reactions.notice(2, session_id, position, replayed);
     reactions.dispatch_next(&mut handlers, &owners, &harness.requests);
     let completed = completion(&mut handlers).await?;
     finish_reaction(
@@ -191,6 +246,7 @@ async fn stale_generation_completion_returns_the_owner_without_acknowledging_new
         &mut receipts,
         &harness.requests,
         &harness.projects,
+        None,
     )
     .await?;
     assert_eq!(harness.ack().await?, position);

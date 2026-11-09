@@ -125,7 +125,7 @@ pub(crate) fn render_restart_result<W: Write>(
             writeln!(
                 stdout,
                 "result: {}",
-                classification_label(response.classification())
+                classification_label(response.classification(), response.snapshot().fleet())
             )?;
             writeln!(stdout, "message: {}", response.message())?;
             render_snapshot(stdout, response.snapshot())
@@ -149,7 +149,7 @@ pub(crate) fn render_terminal_frame<W: Write>(
         writeln!(
             stdout,
             "result: {}",
-            classification_label(response.classification())
+            classification_label(response.classification(), response.snapshot().fleet())
         )?;
         writeln!(stdout, "message: {}", response.message())?;
         render_snapshot(stdout, response.snapshot())?;
@@ -226,13 +226,14 @@ pub(crate) fn render_update_result<W: Write>(
 }
 
 fn render_snapshot<W: Write>(stdout: &mut W, snapshot: &HostSnapshot) -> std::io::Result<()> {
+    render_fleet_status(stdout, snapshot.fleet())?;
     if let Some(outcome) = snapshot.last_login_reload() {
         writeln!(stdout, "last_login_reload: {}", outcome.description())?;
     }
     writeln!(
         stdout,
         "readiness: {}",
-        readiness_label(snapshot.hosted_readiness())
+        readiness_label(snapshot.hosted_readiness(), snapshot.fleet())
     )?;
     writeln!(stdout, "phase: {}", phase_label(snapshot.phase()))?;
     writeln!(stdout, "router: {}", router_label(snapshot.router()))?;
@@ -307,26 +308,160 @@ fn render_snapshot<W: Write>(stdout: &mut W, snapshot: &HostSnapshot) -> std::io
     )
 }
 
-fn classification_label(classification: codex_router_host::TerminalClassification) -> &'static str {
-    match classification {
-        codex_router_host::TerminalClassification::Ready => "ready",
-        codex_router_host::TerminalClassification::LocalReadyRemoteDegraded => {
-            "local ready (Remote Control degraded)"
+fn render_fleet_status<W: Write>(
+    stdout: &mut W,
+    observation: &codex_router_host::FleetHostObservation,
+) -> std::io::Result<()> {
+    use codex_router_host::FleetHostObservation;
+    use collaboration_protocol::FleetLinkState;
+    match observation {
+        FleetHostObservation::NotObserved => writeln!(stdout, "central: not observed"),
+        FleetHostObservation::Unavailable { message } => {
+            writeln!(stdout, "central: unavailable ({message})")
         }
-        codex_router_host::TerminalClassification::Unavailable => "unavailable",
-        codex_router_host::TerminalClassification::Succeeded => "succeeded",
-        codex_router_host::TerminalClassification::Failed => "failed",
-        codex_router_host::TerminalClassification::Busy => "busy",
+        FleetHostObservation::Available {
+            central,
+            stuck_mail,
+        } => {
+            match central {
+                None => writeln!(stdout, "central: not configured")?,
+                Some(link) => {
+                    match &link.state {
+                        FleetLinkState::Disconnected { since } => {
+                            write!(stdout, "central: disconnected since {since}")
+                        }
+                        FleetLinkState::Connecting { since, attempts } => {
+                            write!(
+                                stdout,
+                                "central: connecting since {since}; attempts {attempts}"
+                            )
+                        }
+                        FleetLinkState::Connected {
+                            since,
+                            last_contact,
+                        } => write!(
+                            stdout,
+                            "central: connected since {since}; last message from central {last_contact}"
+                        ),
+                        FleetLinkState::Refused { reason, at } => {
+                            write!(stdout, "central: refused {reason:?} at {at}")
+                        }
+                    }?;
+                    if let Some(drop) = &link.last_drop {
+                        write!(
+                            stdout,
+                            "; last drop {} at {}",
+                            drop.reason.as_str(),
+                            drop.at
+                        )?;
+                    }
+                    if let Some(failure) = &link.last_failure {
+                        let reason = serde_json::to_string(&failure.reason)
+                            .map_err(std::io::Error::other)?;
+                        write!(stdout, "; last failure {reason} at {}", failure.at)?;
+                    }
+                    write!(
+                        stdout,
+                        "; instance {}; connection {}; revision {}",
+                        link.instance, link.connection, link.revision
+                    )?;
+                    if !matches!(link.state, FleetLinkState::Connected { .. })
+                        && let Some(last_frame_at) = link.last_frame_at
+                    {
+                        write!(stdout, "; last message from central {last_frame_at}")?;
+                    }
+                    writeln!(stdout)?;
+                    writeln!(
+                        stdout,
+                        "central peer: {}; endpoint: {}",
+                        link.peer, link.endpoint
+                    )?;
+                }
+            }
+            match stuck_mail {
+                collaboration_protocol::StuckMailSummary::Unavailable { message } => {
+                    writeln!(stdout, "outbox: unavailable ({message})")
+                }
+                collaboration_protocol::StuckMailSummary::AgeUnknown {
+                    recovered_count,
+                    known_stuck,
+                } => {
+                    if let Some(known) = known_stuck {
+                        write!(
+                            stdout,
+                            "outbox: {} items sent longer than 5 minutes; oldest age {}s; ",
+                            known.count, known.oldest_age_seconds
+                        )?;
+                    } else {
+                        write!(stdout, "outbox: ")?;
+                    }
+                    writeln!(
+                        stdout,
+                        "{recovered_count} outstanding sent items; age unknown (recovered)"
+                    )
+                }
+                collaboration_protocol::StuckMailSummary::Empty => {
+                    writeln!(stdout, "outbox: 0 items sent longer than 5 minutes")
+                }
+                collaboration_protocol::StuckMailSummary::Stuck {
+                    count,
+                    oldest_age_seconds,
+                } => writeln!(
+                    stdout,
+                    "outbox: {count} items sent longer than 5 minutes; oldest age {oldest_age_seconds}s"
+                ),
+            }
+        }
     }
 }
 
-fn readiness_label(readiness: codex_router_host::HostedReadiness) -> &'static str {
-    match readiness {
-        codex_router_host::HostedReadiness::Ready => "ready",
-        codex_router_host::HostedReadiness::LocalReadyRemoteDegraded => {
-            "local ready (Remote Control degraded)"
+fn classification_label(
+    classification: codex_router_host::TerminalClassification,
+    fleet: &codex_router_host::FleetHostObservation,
+) -> String {
+    match classification {
+        codex_router_host::TerminalClassification::Ready => {
+            readiness_label(codex_router_host::HostedReadiness::Ready, fleet)
         }
-        codex_router_host::HostedReadiness::Unavailable => "unavailable",
+        codex_router_host::TerminalClassification::LocalReadyRemoteDegraded => readiness_label(
+            codex_router_host::HostedReadiness::LocalReadyRemoteDegraded,
+            fleet,
+        ),
+        codex_router_host::TerminalClassification::Unavailable => "unavailable".to_owned(),
+        codex_router_host::TerminalClassification::Succeeded => "succeeded".to_owned(),
+        codex_router_host::TerminalClassification::Failed => "failed".to_owned(),
+        codex_router_host::TerminalClassification::Busy => "busy".to_owned(),
+    }
+}
+
+fn readiness_label(
+    readiness: codex_router_host::HostedReadiness,
+    fleet: &codex_router_host::FleetHostObservation,
+) -> String {
+    use codex_router_host::{FleetHostObservation, HostedReadiness};
+    use collaboration_protocol::FleetLinkState;
+    if let FleetHostObservation::Available {
+        central: Some(record),
+        ..
+    } = fleet
+        && let FleetLinkState::Refused { reason, .. } = &record.state
+    {
+        match readiness {
+            HostedReadiness::Ready => return format!("local ready (central refused: {reason:?})"),
+            HostedReadiness::LocalReadyRemoteDegraded => {
+                return format!(
+                    "local ready (Remote Control degraded, central refused: {reason:?})"
+                );
+            }
+            HostedReadiness::Unavailable => {}
+        }
+    }
+    match readiness {
+        HostedReadiness::Ready => "ready".to_owned(),
+        HostedReadiness::LocalReadyRemoteDegraded => {
+            "local ready (Remote Control degraded)".to_owned()
+        }
+        HostedReadiness::Unavailable => "unavailable".to_owned(),
     }
 }
 
@@ -410,268 +545,5 @@ fn outcome_label(outcome: Option<&codex_router_host::LifecycleOutcome>) -> &'sta
 }
 
 #[cfg(test)]
-mod tests {
-    use codex_router_host::AppServerCondition;
-    use codex_router_host::ExecutableRelation;
-    use codex_router_host::HostOperation;
-    use codex_router_host::HostPhase;
-    use codex_router_host::HostSnapshotDimensions;
-    use codex_router_host::HostTerminalResponse;
-    use codex_router_host::LifecycleOutcome;
-    use codex_router_host::LifecycleOutcomeClassification;
-    use codex_router_host::OperatorRequest;
-    use codex_router_host::RecoveryBudget;
-    use codex_router_host::RemoteControlCondition;
-    use codex_router_host::RouterCondition;
-    use codex_router_host::TerminalClassification;
-
-    use super::*;
-
-    #[test]
-    #[expect(
-        clippy::panic_in_result_fn,
-        reason = "Contract asserts; setup may fail."
-    )]
-    fn host_status_is_deterministic_complete_and_canary_free() -> std::io::Result<()> {
-        let snapshot = HostSnapshot::new(HostSnapshotDimensions {
-            phase: HostPhase::Steady,
-            router: RouterCondition::ExternalReachable,
-            app_server: AppServerCondition::NativeReady {
-                running_version: "1.2.3".to_owned(),
-            },
-            remote_control: RemoteControlCondition::Connected,
-            remote_control_identity: None,
-            executable_relation: ExecutableRelation::Match,
-            router_executable_relation: codex_router_host::RouterExecutableRelation::Match,
-            recovery_budget: RecoveryBudget::Available,
-            last_lifecycle_outcome: Some(LifecycleOutcome {
-                operation: HostOperation::Start,
-                classification: LifecycleOutcomeClassification::Succeeded,
-            }),
-        });
-        let frames = [OperatorFrame::terminal(HostTerminalResponse::new(
-            OperatorRequest::Status,
-            TerminalClassification::Ready,
-            snapshot,
-            "shared Codex host status".to_owned(),
-        ))];
-        let mut output = Vec::new();
-
-        render_terminal_frame(&mut output, &frames)?;
-
-        let rendered = String::from_utf8(output).map_err(std::io::Error::other)?;
-        for field in [
-            "readiness:",
-            "phase:",
-            "router:",
-            "app_server:",
-            "remote_control:",
-            "codex_executable_relation:",
-            "router_executable_relation:",
-            "recovery_budget:",
-            "last_lifecycle_outcome:",
-        ] {
-            assert!(rendered.contains(field), "missing {field}");
-        }
-        assert!(!rendered.contains("PROMPT_CANARY"));
-        Ok(())
-    }
-
-    #[test]
-    #[expect(
-        clippy::panic_in_result_fn,
-        reason = "Contract asserts; setup may fail."
-    )]
-    fn router_drift_status_names_both_versions_and_restart_action() -> std::io::Result<()> {
-        let snapshot = HostSnapshot::new(HostSnapshotDimensions {
-            phase: HostPhase::Steady,
-            router: RouterCondition::ExternalReachable,
-            app_server: AppServerCondition::Absent,
-            remote_control: RemoteControlCondition::Unavailable,
-            remote_control_identity: None,
-            executable_relation: ExecutableRelation::Match,
-            router_executable_relation: codex_router_host::RouterExecutableRelation::Drift {
-                running_version: "0.1.36".to_owned(),
-                installed_version: Some("0.1.37".to_owned()),
-            },
-            recovery_budget: RecoveryBudget::Available,
-            last_lifecycle_outcome: None,
-        });
-        let mut output = Vec::new();
-        render_snapshot(&mut output, &snapshot)?;
-        let rendered = String::from_utf8(output).map_err(std::io::Error::other)?;
-        assert!(rendered.contains("router_executable_relation: drift"));
-        assert!(rendered.contains("⚠ Router Host is stale (running 0.1.36, installed 0.1.37)"));
-        assert!(rendered.contains("codex-router host restart"));
-        let encoded = serde_json::to_value(snapshot).map_err(std::io::Error::other)?;
-        assert_eq!(encoded["router_executable_relation"]["kind"], "drift");
-        assert_eq!(
-            encoded["router_executable_relation"]["running_version"],
-            "0.1.36"
-        );
-        Ok(())
-    }
-
-    #[test]
-    #[expect(
-        clippy::panic_in_result_fn,
-        reason = "Contract asserts; setup may fail."
-    )]
-    fn replacement_failure_renders_the_required_manual_recovery_action() -> std::io::Result<()> {
-        let mut output = Vec::new();
-        render_update_result(
-            &mut output,
-            &UpdateResult::UpdatedButReplacementFailed {
-                message: "replacement unavailable".to_owned(),
-                recovery_action:
-                    "start codex-router host with the same --router-root and --port after the old Host exits"
-                        .to_owned(),
-            },
-        )?;
-        let rendered = String::from_utf8(output).map_err(std::io::Error::other)?;
-        assert!(rendered.contains("updated but replacement failed"));
-        assert!(rendered.contains(
-            "recovery_action: start codex-router host with the same --router-root and --port"
-        ));
-        Ok(())
-    }
-
-    #[test]
-    #[expect(
-        clippy::panic_in_result_fn,
-        reason = "Contract asserts; setup may fail."
-    )]
-    fn presenter_renders_forced_shutdown_as_warning_and_failure_as_error() -> std::io::Result<()> {
-        let mut presenter = HostProgressPresenter::new(false);
-        let mut output = Vec::new();
-        presenter.accept(
-            &mut output,
-            &OperatorFrame::Progress(HostProgress::AppServerKilled),
-        )?;
-        presenter.accept(
-            &mut output,
-            &OperatorFrame::Terminal(HostTerminalResponse::new(
-                OperatorRequest::Status,
-                TerminalClassification::Failed,
-                ready_snapshot(),
-                "failed".to_owned(),
-            )),
-        )?;
-        let rendered = String::from_utf8(output).map_err(std::io::Error::other)?;
-        assert!(rendered.contains("⚠ forced app-server shutdown"));
-        Ok(())
-    }
-
-    #[test]
-    #[expect(
-        clippy::panic_in_result_fn,
-        reason = "Contract asserts; setup may fail."
-    )]
-    fn presenter_completes_delayed_phases_in_tty_and_plain_modes() -> std::io::Result<()> {
-        for tty in [false, true] {
-            let mut presenter = HostProgressPresenter::new(tty);
-            let mut output = Vec::new();
-            presenter.accept(
-                &mut output,
-                &OperatorFrame::Progress(HostProgress::StartingRouter),
-            )?;
-            for _ in 0..20_000 {
-                std::hint::spin_loop();
-            }
-            presenter.accept(
-                &mut output,
-                &OperatorFrame::Progress(HostProgress::AppServerReady),
-            )?;
-            let rendered = String::from_utf8(output).map_err(std::io::Error::other)?;
-            assert!(rendered.contains("✓ starting router ("));
-            assert!(rendered.contains("starting router ("));
-        }
-        Ok(())
-    }
-
-    #[test]
-    #[expect(
-        clippy::panic_in_result_fn,
-        reason = "Contract asserts; setup may fail."
-    )]
-    fn streamed_progress_and_terminal_render_each_phase_once() -> std::io::Result<()> {
-        let mut presenter = HostProgressPresenter::new(false);
-        let mut output = Vec::new();
-        presenter.accept(
-            &mut output,
-            &OperatorFrame::Progress(HostProgress::StartingAppServer),
-        )?;
-        presenter.accept(
-            &mut output,
-            &OperatorFrame::Progress(HostProgress::AppServerReady),
-        )?;
-        presenter.finish_success(&mut output)?;
-        let response = HostTerminalResponse::new(
-            OperatorRequest::RestartAppServer,
-            TerminalClassification::Succeeded,
-            ready_snapshot(),
-            "app-server restarted".to_owned(),
-        );
-        render_terminal_frame(
-            &mut output,
-            &[
-                OperatorFrame::Progress(HostProgress::StartingAppServer),
-                OperatorFrame::Terminal(response),
-            ],
-        )?;
-        let rendered = String::from_utf8(output).map_err(std::io::Error::other)?;
-        assert_eq!(rendered.matches("starting app-server").count(), 1);
-        assert_eq!(rendered.matches("app-server ready").count(), 1);
-        assert_eq!(rendered.matches("result: succeeded").count(), 1);
-        Ok(())
-    }
-
-    fn ready_snapshot() -> HostSnapshot {
-        HostSnapshot::new(HostSnapshotDimensions {
-            phase: HostPhase::Steady,
-            router: RouterCondition::ExternalReachable,
-            app_server: AppServerCondition::Absent,
-            remote_control: RemoteControlCondition::Unavailable,
-            remote_control_identity: None,
-            executable_relation: ExecutableRelation::Unknown,
-            router_executable_relation: codex_router_host::RouterExecutableRelation::Unknown {
-                reason: "not observed".to_owned(),
-            },
-            recovery_budget: RecoveryBudget::Available,
-            last_lifecycle_outcome: None,
-        })
-    }
-
-    #[test]
-    fn status_renders_the_hosts_startup_port_values_and_sources() {
-        use codex_router_host::{HostPortSelection, HostPortSource, SelectedHostPort};
-        let selected = HostPortSelection {
-            router: SelectedHostPort {
-                port: 28741,
-                source: HostPortSource::SettingsPorts,
-            },
-            mcp: SelectedHostPort {
-                port: 28743,
-                source: HostPortSource::Flag,
-            },
-            tailscale_https: SelectedHostPort {
-                port: 18789,
-                source: HostPortSource::Default,
-            },
-        };
-        let snapshot = ready_snapshot().with_port_selection(Some(selected));
-        let mut output = Vec::new();
-        render_snapshot(&mut output, &snapshot).expect("rendered status");
-        let rendered = String::from_utf8(output).expect("UTF-8 status");
-        for line in [
-            "router_port: 28741 (settings.jsonc ports)",
-            "mcp_port: 28743 (flag)",
-            "tailscale_https_port: 18789 (default)",
-        ] {
-            assert!(rendered.contains(line), "{rendered}");
-        }
-        let encoded = serde_json::to_vec(&snapshot).expect("encoded snapshot");
-        let decoded: HostSnapshot = serde_json::from_slice(&encoded).expect("decoded snapshot");
-        assert_eq!(decoded.port_selection(), Some(selected));
-    }
-}
+#[path = "host_test.rs"]
+mod tests;
