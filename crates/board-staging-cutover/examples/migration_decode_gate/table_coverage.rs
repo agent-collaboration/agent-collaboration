@@ -6,8 +6,6 @@
 //!   gate decodes (a workspace's repository refs, an ADR's files, …).
 //! - `MustBeEmpty`: main decodes it, the migration carries nothing into it, and
 //!   the gate has no reason to: any row is refused until the gate decodes it.
-//! - `CarriedUnchanged`: library-owned state the migration copies byte for byte
-//!   and main's library reads on its own operations.
 //! - `NotReadByMain`: kept for revert, or a ledger main's bootstrap verifies
 //!   (proven separately by main-central opening the migrated objects).
 
@@ -16,7 +14,6 @@ pub enum Coverage {
     Decoded(&'static str),
     DecodedWith(&'static str),
     MustBeEmpty(&'static str),
-    CarriedUnchanged(&'static str),
     NotReadByMain(&'static str),
 }
 
@@ -28,7 +25,9 @@ const LEDGER: Coverage = Coverage::NotReadByMain(
 const JOURNAL: Coverage = Coverage::NotReadByMain(
     "the durable-steps journal main's library adopts (main-central proves it)",
 );
-const RECEIVER: Coverage = Coverage::CarriedUnchanged("fleet-sync-receiver's own Copy state");
+const NO_PUBLIC_DECODER: Coverage = Coverage::MustBeEmpty(
+    "receiver record with no public decoder; any row stops the run until the gate decodes it",
+);
 
 pub const FLEET: &[(&str, Coverage)] = &[
     (
@@ -161,19 +160,31 @@ pub const FLEET: &[(&str, Coverage)] = &[
 pub const COPY: &[(&str, Coverage)] = &[
     (
         "_fleet_sync_copy",
-        Coverage::Decoded("fleet-sync-receiver copy_status"),
+        Coverage::Decoded("copy_status and inspect_copy, after main's receiver migration"),
     ),
-    ("_fleet_sync_receipts", RECEIVER),
-    ("_fleet_sync_staged_parts", RECEIVER),
-    ("_fleet_sync_fence_receipts", RECEIVER),
-    ("_fleet_sync_schema_steps", RECEIVER),
-    ("_fleet_sync_seed", RECEIVER),
-    ("_fleet_sync_seed_pages", RECEIVER),
-    ("_fleet_sync_seed_attempts", RECEIVER),
-    ("_fleet_sync_creation", RECEIVER),
-    ("_fleet_sync_copy_tables", RECEIVER),
-    ("_fleet_sync_install", RECEIVER),
-    ("_fleet_sync_install_pages", RECEIVER),
+    (
+        "_fleet_sync_staged_parts",
+        Coverage::Decoded("inspect_copy staged parts"),
+    ),
+    (
+        "_fleet_sync_schema_steps",
+        Coverage::Decoded("inspect_copy schema fingerprint"),
+    ),
+    (
+        "_fleet_sync_receipts",
+        Coverage::Decoded("receipt digest (PieceDigest)"),
+    ),
+    (
+        "_fleet_sync_copy_tables",
+        Coverage::Decoded("replicated schema membership (TableName)"),
+    ),
+    ("_fleet_sync_fence_receipts", NO_PUBLIC_DECODER),
+    ("_fleet_sync_seed", NO_PUBLIC_DECODER),
+    ("_fleet_sync_seed_pages", NO_PUBLIC_DECODER),
+    ("_fleet_sync_seed_attempts", NO_PUBLIC_DECODER),
+    ("_fleet_sync_creation", NO_PUBLIC_DECODER),
+    ("_fleet_sync_install", NO_PUBLIC_DECODER),
+    ("_fleet_sync_install_pages", NO_PUBLIC_DECODER),
     ("_fleet_sync_hook_migrations", LEDGER),
     ("_sqlx_migrations_fleet_sync_receiver", LEDGER),
     (

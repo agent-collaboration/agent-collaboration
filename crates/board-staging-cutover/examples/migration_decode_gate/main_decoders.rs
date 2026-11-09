@@ -11,7 +11,7 @@
 //! included), the lease incarnation, the feed state and retained range, and
 //! each request ledger record. table_coverage.rs lists what covers every table.
 
-use crate::candidate_image::ObjectImage;
+use crate::candidate_image::{ObjectImage, TypedValue};
 use durable_steps::storage::TransactionScope;
 use fleet_sync_protocol::{CopyStatusAnswer, DatabaseId};
 use message_board::{RecordId, RecordKind, RecordRef};
@@ -187,21 +187,106 @@ pub async fn decode_fleet(
     Ok(refusals)
 }
 
+/// One Copy, as main's health and retention read it: fleet-sync-receiver's
+/// `copy_status` and full `inspect_copy` (record, schema fingerprint, staged
+/// parts), then the receiver's own row rules for the families it reads
+/// elsewhere: each receipt's digest (`PieceDigest`) and each replicated table
+/// name (`TableName`, outside the reserved namespace).
 pub async fn decode_copy(
     project: &str,
+    image: &ObjectImage,
     connection: &mut TursoConnection,
 ) -> Result<Vec<Refusal>, sqlx_core::Error> {
-    let mut transaction = connection.begin().await?;
-    let answer = fleet_sync_receiver::copy_status(&mut TursoScope(&mut transaction)).await;
-    transaction.rollback().await?;
-    let reason = match answer {
-        Ok(CopyStatusAnswer::Status(_) | CopyStatusAnswer::Retired) => return Ok(Vec::new()),
-        Ok(CopyStatusAnswer::NotInitialized) => "main reads no Copy record".to_owned(),
-        Err(error) => error.to_string(),
+    let object = format!("copy {project}");
+    let mut refusals = Vec::new();
+    let mut refuse = |row: &str, reason: String| {
+        refusals.push(Refusal {
+            object: object.clone(),
+            row: row.into(),
+            reason,
+        });
     };
-    Ok(vec![Refusal {
-        object: format!("copy {project}"),
-        row: "_fleet_sync_copy".into(),
-        reason,
-    }])
+    let mut transaction = connection.begin().await?;
+    // As main's post-deploy Copy migration does before main reads it: the
+    // pinned receiver corpus, recorded in central's own set (its checksum
+    // check also validates the candidate's recorded versions), then the Copy's
+    // receiver hook. All of it rolls back with the transaction.
+    let mut receiver = sqlx_core::migrate::Migrator::with_migrations(
+        fleet_sync_receiver::RECEIVER_MIGRATOR
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>(),
+    );
+    receiver.dangerous_set_table_name("_sqlx_migrations_fleet_sync_receiver");
+    if let Err(error) = receiver.run_direct(None, &mut *transaction, false).await {
+        refuse(
+            "_sqlx_migrations_fleet_sync_receiver",
+            format!("main's receiver migration refuses the Copy: {error}"),
+        );
+    }
+    match collaboration_central_core::CopyReceiverRules::new(
+        runtime_primitives::SyncTime::from_unix_millis(0),
+        None,
+    ) {
+        Ok(rules) => {
+            if let Err(error) =
+                fleet_sync_receiver::initialize_hook(&mut TursoScope(&mut transaction), &rules)
+                    .await
+            {
+                refuse(
+                    "_fleet_sync_hook_migrations",
+                    format!("main's receiver hook refuses the Copy: {error}"),
+                );
+            }
+        }
+        Err(error) => refuse("_fleet_sync_hook_migrations", error.to_string()),
+    }
+    let status = fleet_sync_receiver::copy_status(&mut TursoScope(&mut transaction)).await;
+    let inspection = fleet_sync_receiver::inspect_copy(&mut TursoScope(&mut transaction)).await;
+    transaction.rollback().await?;
+    match status {
+        Ok(CopyStatusAnswer::Status(_) | CopyStatusAnswer::Retired) => {}
+        Ok(CopyStatusAnswer::NotInitialized) => {
+            refuse("_fleet_sync_copy", "main reads no Copy record".into())
+        }
+        Err(error) => refuse("_fleet_sync_copy", error.to_string()),
+    }
+    match inspection {
+        fleet_sync_receiver::CopyInspection::Damaged { detail } => {
+            refuse(
+                "inspection",
+                format!("main's Copy inspection marks it damaged: {detail}"),
+            );
+        }
+        fleet_sync_receiver::CopyInspection::Uninitialized => {
+            refuse("inspection", "main's Copy inspection finds no Copy".into());
+        }
+        fleet_sync_receiver::CopyInspection::Live { .. }
+        | fleet_sync_receiver::CopyInspection::Retired { .. } => {}
+    }
+    for (index, identity, digest) in image.typed_pairs("_fleet_sync_receipts", "identity", "digest")
+    {
+        let row = format!("_fleet_sync_receipts row {index}");
+        match (identity, digest) {
+            (TypedValue::Text(_), TypedValue::Text(digest)) => {
+                if fleet_sync_protocol::PieceDigest::try_from(digest.clone()).is_err() {
+                    refuse(&row, "receipt digest isn't a piece digest".into());
+                }
+            }
+            _ => refuse(&row, "receipt identity or digest isn't text".into()),
+        }
+    }
+    for (index, name) in image.typed_column("_fleet_sync_copy_tables", "name") {
+        let row = format!("_fleet_sync_copy_tables row {index}");
+        match name {
+            TypedValue::Text(name)
+                if fleet_sync_protocol::TableName::new(name).is_ok()
+                    && !fleet_sync_protocol::reserved_namespace(name) => {}
+            _ => refuse(
+                &row,
+                "replicated schema membership isn't a valid table name".into(),
+            ),
+        }
+    }
+    Ok(refusals)
 }

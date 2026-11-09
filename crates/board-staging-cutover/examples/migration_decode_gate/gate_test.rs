@@ -399,3 +399,115 @@ fn every_table_mains_fleet_migrations_create_is_decoded_or_must_be_empty() {
     }
     assert_eq!(missing, Vec::<String>::new());
 }
+
+/// Adds one row to a table of the first Copy (the held-at-three project).
+fn add_copy_row(candidate: &mut Value, table: &str, row: Value) {
+    let copies = candidate["copies"].as_object_mut().expect("copies");
+    let copy = copies.values_mut().next().expect("one copy");
+    copy["tables"][table]["rows"]
+        .as_array_mut()
+        .unwrap_or_else(|| panic!("{table} rows"))
+        .push(row);
+}
+
+fn text(value: &str) -> Value {
+    serde_json::json!({ "kind": "text", "value": value })
+}
+fn integer(value: i64) -> Value {
+    serde_json::json!({ "kind": "integer", "value": value.to_string() })
+}
+
+/// G3: main inspects each Copy's retained library records after its receiver
+/// migration; the gate must refuse what that inspection marks Damaged.
+#[tokio::test]
+async fn a_staged_part_with_a_non_integer_time_is_refused_and_a_valid_staged_part_passes() {
+    // Arrange: one staged part of transaction {epoch 3, commit 18}.
+    let staged = |staged_at: &str| {
+        let staged_at = staged_at.to_owned();
+        edited(move |candidate| {
+            add_copy_row(
+                candidate,
+                "_fleet_sync_staged_parts",
+                serde_json::json!([
+                    text(r#"{"epoch":3,"commitId":18}"#),
+                    integer(0),
+                    text(&staged_at),
+                    text("{}")
+                ]),
+            );
+        })
+    };
+
+    // Act
+    let valid = run_gate(&staged("1794000000000")).await;
+    let refused = run_gate(&staged("not-an-i64")).await;
+
+    // Assert
+    assert_eq!(valid.outcome, Outcome::Pass, "{valid:?}");
+    assert_eq!(refused.outcome, Outcome::Refused, "{refused:?}");
+    assert!(
+        refused
+            .refusals
+            .iter()
+            .any(|refusal| refusal.object.starts_with("copy ")
+                && refusal.row == "inspection"
+                && refusal.reason.contains("damaged")),
+        "{:?}",
+        refused.refusals
+    );
+}
+
+#[tokio::test]
+async fn a_receipt_whose_digest_is_not_a_piece_digest_is_refused_and_a_valid_receipt_passes() {
+    // Arrange
+    let receipt = |digest: &str| {
+        let digest = digest.to_owned();
+        edited(move |candidate| {
+            add_copy_row(
+                candidate,
+                "_fleet_sync_receipts",
+                serde_json::json!([text("piece-identity"), text(&digest)]),
+            );
+        })
+    };
+
+    // Act
+    let valid = run_gate(&receipt(&"a".repeat(64))).await;
+    let refused = run_gate(&receipt("not-a-digest")).await;
+
+    // Assert
+    assert_eq!(valid.outcome, Outcome::Pass, "{valid:?}");
+    assert!(
+        refused
+            .refusals
+            .iter()
+            .any(|refusal| refusal.row.starts_with("_fleet_sync_receipts row")),
+        "{:?}",
+        refused.refusals
+    );
+}
+
+#[test]
+fn every_table_the_receiver_corpus_creates_is_decoded_must_be_empty_or_a_named_ledger() {
+    use crate::table_coverage::{COPY, Coverage, coverage};
+    let ledgers = [
+        "_fleet_sync_hook_migrations",
+        "_fleet_sync_legacy_hook_migrations",
+    ];
+    let mut missing = Vec::new();
+    for migration in fleet_sync_receiver::RECEIVER_MIGRATOR.iter() {
+        for statement in migration.sql.as_ref().split("CREATE TABLE ").skip(1) {
+            let table: String = statement
+                .trim_start_matches("IF NOT EXISTS ")
+                .chars()
+                .take_while(|character| character.is_ascii_alphanumeric() || *character == '_')
+                .collect();
+            match coverage(COPY, &table) {
+                Some(Coverage::Decoded(_) | Coverage::MustBeEmpty(_)) => {}
+                Some(Coverage::NotReadByMain(_)) if ledgers.contains(&table.as_str()) => {}
+                other => missing.push(format!("{table}: {other:?}")),
+            }
+        }
+    }
+    assert_eq!(missing, Vec::<String>::new());
+}

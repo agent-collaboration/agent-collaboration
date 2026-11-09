@@ -62,6 +62,37 @@ pub struct ObjectImage {
 }
 
 impl ObjectImage {
+    /// One column's typed values with their row index; empty when absent.
+    pub fn typed_column(&self, table: &str, column: &str) -> Vec<(usize, &TypedValue)> {
+        let Some(image) = self.tables.get(table) else {
+            return Vec::new();
+        };
+        let Some(at) = image.columns.iter().position(|name| name == column) else {
+            return Vec::new();
+        };
+        image
+            .rows
+            .iter()
+            .enumerate()
+            .filter_map(|(index, row)| row.get(at).map(|value| (index, value)))
+            .collect()
+    }
+
+    /// Two columns' typed values per row, with the row index.
+    pub fn typed_pairs(
+        &self,
+        table: &str,
+        first: &str,
+        second: &str,
+    ) -> Vec<(usize, &TypedValue, &TypedValue)> {
+        let left = self.typed_column(table, first);
+        let right = self.typed_column(table, second);
+        left.into_iter()
+            .zip(right)
+            .map(|((index, a), (_, b))| (index, a, b))
+            .collect()
+    }
+
     /// How many rows a table holds; zero when the table is absent.
     pub fn row_count(&self, table: &str) -> usize {
         self.tables.get(table).map_or(0, |image| image.rows.len())

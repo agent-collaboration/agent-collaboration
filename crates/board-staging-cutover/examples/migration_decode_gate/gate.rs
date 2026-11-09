@@ -86,7 +86,7 @@ pub async fn run_gate(inventory_text: &str) -> GateReport {
     for (project, image) in &candidate.copies {
         let object = format!("copy {project}");
         match rebuild(image).await {
-            Ok(mut connection) => match decode_copy(project, &mut connection).await {
+            Ok(mut connection) => match decode_copy(project, image, &mut connection).await {
                 Ok(found) => refusals.extend(found),
                 Err(error) => refusals.push(storage_refusal(&object, &error)),
             },
