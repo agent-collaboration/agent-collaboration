@@ -235,7 +235,6 @@ async fn acp_queue_known_not_submitted_returns_to_hold_without_advancing() {
     assert_eq!(board.held_since, Some(fixture.clock.now()));
     assert!(runtime.requests.lock().await.try_recv().is_err());
     *fixture.presence.0.lock().unwrap() = collaboration_contracts::TargetPresence::Running;
-    fixture.clock.advance(30).await;
     // Held mail waits for a signal that its target loaded, not for the clock.
     fixture.held_mail.provider_completed();
     let retried = tokio::time::timeout(std::time::Duration::from_secs(10), async {

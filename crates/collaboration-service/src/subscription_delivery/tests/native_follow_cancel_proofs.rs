@@ -77,6 +77,7 @@ async fn a_resolved_membership_keeps_its_held_item_and_drains_the_unallocated_ra
         .await
         .unwrap();
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
+    // The owed drain's quiet window reaches its 30 s cap.
     fixture.clock.advance_without_tokio_time(30);
     // Held mail waits for a signal that its target loaded, not for the clock.
     fixture.held_mail.observation_retried();
@@ -318,7 +319,6 @@ async fn a_real_membership_end_prevents_its_held_follow_through_a_frozen_child()
     // Local controls need no central ACK (840). Readiness reaches the real
     // pre-injection publisher check; no fixture releases custody or fabricates outcomes.
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
-    fixture.clock.advance_without_tokio_time(30);
     let settled = async {
         loop {
             let outcome = native

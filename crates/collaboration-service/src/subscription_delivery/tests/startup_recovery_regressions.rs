@@ -67,7 +67,9 @@ async fn deferred_project_restores_an_abandoned_selection_despite_the_same_reade
         .await
         .unwrap()
         .unwrap();
-    let runtime = fixture.native_runtime_with_clock(clock(&fixture)).await;
+    // The owner runs on the test clock: B's startup retry fires at its deadline.
+    let runtime = fixture.native_runtime().await;
+    let retry_at = fixture.clock.monotonic_now() + std::time::Duration::from_secs(1);
     assert!(evidence.timeout.load(Ordering::SeqCst));
     tokio::time::resume();
     let notice = activity(&fixture, &runtime).await;
@@ -77,6 +79,15 @@ async fn deferred_project_restores_an_abandoned_selection_despite_the_same_reade
     );
     runtime.await_settled().await;
     release_project_readers(held).await;
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        fixture.clock.not_due_check_now(retry_at),
+    )
+    .await
+    .expect("the startup task waits for its first retry");
+    fixture
+        .clock
+        .advance_by_without_tokio_time(retry_at.duration_since(fixture.clock.monotonic_now()));
     // No reader action: A's existing owner must not protect B's pre-crash selection.
     evidence.state("finished").await;
     let restored = fixture

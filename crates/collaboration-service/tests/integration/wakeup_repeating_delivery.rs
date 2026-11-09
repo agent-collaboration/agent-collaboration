@@ -69,10 +69,13 @@ impl SubscriptionClock for ManualWakeClock {
     }
 }
 
+/// Moves the wall clock and Tokio time together to `now_ms`, so the worker timer armed
+/// for that due time fires because it is due.
 async fn advance_wake_clock(clock: &ManualWakeClock, now_ms: i64) {
     tokio::time::pause();
+    let step = now_ms.saturating_sub(clock.0.load(Ordering::SeqCst));
     clock.set(now_ms);
-    tokio::time::advance(Duration::from_millis(250)).await;
+    tokio::time::advance(Duration::from_millis(u64::try_from(step).unwrap_or(0))).await;
     // Real socket/database work keeps its causal waits on elapsed time rather
     // than allowing paused-time auto-advance to consume its I/O deadlines.
     tokio::time::resume();

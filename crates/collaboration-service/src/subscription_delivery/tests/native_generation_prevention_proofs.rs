@@ -203,7 +203,6 @@ async fn a_generation_prevented_range_is_replaced_once_and_reaches_the_native_cl
     let mut received = None;
     if replacements.is_ok() {
         *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
-        fixture.clock.advance_without_tokio_time(30);
         let request = tokio::time::timeout(Duration::from_secs(6), async {
             runtime.requests.lock().await.recv().await.unwrap()
         })

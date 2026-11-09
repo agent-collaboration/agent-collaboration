@@ -151,7 +151,6 @@ async fn assert_reactivated_frontier(resolved: bool) {
             "activation mismatch was treated as settled despite A's uncovered resolved debt"
         );
         *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
-        fixture.clock.advance_without_tokio_time(30);
         // Held mail waits for a signal that its target loaded, not for the clock.
         fixture.held_mail.observation_retried();
         let request = tokio::time::timeout(Duration::from_secs(10), async {

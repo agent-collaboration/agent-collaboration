@@ -23,14 +23,28 @@ async fn early_startup_timeout_recovers_owed_range_without_reader_action() {
         .unwrap();
     let held = exhaust_project_readers(&project).await;
     evidence.timeout.store(false, Ordering::SeqCst);
-    let runtime = fixture.native_runtime_with_clock(clock(&fixture)).await;
+    // The owner runs on the test clock: the startup retry fires when the test moves the
+    // clock to its deadline, not on a real timer.
+    let runtime = fixture.native_runtime().await;
+    let retry_at = fixture.clock.monotonic_now() + Duration::from_secs(1);
     assert!(
         evidence.timeout.load(Ordering::SeqCst),
         "the initial native membership probe must time out"
     );
     tokio::time::resume();
     release_project_readers(held).await;
-    // No post, list, wait, reconcile or command from this reader starts recovery.
+    // No post, list, wait, reconcile or command from this reader starts recovery; only
+    // the retry's own deadline does.
+    tokio::time::timeout(
+        Duration::from_secs(5),
+        fixture.clock.not_due_check_now(retry_at),
+    )
+    .await
+    .expect("the startup task waits for its first retry");
+    assert!(runtime.requests.lock().await.try_recv().is_err());
+    fixture
+        .clock
+        .advance_by_without_tokio_time(retry_at.duration_since(fixture.clock.monotonic_now()));
     let notice = activity(&fixture, &runtime).await;
     assert_eq!(
         notice.ranges,
@@ -65,7 +79,9 @@ async fn definitive_failure_after_a_deferred_probe_quarantines_and_ends_recovery
         .unwrap();
     let held = exhaust_project_readers(&project).await;
     evidence.timeout.store(false, Ordering::SeqCst);
-    let runtime = fixture.native_runtime_with_clock(clock(&fixture)).await;
+    // The owner runs on the test clock: the startup retry fires at its deadline.
+    let runtime = fixture.native_runtime().await;
+    let retry_at = fixture.clock.monotonic_now() + Duration::from_secs(1);
     assert!(evidence.timeout.load(Ordering::SeqCst));
     tokio::time::resume();
     let mut raw = sqlx_turso::TursoConnectOptions::new()
@@ -84,6 +100,15 @@ async fn definitive_failure_after_a_deferred_probe_quarantines_and_ends_recovery
     );
     raw.close().await.unwrap();
     release_project_readers(held).await;
+    tokio::time::timeout(
+        Duration::from_secs(5),
+        fixture.clock.not_due_check_now(retry_at),
+    )
+    .await
+    .expect("the startup task waits for its first retry");
+    fixture
+        .clock
+        .advance_by_without_tokio_time(retry_at.duration_since(fixture.clock.monotonic_now()));
     evidence.state("quarantined").await;
     evidence.state("finished").await;
     assert!(

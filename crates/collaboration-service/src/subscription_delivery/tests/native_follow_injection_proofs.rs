@@ -76,7 +76,6 @@ async fn assert_local_injection_prevention(discard_group: bool) {
     // This installation has no central session or replication port. A local
     // control must not wait for a watermark it can never receive (U63 / 840).
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
-    fixture.clock.advance_without_tokio_time(30);
     // Held mail waits for a signal that its target loaded, not for the clock.
     fixture.held_mail.observation_retried();
     let next_client_call = async { runtime.requests.lock().await.recv().await.unwrap() };

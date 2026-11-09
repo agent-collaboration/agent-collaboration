@@ -182,7 +182,6 @@ async fn a_renewed_held_follow_delivers_past_its_original_membership_expiry() {
         .await;
     fixture.clock.advance_without_tokio_time(2);
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
-    fixture.clock.advance_without_tokio_time(30);
     let request = tokio::time::timeout(Duration::from_secs(6), async {
         runtime.requests.lock().await.recv().await.unwrap()
     })
