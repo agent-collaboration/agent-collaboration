@@ -283,7 +283,8 @@ where
 
 /// Central owes `subject` work that is answered from outside (a Router's
 /// acknowledgment): keep a waiting row due at `at`, with no failure recorded.
-/// An existing row is left as it is.
+/// An existing row keeps its state, except a parked one (see [`park`]), which
+/// is due at `at` again.
 pub(crate) async fn owe<Scope: TransactionScope>(
     scope: &mut Scope,
     id: Uuid,
@@ -298,7 +299,22 @@ where
     for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
-    if attempt(scope, subject, kind).await?.is_some() {
+    if let Some(row) = attempt(scope, subject, kind).await? {
+        if row.state
+            == (AttemptState::Waiting {
+                next_attempt_at: None,
+            })
+        {
+            queries::arm_parked_work_attempt(
+                scope,
+                subject.to_string(),
+                kind.as_str().into(),
+                at.unix_millis().to_string(),
+                now.unix_millis().to_string(),
+            )
+            .await
+            .map_err(StoreError::backend)?;
+        }
         return Ok(());
     }
     queries::insert_work_attempt_owed(
@@ -331,6 +347,30 @@ where
         .into_iter()
         .map(|row| private_id(row.subject, "subject"))
         .collect()
+}
+
+/// Park a waiting row: it keeps its count and error but is never due, and
+/// arms no alarm, until [`owe`] arms it again (the Router owed the work is
+/// back and can answer it).
+pub(crate) async fn park<Scope: TransactionScope>(
+    scope: &mut Scope,
+    subject: Uuid,
+    kind: AttemptKind,
+    now: SyncTime,
+) -> Result<(), StoreError>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+{
+    queries::park_work_attempt(
+        scope,
+        subject.to_string(),
+        kind.as_str().into(),
+        now.unix_millis().to_string(),
+    )
+    .await
+    .map(|_| ())
+    .map_err(StoreError::backend)
 }
 
 /// The work finished: forget its row, in the transaction that finished it.

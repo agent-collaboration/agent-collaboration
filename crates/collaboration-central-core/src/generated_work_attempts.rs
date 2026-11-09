@@ -227,6 +227,54 @@ where
         Ok(())
     }
 }
+pub(crate) fn park_work_attempt<S>(
+    scope: &mut S,
+    subject: String,
+    kind: String,
+    now: String,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/work_attempts/park_work_attempt.sql"
+        )))
+        .bind(subject)
+        .bind(kind)
+        .bind(now);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+pub(crate) fn arm_parked_work_attempt<S>(
+    scope: &mut S,
+    subject: String,
+    kind: String,
+    next_attempt_at: String,
+    now: String,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/work_attempts/arm_parked_work_attempt.sql"
+        )))
+        .bind(subject)
+        .bind(kind)
+        .bind(next_attempt_at)
+        .bind(now);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
 
 #[derive(Debug)]
 pub(crate) struct StoredDueWorkAttempt {

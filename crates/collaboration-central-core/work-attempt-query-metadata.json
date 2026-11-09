@@ -60,18 +60,20 @@
     "sql/socket_requests/read_socket_request_by_send.sql": "e7aadccb6ec33a92e2e49f162781c61fae2301db0e5831d126ffc31f82d0bec4",
     "sql/socket_requests/reset_socket_request_waiting.sql": "1e099868e735766714bbd0702f454d22748d1959ca41eb0daeb9d3e138bb73ad",
     "sql/socket_requests/update_socket_request_refused.sql": "7677b4856ff22453c11d6b0f881d6678a2ccc3a57913b78bb88b0ff583978e2d",
+    "sql/work_attempts/arm_parked_work_attempt.sql": "282c678e30f5d2c0899c16b54b8ddb9c5e0e9166e53cb963fb635c5a486e99a4",
     "sql/work_attempts/delete_work_attempt.sql": "ddd9a1870613ecca05c59ef550af73514d26a458bb5e3713b38aa19760d2a677",
     "sql/work_attempts/insert_work_attempt_failure.sql": "858371fe97a4cd10093cf9db4e7391507e8d072a887839ec71cc1f1e22524beb",
     "sql/work_attempts/insert_work_attempt_owed.sql": "d3bfaa558808ff789ab91a1008440bf289691aa54829b4fb5965e3455ef84da2",
+    "sql/work_attempts/park_work_attempt.sql": "5a2d3bbaf5a8c31999738e7a1caf3a093303bbb26af41c9fc732b9fe2ccfcf0e",
     "sql/work_attempts/read_due_work_attempts.sql": "e43e3f4ec5530fb9490063f9742d99423a7e5c9e36ca165607d6ee03df6a8b35",
     "sql/work_attempts/read_next_work_retry.sql": "a9a59ac30501393410c32188700fd6d56c7ffd23ac4226be56518b8cfaf1488b",
     "sql/work_attempts/read_work_attempt.sql": "77d2c8f285c17d94058a1567ce01aac12fac83abf26184c6aedac832a8a39e3c",
     "sql/work_attempts/update_work_attempt_failure.sql": "d5f7a6192d35745ee6de01982f90779697df2e57511819db8824313e636e9854",
-    "src/generated_work_attempts.rs": "8b506fc0d41e53a252d2e37cbc6ea8ffde1beee0e6b554cef2442c5261d21ef8",
-    "work-attempt-queries.json": "58332d0469be2d11fc210837660112c926b0241f2b647921d412aee09385bb8e",
+    "src/generated_work_attempts.rs": "eb5a5c71ce053f8a45f3e2c7ff01514bb4db5cbf4f4a823001a783dd37a75224",
+    "work-attempt-queries.json": "7ebeeed7b712ca6952c7b2c24dc44c96e4384e21d87ae2bb2f0a9c6bd74b949c",
     "work_migrations/0001_central_work_attempts.sql": "03247f9ed521e69d17b6c49dd1e8f7e8c458be0abc8f4d73e1f7379fb69477e9"
   },
-  "queries_digest": "383a38ea84d6e7e65cfcfbdfcdcdc056aea45b7a660a23989d6ff3c9d164aaeb",
+  "queries_digest": "6833c5b8dd65155fb97225275b74fe4c446b898f2bac4f8e4f7e4b337f5bbc62",
   "queries": [
     {
       "name": "read_work_attempt",
@@ -264,6 +266,16 @@
     {
       "name": "insert_work_attempt_owed",
       "bind_slots": 5,
+      "columns": []
+    },
+    {
+      "name": "park_work_attempt",
+      "bind_slots": 3,
+      "columns": []
+    },
+    {
+      "name": "arm_parked_work_attempt",
+      "bind_slots": 4,
       "columns": []
     },
     {

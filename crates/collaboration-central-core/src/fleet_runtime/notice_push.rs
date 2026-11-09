@@ -8,7 +8,9 @@
 //! acknowledged, or from the retained floor for a released Router. A Router
 //! that negotiated NoticesApplied is owed its acknowledgment: while it is
 //! behind, its notice_delivery row resends from what it applied on the 30 s
-//! backoff. A released Router gets live pushes only and keeps polling.
+//! backoff; offline when the retry comes due, the row is parked until the
+//! Router reconnects acknowledging. A released Router gets live pushes only
+//! and keeps polling.
 use crate::{
     FleetKind, ObjectPlatform, ObjectRuntime,
     notice_push::NoticeCursor,
@@ -258,10 +260,13 @@ where
                             continue;
                         };
                         if !negotiated {
-                            // Offline, or back as a released Router: nothing is resent until
-                            // it reconnects acknowledging, and a released Router never is.
                             if recipients.iter().any(|recipient| recipient.peer == peer) {
+                                // Back as a released Router: never resent to.
                                 crate::work_attempts::succeeded(scope, subject, owed).await?;
+                            } else {
+                                // Offline: parked, so it is no longer due (nor arms the
+                                // alarm) until it reconnects acknowledging, which arms it.
+                                crate::work_attempts::park(scope, subject, owed, now).await?;
                             }
                             continue;
                         }

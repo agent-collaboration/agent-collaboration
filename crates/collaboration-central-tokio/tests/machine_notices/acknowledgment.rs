@@ -237,3 +237,58 @@ async fn a_catch_up_over_32_notices_finishes_on_the_next_event() -> Result<(), T
     fixture.objects.close().await?;
     Ok(())
 }
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions follow one owed notice row through parking offline and re-arming on reconnect."
+)]
+#[tokio::test]
+async fn an_offline_routers_due_resend_parks_until_it_reconnects_acknowledging()
+-> Result<(), TestError> {
+    // Arrange: a negotiated Router is owed one unapplied notice, then goes away.
+    let root = tempfile::tempdir()?;
+    let fixture = Fixture::open_honoring(root.path(), CENTRAL_FRAME_CAPABILITIES).await?;
+    let peer = PeerId::new(durable_steps::Uuid::now_v7())?;
+    let (binding, mut socket, _) =
+        admit_offering(&fixture, peer, Some(FrameCapabilities::SUPPORTED)).await?;
+    let first = notice(1)?;
+    deliver(&fixture, &invocation(&first)?).await?;
+    assert_hint(next(&mut socket).await?, 1, 1, &first);
+    drop(socket);
+    event(&fixture, ObjectEvent::SocketClosed { binding }).await;
+
+    // Act: its armed retry comes due while it is offline.
+    fixture.io.clock.set_offset(30_001);
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
+
+    // Assert: parked, not left due (which would keep the alarm firing), and
+    // nothing counted: no send was attempted.
+    assert_eq!(
+        attempt_row(&fixture, peer, NOTICE_DELIVERY).await?,
+        Some(("waiting".to_owned(), 0, None, None)),
+        "an offline Router's resend stayed due"
+    );
+
+    // Act: it reconnects acknowledging.
+    let (_, mut socket, _) =
+        admit_offering(&fixture, peer, Some(FrameCapabilities::SUPPORTED)).await?;
+
+    // Assert: caught up from what it applied, and the row is armed again.
+    assert_hint(next(&mut socket).await?, 1, 1, &first);
+    let reconnected_at = fixture.io.now().unix_millis();
+    assert_eq!(
+        attempt_row(&fixture, peer, NOTICE_DELIVERY).await?,
+        Some(("waiting".to_owned(), 0, None, Some(reconnected_at + 30_000))),
+        "the reconnect did not re-arm the parked row"
+    );
+    assert!(
+        socket.try_recv().is_err(),
+        "the reconnect repeated a notice"
+    );
+    // Still unapplied past the re-armed retry: resent.
+    fixture.io.clock.set_offset(30_001 + 30_001);
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
+    assert_hint(next(&mut socket).await?, 2, 1, &first);
+    fixture.objects.close().await?;
+    Ok(())
+}

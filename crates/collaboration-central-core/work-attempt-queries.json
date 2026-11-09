@@ -178,6 +178,57 @@
       ]
     },
     {
+      "name": "park_work_attempt",
+      "sql": "sql/work_attempts/park_work_attempt.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "subject",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "arm_parked_work_attempt",
+      "sql": "sql/work_attempts/arm_parked_work_attempt.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "subject",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "next_attempt_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
       "name": "read_due_work_attempts",
       "sql": "sql/work_attempts/read_due_work_attempts.sql",
       "row": "StoredDueWorkAttempt",
