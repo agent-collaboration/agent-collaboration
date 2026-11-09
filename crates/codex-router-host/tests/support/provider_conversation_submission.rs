@@ -6,19 +6,14 @@
 //! calls from the protocol request a test builds, so the test still reads the settlement with
 //! `conversation_operation_wait`. A prompt that stays pending until the test acts runs in the
 //! background.
-//!
-//! The API's prompt input names Session actors only: a prompt whose approver is a Human runs
-//! with the requester as its approver.
 use collaboration_client::{
-    CollaborationAccess, CollaborationClient, ConversationCancelInput, ConversationClient,
-    ConversationClientError, ConversationCreateActor, ConversationCreateInput,
-    ConversationLoadInput, ConversationOperationResult, ConversationPromptInput,
-    PublicPromptContent,
+    CollaborationAccess, CollaborationClient, ConversationActor, ConversationCancelInput,
+    ConversationClient, ConversationClientError, ConversationCreateInput, ConversationLoadInput,
+    ConversationOperationResult, ConversationPromptInput, PublicPromptContent,
 };
 use collaboration_protocol::{
     ConversationCancelRequest, ConversationCreateRequest, ConversationLoadRequest,
     ConversationOperationSubmission, ConversationPromptRequest, EndpointRef, ProviderIdentity,
-    SessionRef,
 };
 use std::{path::PathBuf, time::Duration};
 use tokio::task::JoinHandle;
@@ -34,26 +29,16 @@ async fn conversation_client(
     ConversationClient::connect(&CollaborationAccess::api(client.directory()), endpoint).await
 }
 
-fn create_actor(
+fn conversation_actor(
     identity: &ProviderIdentity,
-) -> Result<ConversationCreateActor, ConversationClientError> {
+) -> Result<ConversationActor, ConversationClientError> {
     match identity {
-        ProviderIdentity::Session(session) => Ok(ConversationCreateActor::Session(session.clone())),
+        ProviderIdentity::Session(session) => Ok(ConversationActor::Session(session.clone())),
         ProviderIdentity::Human { .. } => identity
             .to_board_identity()
-            .map(ConversationCreateActor::Typed)
+            .map(ConversationActor::Typed)
             .map_err(ConversationClientError::InvalidInput),
     }
-}
-
-fn session_actor(
-    identity: &ProviderIdentity,
-    field: &'static str,
-) -> Result<SessionRef, ConversationClientError> {
-    identity
-        .session()
-        .cloned()
-        .ok_or(ConversationClientError::InvalidInput(field))
 }
 
 /// Creates the provider conversation `request` names and waits for it to settle.
@@ -69,8 +54,8 @@ pub(crate) async fn submit_provider_create(
         endpoint: request.endpoint.clone(),
         working_directory: PathBuf::from(String::from(request.working_directory)),
         access: request.requested_policy.access,
-        created_by: create_actor(&request.created_by)?,
-        approver: Some(create_actor(&request.approver)?),
+        created_by: conversation_actor(&request.created_by)?,
+        approver: Some(conversation_actor(&request.approver)?),
         generation: request.generation,
         model,
         mode,
@@ -115,7 +100,7 @@ fn prompt_input(
         operation_id: Some(request.operation_id),
         target: request.target,
         working_directory: None,
-        requested_by: session_actor(&request.requested_by, "prompt requester must be a Session")?,
+        requested_by: conversation_actor(&request.requested_by)?,
         approver: Some(request.approver.clone()),
         message,
         effort: None,
@@ -154,7 +139,7 @@ pub(crate) async fn submit_provider_cancel(
         operation_id: request.operation_id,
         target_operation_id: request.target_operation_id,
         target: request.target.clone(),
-        requested_by: session_actor(&request.requested_by, "cancel requester must be a Session")?,
+        requested_by: conversation_actor(&request.requested_by)?,
         approver: Some(request.approver.clone()),
         generation: request.generation,
     };

@@ -13,7 +13,7 @@ mod intent_read_cost_counter;
 use intent_read_cost_counter::{IntentReadCost, IntentReadCounter};
 #[path = "intent_reinstatement_recovery_tests.rs"]
 mod intent_reinstatement_recovery_tests;
-#[path = "intent_role_delivery_tests.rs"]
+#[path = "intent_role_delivery_test.rs"]
 mod intent_role_delivery_tests;
 
 async fn addressed_post(fixture: &OwnerFixture, recipient: Identity) -> NotifyIntentId {

@@ -9,7 +9,7 @@ writers_started_at=2026-10-27T01:00:00Z
 
 jq -n '
   ["v0-rust-static-", "v0-rust-test-", "v0-rust-e2e-", "v0-rust-wasm-",
-   "v0-rust-release-arm64-background-", "Linux-X64-rust-tools-",
+   "Linux-X64-rust-tools-",
    "Linux-X64-rust-tools-sqlx-", "Linux-X64-worker-build-"]
   | to_entries | map(
       [{id: (100 + .key), key: (.value + "z-old"), ref: "refs/heads/main",
@@ -26,7 +26,7 @@ jq -n '
 ' > "$fixture_root/inventory.json"
 
 bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/inventory.json" > "$fixture_root/plan.json"
-jq -e 'length == 8 and ([.[].delete[].id] | sort) == [100,101,102,103,104,105,106,107]
+jq -e 'length == 7 and ([.[].delete[].id] | sort) == [100,101,102,103,104,105,106]
   and all(.[]; .keepKey | endswith("a-new"))' "$fixture_root/plan.json" > /dev/null
 
 # An exact hit has only one key and creates no new archive.
@@ -34,7 +34,7 @@ jq 'map(select(.id >= 200))' "$fixture_root/inventory.json" > "$fixture_root/hit
 bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/hits.json" | jq -e '[.[].delete[]] == []' > /dev/null
 # Never delete an older cache version under the protected key either.
 jq '. + [(.[] | select(.id == 200)) + {id: 903, createdAt: "2026-10-26T00:00:00Z"}]' "$fixture_root/inventory.json" > "$fixture_root/versions.json"
-bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/versions.json" | jq -e '([.[].delete[].id] | sort) == [100,101,102,103,104,105,106,107]' > /dev/null
+bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/versions.json" | jq -e '([.[].delete[].id] | sort) == [100,101,102,103,104,105,106]' > /dev/null
 
 # Compare fractional seconds accurately at the writer-start boundary.
 printf '%s\n' '[
@@ -60,6 +60,17 @@ expect_plan_failure "$fixture_root/duplicate.json" 'duplicate IDs'
 jq -n '[range(1000) | {id: (1 + .), key: "unrelated", ref: "refs/heads/main"}]' > "$fixture_root/truncated.json"
 expect_plan_failure "$fixture_root/truncated.json" 'a possibly truncated inventory'
 
+# Release workflow caches: several main keys, none saved by this run, are left alone.
+jq '. + [
+  {id:400,key:"v0-rust-release-arm64-background-Darwin-arm64-old",ref:"refs/heads/main",createdAt:"2026-10-20T01:00:00Z",sizeInBytes:10},
+  {id:401,key:"v0-rust-release-arm64-background-Darwin-arm64-new",ref:"refs/heads/main",createdAt:"2026-10-25T01:00:00Z",sizeInBytes:20}
+]' "$fixture_root/inventory.json" > "$fixture_root/with-release.json"
+if ! bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/with-release.json" |
+  jq -e '([.[].delete[].id] | sort) == [100,101,102,103,104,105,106] and all(.[]; .family != "v0-rust-release-arm64-background-")' > /dev/null; then
+  echo 'Release workflow caches must never be selected or block pruning' >&2
+  exit 1
+fi
+
 # The pnpm writer is disabled: retire old main entries, preserving other refs.
 jq '. + [
   {id:300,key:"node-cache-Linux-x64-pnpm-old-a",ref:"refs/heads/main",createdAt:"2026-10-26T01:00:00Z",sizeInBytes:10},
@@ -69,7 +80,7 @@ jq '. + [
   {id:932,key:"node-cache-Linux-x64-npm-other",ref:"refs/heads/main",createdAt:"2026-10-26T01:00:00Z",sizeInBytes:50}
 ]' "$fixture_root/inventory.json" > "$fixture_root/with-pnpm.json"
 bash "$prune_script" --plan "$writers_started_at" < "$fixture_root/with-pnpm.json" > "$fixture_root/pnpm-plan.json"
-if ! jq -e '([.[].delete[].id] | sort) == [100,101,102,103,104,105,106,107,300,301]
+if ! jq -e '([.[].delete[].id] | sort) == [100,101,102,103,104,105,106,300,301]
   and any(.[]; .family == "node-cache-Linux-x64-pnpm-" and .keepKey == null)' "$fixture_root/pnpm-plan.json" > /dev/null; then
   echo 'Retired pnpm main entries must be selected; other refs must be protected' >&2
   exit 1
@@ -116,14 +127,14 @@ done
 : > "$GH_CALLS"
 GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main GITHUB_REPOSITORY=example/repo \
   bash "$prune_script" --apply > /dev/null
-awk '$1 == "cache" && $2 == "delete" {print $3}' "$GH_CALLS" | jq -s -e 'sort == [100,101,102,103,104,105,106,107]' > /dev/null
-[[ "$(wc -l < "$GH_CALLS" | tr -d ' ')" == 11 ]]
+awk '$1 == "cache" && $2 == "delete" {print $3}' "$GH_CALLS" | jq -s -e 'sort == [100,101,102,103,104,105,106]' > /dev/null
+[[ "$(wc -l < "$GH_CALLS" | tr -d ' ')" == 10 ]]
 
 : > "$GH_CALLS"
 GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main GITHUB_REPOSITORY=example/repo \
   GH_FIXTURE="$fixture_root/with-pnpm.json" bash "$prune_script" --apply > /dev/null
-awk '$1 == "cache" && $2 == "delete" {print $3}' "$GH_CALLS" | jq -s -e 'sort == [100,101,102,103,104,105,106,107,300,301]' > /dev/null
-[[ "$(wc -l < "$GH_CALLS" | tr -d ' ')" == 13 ]]
+awk '$1 == "cache" && $2 == "delete" {print $3}' "$GH_CALLS" | jq -s -e 'sort == [100,101,102,103,104,105,106,300,301]' > /dev/null
+[[ "$(wc -l < "$GH_CALLS" | tr -d ' ')" == 12 ]]
 
 : > "$GH_CALLS"
 if GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main GITHUB_REPOSITORY=example/repo \
@@ -160,4 +171,4 @@ if GITHUB_EVENT_NAME=push GITHUB_REF=refs/heads/main GITHUB_REPOSITORY=example/r
   exit 1
 fi
 [[ "$(wc -l < "$GH_CALLS" | tr -d ' ')" == 1 ]]
-printf 'Main cache pruning: 20 checks passed\n'
+printf 'Main cache pruning: 21 checks passed\n'

@@ -73,6 +73,12 @@ filter = "package(=codex-router-host) & test(=external_provider_supervisor::test
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
+# This controlled ACP release case owns a provider child and a bounded wait.
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & binary(=integration) & test(=provider_pending_hub_races::human_mcp_control_test::dropped_human_mcp_waiter_does_not_cancel_or_redispatch_the_released_turn)"
+test-group = "process-runtime"
+threads-required = "num-test-threads"
+
 # These cases deliberately fill the real production queue or construct 260
 # maximum descriptions / 31,000 historical effects. Keep those inputs and
 # deadlines intact, but allow only one heavy case while ordinary tests retain

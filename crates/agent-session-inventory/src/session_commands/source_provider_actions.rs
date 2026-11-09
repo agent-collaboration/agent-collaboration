@@ -13,9 +13,8 @@ use collaboration_client::protocol::{
     ProviderWorkingDirectory, SessionRef,
 };
 use collaboration_client::{
-    ClientError, CollaborationAccess, CollaborationClient, ConversationClient,
-    ConversationClientError, ConversationCreateActor, ConversationCreateInput,
-    ConversationLoadInput,
+    ClientError, CollaborationAccess, CollaborationClient, ConversationActor, ConversationClient,
+    ConversationClientError, ConversationCreateInput, ConversationLoadInput,
 };
 use std::{
     collections::BTreeSet,
@@ -101,7 +100,7 @@ pub async fn execute_provider_action(
                 }) {
                     return Err(SourceRejection::UnsupportedProviderAction);
                 }
-                let actor = ConversationCreateActor::Typed(
+                let actor = ConversationActor::Typed(
                     requester
                         .to_board_identity()
                         .map_err(|_| SourceRejection::InvalidRequest)?,

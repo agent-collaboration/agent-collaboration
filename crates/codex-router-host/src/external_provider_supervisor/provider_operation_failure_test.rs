@@ -3,6 +3,38 @@ use acp_client_runtime::ProviderSettingKind;
 use collaboration_protocol::ProviderSettingName;
 
 #[test]
+fn replay_failure_mapping_preserves_pre_and_post_dispatch_provenance() {
+    let target: SessionRef = serde_json::from_value(serde_json::json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"cursor-local"},"sessionId":"known"})).expect("target");
+    for (error, kind, stage, effect) in [
+        (
+            ExternalProviderRuntimeError::HistoryReplayAdmissionFailed,
+            ConversationOperationFailureKind::Unavailable,
+            ConversationOperationFailureStage::Dispatch,
+            ProviderOperationEffect::None,
+        ),
+        (
+            ExternalProviderRuntimeError::HistoryReplayUnavailable,
+            ConversationOperationFailureKind::OutcomeUnknown,
+            ConversationOperationFailureStage::Settlement,
+            ProviderOperationEffect::Unknown,
+        ),
+    ] {
+        // Arrange/Act: mapping must retain the exact caller operation and target on either path.
+        let operation = OperationId::generate();
+        let failure = runtime_failure(operation.clone(), Some(target.clone()), error);
+        // Assert: post-dispatch uncertainty cannot be weakened by the new admission arm.
+        assert_eq!(failure.operation_id, Some(operation));
+        assert_eq!(failure.target, Some(target.clone()));
+        assert_eq!(failure.kind, kind);
+        assert_eq!(failure.stage, stage);
+        assert_eq!(failure.effect, effect);
+        if effect == ProviderOperationEffect::None {
+            assert!(String::from(failure.message).contains("before provider load"));
+        }
+    }
+}
+
+#[test]
 fn invalid_setting_failure_names_each_setting_and_advertised_values() {
     for (setting, name, expected_setting) in [
         (ProviderSettingKind::Mode, "mode", ProviderSettingName::Mode),
