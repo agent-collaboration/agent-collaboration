@@ -29,6 +29,35 @@ export function parseExact(text: string): unknown {
   } as (this: unknown, key: string, value: unknown) => unknown);
 }
 
+/** A JSON number written with a fraction or exponent: serde_json reads it as f64, never as an integer. */
+export class JsonFloat {
+  readonly source: string;
+  readonly value: number;
+  constructor(source: string, value: number) {
+    this.source = source;
+    this.value = value;
+  }
+}
+
+/**
+ * JSON as serde_json reads a stored record: an integer token stays an exact
+ * integer, and any other number token (1.0, 1e0) becomes a JsonFloat, so a
+ * decoder expecting an integer refuses it as serde's integer visitors do.
+ */
+export function parseSerdeJson(text: string): unknown {
+  return JSON.parse(text, function (
+    this: unknown,
+    _key,
+    value: unknown,
+    context?: { source?: string },
+  ) {
+    if (typeof value !== "number") return value;
+    const source = context?.source ?? String(value);
+    if (!INTEGER_SOURCE.test(source)) return new JsonFloat(source, value);
+    return Number.isSafeInteger(value) ? value : BigInt(source);
+  } as (this: unknown, key: string, value: unknown) => unknown);
+}
+
 export function stringifyExact(value: unknown): string {
   return JSON.stringify(value, (_key, item: unknown) =>
     typeof item === "bigint" ? JSON.rawJSON(item.toString()) : item,

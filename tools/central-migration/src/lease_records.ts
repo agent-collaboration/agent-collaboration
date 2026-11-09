@@ -5,7 +5,7 @@
 // decoded and every invariant main enforces is enforced here, before any write,
 // so a value main would refuse stops the migration with its row named (R7).
 
-import { parseExact } from "./exact_json.ts";
+import { parseSerdeJson } from "./exact_json.ts";
 import {
   Invalid,
   adjacentlyTagged,
@@ -219,7 +219,7 @@ const reportSchemaSupport = struct(
   true,
 );
 
-const json = <T>(decoder: Decoder<T>): Decoder<T> => fromJsonText(parseExact, decoder);
+const json = <T>(decoder: Decoder<T>): Decoder<T> => fromJsonText(parseSerdeJson, decoder);
 /** An optional column: main reads a value not stored as text as absent (`CASE WHEN typeof(c)='text'`). */
 const optionalJson =
   <T>(decoder: Decoder<T>) =>

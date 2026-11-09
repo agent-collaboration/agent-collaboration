@@ -171,3 +171,60 @@ test("main's central opens every migrated object: the Fleet, each live Copy and 
     },
   );
 });
+
+// The consumer side of I1: each value class the preflight refuses, written
+// straight into migrated storage (past the preflight), is refused by main too.
+for (const [name, statements] of [
+  [
+    "a lease-table integer written 1.0",
+    [
+      `UPDATE _fleet_sync_databases SET record = replace(record, '"change":1', '"change":1.0') WHERE database = '${IDS.projectHeld1}'`,
+    ],
+  ],
+  [
+    "a lease record with an extra constructor field",
+    [
+      `UPDATE _fleet_sync_databases SET record = replace(record, '{"database"', '{"constructor":0,"database"') WHERE database = '${IDS.projectHeld3}'`,
+    ],
+  ],
+  [
+    "a blank directory name",
+    [`UPDATE fleet_project_directory SET name = '   ' WHERE project_id = '${IDS.projectHeld1}'`],
+  ],
+] as const) {
+  test(`main's central refuses ${name} the preflight refuses`, async () => {
+    const build = process.env.MAIN_CENTRAL_BUILD;
+    assert.ok(
+      build !== undefined && build !== "",
+      "MAIN_CENTRAL_BUILD must name this checkout's central build",
+    );
+    await withProduction(
+      () => {},
+      async (run) => {
+        // Arrange: a valid migration, then the value written past the preflight.
+        const migrated = await run.call("migrate", "POST");
+        assert.equal(migrated.status, 200, JSON.stringify(migrated.body));
+        await run.standInRun("FLEET", "fleet", statements);
+
+        // Act
+        const central = await startMainCentral(build, run);
+        let directory: { status: number; body: string };
+        try {
+          const response = await central.dispatchFetch("https://central.test/admin/v1/copies", {
+            headers: {
+              "Cf-Access-Jwt-Assertion": await run.signer.sign(
+                ownerClaims(Math.floor(Date.now() / 1000)),
+              ),
+            },
+          });
+          directory = { status: response.status, body: await response.text() };
+        } finally {
+          await central.dispose();
+        }
+
+        // Assert: main doesn't serve the Fleet with that value in it.
+        assert.deepEqual(directory, { status: 503, body: '{"kind":"objectUnavailable"}' });
+      },
+    );
+  });
+}

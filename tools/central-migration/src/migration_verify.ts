@@ -253,9 +253,10 @@ export async function verifyMigration(
   for (const table of LEASE_TABLES)
     checks.push(sameRows(table, rows(fleet, table), rows(registry, table)));
 
-  // Each copy: its receiver records, stamped when that copy committed. A copy
-  // migrated by an earlier, interrupted run keeps its own earlier stamp; no copy
-  // can be stamped after the Fleet, which commits last.
+  // Each copy: its receiver records, at the stamp that copy committed with. A
+  // copy migrated by an earlier, interrupted run keeps its own stamp. Stamps from
+  // separate runs are separate wall-clock samples with no order between them, so
+  // each object is checked against its own stamp only.
   const leases = new Map(
     rows(registry, "_fleet_sync_leases").map((row) => [
       String(row.database),
@@ -265,13 +266,12 @@ export async function verifyMigration(
   for (const [project, copy] of Object.entries(copies)) {
     const records = rows(copy, ledgerTable("fleet-sync-receiver"));
     const copyStamp = String(records[0]?.installed_on ?? "");
-    const stampOk =
-      /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(copyStamp) && copyStamp <= installedOn;
+    const stampOk = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(copyStamp);
     if (!stampOk) {
       checks.push({
         name: `copy ${project} records`,
         ok: false,
-        detail: `stamp ${copyStamp} is not a whole-second time at or before the Fleet's ${installedOn}`,
+        detail: `stamp ${copyStamp} is not a whole-second installed_on time`,
       });
       continue;
     }

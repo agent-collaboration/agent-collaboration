@@ -5,7 +5,7 @@
 // newtypes' `try_from` checks. Values arrive from exact JSON (integers beyond
 // 2^53 as bigints).
 
-import { I64_MAX, U64_MAX } from "./exact_json.ts";
+import { I64_MAX, JsonFloat, U64_MAX } from "./exact_json.ts";
 
 export class Invalid extends Error {}
 export const invalid = (path: string, why: string): never => {
@@ -20,6 +20,8 @@ const isObject = (value: unknown): value is Record<string, unknown> =>
 // Primitive serde types.
 
 function integer(value: unknown, path: string, min: bigint, max: bigint, name: string): bigint {
+  if (value instanceof JsonFloat)
+    return invalid(path, `expected ${name}, found the float ${value.source}`);
   const exact =
     typeof value === "bigint"
       ? value
@@ -107,13 +109,16 @@ function fieldsOf<F extends Fields>(
 ): Decoded<F> {
   if (denyUnknown) {
     for (const key of Object.keys(value)) {
-      if (!(key in fields) && !allowed.includes(key)) invalid(path, `unknown field ${key}`);
+      // Own properties only: an inherited name such as "constructor" is not a declared field.
+      if (!Object.hasOwn(fields, key) && !allowed.includes(key))
+        invalid(path, `unknown field ${key}`);
     }
   }
   const out: Record<string, unknown> = {};
   for (const [key, decoder] of Object.entries(fields)) {
-    if (!(key in value) && decoder.optional !== true) invalid(path, `missing field ${key}`);
-    out[key] = decoder(value[key], `${path}.${key}`);
+    if (!Object.hasOwn(value, key) && decoder.optional !== true)
+      invalid(path, `missing field ${key}`);
+    out[key] = decoder(Object.hasOwn(value, key) ? value[key] : undefined, `${path}.${key}`);
   }
   return out as Decoded<F>;
 }
@@ -155,9 +160,10 @@ export function adjacentlyTagged(
       if (key !== tag && key !== content) invalid(path, `unknown field ${key}`);
     }
     const name = value[tag];
-    const variant = typeof name === "string" ? variants[name] : undefined;
+    const variant =
+      typeof name === "string" && Object.hasOwn(variants, name) ? variants[name] : undefined;
     if (variant === undefined) return invalid(`${path}.${tag}`, `unknown variant ${String(name)}`);
-    const payload = value[content];
+    const payload = Object.hasOwn(value, content) ? value[content] : undefined;
     const at = `${path}.${content}`;
     switch (variant.kind) {
       case "unit":
@@ -186,7 +192,8 @@ export function internallyTagged(
   return (value, path) => {
     if (!isObject(value)) return invalid(path, "expected an object");
     const name = value[tag];
-    const shape = typeof name === "string" ? variants[name] : undefined;
+    const shape =
+      typeof name === "string" && Object.hasOwn(variants, name) ? variants[name] : undefined;
     if (shape === undefined) return invalid(`${path}.${tag}`, `unknown variant ${String(name)}`);
     return { variant: String(name), value: fieldsOf(value, shape, path, true, [tag]) };
   };

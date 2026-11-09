@@ -4,12 +4,12 @@
 // own rules).
 
 import type { NewRow } from "./fleet_conversion.ts";
+import { machineLabel } from "./message_board_values.ts";
 import type { ReadRow } from "./storage_objects.ts";
 
 const UUID_V7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 /** message_board ServiceId: a canonical lowercase RFC UUID of any version. */
 const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
-const MAX_MACHINE_LABEL_SCALARS = 120;
 // Rust's char::is_control: the Cc category.
 const CONTROL = /\p{Cc}/u;
 
@@ -49,14 +49,9 @@ export function enrollmentRow(row: ReadRow, runTimeText: string): NewRow | strin
   if (service === null || !CANONICAL_UUID.test(service))
     return "service_id is not a canonical UUID";
   const label = field("machine_label");
-  // MachineLabel::try_from trims and bounds; main refuses a label that doesn't round-trip.
-  if (
-    label === null ||
-    label.trim() === "" ||
-    label.trim() !== label ||
-    [...label].length > MAX_MACHINE_LABEL_SCALARS
-  )
-    return "machine_label is empty, padded or longer than 120 characters";
+  // message_board::MachineLabel (board_metadata.rs:80): main refuses a label its type would change.
+  const labelRefusal = label === null ? "is missing" : machineLabel(label);
+  if (label === null || labelRefusal !== null) return `machine_label ${labelRefusal}`;
   const accessClient = field("access_client_id");
   if (accessClient === null || !trimmedText(accessClient))
     return "access_client_id is empty, padded or has control characters";

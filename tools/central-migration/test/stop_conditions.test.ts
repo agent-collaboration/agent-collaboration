@@ -306,6 +306,77 @@ const CONTRADICTIONS: Contradiction[] = [
     subject: `project ${IDS.projectHeld1}`,
     reason: /main refuses the copy record: _fleet_sync_copy\.record: duplicate field role/,
   },
+  // I1, decoder fidelity: message_board::MachineLabel is 1–256 UTF-8 bytes, without C0 controls.
+  {
+    name: "an enrollment's machine label is over 256 UTF-8 bytes",
+    edit: (production) =>
+      production.registry.push(
+        `UPDATE machine_enrollments SET machine_label = '${"界".repeat(100)}' WHERE peer_id = ${quote(IDS.machineA)}`,
+      ),
+    object: "registry",
+    subject: `machine ${IDS.machineA}`,
+    reason: /machine_label must be 1 to 256 UTF-8 bytes/,
+  },
+  {
+    name: "an enrollment's machine label holds a NUL",
+    edit: (production) =>
+      production.registry.push(
+        `UPDATE machine_enrollments SET machine_label = 'Sun' || char(0) || 'book' WHERE peer_id = ${quote(IDS.machineA)}`,
+      ),
+    object: "registry",
+    subject: `machine ${IDS.machineA}`,
+    reason: /machine_label contains a forbidden control character/,
+  },
+  // serde_json reads 1.0 and 1e0 as floats; an integer field refuses them.
+  {
+    name: "a registry revision change is written 1.0",
+    edit: (production) =>
+      production.registry.push(
+        `UPDATE _fleet_sync_databases SET record = replace(record, '"change":1', '"change":1.0') WHERE database = ${quote(IDS.projectHeld1)}`,
+      ),
+    object: "registry",
+    subject: `_fleet_sync_databases ${IDS.projectHeld1} [row 2]`,
+    reason: /record\.revision\.change: expected u64, found the float 1\.0/,
+  },
+  {
+    name: "a lease epoch is written 1e0",
+    edit: (production) =>
+      production.registry.push(
+        `UPDATE _fleet_sync_leases SET record = replace(record, '"epoch":1,', '"epoch":1e0,') WHERE database = ${quote(IDS.projectHeld1)}`,
+      ),
+    object: "registry",
+    subject: `_fleet_sync_leases ${IDS.projectHeld1} [row 2]`,
+    reason: /record\.epoch: expected u64, found the float 1e0/,
+  },
+  {
+    name: "a registry record carries an extra constructor field",
+    edit: (production) =>
+      production.registry.push(
+        `UPDATE _fleet_sync_databases SET record = replace(record, '{"database"', '{"constructor":0,"database"') WHERE database = ${quote(IDS.projectHeld3)}`,
+      ),
+    object: "registry",
+    subject: `_fleet_sync_databases ${IDS.projectHeld3} [row 1]`,
+    reason: /record: unknown field constructor/,
+  },
+  // Fleet names are ResourceName: 1–256 bytes, refused if trimming would change them.
+  {
+    name: "a workspace name is blank",
+    edit: (production) => production.fleet.push("UPDATE workspaces SET name = '   '"),
+    object: "fleet",
+    subject: "carried row",
+    reason: new RegExp(
+      `workspaces/${IDS.workspace}\\.name: has surrounding whitespace its type would trim`,
+    ),
+  },
+  {
+    name: "a board name has surrounding whitespace",
+    edit: (production) => production.fleet.push("UPDATE boards SET name = ' central'"),
+    object: "fleet",
+    subject: "carried row",
+    reason: new RegExp(
+      `boards/${IDS.board}\\.name: has surrounding whitespace its type would trim`,
+    ),
+  },
   // I5: incarnation counters main can't parse or store.
   {
     name: "an incarnation counter is not canonical decimal",

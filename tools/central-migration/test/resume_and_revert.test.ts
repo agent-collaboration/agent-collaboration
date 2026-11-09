@@ -57,6 +57,35 @@ test("a migrate interrupted after the first copy finishes on a later run, and ve
   );
 });
 
+test("a migrate resumed with an earlier clock sample than its first copy finishes and verifies", async () => {
+  await withProduction(
+    () => {},
+    async (run) => {
+      // Arrange: the first copy commits at 12:07:31; the retry's clock reads 12:00:00.
+      const lost = await run.interrupted("migrate", { afterWrites: 1, runTime: LATER_RUN });
+      assert.equal(lost.status, 500, JSON.stringify(lost.body));
+      const firstCopy = `PROJECT_COPIES/${[...PROJECTS].sort()[0]}`;
+      const committed = (await run.oldStorage())[firstCopy];
+
+      // Act
+      const resumed = await run.interrupted("migrate", {
+        afterWrites: OBJECTS,
+        runTime: FIRST_RUN,
+      });
+      const verified = await run.call("verify");
+
+      // Assert: completed, the first copy untouched at its later stamp, and verify passes.
+      assert.equal(resumed.status, 200, JSON.stringify(resumed.body));
+      assert.deepEqual((await run.oldStorage())[firstCopy], committed);
+      const stamp = (committed as { rows: Record<string, { installed_on: string }[]> }).rows
+        ._sqlx_migrations_fleet_sync_receiver?.[0]?.installed_on;
+      assert.equal(stamp, "2026-11-09 12:07:31");
+      assert.equal(verified.status, 200, JSON.stringify(verified.body));
+      assert.equal(verified.body.ok, true);
+    },
+  );
+});
+
 for (let reverted = 0; reverted <= PROJECTS.length; reverted += 1) {
   test(`a revert interrupted after ${reverted} of ${PROJECTS.length} copies finishes on the next run and restores every object`, async () => {
     await withProduction(

@@ -4,6 +4,20 @@
 // run with the row named (R7) instead of being rewritten.
 
 import { I64_MAX, parseExact } from "./exact_json.ts";
+import {
+  canonicalRouterTime,
+  commitSha,
+  commonDirectory,
+  description as descriptionText,
+  endpointId,
+  humanId,
+  machineLabel,
+  markdownText,
+  normalizedOrigin,
+  resourceName,
+  serviceId,
+  sessionId,
+} from "./message_board_values.ts";
 import type { ReadRow as SqlRow } from "./storage_objects.ts";
 
 export class Rejected extends Error {}
@@ -18,9 +32,22 @@ export const isUuidV7 = (value: unknown): value is string =>
 function text(value: unknown, where: string): string {
   return typeof value === "string" ? value : reject(where, "expected text");
 }
-function optionalText(value: unknown, where: string): string | null {
-  return value === undefined || value === null ? null : text(value, where);
+/** Text main decodes into a validated type through `canonical`: refused unless the type keeps it exactly. */
+function typed(value: unknown, where: string, check: (value: string) => string | null): string {
+  const result = text(value, where);
+  const refusal = check(result);
+  return refusal === null ? result : reject(where, refusal);
 }
+function optionalTyped(
+  value: unknown,
+  where: string,
+  check: (value: string) => string | null,
+): string | null {
+  return value === undefined || value === null ? null : typed(value, where, check);
+}
+/** fleet-admission FleetImportDigest: a CanonicalHash, 64 lowercase hexadecimal characters. */
+const importDigest = (value: string): string | null =>
+  /^[0-9a-f]{64}$/.test(value) ? null : "must be 64 lowercase hexadecimal characters";
 function uuid(value: unknown, where: string): string {
   return isUuidV7(value) ? value : reject(where, "expected a canonical UUIDv7");
 }
@@ -67,7 +94,7 @@ function envelopeColumns(
   if (kind === "human") {
     actorColumns = {
       actor_kind: "human",
-      actor_human_id: text(actor.humanId, `${where}.actor.humanId`),
+      actor_human_id: typed(actor.humanId, `${where}.actor.humanId`, humanId),
       actor_service_id: null,
       actor_endpoint_id: null,
       actor_session_id: null,
@@ -79,9 +106,9 @@ function envelopeColumns(
     actorColumns = {
       actor_kind: "session",
       actor_human_id: null,
-      actor_service_id: text(endpoint.serviceId, `${where}.actor.serviceId`),
-      actor_endpoint_id: text(endpoint.endpointId, `${where}.actor.endpointId`),
-      actor_session_id: text(session.sessionId, `${where}.actor.sessionId`),
+      actor_service_id: typed(endpoint.serviceId, `${where}.actor.serviceId`, serviceId),
+      actor_endpoint_id: typed(endpoint.endpointId, `${where}.actor.endpointId`, endpointId),
+      actor_session_id: typed(session.sessionId, `${where}.actor.sessionId`, sessionId),
       actor_router_component: null,
     };
   } else {
@@ -93,7 +120,7 @@ function envelopeColumns(
     actorColumns = {
       actor_kind: "router",
       actor_human_id: null,
-      actor_service_id: text(actor.installation, `${where}.actor.installation`),
+      actor_service_id: typed(actor.installation, `${where}.actor.installation`, serviceId),
       actor_endpoint_id: null,
       actor_session_id: null,
       actor_router_component:
@@ -108,12 +135,16 @@ function envelopeColumns(
     ["router", "legacy_unknown"] as const,
     `${where}.time_basis`,
   );
-  const routerTime = optionalText(row.router_time, `${where}.router_time`);
+  const routerTime = optionalTyped(row.router_time, `${where}.router_time`, canonicalRouterTime);
   if ((timeBasis === "router") !== (routerTime !== null)) {
     reject(`${where}.router_time`, "router time must be present exactly when the basis is router");
   }
-  const importDigest = optionalText(row.import_digest, `${where}.import_digest`);
-  if (timeBasis === "legacy_unknown" && importDigest === null) {
+  const storedImportDigest = optionalTyped(
+    row.import_digest,
+    `${where}.import_digest`,
+    importDigest,
+  );
+  if (timeBasis === "legacy_unknown" && storedImportDigest === null) {
     reject(`${where}.import_digest`, "a legacy-time row needs its import digest");
   }
   const request = envelope.request;
@@ -124,9 +155,9 @@ function envelopeColumns(
     fleet_position: count(position.position, `${where}.position.position`),
     router_time: routerTime,
     time_basis: timeBasis,
-    origin_installation: text(row.origin_installation, `${where}.origin_installation`),
-    origin_machine: text(row.origin_machine, `${where}.origin_machine`),
-    import_digest: importDigest,
+    origin_installation: typed(row.origin_installation, `${where}.origin_installation`, serviceId),
+    origin_machine: typed(row.origin_machine, `${where}.origin_machine`, machineLabel),
+    import_digest: storedImportDigest,
     created_at: runTime,
     updated_at: runTime,
   };
@@ -143,15 +174,23 @@ function repositoryColumns(reference: Record<string, unknown>, where: string): N
   return kind === "origin"
     ? {
         reference_kind: "origin",
-        normalized_origin: text(reference.normalizedOrigin, `${where}.normalizedOrigin`),
+        normalized_origin: typed(
+          reference.normalizedOrigin,
+          `${where}.normalizedOrigin`,
+          normalizedOrigin,
+        ),
         service_id: null,
         common_directory: null,
       }
     : {
         reference_kind: "local",
         normalized_origin: null,
-        service_id: text(reference.serviceId, `${where}.serviceId`),
-        common_directory: text(reference.commonDirectory, `${where}.commonDirectory`),
+        service_id: typed(reference.serviceId, `${where}.serviceId`, serviceId),
+        common_directory: typed(
+          reference.commonDirectory,
+          `${where}.commonDirectory`,
+          commonDirectory,
+        ),
       };
 }
 
@@ -199,8 +238,8 @@ export function convertFleetGraph(
     if (repositories.length > 16) reject(`${where}.repositories`, "more than 16");
     rows.fleet_workspaces.push({
       workspace_id: workspaceId,
-      name: text(row.name, `${where}.name`),
-      description: text(body.description, `${where}.description`),
+      name: typed(row.name, `${where}.name`, resourceName),
+      description: typed(body.description, `${where}.description`, descriptionText),
       state: oneOf(body.state, ["active", "archiving", "archived"] as const, `${where}.state`),
       repository_count: repositories.length,
       ...envelopeColumns(row, envelope, where, runTime),
@@ -229,8 +268,8 @@ export function convertFleetGraph(
     rows.fleet_boards.push({
       board_id: boardId,
       workspace_id: uuid(row.workspace_id, `${where}.workspace_id`),
-      name: text(row.name, `${where}.name`),
-      description: text(body.description, `${where}.description`),
+      name: typed(row.name, `${where}.name`, resourceName),
+      description: typed(body.description, `${where}.description`, descriptionText),
       board_kind: boardKind,
       initiative_goal: boardKind === "initiative" ? text(kind.goal, `${where}.kind.goal`) : null,
       initiative_done_when:
@@ -252,7 +291,7 @@ export function convertFleetGraph(
       project_id: projectId,
       workspace_id: uuid(row.workspace_id, `${where}.workspace_id`),
       board_id: uuid(row.board_id, `${where}.board_id`),
-      name: text(row.name, `${where}.name`),
+      name: typed(row.name, `${where}.name`, resourceName),
       ...envelopeColumns(row, envelope, where, runTime),
     });
   }
@@ -286,8 +325,8 @@ export function convertFleetGraph(
     rows.fleet_workspace_adrs.push({
       adr_id: adrId,
       workspace_id: uuid(row.workspace_id, `${where}.workspace_id`),
-      title: text(row.title, `${where}.title`),
-      text: text(body.text, `${where}.text`),
+      title: typed(row.title, `${where}.title`, resourceName),
+      text: typed(body.text, `${where}.text`, markdownText),
       status: oneOf(
         body.status,
         ["proposed", "accepted", "superseded", "withdrawn"] as const,
@@ -310,9 +349,9 @@ export function convertFleetGraph(
         id: newId(),
         adr_id: adrId,
         ordinal,
-        repository_origin: text(artifact.repository, `${at}.repository`),
+        repository_origin: typed(artifact.repository, `${at}.repository`, normalizedOrigin),
         path: text(artifact.path, `${at}.path`),
-        commit_sha: optionalText(artifact.commit, `${at}.commit`),
+        commit_sha: optionalTyped(artifact.commit, `${at}.commit`, commitSha),
         created_at: runTime,
         updated_at: runTime,
       });
@@ -336,11 +375,15 @@ export function convertFleetGraph(
       attachment_id: uuid(row.attachment_id, `${where}.attachment_id`),
       workspace_id: uuid(row.workspace_id, `${where}.workspace_id`),
       ...repositoryColumns(object(reference, `${where}.repository_reference`), where),
-      router_time: optionalText(row.router_time, `${where}.router_time`),
+      router_time: optionalTyped(row.router_time, `${where}.router_time`, canonicalRouterTime),
       time_basis: timeBasis,
-      origin_installation: text(row.origin_installation, `${where}.origin_installation`),
-      origin_machine: text(row.origin_machine, `${where}.origin_machine`),
-      import_digest: optionalText(row.import_digest, `${where}.import_digest`),
+      origin_installation: typed(
+        row.origin_installation,
+        `${where}.origin_installation`,
+        serviceId,
+      ),
+      origin_machine: typed(row.origin_machine, `${where}.origin_machine`, machineLabel),
+      import_digest: optionalTyped(row.import_digest, `${where}.import_digest`, importDigest),
       created_at: runTime,
       updated_at: runTime,
     });
