@@ -4,7 +4,10 @@
 // nothing else in the account changes.
 //
 //   node scripts/deploy_seed_worker.ts --settings <private settings.json>
-//     --artifact <this package's build/> --scratch <new private dir> [--dry-run]
+//     --artifact <this package's build/> --scratch <new private dir> [--dry-run] [--s4-redeploy]
+//
+// --s4-redeploy redeploys the seed Worker over the S4 refusal allocation's
+// existing namespaces between S4 cases; any other allocation is refused.
 
 import { readFile } from "node:fs/promises";
 import { PINNED_CF, guardedRun } from "../../../tools/central-migration/scripts/deploy_run.ts";
@@ -27,14 +30,14 @@ const artifact = option("artifact");
 const scratch = option("scratch");
 if (settingsPath === undefined || artifact === undefined || scratch === undefined) {
   throw new Error(
-    "usage: deploy_seed_worker.ts --settings <file> --artifact <dir> --scratch <dir> [--dry-run]",
+    "usage: deploy_seed_worker.ts --settings <file> --artifact <dir> --scratch <dir> [--dry-run] [--s4-redeploy]",
   );
 }
 const settings = JSON.parse(await readFile(settingsPath, "utf8")) as DeploySettings;
 
 try {
   const outcome = await guardedRun({
-    kind: "seed",
+    kind: flags.includes("--s4-redeploy") ? "s4-seed" : "seed",
     settings,
     config: refuseProduction(seedWorkerConfig(liveConfig(settings, true), ENTRYPOINTS.seed)),
     artifact,

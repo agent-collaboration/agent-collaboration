@@ -66,3 +66,10 @@ test("production's central is refused, and the allocated S1 name is accepted", (
     "collaboration-central-s1-migration",
   );
 });
+
+test("the seed Worker's S4 routes and the deploy's S4 redeploy name the same allocation", async () => {
+  const { S4_ALLOCATION } = await import("../src/s4_routes.ts");
+  const { S4_STAGING_WORKER } =
+    await import("../../../tools/central-migration/scripts/worker_deploy.ts");
+  assert.equal(S4_ALLOCATION, S4_STAGING_WORKER);
+});

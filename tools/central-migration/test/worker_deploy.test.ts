@@ -424,3 +424,27 @@ test("step 5's planned diff keeps Fleet and ProjectCopy and deletes the three re
     "MailboxObject",
   ]);
 });
+
+test("only the S4 refusal allocation redeploys its seed Worker, over its existing five namespaces", async () => {
+  const { S4_STAGING_WORKER } = await import("../scripts/worker_deploy.ts");
+  // The S1 allocation can't redeploy a seed.
+  assert.throws(
+    () => checkBefore("s4-seed", SETTINGS, inventory([...OTHER, ...FIVE], true, BOUND)),
+    refusedWith(/only collaboration-central-s4-refusals redeploys its seed Worker/),
+  );
+  // The S4 allocation can, once its Worker, five namespaces and hostname exist.
+  const s4 = { ...SETTINGS, workerName: S4_STAGING_WORKER, hostname: "s4.staging.example" };
+  const own = CENTRAL_CLASSES.map((cls, index) => ns(`s4-${index}`, cls, S4_STAGING_WORKER));
+  const bound = [{ hostname: s4.hostname, service: S4_STAGING_WORKER }];
+  const existing = {
+    namespaces: [...OTHER, ...own],
+    workers: [{ id: S4_STAGING_WORKER }],
+    domains: bound,
+  };
+  checkBefore("s4-seed", s4, existing);
+  checkAfter("s4-seed", s4, existing, existing);
+  assert.throws(
+    () => checkBefore("s4-seed", s4, { ...existing, workers: [] }),
+    refusedWith(/doesn't exist yet/),
+  );
+});

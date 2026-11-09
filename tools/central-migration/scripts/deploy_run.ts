@@ -83,7 +83,7 @@ export async function stageScratch(
   const tool = await pinnedTool();
   await mkdir(scratch, { mode: 0o700 });
   await cp(resolve(artifact), join(scratch, "artifact"), { recursive: true, errorOnExist: true });
-  if (kind === "seed")
+  if (kind === "seed" || kind === "s4-seed")
     await writeFile(join(scratch, ENTRYPOINTS.seed), SEED_ENTRY_MODULE, {
       mode: 0o600,
       flag: "wx",

@@ -7,12 +7,23 @@ import { copyRecordJson, publishSnapshot, schemaStepJson } from "./copy_publicat
 import type { DurableObjectState, SqlStorage, SqlValue } from "./platform.ts";
 import { SeedRefused, type SeedProject } from "./seed_contract.ts";
 import type { Statement } from "./seed_storage.ts";
+import {
+  restore,
+  runStatements,
+  snapshotPage,
+  type ObjectImage,
+  type SnapshotCursor,
+} from "./s4_fixture_storage.ts";
 
 const INTERNAL = "https://central-seed.internal";
 export const OBJECT_STATEMENTS_URL = `${INTERNAL}/statements`;
 export const OBJECT_COPY_URL = `${INTERNAL}/copy`;
 export const OBJECT_TABLES_URL = `${INTERNAL}/tables`;
 export const OBJECT_COPY_RECORD_URL = `${INTERNAL}/copy-record`;
+/** S4 refusal allocation only (s4_routes.ts guards every call that reaches these). */
+export const S4_STATEMENTS_URL = `${INTERNAL}/s4/statements`;
+export const S4_SNAPSHOT_URL = `${INTERNAL}/s4/snapshot`;
+export const S4_RESTORE_URL = `${INTERNAL}/s4/restore`;
 
 export interface CopyRequest {
   readonly prelude: readonly Statement[];
@@ -61,6 +72,12 @@ abstract class SeedStorageObject {
         const copy = (await request.json()) as CopyRequest;
         return json(this.seed(sql, copy.prelude, copy.project));
       }
+      case `POST ${S4_STATEMENTS_URL}`:
+        return json(runStatements(this.state, (await request.json()) as readonly string[]));
+      case `POST ${S4_SNAPSHOT_URL}`:
+        return json(snapshotPage(sql, (await request.json()) as SnapshotCursor | null));
+      case `POST ${S4_RESTORE_URL}`:
+        return json(restore(this.state, (await request.json()) as ObjectImage));
       default:
         return json({ refused: "route" }, 404);
     }

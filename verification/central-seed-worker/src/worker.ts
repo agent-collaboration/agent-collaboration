@@ -40,6 +40,8 @@ export {
   ProjectCopyObject,
 } from "./storage_objects.ts";
 
+import { isS4Route, s4Route } from "./s4_routes.ts";
+
 export interface SeedEnv extends AccessSettings {
   /** Set only by the staging deploy config; any other deployment refuses every call. */
   readonly STAGING_SEED_TARGET?: string;
@@ -189,8 +191,10 @@ async function seedRegistry(request: RegistryRequest, env: SeedEnv) {
 
 export default {
   async fetch(request: Request, env: SeedEnv): Promise<Response> {
-    const phase = ROUTES[new URL(request.url).pathname];
-    if (phase === undefined) return json({ refused: "staging seed Worker" }, 503);
+    const path = new URL(request.url).pathname;
+    const phase = ROUTES[path];
+    if (phase === undefined && !isS4Route(path))
+      return json({ refused: "staging seed Worker" }, 503);
     if (env.STAGING_SEED_TARGET === undefined || env.STAGING_SEED_TARGET === "") {
       return json({ refused: "this deployment is not a staging seed target" }, 503);
     }
@@ -212,6 +216,7 @@ export default {
     );
     if (owner.kind === "refused") return json({ refused: owner.refusal }, 403);
     if (request.method !== "POST") return json({ refused: "method" }, 405);
+    if (phase === undefined) return s4Route(path, await request.json(), env);
     try {
       const body: unknown = await request.json();
       const result =

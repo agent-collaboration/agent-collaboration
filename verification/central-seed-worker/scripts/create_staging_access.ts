@@ -15,6 +15,10 @@
 // - readback: prints names, ids and policies only; never a secret.
 // Every cf call runs with CLOUDFLARE_ACCOUNT_ID from the settings in its own
 // environment; nothing secret is printed or put in an argument.
+//
+// An owner-only allocation (settings access.ownerOnly true, the S4 refusal
+// allocation) has no Router: tokens is refused, and apps creates only the
+// whole-host owner application.
 
 import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -46,7 +50,7 @@ interface S1Settings {
   accountId: string;
   workerName: string;
   hostname: string;
-  access: Record<string, unknown> & { ownerIdentity: string };
+  access: Record<string, unknown> & { ownerIdentity: string; ownerOnly?: boolean };
 }
 const settings = JSON.parse(await readFile(settingsFile, "utf8")) as S1Settings;
 if (
@@ -77,7 +81,10 @@ const listOf = (answer: unknown): Record<string, unknown>[] => {
 const saveSettings = () =>
   writeFile(settingsFile, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
 
+const ownerOnly = settings.access.ownerOnly === true;
+
 async function tokens() {
+  if (ownerOnly) throw new Error("an owner-only allocation has no Router service tokens");
   const existing = listOf(await cf(["zero-trust", "access", "service-tokens", "list"]));
   const recorded: { name: string; id: string; expiresAt: unknown }[] = [];
   for (const name of TOKEN_NAMES) {
@@ -126,7 +133,7 @@ async function tokens() {
 
 async function apps() {
   const tokens = settings.access.serviceTokens as { name: string; id: string }[] | undefined;
-  if (!Array.isArray(tokens) || tokens.length !== TOKEN_NAMES.length)
+  if (!ownerOnly && (!Array.isArray(tokens) || tokens.length !== TOKEN_NAMES.length))
     throw new Error("create the service tokens first");
   const existing = listOf(
     await cf(["zero-trust", "access", "applications", "list", "--domain", settings.hostname]),
@@ -147,19 +154,23 @@ async function apps() {
         },
       ],
     },
-    session: {
-      type: "self_hosted",
-      name: `${settings.workerName} sessions`,
-      domain: `${settings.hostname}/v1/session`,
-      session_duration: "24h",
-      policies: [
-        {
-          name: "debug routers",
-          decision: "non_identity",
-          include: tokens.map((token) => ({ service_token: { token_id: token.id } })),
-        },
-      ],
-    },
+    ...(ownerOnly
+      ? {}
+      : {
+          session: {
+            type: "self_hosted",
+            name: `${settings.workerName} sessions`,
+            domain: `${settings.hostname}/v1/session`,
+            session_duration: "24h",
+            policies: [
+              {
+                name: "debug routers",
+                decision: "non_identity",
+                include: (tokens ?? []).map((token) => ({ service_token: { token_id: token.id } })),
+              },
+            ],
+          },
+        }),
   };
   const created: Record<string, { id: unknown; aud: unknown }> = {};
   for (const [kind, body] of Object.entries(bodies)) {
@@ -195,8 +206,10 @@ async function apps() {
   }
   if (!dryRun) {
     settings.access.adminAudience = created.admin?.aud;
-    settings.access.sessionAudience = created.session?.aud;
-    settings.access.applications = { admin: created.admin?.id, session: created.session?.id };
+    if (!ownerOnly) settings.access.sessionAudience = created.session?.aud;
+    settings.access.applications = ownerOnly
+      ? { admin: created.admin?.id }
+      : { admin: created.admin?.id, session: created.session?.id };
     await saveSettings();
     console.log(
       JSON.stringify({

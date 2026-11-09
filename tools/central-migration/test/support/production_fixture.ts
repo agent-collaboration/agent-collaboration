@@ -135,6 +135,8 @@ function leaseHistory(): string[] {
 }
 
 export function productionSeed(): ProductionSeed {
+  // Every call builds the same corpus: the S4 driver diffs two of them.
+  rowCounter = 0;
   // Production's DDL, verbatim (src/generated/schema_sources.ts, from git at 2636806a5).
   const history = SCHEMA_SOURCES.production.history.flatMap(split);
   const journal = split(SCHEMA_SOURCES.production.journal);

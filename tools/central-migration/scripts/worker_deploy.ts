@@ -14,7 +14,13 @@
 
 import { mainCentralConfig, migrationWorkerConfig, type WorkerConfig } from "./deploy_configs.ts";
 
-export type WorkerKind = "seed" | "old-central" | "migration" | "main-central";
+export type WorkerKind = "seed" | "s4-seed" | "old-central" | "migration" | "main-central";
+
+/**
+ * S4's refusal allocation (T11). Its seed Worker is redeployed over the same
+ * namespaces between cases ("s4-seed"); no other allocation may redeploy a seed.
+ */
+export const S4_STAGING_WORKER = "collaboration-central-s4-refusals";
 
 /** Production central's identity, never a target of this tool. */
 export const PRODUCTION = {
@@ -79,6 +85,7 @@ export const SEED_ENTRY_MODULE = `export * from "./${SEED_TSC_ENTRY}";\nexport {
 /** Where each kind's entry module sits inside the copied artifact directory. */
 export const ENTRYPOINTS: Readonly<Record<WorkerKind, string>> = {
   seed: "artifact/seed_entry.js",
+  "s4-seed": "artifact/seed_entry.js",
   migration: "artifact/worker.js",
   "old-central": "artifact/index.js",
   "main-central": "artifact/index.js",
@@ -94,6 +101,7 @@ const ES_MODULES = '{ type: "ESModule", globs: ["**/*.js"], fallthrough: false }
 const COMPILED_WASM = '{ type: "CompiledWasm", globs: ["**/*.wasm"], fallthrough: false }';
 export const BUILD_RULES: Readonly<Record<WorkerKind, string>> = {
   seed: buildRules(ES_MODULES),
+  "s4-seed": buildRules(ES_MODULES),
   migration: buildRules(ES_MODULES),
   "old-central": buildRules(COMPILED_WASM),
   "main-central": buildRules(COMPILED_WASM),
@@ -259,6 +267,8 @@ export function checkBefore(kind: WorkerKind, settings: DeploySettings, before: 
     if (host.length > 0) refuse(`hostname ${settings.hostname} already exists`);
     return;
   }
+  if (kind === "s4-seed" && !sameName(worker, S4_STAGING_WORKER))
+    refuse(`only ${S4_STAGING_WORKER} redeploys its seed Worker`);
   if (!workerNames(before).includes(canonicalName(worker)))
     refuse(`Worker ${worker} doesn't exist yet`);
   const classes = own.map((namespace) => namespace.class).sort();
