@@ -195,14 +195,14 @@ async fn first_process(client: &Client) -> ConformanceResult<String> {
         if history.len() != count
             || !tables
                 .iter()
-                .any(|name| name == "central_schema_migrations")
+                .any(|name| name.starts_with("_sqlx_migrations_"))
         {
             return Err("bootstrap history/table readback missing".into());
         }
         for row in &history {
             if row.version_class != "integer"
                 || row.checksum_class != "blob"
-                || row.installed_class != "integer"
+                || row.installed_class != "text"
                 || row.execution_class != "integer"
                 || row.description.is_empty()
                 || row.success != 1

@@ -166,7 +166,7 @@ async fn owner_health_precedes_initialization_uses_target_bytes_and_refuses_mach
         .connect()
         .await?;
     let observed=async {
-        let row=query::<sqlx_turso::Turso>("SELECT count(*) AS count FROM sqlite_schema WHERE type='table' AND name IN ('central_schema_migrations','central_schema_migration_failures')").fetch_one(&mut reader).await?;
+        let row=query::<sqlx_turso::Turso>("SELECT count(*) AS count FROM sqlite_schema WHERE type='table' AND name IN ('_sqlx_migrations_fleet_sync_receiver','central_schema_migration_failures')").fetch_one(&mut reader).await?;
         let count:i64=row.try_get("count")?;
         if count!=0 {return Err("fresh Health created central migration bookkeeping".into());}
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())

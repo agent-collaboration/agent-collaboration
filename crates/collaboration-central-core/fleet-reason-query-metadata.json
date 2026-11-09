@@ -1,7 +1,6 @@
 {
   "producer": "owned sqlx-turso / Turso 0.8.1 describe",
   "sources": {
-    "core_migrations/0000_migration_history.sql": "badc108861ed9aff10b5da4383ecb7a62387c677f8ae28ab67a77d0d878bd68b",
     "core_migrations/0001_fleet_decisions.sql": "88b68c4557b378f3b6757c93243543de05dfc375d4d3c23d7cf5b6a1598343a5",
     "core_migrations/0002_fleet_decision_receipts.sql": "07da9a4fce8c160b30fec2133c1130171f901c1ecc9dfb2a15d35f32a0511fb3",
     "core_migrations/0003_fleet_records.sql": "708ac76292741e43deb96bec00cd32dcca4834ffc171289e330bc3e9e68a726c",

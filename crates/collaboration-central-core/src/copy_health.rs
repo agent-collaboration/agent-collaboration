@@ -190,21 +190,18 @@ where
         .into_iter()
         .max()
         .ok_or_else(|| StoreError::backend("receiver corpus is empty"))?;
-    let present = table_present(scope, "central_schema_migrations").await?;
+    let receiver = crate::migration_records::MigrationSet::FleetSyncReceiver;
+    let present = table_present(scope, receiver.table()).await?;
     let mut stored = None;
     let rows = if present {
-        crate::generated_bootstrap::read_migration_history(scope, "fleet-sync-receiver".into())
+        crate::migration_records::read(scope, receiver)
             .await
             .map_err(StoreError::backend)?
     } else {
         Vec::new()
     };
     for row in rows {
-        crate::migration_bookkeeping::validate_history_times(&row)?;
-        crate::fleet_record_codec::check_private_id(
-            &crate::fleet_record_codec::required(row.row_id, "migration row identity")?,
-            "migration row identity",
-        )?;
+        crate::migration_records::validate(&row, receiver)?;
         let version = u64::try_from(
             row.version
                 .ok_or_else(|| StoreError::backend("missing migration version"))?,

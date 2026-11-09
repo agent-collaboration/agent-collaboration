@@ -38,7 +38,7 @@ async fn own_history_and_failure_tables_are_excluded_and_cannot_be_claimed_by_pr
         fixture.create(false).await?;
         fixture.apply(schema_piece(fixture.database)?).await?;
         let owned_tables = fixture.copy.transaction(|scope| Box::pin(async move {
-            let row = query::<sqlx_turso::Turso>("SELECT count(*) AS count FROM sqlite_schema WHERE type='table' AND name IN ('central_schema_migrations','central_schema_migration_failures')")
+            let row = query::<sqlx_turso::Turso>("SELECT count(*) AS count FROM sqlite_schema WHERE type='table' AND name IN ('_sqlx_migrations_fleet_sync_receiver','central_schema_migration_failures')")
                 .fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
             row.try_get::<i64,_>("count").map_err(StoreError::backend)
         })).await?;
@@ -53,7 +53,7 @@ async fn own_history_and_failure_tables_are_excluded_and_cannot_be_claimed_by_pr
             || before.tables[0].table.as_str() != "board_rows" {
             return Err("central metadata entered the replicated catalog or fingerprint".into());
         }
-        for table in ["central_schema_migrations", "central_schema_migration_failures"] {
+        for table in ["_sqlx_migrations_fleet_sync_receiver", "central_schema_migration_failures"] {
             let piece = Piece::new(PieceContents {
                 database: fixture.database,
                 epoch: position(1)?.epoch,

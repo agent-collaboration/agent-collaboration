@@ -1,0 +1,339 @@
+{
+  "migrations": [
+    "core_migrations",
+    "migration_record_tables"
+  ],
+  "output": "src/generated_migration_records.rs",
+  "metadata": "migration-record-query-metadata.json",
+  "queries": [
+    {
+      "name": "initialize_fleet_sync_lease_records",
+      "sql": "migration_record_tables/0901_fleet_sync_lease.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": []
+    },
+    {
+      "name": "read_fleet_sync_lease_records",
+      "sql": "sql/migration_records/read_fleet_sync_lease.sql",
+      "row": "StoredMigrationRecord",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "insert_fleet_sync_lease_record",
+      "sql": "sql/migration_records/insert_fleet_sync_lease.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "version",
+          "kind": "integer",
+          "nullable": false
+        },
+        {
+          "name": "description",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "installed_on",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "checksum",
+          "kind": "blob",
+          "nullable": false
+        },
+        {
+          "name": "execution_time",
+          "kind": "integer",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "initialize_fleet_sync_receiver_records",
+      "sql": "migration_record_tables/0902_fleet_sync_receiver.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": []
+    },
+    {
+      "name": "read_fleet_sync_receiver_records",
+      "sql": "sql/migration_records/read_fleet_sync_receiver.sql",
+      "row": "StoredMigrationRecord",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "insert_fleet_sync_receiver_record",
+      "sql": "sql/migration_records/insert_fleet_sync_receiver.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "version",
+          "kind": "integer",
+          "nullable": false
+        },
+        {
+          "name": "description",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "installed_on",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "checksum",
+          "kind": "blob",
+          "nullable": false
+        },
+        {
+          "name": "execution_time",
+          "kind": "integer",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "initialize_fleet_sync_session_records",
+      "sql": "migration_record_tables/0903_fleet_sync_session.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": []
+    },
+    {
+      "name": "read_fleet_sync_session_records",
+      "sql": "sql/migration_records/read_fleet_sync_session.sql",
+      "row": "StoredMigrationRecord",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "insert_fleet_sync_session_record",
+      "sql": "sql/migration_records/insert_fleet_sync_session.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "version",
+          "kind": "integer",
+          "nullable": false
+        },
+        {
+          "name": "description",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "installed_on",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "checksum",
+          "kind": "blob",
+          "nullable": false
+        },
+        {
+          "name": "execution_time",
+          "kind": "integer",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "initialize_fleet_sync_delivery_records",
+      "sql": "migration_record_tables/0904_fleet_sync_delivery.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": []
+    },
+    {
+      "name": "read_fleet_sync_delivery_records",
+      "sql": "sql/migration_records/read_fleet_sync_delivery.sql",
+      "row": "StoredMigrationRecord",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "insert_fleet_sync_delivery_record",
+      "sql": "sql/migration_records/insert_fleet_sync_delivery.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "version",
+          "kind": "integer",
+          "nullable": false
+        },
+        {
+          "name": "description",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "installed_on",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "checksum",
+          "kind": "blob",
+          "nullable": false
+        },
+        {
+          "name": "execution_time",
+          "kind": "integer",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "initialize_central_fleet_records",
+      "sql": "migration_record_tables/0905_central_fleet.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": []
+    },
+    {
+      "name": "read_central_fleet_records",
+      "sql": "sql/migration_records/read_central_fleet.sql",
+      "row": "StoredMigrationRecord",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "insert_central_fleet_record",
+      "sql": "sql/migration_records/insert_central_fleet.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "version",
+          "kind": "integer",
+          "nullable": false
+        },
+        {
+          "name": "description",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "installed_on",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "checksum",
+          "kind": "blob",
+          "nullable": false
+        },
+        {
+          "name": "execution_time",
+          "kind": "integer",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "initialize_central_registry_records",
+      "sql": "migration_record_tables/0906_central_registry.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": []
+    },
+    {
+      "name": "read_central_registry_records",
+      "sql": "sql/migration_records/read_central_registry.sql",
+      "row": "StoredMigrationRecord",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "insert_central_registry_record",
+      "sql": "sql/migration_records/insert_central_registry.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "version",
+          "kind": "integer",
+          "nullable": false
+        },
+        {
+          "name": "description",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "installed_on",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "checksum",
+          "kind": "blob",
+          "nullable": false
+        },
+        {
+          "name": "execution_time",
+          "kind": "integer",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "initialize_central_session_records",
+      "sql": "migration_record_tables/0907_central_session.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": []
+    },
+    {
+      "name": "read_central_session_records",
+      "sql": "sql/migration_records/read_central_session.sql",
+      "row": "StoredMigrationRecord",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "insert_central_session_record",
+      "sql": "sql/migration_records/insert_central_session.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "version",
+          "kind": "integer",
+          "nullable": false
+        },
+        {
+          "name": "description",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "installed_on",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "checksum",
+          "kind": "blob",
+          "nullable": false
+        },
+        {
+          "name": "execution_time",
+          "kind": "integer",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

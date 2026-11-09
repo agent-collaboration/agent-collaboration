@@ -1,8 +1,7 @@
 {
   "producer": "owned sqlx-turso / Turso 0.8.1 describe",
   "sources": {
-    "bootstrap-probe-queries.json": "7128534cc0d4c394ca086478977ad3a67355edc7e26ae78af93c0e4d95793e64",
-    "core_migrations/0000_migration_history.sql": "badc108861ed9aff10b5da4383ecb7a62387c677f8ae28ab67a77d0d878bd68b",
+    "bootstrap-probe-queries.json": "a2ddeccc12d00d237a858071559fa68d1c6d1dfa3dd9b33a01a830675c8785c0",
     "core_migrations/0001_fleet_decisions.sql": "88b68c4557b378f3b6757c93243543de05dfc375d4d3c23d7cf5b6a1598343a5",
     "core_migrations/0002_fleet_decision_receipts.sql": "07da9a4fce8c160b30fec2133c1130171f901c1ecc9dfb2a15d35f32a0511fb3",
     "core_migrations/0003_fleet_records.sql": "708ac76292741e43deb96bec00cd32dcca4834ffc171289e330bc3e9e68a726c",
@@ -64,13 +63,31 @@
     "generator:sqlx-turso/src/lib.rs": "32ec3ac4ca4d0d703a452496262928a3a00ddfdf71eac8cbbe4ce1a3da69d9b5",
     "generator:workspace/Cargo.lock": "e6dd6bbdd6d3915326e1bb54c57870a5d55f515e4be70732d385a2c7fd5bebbe",
     "generator:workspace/rust-toolchain.toml": "3baca9098f290c1bc291aa94f22c516487ba2c0865bd9795d1c863b72025ab9c",
-    "sql/bootstrap_probe_checksum.sql": "5a9a0125eea2925e457eac3b43fa090833062803e0982315d962c8a9f2bb3fc1",
-    "sql/bootstrap_probe_history.sql": "800a11d383c0ae1d9560b24aff231ec7214bbfe09f67a103e0edae5add148fbd",
+    "migration_record_tables/0901_fleet_sync_lease.sql": "8507f0584736d2cd9c141202dd7feee22e4fe0b978105a96dd14c357bef7b46a",
+    "migration_record_tables/0902_fleet_sync_receiver.sql": "08fc7b3ca0619274d260da8be5b2a7387885ada481460018cf38d3a01d67bb78",
+    "migration_record_tables/0903_fleet_sync_session.sql": "a97416e85f11f9571b239f22d76a22759a9787902f105455653ca9cfedfb6a78",
+    "migration_record_tables/0904_fleet_sync_delivery.sql": "1c9a831f12104cf4f159b1206b83cf04ed8756aa991124b7e1f49d7f44bc1c81",
+    "migration_record_tables/0905_central_fleet.sql": "64878d1e1925bbb2183d281406111180cf7ebb729db2df868acaf4a98f6fba83",
+    "migration_record_tables/0906_central_registry.sql": "971ec1c2a3d019ae2952d59f54e68f76f4d4e2f9e74ee4a096d6e4b453b525e6",
+    "migration_record_tables/0907_central_session.sql": "aa6e2e80f2c0aa4b1c32ed86efa786013a1de17eeffbc700e6b19a42aecd79f2",
     "sql/bootstrap_probe_tables.sql": "519903a94c731b528c2f27e95330ca35f4c83c20cde277d29592fe2fe126a1b8",
-    "sql/bootstrap_probe_version.sql": "7eb21407286ab9689713d2b7e7b26c82dcb1f4be3c18d7c352a8c518a4d9a492",
-    "src/generated_bootstrap_probes.rs": "ad132f8e66acd685c4aec85b3d52138b875af7074825a6f0027f816a1a2c51df"
+    "sql/migration_records/probe_checksum_central_fleet.sql": "c44af5c43c5b01a135fbb8d002da42ac6054a3b0782025208ebda4b953d87894",
+    "sql/migration_records/probe_checksum_central_registry.sql": "a046bac72c42ac1a3cd6eb4d8cea3df7b5ec1494e0057d775fc6a76429df6f71",
+    "sql/migration_records/probe_checksum_central_session.sql": "cf2b3aafd23b8b421d03c92623e481987f37cd756f01dccc8d5fcb4e27832493",
+    "sql/migration_records/probe_checksum_fleet_sync_delivery.sql": "074c677d7a1e2d79482c709ddf21d4330e96cbb55790e61cc034aa658b77a251",
+    "sql/migration_records/probe_checksum_fleet_sync_lease.sql": "1c1c44b89612d69aa2e0648dd9a80988be3ce95a2af4429d328362c9f262e1d6",
+    "sql/migration_records/probe_checksum_fleet_sync_receiver.sql": "1c5b9f564c826327f4f5a29d76605af45660792c2b6e197951f744559f253e91",
+    "sql/migration_records/probe_checksum_fleet_sync_session.sql": "177b3ab6be935a9fb46798e7154e4a4ec4612ad8d2319bff4ead102d6b6ec50f",
+    "sql/migration_records/probe_version_central_fleet.sql": "0ba4eb0462d3a0da18c64a77dd5e131d365817631e886707c7ca2e226e47fb7a",
+    "sql/migration_records/probe_version_central_registry.sql": "1aa71cbc948639647f8e4c6f3760ebcd1487b48e91a57b697f3408fc0c6a4deb",
+    "sql/migration_records/probe_version_central_session.sql": "c2153d75b073b48d3625faa00eae9eff3c189c6964b88c4c16eca2559845ae42",
+    "sql/migration_records/probe_version_fleet_sync_delivery.sql": "8dd11407241bd0f07b1e814a8689e4bd34b5fdfd05cd515c7a3e380d3a05b585",
+    "sql/migration_records/probe_version_fleet_sync_lease.sql": "515fdd1c6be0c9e7d85cacb6680c025a7e351b1e3868a09f8501decfc363111a",
+    "sql/migration_records/probe_version_fleet_sync_receiver.sql": "2933a68da7009da678e943830a2ddd9b8aa2f968ec29e788349e52393aa55b87",
+    "sql/migration_records/probe_version_fleet_sync_session.sql": "343bf0b694ab0bd333b8b76518288776e3c342f3b9b8d684103b54ae1d9be703",
+    "src/generated_bootstrap_probes.rs": "4f3137198b13b70b42b9f43bb97f2091f8a664dc0975802ad7792892ea36f197"
   },
-  "queries_digest": "db54238d8b720499fc947d26c7d38bfdde3d6ded73d6a4b0e58dd9302484cf92",
+  "queries_digest": "c809a09b06e9facdbe3e1fa8ff578489cd6984e50f7221839af91b0d7018b3bc",
   "queries": [
     {
       "name": "bootstrap_probe_tables",
@@ -86,96 +103,73 @@
       ]
     },
     {
-      "name": "bootstrap_probe_history",
-      "bind_slots": 0,
-      "columns": [
-        {
-          "name": "corpus",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "version",
-          "sql_type": "INTEGER",
-          "rust_type": "Option<i64>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "description",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "installed_on",
-          "sql_type": "INTEGER",
-          "rust_type": "Option<i64>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "success",
-          "sql_type": "INTEGER",
-          "rust_type": "Option<i64>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "checksum",
-          "sql_type": "BLOB",
-          "rust_type": "Option<Vec<u8>>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "execution_time",
-          "sql_type": "INTEGER",
-          "rust_type": "Option<i64>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "version_class",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "typeof"
-        },
-        {
-          "name": "checksum_class",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "typeof"
-        },
-        {
-          "name": "installed_class",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "typeof"
-        },
-        {
-          "name": "execution_class",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "typeof"
-        }
-      ]
-    },
-    {
-      "name": "bootstrap_probe_checksum",
-      "bind_slots": 2,
+      "name": "bootstrap_probe_checksum_fleet_sync_lease",
+      "bind_slots": 1,
       "columns": []
     },
     {
-      "name": "bootstrap_probe_version",
-      "bind_slots": 2,
+      "name": "bootstrap_probe_version_fleet_sync_lease",
+      "bind_slots": 1,
+      "columns": []
+    },
+    {
+      "name": "bootstrap_probe_checksum_fleet_sync_receiver",
+      "bind_slots": 1,
+      "columns": []
+    },
+    {
+      "name": "bootstrap_probe_version_fleet_sync_receiver",
+      "bind_slots": 1,
+      "columns": []
+    },
+    {
+      "name": "bootstrap_probe_checksum_fleet_sync_session",
+      "bind_slots": 1,
+      "columns": []
+    },
+    {
+      "name": "bootstrap_probe_version_fleet_sync_session",
+      "bind_slots": 1,
+      "columns": []
+    },
+    {
+      "name": "bootstrap_probe_checksum_fleet_sync_delivery",
+      "bind_slots": 1,
+      "columns": []
+    },
+    {
+      "name": "bootstrap_probe_version_fleet_sync_delivery",
+      "bind_slots": 1,
+      "columns": []
+    },
+    {
+      "name": "bootstrap_probe_checksum_central_fleet",
+      "bind_slots": 1,
+      "columns": []
+    },
+    {
+      "name": "bootstrap_probe_version_central_fleet",
+      "bind_slots": 1,
+      "columns": []
+    },
+    {
+      "name": "bootstrap_probe_checksum_central_registry",
+      "bind_slots": 1,
+      "columns": []
+    },
+    {
+      "name": "bootstrap_probe_version_central_registry",
+      "bind_slots": 1,
+      "columns": []
+    },
+    {
+      "name": "bootstrap_probe_checksum_central_session",
+      "bind_slots": 1,
+      "columns": []
+    },
+    {
+      "name": "bootstrap_probe_version_central_session",
+      "bind_slots": 1,
       "columns": []
     }
   ]

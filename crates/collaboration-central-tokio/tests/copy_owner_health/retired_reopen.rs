@@ -67,7 +67,7 @@ async fn history_stamps(root: &Path) -> ConformanceResult<Vec<HistoryStamp>> {
         .await?;
     let result = async {
         let rows = query::<sqlx_turso::Turso>(
-            "SELECT corpus,version,checksum FROM central_schema_migrations ORDER BY corpus,version",
+            "SELECT 'fleet-sync-receiver' AS corpus,CAST(version AS INTEGER) AS version,checksum FROM _sqlx_migrations_fleet_sync_receiver ORDER BY version",
         )
         .fetch_all(&mut store)
         .await?;
@@ -103,7 +103,7 @@ async fn make_history_unsupported(root: &Path) -> ConformanceResult<Vec<HistoryS
         .connect()
         .await?;
     let changed = query::<sqlx_turso::Turso>(
-        "UPDATE central_schema_migrations SET version='999' WHERE corpus='fleet-sync-receiver' AND version='3'",
+        "UPDATE _sqlx_migrations_fleet_sync_receiver SET version=999 WHERE version=3",
     )
     .execute(&mut store)
     .await;

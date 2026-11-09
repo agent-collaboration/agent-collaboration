@@ -39,57 +39,60 @@ async fn columns(
         .object
         .transaction(move |scope| {
             Box::pin(async move {
-                let sql = match table {
-                    "central_schema_migrations" => "PRAGMA table_info(central_schema_migrations)",
-                    "central_schema_migration_failures" => {
-                        "PRAGMA table_info(central_schema_migration_failures)"
-                    }
-                    _ => return Err(StoreError::backend("unexpected bookkeeping table")),
-                };
-                query::<sqlx_turso::Turso>(sql)
-                    .fetch_all(scope.executor())
-                    .await
-                    .map_err(StoreError::backend)?
-                    .into_iter()
-                    .map(|row| {
-                        Ok((
-                            row.try_get("name").map_err(StoreError::backend)?,
-                            row.try_get("type").map_err(StoreError::backend)?,
-                            row.try_get("pk").map_err(StoreError::backend)?,
-                        ))
-                    })
-                    .collect()
+                query::<sqlx_turso::Turso>(sqlx_core::sql_str::AssertSqlSafe(format!(
+                    "PRAGMA table_info({table})"
+                )))
+                .fetch_all(scope.executor())
+                .await
+                .map_err(StoreError::backend)?
+                .into_iter()
+                .map(|row| {
+                    Ok((
+                        row.try_get("name").map_err(StoreError::backend)?,
+                        row.try_get("type").map_err(StoreError::backend)?,
+                        row.try_get("pk").map_err(StoreError::backend)?,
+                    ))
+                })
+                .collect()
             })
         })
         .await?)
 }
 
+/// The record table of `schema`'s own migration set.
+fn record_table(schema: EngineSchema) -> TestResult<&'static str> {
+    Ok(crate::migration_records::MigrationSet::named(schema.corpus())?.table())
+}
+
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Both fresh bootstrap roles must create the exact owner-approved bookkeeping columns and store injected integer times without an old at alias."
+    reason = "Both fresh bootstrap roles must create sqlx's exact record table for their set, store the injected install time, and leave the failure table's shape alone."
 )]
-async fn fleet_and_copy_bootstrap_create_final_bookkeeping_with_integer_injected_times()
+async fn fleet_and_copy_bootstrap_create_one_sqlx_record_table_per_set_with_injected_install_times()
 -> TestResult {
     for schema in [EngineSchema::Fleet, EngineSchema::Copy] {
         let fixture = FleetStorageFixture::open().await?;
         assert!(bootstrap(&fixture, schema, NOW).await? > 0);
-        let history = columns(&fixture, "central_schema_migrations").await?;
+        let table = record_table(schema)?;
+        // sqlx's own DDL (sqlx-sqlite-0.9.0 src/migrate.rs:93–100), under the set's name.
         assert_eq!(
-            history,
+            columns(&fixture, table).await?,
             vec![
-                ("row_id".into(), "TEXT".into(), 1),
-                ("corpus".into(), "TEXT".into(), 0),
-                ("version".into(), "INTEGER".into(), 0),
+                ("version".into(), "BIGINT".into(), 1),
                 ("description".into(), "TEXT".into(), 0),
-                ("installed_on".into(), "INTEGER".into(), 0),
-                ("success".into(), "INTEGER".into(), 0),
+                ("installed_on".into(), "TIMESTAMP".into(), 0),
+                ("success".into(), "BOOLEAN".into(), 0),
                 ("checksum".into(), "BLOB".into(), 0),
-                ("execution_time".into(), "INTEGER".into(), 0),
-                ("created_at".into(), "INTEGER".into(), 0),
-                ("updated_at".into(), "INTEGER".into(), 0),
+                ("execution_time".into(), "BIGINT".into(), 0),
             ],
             "{schema:?}"
+        );
+        assert!(
+            columns(&fixture, "central_schema_migrations")
+                .await?
+                .is_empty(),
+            "{schema:?} kept the custom record"
         );
         let failures = columns(&fixture, "central_schema_migration_failures").await?;
         assert_eq!(
@@ -105,31 +108,16 @@ async fn fleet_and_copy_bootstrap_create_final_bookkeeping_with_integer_injected
             ],
             "{schema:?}"
         );
-        let original = read_history(&fixture).await?;
-        assert!(!original.is_empty());
+        let original = read_history(&fixture, table).await?;
+        assert_eq!(original.len(), schema.migrations().len());
         for row in &original {
-            assert!(runtime_primitives::uuid_v7(durable_steps::Uuid::parse_str(
-                &row.row_id
-            )?));
-            assert_eq!(
-                durable_steps::Uuid::parse_str(&row.row_id)?.to_string(),
-                row.row_id
-            );
-            assert!(!row.corpus.is_empty());
             assert!(row.version > 0);
             assert!(!row.checksum.is_empty());
             assert_eq!(
-                (row.created_at, row.updated_at, row.installed_on),
-                (NOW.unix_millis(), NOW.unix_millis(), NOW.unix_millis())
+                row.installed_on,
+                crate::migration_records::installed_on_text(NOW)?
             );
-            assert_eq!(
-                (
-                    row.created_class.as_str(),
-                    row.updated_class.as_str(),
-                    row.installed_class.as_str()
-                ),
-                ("integer", "integer", "integer")
-            );
+            assert_eq!(row.installed_class, "text");
         }
         let reopened = fixture.reopen().await?;
         assert_eq!(
@@ -141,7 +129,7 @@ async fn fleet_and_copy_bootstrap_create_final_bookkeeping_with_integer_injected
             .await?,
             0
         );
-        let repeated = read_history(&reopened).await?;
+        let repeated = read_history(&reopened, table).await?;
         assert_eq!(
             repeated, original,
             "owning reopen or no-op bootstrap rewrote bookkeeping"
@@ -153,31 +141,22 @@ async fn fleet_and_copy_bootstrap_create_final_bookkeeping_with_integer_injected
 
 #[derive(Debug, PartialEq)]
 struct HistoryRow {
-    row_id: String,
-    corpus: String,
     version: i64,
     checksum: Vec<u8>,
-    created_at: i64,
-    updated_at: i64,
-    installed_on: i64,
-    created_class: String,
-    updated_class: String,
+    installed_on: String,
     installed_class: String,
 }
-async fn read_history(fixture: &FleetStorageFixture) -> TestResult<Vec<HistoryRow>> {
-    Ok(fixture.object.transaction(|scope|Box::pin(async move {
-        let rows=query::<sqlx_turso::Turso>("SELECT row_id,corpus,version,checksum,created_at,updated_at,installed_on,typeof(created_at) AS created_class,typeof(updated_at) AS updated_class,typeof(installed_on) AS installed_class FROM central_schema_migrations ORDER BY corpus,version")
+async fn read_history(
+    fixture: &FleetStorageFixture,
+    table: &'static str,
+) -> TestResult<Vec<HistoryRow>> {
+    Ok(fixture.object.transaction(move |scope|Box::pin(async move {
+        let rows=query::<sqlx_turso::Turso>(sqlx_core::sql_str::AssertSqlSafe(format!("SELECT CAST(version AS INTEGER) AS version,checksum,CAST(installed_on AS TEXT) AS installed_on,typeof(installed_on) AS installed_class FROM {table} ORDER BY version")))
             .fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
         rows.into_iter().map(|row|Ok(HistoryRow {
-            row_id:row.try_get("row_id").map_err(StoreError::backend)?,
-            corpus:row.try_get("corpus").map_err(StoreError::backend)?,
             version:row.try_get("version").map_err(StoreError::backend)?,
             checksum:row.try_get("checksum").map_err(StoreError::backend)?,
-            created_at:row.try_get("created_at").map_err(StoreError::backend)?,
-            updated_at:row.try_get("updated_at").map_err(StoreError::backend)?,
             installed_on:row.try_get("installed_on").map_err(StoreError::backend)?,
-            created_class:row.try_get("created_class").map_err(StoreError::backend)?,
-            updated_class:row.try_get("updated_class").map_err(StoreError::backend)?,
             installed_class:row.try_get("installed_class").map_err(StoreError::backend)?,
         })).collect::<Result<Vec<_>,StoreError>>()
     })).await?)
@@ -193,8 +172,9 @@ async fn fresh_bootstrap_matches_sqlx_migration_column_types_and_checksum_bytes(
         let fixture = FleetStorageFixture::open().await?;
         bootstrap(&fixture, schema, NOW).await?;
 
+        let table = record_table(schema)?;
         fixture.object.transaction(move |scope|Box::pin(async move {
-            let rows=query::<sqlx_turso::Turso>("SELECT typeof(version) AS version_class,typeof(checksum) AS checksum_class FROM central_schema_migrations WHERE corpus=?1").bind(schema.corpus()).fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
+            let rows=query::<sqlx_turso::Turso>(sqlx_core::sql_str::AssertSqlSafe(format!("SELECT typeof(version) AS version_class,typeof(checksum) AS checksum_class FROM {table}"))).fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
             assert!(!rows.is_empty());
             for row in rows {
                 assert_eq!(row.try_get::<String,_>("version_class").map_err(StoreError::backend)?,"integer");
@@ -203,17 +183,18 @@ async fn fresh_bootstrap_matches_sqlx_migration_column_types_and_checksum_bytes(
             Ok(())
         })).await?;
         let stored: Vec<(i64, Vec<u8>)> = fixture.object.transaction(move |scope| Box::pin(async move {
-            let rows = query::<sqlx_turso::Turso>(
-                "SELECT version,typeof(checksum) AS checksum_class,checksum,description,success,typeof(success) AS success_class,installed_on,typeof(installed_on) AS installed_class,execution_time,typeof(execution_time) AS execution_class FROM central_schema_migrations WHERE corpus=?1",
-            ).bind(schema.corpus()).fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
+            let rows = query::<sqlx_turso::Turso>(sqlx_core::sql_str::AssertSqlSafe(format!(
+                "SELECT CAST(version AS INTEGER) AS version,typeof(checksum) AS checksum_class,checksum,description,CAST(success AS INTEGER) AS success,typeof(success) AS success_class,CAST(installed_on AS TEXT) AS installed_on,typeof(installed_on) AS installed_class,CAST(execution_time AS INTEGER) AS execution_time,typeof(execution_time) AS execution_class FROM {table}",
+            ))).fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
             rows.into_iter().map(|row| {
                 let class: String = row.try_get("checksum_class").map_err(StoreError::backend)?;
                 assert_eq!(class, "blob", "{schema:?} checksum storage class");
                 assert!(!row.try_get::<String,_>("description").map_err(StoreError::backend)?.is_empty());
                 assert_eq!(row.try_get::<i64,_>("success").map_err(StoreError::backend)?,1);
-                assert_eq!(row.try_get::<i64,_>("installed_on").map_err(StoreError::backend)?, NOW.unix_millis());
+                assert_eq!(row.try_get::<String,_>("installed_on").map_err(StoreError::backend)?, crate::migration_records::installed_on_text(NOW)?);
+                assert_eq!(row.try_get::<String,_>("installed_class").map_err(StoreError::backend)?,"text");
                 assert_eq!(row.try_get::<i64,_>("execution_time").map_err(StoreError::backend)?,0);
-                for field in ["success_class","installed_class","execution_class"] {assert_eq!(row.try_get::<String,_>(field).map_err(StoreError::backend)?,"integer");}
+                for field in ["success_class","execution_class"] {assert_eq!(row.try_get::<String,_>(field).map_err(StoreError::backend)?,"integer");}
                 Ok((row.try_get("version").map_err(StoreError::backend)?,row.try_get("checksum").map_err(StoreError::backend)?))
             }).collect::<Result<Vec<_>,StoreError>>()
         })).await?;
@@ -353,22 +334,26 @@ async fn sql(fixture: &FleetStorageFixture, statement: &'static str) -> TestResu
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Actual bootstrap and tolerant Copy health must reject stored REAL/TEXT time corruption rather than coerce the cast text to a usable integer."
+    reason = "Actual bootstrap must refuse a record outside sqlx's shape, and tolerant Copy health must reject stored REAL/TEXT failure times rather than coerce them."
 )]
-async fn corrupt_native_bookkeeping_times_refuse_bootstrap_or_make_health_explicitly_unreadable()
+async fn corrupt_migration_records_refuse_bootstrap_and_corrupt_failure_times_make_health_unreadable()
 -> TestResult {
     for (statement, field) in [
         (
-            "UPDATE central_schema_migrations SET created_at=x'31'",
-            "central_schema_migrations.created_at",
+            "UPDATE _sqlx_migrations_central_fleet SET installed_on=1.5",
+            "_sqlx_migrations_central_fleet.installed_on",
         ),
         (
-            "UPDATE central_schema_migrations SET updated_at='bad'",
-            "central_schema_migrations.updated_at",
+            "UPDATE _sqlx_migrations_central_fleet SET installed_on='yesterday'",
+            "_sqlx_migrations_central_fleet.installed_on",
         ),
         (
-            "UPDATE central_schema_migrations SET installed_on=1.5",
-            "central_schema_migrations.installed_on",
+            "UPDATE _sqlx_migrations_central_fleet SET success=0",
+            "_sqlx_migrations_central_fleet.success",
+        ),
+        (
+            "UPDATE _sqlx_migrations_central_fleet SET execution_time=-1",
+            "_sqlx_migrations_central_fleet.execution_time",
         ),
     ] {
         let fixture = FleetStorageFixture::open().await?;
@@ -377,7 +362,7 @@ async fn corrupt_native_bookkeeping_times_refuse_bootstrap_or_make_health_explic
         let failure = bootstrap(&fixture, EngineSchema::Fleet, NOW)
             .await
             .err()
-            .ok_or("invalid native timestamp was accepted")?;
+            .ok_or("a record outside sqlx's shape was accepted")?;
         assert!(
             matches!(failure.downcast_ref::<StoreError>(),Some(StoreError::Corrupt {field:actual,..}) if actual==field),
             "{failure:?}"
@@ -460,7 +445,7 @@ async fn migration_execution_time_uses_the_injected_clock_around_each_execute() 
                 )
                 .await?;
                 let rows = query::<sqlx_turso::Turso>(
-                    "SELECT installed_on,execution_time FROM central_schema_migrations ORDER BY version",
+                    "SELECT CAST(installed_on AS TEXT) AS installed_on,CAST(execution_time AS INTEGER) AS execution_time FROM _sqlx_migrations_central_fleet ORDER BY version",
                 )
                 .fetch_all(scope.executor())
                 .await
@@ -469,7 +454,10 @@ async fn migration_execution_time_uses_the_injected_clock_around_each_execute() 
                 for (index, row) in rows.into_iter().enumerate() {
                     assert_eq!(row.try_get::<i64, _>("execution_time").map_err(StoreError::backend)?, 7);
                     let offset = i64::try_from(index).map_err(StoreError::backend)? * 14 + 7;
-                    assert_eq!(row.try_get::<i64, _>("installed_on").map_err(StoreError::backend)?, NOW.unix_millis() + offset);
+                    let installed = crate::migration_records::installed_on_text(
+                        runtime_primitives::SyncTime::from_unix_millis(NOW.unix_millis() + offset),
+                    )?;
+                    assert_eq!(row.try_get::<String, _>("installed_on").map_err(StoreError::backend)?, installed);
                 }
                 Ok(())
             })
@@ -494,27 +482,52 @@ async fn backwards_clock_records_zero_execution_time_and_commits_history() -> Te
         }
     }
     let fixture = FleetStorageFixture::open().await?;
-    fixture.object.transaction(|scope| Box::pin(async move {
-        let (applied, _) = <BootstrapStep as StepCallback<Store, sqlx_turso::Turso>>::run(
-            BootstrapStep {
-                schema: EngineSchema::Fleet,
-                now: NOW,
-                clock: Arc::new(BackwardsClock(std::sync::atomic::AtomicBool::new(false))),
-            }, scope,
-        ).await?;
-        let rows = query::<sqlx_turso::Turso>(
-            "SELECT installed_on,success,execution_time FROM central_schema_migrations WHERE corpus='central-fleet'",
+    fixture
+        .object
+        .transaction(|scope| {
+            Box::pin(async move {
+                let (applied, _) = <BootstrapStep as StepCallback<Store, sqlx_turso::Turso>>::run(
+                    BootstrapStep {
+                        schema: EngineSchema::Fleet,
+                        now: NOW,
+                        clock: Arc::new(BackwardsClock(std::sync::atomic::AtomicBool::new(false))),
+                    },
+                    scope,
+                )
+                .await?;
+                let rows = query::<sqlx_turso::Turso>(
+            "SELECT CAST(installed_on AS TEXT) AS installed_on,CAST(success AS INTEGER) AS success,CAST(execution_time AS INTEGER) AS execution_time FROM _sqlx_migrations_central_fleet",
         ).fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
-        assert_eq!(rows.len(), EngineSchema::Fleet.migrations().len());
-        assert_eq!(applied.count, rows.len());
-        for row in rows {
-            assert_eq!(row.try_get::<i64,_>("installed_on").map_err(StoreError::backend)?, NOW.unix_millis() - 7);
-            assert_eq!(row.try_get::<i64,_>("success").map_err(StoreError::backend)?, 1);
-            assert_eq!(row.try_get::<i64,_>("execution_time").map_err(StoreError::backend)?, 0);
-        }
-        Ok(())
-    })).await?;
+                assert_eq!(rows.len(), EngineSchema::Fleet.migrations().len());
+                assert_eq!(applied.count, rows.len());
+                for row in rows {
+                    assert_eq!(
+                        row.try_get::<String, _>("installed_on")
+                            .map_err(StoreError::backend)?,
+                        crate::migration_records::installed_on_text(
+                            runtime_primitives::SyncTime::from_unix_millis(NOW.unix_millis() - 7)
+                        )?
+                    );
+                    assert_eq!(
+                        row.try_get::<i64, _>("success")
+                            .map_err(StoreError::backend)?,
+                        1
+                    );
+                    assert_eq!(
+                        row.try_get::<i64, _>("execution_time")
+                            .map_err(StoreError::backend)?,
+                        0
+                    );
+                }
+                Ok(())
+            })
+        })
+        .await?;
     // A separate transaction observes the committed rows, not just an uncommitted INSERT.
-    assert!(!read_history(&fixture).await?.is_empty());
+    assert!(
+        !read_history(&fixture, "_sqlx_migrations_central_fleet")
+            .await?
+            .is_empty()
+    );
     fixture.close().await
 }

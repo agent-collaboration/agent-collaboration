@@ -59,7 +59,8 @@ pub struct BootstrapHistory {
     pub corpus: String,
     pub version: i64,
     pub description: String,
-    pub installed_on: i64,
+    /// sqlx's TIMESTAMP text (`YYYY-MM-DD HH:MM:SS`).
+    pub installed_on: String,
     pub success: i64,
     pub execution_time: i64,
     pub checksum: Vec<u8>,
@@ -191,16 +192,16 @@ where
                         .map(|row| row.name.ok_or_else(|| corrupt("missing table name")))
                         .collect::<Result<Vec<_>, _>>()?;
                     let mut history = Vec::new();
-                    if tables
-                        .iter()
-                        .any(|name| name == "central_schema_migrations")
-                    {
-                        for row in queries::bootstrap_probe_history(scope)
+                    for set in crate::migration_records::MigrationSet::ALL {
+                        if !tables.iter().any(|name| name == set.table()) {
+                            continue;
+                        }
+                        for row in crate::migration_records::read(scope, set)
                             .await
                             .map_err(StoreError::backend)?
                         {
                             history.push(BootstrapHistory {
-                                corpus: row.corpus.ok_or_else(|| corrupt("missing corpus"))?,
+                                corpus: set.name().to_owned(),
                                 version: row.version.ok_or_else(|| corrupt("missing version"))?,
                                 version_class: row
                                     .version_class
@@ -248,22 +249,13 @@ where
                     BootstrapReply::ConflictPrepared
                 }
                 BootstrapCommand::CorruptHistory { schema, corruption } => {
+                    let set = crate::migration_records::MigrationSet::named(schema.corpus())?;
                     match corruption {
                         HistoryCorruption::Checksum => {
-                            queries::bootstrap_probe_checksum(
-                                scope,
-                                vec![0; 48],
-                                schema.corpus().into(),
-                            )
-                            .await
+                            corrupt_checksum(scope, set, vec![0; 48]).await
                         }
-                        HistoryCorruption::InvalidVersion => {
-                            queries::bootstrap_probe_version(scope, 0, schema.corpus().into()).await
-                        }
-                        HistoryCorruption::UnknownVersion => {
-                            queries::bootstrap_probe_version(scope, 999, schema.corpus().into())
-                                .await
-                        }
+                        HistoryCorruption::InvalidVersion => corrupt_version(scope, set, 0).await,
+                        HistoryCorruption::UnknownVersion => corrupt_version(scope, set, 999).await,
                     }
                     .map_err(StoreError::backend)?;
                     BootstrapReply::HistoryCorrupted
@@ -347,5 +339,73 @@ where
             };
             Ok((reply, Vec::new()))
         })
+    }
+}
+
+/// Rewrite version 1's checksum in one set's record table.
+async fn corrupt_checksum<Scope>(
+    scope: &mut Scope,
+    set: crate::migration_records::MigrationSet,
+    value: Vec<u8>,
+) -> Result<(), sqlx_core::Error>
+where
+    Scope: TransactionScope,
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> Vec<u8>: Type<Scope::Database> + Encode<'value, Scope::Database>,
+{
+    use crate::migration_records::MigrationSet as Set;
+    match set {
+        Set::FleetSyncLease => {
+            queries::bootstrap_probe_checksum_fleet_sync_lease(scope, value).await
+        }
+        Set::FleetSyncReceiver => {
+            queries::bootstrap_probe_checksum_fleet_sync_receiver(scope, value).await
+        }
+        Set::FleetSyncSession => {
+            queries::bootstrap_probe_checksum_fleet_sync_session(scope, value).await
+        }
+        Set::FleetSyncDelivery => {
+            queries::bootstrap_probe_checksum_fleet_sync_delivery(scope, value).await
+        }
+        Set::CentralFleet => queries::bootstrap_probe_checksum_central_fleet(scope, value).await,
+        Set::CentralRegistry => {
+            queries::bootstrap_probe_checksum_central_registry(scope, value).await
+        }
+        Set::CentralSession => {
+            queries::bootstrap_probe_checksum_central_session(scope, value).await
+        }
+    }
+}
+
+/// Rewrite version 1's version number in one set's record table.
+async fn corrupt_version<Scope>(
+    scope: &mut Scope,
+    set: crate::migration_records::MigrationSet,
+    value: i64,
+) -> Result<(), sqlx_core::Error>
+where
+    Scope: TransactionScope,
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> i64: Type<Scope::Database> + Encode<'value, Scope::Database>,
+{
+    use crate::migration_records::MigrationSet as Set;
+    match set {
+        Set::FleetSyncLease => {
+            queries::bootstrap_probe_version_fleet_sync_lease(scope, value).await
+        }
+        Set::FleetSyncReceiver => {
+            queries::bootstrap_probe_version_fleet_sync_receiver(scope, value).await
+        }
+        Set::FleetSyncSession => {
+            queries::bootstrap_probe_version_fleet_sync_session(scope, value).await
+        }
+        Set::FleetSyncDelivery => {
+            queries::bootstrap_probe_version_fleet_sync_delivery(scope, value).await
+        }
+        Set::CentralFleet => queries::bootstrap_probe_version_central_fleet(scope, value).await,
+        Set::CentralRegistry => {
+            queries::bootstrap_probe_version_central_registry(scope, value).await
+        }
+        Set::CentralSession => queries::bootstrap_probe_version_central_session(scope, value).await,
     }
 }

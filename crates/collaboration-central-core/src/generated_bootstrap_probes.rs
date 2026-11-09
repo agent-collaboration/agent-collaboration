@@ -35,97 +35,268 @@ where
             .collect()
     }
 }
-
-#[derive(Debug)]
-pub(crate) struct BootstrapHistoryRow {
-    pub corpus: Option<String>,
-    pub version: Option<i64>,
-    pub description: Option<String>,
-    pub installed_on: Option<i64>,
-    pub success: Option<i64>,
-    pub checksum: Option<Vec<u8>>,
-    pub execution_time: Option<i64>,
-    pub version_class: Option<String>,
-    pub checksum_class: Option<String>,
-    pub installed_class: Option<String>,
-    pub execution_class: Option<String>,
-}
-pub(crate) fn bootstrap_probe_history<S>(
-    scope: &mut S,
-) -> impl std::future::Future<Output = Result<Vec<BootstrapHistoryRow>, sqlx_core::Error>> + Send
-where
-    S: TransactionScope,
-    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
-    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
-    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
-    for<'value> Option<Vec<u8>>: Type<S::Database> + Decode<'value, S::Database>,
-    for<'value> Option<i64>: Type<S::Database> + Decode<'value, S::Database>,
-{
-    async move {
-        let statement = query::<S::Database>(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/sql/bootstrap_probe_history.sql"
-        )));
-        let rows = statement.fetch_all(scope.executor()).await?;
-        rows.iter()
-            .map(|row| {
-                Ok(BootstrapHistoryRow {
-                    corpus: row.try_get("corpus")?,
-                    version: row.try_get("version")?,
-                    description: row.try_get("description")?,
-                    installed_on: row.try_get("installed_on")?,
-                    success: row.try_get("success")?,
-                    checksum: row.try_get("checksum")?,
-                    execution_time: row.try_get("execution_time")?,
-                    version_class: row.try_get("version_class")?,
-                    checksum_class: row.try_get("checksum_class")?,
-                    installed_class: row.try_get("installed_class")?,
-                    execution_class: row.try_get("execution_class")?,
-                })
-            })
-            .collect()
-    }
-}
-pub(crate) fn bootstrap_probe_checksum<S>(
+pub(crate) fn bootstrap_probe_checksum_fleet_sync_lease<S>(
     scope: &mut S,
     value: Vec<u8>,
-    corpus: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
-    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
     for<'value> Vec<u8>: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
         let statement = query::<S::Database>(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/sql/bootstrap_probe_checksum.sql"
+            "/sql/migration_records/probe_checksum_fleet_sync_lease.sql"
         )))
-        .bind(value)
-        .bind(corpus);
+        .bind(value);
         statement.execute(scope.executor()).await?;
         Ok(())
     }
 }
-pub(crate) fn bootstrap_probe_version<S>(
+pub(crate) fn bootstrap_probe_version_fleet_sync_lease<S>(
     scope: &mut S,
     value: i64,
-    corpus: String,
 ) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
 where
     S: TransactionScope,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
-    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
     for<'value> i64: Type<S::Database> + Encode<'value, S::Database>,
 {
     async move {
         let statement = query::<S::Database>(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/sql/bootstrap_probe_version.sql"
+            "/sql/migration_records/probe_version_fleet_sync_lease.sql"
         )))
-        .bind(value)
-        .bind(corpus);
+        .bind(value);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+pub(crate) fn bootstrap_probe_checksum_fleet_sync_receiver<S>(
+    scope: &mut S,
+    value: Vec<u8>,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Vec<u8>: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/migration_records/probe_checksum_fleet_sync_receiver.sql"
+        )))
+        .bind(value);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+pub(crate) fn bootstrap_probe_version_fleet_sync_receiver<S>(
+    scope: &mut S,
+    value: i64,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> i64: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/migration_records/probe_version_fleet_sync_receiver.sql"
+        )))
+        .bind(value);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+pub(crate) fn bootstrap_probe_checksum_fleet_sync_session<S>(
+    scope: &mut S,
+    value: Vec<u8>,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Vec<u8>: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/migration_records/probe_checksum_fleet_sync_session.sql"
+        )))
+        .bind(value);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+pub(crate) fn bootstrap_probe_version_fleet_sync_session<S>(
+    scope: &mut S,
+    value: i64,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> i64: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/migration_records/probe_version_fleet_sync_session.sql"
+        )))
+        .bind(value);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+pub(crate) fn bootstrap_probe_checksum_fleet_sync_delivery<S>(
+    scope: &mut S,
+    value: Vec<u8>,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Vec<u8>: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/migration_records/probe_checksum_fleet_sync_delivery.sql"
+        )))
+        .bind(value);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+pub(crate) fn bootstrap_probe_version_fleet_sync_delivery<S>(
+    scope: &mut S,
+    value: i64,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> i64: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/migration_records/probe_version_fleet_sync_delivery.sql"
+        )))
+        .bind(value);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+pub(crate) fn bootstrap_probe_checksum_central_fleet<S>(
+    scope: &mut S,
+    value: Vec<u8>,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Vec<u8>: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/migration_records/probe_checksum_central_fleet.sql"
+        )))
+        .bind(value);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+pub(crate) fn bootstrap_probe_version_central_fleet<S>(
+    scope: &mut S,
+    value: i64,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> i64: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/migration_records/probe_version_central_fleet.sql"
+        )))
+        .bind(value);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+pub(crate) fn bootstrap_probe_checksum_central_registry<S>(
+    scope: &mut S,
+    value: Vec<u8>,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Vec<u8>: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/migration_records/probe_checksum_central_registry.sql"
+        )))
+        .bind(value);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+pub(crate) fn bootstrap_probe_version_central_registry<S>(
+    scope: &mut S,
+    value: i64,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> i64: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/migration_records/probe_version_central_registry.sql"
+        )))
+        .bind(value);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+pub(crate) fn bootstrap_probe_checksum_central_session<S>(
+    scope: &mut S,
+    value: Vec<u8>,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Vec<u8>: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/migration_records/probe_checksum_central_session.sql"
+        )))
+        .bind(value);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}
+pub(crate) fn bootstrap_probe_version_central_session<S>(
+    scope: &mut S,
+    value: i64,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> i64: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/migration_records/probe_version_central_session.sql"
+        )))
+        .bind(value);
         statement.execute(scope.executor()).await?;
         Ok(())
     }

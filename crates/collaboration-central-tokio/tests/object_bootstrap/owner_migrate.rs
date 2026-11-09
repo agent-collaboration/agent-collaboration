@@ -42,11 +42,11 @@ async fn version_one(fixture: &Fixture) -> Result<(), TestError> {
             .find(|migration| migration.version == 1)
             .ok_or_else(|| StoreError::backend("public receiver version1 absent"))?;
         scope.executor().execute(migration.sql.as_ref()).await.map_err(StoreError::backend)?;
-        scope.executor().execute(include_str!("../../../collaboration-central-core/core_migrations/0000_migration_history.sql"))
+        scope.executor().execute(include_str!("../../../collaboration-central-core/migration_record_tables/0902_fleet_sync_receiver.sql"))
             .await.map_err(StoreError::backend)?;
         let checksum = migration.checksum.to_vec();
-        query::<sqlx_turso::Turso>("INSERT INTO central_schema_migrations(row_id,corpus,version,description,installed_on,success,checksum,execution_time,created_at,updated_at) VALUES (?1,'fleet-sync-receiver',1,?4,?3,1,?2,0,?3,?3)")
-            .bind(durable_steps::Uuid::now_v7().to_string()).bind(checksum).bind(ProbeIo.now().unix_millis()).bind(migration.description.as_ref()).execute(scope.executor()).await.map_err(StoreError::backend)?;
+        query::<sqlx_turso::Turso>("INSERT INTO _sqlx_migrations_fleet_sync_receiver(version,description,installed_on,success,checksum,execution_time) VALUES (1,?3,?2,1,?1,0)")
+            .bind(checksum).bind("2026-10-18 00:00:00").bind(migration.description.as_ref()).execute(scope.executor()).await.map_err(StoreError::backend)?;
         scope.executor().execute("CREATE TABLE retained_project_rows(id TEXT NOT NULL PRIMARY KEY,value TEXT NOT NULL); INSERT INTO retained_project_rows VALUES ('row','retained')")
             .await.map_err(StoreError::backend)?;
         Ok(())
@@ -113,7 +113,7 @@ async fn migrate_reports_real_receiver_rollback_then_retries_from_the_retained_v
     let proof = async {
         version_one(&fixture).await?;
         fixture.object.transaction(|scope| Box::pin(async move {
-            scope.executor().execute("CREATE TRIGGER receiver_migrate_fault BEFORE INSERT ON central_schema_migrations WHEN NEW.corpus='fleet-sync-receiver' AND NEW.version=3 BEGIN SELECT RAISE(ABORT,'migrate version3 fault'); END")
+            scope.executor().execute("CREATE TRIGGER receiver_migrate_fault BEFORE INSERT ON _sqlx_migrations_fleet_sync_receiver WHEN NEW.version=3 BEGIN SELECT RAISE(ABORT,'migrate version3 fault'); END")
                 .await.map_err(StoreError::backend)?;
             Ok(())
         })).await?;
@@ -124,7 +124,7 @@ async fn migrate_reports_real_receiver_rollback_then_retries_from_the_retained_v
             return Err(format!("Migrate hid the failed corpus/version/cause: {failed}").into());
         }
         let history: Vec<i64> = fixture.object.transaction(|scope| Box::pin(async move {
-            query::<sqlx_turso::Turso>("SELECT version FROM central_schema_migrations WHERE corpus='fleet-sync-receiver' ORDER BY version")
+            query::<sqlx_turso::Turso>("SELECT CAST(version AS INTEGER) AS version FROM _sqlx_migrations_fleet_sync_receiver ORDER BY version")
                 .fetch_all(scope.executor()).await.map_err(StoreError::backend)?
                 .into_iter().map(|row| row.try_get("version").map_err(StoreError::backend)).collect()
         })).await?;
@@ -158,7 +158,7 @@ async fn migrate_refuses_populated_receiver_without_history_instead_of_adopting_
         bootstrap.initialize(EngineSchema::Copy).await?;
         bootstrap.execute(BootstrapCommand::Probe { schema: BootstrapProbe::Copy }).await?;
         fixture.object.transaction(|scope| Box::pin(async move {
-            scope.executor().execute("CREATE TABLE retained_project_rows(id TEXT NOT NULL PRIMARY KEY,value TEXT NOT NULL); INSERT INTO retained_project_rows VALUES ('row','retained'); DELETE FROM central_schema_migrations")
+            scope.executor().execute("CREATE TABLE retained_project_rows(id TEXT NOT NULL PRIMARY KEY,value TEXT NOT NULL); INSERT INTO retained_project_rows VALUES ('row','retained'); DELETE FROM _sqlx_migrations_fleet_sync_receiver")
                 .await.map_err(StoreError::backend)?;
             Ok(())
         })).await?;
@@ -171,7 +171,7 @@ async fn migrate_refuses_populated_receiver_without_history_instead_of_adopting_
         let after = serde_json::to_value(runtime(&fixture)?.read_copy_status().await.map_err(|error|format!("retained status: {error:?}"))?)?;
         if after != before { return Err("refused adoption changed the actual receiver state".into()); }
         let (history, retained): (i64, String) = fixture.object.transaction(|scope| Box::pin(async move {
-            let history = query::<sqlx_turso::Turso>("SELECT COUNT(*) AS count FROM central_schema_migrations")
+            let history = query::<sqlx_turso::Turso>("SELECT COUNT(*) AS count FROM _sqlx_migrations_fleet_sync_receiver")
                 .fetch_one(scope.executor()).await.map_err(StoreError::backend)?
                 .try_get("count").map_err(StoreError::backend)?;
             let retained = query::<sqlx_turso::Turso>("SELECT value FROM retained_project_rows WHERE id='row'")
@@ -202,7 +202,7 @@ async fn migrate_retired_receipt_never_recreates_metadata_or_changes_its_timesta
         fixture.object.transaction(|scope| Box::pin(async move {
             if fleet_sync_receiver::retire_copy(scope, &request, ProbeIo.now()).await.map_err(fleet_sync_receiver::receiver_rollback)?
                 != fleet_sync_protocol::RetireCopyAnswer::Retired { return Err(StoreError::backend("real receiver retirement refused")); }
-            scope.executor().execute("DROP TABLE central_schema_migrations; DROP TABLE central_schema_migration_failures")
+            scope.executor().execute("DROP TABLE _sqlx_migrations_fleet_sync_receiver; DROP TABLE central_schema_migration_failures")
                 .await.map_err(StoreError::backend)?;
             Ok(())
         })).await?;
@@ -237,7 +237,7 @@ async fn migrate_names_hook_failure_separately_and_recovers_without_partial_rece
             return Err(format!("hook failure was blamed on the receiver or lost its own version: {failed}").into());
         }
         let history_tables: i64 = fixture.object.transaction(|scope| Box::pin(async move {
-            query::<sqlx_turso::Turso>("SELECT COUNT(*) AS count FROM sqlite_schema WHERE type='table' AND name='central_schema_migrations'")
+            query::<sqlx_turso::Turso>("SELECT COUNT(*) AS count FROM sqlite_schema WHERE type='table' AND name='_sqlx_migrations_fleet_sync_receiver'")
                 .fetch_one(scope.executor()).await.map_err(StoreError::backend)?
                 .try_get("count").map_err(StoreError::backend)
         })).await?;
@@ -267,7 +267,9 @@ async fn migrate_reports_corrupt_history_without_inventing_version_zero() -> Res
                 Box::pin(async move {
                     scope
                         .executor()
-                        .execute("UPDATE central_schema_migrations SET version='unreadable'")
+                        .execute(
+                            "UPDATE _sqlx_migrations_fleet_sync_receiver SET version='unreadable'",
+                        )
                         .await
                         .map_err(StoreError::backend)?;
                     Ok(())
@@ -282,7 +284,9 @@ async fn migrate_reports_corrupt_history_without_inventing_version_zero() -> Res
             || !failed
                 .get("reason")
                 .and_then(Value::as_str)
-                .is_some_and(|reason| reason == "invalid stored field \"version\"")
+                .is_some_and(|reason| {
+                    reason.contains("_sqlx_migrations_fleet_sync_receiver.version")
+                })
         {
             return Err(
                 format!("corrupt history invented a version or hid its cause: {failed}").into(),

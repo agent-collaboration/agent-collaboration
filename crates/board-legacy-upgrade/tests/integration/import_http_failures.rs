@@ -17,7 +17,7 @@ use std::{num::NonZeroU64, time::Duration};
 use support::*;
 
 // JSON cannot carry SQLite BLOBs; hex is only this fixture's lossless readback encoding.
-const RECEIVER_MIGRATION_STAMP: &str = "SELECT json_array(row_id,corpus,version,description,installed_on,success,hex(checksum),execution_time,created_at,updated_at) AS value FROM central_schema_migrations WHERE corpus='fleet-sync-receiver' AND version=3";
+const RECEIVER_MIGRATION_STAMP: &str = "SELECT json_array(version,description,CAST(installed_on AS TEXT),success,hex(checksum),execution_time) AS value FROM _sqlx_migrations_fleet_sync_receiver WHERE version=3";
 
 async fn request(
     http: &reqwest::Client,
@@ -191,19 +191,14 @@ async fn pending_copy_import_keeps_the_owner_reason_across_reopen() -> TestResul
     let [saved] = saved.as_slice() else {
         return Err("one receiver history stamp required".into());
     };
-    let (
-        row_id,
-        corpus,
-        version,
-        description,
-        installed_on,
-        success,
-        checksum_hex,
-        execution_time,
-        created_at,
-        updated_at,
-    ): (String, String, i64, String, i64, i64, String, i64, i64, i64) =
-        serde_json::from_str(saved)?;
+    let (version, description, installed_on, success, checksum_hex, execution_time): (
+        i64,
+        String,
+        String,
+        i64,
+        String,
+        i64,
+    ) = serde_json::from_str(saved)?;
     if checksum_hex.len() != 96 {
         return Err("one raw SHA-384 checksum required".into());
     }
@@ -214,7 +209,7 @@ async fn pending_copy_import_keeps_the_owner_reason_across_reopen() -> TestResul
     upload_support::execute(
         root.path(),
         &object,
-        "DELETE FROM central_schema_migrations WHERE corpus='fleet-sync-receiver' AND version=3",
+        "DELETE FROM _sqlx_migrations_fleet_sync_receiver WHERE version=3",
     )
     .await?;
     let server = central_fixture::start_server(root.path(), &jwks).await?;
@@ -234,18 +229,14 @@ async fn pending_copy_import_keeps_the_owner_reason_across_reopen() -> TestResul
         .connect()
         .await?;
     let restored = sqlx_turso::sqlx::query::<sqlx_turso::Turso>(
-        "INSERT INTO central_schema_migrations(row_id,corpus,version,description,installed_on,success,checksum,execution_time,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO _sqlx_migrations_fleet_sync_receiver(version,description,installed_on,success,checksum,execution_time) VALUES(?,?,?,?,?,?)",
     )
-    .bind(row_id)
-    .bind(corpus)
     .bind(version)
     .bind(description)
     .bind(installed_on)
     .bind(success)
     .bind(checksum)
     .bind(execution_time)
-    .bind(created_at)
-    .bind(updated_at)
     .execute(&mut connection)
     .await;
     connection.close().await?;
