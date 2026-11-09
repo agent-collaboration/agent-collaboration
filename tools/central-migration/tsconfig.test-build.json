@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "build-test",
+    "rootDir": "test/support",
+    "types": [],
+    "rewriteRelativeImportExtensions": true
+  },
+  "include": ["test/support/old_central_stand_in.ts"]
+}
