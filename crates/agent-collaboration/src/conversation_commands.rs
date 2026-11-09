@@ -6,8 +6,8 @@ use collaboration_client::protocol::{
     OperationId, RouterAccess, SessionId, SessionRef,
 };
 use collaboration_client::{
-    AcpConversation, ClientError, CollaborationClient, ConversationCancelInput, ConversationClient,
-    ConversationClientError, ConversationCreateActor, ConversationCreateInput,
+    AcpConversation, ClientError, CollaborationClient, ConversationActor, ConversationCancelInput,
+    ConversationClient, ConversationClientError, ConversationCreateInput,
     ConversationCreatePromptInput, ConversationCreatePromptOutcome, ConversationCreateRequest,
     ConversationEnd, ConversationEvent, ConversationLoadInput, ConversationOperationResult,
     ConversationPromptInput, ConversationPromptRequest, ConversationStopReason, OperationEffect,

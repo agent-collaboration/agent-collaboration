@@ -369,3 +369,14 @@ fn caller_cancellation_effect_reflects_the_submission_boundary() {
         assert_eq!(presented["operationId"], serde_json::json!(operation_id));
     }
 }
+
+#[test]
+fn untyped_lifecycle_rejection_keeps_unknown_fallback() {
+    let rejection = collaboration_service::collaboration_application::ConversationFailure::InvalidStoredOperation;
+    let result = super::typed_failure_result::<
+        collaboration_protocol::ConversationOperationFailure,
+        (),
+        _,
+    >(Err(rejection), OperationEffect::Unknown);
+    assert_eq!(result.structured_content.unwrap()["effect"], "unknown");
+}

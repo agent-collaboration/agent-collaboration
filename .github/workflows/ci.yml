@@ -29,7 +29,6 @@ jobs:
   static:
     name: Static validation
     runs-on: ubuntu-latest
-    # Keep Linux test profiles out of the macOS release cache environment.
     env:
       CARGO_TERM_COLOR: always
       RUST_TOOLCHAIN: 1.98.1
@@ -214,17 +213,28 @@ jobs:
             tmp/rust-tools/bin/cargo-sqlx
           key: ${{ steps.sqlx_tools.outputs.cache-primary-key }}
 
+  # The workspace tests are CPU-bound on one 4-vCPU runner, so they run as two
+  # halves. Shard 1 builds every test binary once, uploads them as a nextest
+  # archive, then runs its half. Shard 2 sets up in parallel, waits for that
+  # archive and runs the other half from it, so the build is never repeated.
   test:
-    name: Test Rust workspace
+    name: Test Rust workspace (${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
     timeout-minutes: 360
-    # Keep Linux test profiles out of the macOS release cache environment.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     env:
       CARGO_TERM_COLOR: always
       RUST_TOOLCHAIN: 1.98.1
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_TEST_DEBUG: "0"
       CARGO_INCREMENTAL: "0"
+      # Re-run attempts upload their own archive instead of reusing a stale one.
+      TEST_ARCHIVE_NAME: workspace-test-archive-${{ github.run_attempt }}
+      # Tests whose real Host, importer and forwarding-timer roots run in e2e.
+      WORKSPACE_TEST_FILTER: 'not((package(=agent-collaboration) & binary(=e2e)) | (package(=board-legacy-upgrade) & binary(=e2e)) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/)))'
     steps:
       # The steps below build the workspace under several package selections and
       # feature sets, which together outgrow the runner's free disk. Remove
@@ -262,24 +272,26 @@ jobs:
         with:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy,rustfmt,rust-src
+      # Shard 1 builds the workspace tests and shard 2 the quota-reset harness;
+      # only shard 1 saves the shared dependency cache.
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: test
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          save-if: ${{ matrix.shard == 1 && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       # The dependency-structure tests use offline Cargo metadata for all
       # targets, so fetch target-specific packages even on this Linux runner.
       - name: Fetch dependencies for all targets
         run: cargo fetch --locked
       - name: Select quota-reset stage
         id: quota_scope
-        if: github.event_name == 'pull_request'
+        if: matrix.shard == 2 && github.event_name == 'pull_request'
         env:
           QUOTA_DIFF_BASE: ${{ github.event.pull_request.base.sha }}
           # Use the tested merge tree so paths match metadata after base-branch moves.
           QUOTA_DIFF_HEAD: ${{ github.sha }}
         run: node verification/tooling/select-quota-stage.ts
       - name: Report skipped quota-reset stage
-        if: github.event_name == 'pull_request' && steps.quota_scope.outputs.changed == 'false'
+        if: matrix.shard == 2 && github.event_name == 'pull_request' && steps.quota_scope.outputs.changed == 'false'
         run: |
           printf 'quota-reset stage skipped: no quota changes\n' | tee -a "$GITHUB_STEP_SUMMARY"
       - name: Restore pinned Rust tools
@@ -297,37 +309,90 @@ jobs:
           cache-hit: ${{ steps.rust_tools.outputs.cache-hit }}
       - name: Wait for runner disk cleanup
         wait-all:
-      # Compile every test binary once, then run workspace and quota tests from
-      # the built artifacts so they do not contend for Cargo's build lock.
+      # Compile every test binary once and pack it as a nextest archive, so both
+      # shards run the same binaries without contending for Cargo's build lock.
       # Keep each build selection and feature set identical to its run.
-      # Real Host, importer and forwarding-timer roots run in e2e below.
-      # Keep the build/run exclusions and slower-job inventory identical.
       - name: Build test binaries
+        if: matrix.shard == 1
         run: |
-          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not((package(=agent-collaboration) & binary(=e2e)) | (package(=board-legacy-upgrade) & binary(=e2e)) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/)))' --no-run
+          cargo nextest archive --locked --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness --archive-file "$RUNNER_TEMP/workspace-tests.tar.zst"
+          ls -l "$RUNNER_TEMP/workspace-tests.tar.zst"
           df -h /
-      - name: Build quota-reset test binaries
-        if: github.event_name != 'pull_request' || steps.quota_scope.outputs.changed == 'true'
-        run: cargo nextest run --profile ci --status-level all --final-status-level all -p codex-router-quota-reset-test-harness --no-run
-      - name: Test quota-reset terminal integration
-        id: quota_reset_terminal_integration
-        if: github.event_name != 'pull_request' || steps.quota_scope.outputs.changed == 'true'
-        background: true
-        run: cargo nextest run --profile ci --status-level all --final-status-level all -p codex-router-quota-reset-test-harness
-      - name: Test Rust workspace
+      - name: Share test binaries with shard 2
+        if: matrix.shard == 1
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.TEST_ARCHIVE_NAME }}
+          path: ${{ runner.temp }}/workspace-tests.tar.zst
+          retention-days: 1
+          # The archive is already zstd-compressed.
+          compression-level: 0
+      - name: Test Rust workspace, first half
         id: workspace_tests
+        if: matrix.shard == 1
         run: |
           # Exercise private fixture setup under the ordinary Unix mask.
           umask 022
-          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E 'not((package(=agent-collaboration) & binary(=e2e)) | (package(=board-legacy-upgrade) & binary(=e2e)) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/)))'
-      - name: Wait for tests
-        wait-all:
+          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E "$WORKSPACE_TEST_FILTER" --partition count:1/2
+      # Shard 2 builds and runs the quota-reset harness and the default-port
+      # cutover while shard 1 is still building. Each keeps its own package and
+      # feature selection, and both finish before the archive lands in target/.
+      - name: Build quota-reset test binaries
+        if: matrix.shard == 2 && (github.event_name != 'pull_request' || steps.quota_scope.outputs.changed == 'true')
+        run: cargo nextest run --profile ci --status-level all --final-status-level all -p codex-router-quota-reset-test-harness --no-run
+      - name: Test quota-reset terminal integration
+        id: quota_reset_terminal_integration
+        if: matrix.shard == 2 && (github.event_name != 'pull_request' || steps.quota_scope.outputs.changed == 'true')
+        run: cargo nextest run --profile ci --status-level all --final-status-level all -p codex-router-quota-reset-test-harness
       - name: Test isolated default Router port cutover
+        if: matrix.shard == 2
         # Keep the same opt-in case, with a per-test elapsed status as well as
         # its uncaptured CLI proof. The default profile adds no CI deadline.
         run: cargo nextest run --locked --profile default --status-level all --final-status-level all -p codex-router-cli --features keychain-test-support --test e2e --run-ignored only --no-capture
+      # Shard 2 waits on a causal signal: an archive in this run, or shard 1
+      # not building one in this attempt. Any attempt's archive was built from
+      # this run's commit, so a rerun of shard 2 alone reuses the newest one.
+      # The sleep only spaces the API polls.
+      - name: Wait for shard 1's test binaries
+        id: test_archive
+        if: matrix.shard == 2
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          while :; do
+            archive="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts?per_page=100" --jq '[.artifacts[] | select((.name | startswith("workspace-test-archive-")) and (.expired | not))] | max_by(.name | ltrimstr("workspace-test-archive-") | tonumber) | .name // empty')"
+            if [ -n "$archive" ]; then
+              echo "name=$archive" >> "$GITHUB_OUTPUT"
+              break
+            fi
+            builder_status="$(gh run view "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --attempt "$GITHUB_RUN_ATTEMPT" --json jobs --jq '.jobs[] | select(.name == "Test Rust workspace (1/2)") | .status')"
+            if [ "$builder_status" != queued ] && [ "$builder_status" != in_progress ] && [ "$builder_status" != waiting ] && [ "$builder_status" != pending ] && [ "$builder_status" != requested ]; then
+              echo "No test archive in this run, and shard 1 is not building one in this attempt (status: ${builder_status:-not part of this attempt}). Re-run all jobs." >&2
+              exit 1
+            fi
+            sleep 20
+          done
+      - name: Download shard 1's test binaries
+        if: matrix.shard == 2
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARCHIVE_NAME: ${{ steps.test_archive.outputs.name }}
+        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$ARCHIVE_NAME" --dir "$RUNNER_TEMP"
+      # Tests start compiled binaries through compile-time CARGO_BIN_EXE paths
+      # under target/. The checkout path is the same on both runners, so unpack
+      # the archive (whose entries start with target/) in place and run from its
+      # metadata instead of letting nextest relocate it to a temporary folder.
+      - name: Unpack shard 1's test binaries into target/
+        if: matrix.shard == 2
+        run: tar --zstd -xf "$RUNNER_TEMP/workspace-tests.tar.zst" -C "$GITHUB_WORKSPACE"
+      - name: Test Rust workspace, second half
+        if: matrix.shard == 2
+        run: |
+          # Exercise private fixture setup under the ordinary Unix mask.
+          umask 022
+          cargo nextest run --profile ci --status-level all --final-status-level all --binaries-metadata target/nextest/binaries-metadata.json --cargo-metadata target/nextest/cargo-metadata.json -E "$WORKSPACE_TEST_FILTER" --partition count:2/2
       - name: Save pinned Rust tools
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.rust_tools.outputs.cache-hit != 'true'
+        if: matrix.shard == 1 && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.rust_tools.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
         with:
           path: |
@@ -426,7 +491,6 @@ jobs:
     name: Central Worker build and local workerd conformance
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Keep Linux test profiles out of the macOS release cache environment.
     env:
       CARGO_TERM_COLOR: always
       RUST_TOOLCHAIN: 1.98.1
@@ -518,66 +582,12 @@ jobs:
           path: ${{ runner.temp }}/central-worker-tools
           key: ${{ steps.worker_tools.outputs.cache-primary-key }}
 
-  release-cache:
-    name: Warm Apple Silicon release dependencies
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: macos-15
-    timeout-minutes: 45
-    # No Linux test-profile env: match release.yml's hashed Rust environment.
-    steps:
-      - name: Checkout release source
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          fetch-depth: 0
-          path: release-source
-          persist-credentials: false
-          ref: ${{ github.sha }}
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
-        with:
-          toolchain: 1.98.1
-      - name: Cache release dependencies
-        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-        with:
-          workspaces: release-source -> target
-          shared-key: release-arm64-background
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-      - name: Prebuild optimized transport test and schema exporter
-        working-directory: release-source
-        run: |
-          set -euo pipefail
-          cargo test --locked --release -p acp-client-runtime --test integration \
-            --no-run --message-format=json --timings > "$RUNNER_TEMP/transport-build.jsonl"
-          cargo build --locked --release -p collaboration-protocol --example export_protocol_types --timings
-      - name: Reject test-only shipping dependencies natively on Apple Silicon
-        working-directory: release-source
-        run: |
-          set -euo pipefail
-          production_graph="$(cargo tree --locked --color never -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade -e normal,build,features)"
-          if grep -Eq -- '-test-support v[0-9]|feature "test-support"' <<< "$production_graph"; then
-            echo 'production dependency graph includes a test-support crate or feature' >&2
-            exit 1
-          fi
-      - name: Build release binaries
-        working-directory: release-source
-        run: cargo build --locked --release -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade --bins --timings
-      - name: Measure release cache inputs
-        run: du -sk release-source/target "$HOME/.cargo/registry" "$HOME/.cargo/git"
-      - name: Retain release cache build timings
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-cache-timing-inventory
-          path: |
-            ${{ runner.temp }}/transport-build.jsonl
-            release-source/target/cargo-timings/
-
   prune-caches:
     name: Prune superseded main caches
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     # needs waits for rust-cache post saves, including successful jobs when
     # another validation job failed. The workflow serializes main producers.
-    needs: [static, wasm, test, e2e, release-cache]
+    needs: [static, wasm, test, e2e]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

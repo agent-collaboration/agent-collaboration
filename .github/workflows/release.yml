@@ -1,9 +1,9 @@
 name: Release
 
+# Releases start by hand from main (gh workflow run release.yml --ref main
+# -f tag=v<version> -f dry_run=false). A run on main may save the release
+# cache, which a tag-push run could only save into that one tag's scope.
 on:
-  push:
-    tags:
-      - "v*.*.*"
   workflow_dispatch:
     inputs:
       tag:
@@ -24,7 +24,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  RELEASE_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+  RELEASE_DRY_RUN: ${{ inputs.dry_run }}
   RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
   # Keychain approvals belong to a code identity; a fixed identifier and team keep
   # one identity across releases. Debug builds use "<identifier>.debug".
@@ -49,7 +49,7 @@ jobs:
           fetch-depth: 0
           path: release-source
           persist-credentials: false
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && github.sha || env.RELEASE_TAG }}
+          ref: ${{ inputs.dry_run && github.sha || env.RELEASE_TAG }}
 
       - name: Install Node for release formula checks
         uses: actions/setup-node@v4
@@ -81,6 +81,14 @@ jobs:
 
           source_commit="$(git rev-parse HEAD)"
           if [[ "${RELEASE_DRY_RUN}" != "true" ]]; then
+            if [[ "${GITHUB_REF}" != refs/heads/main ]]; then
+              echo "publish releases from main: gh workflow run release.yml --ref main -f tag=${RELEASE_TAG} -f dry_run=false" >&2
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "${source_commit}" origin/main; then
+              echo "release tag ${RELEASE_TAG} is not on main" >&2
+              exit 1
+            fi
             tag_commit="$(git rev-list -n 1 "${RELEASE_TAG}")"
             if [[ "${source_commit}" != "${tag_commit}" ]]; then
               echo "checked-out source does not match the release tag" >&2
@@ -111,20 +119,18 @@ jobs:
 
       - name: Report cache save policy
         env:
-          CACHE_SAVE_ALLOWED: "false"
+          CACHE_SAVE_ALLOWED: ${{ github.ref == 'refs/heads/main' }}
         run: |
           printf 'Cache save allowed: %s\n' "$CACHE_SAVE_ALLOWED"
-          if [[ "$GITHUB_EVENT_NAME" != push || "$GITHUB_REF" != refs/heads/main ]]; then
-            test "$CACHE_SAVE_ALLOWED" = false
-          fi
 
       - name: Cache release dependencies
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: release-source -> target
           shared-key: release-arm64-background
-          # ci.yml seeds this exact cache on main; releases only restore it.
-          save-if: false
+          # Runs on main (real releases and dry runs) save it for the next
+          # release; runs on other branches only restore.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       # Prepare small consumers serially: concurrent Cargo compiles would wait
       # on the shared target lock rather than run independently.
@@ -447,7 +453,7 @@ jobs:
 
   publish-tap:
     name: Homebrew tap
-    if: ${{ !(github.event_name == 'workflow_dispatch' && inputs.dry_run) }}
+    if: ${{ !inputs.dry_run }}
     needs: release
     permissions:
       contents: read

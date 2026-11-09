@@ -38,6 +38,7 @@ struct DebugHostContext {
     workspace: PathBuf,
     profile: String,
     model: String,
+    effort: String,
     port: u16,
     host_pid: u32,
     router_root: Option<PathBuf>,
@@ -166,7 +167,8 @@ pub(crate) async fn main() -> Result<(), Box<dyn std::error::Error>> {
         service_directory: collaboration,
         workspace,
         profile: "codex-router-debug".to_owned(),
-        model: "gpt-5.6-luna".to_owned(),
+        model: "gpt-6-luna".to_owned(),
+        effort: "low".to_owned(),
         port: options.port,
         host_pid: std::process::id(),
         router_root: options.router_root.clone(),
@@ -205,10 +207,10 @@ fn luna_profile_from_text(
 ) -> Result<DebugCodexProfile, Box<dyn std::error::Error>> {
     let projected = codex_native_integration::project_debug_profile_endpoint(text, selected_port)?;
     let mut profile: toml::Table = toml::from_str(&projected)?;
-    profile.insert("model".into(), toml::Value::String("gpt-5.6-luna".into()));
+    profile.insert("model".into(), toml::Value::String("gpt-6-luna".into()));
     profile.insert(
         "model_reasoning_effort".into(),
-        toml::Value::String("high".into()),
+        toml::Value::String("low".into()),
     );
     Ok(DebugCodexProfile::parse(
         &toml::to_string(&profile)?,
@@ -255,7 +257,8 @@ fn validate_resume_run_directory(
     let context = read_existing_context(run_directory)?;
     if context.kind != "debugHostPrepared"
         || context.profile != "codex-router-debug"
-        || context.model != "gpt-5.6-luna"
+        || context.model != "gpt-6-luna"
+        || context.effort != "low"
         || context.port != port
         || context.run_directory.canonicalize()? != canonical_root
         || context.service_directory.canonicalize()? != service_directory.canonicalize()?
