@@ -319,8 +319,26 @@ async fn a_real_membership_end_prevents_its_held_follow_through_a_frozen_child()
     }
     // Local controls need no central ACK (840). Readiness reaches the real
     // pre-injection publisher check; no fixture releases custody or fabricates outcomes.
-    // The target loads after the reader checked it.
-    checked_while_wakeable_then_loaded(&fixture, &runtime, &push_id).await;
+    // The target loads after the reader checked it, unless the membership end already
+    // settled the held follow, which then needs no load.
+    let already_settled = async {
+        loop {
+            if let Some(outcome) = native
+                .runtime()
+                .local_outcome_for_test(frozen[0].id())
+                .await
+                .unwrap()
+                && !matches!(outcome, fleet_sync_protocol::RecipientOutcome::Held)
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    };
+    tokio::select! {
+        () = checked_while_wakeable_then_loaded(&fixture, &runtime, &push_id) => {}
+        () = already_settled => {}
+    }
     let settled = async {
         loop {
             let outcome = native
