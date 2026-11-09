@@ -9,10 +9,10 @@
 
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { oldCentralBuild, startOldCentral } from "../support/old_central.ts";
 import { join } from "node:path";
 import { test } from "node:test";
 import { parse } from "lossless-json";
-import { Miniflare, Response as MiniflareResponse, convertV4MiniflareOptions } from "miniflare";
 import {
   ownerClaims,
   testSigner,
@@ -20,17 +20,10 @@ import {
 import type { SeedProject, TransportValue } from "../../src/seed_contract.ts";
 import { tableDigest } from "../../src/table_digest.ts";
 import { transportToSeed } from "../../src/seed_contract.ts";
-import {
-  ACCESS,
-  CERTS_URL,
-  STAGING_TARGET,
-  persistenceRoot,
-  startWorker,
-} from "../support/workerd_harness.ts";
+import { STAGING_TARGET, persistenceRoot, startWorker } from "../support/workerd_harness.ts";
 
 const DATABASE = "01a1c0c5-0000-7000-8000-000000000001";
 const HOLDER = "01a1c0c5-0000-7000-8000-00000000a001";
-const RECEIVER = "01a16eaa-ae36-7eec-9698-e8c34d10238b";
 
 interface Fixture {
   cases: { columns: string; rows: { kind: string; value?: unknown }[][]; digest: string }[];
@@ -81,69 +74,8 @@ async function seededProject(): Promise<SeedProject> {
   };
 }
 
-async function startOldCentral(
-  build: string,
-  persistence: string,
-  jwks: unknown,
-): Promise<Miniflare> {
-  const template = (await import(join(build, "../cloudflare.config.ts"))) as {
-    default: { worker: { env: Record<string, { type: string; value?: string }> } };
-  };
-  const replacements: Record<string, string> = {
-    ...ACCESS,
-    CENTRAL_REGISTRY_CONFIG: JSON.stringify({
-      lease: { leaseDuration: { secs: 14400, nanos: 0 }, renewInterval: { secs: 900, nanos: 0 } },
-      authoritativeReceiver: RECEIVER,
-      releaseUnsentFor: { secs: 0, nanos: 0 },
-      moveNeedsRenewalWithin: { secs: 1800, nanos: 0 },
-    }),
-    CENTRAL_DELIVERY_CONFIG: JSON.stringify({ relayPeer: "01a1c0c5-0000-7000-8000-00000000c001" }),
-  };
-  const bindings = Object.fromEntries(
-    Object.entries(template.default.worker.env)
-      .filter(([, binding]) => binding.type === "text")
-      .map(([name, binding]) => [name, replacements[name] ?? binding.value ?? ""]),
-  );
-  const runtime = new Miniflare(
-    convertV4MiniflareOptions({
-      resourcePersistencePath: persistence,
-      cf: false,
-      workers: [
-        {
-          name: "collaboration-central",
-          compatibilityDate: "2026-08-21",
-          modulesRoot: build,
-          modules: [
-            { type: "ESModule", path: join(build, "index.js") },
-            { type: "CompiledWasm", path: join(build, "index_bg.wasm") },
-          ],
-          durableObjects: {
-            LEASE_REGISTRY: { className: "LeaseRegistryObject", useSQLite: true },
-            CONNECTIONS: { className: "ConnectionObject", useSQLite: true },
-            PROJECT_COPIES: { className: "ProjectCopyObject", useSQLite: true },
-            FLEET: { className: "FleetObject", useSQLite: true },
-            MAILBOXES: { className: "MailboxObject", useSQLite: true },
-          },
-          bindings,
-          outboundService: async (request: Request) => {
-            if (request.url !== CERTS_URL)
-              throw new Error(`unexpected outbound fetch: ${request.url}`);
-            return MiniflareResponse.json(jwks);
-          },
-        },
-      ],
-    }),
-  );
-  await runtime.ready;
-  return runtime;
-}
-
 test("old central opens the seeded Copy as Following with the seeded identity and the Rust fingerprint", async () => {
-  const build = process.env.OLD_CENTRAL_BUILD;
-  assert.ok(
-    build !== undefined && build !== "",
-    "OLD_CENTRAL_BUILD must name the 2636806a5 Worker build",
-  );
+  const build = oldCentralBuild();
   const signer = await testSigner();
   const storage = await persistenceRoot();
   try {
