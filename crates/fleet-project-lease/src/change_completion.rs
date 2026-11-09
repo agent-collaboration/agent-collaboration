@@ -12,7 +12,7 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 
-pub(crate) async fn outcome<C, D>(
+pub(crate) async fn outcome<C, D, H>(
     ctx: &mut C,
     request: &HolderChangeRequest,
     name: &str,
@@ -21,6 +21,7 @@ pub(crate) async fn outcome<C, D>(
 where
     C: OperationContext,
     D: Database,
+    H: crate::OwedSettlement<C::Store, D>,
     for<'t> <C::Store as AtomicStore>::Scope<'t>: TransactionScope<Database = D>,
     D::Arguments: IntoArguments<D>,
     for<'value> String: Type<D> + Encode<'value, D> + Decode<'value, D>,
@@ -34,7 +35,7 @@ where
         .local(step(name)?, move |scope| {
             Box::pin(async move {
                 if let Some(answer) =
-                    crate::transfer_cancellation::process_cancel::<C::Store, D>(scope, id, now)
+                    crate::transfer_cancellation::process_cancel::<C::Store, D, H>(scope, id, now)
                         .await
                         .map_err(step_error)?
                 {
@@ -87,7 +88,7 @@ where
         .await?)
 }
 
-pub(crate) async fn refuse<C, D>(
+pub(crate) async fn refuse<C, D, H>(
     ctx: &mut C,
     request: &HolderChangeRequest,
     name: &str,
@@ -96,6 +97,7 @@ pub(crate) async fn refuse<C, D>(
 where
     C: OperationContext,
     D: Database,
+    H: crate::OwedSettlement<C::Store, D>,
     for<'t> <C::Store as AtomicStore>::Scope<'t>: TransactionScope<Database = D>,
     D::Arguments: IntoArguments<D>,
     for<'value> String: Type<D> + Encode<'value, D> + Decode<'value, D>,
@@ -108,7 +110,7 @@ where
         .local(step(name)?, move |scope| {
             Box::pin(async move {
                 if let Some(answer) =
-                    crate::transfer_cancellation::process_cancel::<C::Store, D>(scope, id, now)
+                    crate::transfer_cancellation::process_cancel::<C::Store, D, H>(scope, id, now)
                         .await
                         .map_err(step_error)?
                 {
@@ -166,6 +168,7 @@ where
     C: OperationContext,
     for<'t> H: crate::LeaseChangeHook<<C::Store as AtomicStore>::Scope<'t>>,
     D: Database,
+    H: crate::OwedSettlement<C::Store, D>,
     for<'t> <C::Store as AtomicStore>::Scope<'t>: TransactionScope<Database = D>,
     D::Arguments: IntoArguments<D>,
     for<'value> String: Type<D> + Encode<'value, D> + Decode<'value, D>,
@@ -178,13 +181,14 @@ where
     Ok(ctx
         .local(step("grant")?, move |scope| {
             Box::pin(async move {
-                if let Some(answer) = crate::transfer_cancellation::process_cancel::<C::Store, D>(
-                    scope,
-                    attempt(&request),
-                    now,
-                )
-                .await
-                .map_err(step_error)?
+                if let Some(answer) =
+                    crate::transfer_cancellation::process_cancel::<C::Store, D, H>(
+                        scope,
+                        attempt(&request),
+                        now,
+                    )
+                    .await
+                    .map_err(step_error)?
                 {
                     return Ok(answer);
                 }

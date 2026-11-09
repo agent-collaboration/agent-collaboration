@@ -161,9 +161,12 @@ impl<
             .registry
             .rule_transaction(move |scope| {
                 Box::pin(async move {
-                    fleet_project_lease::holder_change_view(scope, attempt)
-                        .await
-                        .map_err(durable_steps::StoreError::backend)
+                    fleet_project_lease::holder_change_view::<
+                        fleet_project_lease::NoLeaseChangeHook,
+                        _,
+                    >(scope, attempt)
+                    .await
+                    .map_err(durable_steps::StoreError::backend)
                 })
             })
             .await

@@ -28,7 +28,7 @@ pub(super) async fn view(store: &TestStore, id: TransferId) -> TestResult<Holder
     Ok(store
         .transaction(move |scope| {
             Box::pin(async move {
-                holder_change_view(scope, id)
+                holder_change_view::<crate::NoLeaseChangeHook, _>(scope, id)
                     .await
                     .map_err(storage)?
                     .ok_or_else(|| storage("missing workflow view"))

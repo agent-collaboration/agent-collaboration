@@ -21,6 +21,7 @@ pub(crate) fn registry_engine<Store, Driver, Io, Hook>(
 where
     Store: AtomicStore,
     for<'transaction> Hook: fleet_project_lease::LeaseChangeHook<Store::Scope<'transaction>>,
+    Hook: fleet_project_lease::OwedSettlement<Store, Driver>,
     Driver: Database,
     Io: ObjectIo,
     for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,

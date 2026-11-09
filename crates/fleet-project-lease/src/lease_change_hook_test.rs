@@ -13,6 +13,21 @@ struct ProjectionHook {
     fail_after_write: AtomicBool,
     identities: Arc<TestHost>,
 }
+// The projection hook keeps the journaled settlement owner.
+impl<S> OwedSettlement<S, Turso> for ProjectionHook
+where
+    S: AtomicStore,
+    for<'t> S::Scope<'t>: TransactionScope<Database = Turso>,
+{
+    fn owe_settlement<'call, 'scope: 'call>(
+        scope: &'call mut S::Scope<'scope>,
+        transfer: fleet_protocol::TransferId,
+        settlement: fleet_protocol::ClaimSettlement,
+        now: fleet_protocol::SyncTime,
+    ) -> impl std::future::Future<Output = Result<(), LeaseError>> + Send + 'call {
+        journaled_owe_settlement::<S, Turso>(scope, transfer, settlement, now)
+    }
+}
 impl<S: TransactionScope<Database = Turso>> LeaseChangeHook<S> for ProjectionHook {
     async fn on_lease_change(&self, scope: &mut S, change: &LeaseChange) -> Result<(), LeaseError> {
         if registry_snapshot(scope, change.after.database)

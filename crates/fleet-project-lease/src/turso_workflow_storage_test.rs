@@ -222,7 +222,11 @@ async fn stored_phase_history_rejects_regression_overflow_and_outcome_mismatch()
             .await?;
         let error = store
             .transaction(move |scope| {
-                Box::pin(async move { Ok(holder_change_view(scope, id).await.err()) })
+                Box::pin(async move {
+                    Ok(holder_change_view::<crate::NoLeaseChangeHook, _>(scope, id)
+                        .await
+                        .err())
+                })
             })
             .await?;
         assert!(
@@ -252,7 +256,11 @@ async fn admin_read_rejects_an_admission_bound_to_another_operation() -> TestRes
     })).await?;
     let error = store
         .transaction(move |scope| {
-            Box::pin(async move { Ok(holder_change_view(scope, id).await.err()) })
+            Box::pin(async move {
+                Ok(holder_change_view::<crate::NoLeaseChangeHook, _>(scope, id)
+                    .await
+                    .err())
+            })
         })
         .await?;
     assert!(

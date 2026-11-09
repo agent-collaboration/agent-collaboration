@@ -297,3 +297,113 @@ async fn schema_refusal_after_reservation_is_settled_and_a_gate_refusal_has_no_s
     }
     Ok(())
 }
+
+/// What the recording settlement owner was asked to owe, in order.
+static OWED_SETTLEMENTS: std::sync::Mutex<Vec<(TransferId, SettleOutcome)>> =
+    std::sync::Mutex::new(Vec::new());
+
+/// A host whose settlement owner only records what it is asked to owe.
+struct RecordingSettlement;
+impl<S: durable_steps::storage::TransactionScope> LeaseChangeHook<S> for RecordingSettlement {
+    async fn on_lease_change(
+        &self,
+        _scope: &mut S,
+        _change: &LeaseChange,
+    ) -> Result<(), LeaseError> {
+        Ok(())
+    }
+}
+impl<S, D> OwedSettlement<S, D> for RecordingSettlement
+where
+    S: AtomicStore,
+    D: sqlx_core::database::Database,
+    for<'t> S::Scope<'t>: durable_steps::storage::TransactionScope<Database = D>,
+    D::Arguments: sqlx_core::arguments::IntoArguments<D>,
+    for<'value> String: sqlx_core::types::Type<D>
+        + sqlx_core::encode::Encode<'value, D>
+        + sqlx_core::decode::Decode<'value, D>,
+    for<'value> Option<String>: sqlx_core::types::Type<D>
+        + sqlx_core::encode::Encode<'value, D>
+        + sqlx_core::decode::Decode<'value, D>,
+    for<'row> &'row str: sqlx_core::column::ColumnIndex<D::Row>,
+{
+    fn owe_settlement<'call, 'scope: 'call>(
+        _scope: &'call mut S::Scope<'scope>,
+        transfer: TransferId,
+        settlement: fleet_protocol::ClaimSettlement,
+        _now: SyncTime,
+    ) -> impl std::future::Future<Output = Result<(), LeaseError>> + Send + 'call {
+        OWED_SETTLEMENTS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .push((transfer, settlement.outcome));
+        std::future::ready(Ok(()))
+    }
+}
+
+async fn changed_version_recording(
+    store: Arc<TestStore>,
+    host: Arc<TestHost>,
+) -> TestResult<TestEngine> {
+    let mut engine = TestEngine::new(store, Arc::clone(&host));
+    engine.register(VersionedTask::<_, 2>(HolderChangeTask::<
+        TestStore,
+        Turso,
+        RecordingSettlement,
+    >::new(
+        config()?,
+        host,
+        Arc::new(RecordingSettlement),
+    )))?;
+    engine.register(SettleReservationTask::<TestStore>::new())?;
+    Ok(engine)
+}
+
+#[tokio::test]
+async fn a_failed_claim_owes_its_settlement_only_through_its_hosts_settlement_owner() -> TestResult
+{
+    // Arrange: a reserved claim whose operation fails on the next version.
+    let directory = tempfile::tempdir()?;
+    let path = directory.path().join("registry.db");
+    let host = TestHost::open(directory.path(), false).await?;
+    let store = open_store(&path, Arc::clone(&host), true).await?;
+    prepare(&store, &host).await?;
+    host.status_unreachable.store(true, Ordering::SeqCst);
+    let running = engine(Arc::clone(&store), Arc::clone(&host))?;
+    running
+        .start::<HolderChangeTask<TestStore, Turso, crate::NoLeaseChangeHook>>(
+            &holder_change_request_key(transfer()?)?,
+            HolderChangeRequest::Claim {
+                attempt: transfer()?,
+                database: database()?,
+                claimant: peer(2)?,
+            },
+        )
+        .await?;
+    drop(running);
+    drop(store);
+    host.advance();
+    let store = open_store(&path, Arc::clone(&host), false).await?;
+
+    // Act: the failure runs under a host whose settlement owner records.
+    let changed = changed_version_recording(Arc::clone(&store), Arc::clone(&host)).await?;
+    assert_eq!(changed.drive_due().await?.failed.len(), 1);
+    let after = changed.drive_due().await?;
+
+    // Assert: owed once, through that owner, and no journaled settlement ran.
+    assert_eq!(
+        *OWED_SETTLEMENTS
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner),
+        vec![(
+            transfer()?,
+            SettleOutcome::Refused {
+                reason: HolderChangeRefusal::Unavailable
+            }
+        )],
+        "the settlement was not owed through the host's owner"
+    );
+    assert!(after.completed.is_empty(), "a journaled settlement ran");
+    assert_eq!(host.gate.settlement_count().await?, "0");
+    Ok(())
+}

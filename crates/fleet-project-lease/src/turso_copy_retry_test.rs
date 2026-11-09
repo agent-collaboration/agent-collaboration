@@ -83,7 +83,7 @@ async fn claim_ack_wait_and_fence_keep_pending_history_then_resume_the_same_atte
         let corrupt_probe = reopened.transaction(move |scope| Box::pin(async move {
             query::<Turso>("UPDATE _fleet_sync_steps SET intent=json_set(intent,'$.retry_reason.code','unknown_copy_reason') WHERE operation_id=? AND kind='call_pending'")
                 .bind(operation.as_uuid().to_string()).execute(scope.executor()).await?;
-            let error = holder_change_view(scope, id).await;
+            let error = holder_change_view::<crate::NoLeaseChangeHook, _>(scope, id).await;
             if !matches!(error, Err(LeaseError::Corrupt { field }) if field == "copy retry reason") {
                 return Err(storage("unknown retry code was accepted"));
             }

@@ -255,7 +255,11 @@ async fn admin_view_rejects_unwrapped_or_malformed_saved_call_answers() -> TestR
             .await?;
         let error = store
             .transaction(move |scope| {
-                Box::pin(async move { Ok(holder_change_view(scope, id).await.err()) })
+                Box::pin(async move {
+                    Ok(holder_change_view::<crate::NoLeaseChangeHook, _>(scope, id)
+                        .await
+                        .err())
+                })
             })
             .await?;
         assert!(
