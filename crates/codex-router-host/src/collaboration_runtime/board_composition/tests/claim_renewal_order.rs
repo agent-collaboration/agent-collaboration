@@ -117,7 +117,7 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
     let mut owner = slot.lock().await;
     let install_attempt =
         crate::collaboration_runtime::board_composition::install_attempts::recorded_attempt(
-            &projects.directory,
+            &projects.cache,
             &project,
             epoch,
         )

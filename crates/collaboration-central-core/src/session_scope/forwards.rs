@@ -5,8 +5,8 @@ use super::{
     SyncTime, TransactionScope, Type,
 };
 use crate::{
-    forward_calls::{ForwardAnswerRequest, ForwardDeliveryRequest, ForwardRouteResult},
-    forward_store::{self, ForwardPhase, PendingForward},
+    forward_calls::{ForwardDeliveryRequest, ForwardRouteResult},
+    project_request_store::{self, ProjectRequest, ProjectRequestPhase},
 };
 use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerProtocol, ForwardOutcome, ForwardedPost,
@@ -29,10 +29,10 @@ where
 {
     pub(super) async fn stage_forward(
         &mut self,
-        pending: PendingForward,
+        pending: ProjectRequest,
         post: ForwardedPost,
     ) -> Result<(), StoreError> {
-        if forward_store::pending(self)
+        if project_request_store::requests(self)
             .await?
             .iter()
             .filter(|row| row.session.peer == pending.session.peer)
@@ -47,7 +47,7 @@ where
                 )),
             );
         }
-        forward_store::save_pending(self, &pending).await?;
+        project_request_store::save(self, &pending).await?;
         self.ensure_wake(pending.deadline).await?;
         self.transport
             .push(SessionTransportEffect::ForwardRoute { pending, post });
@@ -60,10 +60,10 @@ where
         post: ForwardedPost,
         now: SyncTime,
     ) -> Result<(), StoreError> {
-        let Some(mut pending) = forward_store::pending_by_frame(self, id).await? else {
+        let Some(mut pending) = project_request_store::by_frame(self, id).await? else {
             return Ok(());
         };
-        if pending.deadline <= now || !matches!(pending.phase, ForwardPhase::Routing) {
+        if pending.deadline <= now || !matches!(pending.phase, ProjectRequestPhase::Routing) {
             return Ok(());
         }
         let outcome = match result {
@@ -73,11 +73,9 @@ where
                 origin,
                 holder_last_seen,
             }) => {
-                pending.phase = ForwardPhase::AwaitingHolder {
-                    installation: installation.clone(),
-                };
+                pending.phase = ProjectRequestPhase::AwaitingHolder { holder };
                 pending.updated_at = now;
-                forward_store::save_pending(self, &pending).await?;
+                project_request_store::save(self, &pending).await?;
                 let request = ForwardDeliveryRequest {
                     forward_frame: id,
                     holder,
@@ -112,10 +110,14 @@ where
         outcome: ForwardOutcome,
         now: SyncTime,
     ) -> Result<(), StoreError> {
-        let Some(pending) = forward_store::pending_by_frame(self, id).await? else {
+        let Some(pending) = project_request_store::by_frame(self, id).await? else {
             return Ok(());
         };
-        if pending.deadline <= now || !matches!(pending.phase, ForwardPhase::AwaitingHolder { .. })
+        if pending.deadline <= now
+            || !matches!(
+                pending.phase,
+                ProjectRequestPhase::AwaitingHolder { .. } | ProjectRequestPhase::AtHolder { .. }
+            )
         {
             return Ok(());
         }
@@ -123,10 +125,10 @@ where
     }
     pub(crate) async fn finish_forward(
         &mut self,
-        pending: PendingForward,
+        pending: ProjectRequest,
         outcome: ForwardOutcome,
     ) -> Result<(), StoreError> {
-        forward_store::remove_pending(self, pending.forward_frame).await?;
+        project_request_store::remove(self, pending.forward_frame).await?;
         self.transport.push(SessionTransportEffect::ForwardFrame {
             connection: pending.connection,
             session: pending.session,
@@ -146,38 +148,25 @@ where
         reply: board_sync_protocol::BoardPayload,
         now: SyncTime,
     ) -> Result<(), StoreError> {
-        let Some(delivered) = forward_store::delivered_by_frame(self, frame).await? else {
+        let Some(request) = project_request_store::by_frame(self, frame).await? else {
             return Ok(());
         };
-        if delivered.deadline <= now || delivered.holder != session.peer {
+        if request.deadline <= now
+            || !matches!(request.phase, ProjectRequestPhase::AtHolder { holder } if holder == session.peer)
+        {
             return Ok(());
         }
-        forward_store::remove_delivered(self, frame).await?;
-        self.transport.push(SessionTransportEffect::ForwardReply {
-            installation: delivered.sender,
-            request: ForwardAnswerRequest {
-                forward_frame: frame,
-                project: delivered.project,
-                reply,
-            },
-        });
-        Ok(())
+        self.finish_forward(request, ForwardOutcome::Answered { reply })
+            .await
     }
     pub(crate) async fn expire_forwards(&mut self, now: SyncTime) -> Result<(), StoreError> {
         let mut next = None;
-        for pending in forward_store::pending(self).await? {
+        for pending in project_request_store::requests(self).await? {
             if pending.deadline <= now {
                 self.finish_forward(pending, ForwardOutcome::Unanswered)
                     .await?;
             } else {
                 next = Some(next.map_or(pending.deadline, |at: SyncTime| at.min(pending.deadline)));
-            }
-        }
-        for delivered in forward_store::delivered(self).await? {
-            if delivered.deadline <= now {
-                forward_store::remove_delivered(self, delivered.forward_frame).await?;
-            } else {
-                next = Some(next.map_or(delivered.deadline, |at| at.min(delivered.deadline)));
             }
         }
         if let Some(at) = next {

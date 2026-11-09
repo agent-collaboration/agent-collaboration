@@ -151,13 +151,19 @@ impl RecipientRuntime {
             Arc::new(SystemClock),
         ));
         let projects = Arc::new(ProjectWriters::new(
-            root,
-            inputs.peer,
-            &registry,
-            requests.clone(),
-            inputs.receiver,
-            ready.clone(),
-            stopped.clone(),
+            crate::collaboration_runtime::board_composition::project_writers::ProjectWriterInputs {
+                cache: Arc::new(
+                    message_board_storage::FleetCache::open(&root.join("fleet-cache.sqlite"))
+                        .await?,
+                ),
+                directory: root,
+                peer: inputs.peer,
+                registry: &registry,
+                requests: requests.clone(),
+                receiver: inputs.receiver,
+                welcomed: ready.clone(),
+                stopped: stopped.clone(),
+            },
         ));
         let shutdown = tokio_util::sync::CancellationToken::new();
         let mut tasks = JoinSet::new();
@@ -167,6 +173,7 @@ impl RecipientRuntime {
             requests,
             MachineNoticeReactions::open(root).await?,
             MachineSessionEventOwners {
+                link_failures: None,
                 projects: projects.clone(),
                 admission: Weak::new(),
                 fleet: Weak::new(),

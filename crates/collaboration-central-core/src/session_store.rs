@@ -39,17 +39,13 @@ pub(crate) enum SessionTransportEffect {
         request: crate::installation_peer_reads::InstallationReadRequest,
     },
     ForwardRoute {
-        pending: crate::forward_store::PendingForward,
+        pending: crate::project_request_store::ProjectRequest,
         post: board_sync_protocol::ForwardedPost,
     },
     ForwardDelivery {
         installation: message_board::ServiceId,
         request: crate::forward_calls::ForwardDeliveryRequest,
         last_seen: Option<SyncTime>,
-    },
-    ForwardReply {
-        installation: message_board::ServiceId,
-        request: crate::forward_calls::ForwardAnswerRequest,
     },
     ForwardFrame {
         connection: ConnectionId,

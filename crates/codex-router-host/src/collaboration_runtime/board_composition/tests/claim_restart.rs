@@ -204,12 +204,13 @@ async fn run_restart_journey(journey: RestartJourney) -> TestResult {
         if receiving && stopped.get("acknowledged") != Some(&serde_json::json!(true)) {
             return Err("received grant was not acknowledged before SIGKILL".into());
         }
-        let attempt_path = config
-            .root
-            .join("snapshot-install-attempts")
-            .join(format!("{}-e2.json", config.request.project_id.as_str()));
+        let attempt_path = attempt_key(
+            &config.root,
+            &config.request.project_id,
+            fleet_sync_protocol::Epoch::new(2)?,
+        );
         let root_record = if receiving {
-            Some(std::fs::read(&attempt_path)?)
+            Some(attempt_bytes(&attempt_path).await?)
         } else {
             None
         };
@@ -299,7 +300,13 @@ async fn run_restart_journey(journey: RestartJourney) -> TestResult {
             );
         }
         if let Some(root_record) = root_record {
-            assert_eq!(std::fs::read(&attempt_path)?, root_record);
+            let selected: message_board_storage::SnapshotInstallAttempt =
+                serde_json::from_slice(&root_record)?;
+            assert_eq!(selected.attempt, completed.request.attempt);
+            assert!(
+                attempt_record(&attempt_path).await?.is_none(),
+                "completed attempt retained after restart"
+            );
         }
         if graceful {
             let posted = marker(&mut output, "RECEIVING_RESTART_POST ").await?;

@@ -259,12 +259,8 @@ async fn verify_recovered_notices(
 ) -> ConformanceResult<()> {
     let mut socket = registration::reconnect(base).await?;
     let proof = async {
-        let board_notice = BoardNotice::BoardArchiving {
-            board: BoardId::try_from(BOARD.to_owned())?,
-        };
-        let feed_notice = BoardNotice::FleetFeedAdvanced {
-            through: FleetPosition::try_from(6)?,
-        };
+        let board_notice = BoardNotice::ProjectListChanged {};
+        let feed_notice = BoardNotice::ProjectListChanged {};
         let recovered = tokio::time::timeout(RECOVERY_BOUND, async {
             loop {
                 let notices = read_machine_notices(&mut socket, Some(1)).await?;
@@ -272,8 +268,8 @@ async fn verify_recovered_notices(
                 if let [first_notice, second_notice] = notices.as_slice() {
                     assert_eq!(first_notice.position.value(), 2);
                     assert_eq!(second_notice.position.value(), 3);
-                    assert_eq!(notices.iter().filter(|notice| notice.kind==board_notice).count(), 1);
-                    assert_eq!(notices.iter().filter(|notice| notice.kind==feed_notice).count(), 1);
+                    assert_eq!(first_notice.kind, board_notice);
+                    assert_eq!(second_notice.kind, feed_notice);
                     return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(notices);
                 }
                 tokio::task::yield_now().await;
@@ -302,7 +298,8 @@ async fn verify_recovered_notices(
         expected_history.extend(recovered.clone());
         assert_eq!(read_machine_notices(&mut socket, None).await?, expected_history);
         let original_notice: BoardNotice = serde_json::from_value(prepared.saved_call.get("request").cloned().ok_or("saved call omitted its notice payload")?)?;
-        assert_eq!(recovered.iter().filter(|notice| notice.kind == original_notice).count(), 1);
+        assert_eq!(original_notice, BoardNotice::ProjectListChanged {});
+        assert_eq!(recovered.len(), 2);
         assert_eq!(decide(&mut socket, &prepared.request).await?, prepared.decision);
         assert_eq!(read_machine_notices(&mut socket, Some(1)).await?, recovered);
         assert_eq!(read_machine_notices(&mut socket, None).await?, expected_history);
@@ -337,10 +334,17 @@ fn reject_duplicate_hints(
     board: &BoardNotice,
     feed: &BoardNotice,
 ) -> ConformanceResult<()> {
-    let repeated_kind = [board, feed]
-        .into_iter()
-        .any(|kind| notices.iter().filter(|notice| &notice.kind == kind).count() > 1);
-    if notices.len() > 2 || repeated_kind {
+    let positions: std::collections::BTreeSet<_> = notices
+        .iter()
+        .map(|notice| notice.position.value())
+        .collect();
+    if notices.len() > 2
+        || positions.len() != notices.len()
+        || notices.iter().any(|notice| {
+            ![2, 3].contains(&notice.position.value())
+                || (&notice.kind != board && &notice.kind != feed)
+        })
+    {
         return Err(format!(
             "original notice calls appended duplicate machine positions: {notices:?}"
         )
@@ -401,6 +405,14 @@ async fn assert_original_receiver_receipt(
         let row=query::<sqlx_turso::Turso>("SELECT COUNT(*) AS count FROM _fleet_sync_operations WHERE kind='central.machine-notice-append' AND request_key=? AND state='completed'")
             .bind(key).fetch_one(&mut connection).await?;
         assert_eq!(row.try_get::<i64,_>("count")?,1,"original sender operation/step lost its one completed receiver receipt");
+        // Both source jobs now carry the same hint; correlate each job's receipt instead of its kind.
+        let senders = query::<sqlx_turso::Turso>("SELECT sender.operation_id,(SELECT count(*) FROM _fleet_sync_operations receiver JOIN machine_control_project_notices notice ON notice.notice_id=receiver.operation_id WHERE receiver.kind='central.machine-notice-append' AND receiver.state='completed' AND receiver.request_key='central-machine-notice:' || sender.operation_id || ':deliver_notice' AND notice.kind='project_list_changed' AND notice.machine_id=? AND notice.position IN (2,3)) AS receipts FROM _fleet_sync_operations sender WHERE sender.kind='central.fleet-notice'")
+            .bind(PEER).fetch_all(&mut connection).await?;
+        assert_eq!(senders.len(), 2);
+        for sender in senders {
+            assert_eq!(sender.try_get::<i64,_>("receipts")?, 1, "one source job lost or duplicated its receiver receipt");
+        }
+
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
     }.await;
     let closed = connection.close().await;

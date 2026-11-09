@@ -108,75 +108,99 @@ pub(super) async fn run_update_case(
             )?),
     ));
 
-    let startup = send_operator_request(
-        coordination_paths.operator_socket(),
-        OperatorRequest::AwaitHostStart,
-        Duration::from_secs(20),
-    )
-    .await?;
-    check_equal(
-        terminal_classification(&startup)?,
-        TerminalClassification::Ready,
-        "update fixture host must start ready",
-    )?;
-    let app_server_pid = wait_for_process_id(&app_server_log).await?;
-    let update = send_operator_request(
-        coordination_paths.operator_socket(),
-        OperatorRequest::UpdateCodex,
-        Duration::from_secs(20),
-    )
-    .await?;
-    check_equal(
-        terminal_classification(&update)?,
-        expected,
-        "update classification must match fixture behavior",
-    )?;
-    let invocation = std::fs::read_to_string(&invocation_log)?;
-    check_equal(
-        invocation,
-        format!(
-            "{} update\n",
-            std::fs::canonicalize(&managed_executable)?.display()
-        ),
-        "updater must invoke the exact captured executable with update",
-    )?;
-    let app_server_pids = std::fs::read_to_string(&app_server_log)?
-        .lines()
-        .filter_map(|line| line.parse::<u32>().ok())
-        .collect::<Vec<_>>();
-    if matches!(mode, UpdateFixtureMode::Changed) {
-        check(
-            app_server_pids.len() >= 2,
-            "changed update must spawn a replacement app-server",
+    let proof_result: Result<(), Box<dyn std::error::Error>> = async {
+        let startup = send_operator_request(
+            coordination_paths.operator_socket(),
+            OperatorRequest::AwaitHostStart,
+            Duration::from_secs(20),
+        )
+        .await
+        .map_err(|error| {
+            std::io::Error::other(format!(
+                "{} startup operator exchange: {error}",
+                mode.name()
+            ))
+        })?;
+        check_equal(
+            terminal_classification(&startup)?,
+            TerminalClassification::Ready,
+            "update fixture host must start ready",
         )?;
-        check(
-            !process_is_running(app_server_pid),
-            "changed update must stop the old app-server",
+        let app_server_pid = wait_for_process_id(&app_server_log).await?;
+        let update = send_operator_request(
+            coordination_paths.operator_socket(),
+            OperatorRequest::UpdateCodex,
+            Duration::from_secs(20),
+        )
+        .await
+        .map_err(|error| {
+            std::io::Error::other(format!("{} update operator exchange: {error}", mode.name()))
+        })?;
+        check_equal(
+            terminal_classification(&update)?,
+            expected,
+            "update classification must match fixture behavior",
         )?;
-        check(
-            process_is_running(
-                *app_server_pids
-                    .last()
-                    .ok_or("replacement app-server PID is missing")?,
+        let invocation = std::fs::read_to_string(&invocation_log)?;
+        check_equal(
+            invocation,
+            format!(
+                "{} update\n",
+                std::fs::canonicalize(&managed_executable)?.display()
             ),
-            "replacement app-server must remain running",
+            "updater must invoke the exact captured executable with update",
         )?;
-    } else {
-        check(
-            process_is_running(app_server_pid),
-            "failed/no-change update must preserve the running app-server",
-        )?;
-    }
-
-    runtime.abort();
-    let _runtime_result = runtime.await;
-    for process_id in app_server_pids {
-        if process_is_running(process_id) {
-            kill_process(process_id)?;
+        let app_server_pids = std::fs::read_to_string(&app_server_log)?
+            .lines()
+            .filter_map(|line| line.parse::<u32>().ok())
+            .collect::<Vec<_>>();
+        if matches!(mode, UpdateFixtureMode::Changed) {
+            check(
+                app_server_pids.len() >= 2,
+                "changed update must spawn a replacement app-server",
+            )?;
+            check(
+                !process_is_running(app_server_pid),
+                "changed update must stop the old app-server",
+            )?;
+            check(
+                process_is_running(
+                    *app_server_pids
+                        .last()
+                        .ok_or("replacement app-server PID is missing")?,
+                ),
+                "replacement app-server must remain running",
+            )?;
+        } else {
+            check(
+                process_is_running(app_server_pid),
+                "failed/no-change update must preserve the running app-server",
+            )?;
         }
+
+        Ok(())
     }
-    router.finish().await?;
-    Ok(())
+    .await;
+
+    let runtime_finished_before_cleanup = runtime.is_finished();
+    runtime.abort();
+    let runtime_result = runtime.await;
+    let child_cleanup: Result<(), Box<dyn std::error::Error>> = (|| {
+        for process_id in read_process_ids(&app_server_log) {
+            if process_is_running(process_id) {
+                kill_process(process_id)?;
+            }
+        }
+        Ok(())
+    })();
+    let router_cleanup = router.finish().await;
+    if let Err(error) = proof_result {
+        return Err(std::io::Error::other(format!(
+            "update fixture {} failed: {error}; Host finished before cleanup={runtime_finished_before_cleanup}; Host result={runtime_result:?}", mode.name()
+        )).into());
+    }
+    child_cleanup?;
+    router_cleanup
 }
 
 pub(super) async fn run_update_with_blocked_installer_case()

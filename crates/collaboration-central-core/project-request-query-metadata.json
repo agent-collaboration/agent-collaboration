@@ -1,7 +1,6 @@
 {
   "producer": "owned sqlx-turso / Turso 0.8.1 describe",
   "sources": {
-    "forward-queries.json": "d16c486613b565d4935f3265ba433dbba24fdc0284c43caef348b7236e210ca2",
     "generator:fleet-sync-query-gen/Cargo.toml": "01210c567dcbccb4ff127626a0ff7625641edd4c5f0787ea41777757b1eaa3e6",
     "generator:fleet-sync-query-gen/src/expression_classes.rs": "14dc40abaec059e437d3e44bc187b9560812b0ed21ee2ad9d558364032fb097e",
     "generator:fleet-sync-query-gen/src/lib.rs": "df50be1a279adf266fdd12d184637b0113740390c0cef7273d1995dea0475152",
@@ -54,20 +53,104 @@
     "generator:sqlx-turso/src/lib.rs": "32ec3ac4ca4d0d703a452496262928a3a00ddfdf71eac8cbbe4ce1a3da69d9b5",
     "generator:workspace/Cargo.lock": "e6dd6bbdd6d3915326e1bb54c57870a5d55f515e4be70732d385a2c7fd5bebbe",
     "generator:workspace/rust-toolchain.toml": "3baca9098f290c1bc291aa94f22c516487ba2c0865bd9795d1c863b72025ab9c",
+    "project-request-queries.json": "f1d5093dffc333ee406dd858ad4dc9b6c2a59459b1def0d599e3a44352f1e1af",
     "registry_migrations/0001_machine_enrollments.sql": "9ad00775473cd1ab27e95a20396eb7b2426accc95e226441bff409055384f3c7",
     "registry_migrations/0002_lease_incarnation.sql": "c43062856051d08a1038ff40e89311918873426a1c158c7b55cb19bc8889aa59",
-    "session_migrations/0011_machine_notices.sql": "98aa3abb60904b6b33d6fe66f1b160a4c7242d0136229e72e579c778b790e3c5",
-    "session_migrations/0012_forward_correlations.sql": "1c7d4cd8c2996317ac6b57c9ac3916fdf30f296fbf7fc7024ebabfe6e567df14",
-    "sql/forwards/delete_forward_row.sql": "95736d31b7f8f5bcef5951d65513dbe004c73a0dcee76914931369c93431885c",
-    "sql/forwards/read_forward_row.sql": "59c245b21035a9a6e2712c3cd01c8573002ea8f57e1bd4838d2ee066ac5161e6",
-    "sql/forwards/read_forward_rows.sql": "18ca38b22bc0a9bbaf7a9ef00a37d1a8915a256b0f8ebe5a1b9e2c137b515781",
-    "sql/forwards/store_forward_row.sql": "6f705c139d5cce3d147858d2680daa9e2a335d4ad493c0f25b259f315ffbf003",
-    "src/generated_forwards.rs": "7808e172df5e0b19af9110a511f075c7cf0612f9fbbb9c858e8682bcce8bda98"
+    "session_migrations/0011_machine_notices.sql": "e29ffcc32b8db2a71355256e7abb49990f5c1a06d33997df0fd86998616f7565",
+    "session_migrations/0012_forward_correlations.sql": "9977ffcdc8d42e005fe7b3d1d80f8a3d0bf219c4f5ea87f94d9f34a012b1c8ef",
+    "sql/project_requests/delete_project_request.sql": "9d7146759890f06d7d19389d17e7d7a9ca38f129c358756bf1447080a61f582c",
+    "sql/project_requests/read_project_request.sql": "d799b69e750b2abad69d5f877707c4a73b990064007e803b10495eae0229daa1",
+    "sql/project_requests/read_project_requests.sql": "a4a78673c6ac5a98918fcc4ec240479b7f97931294effa0ecb19fbfae664bf4b",
+    "sql/project_requests/store_project_request.sql": "201d0ea6ce3ae1ced260a7c5fc8f6cd9fe6348f3970ad4d127cfc800d1af75e7",
+    "src/generated_project_requests.rs": "6a2212aee1db4b81921d18dadedd7c113735aff0f169317f60c5637626bf2fce"
   },
-  "queries_digest": "64b4618504729cf3071649d983d4d16ad1606c403c5731b114edf13bd1b5edd1",
+  "queries_digest": "1677018501011a6b02a5a1d4d2f2aced83eac5468a7f282a2dde43a6201ec3ef",
   "queries": [
     {
-      "name": "read_forward_rows",
+      "name": "read_project_requests",
+      "bind_slots": 0,
+      "columns": [
+        {
+          "name": "id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "request_frame_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "requester_machine_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "requester_session_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "requester_connection_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "project_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "holder_machine_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "phase",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "deadline_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "created_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "updated_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        }
+      ]
+    },
+    {
+      "name": "read_project_request",
       "bind_slots": 1,
       "columns": [
         {
@@ -78,20 +161,6 @@
           "type_source": "driver"
         },
         {
-          "name": "forward_frame_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "side",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
           "name": "request_frame_id",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
@@ -99,28 +168,21 @@
           "type_source": "driver"
         },
         {
-          "name": "origin_machine_id",
+          "name": "requester_machine_id",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
           "nullable": null,
           "type_source": "driver"
         },
         {
-          "name": "origin_session_id",
+          "name": "requester_session_id",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
           "nullable": null,
           "type_source": "driver"
         },
         {
-          "name": "connection_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "expected_holder_machine_id",
+          "name": "requester_connection_id",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
           "nullable": null,
@@ -128,6 +190,13 @@
         },
         {
           "name": "project_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        },
+        {
+          "name": "holder_machine_id",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
           "nullable": null,
@@ -160,142 +229,17 @@
           "rust_type": "Option<String>",
           "nullable": null,
           "type_source": "cast"
-        },
-        {
-          "name": "origin_service_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "holder_service_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
         }
       ]
     },
     {
-      "name": "read_forward_row",
-      "bind_slots": 2,
-      "columns": [
-        {
-          "name": "id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "forward_frame_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "side",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "request_frame_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "origin_machine_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "origin_session_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "connection_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "expected_holder_machine_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "project_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "phase",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "deadline_at",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "cast"
-        },
-        {
-          "name": "created_at",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "cast"
-        },
-        {
-          "name": "updated_at",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "cast"
-        },
-        {
-          "name": "origin_service_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "holder_service_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        }
-      ]
-    },
-    {
-      "name": "store_forward_row",
-      "bind_slots": 13,
+      "name": "store_project_request",
+      "bind_slots": 11,
       "columns": []
     },
     {
-      "name": "delete_forward_row",
-      "bind_slots": 2,
+      "name": "delete_project_request",
+      "bind_slots": 1,
       "columns": []
     }
   ]

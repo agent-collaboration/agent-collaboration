@@ -152,7 +152,7 @@ impl CollaborationRuntime {
             dyn collaboration_contracts::ProjectReplicationPosition,
         > = std::sync::Arc::new(collaboration_contracts::UnacknowledgedProjectReplication);
         let mut configuration = collaboration_runtime::AutomationConfigurationHandle::default();
-        let opened_board = board_composition::open_board_admission_with_enrollment(
+        let (opened_board, fleet_link) = board_composition::open_observed_board_admission(
             &inputs.directory,
             machine_identity.clone(),
             inputs.board_session,
@@ -506,14 +506,16 @@ impl CollaborationRuntime {
                     endpoint_directory.clone(),
                     journal.clone(),
                 );
-            let sessions = collaboration_service::collaboration_application::SessionOperations::new(
-                identity.clone(),
-                endpoint_directory.clone(),
-                native_control,
-                codex_inventory,
-                provider_inventory,
-                journal_operations,
-            );
+            let sessions =
+                collaboration_service::collaboration_application::SessionOperations::new(
+                    identity.clone(),
+                    endpoint_directory.clone(),
+                    native_control,
+                    codex_inventory,
+                    provider_inventory,
+                    journal_operations,
+                )
+                .with_fleet_link(fleet_link.clone());
             let board = collaboration_service::collaboration_application::BoardOperations::new(
                 identity.clone(),
                 project_admission.clone(),
@@ -705,6 +707,7 @@ impl CollaborationRuntime {
         drop(message_routes.router);
         drop(subscription_presence);
         drop(approval_broker);
+        let interactions_reader = std::sync::Arc::downgrade(&interactions);
         drop(interactions);
         let publication = publication.with_acp_listener()?;
         if let Some(settings) = settings_backend
@@ -826,6 +829,8 @@ impl CollaborationRuntime {
             tokio::spawn(async move { maintenance_store.run_maintenance(maintenance_stop).await })
         });
         let mut runtime = Self {
+            fleet_link,
+            interactions: interactions_reader,
             #[cfg(test)]
             startup_test_mail,
             #[cfg(test)]

@@ -81,11 +81,20 @@ async fn sdk_generated_notice_before_welcome_allows_a_real_durable_client_acknow
     let event = tokio::time::timeout(BOUND, events.recv())
         .await?
         .ok_or("notice event missing")?;
+    let ClientEvent::Notice {
+        session_id,
+        position,
+        body,
+    } = event
+    else {
+        return Err("SDK did not produce the notice".into());
+    };
     assert!(
-        matches!(event, ClientEvent::Notice { position, body: Notice::Consumer(ref notice) }
-        if position == NoticePosition::new(1) && matches!(notice.kind, board_sync_protocol::BoardNotice::LeaseSuperseded { .. }))
+        position == NoticePosition::new(1)
+            && matches!(body,
+        Notice::Consumer(ref notice) if matches!(notice.kind, board_sync_protocol::BoardNotice::LeaseSuperseded { .. }))
     );
-    requests.acknowledge_notice(NoticePosition::new(1)).await?;
+    requests.acknowledge_notice(session_id, position).await?;
     let resumed = MachineSessionStore::open(&root)
         .await?
         .load()

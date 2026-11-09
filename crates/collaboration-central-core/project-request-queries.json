@@ -3,43 +3,32 @@
     "registry_migrations",
     "session_migrations"
   ],
-  "output": "src/generated_forwards.rs",
-  "metadata": "forward-query-metadata.json",
+  "output": "src/generated_project_requests.rs",
+  "metadata": "project-request-query-metadata.json",
   "queries": [
     {
-      "name": "read_forward_rows",
-      "sql": "sql/forwards/read_forward_rows.sql",
-      "row": "StoredForwardRow",
+      "name": "read_project_requests",
+      "sql": "sql/project_requests/read_project_requests.sql",
+      "row": "StoredProjectRequest",
       "result": "many",
-      "parameters": [
-        {
-          "name": "side",
-          "kind": "text",
-          "nullable": false
-        }
-      ]
+      "parameters": []
     },
     {
-      "name": "read_forward_row",
-      "sql": "sql/forwards/read_forward_row.sql",
-      "row": "StoredForwardRow",
+      "name": "read_project_request",
+      "sql": "sql/project_requests/read_project_request.sql",
+      "row": "StoredProjectRequest",
       "result": "optional",
       "parameters": [
         {
-          "name": "side",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "forward_frame",
+          "name": "id",
           "kind": "text",
           "nullable": false
         }
       ]
     },
     {
-      "name": "store_forward_row",
-      "sql": "sql/forwards/store_forward_row.sql",
+      "name": "store_project_request",
+      "sql": "sql/project_requests/store_project_request.sql",
       "row": null,
       "result": "execute",
       "parameters": [
@@ -49,44 +38,34 @@
           "nullable": false
         },
         {
-          "name": "forward_frame",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "side",
-          "kind": "text",
-          "nullable": false
-        },
-        {
           "name": "request_frame",
           "kind": "text",
           "nullable": false
         },
         {
-          "name": "origin_machine",
+          "name": "requester_machine",
           "kind": "text",
           "nullable": false
         },
         {
-          "name": "origin_session",
+          "name": "requester_session",
           "kind": "text",
           "nullable": false
         },
         {
-          "name": "connection",
+          "name": "requester_connection",
           "kind": "text",
           "nullable": false
-        },
-        {
-          "name": "expected_holder",
-          "kind": "text",
-          "nullable": true
         },
         {
           "name": "project",
           "kind": "text",
           "nullable": false
+        },
+        {
+          "name": "holder_machine",
+          "kind": "text",
+          "nullable": true
         },
         {
           "name": "phase",
@@ -111,18 +90,13 @@
       ]
     },
     {
-      "name": "delete_forward_row",
-      "sql": "sql/forwards/delete_forward_row.sql",
+      "name": "delete_project_request",
+      "sql": "sql/project_requests/delete_project_request.sql",
       "row": null,
       "result": "execute",
       "parameters": [
         {
-          "name": "side",
-          "kind": "text",
-          "nullable": false
-        },
-        {
-          "name": "forward_frame",
+          "name": "id",
           "kind": "text",
           "nullable": false
         }

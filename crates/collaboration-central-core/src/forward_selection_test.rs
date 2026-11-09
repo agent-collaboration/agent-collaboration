@@ -108,6 +108,25 @@ async fn run(revoked: bool, replay: bool) -> Result<(), TestError> {
             request: serde_json::to_value(&request)?,
         })
     };
+    let selected_request = crate::project_request_store::ProjectRequest {
+        forward_frame: request.forward_frame,
+        request_frame: request.request_frame,
+        connection: request.connection,
+        session: request.origin_session,
+        project: request.post.project.clone(),
+        phase: crate::project_request_store::ProjectRequestPhase::AwaitingHolder { holder: peer },
+        deadline: request.deadline,
+        created_at: NOW,
+        updated_at: NOW,
+    };
+    fixture
+        .object
+        .transaction(move |scope| {
+            Box::pin(
+                async move { crate::project_request_store::save(scope, &selected_request).await },
+            )
+        })
+        .await?;
     if replay {
         runtime.receive_forward_call(invoke()?).await?;
     }
@@ -141,9 +160,14 @@ async fn run(revoked: bool, replay: bool) -> Result<(), TestError> {
         .transaction(move |scope| {
             Box::pin(async move {
                 Ok(
-                    crate::forward_store::delivered_by_frame(scope, request.forward_frame)
+                    crate::project_request_store::by_frame(scope, request.forward_frame)
                         .await?
-                        .is_some(),
+                        .is_some_and(|row| {
+                            matches!(
+                                row.phase,
+                                crate::project_request_store::ProjectRequestPhase::AtHolder { .. }
+                            )
+                        }),
                 )
             })
         })

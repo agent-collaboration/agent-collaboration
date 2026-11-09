@@ -180,7 +180,9 @@ where
         binding: fleet_sync_session::ConnectionBinding,
     ) -> Result<(), StoreError> {
         use runtime_primitives::Clock;
-        let (store, shared_host) = self.session_store_for(binding.connection).await?;
+        // The callback already carries its admitted binding. Cleanup is local
+        // session work and must not rediscover a socket that has disappeared.
+        let (store, shared_host) = self.session_store()?;
         let now = shared_host.now();
         let result = store
             .transaction(move |scope| {

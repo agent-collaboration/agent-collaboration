@@ -363,8 +363,8 @@ async fn run_recovery(case: RecoveryCase) -> ConformanceResult<()> {
     control(base, RevocationControl::ReleaseDelivery).await?;
     tokio::time::timeout(BOUND, revoke).await???;
     let terminal = tokio::time::timeout(BOUND, pump_task).await??;
-    if !matches!(terminal, Err(fleet_sync_session::ClientError::SessionEnded)) {
-        return Err(format!("pump did not terminate on revoke: {terminal:?}").into());
+    if !matches!(terminal, Err(fleet_sync_session::ClientError::Revoked)) {
+        return Err(format!("pump did not return terminal Revoked: {terminal:?}").into());
     }
     stop.send_replace(true);
     tokio::time::timeout(BOUND, runner_task).await???;

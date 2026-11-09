@@ -135,6 +135,93 @@ async fn enrollment_reset_clears_only_cache_rows_and_preserves_non_cache_tables(
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
+    reason = "Contract assertions; fixture errors propagate."
+)]
+async fn reenrollment_preserves_unfinished_typed_and_legacy_attempts_and_clears_session_link()
+-> TestResult {
+    let root = tempfile::tempdir()?;
+    let storage = root.path().join("storage");
+    let journal = root.path().join("enrollment");
+    tokio::fs::create_dir_all(storage.join("machine-session")).await?;
+    tokio::fs::create_dir_all(storage.join("snapshot-install-attempts")).await?;
+    // Reset discards incompatible old resume bytes; it must not start decoding
+    // the state it was explicitly instructed to forget merely to preserve attempts.
+    tokio::fs::write(
+        storage.join("machine-session/state.json"),
+        b"incompatible old state",
+    )
+    .await?;
+    let cache =
+        message_board_storage::FleetCache::open(&storage.join("fleet-cache.sqlite")).await?;
+    let native = fleet_sync_session::ClientSessionState {
+        session_id: fleet_sync_protocol::SessionId::new(uuid::Uuid::now_v7())?,
+        notice_cursor: fleet_sync_protocol::NoticePosition::new(19),
+    };
+    cache.save_machine_session_state(&native).await?;
+    cache
+        .save_machine_notice_progress(fleet_sync_protocol::NoticePosition::new(17))
+        .await?;
+    cache
+        .save_fleet_link(&board_sync_protocol::FleetLinkRecord {
+            peer: fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7())?,
+            endpoint: "wss://central.example/session".to_owned(),
+            instance: u64::MAX,
+            connection: 4,
+            revision: 99,
+            last_frame_at: Some(chrono::Utc::now()),
+            state: board_sync_protocol::FleetLinkState::Disconnected {
+                since: chrono::Utc::now(),
+            },
+            last_drop: None,
+            last_failure: None,
+        })
+        .await?;
+    let project = message_board::ProjectId::generate();
+    let epoch = fleet_sync_protocol::Epoch::new(3)?;
+    let typed = cache.snapshot_install_attempt(&project, epoch).await?;
+    cache.close().await;
+    let legacy = message_board_storage::SnapshotInstallAttempt {
+        project: message_board::ProjectId::generate(),
+        epoch,
+        attempt: fleet_sync_protocol::InstallAttemptId::new(uuid::Uuid::now_v7())?,
+    };
+    let legacy_path = storage.join(format!(
+        "snapshot-install-attempts/{}-e3.json",
+        legacy.project.as_str()
+    ));
+    tokio::fs::write(&legacy_path, serde_json::to_vec(&legacy)?).await?;
+    drop(record_pending_enrollment_reset(&journal)?);
+
+    resume_enrollment_reset(&journal, &storage).await?;
+
+    let cache =
+        message_board_storage::FleetCache::open(&storage.join("fleet-cache.sqlite")).await?;
+    assert_eq!(cache.machine_session_state().await?, None);
+    assert_eq!(
+        cache.machine_notice_progress().await?,
+        fleet_sync_protocol::NoticePosition::new(0)
+    );
+    assert_eq!(cache.fleet_link().await?, None);
+    assert_eq!(
+        cache.snapshot_install_attempt(&project, epoch).await?,
+        typed
+    );
+    assert_eq!(
+        cache
+            .snapshot_install_attempt(&legacy.project, epoch)
+            .await?,
+        legacy.attempt,
+        "reset discarded a legacy unfinished attempt before importing it"
+    );
+    assert!(!legacy_path.exists());
+    assert!(!storage.join("machine-session/state.json").exists());
+    cache.close().await;
+    Ok(())
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
     reason = "Contract assertions; fixture failures propagate."
 )]
 async fn legacy_cleared_phase_discards_old_mail_cursor_before_completing_reset() -> TestResult {
