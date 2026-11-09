@@ -1,4 +1,4 @@
-//! Boundary identity for conversation creation across native and provider clients.
+//! Boundary identity for conversation creation and control across native and provider clients.
 
 use crate::conversation_client::{ConversationClientError, ConversationCreateInput, unsupported};
 use collaboration_protocol::{ProviderIdentity, SessionRef};
@@ -8,12 +8,12 @@ use serde::{Deserialize, Deserializer, Serialize, de};
 /// Accepts the established SessionRef shape and typed Human or Session identities.
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize)]
 #[serde(untagged)]
-pub enum ConversationCreateActor {
+pub enum ConversationActor {
     Session(SessionRef),
     Typed(message_board::Identity),
 }
 
-impl<'de> Deserialize<'de> for ConversationCreateActor {
+impl<'de> Deserialize<'de> for ConversationActor {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -31,13 +31,13 @@ impl<'de> Deserialize<'de> for ConversationCreateActor {
     }
 }
 
-impl From<SessionRef> for ConversationCreateActor {
+impl From<SessionRef> for ConversationActor {
     fn from(session: SessionRef) -> Self {
         Self::Session(session)
     }
 }
 
-impl ConversationCreateActor {
+impl ConversationActor {
     pub(crate) fn session(&self) -> Result<Option<SessionRef>, ConversationClientError> {
         Ok(self.provider_identity()?.session().cloned())
     }
@@ -70,3 +70,7 @@ pub(crate) fn codex_create_actors(
         .transpose()?;
     Ok((created_by, approver))
 }
+
+#[cfg(test)]
+#[path = "conversation_actor_test.rs"]
+mod tests;

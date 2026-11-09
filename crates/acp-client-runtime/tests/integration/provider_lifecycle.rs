@@ -1,5 +1,8 @@
 //! ACP v1 list, resume, and close through one scripted agent subprocess.
 
+#[path = "provider_behavior_lifecycle_test.rs"]
+mod behavior_lifecycle;
+
 use std::{
     path::PathBuf,
     sync::{

@@ -312,7 +312,7 @@ impl ProviderSessionEventHub {
         Ok(item)
     }
 
-    /// Start a fresh agent history replay after provider loss. Old subscribers
+    /// Start a fresh agent history replay after provider loss or explicit close. Old subscribers
     /// receive a control event and must attach again to the new epoch.
     pub async fn begin_history_replay(
         &self,
@@ -326,7 +326,7 @@ impl ProviderSessionEventHub {
             .or_insert_with(|| Arc::new(Mutex::new(SessionHistory::new(self.subscriber_capacity))))
             .clone();
         let mut history = history.lock().await;
-        if history.state != SessionState::Unloaded {
+        if !matches!(history.state, SessionState::Unloaded | SessionState::Closed) {
             return Err(SessionEventHubError::Unavailable);
         }
         history
