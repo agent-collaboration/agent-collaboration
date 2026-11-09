@@ -15,6 +15,7 @@
 // is read with the account cf, ACCOUNT_CF_VERSION: the pinned cf has no Workers
 // custom-domain listing. It reads only; it never sees the config. Every cf
 // call carries the settings' account id, so no check reads another account.
+// The account cf runs from <scratch>-inventory, a second new private directory.
 
 import { execFile } from "node:child_process";
 import { cp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
@@ -126,7 +127,7 @@ export interface GuardedRun {
   readonly settings: DeploySettings;
   readonly config: WorkerConfig;
   readonly artifact: string;
-  /** Must not exist yet; created with mode 0700. */
+  /** Must not exist yet, nor <scratch>-inventory; both are created with mode 0700. */
   readonly scratch: string;
   /** The cf that uploads: PINNED_CF; tests pass a stand-in. */
   readonly cf: string;
@@ -145,13 +146,18 @@ export async function guardedRun(options: GuardedRun): Promise<DeployOutcome> {
   const built = await buildWithPinnedCf(scratch);
   if (built.name !== options.config.worker.name)
     throw new DeployRefused(`cf built ${String(built.name)}, not ${options.config.worker.name}`);
+  // cf hands over to a project-local cf when run inside a project, and the
+  // scratch links the pinned one; the account cf runs from its own empty
+  // private directory, and the version check below holds either way.
+  const inventoryHome = `${scratch}-inventory`;
+  await mkdir(inventoryHome, { mode: 0o700 });
   const environment = { ...process.env, CLOUDFLARE_ACCOUNT_ID: options.settings.accountId };
   const runner =
-    (binary: string): CfRunner =>
+    (binary: string, cwd: string): CfRunner =>
     async (args, label) => {
       try {
         const { stdout, stderr } = await run(binary, [...args], {
-          cwd: scratch,
+          cwd,
           env: environment,
           maxBuffer: 64 * 1024 * 1024,
         });
@@ -163,7 +169,7 @@ export async function guardedRun(options: GuardedRun): Promise<DeployOutcome> {
         throw new Error(`cf ${label} failed; read only the private logs in ${scratch}`);
       }
     };
-  const inventory = runner(options.inventoryCf);
+  const inventory = runner(options.inventoryCf, inventoryHome);
   const version = await inventory(["--version"], "inventory-cf-version");
   if (!version.includes(`v${ACCOUNT_CF_VERSION}`) && version.trim() !== ACCOUNT_CF_VERSION) {
     throw new DeployRefused(
@@ -173,7 +179,7 @@ export async function guardedRun(options: GuardedRun): Promise<DeployOutcome> {
   const outcome = await deployWorker(
     options.kind,
     options.settings,
-    { inventory, deploy: runner(options.cf) },
+    { inventory, deploy: runner(options.cf, scratch) },
     {
       dryRun: options.dryRun,
       tag: `s1-${options.kind}`,

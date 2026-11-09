@@ -4,7 +4,7 @@
 // `after`. Every call is appended to the state's log, so a test can see exactly
 // what ran, and the account each call was scoped to, and nothing is ever
 // uploaded anywhere. FAKE_CF_VERSION changes the version it reports.
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 
 const path = process.env.FAKE_CF_STATE;
 const state = JSON.parse(readFileSync(path, "utf8"));
@@ -14,7 +14,9 @@ state.log.push(args);
 const phase = state.deployed ? state.after : state.before;
 let answer = "";
 if (args[0] === "--version") {
-  answer = `cf · v${process.env.FAKE_CF_VERSION ?? "0.11.0"}`;
+  // Like the real cf, it hands over to a project-local cf inside a project.
+  const local = existsSync("node_modules") ? "1.0.0-beta.17" : undefined;
+  answer = `cf · v${local ?? process.env.FAKE_CF_VERSION ?? "0.11.0"}`;
 } else if (args[0] === "deploy") {
   if (!args.includes("--dry-run")) state.deployed = true;
   answer = "deployed";
