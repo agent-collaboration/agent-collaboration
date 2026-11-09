@@ -12,6 +12,25 @@ use fleet_protocol::{
     ItemId, PeerId, QueryResult, ReplicationAnswer, ReportSchemaSupport, SchemaSupport, SessionId,
 };
 
+impl EngineSchema {
+    /// How many migrations initialize applies to a fresh store of this schema:
+    /// the up migrations of its own corpus and of its central corpus, read
+    /// from the same lists initialize applies.
+    #[must_use]
+    pub fn fresh_migration_count(self) -> usize {
+        let up = |migrations: Vec<&sqlx_core::migrate::Migration>| {
+            migrations
+                .into_iter()
+                .filter(|migration| migration.migration_type.is_up_migration())
+                .count()
+        };
+        up(self.migrations())
+            + self
+                .central_corpus()
+                .map_or(0, |(_, migrations)| up(migrations))
+    }
+}
+
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum HistoryCorruption {

@@ -103,6 +103,17 @@ impl EngineSchema {
             Self::Fleet => FLEET_MIGRATIONS.iter().collect(),
         }
     }
+    /// The central corpus initialize applies after this schema's own one, if
+    /// any: the registry's enrollments, the work rows Fleet and Copy keep, or
+    /// the session store's central tables.
+    fn central_corpus(self) -> Option<(&'static str, Vec<&'static sqlx_core::migrate::Migration>)> {
+        match self {
+            Self::Registry => Some(("central-registry", REGISTRY_MIGRATIONS.iter().collect())),
+            Self::Fleet | Self::Copy => Some((WORK_CORPUS, WORK_MIGRATIONS.iter().collect())),
+            Self::Session => Some(("central-session", SESSION_MIGRATIONS.iter().collect())),
+            Self::Delivery => None,
+        }
+    }
 }
 
 pub struct ObjectBootstrap<Host: ObjectPlatform> {
@@ -294,40 +305,11 @@ where
                     )
                 })?;
             }
-            if self.schema == EngineSchema::Registry {
-                count += apply_corpus(
-                    scope,
-                    "central-registry",
-                    REGISTRY_MIGRATIONS.iter().collect(),
-                    self.now,
-                    self.clock.as_ref(),
-                )
-                .await?
-                .count;
-            }
-            // Fleet and Copy both keep their failing and pending work in
-            // central_work_attempts, migrated with the object's own corpus.
-            if matches!(self.schema, EngineSchema::Fleet | EngineSchema::Copy) {
-                count += apply_corpus(
-                    scope,
-                    WORK_CORPUS,
-                    WORK_MIGRATIONS.iter().collect(),
-                    self.now,
-                    self.clock.as_ref(),
-                )
-                .await?
-                .count;
-            }
-            if self.schema == EngineSchema::Session {
-                count += apply_corpus(
-                    scope,
-                    "central-session",
-                    SESSION_MIGRATIONS.iter().collect(),
-                    self.now,
-                    self.clock.as_ref(),
-                )
-                .await?
-                .count;
+            // Then the schema's central corpus, in the same store transaction.
+            if let Some((corpus, migrations)) = self.schema.central_corpus() {
+                count += apply_corpus(scope, corpus, migrations, self.now, self.clock.as_ref())
+                    .await?
+                    .count;
             }
 
             Ok((BootstrapApplied { count, primary }, Vec::new()))
