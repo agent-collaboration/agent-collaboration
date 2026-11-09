@@ -113,8 +113,24 @@ impl EventTrace {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
+    /// The event's S1 id, for diagnostics written before its record exists.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) const fn event_id(&self) -> Uuid {
+        self.event_id
+    }
+
     pub(crate) fn step(&self, step: PipelineStep) {
         self.state().step = step;
+        // Diagnostic only, on native shells (stderr goes nowhere on wasm): a
+        // plain-text line, so JSON record readers keep it verbatim. The last
+        // line for an event with no completed record names where it stopped.
+        #[cfg(not(target_arch = "wasm32"))]
+        eprintln!(
+            "central-pipeline-step construction={} event={} step={}",
+            self.observer.construction(),
+            self.event_id,
+            step.unit_kind()
+        );
     }
 
     pub(crate) fn unit(&self, unit: UnitRecord) {

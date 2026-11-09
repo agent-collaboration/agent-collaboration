@@ -107,7 +107,19 @@ impl<Face: KernelFace> ObjectKernel<Face> {
         let Some(observer) = self.observer.clone() else {
             return crate::event_owed::scoped(self.run(event, Probe::off())).await;
         };
+        #[cfg(not(target_arch = "wasm32"))]
+        let construction = observer.construction();
         let trace = std::sync::Arc::new(EventTrace::new(observer, event_class(&event)));
+        // Diagnostic: which event entered, before anything awaits (the stored
+        // alarm read comes next), so a later step line names its input even if
+        // no record is ever written, and an enter line with no step line after
+        // it stopped before `open`.
+        #[cfg(not(target_arch = "wasm32"))]
+        eprintln!(
+            "central-pipeline-enter construction={construction} event={} {}",
+            trace.event_id(),
+            entry_label(&event)
+        );
         let entered_at = self.face.now();
         let alarm_before = self.face.stored_alarm().await.ok().flatten();
         let kind = event_kind_record(&event, context);
@@ -220,6 +232,52 @@ impl<Face: KernelFace> ObjectKernel<Face> {
         // not held by the cadence: a Hello's Welcome or a push can't wait 30 s.
         probe.step(PipelineStep::LongOperations);
         Box::pin(self.face.drive_long_operations()).await;
+    }
+}
+
+/// The event's kind and identity, for the diagnostic entry line. A client
+/// frame names its own kind and the frame ids it carries: a single request or
+/// answer's `frame`, each batch item's `sendId`, or `-` (a Hello, or
+/// bytes that do not parse).
+#[cfg(all(feature = "conformance", not(target_arch = "wasm32")))]
+fn entry_label(event: &ObjectEvent) -> String {
+    match event {
+        ObjectEvent::SocketOpened { binding } => {
+            format!("kind=socketOpened connection={}", binding.connection)
+        }
+        ObjectEvent::Frame { binding, frame } => {
+            let parsed = serde_json::from_slice::<serde_json::Value>(frame).ok();
+            let frame_kind = parsed
+                .as_ref()
+                .and_then(|value| value.get("kind")?.as_str())
+                .unwrap_or("-");
+            let ids: Vec<&str> = match parsed.as_ref().and_then(|value| value.get("value")) {
+                Some(serde_json::Value::Array(items)) => items
+                    .iter()
+                    .filter_map(|item| item.get("sendId")?.as_str())
+                    .collect(),
+                Some(single) => single
+                    .get("frame")
+                    .and_then(serde_json::Value::as_str)
+                    .into_iter()
+                    .collect(),
+                None => Vec::new(),
+            };
+            let ids = if ids.is_empty() {
+                "-".to_owned()
+            } else {
+                ids.join(",")
+            };
+            format!(
+                "kind=frame connection={} frameKind={frame_kind} frame={ids}",
+                binding.connection
+            )
+        }
+        ObjectEvent::SocketClosed { binding } => {
+            format!("kind=socketClosed connection={}", binding.connection)
+        }
+        ObjectEvent::Call { .. } => "kind=call".to_owned(),
+        ObjectEvent::Alarm => "kind=alarm".to_owned(),
     }
 }
 
