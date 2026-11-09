@@ -216,7 +216,13 @@ export function productionSeed(): ProductionSeed {
     kind: "project",
     record: { envelope: envelope(id, position), board: IDS.board, title },
   });
-  const adr = (id: string, supersedes: string | null, status: string, position: number) => ({
+  const adr = (
+    id: string,
+    supersedes: string | null,
+    status: string,
+    position: number,
+    madeIn: { kind: string; id: string } | null = null,
+  ) => ({
     kind: "adr",
     record: {
       envelope: envelope(id, position),
@@ -225,7 +231,7 @@ export function productionSeed(): ProductionSeed {
       text: "one central store",
       status,
       supersedes,
-      madeIn: null,
+      madeIn,
       revision: 1,
       repositoryFiles: [
         {
@@ -252,7 +258,7 @@ export function productionSeed(): ProductionSeed {
         `INSERT INTO project_directory(project_id,workspace_id,board_id,name,payload,router_time,time_basis,origin_installation,origin_machine,import_digest) VALUES (${quote(String(id))},${quote(IDS.workspace)},${quote(IDS.board)},${quote(String(title))},${quote(JSON.stringify(project(String(id), String(title), Number(position))))},${graphColumns})`,
     ),
     // The superseding decision is written first, so the conversion must order them.
-    `INSERT INTO workspace_adrs(adr_id,workspace_id,title,payload,router_time,time_basis,origin_installation,origin_machine,import_digest) VALUES (${quote(IDS.adrNew)},${quote(IDS.workspace)},'decision 6',${quote(JSON.stringify(adr(IDS.adrNew, IDS.adrOld, "accepted", 6)))},${graphColumns})`,
+    `INSERT INTO workspace_adrs(adr_id,workspace_id,title,payload,router_time,time_basis,origin_installation,origin_machine,import_digest) VALUES (${quote(IDS.adrNew)},${quote(IDS.workspace)},'decision 6',${quote(JSON.stringify(adr(IDS.adrNew, IDS.adrOld, "accepted", 6, { kind: "thread", id: "01a1c070-0000-7000-8000-0000000000e8" })))},${graphColumns})`,
     `INSERT INTO workspace_adrs(adr_id,workspace_id,title,payload,router_time,time_basis,origin_installation,origin_machine,import_digest) VALUES (${quote(IDS.adrOld)},${quote(IDS.workspace)},'decision 5',${quote(JSON.stringify(adr(IDS.adrOld, null, "superseded", 5)))},${graphColumns})`,
     `INSERT INTO repository_attachments(attachment_id,workspace_id,repository_reference,router_time,time_basis,origin_installation,origin_machine,import_digest) VALUES (${quote(IDS.attachment)},${quote(IDS.workspace)},'{"kind":"local","serviceId":"${IDS.serviceA}","commonDirectory":"/code/repo"}','2026-11-01T12:00:00Z','router',${quote(IDS.serviceA)},'Sunbook',NULL)`,
     `INSERT INTO fleet_feed_state VALUES (${quote(IDS.feedState)},'fleet',42,0)`,

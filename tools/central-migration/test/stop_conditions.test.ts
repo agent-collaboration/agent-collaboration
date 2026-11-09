@@ -409,6 +409,31 @@ const CONTRADICTIONS: Contradiction[] = [
     subject: `_fleet_sync_transfer_cancels ${IDS.cancelledMove} [row 1]`,
     reason: /record: a string holds an unpaired UTF-16 surrogate escape/,
   },
+  // The Fleet graph's enum and Unicode rules, as main's Fleet codecs read them.
+  {
+    name: "a decision's madeIn kind isn't a record kind",
+    edit: (production) =>
+      production.fleet.push(
+        `UPDATE workspace_adrs SET payload = replace(payload, '"madeIn":{"kind":"thread"', '"madeIn":{"kind":"bogus"') WHERE adr_id = ${quote(IDS.adrNew)}`,
+      ),
+    object: "fleet",
+    subject: "carried row",
+    reason: new RegExp(
+      `workspace_adrs/${IDS.adrNew}\\.madeIn\\.kind: expected one of workspace, board`,
+    ),
+  },
+  {
+    name: "a workspace description is an unpaired surrogate",
+    edit: (production) =>
+      production.fleet.push(
+        `UPDATE workspaces SET payload = replace(payload, '"description":""', '"description":"\\uD800"')`,
+      ),
+    object: "fleet",
+    subject: "carried row",
+    reason: new RegExp(
+      `workspaces/${IDS.workspace}\\.payload: a string holds an unpaired UTF-16 surrogate escape`,
+    ),
+  },
   // I5: incarnation counters main can't parse or store.
   {
     name: "an incarnation counter is not canonical decimal",

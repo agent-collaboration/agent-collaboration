@@ -3,7 +3,7 @@
 // value is checked before any write, and a value main's types reject stops the
 // run with the row named (R7) instead of being rewritten.
 
-import { I64_MAX, parseExact } from "./exact_json.ts";
+import { I64_MAX, UnpairedSurrogate, parseSerdeJson } from "./exact_json.ts";
 import {
   canonicalRouterTime,
   commitSha,
@@ -45,6 +45,42 @@ function optionalTyped(
 ): string | null {
   return value === undefined || value === null ? null : typed(value, where, check);
 }
+/** message_board RecordKind (record_references.rs:14–37), as fleet_adr_codec.rs:181 decodes made_in_kind. */
+const RECORD_KINDS = [
+  "workspace",
+  "board",
+  "adr",
+  "project",
+  "workstream",
+  "task",
+  "taskLinkEvent",
+  "subtask",
+  "thread",
+  "threadRefiled",
+  "post",
+  "roleAssignment",
+  "ownerGrant",
+  "standDownAcknowledgement",
+  "fact",
+  "planRevision",
+  "readMark",
+  "notifyIntent",
+  "subscriptionMembership",
+  "request",
+  "workTrailRow",
+  "trailRedaction",
+] as const;
+
+/** A stored JSON text read as serde_json reads it: an unpaired surrogate escape is refused. */
+function storedJson(value: unknown, where: string): unknown {
+  try {
+    return parseSerdeJson(text(value, where));
+  } catch (error) {
+    if (error instanceof Rejected) throw error;
+    return reject(where, error instanceof UnpairedSurrogate ? error.message : "not JSON");
+  }
+}
+
 /** fleet-admission FleetImportDigest: a CanonicalHash, 64 lowercase hexadecimal characters. */
 const importDigest = (value: string): string | null =>
   /^[0-9a-f]{64}$/.test(value) ? null : "must be 64 lowercase hexadecimal characters";
@@ -68,14 +104,7 @@ function object(value: unknown, where: string): Record<string, unknown> {
     : reject(where, "expected an object");
 }
 function parsePayload(row: SqlRow, where: string): Record<string, unknown> {
-  let value: unknown;
-  try {
-    value = parseExact(text(row.payload, `${where}.payload`));
-  } catch (error) {
-    if (error instanceof Rejected) throw error;
-    return reject(`${where}.payload`, "not JSON");
-  }
-  return object(value, `${where}.payload`);
+  return object(storedJson(row.payload, `${where}.payload`), `${where}.payload`);
 }
 
 /** A row to write: exact integers (bigint beyond 2^53) and BLOBs as read keep their type. */
@@ -336,7 +365,8 @@ export function convertFleetGraph(
         body.supersedes === null || body.supersedes === undefined
           ? null
           : uuid(body.supersedes, `${where}.supersedes`),
-      made_in_kind: madeIn === null ? null : text(madeIn.kind, `${where}.madeIn.kind`),
+      made_in_kind:
+        madeIn === null ? null : oneOf(madeIn.kind, RECORD_KINDS, `${where}.madeIn.kind`),
       made_in_record_id: madeIn === null ? null : uuid(madeIn.id, `${where}.madeIn.id`),
       revision: String(count(body.revision, `${where}.revision`)),
       repository_file_count: files.length,
@@ -359,13 +389,7 @@ export function convertFleetGraph(
   }
   for (const row of old.repository_attachments) {
     const where = `repository_attachments/${String(row.attachment_id)}`;
-    let reference: unknown;
-    try {
-      reference = parseExact(text(row.repository_reference, `${where}.repository_reference`));
-    } catch (error) {
-      if (error instanceof Rejected) throw error;
-      reject(`${where}.repository_reference`, "not JSON");
-    }
+    const reference = storedJson(row.repository_reference, `${where}.repository_reference`);
     const timeBasis = oneOf(
       row.time_basis,
       ["router", "legacy_unknown"] as const,

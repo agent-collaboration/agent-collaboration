@@ -174,6 +174,9 @@ test("main's central opens every migrated object: the Fleet, each live Copy and 
 
 // The consumer side of I1: each value class the preflight refuses, written
 // straight into migrated storage (past the preflight), is refused by main too.
+// Only classes main decodes behind an owner route are here; decision records
+// (madeIn.kind) are decoded only by Router session reads, so their consumer
+// refusal is the Rust decode gate's (read_fleet_record_in_scope).
 for (const [name, statements] of [
   [
     "a lease-table integer written 1.0",
