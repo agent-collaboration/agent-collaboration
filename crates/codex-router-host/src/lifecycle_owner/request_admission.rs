@@ -104,6 +104,7 @@ pub(super) struct ActiveStatusObservation {
 }
 
 pub(super) struct OperatorRuntimeContext<'a> {
+    pub(super) fleet_observation: crate::collaboration_runtime::FleetObservationFuture,
     pub(super) state: &'a mut RuntimeState,
     pub(super) app_server: &'a mut Option<AppServerChild>,
     pub(super) router_child: &'a mut Option<RouterChild>,
@@ -321,13 +322,18 @@ pub(super) async fn handle_operator_work(work: OperatorWork, context: OperatorRu
                 .map(|child| child.identity().clone());
             *context.active_status = Some(ActiveStatusObservation {
                 future: crate::lifecycle_owner::status_observation::observe_status(
-                    context.config.clone(),
-                    context.state.router_ownership,
-                    context.router_child.is_some(),
-                    running_identity,
-                    context.update_inputs.update_deadlines.identity(),
-                    !context.update_drain_active,
-                    std::sync::Arc::clone(&context.router_executable_observer),
+                    crate::lifecycle_owner::status_observation::StatusObservationInputs {
+                        config: context.config.clone(),
+                        router_ownership: context.state.router_ownership,
+                        owned_router_child_present: context.router_child.is_some(),
+                        running_identity,
+                        identity_deadline: context.update_inputs.update_deadlines.identity(),
+                        observe_installed_identity: !context.update_drain_active,
+                        router_executable_observer: std::sync::Arc::clone(
+                            &context.router_executable_observer,
+                        ),
+                        fleet_observation: context.fleet_observation,
+                    },
                 ),
                 responses: vec![(work.request, work.response)],
             });

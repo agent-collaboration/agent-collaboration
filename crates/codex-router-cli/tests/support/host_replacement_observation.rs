@@ -4,7 +4,7 @@ use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
 
-// A cold launch of the copied ad-hoc-signed debug CLI can spend over 10 seconds in macOS dyld.
+// A cold launch of the copied debug CLI can spend over 10 seconds in macOS dyld.
 const COPIED_CLI_VERSION_TIMEOUT: Duration = Duration::from_secs(30);
 
 pub async fn binary_version(binary: &Path) -> Result<String, Box<dyn std::error::Error>> {

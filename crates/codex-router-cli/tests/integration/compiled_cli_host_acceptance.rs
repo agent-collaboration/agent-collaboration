@@ -21,6 +21,12 @@ use tokio_tungstenite::tungstenite::Message;
 mod host_replacement_observation;
 use host_replacement_observation::{binary_version, observe_continuous_lock, verify_host_image};
 
+#[path = "../support/compiled_cli_host_fixture.rs"]
+mod compiled_cli_host_fixture;
+use compiled_cli_host_fixture::{kill_fixture_processes, sign_debug_binary};
+#[path = "compiled_cli_host_fixture_test.rs"]
+mod fixture_tests;
+
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 #[tokio::test]
@@ -226,19 +232,19 @@ async fn run_host_install_journey(atomic_install: bool) -> Result<(), Box<dyn st
     install_curl_fixture(&curl_executable)?;
     let port = reserve_loopback_port()?;
     install_debug_profile(&codex_home, port)?;
+    // This journey owns Codex replacement, not ambient Claude/Cursor admission.
+    // Keep installed provider executables from changing its startup prerequisites.
+    std::fs::create_dir_all(&router_root)?;
+    let provider_configuration = serde_json::to_vec(&serde_json::json!({
+        "version": 1,
+        "providers": {
+            "claude": { "enabled": false, "executable": null, "arguments": [] },
+            "cursor": { "enabled": false, "executable": null, "arguments": [] }
+        }
+    }))?;
+    std::fs::write(router_root.join("providers.json"), &provider_configuration)?;
     let candidate_binary = PathBuf::from(env!("CARGO_BIN_EXE_codex-router"));
     let prior_binary = std::env::var_os("CODEX_ROUTER_RESTART_PRIOR_BINARY").map(PathBuf::from);
-    if let Some(prior) = &prior_binary {
-        let before = binary_version(prior).await?;
-        let after = binary_version(&candidate_binary).await?;
-        check(
-            before != after,
-            "cross-version proof requires different package versions",
-        )?;
-        eprintln!(
-            "cross-version candidate handoff: {before} -> {after}; atomic_install={atomic_install}"
-        );
-    }
     let old_install = directory.path().join("old-install");
     let new_install = directory.path().join("new-install");
     std::fs::create_dir_all(&old_install)?;
@@ -248,7 +254,18 @@ async fn run_host_install_journey(atomic_install: bool) -> Result<(), Box<dyn st
         prior_binary.as_deref().unwrap_or(&candidate_binary),
         &binary,
     )?;
+    sign_debug_binary(&binary).await?;
     let installed_binary_version = binary_version(&binary).await?;
+    if prior_binary.is_some() {
+        let after = binary_version(&candidate_binary).await?;
+        check(
+            installed_binary_version != after,
+            "cross-version proof requires different package versions",
+        )?;
+        eprintln!(
+            "cross-version candidate handoff: {installed_binary_version} -> {after}; atomic_install={atomic_install}"
+        );
+    }
     eprintln!(
         "compiled_cli_host_acceptance_installed_binary_warmed version={installed_binary_version}"
     );
@@ -413,6 +430,7 @@ async fn run_host_install_journey(atomic_install: bool) -> Result<(), Box<dyn st
         std::fs::copy(&candidate_binary, &candidate_install)?;
         let old_inode = std::fs::metadata(&binary)?.ino();
         std::fs::rename(&candidate_install, &replacement_binary)?;
+        sign_debug_binary(&replacement_binary).await?;
         check(std::fs::metadata(&replacement_binary)?.ino() != old_inode, "replacement must be a distinct executable identity")?;
         let replacement_version = binary_version(&replacement_binary).await?;
         eprintln!(
@@ -494,6 +512,10 @@ async fn run_host_install_journey(atomic_install: bool) -> Result<(), Box<dyn st
             &replacement_binary, &router_root, &codex_home, &socket_path, &["status"],
         ).await?;
         check(String::from_utf8_lossy(&after.stderr).contains("no shared Codex host is running"), "status did not report absence after stop")?;
+        check(
+            std::fs::read(router_root.join("providers.json"))? == provider_configuration,
+            "Host replacement changed the fixture's provider configuration",
+        )?;
         Ok::<(), Box<dyn std::error::Error>>(())
     }
     .await;
@@ -791,7 +813,7 @@ impl TestDirectory {
     fn new() -> std::io::Result<Self> {
         let counter = TEMP_COUNTER.fetch_add(1, Ordering::Relaxed);
         let path = PathBuf::from("/tmp").join(format!("crh-{}-{counter}", std::process::id()));
-        std::fs::create_dir_all(&path)?;
+        std::fs::create_dir(&path)?;
         Ok(Self { path })
     }
 
@@ -802,6 +824,17 @@ impl TestDirectory {
 
 impl Drop for TestDirectory {
     fn drop(&mut self) {
-        let _cleanup = std::fs::remove_dir_all(&self.path);
+        match kill_fixture_processes(&self.path) {
+            Ok(false) => {
+                let _cleanup = std::fs::remove_dir_all(&self.path);
+            }
+            Ok(true) => eprintln!(
+                "retaining fixture directory {} until owned Child handles join emergency termination",
+                self.path.display()
+            ),
+            Err(error) => {
+                eprintln!("retaining fixture directory after child cleanup failed: {error}")
+            }
+        }
     }
 }

@@ -102,20 +102,9 @@ pub enum BoardReadCursor {
     deny_unknown_fields
 )]
 pub enum BoardNotice {
-    FleetFeedAdvanced {
-        through: message_board::FleetPosition,
-    },
-    LeaseSuperseded {
-        project: ProjectId,
-        epoch: Epoch,
-    },
-    LeaseGranted {
-        project: ProjectId,
-        epoch: Epoch,
-    },
-    BoardArchiving {
-        board: BoardId,
-    },
+    ProjectListChanged {},
+    LeaseSuperseded { project: ProjectId, epoch: Epoch },
+    LeaseGranted { project: ProjectId, epoch: Epoch },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

@@ -10,6 +10,45 @@ pub struct InstallationIdentity {
     pub service_id: crate::UuidIdentity,
     pub machine_label: crate::MachineLabel,
     pub peer_id: InstallationPeerId,
+    #[serde(default)]
+    pub central: CentralLinkObservation,
+}
+
+/// Link diagnostics are independent of the installation's stable identity.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub enum CentralLinkObservation {
+    /// An older Host did not publish a link observation.
+    #[default]
+    NotObserved,
+    NotConfigured,
+    Available {
+        record: Box<board_sync_protocol::FleetLinkRecord>,
+    },
+    Unavailable {
+        message: String,
+    },
+}
+
+impl CentralLinkObservation {
+    pub fn record(&self) -> Option<&board_sync_protocol::FleetLinkRecord> {
+        match self {
+            Self::Available { record } => Some(record),
+            Self::NotObserved | Self::NotConfigured | Self::Unavailable { .. } => None,
+        }
+    }
+
+    pub fn into_record(self) -> Option<board_sync_protocol::FleetLinkRecord> {
+        match self {
+            Self::Available { record } => Some(*record),
+            Self::NotObserved | Self::NotConfigured | Self::Unavailable { .. } => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash, Serialize, Deserialize)]

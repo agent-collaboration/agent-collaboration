@@ -33,16 +33,6 @@ pub(super) fn classify_session(
                 identity,
             )
         }
-        crate::forward_calls::AnswerForward::KIND => {
-            let target: crate::forward_calls::AnswerForward = decode(target)?;
-            encode_shared_call::<SessionKind, DeliveryKind, crate::forward_calls::AnswerForward>(
-                caller,
-                (),
-                target,
-                decode(request)?,
-                identity,
-            )
-        }
         crate::forward_calls::ForwardRoute::KIND => {
             encode_shared_call::<SessionKind, RegistryKind, crate::forward_calls::ForwardRoute>(
                 caller,

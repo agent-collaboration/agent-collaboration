@@ -1,18 +1,15 @@
-CREATE TABLE machine_forward_requests (
+CREATE TABLE machine_project_requests (
     id TEXT NOT NULL PRIMARY KEY,
-    forward_frame_id TEXT NOT NULL,
-    side TEXT NOT NULL,
     request_frame_id TEXT NOT NULL,
-    origin_machine_id TEXT NOT NULL,
-    origin_session_id TEXT NOT NULL,
-    connection_id TEXT NOT NULL,
-    expected_holder_machine_id TEXT,
+    requester_machine_id TEXT NOT NULL,
+    requester_session_id TEXT NOT NULL,
+    requester_connection_id TEXT NOT NULL,
     project_id TEXT NOT NULL,
+    holder_machine_id TEXT,
     phase TEXT NOT NULL,
     deadline_at INTEGER NOT NULL,
     created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL,
-    UNIQUE(forward_frame_id, side)
+    updated_at INTEGER NOT NULL
 );
-CREATE INDEX machine_forward_origins ON machine_forward_requests(origin_machine_id, side);
-CREATE INDEX machine_forward_deadlines ON machine_forward_requests(deadline_at);
+CREATE INDEX machine_project_requesters ON machine_project_requests(requester_machine_id, phase);
+CREATE INDEX machine_project_request_deadlines ON machine_project_requests(deadline_at);

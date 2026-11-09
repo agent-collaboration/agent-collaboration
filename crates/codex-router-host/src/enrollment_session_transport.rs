@@ -30,9 +30,17 @@ impl SessionTransport for EnrollmentSessionTransport {
             crate::enrollment_reset::reset_pending_in_directory(&directory)
         })
         .await
-        .map_err(|_| ConnectFailure::Unavailable)?
-        .map_err(|_| ConnectFailure::Unavailable)?;
+        .map_err(|_| ConnectFailure::Unavailable)
+        .and_then(|result| result.map_err(|_| ConnectFailure::Unavailable));
+        let pending = match pending {
+            Ok(pending) => pending,
+            Err(error) => {
+                self.inner.connection_blocked(&error);
+                return Err(error);
+            }
+        };
         if pending {
+            self.inner.connection_blocked(&ConnectFailure::Unavailable);
             tracing::warn!(
                 reason = crate::ENROLLMENT_RESTART_INSTRUCTION,
                 "central attach blocked by enrollment change"

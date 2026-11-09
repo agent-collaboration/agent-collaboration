@@ -19,6 +19,7 @@ pub(super) type StatusObservationFuture =
     Pin<Box<dyn Future<Output = StatusObservation> + Send + 'static>>;
 
 pub(super) struct StatusObservation {
+    fleet: crate::FleetHostObservation,
     port_selection: Option<crate::HostPortSelection>,
     router: RouterCondition,
     app_server: AppServerCondition,
@@ -63,20 +64,34 @@ impl StatusObservation {
             last_lifecycle_outcome: state.last_lifecycle_outcome.clone(),
         })
         .with_login_reload(state.login_reload_outcome())
-        .with_port_selection(port_selection);
+        .with_port_selection(port_selection)
+        .with_fleet(self.fleet);
         (snapshot, self.pending_identity)
     }
 }
 
-pub(super) fn observe_status(
-    config: HostConfig,
-    router_ownership: crate::RouterOwnership,
-    owned_router_child_present: bool,
-    running_identity: Option<ExecutableIdentity>,
-    identity_deadline: std::time::Duration,
-    observe_installed_identity: bool,
-    router_executable_observer: Arc<tokio::sync::Mutex<crate::RouterExecutableObserver>>,
-) -> StatusObservationFuture {
+pub(super) struct StatusObservationInputs {
+    pub config: HostConfig,
+    pub router_ownership: crate::RouterOwnership,
+    pub owned_router_child_present: bool,
+    pub running_identity: Option<ExecutableIdentity>,
+    pub identity_deadline: std::time::Duration,
+    pub observe_installed_identity: bool,
+    pub router_executable_observer: Arc<tokio::sync::Mutex<crate::RouterExecutableObserver>>,
+    pub fleet_observation: crate::collaboration_runtime::FleetObservationFuture,
+}
+
+pub(super) fn observe_status(inputs: StatusObservationInputs) -> StatusObservationFuture {
+    let StatusObservationInputs {
+        config,
+        router_ownership,
+        owned_router_child_present,
+        running_identity,
+        identity_deadline,
+        observe_installed_identity,
+        router_executable_observer,
+        fleet_observation,
+    } = inputs;
     Box::pin(async move {
         let router = probe_router(config.router_endpoint(), config.deadlines().router_start());
         let app_server_present = running_identity.is_some();
@@ -100,11 +115,18 @@ pub(super) fn observe_status(
         );
         let router_executable_relation =
             async { router_executable_observer.lock().await.observe().await };
-        let (router_result, app_server_result, installed_identity, router_executable_relation) = tokio::join!(
+        let (
+            router_result,
+            app_server_result,
+            installed_identity,
+            router_executable_relation,
+            fleet,
+        ) = tokio::join!(
             router,
             app_server,
             installed_identity,
-            router_executable_relation
+            router_executable_relation,
+            fleet_observation
         );
 
         let router = match router_result {
@@ -160,6 +182,7 @@ pub(super) fn observe_status(
         };
 
         StatusObservation {
+            fleet,
             port_selection: config.port_selection(),
             router,
             app_server,
@@ -231,3 +254,7 @@ fn remote_control_status(
         RemoteControlIdentity::new(server_name.clone(), environment_id.clone()),
     )
 }
+
+#[cfg(test)]
+#[path = "status_observation_test.rs"]
+mod tests;

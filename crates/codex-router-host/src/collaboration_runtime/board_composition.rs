@@ -34,6 +34,8 @@ mod central_read_copy;
 mod fleet_service;
 #[path = "board_composition/install_attempts.rs"]
 mod install_attempts;
+#[path = "board_composition/machine_link.rs"]
+mod machine_link;
 #[path = "board_composition/machine_notice_reactions.rs"]
 mod machine_notice_reactions;
 #[path = "board_composition/machine_session.rs"]
@@ -61,6 +63,8 @@ mod tests;
 pub(super) use machine_session::RunningMachineSession;
 
 pub(super) struct BoardComposition {
+    link: board_fleet_sync::FleetLinkObservation,
+    link_tasks: tokio::task::JoinSet<io::Result<()>>,
     pub admission: Arc<ProjectAdmission>,
     pub replication: Option<Arc<dyn ProjectReplicationPosition>>,
     pub claim: Option<Arc<dyn collaboration_contracts::ProjectClaim>>,
@@ -71,6 +75,9 @@ pub(super) struct BoardComposition {
 }
 
 impl BoardComposition {
+    pub fn link_observation(&self) -> board_fleet_sync::FleetLinkObservation {
+        self.link.clone()
+    }
     pub fn fleet_client(&self) -> Option<Arc<FleetClient>> {
         self.fleet.upgrade()
     }
@@ -99,6 +106,7 @@ impl BoardComposition {
                 self.fleet,
                 self.mail,
                 self.publisher,
+                self.link_tasks,
             )
         })
     }
@@ -134,14 +142,91 @@ pub(super) async fn open_board_admission(
     session_inputs: Option<BoardSessionInputs>,
 ) -> io::Result<BoardComposition> {
     crate::enrollment_reset::resume_enrollment_reset(directory, directory).await?;
-    open_board_admission_with_enrollment(directory, identity, session_inputs, directory).await
+    Box::pin(open_board_admission_with_enrollment(
+        directory,
+        identity,
+        session_inputs,
+        directory,
+    ))
+    .await
 }
 
+#[cfg(test)]
 pub(super) async fn open_board_admission_with_enrollment(
     directory: &Path,
     identity: MachineIdentity,
     session_inputs: Option<BoardSessionInputs>,
     enrollment_directory: &Path,
+) -> io::Result<BoardComposition> {
+    Box::pin(open_observed_board_admission(
+        directory,
+        identity,
+        session_inputs,
+        enrollment_directory,
+    ))
+    .await
+    .0
+}
+
+pub(super) async fn open_observed_board_admission(
+    directory: &Path,
+    identity: MachineIdentity,
+    session_inputs: Option<BoardSessionInputs>,
+    enrollment_directory: &Path,
+) -> (
+    io::Result<BoardComposition>,
+    board_fleet_sync::FleetLinkObservation,
+) {
+    use board_fleet_sync::FleetLinkObservation;
+    let link = match &session_inputs {
+        Some(inputs) => match machine_link::PreparedMachineLink::prepare(directory, inputs).await {
+            Ok(link) => Some(link),
+            Err(error) => {
+                tracing::error!(event = "fleet.link.preparationFailed", %error, "FleetCache link observation unavailable");
+                let observation = FleetLinkObservation::Unavailable {
+                    message: error.to_string(),
+                };
+                return (Err(error), observation);
+            }
+        },
+        None => None,
+    };
+    let result = prepare_board_admission(
+        directory,
+        identity,
+        session_inputs,
+        enrollment_directory,
+        link.as_ref(),
+    )
+    .await;
+    match result {
+        Ok(mut board) => {
+            if let Some(link) = link {
+                board.link = FleetLinkObservation::Live(link.reader);
+                board.link_tasks = link.tasks;
+            }
+            let observation = board.link_observation();
+            (Ok(board), observation)
+        }
+        Err(error) => {
+            tracing::error!(event = "fleet.link.preparationFailed", %error, "BoardComposition preparation failed");
+            let observation = match link {
+                Some(link) => link.failed(&error).await,
+                None => FleetLinkObservation::Unavailable {
+                    message: error.to_string(),
+                },
+            };
+            (Err(error), observation)
+        }
+    }
+}
+
+async fn prepare_board_admission(
+    directory: &Path,
+    identity: MachineIdentity,
+    session_inputs: Option<BoardSessionInputs>,
+    enrollment_directory: &Path,
+    link: Option<&machine_link::PreparedMachineLink>,
 ) -> io::Result<BoardComposition> {
     let marker = enrollment_directory.to_owned();
     if tokio::task::spawn_blocking(move || {
@@ -166,6 +251,7 @@ pub(super) async fn open_board_admission_with_enrollment(
                     inputs,
                     &registry,
                     enrollment_directory,
+                    link.ok_or_else(|| io::Error::other("configured link observation is missing"))?,
                 ))
                 .await?,
             )
@@ -202,6 +288,8 @@ pub(super) async fn open_board_admission_with_enrollment(
         |session| -> Arc<dyn collaboration_contracts::ProjectClaim> { session.projects.clone() },
     );
     Ok(BoardComposition {
+        link: board_fleet_sync::FleetLinkObservation::Unconfigured,
+        link_tasks: tokio::task::JoinSet::new(),
         claim,
         admission: Arc::new(admission),
         replication,

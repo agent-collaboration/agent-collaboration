@@ -30,7 +30,13 @@ impl ArchiveOwner {
         // Drive the two archive phases explicitly at this component boundary.
         // Normal session requests, lease confirmation, native writers and Copy remain real.
         // The separate hint-path regression proves automatic reconciliation wiring.
-        let running = session.start(Weak::new(), fleet.clone(), Weak::new(), Weak::new());
+        let running = session.start(
+            Weak::new(),
+            fleet.clone(),
+            Weak::new(),
+            Weak::new(),
+            std::mem::take(&mut board.link_tasks),
+        );
         drop(board);
         Ok(Self {
             projects,

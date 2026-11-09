@@ -9,6 +9,11 @@ cargo nextest run --locked --profile ci -p message-board-storage
 `integration/main.rs` gathers 2 former external test roots.
 Cases cover durable cursor signing keys and actual indexed query plans for keyed record batches. Library unit tests remain colocated with their implementations.
 
+With `--features test-support`, the colocated notice-progress observer contract
+checks canonical handled progress beside a live store, explicit missing state,
+and invalid-row refusal. The observer opens read-only without creating or migrating
+the database. Its feature is enabled only by test consumers.
+
 Each aggregate declares shared helper implementations once. Existing fixture
 directories remain in place. Only nonempty test categories are declared in
 Cargo.toml; CI selects no separate e2e category for this package.
