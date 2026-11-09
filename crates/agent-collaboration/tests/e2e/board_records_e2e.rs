@@ -5,7 +5,10 @@
 mod complete_pages;
 use crate::fixture;
 
+use super::acp_recipient;
 use crate::follow_fixture;
+#[path = "../board_e2e/closed_peer_refusal.rs"]
+mod closed_peer_refusal;
 #[path = "../board_e2e/held_retention.rs"]
 mod held_retention;
 #[path = "../board_e2e/list_subjects.rs"]
@@ -174,4 +177,10 @@ async fn rejected_native_scopes_never_enter_healthy_aggregate_reads_or_session_c
 async fn held_follow_payload_outlives_real_terminal_history_pruning_and_delivers_original_range_once()
 -> FixtureResult {
     scenario(held_retention::held_follow_survives_history_pruning).await
+}
+
+#[tokio::test]
+async fn a_closed_claude_peer_follow_is_refused_at_once_and_a_later_post_reaches_it_running()
+-> FixtureResult {
+    scenario(closed_peer_refusal::closed_peer_follow_is_refused_and_a_later_post_reaches_it).await
 }

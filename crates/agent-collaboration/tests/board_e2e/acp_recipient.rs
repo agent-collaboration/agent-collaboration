@@ -1,0 +1,147 @@
+//! A recipient the Router holds follow mail for and later loads: a session on the Cursor
+//! endpoint, served by the journaling fixture ACP provider that a Host started in an armed
+//! directory runs. It is absent while its Host's provider has not loaded the session (a
+//! fresh Host), and present once `conversation_load` loads it. Every load and prompt the
+//! provider receives is appended to a journal in the Host directory.
+use super::{fixture::identity, owned_host::BoardHost};
+use codex_router_test_support::FixtureResult;
+use collaboration_protocol::SessionRef;
+use serde_json::{Value, json};
+use std::{
+    os::unix::fs::OpenOptionsExt as _,
+    path::{Path, PathBuf},
+    time::Duration,
+};
+
+/// The bound for a prompt the Router is expected to send.
+const PROMPT_BOUND: Duration = Duration::from_secs(30);
+
+/// How often the journal, written by another process, is read while waiting.
+const JOURNAL_READ_INTERVAL: Duration = Duration::from_millis(20);
+
+pub struct AcpRecipient {
+    pub target: SessionRef,
+    journal: PathBuf,
+}
+
+impl AcpRecipient {
+    /// Arms `directory` so every Host started there runs the journaling fixture provider,
+    /// and names this recipient's session on that Host's Cursor endpoint. The caller
+    /// restarts the Host for the provider to start.
+    pub fn arm(directory: &Path, service_id: &str, session: &str) -> FixtureResult<Self> {
+        let journal = directory.join("fixture-provider-acp.jsonl");
+        let launch = json!({
+            "executable": node_test_fixture::node_executable()?,
+            "arguments": [
+                node_test_fixture::fixture_program("provider-loaded-route-agent.ts")
+                    .canonicalize()?,
+                "journal",
+                journal,
+            ],
+        });
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .mode(0o600)
+            .open(directory.join("fixture-provider-acp.json"))
+            .and_then(|mut file| {
+                std::io::Write::write_all(&mut file, serde_json::to_vec(&launch)?.as_slice())
+            })?;
+        let target = serde_json::from_value(json!({
+            "endpoint": {"serviceId": service_id, "endpointId": "cursor-local"},
+            "sessionId": session,
+        }))?;
+        Ok(Self { target, journal })
+    }
+
+    /// Makes the recipient present: the Host's provider loads its session. A load
+    /// completion is the signal on which held mail for it is checked again.
+    pub async fn load(&self, host: &BoardHost) -> FixtureResult {
+        host.mcp(
+            "conversation_load",
+            json!({
+                "operationId": identity(),
+                "target": self.target,
+                "workingDirectory": std::env::temp_dir(),
+                "requestedBy": {"humanId": "lead"},
+                "access": "write-restricted",
+            }),
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// The text of every prompt the provider received for this session, in order.
+    pub fn prompts(&self) -> FixtureResult<Vec<String>> {
+        let journal = match std::fs::read_to_string(&self.journal) {
+            Ok(journal) => journal,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(error) => return Err(error.into()),
+        };
+        let mut prompts = Vec::new();
+        for line in journal.lines().filter(|line| !line.is_empty()) {
+            let request: Value = serde_json::from_str(line)?;
+            if request.get("method") != Some(&json!("session/prompt"))
+                || request.pointer("/params/sessionId") != Some(&json!(self.target.session_id))
+            {
+                continue;
+            }
+            let text = request
+                .pointer("/params/prompt")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(|block| block.get("text").and_then(Value::as_str))
+                .collect::<Vec<_>>()
+                .join("\n");
+            prompts.push(text);
+        }
+        Ok(prompts)
+    }
+
+    /// Waits for a prompt containing `needle`, and returns its text.
+    pub async fn expect_text_with_timeout(
+        &self,
+        needle: &str,
+        bound: Duration,
+    ) -> FixtureResult<String> {
+        tokio::time::timeout(bound, async {
+            loop {
+                if let Some(text) = self
+                    .prompts()?
+                    .into_iter()
+                    .find(|text| text.contains(needle))
+                {
+                    return FixtureResult::Ok(text);
+                }
+                tokio::time::sleep(JOURNAL_READ_INTERVAL).await;
+            }
+        })
+        .await
+        .map_err(|_| format!("no prompt containing {needle:?} reached the recipient"))?
+    }
+
+    pub async fn expect_text(&self, needle: &str) -> FixtureResult<String> {
+        self.expect_text_with_timeout(needle, PROMPT_BOUND).await
+    }
+
+    pub async fn expect_marker(&self, marker: &str) -> FixtureResult {
+        self.expect_text(marker).await.map(|_| ())
+    }
+
+    /// Prompts received so far that contain `needle`.
+    pub fn count_matching(&self, needle: &str) -> FixtureResult<u64> {
+        Ok(u64::try_from(
+            self.prompts()?
+                .iter()
+                .filter(|text| text.contains(needle))
+                .count(),
+        )?)
+    }
+
+    /// Every prompt received so far. The provider journals a prompt before it answers, so
+    /// a prompt the Router sent and saw answered is already counted.
+    pub fn count(&self) -> FixtureResult<u64> {
+        Ok(u64::try_from(self.prompts()?.len())?)
+    }
+}

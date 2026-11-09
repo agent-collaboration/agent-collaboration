@@ -7,7 +7,7 @@ use super::super::{
         FollowMembership, TransferKind, native_state, only_item, sender_status, transfer_to_second,
     },
     takeover_readbacks as readbacks,
-    takeover_recipients::{self as recipients, Recipients},
+    takeover_recipients::{self as recipients, AcpRecipients},
 };
 use super::{HeldFollow, assert_end_groups};
 use board_central_test_support::{DispatchCallSelector, ObjectAddress};
@@ -23,7 +23,7 @@ struct LocalPrevention {
 }
 
 pub async fn held_local(fixture: &mut BoardFixture, second: &mut SecondHost) -> FixtureResult {
-    recipients::scenario(fixture, second, async |fixture, second, peers| {
+    recipients::acp_scenario(fixture, second, async |fixture, second, peers| {
         Box::pin(controls::scenario(
             fixture,
             second,
@@ -37,7 +37,7 @@ pub async fn held_local(fixture: &mut BoardFixture, second: &mut SecondHost) -> 
 async fn prove_local(
     fixture: &mut BoardFixture,
     second: &mut SecondHost,
-    peers: &mut Recipients,
+    peers: &mut AcpRecipients,
 ) -> FixtureResult {
     let mut wire = central(fixture)?.observe_mail_wire(None)?;
     let mut status_wire = second.enrolled_machine()?.observe_mail_wire(None)?;
@@ -48,7 +48,8 @@ async fn prove_local(
         "2000",
     )?;
     second.reopen_host().await?;
-    let (HeldFollow { follow, item, .. }, held_sequence) = held_local_follow(fixture).await?;
+    let (HeldFollow { follow, item, .. }, held_sequence) =
+        held_local_follow(fixture, peers).await?;
     controls::hold_selected(
         fixture,
         ObjectAddress::Fleet,
@@ -126,7 +127,7 @@ async fn prove_local(
     )
     .await?;
     assert_final_local_custody(fixture, second, &follow, &item, cancel, held_sequence).await?;
-    assert_eq!(peers.first()?.count_after_barrier().await?, 0);
+    assert_eq!(peers.first()?.count()?, 0);
     assert_eq!(controls::report_count(&wire, item.id()), 1);
     eprintln!(
         "T held-local containment evidence: {}",
@@ -217,10 +218,11 @@ async fn assert_local_prevention(
 
 async fn held_local_follow(
     fixture: &mut BoardFixture,
+    peers: &mut AcpRecipients,
 ) -> FixtureResult<(HeldFollow, fleet_sync_protocol::ReportSeq)> {
     fixture.create().await?;
-    let follow =
-        FollowMembership::arrange(fixture, recipients::session(fixture.host()?).await?).await?;
+    let target = peers.arm_first(fixture).await?;
+    let follow = FollowMembership::arrange(fixture, target).await?;
     let range = follow
         .post(fixture, "held local item survives discarded end")
         .await?;
