@@ -9,7 +9,7 @@ import {
 } from "../../../tools/central-migration/scripts/deploy_configs.ts";
 
 /** Production central's identity (fleet-ops production live-target.json): never a seed target. */
-const PRODUCTION = {
+export const PRODUCTION = {
   worker: "collaboration-central",
   domain: "central.agent-collaboration.com",
 } as const;

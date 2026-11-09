@@ -14,6 +14,8 @@ import {
 } from "../../../../tools/central-migration/test/support/owner_assertion.ts";
 import { oldCentralBuild, startOldCentral } from "../support/old_central.ts";
 import { persistenceRoot } from "../support/workerd_harness.ts";
+import { prepareFleetImport } from "../../scripts/fleet_import.ts";
+import { routerLists } from "../support/router_lists.ts";
 
 const IDS = {
   service: "01a1c11a-0000-7000-8000-00000000a002",
@@ -150,6 +152,78 @@ test("old central imports a directory bundle, reads it back, accepts it again un
       assert.deepEqual(
         (after.body as { projects: unknown }).projects,
         (directory.body as { projects: unknown }).projects,
+      );
+    } finally {
+      await central.dispose();
+    }
+  } finally {
+    await storage.remove();
+  }
+});
+
+test("a bundle prepared from Router list records imports into old central and reads back as the lists' directory", async () => {
+  const build = oldCentralBuild();
+  const signer = await testSigner();
+  const storage = await persistenceRoot();
+  try {
+    // Arrange
+    const lists = routerLists();
+    const prepared = prepareFleetImport(
+      lists,
+      { installation: IDS.service, machine: "Sunbook" },
+      "shravansunder",
+    );
+    const central = await startOldCentral(build, storage.path, signer.jwks);
+    try {
+      const call = async (method: string, path: string, body?: unknown) => {
+        const response = await central.dispatchFetch(`https://central.test${path}`, {
+          method,
+          headers: {
+            "Cf-Access-Jwt-Assertion": await signer.sign(
+              ownerClaims(Math.floor(Date.now() / 1000)),
+            ),
+            "content-type": "application/json",
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        });
+        return {
+          status: response.status,
+          body: (await response.json()) as Record<string, unknown>,
+        };
+      };
+
+      // Act
+      const imported = await call("POST", "/admin/v1/import/fleet", prepared.bundle);
+      const directory = await call("GET", "/admin/v1/copies");
+
+      // Assert: every listed project under its board, with that board's archive state.
+      assert.deepEqual(imported.body, { kind: "imported", counts: prepared.counts });
+      const boardState = new Map(
+        lists.boards.map((board) => [
+          board.boardId,
+          board.state === "archived" ? "archived" : "open",
+        ]),
+      );
+      const workspaceOf = new Map(lists.boards.map((board) => [board.boardId, board.workspaceId]));
+      assert.deepEqual(
+        (directory.body.projects as Record<string, unknown>[]).map(
+          ({ project, name, workspace, board, boardArchive }) => ({
+            project,
+            name,
+            workspace,
+            board,
+            boardArchive,
+          }),
+        ),
+        [...lists.projects]
+          .sort((a, b) => a.id.localeCompare(b.id))
+          .map((project) => ({
+            project: project.id,
+            name: project.title,
+            workspace: workspaceOf.get(project.board),
+            board: project.board,
+            boardArchive: boardState.get(project.board),
+          })),
       );
     } finally {
       await central.dispose();

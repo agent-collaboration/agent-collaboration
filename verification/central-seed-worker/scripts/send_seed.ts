@@ -6,21 +6,39 @@
 //
 //   node scripts/send_seed.ts copies   <staging origin> <copies-NNN.json>...
 //   node scripts/send_seed.ts registry <staging origin> <registry.json>...
+//   node scripts/send_seed.ts fleet    <staging origin> <fleet-import.json>
+//
+// The fleet phase posts build_fleet_import.ts's bundle to staging's old central
+// (POST /admin/v1/import/fleet), after the seed Worker is replaced by it. Old
+// central has no staging guard of its own, so this refuses production's origin.
 //
 // The registry phase merges every registry.json it is given (one per Mac) into
 // one request: same target and incarnation, each project once.
 
 import { readFile } from "node:fs/promises";
 import type { RegistryRequest } from "../src/seed_contract.ts";
+import { PRODUCTION } from "./deploy_config.ts";
 
 const [phase, origin, ...files] = process.argv.slice(2);
-if ((phase !== "copies" && phase !== "registry") || origin === undefined || files.length === 0) {
-  throw new Error("usage: send_seed.ts <copies|registry> <staging origin> <request files...>");
+if (
+  (phase !== "copies" && phase !== "registry" && phase !== "fleet") ||
+  origin === undefined ||
+  files.length === 0
+) {
+  throw new Error(
+    "usage: send_seed.ts <copies|registry|fleet> <staging origin> <request files...>",
+  );
 }
 const token = process.env.CENTRAL_SEED_ACCESS_TOKEN;
 if (token === undefined || token === "") throw new Error("CENTRAL_SEED_ACCESS_TOKEN is not set");
-const url = new URL(`/admin/v1/staging-seed/${phase}`, origin);
+const url = new URL(
+  phase === "fleet" ? "/admin/v1/import/fleet" : `/admin/v1/staging-seed/${phase}`,
+  origin,
+);
 if (url.protocol !== "https:") throw new Error("the staging origin must be https");
+if (url.hostname === PRODUCTION.domain || url.hostname.includes("collaboration-central.")) {
+  throw new Error(`refusing production central ${url.hostname}`);
+}
 
 async function send(body: string): Promise<unknown> {
   const response = await fetch(url, {
@@ -34,7 +52,12 @@ async function send(body: string): Promise<unknown> {
   return answer;
 }
 
-if (phase === "copies") {
+if (phase === "fleet") {
+  const [file] = files;
+  if (files.length !== 1 || file === undefined)
+    throw new Error("the fleet phase sends exactly one bundle");
+  console.log(JSON.stringify({ file, answer: await send(await readFile(file, "utf8")) }));
+} else if (phase === "copies") {
   for (const file of files) {
     console.log(JSON.stringify({ file, answer: await send(await readFile(file, "utf8")) }));
   }
