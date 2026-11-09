@@ -176,10 +176,12 @@ pub(crate) async fn run_provider_session<P: InteractionPort>(
                         let (terminal_tx, terminal_rx) = tokio::sync::oneshot::channel();
                         let explicit_compact = matches!(&prompt, crate::ProviderTurnInput::Compact);
                         let submitted_text = match &prompt {
-                            crate::ProviderTurnInput::Prompt(submission) => match submission.content.as_slice() {
-                                [session_event_model::PromptContent::Text { text }] => Some(text.as_str().to_owned()),
-                                _ => None,
-                            },
+                            crate::ProviderTurnInput::Prompt(submission) => Some(crate::provider_prompt_content::join_submitted_text_blocks(
+                                submission.content.iter().filter_map(|block| match block {
+                                    session_event_model::PromptContent::Text { text } => Some(text.as_str()),
+                                    _ => None,
+                                }),
+                            )),
                             crate::ProviderTurnInput::Compact => None,
                         };
                         let prepared = match prompt {
@@ -400,12 +402,17 @@ pub(crate) async fn run_provider_session<P: InteractionPort>(
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved));
                                                 continue;
                                             }
+                                            let submitted_text = Some(prompt.submitted_text());
                                             let result = steer_provider_turn::<P>(&provider_connection, &provider_session_id, prompt, operation_id.clone()).await;
                                             if matches!(result, Ok(ProviderSteeringOutcome::Injected { .. }))
                                                 && runtime_handles.event_sink.publish(
                                                     provider_session_id.0.as_ref(),
                                                     SessionEvent::InputAccepted { input_id, turn_id: turn_id.clone() },
-                                                ).is_err()
+                                                ).and_then(|()| publish_submitted_user_item(
+                                                    runtime_handles.event_sink.as_ref(),
+                                                    provider_session_id.0.as_ref(),
+                                                    submitted_text,
+                                                )).is_err()
                                             {
                                                 runtime_handles.sink_closed.cancel();
                                                 shutdown.cancel();
@@ -438,6 +445,7 @@ pub(crate) async fn run_provider_session<P: InteractionPort>(
                             let _result = reply.send(Err(ExternalProviderRuntimeError::SettingsUnresolved));
                             continue;
                         }
+                        let submitted_text = Some(prompt.submitted_text());
                         let result = steer_provider_turn::<P>(session.connection(), session.session_id(), prompt, None).await;
                         if matches!(result, Ok(ProviderSteeringOutcome::StartedNewTurn)) {
                             let turn_id = uuid::Uuid::now_v7().to_string();
@@ -445,7 +453,11 @@ pub(crate) async fn run_provider_session<P: InteractionPort>(
                             if runtime_handles.event_sink.publish(
                                 session.session_id().0.as_ref(),
                                 SessionEvent::TurnStarted { turn_id: turn_id.clone(), input_id },
-                            ).is_err() {
+                            ).and_then(|()| publish_submitted_user_item(
+                                runtime_handles.event_sink.as_ref(),
+                                session.session_id().0.as_ref(),
+                                submitted_text,
+                            )).is_err() {
                                 runtime_handles.sink_closed.cancel();
                                 shutdown.cancel();
                                 runtime_handles.tool_registry.turn_ended(session.session_id().0.as_ref());

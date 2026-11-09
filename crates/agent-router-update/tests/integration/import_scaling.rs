@@ -17,8 +17,11 @@ use support::*;
 fn grow_fixture(source: &Path, posts: usize) -> TestResult {
     let mut connection = rusqlite::Connection::open(source)?;
     connection.execute_batch("PRAGMA foreign_keys=ON")?;
-    let original: usize =
-        connection.query_row("SELECT COUNT(*) FROM board_messages", [], |row| row.get(0))?;
+    let original = usize::try_from(connection.query_row(
+        "SELECT COUNT(*) FROM board_messages",
+        [],
+        |row| row.get::<_, i64>(0),
+    )?)?;
     let mut sequence: i64 = connection.query_row(
         "SELECT MAX(activity_sequence) FROM board_activity",
         [],
@@ -48,8 +51,8 @@ fn grow_fixture(source: &Path, posts: usize) -> TestResult {
     transaction.commit()?;
     assert_eq!(
         connection.query_row("SELECT COUNT(*) FROM board_messages", [], |row| row
-            .get::<_, usize>(0))?,
-        posts
+            .get::<_, i64>(0))?,
+        i64::try_from(posts)?
     );
     assert!(
         connection

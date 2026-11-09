@@ -8,6 +8,10 @@ use agent_client_protocol::schema::v1::{
 };
 use session_event_model::{PromptContent, PromptEmbeddedSource};
 
+pub(crate) fn join_submitted_text_blocks<'a>(blocks: impl Iterator<Item = &'a str>) -> String {
+    blocks.collect()
+}
+
 /// Translate validated Session content only at the ACP client edge.
 pub(crate) fn acp_blocks_from_prompt_content(contents: Vec<PromptContent>) -> Vec<ContentBlock> {
     contents
@@ -93,6 +97,13 @@ impl ProviderPromptContent {
 
     pub(crate) fn into_blocks(self) -> Vec<ContentBlock> {
         self.blocks
+    }
+
+    pub(crate) fn submitted_text(&self) -> String {
+        join_submitted_text_blocks(self.blocks.iter().filter_map(|block| match block {
+            ContentBlock::Text(content) => Some(content.text.as_str()),
+            _ => None,
+        }))
     }
 
     #[cfg(feature = "test-observation")]

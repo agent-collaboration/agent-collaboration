@@ -271,8 +271,27 @@ async fn submitted_text_has_fresh_completed_history_items_without_merging_provid
         events_before_retired
     );
     assert_eq!(fixture.wire_prompts(), wire_before_rejection);
-    assert!(!fixture.sink.events.lock().expect("events lock").iter().any(|event|
-        matches!(event, SessionEvent::ItemStarted { item } if item.kind == SessionItemKind::UserMessage)));
+    let events = fixture.sink.events.lock().expect("events lock");
+    let receipts: Vec<_> = events
+        .iter()
+        .enumerate()
+        .filter_map(|(index, event)| match event {
+            SessionEvent::ItemStarted { item } if item.kind == SessionItemKind::UserMessage => {
+                Some((index, item))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(receipts.len(), 4);
+    for ((index, item), expected) in receipts.iter().zip(["", "onetwo", "task", ""]) {
+        assert_eq!(item.text.as_deref(), Some(expected));
+        assert_eq!(
+            events[index + 1],
+            SessionEvent::ItemCompleted {
+                item_id: item.item_id.clone()
+            }
+        );
+    }
 }
 
 #[tokio::test]
@@ -295,6 +314,48 @@ async fn submitted_user_item_sink_failure_is_a_post_send_sink_closed_error() {
             !events
                 .iter()
                 .any(|event| matches!(event, SessionEvent::ItemCompleted { .. }))
+        );
+    }
+}
+
+/// A media-only prompt is still a committed user input; compact remains separate.
+#[tokio::test]
+async fn submitted_media_prompts_always_have_one_completed_user_item() {
+    // Arrange: real prompt admission and actor, with a media-capable scripted peer.
+    let fixture = PromptFixture::open("none", None).await;
+    let image: PromptContent =
+        serde_json::from_value(json!({"type":"image","mimeType":"image/png","data":"AA=="}))
+            .expect("image");
+    // Act: both a mixed input and one with no text must be represented.
+    fixture
+        .prompt(vec![text_block("left"), image.clone(), text_block("right")])
+        .await
+        .expect("mixed prompt");
+    fixture
+        .prompt(vec![image])
+        .await
+        .expect("image-only prompt");
+    fixture.shutdown().await;
+    // Assert: literal text projection, one completion with the same item ID.
+    let events = fixture.sink.events.lock().expect("events");
+    let receipts: Vec<_> = events
+        .iter()
+        .enumerate()
+        .filter_map(|(index, event)| match event {
+            SessionEvent::ItemStarted { item } if item.kind == SessionItemKind::UserMessage => {
+                Some((index, item))
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(receipts.len(), 2);
+    for ((index, item), expected) in receipts.iter().zip(["leftright", ""]) {
+        assert_eq!(item.text.as_deref(), Some(expected));
+        assert_eq!(
+            events[index + 1],
+            SessionEvent::ItemCompleted {
+                item_id: item.item_id.clone()
+            }
         );
     }
 }

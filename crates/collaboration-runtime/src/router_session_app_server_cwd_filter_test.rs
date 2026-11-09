@@ -13,6 +13,174 @@ const B: &str = "22222222-2222-4222-8222-222222222222";
 const FOREIGN: &str = "33333333-3333-4333-8333-333333333333";
 const BOUND: Duration = Duration::from_secs(5);
 
+fn listed_ids(response: &Value) -> Vec<&str> {
+    response["result"]["data"]
+        .as_array()
+        .expect("rows")
+        .iter()
+        .map(|row| row["id"].as_str().expect("thread id"))
+        .collect()
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; setup and transport may fail."
+)]
+async fn list_limits_match_the_native_default_floor_and_ceiling() -> TestResult<()> {
+    // Arrange: enough rows to distinguish the native default and maximum.
+    let directory = tempfile::tempdir()?;
+    let backend = seeded_backend(directory.path(), directory.path())?;
+    {
+        let mut inventory = backend.durable_inventory.lock().expect("inventory");
+        let template = inventory[0].clone();
+        inventory.clear();
+        for index in 0..120 {
+            let mut summary = template.clone();
+            summary.session.session_id = Uuid::now_v7().to_string().try_into()?;
+            summary.updated_at_seconds = index;
+            inventory.push(summary);
+        }
+    }
+    let (mut client, task) = connect_native(&backend, "claude-local").await?;
+    // Act / Assert: pinned upstream thread_processor.rs:2782-2786 and :46-47.
+    for (params, expected) in [
+        (json!({}), 25),
+        (json!({"limit":0}), 1),
+        (json!({"limit":10000}), 100),
+    ] {
+        let response = list_threads(&mut client, params).await?;
+        assert_eq!(listed_ids(&response).len(), expected);
+        assert!(response["result"]["nextCursor"].is_string());
+    }
+    client.close(None).await?;
+    tokio::time::timeout(BOUND, task).await???;
+    Ok(())
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; setup and transport may fail."
+)]
+async fn updated_order_pages_use_timestamp_and_session_id_and_reverse_at_the_page_timestamp()
+-> TestResult<()> {
+    // Arrange: inventory insertion order differs from update order; two rows tie.
+    let directory = tempfile::tempdir()?;
+    let backend = seeded_backend(directory.path(), directory.path())?;
+    const C: &str = "01a1c066-9000-7000-8000-000000000001";
+    {
+        let mut inventory = backend.durable_inventory.lock().expect("inventory");
+        for row in inventory.iter_mut() {
+            row.updated_at_seconds = 100;
+        }
+        let mut newest = inventory[0].clone();
+        newest.session.session_id = C.to_owned().try_into()?;
+        newest.updated_at_seconds = 200;
+        inventory.push(newest);
+    }
+    let (mut client, task) = connect_native(&backend, "claude-local").await?;
+    // Act / Assert: each cursor advances after its exact timestamp/id anchor.
+    let first = list_threads(
+        &mut client,
+        json!({"sortKey":"updated_at","limit":1,"cwd":directory.path()}),
+    )
+    .await?;
+    assert_eq!(listed_ids(&first), [C]);
+    let second = list_threads(&mut client, json!({"sortKey":"updated_at","limit":1,"cursor":first["result"]["nextCursor"],"cwd":directory.path()})).await?;
+    assert_eq!(listed_ids(&second), [A]);
+    let third = list_threads(&mut client, json!({"sortKey":"updated_at","limit":1,"cursor":second["result"]["nextCursor"],"cwd":directory.path()})).await?;
+    assert_eq!(listed_ids(&third), [B]);
+    assert_eq!(third["result"]["nextCursor"], Value::Null);
+    let backwards = list_threads(&mut client, json!({"sortKey":"updated_at","sortDirection":"asc","limit":3,"cursor":second["result"]["backwardsCursor"]})).await?;
+    assert_eq!(
+        listed_ids(&backwards),
+        [A, B, C],
+        "reversing includes every row at the page's first timestamp"
+    );
+    // A deleted anchor does not turn the cursor into a missing-row lookup.
+    backend
+        .durable_inventory
+        .lock()
+        .expect("inventory")
+        .retain(|row| row.session.session_id.as_str() != C);
+    let after_deleted = list_threads(
+        &mut client,
+        json!({"sortKey":"updated_at","limit":2,"cursor":first["result"]["nextCursor"]}),
+    )
+    .await?;
+    assert_eq!(listed_ids(&after_deleted), [A, B]);
+    client.close(None).await?;
+    tokio::time::timeout(BOUND, task).await???;
+    Ok(())
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; setup and transport may fail."
+)]
+async fn created_order_reports_unavailable_instead_of_inventing_creation_time() -> TestResult<()> {
+    let directory = tempfile::tempdir()?;
+    let backend = seeded_backend(directory.path(), directory.path())?;
+    let (mut client, task) = connect_native(&backend, "claude-local").await?;
+    let response = list_threads(&mut client, json!({"sortKey":"created_at"})).await?;
+    assert_eq!(response["error"]["code"], -32000);
+    let message = response["error"]["message"]
+        .as_str()
+        .expect("error message");
+    assert!(message.contains("not available through the Router"));
+    assert!(message.contains("creation time"));
+    assert_no_effects(&backend);
+    client.close(None).await?;
+    tokio::time::timeout(BOUND, task).await???;
+    Ok(())
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions; setup and transport may fail."
+)]
+async fn malformed_list_paging_is_rejected_without_widening_inventory() -> TestResult<()> {
+    let directory = tempfile::tempdir()?;
+    let backend = seeded_backend(directory.path(), directory.path())?;
+    let (mut client, task) = connect_native(&backend, "claude-local").await?;
+    for params in [
+        json!({"cursor":"not-a-cursor"}),
+        json!({"limit":-1}),
+        json!({"limit":"1"}),
+        json!({"sortDirection":"sideways"}),
+        json!({"sortKey":"made-up"}),
+        json!({"archived":"true"}),
+    ] {
+        let response = list_threads(&mut client, params.clone()).await?;
+        assert_eq!(response["error"]["code"], -32602, "{params}: {response}");
+        assert!(response.get("result").is_none());
+    }
+    assert_no_effects(&backend);
+    client.close(None).await?;
+    tokio::time::timeout(BOUND, task).await???;
+    Ok(())
+}
+
+#[tokio::test]
+async fn archived_thread_list_is_empty_without_loading_provider_sessions() -> TestResult<()> {
+    // Arrange: normal inventory contains matching sessions, but none is archived.
+    let directory = tempfile::tempdir()?;
+    let backend = seeded_backend(directory.path(), directory.path())?;
+    let (mut client, task) = connect_native(&backend, "claude-local").await?;
+    // Act: the archived tab asks the same endpoint for archived sessions only.
+    let response =
+        list_threads(&mut client, json!({"archived":true,"cwd":directory.path()})).await?;
+    // Assert: do not show the ordinary sessions in that tab or load a provider.
+    assert_ids(&response, &[]);
+    assert_no_effects(&backend);
+    client.close(None).await?;
+    tokio::time::timeout(BOUND, task).await???;
+    Ok(())
+}
+
 fn seeded_backend(a: &Path, b: &Path) -> TestResult<Arc<ScriptedSessionBackend>> {
     let backend = ScriptedSessionBackend::new()?;
     for (id, cwd, endpoint) in [
@@ -90,7 +258,15 @@ fn assert_ids(response: &Value, expected: &[&str]) {
         .collect();
     assert_eq!(ids, expected);
     assert_eq!(response["result"]["nextCursor"], Value::Null);
-    assert_eq!(response["result"]["backwardsCursor"], Value::Null);
+    if expected.is_empty() {
+        assert_eq!(response["result"]["backwardsCursor"], Value::Null);
+    } else {
+        assert!(
+            response["result"]["backwardsCursor"]
+                .as_str()
+                .is_some_and(|cursor| !cursor.is_empty())
+        );
+    }
 }
 
 fn assert_no_effects(backend: &ScriptedSessionBackend) {

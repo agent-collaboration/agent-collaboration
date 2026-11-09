@@ -54,7 +54,7 @@ async fn native_watch_rows_keep_exact_scopes_choices_and_starts_without_syntheti
                 let mut statement = source.prepare(sql)?;
                 let mut rows = statement.query([project.store.project_id().as_str()])?;
                 while let Some(row) = rows.next()? {
-                    let old: u64 = row.get("starts_after_activity")?;
+                    let old = u64::try_from(row.get::<_, i64>("starts_after_activity")?)?;
                     let position = report
                         .old_to_new
                         .range(..=old)

@@ -42,7 +42,11 @@ pub(super) fn parse_native_settings(
         if unsupported
             .iter()
             .any(|key| params.get(key).is_some_and(|value| !value.is_null()))
-            || params.get("serviceTier").is_some()
+            // Native clients send null or "default" without requesting an ACP
+            // service-tier effect. Other values remain unsupported.
+            || params.get("serviceTier").is_some_and(|value| {
+                !value.is_null() && value.as_str() != Some("default")
+            })
         {
             return Err(ThreadMethodError::Unsupported);
         }
