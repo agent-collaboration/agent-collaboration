@@ -345,4 +345,15 @@ fn a_stored_ten_minute_subscription_renews_unchanged_but_cannot_be_set_to_ten_mi
         .apply_patch(&reader, &cap_patch(None, Some(10 * 60)))
         .unwrap_err();
     assert_eq!(refusal.requirement, REQUESTED_CAP_RANGE);
+    // An update that changes only the quiet period keeps the stored cap, and a renewal
+    // after it still carries that cap.
+    let updated = stored
+        .apply_patch(&reader, &cap_patch(Some(60), None))
+        .unwrap();
+    assert_eq!(updated.timing().quiet_seconds(), 60);
+    assert_eq!(updated.timing().cap_seconds(), 10 * 60);
+    let renewed_after_update = updated
+        .apply_patch(&reader, &SubscriptionPolicyPatch::default())
+        .unwrap();
+    assert_eq!(renewed_after_update.timing().cap_seconds(), 10 * 60);
 }
