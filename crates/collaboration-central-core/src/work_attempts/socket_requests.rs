@@ -20,10 +20,11 @@ pub(crate) struct RequestDestination {
 }
 
 /// A retryable refusal (mailbox full, binding unavailable) of the in-flight
-/// send: the row stays in flight on its connection and session, holding its
-/// window slot as the Router's own ledger does, and the failure is counted.
-/// It is resent when the backoff passes, or given up after 24 h of failures
-/// (which ends the send and frees the slot).
+/// send: the failure is counted now, once. The row stays in flight on its
+/// connection and session, holding its window slot as the Router's own ledger
+/// does, but drops the answered send (a later answer to it is stale). It is
+/// resent when backoff(k) passes after this k-th failure, or given up 24 h
+/// after the first failure (which ends the slot).
 pub(crate) async fn refused_for_now<Scope: TransactionScope>(
     scope: &mut Scope,
     subject: Uuid,

@@ -142,3 +142,106 @@ async fn a_refused_push_keeps_its_window_slot_until_its_resend_is_answered() -> 
     assert_eq!(in_flight(&fixture, &recipient).await?, 32);
     fixture.close().await
 }
+
+/// One push row's attempt state: (state, send id present, attempts, next retry).
+async fn push_attempt(
+    fixture: &Fixture,
+    item: ItemId,
+) -> TestResult<(String, bool, i64, Option<i64>)> {
+    let subject = item.as_uuid().to_string();
+    Ok(fixture
+        .store
+        .transaction(move |scope| {
+            Box::pin(async move {
+                let row = query::<sqlx_turso::Turso>(
+                    "SELECT state, send_id IS NOT NULL AS sent, attempts, next_attempt_at FROM central_work_attempts WHERE subject=?1 AND kind='push'",
+                )
+                .bind(subject)
+                .fetch_one(scope.executor())
+                .await
+                .map_err(StoreError::backend)?;
+                Ok((
+                    row.try_get::<String, _>("state").map_err(StoreError::backend)?,
+                    row.try_get::<i64, _>("sent").map_err(StoreError::backend)? == 1,
+                    row.try_get::<i64, _>("attempts").map_err(StoreError::backend)?,
+                    row.try_get::<Option<i64>, _>("next_attempt_at")
+                        .map_err(StoreError::backend)?,
+                ))
+            })
+        })
+        .await?)
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Each assertion names one step of the counting rule."
+)]
+#[tokio::test]
+async fn a_refusal_followed_by_silence_keeps_doubling_the_backoff() -> TestResult {
+    // Arrange: one push to B, refused for now.
+    let root = tempfile::tempdir()?;
+    let fixture = Fixture::open(root.path(), NOW).await?;
+    let mut recipient = Socket::open(&fixture, B, SERVICE_B).await?;
+    let item = envelope(B, SERVICE_B)?;
+    submit(&fixture, &item).await?;
+    let (refused_frame, call, _) = next_push(&mut recipient).await?;
+    recipient
+        .answer(
+            &fixture,
+            refused_frame,
+            PushResult::Refused {
+                reason: DeliveryRefusal::MailboxFull,
+            },
+        )
+        .await?;
+
+    // The refusal is counted once, at its answer: in flight with no send,
+    // retried backoff(1) = 30 s later.
+    let refused_at = fixture.io.now().unix_millis();
+    let (state, sent, attempts, next) = push_attempt(&fixture, item.id()).await?;
+    assert_eq!((state.as_str(), sent, attempts), ("in_flight", false, 1));
+    assert_eq!(next, Some(refused_at + 30_000));
+    assert_eq!(
+        in_flight(&fixture, &recipient).await?,
+        1,
+        "the refusal freed its slot"
+    );
+
+    // Act and assert: each silence is counted at its retry time; after the
+    // k-th failure the next retry is backoff(k) later: 30, then 60, then 120 s.
+    let mut previous = refused_frame;
+    for (expected_attempts, wait) in [(1_i64, 30_000_i64), (2, 60_000), (3, 120_000)] {
+        let due = push_attempt(&fixture, item.id())
+            .await?
+            .3
+            .ok_or("no retry time")?;
+        fixture.io.advance(due - fixture.io.now().unix_millis() + 1);
+        crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
+        let (frame, resent_call, resent_item) = next_push(&mut recipient).await?;
+        assert_eq!(resent_item, item.id());
+        assert_eq!(resent_call, call, "a resend keeps its call identity");
+        assert_ne!(frame, previous, "a resend mints a new send id");
+        let resent_at = fixture.io.now().unix_millis();
+        let (state, sent, attempts, next) = push_attempt(&fixture, item.id()).await?;
+        assert_eq!((state.as_str(), sent), ("in_flight", true));
+        assert_eq!(
+            attempts, expected_attempts,
+            "a failure was not counted once"
+        );
+        assert_eq!(next, Some(resent_at + wait), "the backoff did not double");
+        assert_eq!(in_flight(&fixture, &recipient).await?, 1);
+        // A late answer to the previous send is stale: nothing changes.
+        recipient
+            .answer(
+                &fixture,
+                previous,
+                PushResult::Accepted {
+                    accepted_at: fixture.io.now(),
+                },
+            )
+            .await?;
+        assert_eq!(custody(&fixture, item.id()).await?, ("sent".into(), true));
+        previous = frame;
+    }
+    fixture.close().await
+}

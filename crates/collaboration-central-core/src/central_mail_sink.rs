@@ -105,10 +105,12 @@ where
                     .map_err(storage)?,
                 // A newer version replaces what was sent: a late answer to the
                 // older send is then stale and can't retire this version.
-                Some(AttemptState::InFlight { send, .. })
-                    if send
-                        .sent_version
-                        .is_none_or(|sent| sent < reference.version.value()) =>
+                Some(AttemptState::InFlight {
+                    flight: crate::work_attempts::InFlight::Sent(send),
+                    ..
+                }) if send
+                    .sent_version
+                    .is_none_or(|sent| sent < reference.version.value()) =>
                 {
                     socket_requests::rewait(scope, subject, AttemptKind::Status, now)
                         .await

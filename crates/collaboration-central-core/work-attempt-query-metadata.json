@@ -59,7 +59,7 @@
     "sql/socket_requests/read_owed_socket_requests.sql": "2e77a5e33783a28bb51e4a5107647c7459c79eed6183adc44ec8d8797f0e3b30",
     "sql/socket_requests/read_socket_request_by_send.sql": "e7aadccb6ec33a92e2e49f162781c61fae2301db0e5831d126ffc31f82d0bec4",
     "sql/socket_requests/reset_socket_request_waiting.sql": "1e099868e735766714bbd0702f454d22748d1959ca41eb0daeb9d3e138bb73ad",
-    "sql/socket_requests/update_socket_request_refused.sql": "c5135850fe7329fcee5ea46bd2d26bcec9d1c568c0dfabd406508b921d095c4e",
+    "sql/socket_requests/update_socket_request_refused.sql": "7677b4856ff22453c11d6b0f881d6678a2ccc3a57913b78bb88b0ff583978e2d",
     "sql/work_attempts/delete_work_attempt.sql": "ddd9a1870613ecca05c59ef550af73514d26a458bb5e3713b38aa19760d2a677",
     "sql/work_attempts/insert_work_attempt_failure.sql": "858371fe97a4cd10093cf9db4e7391507e8d072a887839ec71cc1f1e22524beb",
     "sql/work_attempts/insert_work_attempt_owed.sql": "d3bfaa558808ff789ab91a1008440bf289691aa54829b4fb5965e3455ef84da2",

@@ -164,14 +164,24 @@ pub(crate) struct SocketSend {
     pub(crate) sent_version: Option<u64>,
 }
 
+/// What holds an in-flight request's window slot.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum InFlight {
+    /// Sent, waiting for its answer until the retry time.
+    Sent(SocketSend),
+    /// Its send was refused for now (a counted failure): the slot stays on
+    /// this connection and session, with no send, until the retry time resends it.
+    Refused { connection: Uuid, session: Uuid },
+}
+
 /// Each state carries exactly the columns that state allows.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum AttemptState {
     /// Not sent, or failed and waiting; due at `next_attempt_at` if it has one.
     Waiting { next_attempt_at: Option<SyncTime> },
-    /// Sent and waiting for its answer until `next_attempt_at`.
+    /// Holding a window slot until `next_attempt_at`.
     InFlight {
-        send: SocketSend,
+        flight: InFlight,
         next_attempt_at: SyncTime,
     },
     /// Suspended after 24 h of failures: never due, never woken.
@@ -466,11 +476,23 @@ fn decode(row: queries::StoredWorkAttempt) -> Result<AttemptRow, StoreError> {
         "in_flight" => match (send_id, connection, session, next_attempt_at) {
             (Some(send_id), Some(connection), Some(session), Some(next_attempt_at)) => {
                 AttemptState::InFlight {
-                    send: SocketSend {
+                    flight: InFlight::Sent(SocketSend {
                         send_id,
                         connection,
                         session,
                         sent_version,
+                    }),
+                    next_attempt_at,
+                }
+            }
+            // Refused for now: no send, and so no version, but its slot.
+            (None, Some(connection), Some(session), Some(next_attempt_at))
+                if sent_version.is_none() =>
+            {
+                AttemptState::InFlight {
+                    flight: InFlight::Refused {
+                        connection,
+                        session,
                     },
                     next_attempt_at,
                 }
@@ -488,7 +510,15 @@ fn decode(row: queries::StoredWorkAttempt) -> Result<AttemptRow, StoreError> {
         }
         other => return Err(corrupt("state", format!("unknown attempt state {other:?}"))),
     };
-    if sent_version.is_some() && !matches!(state, AttemptState::InFlight { .. }) {
+    if sent_version.is_some()
+        && !matches!(
+            state,
+            AttemptState::InFlight {
+                flight: InFlight::Sent(_),
+                ..
+            }
+        )
+    {
         return Err(corrupt("sent_version", "a version without a send"));
     }
     let attempts = millis(row.attempts, row.attempts_class, "attempts")?
