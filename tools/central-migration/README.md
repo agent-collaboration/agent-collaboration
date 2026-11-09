@@ -44,6 +44,8 @@ The owner check mirrors central's rules (`src/owner_access.ts`, with file:line r
 
 Main reads a Copy's health without migrating it. When main's receiver corpus is newer than production's (agent-fleet-sync's ledger fix adds receiver v4), each Copy reads `unreadable` until it applies the pending migration. Run main's owner Copy migration, `POST /admin/v1/copies/migrate?limit=25`, paging with `after` until `nextAfter` is null. That covers every Copy in the Fleet directory. A retired project has no directory entry, so run `POST /admin/v1/copies/{id}/repair` for each retired Copy; it answers 410 `retired` once current. `test/main_central` does both.
 
+`scripts/run_copy_migration.ts` runs both steps and then reads every Copy's health. It takes the migration Worker's saved inventory, `--receiver-version <n>` and `CENTRAL_OWNER_ACCESS_TOKEN`. Any result that isn't `migrated` or `current`, a repair that isn't 410 `retired`, or a live Copy not at `<n>` stops it with exit 1. Otherwise it prints one line per Copy (state and receiver version) and `{"outcome":"complete"}`.
+
 ## Commands
 
 From this folder:

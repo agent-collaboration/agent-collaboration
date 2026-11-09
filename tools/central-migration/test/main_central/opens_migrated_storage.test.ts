@@ -228,3 +228,66 @@ for (const [name, statements] of [
     );
   });
 }
+
+test("the post-deploy copy migration brings every copy to main's receiver version and stops on a mismatch", async () => {
+  const build = process.env.MAIN_CENTRAL_BUILD;
+  assert.ok(
+    build !== undefined && build !== "",
+    "MAIN_CENTRAL_BUILD must name this checkout's central build",
+  );
+  const { CopyMigrationStopped, migrateCopies } = await import("../../scripts/copy_migration.ts");
+  await withProduction(
+    () => {},
+    async (run) => {
+      // Arrange: the migration, and its inventory's project list.
+      const inventory = await run.call("inventory", "POST", { macFiles: run.production.macFiles });
+      const migrated = await run.call("migrate", "POST");
+      assert.equal(migrated.status, 200, JSON.stringify(migrated.body));
+      const projects = (inventory.body.projects as { project: string; lifecycle: string }[]).map(
+        ({ project, lifecycle }) => ({ project, lifecycle }),
+      );
+      const central = await startMainCentral(build, run);
+      try {
+        const call = async (method: "GET" | "POST", path: string) => {
+          const response = await central.dispatchFetch(`https://central.test${path}`, {
+            method,
+            headers: {
+              "Cf-Access-Jwt-Assertion": await run.signer.sign(
+                ownerClaims(Math.floor(Date.now() / 1000)),
+              ),
+            },
+          });
+          const text = await response.text();
+          return {
+            status: response.status,
+            body: text === "" ? null : (JSON.parse(text) as unknown),
+          };
+        };
+        const health = (await call("GET", `/admin/v1/copies/${IDS.projectHeld3}/health`)).body as {
+          value: { bookkeeping: { value: { supported: number }[] } };
+        };
+        const supported = health.value.bookkeeping.value[0]?.supported ?? 0;
+
+        // Act
+        const result = await migrateCopies(call, projects, supported);
+        const mismatch = await migrateCopies(call, projects, supported + 1).catch(
+          (error: unknown) => error,
+        );
+
+        // Assert: every copy at main's version (the retired one reports none), and a wrong expectation stops.
+        assert.deepEqual(
+          [...result.versions].sort((a, b) => a.project.localeCompare(b.project)),
+          [
+            { project: IDS.projectHeld3, state: "live", receiverVersion: supported },
+            { project: IDS.projectHeld1, state: "live", receiverVersion: supported },
+            { project: IDS.projectRetired, state: "retired", receiverVersion: null },
+          ].sort((a, b) => a.project.localeCompare(b.project)),
+        );
+        assert.ok(mismatch instanceof CopyMigrationStopped, String(mismatch));
+        assert.match((mismatch as Error).message, new RegExp(`expected ${supported + 1}`));
+      } finally {
+        await central.dispose();
+      }
+    },
+  );
+});
