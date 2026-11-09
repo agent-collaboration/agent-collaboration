@@ -337,3 +337,102 @@ async fn held_mail_whose_target_is_not_running_goes_back_through_delivery_instea
     runtime.close().await;
     fixture.close_native(native).await;
 }
+
+/// The refusal a Claude Code peer route answers for a terminal that is not running.
+fn peer_not_running_refusal() -> DeliveryOutcome {
+    DeliveryOutcome::Rejected(collaboration_protocol::DeliveryRejection {
+        reason: collaboration_protocol::DeliveryRejectionReason::EndpointUnavailable,
+        next_action: collaboration_protocol::DeliveryNextAction::RetryLater,
+        client_code: None,
+        detail: Some(
+            "target is not running; open the Claude Code session, then send again".to_owned(),
+        ),
+        claims: None,
+        native_failure: None,
+    })
+}
+
+#[tokio::test]
+async fn mail_held_when_the_runtime_reopens_for_a_target_not_running_is_refused_on_the_first_check()
+{
+    let fixture = Box::pin(OwnerFixture::new()).await;
+    *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
+    let initial = fixture.runtime_without_board().await;
+    let peer = PeerId::new(uuid::Uuid::now_v7()).unwrap();
+    let (app, native) = native_application(&fixture, &initial, peer);
+    let target = target_session(&fixture.reader).unwrap();
+    let (_, held) = send_held(&app, &target, "held before the terminal closed").await;
+    assert!(initial.requests.lock().await.try_recv().is_err());
+    drop(app);
+    initial.close().await;
+
+    // The runtime reopens with the mail still held and the terminal gone. Only the
+    // reader's first check runs: no load signal, no observation retry, no clock move.
+    let fixture = fixture.reopen_native(native).await;
+    *fixture.presence.0.lock().unwrap() = TargetPresence::NotRunning;
+    let clock_at_reopen = fixture.clock.now();
+    let restarted = fixture.runtime_without_board().await;
+    let (app, native) = native_application(&fixture, &restarted, peer);
+    let request = tokio::time::timeout(Duration::from_secs(10), async {
+        restarted.requests.lock().await.recv().await.unwrap()
+    })
+    .await
+    .expect("the first check sent the held mail back to delivery");
+    assert_eq!(request.payload.push_id, held.push_id);
+
+    // The peer route refuses it, and the refusal is final.
+    restarted
+        .completions
+        .send(peer_not_running_refusal())
+        .unwrap();
+    await_native_completion(&restarted, 1).await;
+    let settled = tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let record = native
+                .interactions
+                .get_push_record(&held.push_id)
+                .await
+                .unwrap()
+                .unwrap();
+            if record.delivery_state != PushDeliveryState::Held
+                && record.delivery_state != PushDeliveryState::Attempted
+                && record.delivery_state != PushDeliveryState::Pending
+            {
+                break record;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("the refused mail settled");
+    // With nothing left to hold, the reader's owner has no more work and stops.
+    tokio::time::timeout(
+        Duration::from_secs(10),
+        restarted.observe(|event| matches!(event, OwnerObservation::Stopped)),
+    )
+    .await
+    .expect("the reader's owner stopped with nothing left to hold");
+
+    assert_eq!(
+        settled.delivery_state,
+        PushDeliveryState::Rejected,
+        "refused, not held again"
+    );
+    assert!(
+        native
+            .interactions
+            .list_held_mail_push_records(&target)
+            .await
+            .unwrap()
+            .is_empty(),
+        "nothing stays held"
+    );
+    assert!(
+        restarted.requests.lock().await.try_recv().is_err(),
+        "exactly one delivery request"
+    );
+    assert_eq!(fixture.clock.now(), clock_at_reopen, "no clock move");
+    drop(app);
+    restarted.close().await;
+    fixture.close_native(native).await;
+}
