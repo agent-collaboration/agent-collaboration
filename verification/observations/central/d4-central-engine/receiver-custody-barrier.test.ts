@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, realpath, rm } from "node:fs/promises";
 import { createConnection } from "node:net";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import { ReceiverCustodyBarrier } from "./receiver-custody-barrier.ts";
 
@@ -9,7 +11,7 @@ test(
   "the real socket marker parks each receipt until release and later receipts pass through",
   { timeout: 5000 },
   async (): Promise<void> => {
-    const root = await mkdtemp("/private/tmp/d4b-");
+    const root = await mkdtemp(join(await realpath(tmpdir()), "d4b-"));
     const barrier = await ReceiverCustodyBarrier.listen(`${root}/accepted.sock`);
     const first = createConnection(barrier.path),
       second = createConnection(barrier.path);
@@ -63,7 +65,7 @@ test(
   "releasing one reached group keeps existing and future receipts held",
   { timeout: 5000 },
   async (): Promise<void> => {
-    const root = await mkdtemp("/private/tmp/d4b-");
+    const root = await mkdtemp(join(await realpath(tmpdir()), "d4b-"));
     const barrier = await ReceiverCustodyBarrier.listen(`${root}/accepted.sock`);
     const clients: ReturnType<typeof createConnection>[] = [];
     const connect = async (): Promise<ReturnType<typeof createConnection>> => {
@@ -111,7 +113,7 @@ test(
   "a reached peer disappearing before release invalidates the held cut",
   { timeout: 5000 },
   async (): Promise<void> => {
-    const root = await mkdtemp("/private/tmp/d4b-");
+    const root = await mkdtemp(join(await realpath(tmpdir()), "d4b-"));
     const barrier = await ReceiverCustodyBarrier.listen(`${root}/accepted.sock`);
     const client = createConnection(barrier.path);
     try {
@@ -135,7 +137,7 @@ test(
   { timeout: 5000 },
   async (): Promise<void> => {
     for (const marker of ["unrelated\n", "inbox-accepted\nextra"]) {
-      const root = await mkdtemp("/private/tmp/d4b-");
+      const root = await mkdtemp(join(await realpath(tmpdir()), "d4b-"));
       const barrier = await ReceiverCustodyBarrier.listen(`${root}/accepted.sock`);
       const client = createConnection(barrier.path);
       client.on("error", (): void => {});
@@ -159,7 +161,7 @@ test(
   "a missing or partial marker is never a successful reach and closing settles its waiter",
   { timeout: 5000 },
   async (): Promise<void> => {
-    const root = await mkdtemp("/private/tmp/d4b-");
+    const root = await mkdtemp(join(await realpath(tmpdir()), "d4b-"));
     const barrier = await ReceiverCustodyBarrier.listen(`${root}/accepted.sock`);
     const client = createConnection(barrier.path);
     try {
