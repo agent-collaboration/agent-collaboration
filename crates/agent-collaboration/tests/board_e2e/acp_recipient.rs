@@ -71,6 +71,20 @@ impl AcpRecipient {
         Ok(())
     }
 
+    /// Makes the recipient present so that its load is what releases its held mail. First
+    /// the reader finishes a pass with the recipient still absent (a subscriptions read
+    /// answers from a completed reconcile pass), so its held mail is checked and stays
+    /// held; then the provider loads the session. The caller does nothing else that checks
+    /// held mail before it observes the release.
+    pub async fn come_back(&self, host: &BoardHost) -> FixtureResult {
+        host.mcp(
+            "thread_subscriptions",
+            json!({"actor":{"kind":"session","session":self.target}}),
+        )
+        .await?;
+        self.load(host).await
+    }
+
     /// The text of every prompt the provider received for this session, in order.
     pub fn prompts(&self) -> FixtureResult<Vec<String>> {
         let journal = match std::fs::read_to_string(&self.journal) {

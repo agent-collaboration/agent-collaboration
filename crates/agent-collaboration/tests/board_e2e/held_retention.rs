@@ -35,8 +35,8 @@ pub async fn held_follow_survives_history_pruning(fixture: &mut BoardFixture) ->
     fixture.stop_host().await?;
     fixture.reopen_host().await?;
     let held = hold_and_prune(fixture, &target, &control).await?;
-    // It comes back: the provider loads the session, and the held follow follows it.
-    recipient.load(fixture.host()?).await?;
+    // It comes back: the provider loads the session, and only that load releases the follow.
+    recipient.come_back(fixture.host()?).await?;
     deliver_after_prune(fixture, &recipient, &control, &held).await
 }
 
@@ -110,13 +110,6 @@ async fn deliver_after_prune(
     control: &PushRecord,
     held: &PushRecord,
 ) -> FixtureResult {
-    fixture
-        .host()?
-        .mcp(
-            "thread_subscriptions",
-            json!({"actor":{"kind":"session","session":peer.target}}),
-        )
-        .await?;
     let text = peer.expect_text(FOLLOW_SUMMARY).await?;
     assert!(
         text.contains(held.push_id.as_str()),

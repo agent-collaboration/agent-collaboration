@@ -202,7 +202,7 @@ impl AcpRecipients {
         fixture: &BoardFixture,
         expected_frames: u64,
     ) -> FixtureResult {
-        self.first()?.load(fixture.host()?).await?;
+        self.first()?.come_back(fixture.host()?).await?;
         self.expected_first_frames = Some(expected_frames);
         Ok(())
     }
@@ -213,7 +213,7 @@ impl AcpRecipients {
         second: &SecondHost,
         expected_frames: u64,
     ) -> FixtureResult {
-        self.second()?.load(second.host()?).await?;
+        self.second()?.come_back(second.host()?).await?;
         self.expected_second_frames = Some(expected_frames);
         Ok(())
     }
