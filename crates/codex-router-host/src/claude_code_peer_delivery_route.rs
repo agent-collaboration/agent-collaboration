@@ -229,14 +229,21 @@ impl ClaudeCodePeerDeliveryRoute {
                 {
                     return Ok(peer_observed(NativeObservedOutcome::Unknown, None));
                 }
-                Ok(NativeDeliveryResult::not_submitted(
-                    reason,
-                    true,
-                    UnsentCause::Holdable {
-                        otherwise: peer_socket_code(cause),
-                    },
-                )
-                .with_reachability(SessionReachability::ClaudeCodePeer))
+                // Nothing reached the terminal, and nothing will start it or say it started,
+                // so this is refused at once and never held. A peer that exited after it was
+                // selected (its key or socket gone) is refused as not running.
+                Ok(match cause {
+                    PeerSocketUnsentCause::AuthenticationUnavailable
+                    | PeerSocketUnsentCause::ConnectFailed
+                    | PeerSocketUnsentCause::WriteNotStarted => peer_not_running_rejection(),
+                    PeerSocketUnsentCause::EncodingFailed
+                    | PeerSocketUnsentCause::FrameTooLarge => NativeDeliveryResult::not_submitted(
+                        reason,
+                        false,
+                        UnsentCause::Refused(peer_socket_code(cause)),
+                    )
+                    .with_reachability(SessionReachability::ClaudeCodePeer),
+                })
             }
             PeerSocketWriteOutcome::Unknown { .. } => {
                 if evidence

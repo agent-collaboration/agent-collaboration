@@ -526,3 +526,163 @@ async fn peer_reconciliation_rejects_evidence_for_another_session() {
 
     assert!(outcome.is_err());
 }
+
+/// Records each peer write effect, and pauses the attempt once, at Dispatching, before the
+/// socket write, until the test lets it go on.
+struct PauseAtDispatching {
+    writes: tokio::sync::Mutex<Vec<PeerWriteEffect>>,
+    reached: tokio::sync::Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
+    resume: tokio::sync::Mutex<Option<tokio::sync::oneshot::Receiver<()>>>,
+}
+
+impl AttemptEvidenceSink for PauseAtDispatching {
+    fn record(
+        &self,
+        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
+    ) -> DeliveryFuture<'_, ()> {
+        Box::pin(async move {
+            let RouteEffectEvidence::ClaudeCodePeer(peer) = evidence else {
+                return Ok(());
+            };
+            self.writes.lock().await.push(peer.write);
+            if peer.write == PeerWriteEffect::Dispatching {
+                if let Some(reached) = self.reached.lock().await.take() {
+                    let _ = reached.send(());
+                }
+                if let Some(resume) = self.resume.lock().await.take() {
+                    let _ = resume.await;
+                }
+            }
+            Ok(())
+        })
+    }
+}
+
+/// How a selected peer is gone by the time its socket is written.
+#[derive(Clone, Copy, Debug)]
+enum PeerGone {
+    /// It exited: its registry record and published key are gone.
+    Exited,
+    /// Its socket stopped listening; its record and key remain.
+    SocketClosed,
+}
+
+#[tokio::test]
+async fn a_peer_gone_between_selection_and_its_write_is_refused_as_not_running_and_never_held() {
+    for gone in [PeerGone::Exited, PeerGone::SocketClosed] {
+        let root = tempfile::tempdir().expect("registry root");
+        let socket_path = publish_peer(root.path(), Some("idle"));
+        let listener = tokio::net::UnixListener::bind(&socket_path).expect("peer listener");
+        let route = Arc::new(ClaudeCodePeerDeliveryRoute::new(
+            target().endpoint,
+            Arc::new(ClaudeCodeSessionRegistry::new(root.path().to_owned())),
+            Arc::new(ClaudeCodePeerSocket::new(root.path().to_owned())),
+        ));
+        let router = SessionDeliveryRouter::new(vec![route]);
+        let (reached, reached_signal) = tokio::sync::oneshot::channel();
+        let (resume_signal, resume) = tokio::sync::oneshot::channel();
+        let evidence = PauseAtDispatching {
+            writes: tokio::sync::Mutex::new(Vec::new()),
+            reached: tokio::sync::Mutex::new(Some(reached)),
+            resume: tokio::sync::Mutex::new(Some(resume)),
+        };
+
+        // The peer is selected as writable; the attempt pauses before its socket write.
+        let attempt = router.deliver(delivery(MessageDelivery::Auto), &evidence);
+        tokio::pin!(attempt);
+        tokio::select! {
+            biased;
+            _ = &mut attempt => panic!("{gone:?}: the attempt ended before its write"),
+            signal = reached_signal => signal.expect("the attempt reached its write"),
+        }
+        // The peer goes away, and the attempt goes on.
+        drop(listener);
+        std::fs::remove_file(&socket_path).expect("socket gone");
+        if matches!(gone, PeerGone::Exited) {
+            for entry in std::fs::read_dir(root.path()).expect("registry") {
+                let path = entry.expect("registry entry").path();
+                if path
+                    .extension()
+                    .is_some_and(|extension| extension == "json" || extension == "key")
+                {
+                    std::fs::remove_file(path).expect("record gone");
+                }
+            }
+        }
+        resume_signal.send(()).expect("resume the attempt");
+        let result = attempt.await.expect("delivery result");
+
+        assert!(
+            matches!(
+                &result.receipt().outcome,
+                DeliveryOutcome::Rejected(rejection)
+                    if rejection.reason == DeliveryRejectionReason::EndpointUnavailable
+                        && rejection
+                            .detail
+                            .as_deref()
+                            .is_some_and(|detail| detail.starts_with("target is not running"))
+            ),
+            "{gone:?}: refused as not running: {:?}",
+            result.receipt().outcome
+        );
+        assert!(
+            matches!(
+                result.unsent_cause(),
+                Some(collaboration_contracts::UnsentCause::Refused(_))
+            ),
+            "{gone:?}: refused, never holdable: {:?}",
+            result.unsent_cause()
+        );
+        assert_eq!(
+            *evidence.writes.lock().await,
+            [PeerWriteEffect::Dispatching, PeerWriteEffect::NotDispatched],
+            "{gone:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_peer_write_cut_off_after_some_bytes_stays_unknown() {
+    let root = tempfile::tempdir().expect("registry root");
+    let socket_path = publish_peer(root.path(), Some("idle"));
+    let listener = tokio::net::UnixListener::bind(&socket_path).expect("peer listener");
+    // The peer reads its auth frame and the start of the message, then goes away.
+    let receiver = tokio::spawn(async move {
+        use tokio::io::AsyncReadExt as _;
+        let (stream, _) = listener.accept().await.expect("accepted peer");
+        let mut reader = BufReader::new(stream);
+        let mut auth = String::new();
+        reader.read_line(&mut auth).await.expect("auth frame");
+        let mut first_bytes = [0_u8; 1024];
+        reader
+            .read_exact(&mut first_bytes)
+            .await
+            .expect("partial user frame");
+    });
+    let route = Arc::new(ClaudeCodePeerDeliveryRoute::new(
+        target().endpoint,
+        Arc::new(ClaudeCodeSessionRegistry::new(root.path().to_owned())),
+        Arc::new(ClaudeCodePeerSocket::new(root.path().to_owned())),
+    ));
+    let router = SessionDeliveryRouter::new(vec![route]);
+    let evidence = RecordedPeerEvidence(tokio::sync::Mutex::new(Vec::new()));
+    let mut request = delivery(MessageDelivery::Auto);
+    request.payload.line = MessageText::try_from(format!(
+        "{} {}",
+        "x".repeat(900_000),
+        request.payload.line.as_str()
+    ))
+    .expect("a large push line");
+
+    let result = router
+        .deliver(request, &evidence)
+        .await
+        .expect("delivery result");
+    receiver.await.expect("receiver");
+
+    assert_eq!(
+        result.receipt().outcome,
+        DeliveryOutcome::Unknown,
+        "a write that may have reached the terminal is neither refused nor held"
+    );
+}

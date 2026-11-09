@@ -48,7 +48,10 @@ impl ReaderDeliveryOwner {
         });
         #[cfg(not(test))]
         let _ = item;
-        if running {
+        // A target that is not running and that nothing can start, a closed Claude Code
+        // terminal, is not held for: its mail goes back through delivery, whose route refuses
+        // it at once.
+        if running || matches!(presence, TargetPresence::NotRunning) {
             runtime
                 .release_held_mail(items.clone())
                 .await

@@ -304,3 +304,36 @@ async fn a_journal_record_for_another_thread_checks_nothing_and_its_own_load_rel
     runtime.close().await;
     fixture.close_native(native).await;
 }
+
+#[tokio::test]
+async fn held_mail_whose_target_is_not_running_goes_back_through_delivery_instead_of_staying_held()
+{
+    let fixture = Box::pin(OwnerFixture::new()).await;
+    *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
+    let runtime = fixture.runtime_without_board().await;
+    let peer = PeerId::new(uuid::Uuid::now_v7()).unwrap();
+    let (app, native) = native_application(&fixture, &runtime, peer);
+    let target = target_session(&fixture.reader).unwrap();
+    let (input, held) = send_held(&app, &target, "held, then its terminal is gone").await;
+    tokio::time::timeout(Duration::from_secs(10), runtime.observe(|event| matches!(event,
+        OwnerObservation::NativeHeldChecked { item, running: false } if item == &held.push_id
+    ))).await.unwrap();
+
+    // The next check finds a target that is not running and that nothing can start. Its
+    // mail is not kept held for a load that will never come: it goes back through delivery,
+    // whose route refuses it.
+    *fixture.presence.0.lock().unwrap() = TargetPresence::NotRunning;
+    fixture.held_mail.observation_retried();
+    let request = tokio::time::timeout(Duration::from_secs(10), async {
+        runtime.requests.lock().await.recv().await.unwrap()
+    })
+    .await
+    .expect("mail held for a target that is not running went back to delivery");
+    assert_eq!(request.payload.push_id, held.push_id);
+    runtime.completions.send(DeliveryOutcome::Started).unwrap();
+    await_native_completion(&runtime, 1).await;
+    await_compaction(&native, reference_for_request(&input, &held.push_id, peer)).await;
+    drop(app);
+    runtime.close().await;
+    fixture.close_native(native).await;
+}
