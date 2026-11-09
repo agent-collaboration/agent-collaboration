@@ -34,7 +34,7 @@ sqlite-storage-maintenance = { path = "../sqlite-storage-maintenance", version =
 uuid.workspace = true
 
 [dev-dependencies]
-sqlite-storage-maintenance = { path = "../sqlite-storage-maintenance", features = ["test-support"] }
+sqlite-storage-maintenance = { path = "../sqlite-storage-maintenance", version = "0.1.118", features = ["test-support"] }
 automation-storage = { path = "../automation-storage", version = "0.1.96" }
 agent-automation = { path = "../agent-automation", version = "0.1.96" }
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
