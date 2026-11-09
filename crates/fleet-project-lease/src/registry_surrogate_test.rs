@@ -112,7 +112,11 @@ async fn phase_history_surrogate_id_is_validated_before_admin_read_without_repai
     store.transaction(|scope|Box::pin(async move {query::<Turso>("UPDATE _fleet_sync_transfer_phase_history SET id='019eef00-0000-4000-8000-000000000099' WHERE position=1").execute(scope.executor()).await?;Ok(())})).await?;
     let before = records(&store).await?;
     let result = store
-        .transaction(move |scope| Box::pin(async move { Ok(holder_change_view(scope, id).await) }))
+        .transaction(move |scope| {
+            Box::pin(async move {
+                Ok(holder_change_view::<crate::NoLeaseChangeHook, _>(scope, id).await)
+            })
+        })
         .await?;
     assert!(
         result.is_err(),

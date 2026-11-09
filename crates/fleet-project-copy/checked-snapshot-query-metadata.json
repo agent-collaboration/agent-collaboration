@@ -57,6 +57,7 @@
     "migrations/0001_copy_rules.sql": "2edfb5ed73cfa0d0c0f17ff38ca3aabb9da25ec57b806904cbb006f5ae573e85",
     "migrations/0002_replicated_schema.sql": "56450d0f0ff8c8ec0e6d9354ca71902447bba3e415ae9398893ce57618af4c9e",
     "migrations/0003_snapshot_install.sql": "cccd97bc8517afc90d74f3b0094805b3f3c0265c777bb1d069170ea8f46c0e04",
+    "migrations/0004_staged_part_ids.sql": "e9847a6d39b8002d035e4421b8d0846a7fd88745f5d9a14dd68b4f7722a12b8d",
     "sql/drop_seed_pages.sql": "0e30e843bd90a7b2386f84cef9e78a0c5eb11e9eeb5ee52b07eefa6fc9dcfd1e",
     "sql/erase_install.sql": "67ab649a322fbb5787a26d9cde08efdd78b80fb8b119c3bd65531791b8f2cb3e",
     "sql/erase_install_pages.sql": "0faaf30d6e2e77fa85be4f95ba307950ab02f57f5207137c6d6de0ca59cdb7ba",

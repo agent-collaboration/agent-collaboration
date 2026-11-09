@@ -1,7 +1,7 @@
 //! Admin continuation composes the shared Copy seed entry and its committed summary.
 
 use crate::{
-    CallerKind, CopyKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, CopyKind, ObjectAddress, ObjectPlatform, ObjectRuntime,
     admin_import_contract::AdminImportRecord,
     caller_context::CallAuthority,
     copy_write_calls::{AdminCopySeedRequest, CopyAdminSeed},
@@ -64,7 +64,7 @@ pub(crate) enum AdminSeedAnswer {
     Retired,
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<CopyKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

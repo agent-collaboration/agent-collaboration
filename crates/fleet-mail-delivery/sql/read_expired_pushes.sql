@@ -1,0 +1,1 @@
+SELECT CAST(item_id AS TEXT) AS item_id,recipient_machine_id FROM _fleet_sync_outbox_items WHERE handed_off_at IS NULL AND valid_until IS NOT NULL AND status_kind IN ('queued','sent','atRecipient','held') AND valid_until<=CAST(?1 AS INTEGER) ORDER BY valid_until,item_id LIMIT CAST(?2 AS INTEGER);

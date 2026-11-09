@@ -1,4 +1,5 @@
 use crate::status_row::PublicationRow;
+pub(crate) mod owed_status;
 use crate::{DeliveryError, custody_record::*, delivery_storage_rows as queries};
 use durable_steps::storage::TransactionScope;
 use fleet_protocol::*;
@@ -310,6 +311,34 @@ where
                 target,
             }),
         ))
+    }
+    /// The owed publications to this stream's own machine whose event is at
+    /// or before `through`: acknowledging `through` is evidence the machine
+    /// applied them. Read before [`Self::acknowledge`], which drops the events.
+    pub async fn publications_applied_through(
+        &mut self,
+        through: StatusCursor,
+    ) -> Result<Vec<String>, DeliveryError> {
+        let rows = queries::read_publications_applied_through(
+            self.scope,
+            crate::submitter::kind(self.sender).to_owned(),
+            crate::submitter::id(self.sender),
+            through.value().to_string(),
+        )
+        .await
+        .map_err(sql_error)?;
+        rows.into_iter()
+            .map(|row| {
+                stored_row_id(
+                    &row.id,
+                    "_fleet_sync_status_owed",
+                    crate::submitter::id(self.sender),
+                )?;
+                row.id.ok_or(DeliveryError::Corrupt {
+                    field: "owed publication id",
+                })
+            })
+            .collect()
     }
     /// Retire a durably applied prefix in the host's transaction.
     pub async fn acknowledge(

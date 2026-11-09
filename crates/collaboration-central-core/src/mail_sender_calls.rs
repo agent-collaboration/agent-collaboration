@@ -137,7 +137,7 @@ where
                     self.limits,
                     &crate::fleet_sender_binding::FleetSenderBinding,
                 )
-                .relay_settle::<crate::fleet_mail_tasks::FleetMailRemoval<Store, Driver>>(
+                .relay_settle::<crate::central_mail_sink::CentralMailSink>(
                     *submitter,
                     *item,
                     digest.clone(),

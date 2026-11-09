@@ -2,7 +2,6 @@
 use super::{
     composed_fleet_fixture::*, fleet_mail_dispatch::*, fleet_mail_inbox_fixture::RecipientInbox,
 };
-use durable_steps::StoreError;
 use fleet_protocol::{DeliveryStatus, PushResult};
 
 #[expect(
@@ -20,69 +19,40 @@ async fn committed_inbox_replays_one_item_after_its_receipt_is_lost_and_the_owne
     let mut recipient = Socket::open(&fixture, B, SERVICE_B).await?;
     let item = envelope(B, SERVICE_B)?;
     let limits = collaboration_central_core::fleet_outbox_limits()?;
+    // The submit's own event pushes to B.
     submit(&fixture, &item).await?;
-    let (drive, original_call) = tokio::time::timeout(CAP, async {
-        tokio::try_join!(fixture.runtime.on_alarm(), async {
-            let pushed = recipient
-                .push_envelope(item.id())
-                .await
-                .map_err(StoreError::backend)?;
-            let answer = inbox
-                .accept(pushed.submitter, pushed.item, limits)
-                .await
-                .map_err(StoreError::backend)?;
-            assert!(matches!(answer, PushResult::Accepted { .. }));
-            assert_eq!(inbox.count().await.map_err(StoreError::backend)?, 1);
-            // The actual inbox commit is observed above. Its answer never reaches Fleet.
-            let mut deadlines = fixture.io.reply_deadlines.subscribe();
-            tokio::time::timeout(CAP, deadlines.wait_for(|count| *count >= 1))
-                .await
-                .map_err(StoreError::backend)?
-                .map_err(StoreError::backend)?;
-            fixture.io.advance(2_000);
-            Ok::<_, StoreError>(pushed.call)
-        })
-    })
-    .await??;
-    assert!(drive.failed.is_empty(), "{drive:?}");
-    assert_eq!(drive.retried.len(), 1);
+    let pushed = recipient.push_envelope(item.id()).await?;
+    let answer = inbox.accept(pushed.submitter, pushed.item, limits).await?;
+    assert!(matches!(answer, PushResult::Accepted { .. }));
+    assert_eq!(inbox.count().await?, 1);
+    // The actual inbox commit is observed above. Its answer never reaches Fleet.
+    let original_call = pushed.call;
     assert_eq!(custody(&fixture, item.id()).await?, ("sent".into(), true));
     inbox.close().await?;
 
     let reopened =
         RecipientInbox::open(&inbox_path, fixture.io.clone(), B.to_owned().try_into()?).await?;
     assert_eq!(reopened.count().await?, 1);
-    fixture.io.advance(60_000);
-    let (drive, ()) = tokio::time::timeout(CAP, async {
-        tokio::try_join!(fixture.runtime.on_alarm(), async {
-            let pushed = recipient
-                .push_envelope(item.id())
-                .await
-                .map_err(StoreError::backend)?;
-            assert_eq!(
-                pushed.call, original_call,
-                "the owning reopen changed the original durable Push CallId"
-            );
-            let answer = reopened
-                .accept(pushed.submitter, pushed.item, limits)
-                .await
-                .map_err(StoreError::backend)?;
-            assert!(matches!(
-                answer,
-                PushResult::Replayed {
-                    status: DeliveryStatus::AtRecipient,
-                    ..
-                }
-            ));
-            recipient
-                .answer(&fixture, pushed.frame, answer)
-                .await
-                .map_err(StoreError::backend)
-        })
-    })
-    .await??;
-    assert!(drive.failed.is_empty(), "{drive:?}");
-    assert!(drive.retried.is_empty(), "{drive:?}");
+    // Past the unanswered push's first retry time, the next due batch resends
+    // it with a new send id and the same call identity.
+    fixture.io.advance(31_000);
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
+    let pushed = recipient.push_envelope(item.id()).await?;
+    assert_eq!(
+        pushed.call, original_call,
+        "the resend changed the original Push CallId"
+    );
+    let answer = reopened
+        .accept(pushed.submitter, pushed.item, limits)
+        .await?;
+    assert!(matches!(
+        answer,
+        PushResult::Replayed {
+            status: DeliveryStatus::AtRecipient,
+            ..
+        }
+    ));
+    recipient.answer(&fixture, pushed.frame, answer).await?;
     assert_eq!(reopened.count().await?, 1);
     assert_eq!(
         custody(&fixture, item.id()).await?,

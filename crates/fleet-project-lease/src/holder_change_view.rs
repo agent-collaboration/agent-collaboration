@@ -6,11 +6,14 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 
-pub async fn holder_change_view<S>(
+/// The holder change `attempt` as its requester sees it. `Settlement` is the
+/// host that owns claim settlements (see [`crate::OwedSettlement`]).
+pub async fn holder_change_view<Settlement, S>(
     scope: &mut S,
     attempt: TransferId,
 ) -> Result<Option<HolderChangeView>, LeaseError>
 where
+    Settlement: crate::SettlementStateSource,
     S: TransactionScope + JournalStorage,
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
     for<'value> String:
@@ -50,39 +53,38 @@ where
     };
     let mut follow_unresolved = None;
     let mut follow_up_failure = None;
-    if let Some(id) = admission.follow_up {
-        let (kind, key) = if matches!(admission.request, HolderChangeRequest::Move { .. }) {
-            (
+    // A Move's follow-up is its journaled cancel; a claim's is its settlement,
+    // read from whichever host owns settlements.
+    let follow_up = match (&admission.request, admission.follow_up) {
+        (HolderChangeRequest::Move { .. }, Some(id)) => Some(
+            journal_follow_up(
+                scope,
+                id,
                 "fleet-sync.holder-change-cancel",
-                crate::transfer_cancellation::cancel_task_key(attempt)?,
+                &crate::transfer_cancellation::cancel_task_key(attempt)?,
             )
-        } else {
-            (
-                "fleet-sync.settle-reservation",
-                durable_steps::RequestKey::new(format!("claim-settle:{}", attempt.as_uuid()))
-                    .map_err(|error| LeaseError::InvalidInput {
-                        field: error.to_string(),
-                    })?,
-            )
-        };
-        match read_journal_progress(scope, id, kind, &key).await? {
-            JournalProgress::Running {
-                waiting: child_waiting,
-                ..
-            } => {
-                follow_unresolved = Some(true);
-                waiting = child_waiting;
-            }
-            JournalProgress::Completed => {
-                follow_unresolved = Some(false);
-                waiting = None;
-            }
-            JournalProgress::Failed { reason } => {
-                follow_unresolved = Some(true);
-                waiting = None;
-                follow_up_failure = Some(reason);
-            }
+            .await?,
+        ),
+        (HolderChangeRequest::Move { .. }, None) => None,
+        _ => Settlement::settlement_state(scope, attempt).await?,
+    };
+    match follow_up {
+        Some(crate::SettlementState::Owed {
+            waiting: child_waiting,
+        }) => {
+            follow_unresolved = Some(true);
+            waiting = child_waiting;
         }
+        Some(crate::SettlementState::Settled) => {
+            follow_unresolved = Some(false);
+            waiting = None;
+        }
+        Some(crate::SettlementState::Failed { reason }) => {
+            follow_unresolved = Some(true);
+            waiting = None;
+            follow_up_failure = Some(reason);
+        }
+        None => {}
     }
     let settlement_owed = matches!(admission.request, HolderChangeRequest::Claim { .. })
         && outcome.is_some()
@@ -103,6 +105,29 @@ where
         cancel,
         outcome,
     }))
+}
+
+/// A journaled follow-up operation's state.
+pub(crate) async fn journal_follow_up<S>(
+    scope: &mut S,
+    id: OperationId,
+    kind: &str,
+    key: &durable_steps::RequestKey,
+) -> Result<crate::SettlementState, LeaseError>
+where
+    S: TransactionScope + JournalStorage,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String:
+        Type<S::Database> + Encode<'value, S::Database> + Decode<'value, S::Database>,
+    for<'value> Option<String>:
+        Type<S::Database> + Encode<'value, S::Database> + Decode<'value, S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+{
+    Ok(match read_journal_progress(scope, id, kind, key).await? {
+        JournalProgress::Running { waiting, .. } => crate::SettlementState::Owed { waiting },
+        JournalProgress::Completed => crate::SettlementState::Settled,
+        JournalProgress::Failed { reason } => crate::SettlementState::Failed { reason },
+    })
 }
 
 async fn read_journal_progress<S>(

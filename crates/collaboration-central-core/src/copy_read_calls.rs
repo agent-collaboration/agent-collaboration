@@ -1,7 +1,7 @@
 //! Shared snapshot reads cross Session → Copy only after the session commits.
 
 use crate::{
-    CopyKind, ObjectHost, ObjectRuntime, PlatformIo,
+    CopyKind, ObjectPlatform, ObjectRuntime,
     object_runtime::ObjectWork,
     step_driver::{StepCallback, StepDriver, StepResult},
 };
@@ -38,7 +38,7 @@ pub(crate) enum CopyReadRequest {
     Page { cursor: Option<SnapshotCursor> },
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<CopyKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

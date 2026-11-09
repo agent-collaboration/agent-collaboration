@@ -1,3 +1,6 @@
+/// Where a claim's settlement is owed, and how far it has got.
+pub(crate) mod owed_settlement;
+
 use crate::{registry_records::*, registry_storage::RegistryStorage, *};
 use durable_steps::{AtomicStore, JournalScope, RequestKey};
 use sqlx_core::{
@@ -5,7 +8,7 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 
-pub(crate) async fn process_cancel<S, D>(
+pub(crate) async fn process_cancel<S, D, Settlement>(
     scope: &mut S::Scope<'_>,
     id: TransferId,
     now: SyncTime,
@@ -13,6 +16,7 @@ pub(crate) async fn process_cancel<S, D>(
 where
     S: AtomicStore,
     D: Database,
+    Settlement: crate::OwedSettlement<S, D>,
     for<'t> S::Scope<'t>: durable_steps::storage::TransactionScope<Database = D>,
     D::Arguments: IntoArguments<D>,
     for<'value> String: Type<D> + Encode<'value, D> + Decode<'value, D>,
@@ -84,7 +88,7 @@ where
     record.enter(HolderChangePhase::Ended, now)?;
     RegistryStorage(scope).save_transfer(&record, now).await?;
     if claim_owed {
-        admit_settlement::<S, D>(scope, id, SettleOutcome::Cancelled, now).await?;
+        owe_settlement::<S, D, Settlement>(scope, id, SettleOutcome::Cancelled, now).await?;
     }
     Ok(Some(answer))
 }
@@ -97,7 +101,9 @@ pub(crate) fn cancel_task_key(id: TransferId) -> Result<RequestKey, LeaseError> 
     })
 }
 
-pub(crate) async fn admit_settlement<S, D>(
+/// Owe the claim `id`'s settlement with `outcome`, through the host that owns
+/// settlements.
+pub(crate) async fn owe_settlement<S, D, Settlement>(
     scope: &mut S::Scope<'_>,
     id: TransferId,
     outcome: SettleOutcome,
@@ -106,39 +112,27 @@ pub(crate) async fn admit_settlement<S, D>(
 where
     S: AtomicStore,
     D: Database,
+    Settlement: crate::OwedSettlement<S, D>,
     for<'t> S::Scope<'t>: durable_steps::storage::TransactionScope<Database = D>,
     D::Arguments: IntoArguments<D>,
     for<'value> String: Type<D> + Encode<'value, D> + Decode<'value, D>,
     for<'value> Option<String>: Type<D> + Encode<'value, D> + Decode<'value, D>,
     for<'row> &'row str: ColumnIndex<D::Row>,
 {
-    let mut admission =
-        RegistryStorage(scope)
-            .admission(id)
-            .await?
-            .ok_or_else(|| LeaseError::Corrupt {
-                field: "settlement admission".into(),
-            })?;
-    let key = RequestKey::new(format!("claim-settle:{}", id.as_uuid())).map_err(|error| {
-        LeaseError::InvalidInput {
-            field: error.to_string(),
-        }
-    })?;
-    let admitted = scope
-        .admit::<SettleReservationTask<S>>(
-            &key,
-            &fleet_protocol::ClaimSettlement {
-                change: admission.request.clone(),
-                outcome,
-            },
-        )
-        .await
-        .map_err(|error| LeaseError::InvalidInput {
-            field: error.to_string(),
+    let admission = RegistryStorage(&mut *scope)
+        .admission(id)
+        .await?
+        .ok_or_else(|| LeaseError::Corrupt {
+            field: "settlement admission".into(),
         })?;
-    admission.follow_up = Some(admitted.id());
-    RegistryStorage(scope)
-        .save_admission(&admission, now)
-        .await?;
-    Ok(())
+    Settlement::owe_settlement(
+        scope,
+        id,
+        fleet_protocol::ClaimSettlement {
+            change: admission.request,
+            outcome,
+        },
+        now,
+    )
+    .await
 }

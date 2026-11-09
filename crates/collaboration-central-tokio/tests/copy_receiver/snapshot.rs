@@ -18,7 +18,7 @@ async fn ordinary_seed_keeps_summary_absent_until_an_annotated_piece() -> TestRe
                 position: position(1)?
             })
         );
-        fixture.runtime.on_alarm().await?;
+        crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
         assert_eq!(fixture.runtime.copy_summary().await?, None);
         assert_eq!(fixture.summary(true).await?, None);
         let CopyStatusAnswer::Status(status) = fixture
@@ -51,7 +51,7 @@ async fn ordinary_seed_keeps_summary_absent_until_an_annotated_piece() -> TestRe
                 through: position(2)?
             }
         );
-        fixture.runtime.on_alarm().await?;
+        crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
         assert!(fixture.runtime.copy_summary().await?.is_some());
         assert_eq!(fixture.summary(true).await?, fixture.summary(false).await?);
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
@@ -88,7 +88,7 @@ async fn admin_seed_summary_and_follow_up_share_publication_and_never_rewrite_on
         assert_eq!(fixture.complete_seed(true,&done,None).await?,ReplicationAnswer::SeedComplete(SeedAnswer::Published{position:position(1)?}));
         assert_eq!(fixture.runtime.copy_summary().await?,Some(before));
         assert_eq!(fixture.counts().await?,(1,1,1));
-        fixture.runtime.on_alarm().await?;
+        crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
         assert_eq!(fixture.summary(true).await?,fixture.summary(false).await?);
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
     }.await;

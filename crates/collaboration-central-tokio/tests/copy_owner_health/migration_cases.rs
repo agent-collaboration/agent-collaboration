@@ -136,7 +136,7 @@ async fn receiver_failure_survives_rollback_best_effort_recording_and_clears_on_
             let (status, body) = client.repair(database).await?;
             if status != StatusCode::OK {return Err(format!("recovered receiver Repair failed: {status}: {body}").into());}
             let health = client.health(database).await?;
-            bookkeeping(&health, Some(3))?;
+            bookkeeping(&health, Some(4))?;
             no_failures(&health)
         }).await
     }.await;
@@ -180,7 +180,7 @@ async fn hook_failure_names_its_own_corpus_and_success_clears_it() -> Conformanc
                 return Err(format!("recovered hook Repair failed: {status}: {body}").into());
             }
             let health = client.health(database).await?;
-            bookkeeping(&health, Some(3))?;
+            bookkeeping(&health, Some(4))?;
             no_failures(&health)
         })
         .await
@@ -218,7 +218,7 @@ async fn health_reads_history_independently_of_an_unreadable_failure_table() -> 
         serve(root.path(), &jwks.url, |base| async move {
             let client = OwnerClient::new(&base)?;
             let health = client.health(database).await?;
-            bookkeeping(&health, Some(3))?;
+            bookkeeping(&health, Some(4))?;
             if health.pointer("/value/migrationFailures/kind") != Some(&json!("unreadable"))
                 || health
                     .pointer("/value/migrationFailures/value/detail")

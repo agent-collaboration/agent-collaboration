@@ -1,12 +1,12 @@
 //! Bootstrap-only capabilities over the production Durable Object store.
 use crate::CloudflareStorageHost;
-use collaboration_central_core::{CoreHost, ObjectAddress, PlatformIo};
+use collaboration_central_core::{CoreHost, ObjectAddress, ObjectIo};
 use durable_steps::{CallFailure, NotSentReason};
 use fleet_protocol::ReceiverId;
 use runtime_primitives::{AlarmOwner, Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use std::sync::Arc;
 
-pub(crate) type ReceiptStoreHost = CloudflareStorageHost<CoreHost<ControlIo>>;
+pub(crate) type ReceiptStoreHost = CloudflareStorageHost<ControlIo>;
 pub(crate) struct ControlIo {
     wake: AlarmOwner,
 }
@@ -31,12 +31,12 @@ impl WakeScheduler for ControlIo {
         self.wake.wake_at(at).await
     }
 }
-impl PlatformIo for ControlIo {
-    fn reply_deadline(
+impl ObjectIo for ControlIo {
+    fn event_deadline(
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
-        worker::send::SendFuture::new(crate::reply_deadline::ReplyDeadline::new(remaining))
+        worker::send::SendFuture::new(crate::event_deadline::EventDeadline::new(remaining))
     }
 
     async fn object_call(

@@ -333,3 +333,64 @@ where
             .transpose()
     }
 }
+
+#[derive(Debug)]
+pub(crate) struct StoredMachineNoticeApplied {
+    pub applied_through: Option<String>,
+    pub applied_class: Option<String>,
+    pub last_issued_position: Option<String>,
+    pub issued_class: Option<String>,
+}
+pub(crate) fn read_machine_notice_applied<S>(
+    scope: &mut S,
+    machine_id: String,
+) -> impl std::future::Future<Output = Result<Vec<StoredMachineNoticeApplied>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/machine_notices/read_machine_notice_applied.sql"
+        )))
+        .bind(machine_id);
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredMachineNoticeApplied {
+                    applied_through: row.try_get("applied_through")?,
+                    applied_class: row.try_get("applied_class")?,
+                    last_issued_position: row.try_get("last_issued_position")?,
+                    issued_class: row.try_get("issued_class")?,
+                })
+            })
+            .collect()
+    }
+}
+pub(crate) fn record_machine_notice_applied<S>(
+    scope: &mut S,
+    through: String,
+    now: String,
+    machine_id: String,
+) -> impl std::future::Future<Output = Result<(), sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/machine_notices/record_machine_notice_applied.sql"
+        )))
+        .bind(through)
+        .bind(now)
+        .bind(machine_id);
+        statement.execute(scope.executor()).await?;
+        Ok(())
+    }
+}

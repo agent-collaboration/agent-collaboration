@@ -2,20 +2,14 @@
 
 use durable_steps::{CallFailure, Uuid};
 use futures_channel::oneshot;
-use runtime_primitives::SyncTime;
 use std::{
     collections::{BTreeMap, btree_map::Entry},
     sync::{Arc, Mutex, Weak},
 };
 
-struct PendingChange {
-    deadline: SyncTime,
-    changed: oneshot::Sender<()>,
-}
-
 #[derive(Default)]
 pub(crate) struct CopyChangeNotifier {
-    pending: Mutex<BTreeMap<Uuid, PendingChange>>,
+    pending: Mutex<BTreeMap<Uuid, oneshot::Sender<()>>>,
     #[cfg(feature = "conformance")]
     notifications: std::sync::atomic::AtomicU64,
 }
@@ -28,16 +22,16 @@ pub(crate) struct CopyChangeWaiter {
 
 impl CopyChangeNotifier {
     /// Register before reading status, so a commit in the read/wait gap is retained.
+    /// The caller bounds the wait with its event's deadline.
     pub(crate) fn subscribe(
         self: &Arc<Self>,
         identity: Uuid,
-        deadline: SyncTime,
     ) -> Result<CopyChangeWaiter, CallFailure> {
         let (changed, received) = oneshot::channel();
         let mut pending = self.pending.lock().map_err(|_| CallFailure::AnswerLost)?;
         match pending.entry(identity) {
             Entry::Vacant(entry) => {
-                entry.insert(PendingChange { deadline, changed });
+                entry.insert(changed);
             }
             Entry::Occupied(_) => return Err(CallFailure::AnswerLost),
         }
@@ -59,34 +53,10 @@ impl CopyChangeNotifier {
             .map(|mut pending| std::mem::take(&mut *pending));
         // Waking readers can re-enter the object. Never wake under this lock.
         if let Some(removed) = removed {
-            for (_, pending) in removed {
-                let _ = pending.changed.send(());
+            for (_, changed) in removed {
+                let _ = changed.send(());
             }
         }
-    }
-
-    pub(crate) fn expire(&self, now: SyncTime) {
-        let removed = self.pending.lock().ok().map(|mut pending| {
-            let mut expired = Vec::new();
-            for (identity, waiting) in pending.iter() {
-                if waiting.deadline <= now {
-                    expired.push(*identity);
-                }
-            }
-            expired
-                .into_iter()
-                .filter_map(|identity| pending.remove(&identity))
-                .collect::<Vec<_>>()
-        });
-        // Expiry drops the sender, producing AnswerLost rather than progress.
-        drop(removed);
-    }
-
-    pub(crate) fn next_deadline(&self) -> Option<SyncTime> {
-        self.pending
-            .lock()
-            .ok()
-            .and_then(|pending| pending.values().map(|waiting| waiting.deadline).min())
     }
 
     #[cfg(feature = "conformance")]
@@ -126,55 +96,5 @@ impl Drop for CopyChangeWaiter {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[expect(
-        clippy::panic_in_result_fn,
-        reason = "Assertions must fail this test while fixture errors propagate through Result."
-    )]
-    #[test]
-    fn a_commit_between_subscribe_and_wait_remains_ready_for_every_reader()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let changes = Arc::new(CopyChangeNotifier::default());
-        let deadline = SyncTime::from_unix_millis(100);
-        let mut first = changes
-            .subscribe(Uuid::now_v7(), deadline)
-            .map_err(|error| format!("{error:?}"))?;
-        let mut second = changes
-            .subscribe(Uuid::now_v7(), deadline)
-            .map_err(|error| format!("{error:?}"))?;
-
-        changes.signal_committed();
-
-        assert_eq!(first.changed.try_recv()?, Some(()));
-        assert_eq!(second.changed.try_recv()?, Some(()));
-        assert_eq!(changes.next_deadline(), None);
-        Ok(())
-    }
-
-    #[expect(
-        clippy::panic_in_result_fn,
-        reason = "Assertions must fail this test while fixture errors propagate through Result."
-    )]
-    #[test]
-    fn expiry_and_instance_loss_cancel_the_wait_without_reporting_a_change()
-    -> Result<(), Box<dyn std::error::Error>> {
-        let changes = Arc::new(CopyChangeNotifier::default());
-        let mut waiter = changes
-            .subscribe(Uuid::now_v7(), SyncTime::from_unix_millis(100))
-            .map_err(|error| format!("{error:?}"))?;
-
-        changes.expire(SyncTime::from_unix_millis(99));
-        assert_eq!(waiter.changed.try_recv()?, None);
-        changes.expire(SyncTime::from_unix_millis(100));
-        assert!(waiter.changed.try_recv().is_err());
-        let mut replacement = changes
-            .subscribe(Uuid::now_v7(), SyncTime::from_unix_millis(200))
-            .map_err(|error| format!("{error:?}"))?;
-        drop(changes);
-
-        assert!(replacement.changed.try_recv().is_err());
-        Ok(())
-    }
-}
+#[path = "copy_change_notifier_test.rs"]
+mod tests;

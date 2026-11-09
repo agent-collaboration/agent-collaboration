@@ -5,8 +5,8 @@ use axum::{
     response::IntoResponse,
 };
 use collaboration_central_core::{
-    AccessJwk, AdmissionOrigin, CentralObservation, CentralPlatform, CoreHost, KeyFetchFailure,
-    RawJwks, SerializedObjectCall, SignatureValidity, UpgradeFailure, VerifyFailure,
+    AccessJwk, AdmissionOrigin, CentralObservation, CentralPlatform, KeyFetchFailure, RawJwks,
+    SerializedObjectCall, SignatureValidity, UpgradeFailure, VerifyFailure,
 };
 use runtime_primitives::Clock;
 use std::{
@@ -54,8 +54,10 @@ impl TokioCentralPlatform {
     pub(crate) async fn runtime_control(
         &self,
         request: collaboration_central_conformance::RuntimeControlRequest,
-    ) -> Result<collaboration_central_conformance::RuntimeFaultObservation, durable_steps::StoreError>
-    {
+    ) -> Result<
+        collaboration_central_conformance::RuntimeControlResponse,
+        crate::native_objects::RuntimeControlError,
+    > {
         self.objects.runtime_control(request).await
     }
     #[expect(
@@ -267,7 +269,7 @@ impl TokioCentralPlatform {
 }
 
 impl CentralPlatform for TokioCentralPlatform {
-    type Host = crate::TokioStorageHost<CoreHost<crate::TokioObjectIo>>;
+    type Host = crate::TokioStorageHost<crate::TokioObjectIo>;
     fn clock(&self) -> &dyn Clock {
         self.clock.as_ref()
     }

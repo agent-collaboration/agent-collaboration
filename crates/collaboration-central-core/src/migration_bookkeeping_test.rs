@@ -460,7 +460,8 @@ async fn migration_execution_time_uses_the_injected_clock_around_each_execute() 
                 )
                 .await?;
                 let rows = query::<sqlx_turso::Turso>(
-                    "SELECT installed_on,execution_time FROM central_schema_migrations ORDER BY version",
+                    // The Fleet corpus runs first; central-work follows it in the same step.
+                    "SELECT installed_on,execution_time FROM central_schema_migrations WHERE corpus='central-fleet' ORDER BY version",
                 )
                 .fetch_all(scope.executor())
                 .await
@@ -506,7 +507,8 @@ async fn backwards_clock_records_zero_execution_time_and_commits_history() -> Te
             "SELECT installed_on,success,execution_time FROM central_schema_migrations WHERE corpus='central-fleet'",
         ).fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
         assert_eq!(rows.len(), EngineSchema::Fleet.migrations().len());
-        assert_eq!(applied.count, rows.len());
+        // The step also applies the central-work corpus that Fleet carries.
+        assert_eq!(applied.count, rows.len() + super::WORK_MIGRATIONS.len());
         for row in rows {
             assert_eq!(row.try_get::<i64,_>("installed_on").map_err(StoreError::backend)?, NOW.unix_millis() - 7);
             assert_eq!(row.try_get::<i64,_>("success").map_err(StoreError::backend)?, 1);

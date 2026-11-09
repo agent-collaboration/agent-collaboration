@@ -1,8 +1,9 @@
 //! The connection object's delivery face sends outside local exclusion.
 use crate::FleetKind;
+use runtime_primitives::Clock as _;
 
 use crate::{
-    CallerKind, DeliveryKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, DeliveryKind, ObjectAddress, ObjectIo, ObjectPlatform, ObjectRuntime,
     caller_context::CallAuthority,
     object_call_envelope::{ObjectCallEnvelope, encode_refusal},
     object_runtime::ObjectWork,
@@ -21,7 +22,7 @@ use sqlx_core::{
 };
 use std::{marker::PhantomData, sync::Arc};
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -36,7 +37,7 @@ where
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
 {
-    pub fn delivery(&self) -> Result<ObjectRuntime<DeliveryKind, Host, Io>, StoreError> {
+    pub fn delivery(&self) -> Result<ObjectRuntime<DeliveryKind, Host>, StoreError> {
         let ObjectWork::Fleet {
             host,
             io,
@@ -47,6 +48,7 @@ where
             delivery,
             holder_answer_timeout,
             honored_capabilities,
+            notice_cursors,
         } = &self.work
         else {
             return Err(StoreError::backend("delivery requires Fleet"));
@@ -62,6 +64,7 @@ where
                 delivery: *delivery,
                 holder_answer_timeout: *holder_answer_timeout,
                 honored_capabilities: *honored_capabilities,
+                notice_cursors: notice_cursors.clone(),
             },
             face: PhantomData,
         })
@@ -171,7 +174,7 @@ enum HolderReplyKind {
     Withdrawal,
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<DeliveryKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<DeliveryKind, Host>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -204,9 +207,6 @@ where
             crate::forward_calls::DeliverForward::KIND
         ) {
             return self.receive_forward_call(invocation).await;
-        }
-        if invocation.kind == crate::machine_notice_delivery::DeliverMachineNotice::KIND {
-            return self.receive_machine_notice(invocation).await;
         }
         if !matches!(invocation.authority, CallAuthority::Object)
             || invocation.source != ObjectAddress::Fleet
@@ -261,18 +261,35 @@ where
             ),
         };
         let deadline_io = io.clone();
-        let answer = crate::peer_request::begin_peer_request(
+        let waiter = crate::peer_request::begin_peer_request(
             host.clone(),
             io.clone(),
             replies.clone(),
             holder,
             body,
             *holder_answer_timeout,
-            move |remaining| async move { deadline_io.reply_deadline(remaining).await },
+            move |remaining| async move { deadline_io.event_deadline(remaining).await },
         )
-        .await?
-        .answer()
         .await?;
+        // The wait ends at its event deadline, never through the alarm (H2).
+        let remaining = std::time::Duration::from_millis(
+            u64::try_from(
+                waiter
+                    .deadline()
+                    .unix_millis()
+                    .saturating_sub(io.now().unix_millis()),
+            )
+            .unwrap_or(0),
+        );
+        let answer = match futures_util::future::select(
+            Box::pin(waiter.answer()),
+            Box::pin(io.event_deadline(remaining)),
+        )
+        .await
+        {
+            futures_util::future::Either::Left((answer, _)) => answer?,
+            futures_util::future::Either::Right(_) => return Err(CallFailure::AnswerLost),
+        };
         match (reply_kind, answer) {
             (HolderReplyKind::Release, ClientAnswer::Crate(ServerCallAnswer::Release(answer))) => {
                 serde_json::to_vec(&answer).map_err(|_| CallFailure::AnswerLost)

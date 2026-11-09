@@ -758,6 +758,8 @@ where
 
 #[derive(Debug)]
 pub(crate) struct InspectionPartRow {
+    pub id: Option<String>,
+    pub id_class: Option<String>,
     pub transaction_key: Option<String>,
     pub key_class: Option<String>,
     pub part_index: Option<String>,
@@ -783,6 +785,8 @@ where
         rows.iter()
             .map(|row| {
                 Ok(InspectionPartRow {
+                    id: row.try_get("id")?,
+                    id_class: row.try_get("id_class")?,
                     transaction_key: row.try_get("transaction_key")?,
                     key_class: row.try_get("key_class")?,
                     part_index: row.try_get("part_index")?,

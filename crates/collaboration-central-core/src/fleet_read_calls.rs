@@ -1,6 +1,6 @@
 //! Fleet reads stay inside the canonical Fleet owner after leaving the session.
 use crate::{
-    CallerKind, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, FleetKind, ObjectAddress, ObjectPlatform, ObjectRuntime,
     caller_context::CallAuthority, fleet_read_step::ReadFleet,
     object_call_envelope::ObjectCallEnvelope, object_runtime::ObjectWork, step_driver::StepDriver,
 };
@@ -9,6 +9,7 @@ use durable_steps::{
     AtomicStore, CallFailure, CallTarget, NotSentReason, storage::TransactionScope,
 };
 use message_board::FleetPosition;
+use runtime_primitives::Clock as _;
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
@@ -40,7 +41,7 @@ impl CallTarget for FleetRead {
     type Request = FleetReadRequest;
     type Answer = BoardReadPage;
 }
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

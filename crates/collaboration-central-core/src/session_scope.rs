@@ -3,8 +3,7 @@
 use crate::session_store::PendingWelcome;
 use crate::session_store::SessionTransportEffect;
 use crate::{
-    ObjectHost, PlatformIo, RegistrationEdits, RegistrationSnapshot,
-    session_store::CoreSessionStore,
+    ObjectPlatform, RegistrationEdits, RegistrationSnapshot, session_store::CoreSessionStore,
 };
 use durable_steps::{
     Admitted, AtomicStore, DriveLease, JournalScope, OperationId, ReborrowScope, RequestKey,
@@ -24,9 +23,13 @@ use std::marker::PhantomData;
 mod enrollment_gate;
 mod fleet_reads;
 mod forwards;
+mod notice_acknowledgment;
+mod notice_publication;
 mod operations;
+mod owed_answers;
+pub(crate) mod owed_requests;
 
-pub(crate) struct CoreSessionScope<'transaction, Host: ObjectHost, Io: PlatformIo>
+pub(crate) struct CoreSessionScope<'transaction, Host: ObjectPlatform>
 where
     Host::Store: ReborrowScope,
 {
@@ -36,11 +39,10 @@ where
     pub effects: Vec<PendingWelcome>,
     pub transport: Vec<SessionTransportEffect>,
     pub wake_at: Option<SyncTime>,
-    pub marker: PhantomData<fn() -> Io>,
+    pub marker: PhantomData<fn() -> Host::Io>,
 }
 
-impl<'transaction, Host: ObjectHost, Io: PlatformIo> TransactionScope
-    for CoreSessionScope<'transaction, Host, Io>
+impl<'transaction, Host: ObjectPlatform> TransactionScope for CoreSessionScope<'transaction, Host>
 where
     Host::Store: ReborrowScope,
     <Host::Store as AtomicStore>::Scope<'transaction>: TransactionScope<Database = Host::Database>,
@@ -55,7 +57,7 @@ where
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> SessionScope for CoreSessionScope<'_, Host, Io>
+impl<Host: ObjectPlatform> SessionScope for CoreSessionScope<'_, Host>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -89,11 +91,9 @@ where
         now: SyncTime,
     ) -> Result<(), fleet_session::StoreError> {
         let key = schema_support_request_key(&input.report).map_err(session_error)?;
-        self.admit::<PublishSchemaSupport<CoreSessionStore<Host, Io>, Host::Database>>(
-            &key, &input,
-        )
-        .await
-        .map_err(session_error)?;
+        self.admit::<PublishSchemaSupport<CoreSessionStore<Host>, Host::Database>>(&key, &input)
+            .await
+            .map_err(session_error)?;
         self.ensure_wake(now).await.map_err(session_error)
     }
     fn welcome_after_commit(
@@ -115,7 +115,7 @@ fn session_error(error: impl std::fmt::Display) -> fleet_session::StoreError {
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> CoreSessionScope<'_, Host, Io>
+impl<Host: ObjectPlatform> CoreSessionScope<'_, Host>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -158,10 +158,16 @@ where
                 continue;
             }
             match effect {
-                SessionEffect::RequestBatch { .. }
-                | SessionEffect::AnswerBatch { .. }
-                | SessionEffect::NoticesApplied { .. } => {
-                    // D3 admits typed vocabulary only. D4 owns execution and replies.
+                SessionEffect::RequestBatch { .. } | SessionEffect::AnswerBatch { .. } => {
+                    // D3 admits typed vocabulary only. Batches are slice 4d.
+                }
+                SessionEffect::NoticesApplied {
+                    session,
+                    frame,
+                    through,
+                } => {
+                    self.acknowledge_notices(connection, session, frame, through, now)
+                        .await?;
                 }
                 SessionEffect::Route {
                     session,
@@ -174,10 +180,11 @@ where
                         limits,
                         &crate::fleet_sender_binding::FleetSenderBinding,
                     )
-                    .recipient_report::<crate::fleet_mail_tasks::FleetStatusTask<
-                        crate::session_store::CoreSessionStore<Host, Io>,
-                        Host::Database,
-                    >>(session.peer, report, now)
+                    .recipient_report::<crate::central_mail_sink::CentralMailSink>(
+                        session.peer,
+                        report,
+                        now,
+                    )
                     .await
                     .map_err(fleet_mail_delivery::delivery_rollback)?;
                     self.stage_operation_answer(
@@ -192,14 +199,29 @@ where
                     operation:
                         OperationRequest::Delivery(DeliveryRequest::StatusAck { through, .. }),
                 } => {
-                    let result = fleet_mail_delivery::StatusStream::<_, BoardDeliveryTypes>::new(
-                        self,
-                        fleet_protocol::Submitter::Machine(session.peer),
-                        installation.clone(),
-                    )
-                    .acknowledge(through, now)
-                    .await
-                    .map_err(StoreError::backend)?;
+                    let mut stream =
+                        fleet_mail_delivery::StatusStream::<_, BoardDeliveryTypes>::new(
+                            self,
+                            fleet_protocol::Submitter::Machine(session.peer),
+                            installation.clone(),
+                        );
+                    // Read before acknowledging: the acknowledgment drops the events.
+                    let applied = stream
+                        .publications_applied_through(through)
+                        .await
+                        .map_err(StoreError::backend)?;
+                    let result = stream
+                        .acknowledge(through, now)
+                        .await
+                        .map_err(StoreError::backend)?;
+                    if matches!(result, fleet_protocol::StatusAckResult::Acknowledged { .. })
+                        && !applied.is_empty()
+                    {
+                        self.close_applied_statuses(applied).await?;
+                        // Closed rows free their window slots: refill them this event.
+                        crate::event_owed::owed_request(session.peer)
+                            .map_err(StoreError::backend)?;
+                    }
                     let bytes = serde_json::to_vec(&ServerFrame::<BoardConsumerProtocol>::Answer {
                         frame,
                         body: OperationAnswer::Delivery(DeliveryAnswer::StatusAck(result)),
@@ -270,6 +292,25 @@ where
                     self.stage_forward_answer(session, frame, reply, now)
                         .await?;
                 }
+                SessionEffect::RouteAnswer {
+                    session,
+                    frame,
+                    answer: fleet_protocol::ClientAnswer::Crate(answer),
+                } => {
+                    if !self
+                        .route_owed_answer(connection, session, frame, &answer, now)
+                        .await?
+                    {
+                        self.stage_transport(
+                            vec![SessionEffect::RouteAnswer {
+                                session,
+                                frame,
+                                answer: fleet_protocol::ClientAnswer::Crate(answer),
+                            }],
+                            Some(connection),
+                        )?;
+                    }
+                }
                 other => self.stage_transport(vec![other], Some(connection))?,
             }
         }
@@ -277,7 +318,7 @@ where
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> JournalScope for CoreSessionScope<'_, Host, Io>
+impl<Host: ObjectPlatform> JournalScope for CoreSessionScope<'_, Host>
 where
     Host::Store: ReborrowScope,
 {
@@ -304,9 +345,18 @@ where
         self.wake_at = Some(self.wake_at.map_or(at, |current| current.min(at)));
         Ok(())
     }
+    async fn make_due(&mut self, id: OperationId, now: SyncTime) -> Result<bool, StoreError> {
+        let made_due = self.inner.make_due(id, now).await?;
+        if made_due {
+            // Like ensure_wake: the inner wake commits with the transaction on Cloudflare;
+            // Tokio learns it only from this post-commit wake.
+            self.wake_at = Some(self.wake_at.map_or(now, |current| current.min(now)));
+        }
+        Ok(made_due)
+    }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> JournalStorage for CoreSessionScope<'_, Host, Io>
+impl<Host: ObjectPlatform> JournalStorage for CoreSessionScope<'_, Host>
 where
     Host::Store: ReborrowScope,
 {
@@ -364,7 +414,7 @@ where
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> CoreSessionScope<'_, Host, Io>
+impl<Host: ObjectPlatform> CoreSessionScope<'_, Host>
 where
     Host::Store: ReborrowScope,
 {

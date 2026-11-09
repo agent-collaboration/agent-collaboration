@@ -44,11 +44,11 @@ async fn send_report(
     let call = serde_json::from_value(
         json!({"operation":durable_steps::Uuid::now_v7(),"step":"recipient_report"}),
     )?;
-    fixture
-        .runtime
-        .on_frame(
-            socket.binding,
-            serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Request {
+    // The report arrives as a kernel event, so its owed sends follow it.
+    match collaboration_central_core::ObjectKernel::new(&fixture.runtime)
+        .on_event(collaboration_central_core::ObjectEvent::Frame {
+            binding: socket.binding,
+            frame: serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Request {
                 frame,
                 body: OperationRequest::Delivery(DeliveryRequest::Report {
                     call,
@@ -59,9 +59,47 @@ async fn send_report(
                     },
                 }),
             })?,
-        )
-        .await?;
-    Ok(frame)
+        })
+        .await
+    {
+        // The event failed and its transaction rolled back. A shell then
+        // closes that connection, as the Tokio and Cloudflare shells do: the
+        // closed-socket event, and no further frames on it.
+        collaboration_central_core::EventReply::SocketFailed => {
+            collaboration_central_core::ObjectKernel::new(&fixture.runtime)
+                .on_event(collaboration_central_core::ObjectEvent::SocketClosed {
+                    binding: socket.binding,
+                })
+                .await;
+            collaboration_central_core::ObjectPlatform::quarantine_connections(
+                fixture.host.as_ref(),
+                vec![socket.binding.connection],
+            )
+            .await;
+            Err("the report's event failed and rolled back".into())
+        }
+        _ => Ok(frame),
+    }
+}
+
+async fn owed_statuses(fixture: &Fixture) -> TestResult<i64> {
+    use durable_steps::storage::TransactionScope;
+    use sqlx_core::{query::query, row::Row};
+    Ok(fixture
+        .store
+        .transaction(|scope| {
+            Box::pin(async move {
+                query::<sqlx_turso::Turso>(
+                    "SELECT count(*) AS owed FROM central_work_attempts WHERE kind='status' AND state='waiting'",
+                )
+                .fetch_one(scope.executor())
+                .await
+                .map_err(StoreError::backend)?
+                .try_get("owed")
+                .map_err(StoreError::backend)
+            })
+        })
+        .await?)
 }
 
 async fn sender_statuses(fixture: &Fixture) -> TestResult<Vec<DeliveryStatus<Acceptance>>> {
@@ -99,26 +137,17 @@ async fn only_the_recipient_can_report_and_replay_never_advances_status_or_owes_
     let mut attacker = Socket::open(&fixture, C, SERVICE_C).await?;
     let item = envelope(B, SERVICE_B)?;
     submit(&fixture, &item).await?;
-    let (drive, ()) = tokio::time::timeout(CAP, async {
-        tokio::try_join!(fixture.runtime.on_alarm(), async {
-            let frame = recipient
-                .push(item.id())
-                .await
-                .map_err(StoreError::backend)?;
-            recipient
-                .answer(
-                    &fixture,
-                    frame,
-                    PushResult::Accepted {
-                        accepted_at: fixture.io.now(),
-                    },
-                )
-                .await
-                .map_err(StoreError::backend)
-        })
-    })
-    .await??;
-    assert!(drive.failed.is_empty(), "{drive:?}");
+    // The submit's own event pushes to B; B takes custody.
+    let frame = recipient.push(item.id()).await?;
+    recipient
+        .answer(
+            &fixture,
+            frame,
+            PushResult::Accepted {
+                accepted_at: fixture.io.now(),
+            },
+        )
+        .await?;
     assert_eq!(
         sender_statuses(&fixture).await?,
         vec![DeliveryStatus::AtRecipient]
@@ -162,6 +191,8 @@ async fn only_the_recipient_can_report_and_replay_never_advances_status_or_owes_
         "status events must roll back with the report"
     );
     fixture.sql("DROP TRIGGER reject_report_status").await?;
+    // The failed event closed B's connection; B reconnects to report again.
+    let mut recipient = Socket::open(&fixture, B, SERVICE_B).await?;
     assert_eq!(
         report(
             &fixture,
@@ -236,38 +267,26 @@ async fn only_the_recipient_can_report_and_replay_never_advances_status_or_owes_
     reason = "A report's new status job must contribute a committed wake instead of relying on an unrelated later alarm."
 )]
 #[tokio::test]
-async fn report_admission_captures_its_post_commit_wake_in_the_session_adapter() -> TestResult {
+async fn report_admission_owes_its_status_publication_without_a_wake() -> TestResult {
     let root = tempfile::tempdir()?;
     let fixture = Fixture::open(root.path(), NOW).await?;
     let mut recipient = Socket::open(&fixture, B, SERVICE_B).await?;
     let item = envelope(B, SERVICE_B)?;
     submit(&fixture, &item).await?;
-    let (drive, ()) = tokio::time::timeout(CAP, async {
-        tokio::try_join!(fixture.runtime.on_alarm(), async {
-            let frame = recipient
-                .push(item.id())
-                .await
-                .map_err(StoreError::backend)?;
-            recipient
-                .answer(
-                    &fixture,
-                    frame,
-                    PushResult::Accepted {
-                        accepted_at: fixture.io.now(),
-                    },
-                )
-                .await
-                .map_err(StoreError::backend)
-        })
-    })
-    .await??;
-    assert!(drive.failed.is_empty(), "{drive:?}");
-    // Drain only the setup publication. No alarm is driven after the Report.
-    let setup = fixture.runtime.on_alarm().await?;
-    assert!(setup.failed.is_empty(), "{setup:?}");
+    // The submit's own event pushes to B; B takes custody.
+    let frame = recipient.push(item.id()).await?;
+    recipient
+        .answer(
+            &fixture,
+            frame,
+            PushResult::Accepted {
+                accepted_at: fixture.io.now(),
+            },
+        )
+        .await?;
     fixture.io.advance(1_000);
-    let now = fixture.io.now();
     let before = fixture.io.wakes()?.len();
+    let owed_before = owed_statuses(&fixture).await?;
     assert_eq!(
         report(
             &fixture,
@@ -281,10 +300,21 @@ async fn report_admission_captures_its_post_commit_wake_in_the_session_adapter()
             report_seq: ReportSeq::new(1)
         }
     );
+    // The report owes the sender its new status publication in the same
+    // transaction. The sender has no connection, so the row waits for its
+    // Welcome: a waiting row is never due, so it asks for no near wake. The
+    // only later wake is the relay record's 60-day mail retention.
+    assert!(
+        owed_statuses(&fixture).await? >= owed_before.max(1),
+        "the report owed no status publication"
+    );
+    let horizon = fixture.io.now().unix_millis() + 86_400_000;
     let wakes = fixture.io.wakes()?;
     assert!(
-        wakes.iter().skip(before).any(|wake| *wake == now),
-        "new publication was admitted without a post-commit wake: {:?}",
+        wakes[before..]
+            .iter()
+            .all(|wake| wake.unix_millis() > horizon),
+        "a waiting status publication asked for a wake: {:?}",
         &wakes[before..]
     );
     assert_eq!(
@@ -304,25 +334,17 @@ async fn revoked_recipient_report(handoff: bool) -> TestResult {
     let item = envelope(B, SERVICE_B)?;
     submit(&fixture, &item).await?;
     if handoff {
-        let (drive, ()) = tokio::try_join!(fixture.runtime.on_alarm(), async {
-            let frame = recipient
-                .push(item.id())
-                .await
-                .map_err(StoreError::backend)?;
-            recipient
-                .answer(
-                    &fixture,
-                    frame,
-                    PushResult::Accepted {
-                        accepted_at: fixture.io.now(),
-                    },
-                )
-                .await
-                .map_err(StoreError::backend)
-        })?;
-        if !drive.failed.is_empty() {
-            return Err("handoff control failed".into());
-        }
+        // The submit's own event pushes to B; B takes custody.
+        let frame = recipient.push(item.id()).await?;
+        recipient
+            .answer(
+                &fixture,
+                frame,
+                PushResult::Accepted {
+                    accepted_at: fixture.io.now(),
+                },
+            )
+            .await?;
     }
     let id = item.id();
     let before = fixture.store.transaction(move |scope|Box::pin(async move {
@@ -366,7 +388,7 @@ async fn revoked_recipient_report(handoff: bool) -> TestResult {
     let outcome = RecipientOutcome::Delivered {
         acceptance: serde_json::from_value(json!("queued"))?,
     };
-    if report(&fixture, &mut recipient, id, 1, outcome.clone()).await?
+    if report(&fixture, &mut recipient, id, 1, outcome).await?
         != (ReportResult::Ack {
             report_seq: ReportSeq::new(1),
         })
@@ -376,14 +398,22 @@ async fn revoked_recipient_report(handoff: bool) -> TestResult {
     if custody(&fixture, id).await? != ("delivered".into(), false) {
         return Err("allowed report did not advance status and release payload".into());
     }
-    let events = sender_statuses(&fixture).await?;
-    if report(&fixture, &mut recipient, id, 1, outcome).await?
-        != (ReportResult::Replayed {
-            report_seq: ReportSeq::new(1),
-        })
-        || sender_statuses(&fixture).await? != events
-    {
-        return Err("allowed report replay duplicated sender status".into());
+    // The report's own event runs the revocation's pending session end, so
+    // the revoked recipient's connection closes right after its answer.
+    // Frames already queued before the close (its sender's notices) come first.
+    let mut closed = None;
+    for _ in 0..16 {
+        match tokio::time::timeout(CAP, recipient.next()).await? {
+            Ok(_) => {}
+            Err(error) => {
+                closed = Some(error.to_string());
+                break;
+            }
+        }
+    }
+    match closed {
+        Some(reason) if reason.contains("CredentialRejected(Revoked)") => {}
+        other => return Err(format!("the revoked recipient was not closed: {other:?}").into()),
     }
     fixture.close().await
 }

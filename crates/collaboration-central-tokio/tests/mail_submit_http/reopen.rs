@@ -134,7 +134,9 @@ async fn whole_server_restart_replays_the_same_push_call_then_receipts_release_o
             let mut sender=connect(second.base_url(),SENDER_CREDENTIAL,"019f0000-0000-7000-8000-000000000f82").await?;
             let mut recipient=connect(second.base_url(),RECIPIENT_CREDENTIAL,"019f0000-0000-7000-8000-000000000f92").await?;
             eprintln!("MAIL_PUSH_REOPEN_STAGE both credentials reconnected");
-            wake_released_retry(&second, root.path()).await?;
+            // The push still owed from the first server (in flight on a connection
+            // that no longer exists) is resent in the recipient's Welcome catch-up:
+            // no clock move, journal edit or new call identity is involved.
             let result=async {
                 let (frame,retry)=next_push(&mut recipient).await?;
                 eprintln!("MAIL_PUSH_REOPEN_STAGE same-call retry arrived");
@@ -165,31 +167,4 @@ async fn whole_server_restart_replays_the_same_push_call_then_receipts_release_o
     proof?;
     stopped?;
     Ok(())
-}
-
-async fn wake_released_retry(server: &TokioServer, root: &Path) -> ConformanceResult<()> {
-    let service: message_board::ServiceId = RECIPIENT.to_owned().try_into()?;
-    tokio::time::timeout(Duration::from_secs(5), async {
-        loop {
-            // A request already enqueued after reconnect needs no clock move.
-            if !server.conformance_platform().conformance_holder_frames(&service).await?.is_empty() {
-                return Ok::<_,Box<dyn std::error::Error+Send+Sync>>(());
-            }
-            let mut reader = sqlx_turso::TursoConnectOptions::new().filename(root.join("fleet.db")).read_only(true).connect().await?;
-            let next = query::<sqlx_turso::Turso>("SELECT min(next_attempt_at) AS next FROM _fleet_sync_operations WHERE kind='fleet-sync.delivery.push-item' AND state='running' AND drive_until IS NULL")
-                .fetch_one(&mut reader).await?.try_get::<Option<i64>,_>("next")?;
-            reader.close().await?;
-            if let Some(next) = next {
-                // Startup may have tried while B was offline. Advance the
-                // injected clock to that actual released retry's due time.
-                reqwest::Client::new().post(format!("{}/admin/v1/conformance/runtime",server.base_url()))
-                    .header("Cf-Access-Jwt-Assertion",collaboration_central_conformance::owner_assertion()?)
-                    .timeout(Duration::from_secs(5))
-                    .json(&RuntimeControlRequest {address:collaboration_central_core::ObjectAddress::Fleet,command:RuntimeControl::SetTime {now:collaboration_central_core::RegistryTime(chrono::DateTime::from_timestamp_millis(next).ok_or("retry clock outside UTC range")?)}})
-                    .send().await?.error_for_status()?;
-                return Ok(());
-            }
-            tokio::task::yield_now().await;
-        }
-    }).await?
 }

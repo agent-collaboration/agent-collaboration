@@ -3,7 +3,7 @@
 use super::{
     forwarded_post_lifecycle_oracles as wire,
     forwarded_post_route_overlap::late_route,
-    forwarded_post_scenarios::control,
+    forwarded_post_scenarios::{control, settle},
     forwarded_post_state_oracles::{live_records, no_retained_state, pending_record},
 };
 use collaboration_central_conformance::{ConformanceResult, machine_assertion, owner_assertion};
@@ -45,6 +45,7 @@ pub(super) async fn overlap(
         holder,
         database,
         |command| control(base, command),
+        |now| settle(base, now),
         |holder| observe(base, holder),
     )
     .await

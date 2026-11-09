@@ -16,10 +16,13 @@ import { ObservationOpen, Receipt } from "./receipt.ts";
 import { prepareRun, type PreparedRun } from "./run-setup.ts";
 import { RunLifetime } from "./run-lifetime.ts";
 import { assessD1Coverage, d1Observations } from "./observations/central/d1-coverage.ts";
-import { readD1HarnessDeclaration, runD1Harness } from "./observations/central/d1-harness.ts";
+import { runD1Harness } from "./observations/central/d1-harness.ts";
+import { readD1HarnessDeclaration } from "./observations/central/d1-harness-plan.ts";
 import { d1ReadbackSchema, readD1Stores } from "./observations/central/d1-sqlite-readback.ts";
 import { readCompatibilityPlan } from "./observations/central/d3-wire-compatibility/compatibility-plan.ts";
 import { runCompatibility } from "./observations/central/d3-wire-compatibility/compatibility-run.ts";
+import { readD4OfflineHarnessPlan } from "./observations/central/d4-central-engine/offline-harness-plan.ts";
+import { runOfflineCustody } from "./observations/central/d4-central-engine/offline-harness.ts";
 
 async function declarationFromArguments(): Promise<Declaration> {
   const path = process.argv[2];
@@ -113,6 +116,8 @@ function printPreparation(): boolean {
         "Read exact stopped task stores after consumer checks.\n" +
         "node verification/run.ts --d3-wire PRIVATE_DECLARATION.json\n" +
         "Local released 0.1.134 source/debug-build compatibility against declared Tokio central; no Keychain or model input.\n" +
+        "node verification/run.ts --d4-offline-custody PRIVATE_DECLARATION.json\n" +
+        "Declared immutable local Tokio/real-Router ten-item custody; Codex0.166.0 archive/unarchive, no model input. Launch from the compiled source archive root.\n" +
         "D1 full outcome credit requires declared controls/target; staging is never executed here.\n",
     );
     return true;
@@ -134,6 +139,12 @@ function printPreparation(): boolean {
   return false;
 }
 async function runD1Action(): Promise<boolean> {
+  if (process.argv.length === 4 && process.argv[2] === "--d4-offline-custody") {
+    const path = process.argv[3];
+    if (path === undefined) throw new Error("D4 offline declaration absent");
+    await runOfflineCustody(await readD4OfflineHarnessPlan(path));
+    return true;
+  }
   if (process.argv.length === 4 && process.argv[2] === "--d3-wire") {
     const path = process.argv[3];
     if (path === undefined) throw new Error("D3 plan absent");

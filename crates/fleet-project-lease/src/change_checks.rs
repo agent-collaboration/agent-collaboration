@@ -50,7 +50,7 @@ pub(crate) enum CheckedChange {
     Answer(HolderChangeAnswer),
 }
 
-pub(crate) async fn check<C, D>(
+pub(crate) async fn check<C, D, H>(
     ctx: &mut C,
     request: &HolderChangeRequest,
     config: &RegistryConfig,
@@ -58,6 +58,7 @@ pub(crate) async fn check<C, D>(
 where
     C: OperationContext,
     D: Database,
+    H: crate::OwedSettlement<C::Store, D>,
     for<'t> <C::Store as AtomicStore>::Scope<'t>: TransactionScope<Database = D>,
     D::Arguments: IntoArguments<D>,
     for<'value> String: Type<D> + Encode<'value, D> + Decode<'value, D>,
@@ -98,7 +99,7 @@ where
                     }));
                 }
                 if let Some(answer) =
-                    crate::transfer_cancellation::process_cancel::<C::Store, D>(scope, id, now)
+                    crate::transfer_cancellation::process_cancel::<C::Store, D, H>(scope, id, now)
                         .await
                         .map_err(step_error)?
                 {

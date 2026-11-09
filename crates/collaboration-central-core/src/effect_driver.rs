@@ -12,7 +12,7 @@
 
 use crate::session_store::SessionTransportEffect;
 use crate::{
-    CoreHost, ObjectHost, PlatformIo,
+    CoreHost, ObjectPlatform,
     session_store::{PendingWelcome, SessionCommit},
     step_driver::CommittedEffects,
 };
@@ -31,12 +31,12 @@ mod installation_reads;
 mod mail_submit;
 mod sender_mail;
 
-pub(crate) struct EffectDriver<Host: ObjectHost, Io: PlatformIo> {
+pub(crate) struct EffectDriver<Host: ObjectPlatform> {
     host: Arc<Host>,
-    shared_host: Arc<CoreHost<Io>>,
+    shared_host: Arc<CoreHost<Host::Io>>,
     replies: Arc<crate::holder_reply_hub::HolderReplyHub>,
 }
-impl<Host: ObjectHost, Io: PlatformIo> Clone for EffectDriver<Host, Io> {
+impl<Host: ObjectPlatform> Clone for EffectDriver<Host> {
     fn clone(&self) -> Self {
         Self {
             host: self.host.clone(),
@@ -54,10 +54,10 @@ pub(crate) struct PublishedSessionEffects {
     wake_at: Option<runtime_primitives::SyncTime>,
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
+impl<Host: ObjectPlatform> EffectDriver<Host> {
     pub(crate) fn new(
         host: Arc<Host>,
-        shared_host: Arc<CoreHost<Io>>,
+        shared_host: Arc<CoreHost<Host::Io>>,
         replies: Arc<crate::holder_reply_hub::HolderReplyHub>,
     ) -> Self {
         Self {
@@ -116,7 +116,7 @@ impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
         if let Some(at) = published.wake_at {
             // The journal already owns this deadline. Failed activation cannot
             // turn committed admission into rollback; restart drives due.
-            let _ = self.host.wake().wake_at(at).await;
+            let _ = self.host.alarm().wake_at(at).await;
         }
         for connection in &published.close {
             self.replies.fail_connection(*connection);
@@ -348,11 +348,11 @@ impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
                     let host = self.host.clone();
                     let current =
                         self.host
-                            .with_local_section(async move {
+                            .with_local_section(crate::LocalSection::new(async move {
                                 host.registrations().await.ok().and_then(|registrations| {
                                     registrations.get(&connection).copied()
                                 })
-                            })
+                            }))
                             .await;
                     let Ok(Some(fleet_session::ConnectionRegistration::Attached {
                         session_id: attached,
@@ -387,16 +387,18 @@ impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
         session: fleet_protocol::SessionId,
     ) -> bool {
         let host = self.host.clone();
-        matches!(self.host.with_local_section(async move {
+        matches!(self.host.with_local_section(crate::LocalSection::new(async move {
             host.registrations().await.ok().and_then(|registrations| registrations.get(&connection).copied())
-        }).await, Ok(Some(fleet_session::ConnectionRegistration::Attached { session_id, .. })) if session_id == session)
+        })).await, Ok(Some(fleet_session::ConnectionRegistration::Attached { session_id, .. })) if session_id == session)
     }
     async fn fail_connection(&self, connection: ConnectionId) {
         self.replies.fail_connection(connection);
         let host = self.host.clone();
         let _ = self
             .host
-            .with_local_section(async move { host.quarantine_connections(vec![connection]).await })
+            .with_local_section(crate::LocalSection::new(async move {
+                host.quarantine_connections(vec![connection]).await
+            }))
             .await;
         let _ = self
             .host

@@ -134,7 +134,7 @@ async fn receipt(
         .transaction(move |scope| {
             Box::pin(async move {
                 let answer = Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .receipt::<PublishTask>(
+                    .receipt::<fleet_mail_delivery::JournaledStatus<PublishTask>>(
                         peer(2),
                         &DeliveryItemRef {
                             item: item_id(2),
@@ -164,7 +164,7 @@ async fn assert_invalid_receipt(fixture: &Fixture, answer: PushResult<Acceptance
                     .await?
                     .try_get::<i64, _>("changes")?;
                 let result = Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .receipt::<PublishTask>(
+                    .receipt::<fleet_mail_delivery::JournaledStatus<PublishTask>>(
                         peer(2),
                         &DeliveryItemRef {
                             item: item_id(2),
@@ -223,7 +223,11 @@ async fn apply_report(
         .transaction(move |scope| {
             Box::pin(async move {
                 let answer = Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .recipient_report::<PublishTask>(peer(2), report, now())
+                    .recipient_report::<fleet_mail_delivery::JournaledStatus<PublishTask>>(
+                        peer(2),
+                        report,
+                        now(),
+                    )
                     .await
                     .map_err(storage_error)?;
                 if rollback {

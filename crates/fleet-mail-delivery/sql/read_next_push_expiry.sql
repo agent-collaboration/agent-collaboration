@@ -1,0 +1,1 @@
+SELECT CAST(MIN(valid_until) AS TEXT) AS next_expiry, typeof(MIN(valid_until)) AS next_class FROM _fleet_sync_outbox_items WHERE handed_off_at IS NULL AND valid_until IS NOT NULL AND status_kind IN ('queued','sent','atRecipient','held');

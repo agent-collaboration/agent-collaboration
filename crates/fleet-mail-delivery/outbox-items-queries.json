@@ -17,6 +17,38 @@
         }
       ],
       "row": "StoredOutboxRow"
+    },
+    {
+      "name": "read_next_push_expiry",
+      "sql": "sql/read_next_push_expiry.sql",
+      "result": "one",
+      "parameters": [],
+      "row": "StoredNextPushExpiry"
+    },
+    {
+      "name": "read_expired_pushes",
+      "sql": "sql/read_expired_pushes.sql",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ],
+      "row": "StoredExpiredPush"
+    },
+    {
+      "name": "read_outbox_owner_rows",
+      "sql": "sql/read_outbox_owner_rows.sql",
+      "result": "many",
+      "parameters": [],
+      "row": "StoredOutboxOwner"
     }
   ]
 }

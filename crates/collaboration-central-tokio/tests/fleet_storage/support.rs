@@ -1,8 +1,7 @@
 use collaboration_central_core::{
-    AccessCaller, CoreHost, FleetKind, FleetResult, ObjectAddress, ObjectRuntime, OwnerIdentity,
-    PlatformIo,
+    AccessCaller, CoreHost, FleetKind, FleetResult, ObjectAddress, ObjectIo, ObjectRuntime,
+    OwnerIdentity,
 };
-use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{
     AtomicStore, CallFailure, NotSentReason, StoreError, storage::TransactionScope,
 };
@@ -37,8 +36,8 @@ impl WakeScheduler for Io {
         Ok(())
     }
 }
-impl PlatformIo for Io {
-    fn reply_deadline(
+impl ObjectIo for Io {
+    fn event_deadline(
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
@@ -56,7 +55,7 @@ pub struct Fixture {
     pub receiver: ReceiverId,
     pub objects: ObjectStore<CoreHost<Io>>,
     pub object: Arc<TokioObject<CoreHost<Io>>>,
-    pub(super) runtime: ObjectRuntime<FleetKind, TokioStorageHost<CoreHost<Io>>, Io>,
+    pub(super) runtime: ObjectRuntime<FleetKind, crate::io_alarm::IoPlatform<Io>>,
 }
 impl Fixture {
     pub async fn fleet_request(
@@ -119,8 +118,10 @@ impl Fixture {
             )
             .await?;
         let runtime = ObjectRuntime::fleet(
-            Arc::new(TokioStorageHost::new(object.clone())),
-            io,
+            Arc::new(crate::io_alarm::io_platform(
+                object.clone(),
+                std::sync::Arc::new(io),
+            )),
             fleet_project_lease::RegistryConfig {
                 authoritative_receiver: receiver,
                 lease: fleet_project_lease::LeasePolicy {

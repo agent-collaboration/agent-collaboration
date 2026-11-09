@@ -45,7 +45,7 @@ async fn run(revoked: bool, replay: bool) -> Result<(), TestError> {
         session,
         peer,
         sends: AtomicUsize::new(0),
-        io: FixtureIo,
+        io: Arc::new(FixtureIo),
     });
     let shared_host = Arc::new(crate::CoreHost::for_store(
         FixtureIo,
@@ -60,7 +60,7 @@ async fn run(revoked: bool, replay: bool) -> Result<(), TestError> {
         release_unsent_for: std::time::Duration::ZERO,
         move_needs_renewal_within: None,
     };
-    let runtime = ObjectRuntime::<DeliveryKind, _, _> {
+    let runtime = ObjectRuntime::<DeliveryKind, _> {
         work: ObjectWork::Fleet {
             honored_capabilities: fleet_protocol::FrameCapabilities::default(),
             host: host.clone(),
@@ -71,6 +71,7 @@ async fn run(revoked: bool, replay: bool) -> Result<(), TestError> {
             config,
             delivery: crate::DeliveryConfig { relay_peer: peer },
             holder_answer_timeout: std::time::Duration::from_secs(2),
+            notice_cursors: Arc::default(),
         },
         face: PhantomData,
     };

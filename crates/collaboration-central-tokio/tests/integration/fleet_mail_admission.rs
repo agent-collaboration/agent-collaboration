@@ -9,7 +9,7 @@ use sqlx_core::{query::query, row::Row};
 
 pub(super) async fn admitted_rows(fixture: &Fixture) -> TestResult<(i64, i64)> {
     Ok(fixture.store.transaction(|scope| Box::pin(async move {
-        let row = query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM _fleet_sync_outbox_items) AS items,(SELECT count(*) FROM _fleet_sync_operations WHERE kind='fleet-sync.delivery.push-item') AS pushes")
+        let row = query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM _fleet_sync_outbox_items) AS items,(SELECT count(*) FROM central_work_attempts WHERE kind='push') AS pushes")
             .fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
         Ok((row.try_get("items").map_err(StoreError::backend)?,row.try_get("pushes").map_err(StoreError::backend)?))
     })).await?)
@@ -80,37 +80,22 @@ async fn replay_and_conflict_preserve_one_fleet_custody_row_and_a_restart_still_
         B.to_owned().try_into()?,
     )
     .await?;
-    reopened.io.advance(2_000);
-    let (drive, ()) = tokio::time::timeout(CAP, async {
-        tokio::try_join!(reopened.runtime.on_alarm(), async {
-            let pushed = recipient
-                .push_envelope(item.id())
-                .await
-                .map_err(StoreError::backend)?;
-            assert_eq!(
-                pushed.item.digest(),
-                item.digest(),
-                "the conflicting attempt must not replace custody"
-            );
-            let answer = inbox
-                .accept(
-                    pushed.submitter,
-                    pushed.item,
-                    collaboration_central_core::fleet_outbox_limits()
-                        .map_err(StoreError::backend)?,
-                )
-                .await
-                .map_err(StoreError::backend)?;
-            assert!(matches!(answer, PushResult::Accepted { .. }));
-            recipient
-                .answer(&reopened, pushed.frame, answer)
-                .await
-                .map_err(StoreError::backend)
-        })
-    })
-    .await??;
-    assert!(drive.failed.is_empty(), "{drive:?}");
-    assert!(drive.retried.is_empty(), "{drive:?}");
+    // B's Welcome catch-up sends the push still owed from before the reopen.
+    let pushed = recipient.push_envelope(item.id()).await?;
+    assert_eq!(
+        pushed.item.digest(),
+        item.digest(),
+        "the conflicting attempt must not replace custody"
+    );
+    let answer = inbox
+        .accept(
+            pushed.submitter,
+            pushed.item,
+            collaboration_central_core::fleet_outbox_limits()?,
+        )
+        .await?;
+    assert!(matches!(answer, PushResult::Accepted { .. }));
+    recipient.answer(&reopened, pushed.frame, answer).await?;
     assert_eq!(inbox.count().await?, 1);
     assert_eq!(
         custody(&reopened, item.id()).await?,
@@ -122,7 +107,7 @@ async fn replay_and_conflict_preserve_one_fleet_custody_row_and_a_restart_still_
         Some(&json!("atRecipient")),
         "{replay}"
     );
-    // PushItem discards its completed journal row. Replaying the handoff must admit no new Push.
+    // The handoff closed the owed push row. Replaying it must owe no new push.
     assert_eq!(admitted_rows(&reopened).await?, (1, 0));
     inbox.close().await?;
     reopened.close().await
@@ -140,7 +125,7 @@ async fn push_admission_rollback_and_post_commit_wake_loss_preserve_one_replayab
     let fixture = Fixture::open(root.path(), NOW).await?;
     let item = envelope(B, SERVICE_B)?;
     let before_wakes = fixture.io.wakes()?;
-    fixture.sql("CREATE TRIGGER reject_fleet_push_admission BEFORE INSERT ON _fleet_sync_operations WHEN NEW.kind='fleet-sync.delivery.push-item' BEGIN SELECT RAISE(ABORT,'injected Push admission failure'); END").await?;
+    fixture.sql("CREATE TRIGGER reject_fleet_push_admission BEFORE INSERT ON central_work_attempts WHEN NEW.kind='push' BEGIN SELECT RAISE(ABORT,'injected Push admission failure'); END").await?;
     assert!(submit_answer(&fixture, &item).await.is_err());
     assert_eq!(
         admitted_rows(&fixture).await?,
@@ -152,7 +137,7 @@ async fn push_admission_rollback_and_post_commit_wake_loss_preserve_one_replayab
         .transaction(|scope| {
             Box::pin(async move {
                 let row = query::<sqlx_turso::Turso>(
-                    "SELECT count(*) AS jobs FROM _fleet_sync_operations",
+                    "SELECT (SELECT count(*) FROM _fleet_sync_operations)+(SELECT count(*) FROM central_work_attempts) AS jobs",
                 )
                 .fetch_one(scope.executor())
                 .await
@@ -173,12 +158,10 @@ async fn push_admission_rollback_and_post_commit_wake_loss_preserve_one_replayab
     fixture
         .sql("DROP TRIGGER reject_fleet_push_admission")
         .await?;
+    // #failures: an alarm write that fails on a call still sends the answer;
+    // the admission lowered the alarm in its own commit, so the work keeps its wake.
     fixture.io.reject_next_wake.store(true, Ordering::SeqCst);
-    assert!(
-        submit_answer(&fixture, &item).await.is_err(),
-        "post-commit wake loss must not acknowledge activation"
-    );
-    assert!(!fixture.io.reject_next_wake.load(Ordering::SeqCst));
+    submit_answer(&fixture, &item).await?;
     assert_eq!(
         admitted_rows(&fixture).await?,
         (1, 1),

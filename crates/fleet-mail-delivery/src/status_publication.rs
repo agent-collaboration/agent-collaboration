@@ -142,3 +142,85 @@ pub(crate) fn publication_request_key<R: serde::Serialize>(
     durable_steps::RequestKey::new(canonical_encode(reference)?)
         .map_err(|error| DeliveryError::Encoding(error.to_string()))
 }
+
+/// The owed row holding this publication, if it is still owed. Its id names
+/// the row's attempts: the row is rewritten in place for each newer version.
+pub async fn publication_subject<S, D>(
+    scope: &mut S,
+    reference: &PublicationRef<D::StatusRoute>,
+) -> Result<Option<String>, DeliveryError>
+where
+    S: TransactionScope,
+    D: DeliveryTypes,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'v> String: Type<S::Database> + Encode<'v, S::Database>,
+    for<'v> Option<String>: Type<S::Database> + Decode<'v, S::Database>,
+    for<'r> &'r str: ColumnIndex<<S::Database as Database>::Row>,
+{
+    crate::delivery_sizes::check_status_route::<D>(reference.target.route())?;
+    let Some(row) = queries::read_publication(
+        scope,
+        item_key(reference.item),
+        canonical_encode(&reference.target)?,
+    )
+    .await
+    .map_err(sql_error)?
+    else {
+        return Ok(None);
+    };
+    stored_row_id(&row.id, "_fleet_sync_status_owed", item_key(reference.item))?;
+    Ok(row.id)
+}
+
+/// The publication an owed row holds now (its latest version), with the
+/// reference that names it, or `None` once it was retired.
+pub async fn publication_by_subject<S, D>(
+    scope: &mut S,
+    subject: String,
+) -> Result<
+    Option<(
+        PublicationRef<D::StatusRoute>,
+        StatusPublication<D::Acceptance>,
+    )>,
+    DeliveryError,
+>
+where
+    S: TransactionScope,
+    D: DeliveryTypes,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'v> String: Type<S::Database> + Encode<'v, S::Database>,
+    for<'v> Option<String>: Type<S::Database> + Decode<'v, S::Database>,
+    for<'r> &'r str: ColumnIndex<<S::Database as Database>::Row>,
+{
+    let Some(row) = queries::read_publication_by_id(scope, subject.clone())
+        .await
+        .map_err(sql_error)?
+    else {
+        return Ok(None);
+    };
+    stored_row_id(&row.id, "_fleet_sync_status_owed", subject)?;
+    let target: PublicationTarget<D::StatusRoute> = row.target()?;
+    crate::delivery_sizes::check_status_route::<D>(target.route())?;
+    let publication: StatusPublication<D::Acceptance> = row.publication()?;
+    crate::delivery_sizes::check_status::<D>(&publication.status).map_err(|_| {
+        DeliveryError::Corrupt {
+            field: "stored publication bounds",
+        }
+    })?;
+    let version = integer(row.version, row.version_class, "owed publication version")?;
+    if publication.version.value() != version
+        || version == 0
+        || crate::submitter::from_columns(row.submitter_kind, row.submitter_id)?
+            != Some(target.submitter())
+    {
+        return Err(DeliveryError::Corrupt {
+            field: "owed publication identity",
+        });
+    }
+    let reference = PublicationRef {
+        item: publication.item,
+        version: publication.version,
+        target,
+    };
+    Ok(Some((reference, publication)))
+}

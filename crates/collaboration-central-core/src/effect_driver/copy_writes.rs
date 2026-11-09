@@ -1,7 +1,7 @@
 //! A verified session's peer is the writer authority; frames cannot choose it.
 use super::EffectDriver;
 use crate::{
-    ObjectHost, PlatformIo,
+    ObjectPlatform,
     copy_write_calls::{CopySessionWrite, WriterCopyRequest},
 };
 use board_sync_protocol::BoardConsumerProtocol;
@@ -9,7 +9,7 @@ use durable_steps::Host as _;
 use fleet_protocol::{ConnectionId, DatabaseId, FrameId, OperationAnswer, ServerFrame};
 use fleet_session::SessionKey;
 
-impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
+impl<Host: ObjectPlatform> EffectDriver<Host> {
     pub(super) async fn answer_copy_write(
         &self,
         connection: ConnectionId,

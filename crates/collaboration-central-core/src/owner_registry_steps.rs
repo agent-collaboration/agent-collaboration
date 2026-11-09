@@ -55,10 +55,13 @@ where
                 ));
             };
             let attempt = self.offer.attempt();
-            let saved = fleet_project_lease::holder_change_view(scope, attempt)
-                .await
-                .map_err(StoreError::backend)?
-                .map(|view| view.request);
+            let saved = fleet_project_lease::holder_change_view::<
+                crate::central_settlement::CentralSettlement,
+                _,
+            >(scope, attempt)
+            .await
+            .map_err(StoreError::backend)?
+            .map(|view| view.request);
             let request = match self.offer {
                 OwnerTransferOffer::Move(offered) => {
                     let from_epoch = match &saved {
@@ -242,9 +245,12 @@ where
                     OwnerTransferAnswer::Failed { reason }
                 }
                 Some(HolderChangeAnswer::Pending { .. }) | None => {
-                    let view = fleet_project_lease::holder_change_view(scope, attempt)
-                        .await
-                        .map_err(StoreError::backend)?;
+                    let view = fleet_project_lease::holder_change_view::<
+                        crate::central_settlement::CentralSettlement,
+                        _,
+                    >(scope, attempt)
+                    .await
+                    .map_err(StoreError::backend)?;
                     match view
                         .and_then(|view| view.waiting)
                         .and_then(|waiting| waiting.copy_unavailable)

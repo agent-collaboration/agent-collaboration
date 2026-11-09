@@ -56,7 +56,7 @@ async fn relay_submit(fixture: &Fixture, id: u64) -> SubmitResult<Acceptance> {
         .transaction(move |scope| {
             Box::pin(async move {
                 Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .submit_relay::<FixturePush<TestTypes>, RecordRemoval>(
+                    .submit_relay::<fleet_mail_delivery::JournaledWork<FixturePush<TestTypes>, RecordRemoval>>(
                         Submitter::Machine(peer(1)),
                         cancel(id, 1),
                         peer(3),

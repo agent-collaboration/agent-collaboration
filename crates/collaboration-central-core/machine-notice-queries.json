@@ -199,6 +199,42 @@
           "nullable": false
         }
       ]
+    },
+    {
+      "name": "read_machine_notice_applied",
+      "sql": "sql/machine_notices/read_machine_notice_applied.sql",
+      "row": "StoredMachineNoticeApplied",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "machine_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "record_machine_notice_applied",
+      "sql": "sql/machine_notices/record_machine_notice_applied.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "through",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "machine_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
     }
   ]
 }

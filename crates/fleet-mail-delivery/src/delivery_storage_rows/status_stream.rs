@@ -420,3 +420,116 @@ where
             .collect()
     }
 }
+pub(crate) fn read_publication_by_id<S>(
+    scope: &mut S,
+    id: String,
+) -> impl std::future::Future<Output = Result<Option<StoredPublicationRow>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/read_publication_by_id.sql"
+        )))
+        .bind(id);
+        let row = statement.fetch_optional(scope.executor()).await?;
+        row.as_ref()
+            .map(|row| {
+                Ok(StoredPublicationRow {
+                    id: row.try_get("id")?,
+                    submitter_kind: row.try_get("submitter_kind")?,
+                    submitter_id: row.try_get("submitter_id")?,
+                    item_id: row.try_get("item_id")?,
+                    version_class: row.try_get("version_class")?,
+                    version: row.try_get("version")?,
+                    status_kind: row.try_get("status_kind")?,
+                    status_acceptance: row.try_get("status_acceptance")?,
+                    refusal_kind: row.try_get("refusal_kind")?,
+                    refusal_code: row.try_get("refusal_code")?,
+                    refusal_failure: row.try_get("refusal_failure")?,
+                    refusal_size_field: row.try_get("refusal_size_field")?,
+                    refusal_digest: row.try_get("refusal_digest")?,
+                    refusal_item_id: row.try_get("refusal_item_id")?,
+                    cancel_outcome: row.try_get("cancel_outcome")?,
+                    cancel_too_late_at: row.try_get("cancel_too_late_at")?,
+                    target_kind: row.try_get("target_kind")?,
+                    status_route: row.try_get("status_route")?,
+                })
+            })
+            .transpose()
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct StoredAppliedPublication {
+    pub id: Option<String>,
+}
+pub(crate) fn read_publications_applied_through<S>(
+    scope: &mut S,
+    submitter_kind: String,
+    submitter_id: String,
+    through: String,
+) -> impl std::future::Future<Output = Result<Vec<StoredAppliedPublication>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/read_publications_applied_through.sql"
+        )))
+        .bind(submitter_kind)
+        .bind(submitter_id)
+        .bind(through);
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredAppliedPublication {
+                    id: row.try_get("id")?,
+                })
+            })
+            .collect()
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct StoredStatusOwedRow {
+    pub id: Option<String>,
+    pub item_id: Option<String>,
+    pub version: Option<String>,
+}
+pub(crate) fn read_status_owed_rows<S>(
+    scope: &mut S,
+) -> impl std::future::Future<Output = Result<Vec<StoredStatusOwedRow>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/read_status_owed_rows.sql"
+        )));
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredStatusOwedRow {
+                    id: row.try_get("id")?,
+                    item_id: row.try_get("item_id")?,
+                    version: row.try_get("version")?,
+                })
+            })
+            .collect()
+    }
+}

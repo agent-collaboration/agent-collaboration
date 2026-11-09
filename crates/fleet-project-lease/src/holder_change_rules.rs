@@ -22,6 +22,7 @@ pub async fn holder_change<C, D, H>(
 where
     C: OperationContext,
     for<'t> H: crate::LeaseChangeHook<<C::Store as AtomicStore>::Scope<'t>>,
+    H: crate::OwedSettlement<C::Store, D>,
     D: Database,
     for<'t> <C::Store as AtomicStore>::Scope<'t>: TransactionScope<Database = D>,
     D::Arguments: IntoArguments<D>,
@@ -29,7 +30,7 @@ where
     for<'value> Option<String>: Type<D> + Encode<'value, D> + Decode<'value, D>,
     for<'row> &'row str: ColumnIndex<D::Row>,
 {
-    let (intent, holder) = match change_checks::check::<C, D>(ctx, request, config).await? {
+    let (intent, holder) = match change_checks::check::<C, D, H>(ctx, request, config).await? {
         CheckedChange::Answer(answer) => return Ok(answer),
         CheckedChange::Continue { intent, holder } => (intent, holder),
     };
@@ -61,7 +62,7 @@ where
             let released = match released {
                 CallResult::Answered(answer) => answer,
                 CallResult::NeverSent { last_seen } => {
-                    return change_completion::refuse::<C, D>(
+                    return change_completion::refuse::<C, D, H>(
                         ctx,
                         request,
                         "holder_unreachable",
@@ -70,7 +71,7 @@ where
                     .await;
                 }
             };
-            if let Some(answer) = change_completion::outcome::<C, D>(
+            if let Some(answer) = change_completion::outcome::<C, D, H>(
                 ctx,
                 request,
                 "after_release",
@@ -103,7 +104,7 @@ where
                     migration,
                     state,
                 }) => {
-                    return change_completion::refuse::<C, D>(
+                    return change_completion::refuse::<C, D, H>(
                         ctx,
                         request,
                         "release_refused",
@@ -115,7 +116,7 @@ where
                     store,
                     supported,
                 }) => {
-                    return change_completion::refuse::<C, D>(
+                    return change_completion::refuse::<C, D, H>(
                         ctx,
                         request,
                         "release_refused",
@@ -124,7 +125,7 @@ where
                     .await;
                 }
                 ReleaseAnswer::ReleaseRefused(ReleaseRefusal::Superseded { .. }) => {
-                    return change_completion::refuse::<C, D>(
+                    return change_completion::refuse::<C, D, H>(
                         ctx,
                         request,
                         "release_refused",
@@ -160,7 +161,7 @@ where
                     });
                 }
                 AwaitAckedAnswer::NotInitialized => {
-                    return change_completion::refuse::<C, D>(
+                    return change_completion::refuse::<C, D, H>(
                         ctx,
                         request,
                         "copy_not_initialized",
@@ -169,7 +170,7 @@ where
                     .await;
                 }
                 AwaitAckedAnswer::Retired => {
-                    return change_completion::refuse::<C, D>(
+                    return change_completion::refuse::<C, D, H>(
                         ctx,
                         request,
                         "copy_retired",
@@ -200,7 +201,7 @@ where
             match gate {
                 GateAnswer::Reserved => {}
                 GateAnswer::Refused { reason } => {
-                    return change_completion::refuse::<C, D>(
+                    return change_completion::refuse::<C, D, H>(
                         ctx,
                         request,
                         "reservation_refused",
@@ -214,7 +215,7 @@ where
                     });
                 }
             }
-            if let Some(answer) = change_completion::outcome::<C, D>(
+            if let Some(answer) = change_completion::outcome::<C, D, H>(
                 ctx,
                 request,
                 "after_reserve",
@@ -237,7 +238,7 @@ where
             let status = match status {
                 CopyStatusAnswer::Status(status) => status,
                 CopyStatusAnswer::NotInitialized => {
-                    let answer = change_completion::refuse::<C, D>(
+                    let answer = change_completion::refuse::<C, D, H>(
                         ctx,
                         request,
                         "copy_not_initialized",
@@ -247,7 +248,7 @@ where
                     return settle_claim::<C, D>(ctx, request, answer).await;
                 }
                 CopyStatusAnswer::Retired => {
-                    let answer = change_completion::refuse::<C, D>(
+                    let answer = change_completion::refuse::<C, D, H>(
                         ctx,
                         request,
                         "copy_retired",
@@ -268,7 +269,7 @@ where
             }
         }
     };
-    if let Some(answer) = change_completion::outcome::<C, D>(
+    if let Some(answer) = change_completion::outcome::<C, D, H>(
         ctx,
         request,
         "before_fence",
@@ -295,7 +296,8 @@ where
         )
         .await?;
     if let FenceResult::FenceNotAdvanced { current_epoch } = fenced {
-        match crate::floor_repair::repair::<C, D>(ctx, request, current_epoch, expect.acked).await?
+        match crate::floor_repair::repair::<C, D, H>(ctx, request, current_epoch, expect.acked)
+            .await?
         {
             crate::floor_repair::RepairedFence::Answer(answer) => {
                 return settle_claim::<C, D>(ctx, request, answer).await;
@@ -348,7 +350,7 @@ where
         FenceResult::Retired => Some(HolderChangeRefusal::Retired),
     };
     let answer = if let Some(reason) = refusal {
-        change_completion::refuse::<C, D>(ctx, request, "fence_refused", reason).await?
+        change_completion::refuse::<C, D, H>(ctx, request, "fence_refused", reason).await?
     } else {
         change_completion::grant::<C, D, H>(ctx, request, fenced, expect, config, hook).await?
     };

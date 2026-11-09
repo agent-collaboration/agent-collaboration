@@ -2,7 +2,7 @@
 
 use crate::conformance_core_store::{ControlIo, ReceiptStoreHost, new_host};
 use collaboration_central_core::{
-    AccessCaller, AccessClientId, BootstrapCommand, EnrollMachine, ObjectBootstrap, ObjectHost,
+    AccessCaller, AccessClientId, BootstrapCommand, EnrollMachine, ObjectBootstrap, ObjectPlatform,
     ObjectRuntime, OwnerIdentity,
 };
 use fleet_project_lease::{LeasePolicy, RegistryConfig};
@@ -79,19 +79,11 @@ enum Command {
 }
 fn registry(
     host: Arc<ReceiptStoreHost>,
-) -> Result<
-    ObjectRuntime<
-        collaboration_central_core::FleetKind,
-        ReceiptStoreHost,
-        crate::conformance_core_store::ControlIo,
-    >,
-> {
+) -> Result<ObjectRuntime<collaboration_central_core::FleetKind, ReceiptStoreHost>> {
     let receiver = ReceiverId::try_from("019f0000-0000-7000-8000-000000000010".to_owned())
         .map_err(|e| Error::RustError(e.to_string()))?;
-    let io = crate::conformance_core_store::ControlIo::new(host.wake().clone());
     ObjectRuntime::fleet(
         host,
-        io,
         RegistryConfig {
             lease: LeasePolicy {
                 lease_duration: Duration::from_secs(60),
@@ -108,9 +100,41 @@ fn registry(
             .map_err(|error| worker::Error::RustError(error.to_string()))?,
         },
         Duration::from_secs(20),
-        fleet_protocol::FrameCapabilities::default(),
+        collaboration_central_core::CENTRAL_FRAME_CAPABILITIES,
     )
     .map_err(|e| Error::RustError(e.to_string()))
+}
+
+/// Send a registry call as one Call event through the Fleet kernel, as the edge does.
+async fn registry_call_event(
+    runtime: &ObjectRuntime<collaboration_central_core::FleetKind, ReceiptStoreHost>,
+    caller: AccessCaller,
+    call: collaboration_central_core::RegistryCall,
+) -> std::result::Result<collaboration_central_core::RegistryResult, durable_steps::StoreError> {
+    let (_, body) = collaboration_central_core::conformance_setup_calls::encode_edge_registry_call(
+        caller,
+        call,
+        durable_steps::Uuid::now_v7(),
+    )
+    .map_err(|failure| durable_steps::StoreError::backend(format!("{failure:?}")))?
+    .into_parts();
+    match collaboration_central_core::ObjectKernel::new(runtime)
+        .on_event(collaboration_central_core::ObjectEvent::Call {
+            body,
+            storage_bytes: None,
+        })
+        .await
+    {
+        collaboration_central_core::EventReply::CallAnswer(reply) => {
+            collaboration_central_core::deserialize_object_reply::<
+                collaboration_central_core::RegistryKind,
+            >(&reply)
+            .map_err(|failure| durable_steps::StoreError::backend(format!("{failure:?}")))
+        }
+        other => Err(durable_steps::StoreError::backend(format!(
+            "registry call event answered {other:?}"
+        ))),
+    }
 }
 
 #[derive(Deserialize)]
@@ -198,47 +222,71 @@ impl DurableObject for BootstrapObject {
             .map_err(|error| Error::RustError(error.to_string()))?;
         if let Some(Fault::LoseRollbackReply) = body.fault {
             #[cfg(feature = "conformance-faults")]
-            host.store().inner().lose_next_rollback_reply();
+            host.store().inner().inner().lose_next_rollback_reply();
             #[cfg(not(feature = "conformance-faults"))]
             return Response::error("store faults unavailable", 404);
         }
         let result = match body.command {
-            Command::Bootstrap(command) => {
-                ObjectBootstrap::new(host.clone(), Arc::new(ControlIo::new(host.wake().clone())))
-                    .execute(command)
-                    .await
-                    .and_then(|reply| {
-                        serde_json::to_value(reply).map_err(durable_steps::StoreError::backend)
-                    })
-            }
+            Command::Bootstrap(command) => ObjectBootstrap::new(
+                host.clone(),
+                Arc::new(ControlIo::new(host.alarm().owner().clone())),
+            )
+            .execute(command)
+            .await
+            .and_then(|reply| {
+                serde_json::to_value(reply).map_err(durable_steps::StoreError::backend)
+            }),
             Command::ImportedUnheld { .. } => Err(durable_steps::StoreError::backend(
                 "import fixture must use the composed Registry",
             )),
+            // Enrollment and authentication run as the edge's registry call
+            // events, so what they owe is sent after the event.
             Command::Enroll(request) => {
-                let runtime = registry(host.clone())?;
-                let owner = OwnerIdentity::from_access(AccessCaller::Owner {
-                    email: "fixture@example.test".into(),
-                })
-                .map_err(|e| Error::RustError(e.to_string()))?;
-                runtime
-                    .enroll_machine(&owner, request)
-                    .await
-                    .and_then(|reply| {
-                        serde_json::to_value(reply).map_err(durable_steps::StoreError::backend)
-                    })
+                match registry_call_event(
+                    &registry(host.clone())?,
+                    AccessCaller::Owner {
+                        email: "fixture@example.test".into(),
+                    },
+                    collaboration_central_core::RegistryCall::EnrollMachine(request),
+                )
+                .await
+                {
+                    Ok(collaboration_central_core::RegistryResult::Enrollment(decision)) => {
+                        serde_json::to_value(decision).map_err(durable_steps::StoreError::backend)
+                    }
+                    Ok(_) => Err(durable_steps::StoreError::backend(
+                        "enrollment answered another result",
+                    )),
+                    Err(failure) => Err(failure),
+                }
             }
             Command::Authenticate {
                 access_client_id,
                 credential_hash,
-            } => registry(host.clone())?
-                .authenticate_machine(access_client_id, credential_hash)
+            } => {
+                match registry_call_event(
+                    &registry(host.clone())?,
+                    AccessCaller::Machine {
+                        client_id: access_client_id,
+                    },
+                    collaboration_central_core::RegistryCall::AuthenticateEnrollment {
+                        credential_hash,
+                    },
+                )
                 .await
-                .and_then(|reply| {
-                    serde_json::to_value(reply).map_err(durable_steps::StoreError::backend)
-                }),
+                {
+                    Ok(collaboration_central_core::RegistryResult::EnrollmentAuthenticated(
+                        result,
+                    )) => serde_json::to_value(result).map_err(durable_steps::StoreError::backend),
+                    Ok(_) => Err(durable_steps::StoreError::backend(
+                        "authentication answered another result",
+                    )),
+                    Err(failure) => Err(failure),
+                }
+            }
         };
         #[cfg(feature = "conformance-faults")]
-        let observed = host.store().inner().reply_loss_observed();
+        let observed = host.store().inner().inner().reply_loss_observed();
         #[cfg(not(feature = "conformance-faults"))]
         let observed = false;
         Response::from_json(&serde_json::json!({"result":result,"replyLossObserved":observed}))

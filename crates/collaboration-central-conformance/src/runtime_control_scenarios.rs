@@ -136,6 +136,8 @@ pub async fn run_runtime_control_conformance(client: &ConformanceClient) -> Conf
         if !same_clock {return Err("admission changed the pinned clock instead of waking due work".into());}
         println!("PINNED_CLOCK_CASE new_Hello_admission_wakes_at_the_same_injected_time passed");
         println!("RUNTIME_CONTROLS_CASE real_object_clock_late_storage_rollback_exact_answer_drop_and_owned_dispatch_hold passed");
+        crate::runtime_control_clock::clock_settle_cases(client, copy.clone(), now.0.timestamp_millis()).await?;
+        println!("CLOCK_SETTLE_CASE quiet_jump_short_move_one_delivered_alarm_fence_suppressed_consumed_and_unopened_notOpen passed");
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }.await;
     // Do not leave a dispatcher blocked on an early assertion failure.
@@ -306,6 +308,37 @@ async fn pin_fleet_clock(
         RuntimeControl::SetTime { now },
     )
     .await?;
+    let workspace = create_workspace(socket).await?;
+    let answer = operation(
+        socket,
+        OperationRequest::Consumer(BoardConsumerRequest::Read {
+            scope: BoardReadScope::FleetRecords,
+            cursor: Some(board_sync_protocol::BoardReadCursor::Fleet(
+                message_board::FleetPosition::ZERO,
+            )),
+        }),
+    )
+    .await?;
+    let OperationAnswer::Consumer(BoardConsumerAnswer::Read(BoardReadPage::FleetFeed(
+        FleetFeedRead::Page { records, .. },
+    ))) = answer
+    else {
+        return Err("clock case did not read its real Fleet feed".into());
+    };
+    let records = records
+        .into_iter()
+        .map(|record| record.decode::<message_board::Record>())
+        .collect::<Result<Vec<_>, _>>()?;
+    if !records.iter().any(|record| matches!(record, message_board::Record::Workspace(value) if value.workspace_id == workspace && value.envelope.time == message_board::RecordTime::Router(now.0))) {
+        return Err("SetTime did not reach the normal owning Fleet write".into());
+    }
+    Ok(())
+}
+/// One real owning Fleet write (a workspace create, which appends to the feed)
+/// on `socket`; answers the workspace it created.
+pub(crate) async fn create_workspace(
+    socket: &mut WebSocket,
+) -> ConformanceResult<message_board::WorkspaceId> {
     let workspace =
         message_board::WorkspaceId::try_from(durable_steps::Uuid::now_v7().to_string())?;
     let request = FleetRequest {
@@ -340,30 +373,7 @@ async fn pin_fleet_clock(
     ) {
         return Err("clock fixture metadata was not accepted".into());
     }
-    let answer = operation(
-        socket,
-        OperationRequest::Consumer(BoardConsumerRequest::Read {
-            scope: BoardReadScope::FleetRecords,
-            cursor: Some(board_sync_protocol::BoardReadCursor::Fleet(
-                message_board::FleetPosition::ZERO,
-            )),
-        }),
-    )
-    .await?;
-    let OperationAnswer::Consumer(BoardConsumerAnswer::Read(BoardReadPage::FleetFeed(
-        FleetFeedRead::Page { records, .. },
-    ))) = answer
-    else {
-        return Err("clock case did not read its real Fleet feed".into());
-    };
-    let records = records
-        .into_iter()
-        .map(|record| record.decode::<message_board::Record>())
-        .collect::<Result<Vec<_>, _>>()?;
-    if !records.iter().any(|record| matches!(record, message_board::Record::Workspace(value) if value.workspace_id == workspace && value.envelope.time == message_board::RecordTime::Router(now.0))) {
-        return Err("SetTime did not reach the normal owning Fleet write".into());
-    }
-    Ok(())
+    Ok(workspace)
 }
 fn position(sequence: u64) -> ConformanceResult<ReplicationPosition> {
     Ok(ReplicationPosition::new(

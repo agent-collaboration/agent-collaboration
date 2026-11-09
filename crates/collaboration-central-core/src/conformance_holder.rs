@@ -3,7 +3,7 @@ use crate::FleetKind;
 
 use crate::{
     AccessCaller, CallerContext, CallerKind, CentralApplication, CentralPlatform, EdgeKind,
-    ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo, RegistryKind,
+    ObjectAddress, ObjectPlatform, ObjectRuntime, RegistryKind,
     caller_context::CallAuthority,
     object_call_envelope::{ObjectCallEnvelope, encode_shared_call},
     object_runtime::ObjectWork,
@@ -190,7 +190,7 @@ pub(crate) fn probe_response<Answer: Serialize>(result: Result<Answer, CallFailu
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

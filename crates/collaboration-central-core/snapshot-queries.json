@@ -1,0 +1,31 @@
+{
+  "migrations": [
+    "work_migrations",
+    "session_migrations"
+  ],
+  "output": "src/generated_snapshot.rs",
+  "metadata": "snapshot-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_snapshot_attempts",
+      "sql": "sql/snapshot/read_snapshot_attempts.sql",
+      "result": "many",
+      "parameters": [],
+      "row": "SnapshotAttemptRow"
+    },
+    {
+      "name": "read_snapshot_in_flight",
+      "sql": "sql/snapshot/read_snapshot_in_flight.sql",
+      "result": "many",
+      "parameters": [],
+      "row": "SnapshotInFlightRow"
+    },
+    {
+      "name": "read_snapshot_notice_progress",
+      "sql": "sql/snapshot/read_snapshot_notice_progress.sql",
+      "result": "many",
+      "parameters": [],
+      "row": "SnapshotNoticeProgressRow"
+    }
+  ]
+}

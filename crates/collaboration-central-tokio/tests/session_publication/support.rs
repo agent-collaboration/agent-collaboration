@@ -1,12 +1,13 @@
 use collaboration_central_core::{
-    CoreHost, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo, RegistrationEdits,
+    CoreHost, ObjectAddress, ObjectIo, ObjectPlatform, ObjectRuntime, RegistrationEdits,
     RegistrationSnapshot, SocketFailure,
 };
-use collaboration_central_tokio::{SocketCommand, TokioStorageHost};
+use collaboration_central_tokio::SocketCommand;
 use durable_steps::{
     AtomicStore, BoxFuture, CallFailure, NotSentReason, ReborrowScope, StoreError,
     storage::TransactionScope,
 };
+use fleet_protocol::FrameCapabilities;
 use fleet_protocol::{
     ClientFrame, CloseReason, ConnectionId, NoConsumer, PeerId, ReceiverId, SchemaSupport,
     SessionId,
@@ -15,17 +16,14 @@ use fleet_session::{Bytes, ConnectionBinding, ConnectionRegistration, VerifiedPe
 use fleet_tokio_objects::{ObjectKey, ObjectStore, TokioObject};
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use sqlx_core::{query::query, row::Row};
-use std::{
-    future::Future,
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, AtomicI64, AtomicU8, Ordering},
-    },
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, AtomicI64, AtomicU8, Ordering},
 };
 use tokio::sync::{Semaphore, mpsc};
 
 pub type TestError = Box<dyn std::error::Error + Send + Sync>;
-pub type Runtime = ObjectRuntime<collaboration_central_core::FleetKind, TestHost, Transport>;
+pub type Runtime = ObjectRuntime<collaboration_central_core::FleetKind, TestHost>;
 type NativeObject = TokioObject<CoreHost<Transport>>;
 
 #[derive(Clone, Default)]
@@ -35,13 +33,28 @@ pub struct Transport {
     pub wakes: Arc<Mutex<Vec<SyncTime>>>,
     pub gather: Arc<PublicationProbe>,
     pub schema: Arc<PublicationProbe>,
-    pub clock_offset_millis: Arc<AtomicI64>,
+    pub clock: Arc<InjectedClock>,
+}
+
+/// The fixture's business clock. Moving it wakes any event deadline it passes,
+/// so a test ends a wait causally, without real time.
+#[derive(Default)]
+pub struct InjectedClock {
+    offset_millis: AtomicI64,
+    moved: tokio::sync::Notify,
+}
+impl InjectedClock {
+    pub fn set_offset(&self, millis: i64) {
+        self.offset_millis.store(millis, Ordering::SeqCst);
+        self.moved.notify_waiters();
+    }
+    fn offset(&self) -> i64 {
+        self.offset_millis.load(Ordering::SeqCst)
+    }
 }
 impl Clock for Transport {
     fn now(&self) -> SyncTime {
-        SyncTime::from_unix_millis(
-            1_792_281_600_000_i64.saturating_add(self.clock_offset_millis.load(Ordering::SeqCst)),
-        )
+        SyncTime::from_unix_millis(1_792_281_600_000_i64.saturating_add(self.clock.offset()))
     }
 }
 impl IdSource for Transport {
@@ -60,12 +73,30 @@ impl WakeScheduler for Transport {
         Ok(())
     }
 }
-impl PlatformIo for Transport {
-    fn reply_deadline(
+impl ObjectIo for Transport {
+    fn event_deadline(
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
-        tokio::time::sleep(remaining)
+        let until = self.now().after(remaining);
+        let io = self.clone();
+        async move {
+            let injected = async {
+                loop {
+                    let moved = io.clock.moved.notified();
+                    tokio::pin!(moved);
+                    moved.as_mut().enable();
+                    if io.now() >= until {
+                        return;
+                    }
+                    moved.await;
+                }
+            };
+            tokio::select! {
+                () = tokio::time::sleep(remaining) => {}
+                () = injected => {}
+            }
+        }
     }
 
     async fn before_local_call(&self, bytes: &[u8]) -> Result<(), CallFailure> {
@@ -191,25 +222,29 @@ impl AtomicStore for TestStore {
 }
 
 pub struct TestHost {
-    pub native: Arc<TokioStorageHost<CoreHost<Transport>>>,
+    pub native: Arc<crate::io_alarm::IoPlatform<Transport>>,
     pub store: Arc<TestStore>,
     pub probe: Arc<PublicationProbe>,
     pub send_failure: Mutex<Option<ConnectionId>>,
     welcome: Arc<PublicationProbe>,
 }
-impl ObjectHost for TestHost {
+impl ObjectPlatform for TestHost {
     type Database = sqlx_turso::Turso;
     type Store = TestStore;
-    type Wake = CoreHost<Transport>;
+    type Alarm = crate::io_alarm::IoAlarm<Transport>;
+    type Io = Transport;
     fn store(&self) -> &Arc<Self::Store> {
         &self.store
     }
-    fn wake(&self) -> &Self::Wake {
-        self.native.wake()
+    fn alarm(&self) -> &Self::Alarm {
+        self.native.alarm()
+    }
+    fn io(&self) -> &std::sync::Arc<Self::Io> {
+        self.native.io()
     }
     async fn with_local_section<Output: Send + 'static>(
         &self,
-        run: impl Future<Output = Output> + Send + 'static,
+        run: collaboration_central_core::LocalSection<Output>,
     ) -> Result<Output, collaboration_central_core::LocalSectionFailure> {
         self.native.with_local_section(run).await
     }
@@ -317,17 +352,36 @@ pub struct Fixture {
 }
 impl Fixture {
     pub async fn open(path: &std::path::Path) -> Result<Self, TestError> {
-        Self::open_with(path, true, Self::default_installation()?).await
+        Self::open_with(
+            path,
+            true,
+            Self::default_installation()?,
+            FrameCapabilities::default(),
+        )
+        .await
     }
     pub async fn reopen(path: &std::path::Path) -> Result<Self, TestError> {
-        Self::open_with(path, false, Self::default_installation()?).await
+        Self::open_with(
+            path,
+            false,
+            Self::default_installation()?,
+            FrameCapabilities::default(),
+        )
+        .await
     }
 
     pub async fn open_for_installation(
         path: &std::path::Path,
         installation: message_board::ServiceId,
     ) -> Result<Self, TestError> {
-        Self::open_with(path, true, installation).await
+        Self::open_with(path, true, installation, FrameCapabilities::default()).await
+    }
+    /// A Fleet that honors `honored` frame capabilities, as a deployed central does.
+    pub async fn open_honoring(
+        path: &std::path::Path,
+        honored: FrameCapabilities,
+    ) -> Result<Self, TestError> {
+        Self::open_with(path, true, Self::default_installation()?, honored).await
     }
     fn default_installation() -> Result<message_board::ServiceId, TestError> {
         Ok(message_board::ServiceId::try_from(
@@ -338,6 +392,7 @@ impl Fixture {
         path: &std::path::Path,
         initialize: bool,
         installation: message_board::ServiceId,
+        honored: FrameCapabilities,
     ) -> Result<Self, TestError> {
         let io = Transport::default();
         let receiver = ReceiverId::new(durable_steps::Uuid::now_v7())?;
@@ -346,7 +401,10 @@ impl Fixture {
         let object = objects
             .object(ObjectKey::new("fleet")?, Default::default(), shared)
             .await?;
-        let native = Arc::new(TokioStorageHost::new(object.clone()));
+        let native = Arc::new(crate::io_alarm::io_platform(
+            object.clone(),
+            object.host().io().clone(),
+        ));
         let host = Arc::new(TestHost {
             native,
             store: Arc::new(TestStore {
@@ -362,7 +420,6 @@ impl Fixture {
         // This route address is a test fixture only; no provenance is derived from PeerId.
         let runtime = Arc::new(Runtime::fleet(
             host.clone(),
-            io.clone(),
             fleet_project_lease::RegistryConfig {
                 authoritative_receiver: receiver,
                 lease: fleet_project_lease::LeasePolicy {
@@ -378,7 +435,7 @@ impl Fixture {
                     .try_into()?,
             },
             std::time::Duration::from_secs(2),
-            fleet_protocol::FrameCapabilities::default(),
+            honored,
         )?);
         if initialize {
             runtime.initialize().await?;

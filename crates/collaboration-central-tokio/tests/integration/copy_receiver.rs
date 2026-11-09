@@ -36,7 +36,7 @@ async fn applied_summary_keeps_unknown_time_and_no_status_in_copy_and_directory(
         assert_eq!(fixture.summary(false).await?, Some(json!({
             "database":fixture.database,"summary":annotation,"position":position(1)?,"ackedAt":1_792_281_600_000_i64
         })));
-        fixture.runtime.on_alarm().await?;
+        crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
         assert_eq!(fixture.summary(true).await?, fixture.summary(false).await?);
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }.await;
@@ -83,7 +83,7 @@ async fn a_piece_without_annotation_keeps_the_last_summary_and_admits_no_new_upd
     let proof = async {
         fixture.create(false).await?;
         fixture.apply(schema_piece(fixture.database)?).await?;
-        fixture.runtime.on_alarm().await?;
+        crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
         let summary = fixture.runtime.copy_summary().await?;
         let counts = fixture.counts().await?;
         let calls = fixture.io.calls.lock().map_err(|_| "calls poisoned")?.len();
@@ -105,7 +105,7 @@ async fn a_piece_without_annotation_keeps_the_last_summary_and_admits_no_new_upd
                 through: position(2)?
             }
         );
-        fixture.runtime.on_alarm().await?;
+        crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
         assert_eq!(fixture.runtime.copy_summary().await?, summary);
         assert_eq!(fixture.counts().await?, counts);
         assert_eq!(

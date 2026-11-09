@@ -19,7 +19,7 @@ async fn pending_hop_and_local_tasks_finish_after_removal_without_redispatch_or_
         .transaction(|scope| {
             Box::pin(async move {
                 Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .submit_relay::<PushTask, RecordRemoval>(
+                    .submit_relay::<fleet_mail_delivery::JournaledWork<PushTask, RecordRemoval>>(
                         fleet_mail_delivery::Submitter::Machine(peer(1)),
                         item(1, "pending sender"),
                         peer(3),
@@ -233,7 +233,7 @@ async fn sixty_one_day_receipt_is_refused_even_after_custody_was_removed() {
                     digest: item(1, "old").digest().clone(),
                 };
                 let result = Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .receipt::<super::support::network::PublishTask>(
+                    .receipt::<fleet_mail_delivery::JournaledStatus<super::support::network::PublishTask>>(
                         peer(2),
                         &reference,
                         PushResult::Accepted {
@@ -270,7 +270,7 @@ async fn sixty_one_day_recipient_report_is_refused_even_after_custody_was_remove
                     outcome: RecipientOutcome::Held,
                 };
                 let result = Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .recipient_report::<super::support::network::PublishTask>(
+                    .recipient_report::<fleet_mail_delivery::JournaledStatus<super::support::network::PublishTask>>(
                         peer(2),
                         report,
                         day(61),

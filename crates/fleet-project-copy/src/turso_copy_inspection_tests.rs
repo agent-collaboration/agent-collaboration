@@ -318,22 +318,39 @@ async fn interrupted_transaction_parts_keep_individual_times_and_inspection_writ
                 stage: CopyStage::Following,
                 staged_parts,
                 ..
-            } => assert_eq!(
-                staged_parts,
-                vec![StagedTransaction {
-                    transaction_key,
-                    parts: vec![
-                        StagedPart {
-                            index: 0,
-                            staged_at: SyncTime::from_unix_millis(100)
-                        },
-                        StagedPart {
-                            index: 1,
-                            staged_at: SyncTime::from_unix_millis(101)
-                        }
+            } => {
+                let [
+                    StagedTransaction {
+                        transaction_key: key,
+                        parts,
+                    },
+                ] = staged_parts.as_slice()
+                else {
+                    return Err(format!("expected one staged transaction: {staged_parts:?}").into());
+                };
+                assert_eq!(*key, transaction_key);
+                assert_eq!(
+                    parts
+                        .iter()
+                        .map(|part| (part.index, part.staged_at))
+                        .collect::<Vec<_>>(),
+                    [
+                        (0, SyncTime::from_unix_millis(100)),
+                        (1, SyncTime::from_unix_millis(101))
                     ]
-                }]
-            ),
+                );
+                // Each part's key is a UUIDv7 minted at its own staged time.
+                for part in parts {
+                    let millis = part
+                        .id
+                        .get_timestamp()
+                        .map(|stamp| stamp.to_unix())
+                        .map(|(seconds, nanos)| seconds * 1000 + u64::from(nanos) / 1_000_000);
+                    assert_eq!(part.id.get_version_num(), 7);
+                    assert_eq!(millis, u64::try_from(part.staged_at.unix_millis()).ok());
+                }
+                assert_ne!(parts[0].id, parts[1].id);
+            }
             answer => return Err(format!("expected staged transaction facts: {answer:?}").into()),
         }
     }

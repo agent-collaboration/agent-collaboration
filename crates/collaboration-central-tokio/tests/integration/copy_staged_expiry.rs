@@ -76,7 +76,7 @@ async fn a_reopened_copy_alarm_removes_expired_staged_parts() -> TestResult {
     let observed = async {
         let before = staged_count(&reopened).await?;
         reopened.io.time.fetch_add(2 * 86_400_000, Ordering::SeqCst);
-        reopened.runtime.on_alarm().await?;
+        crate::kernel_alarm::deliver_alarm(&reopened.runtime).await?;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>((before, staged_count(&reopened).await?))
     }
     .await;

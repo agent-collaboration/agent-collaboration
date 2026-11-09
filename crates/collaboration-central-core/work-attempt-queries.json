@@ -1,0 +1,451 @@
+{
+  "migrations": [
+    "work_migrations"
+  ],
+  "output": "src/generated_work_attempts.rs",
+  "metadata": "work-attempt-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_work_attempt",
+      "sql": "sql/work_attempts/read_work_attempt.sql",
+      "row": "StoredWorkAttempt",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "subject",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_work_attempt_failure",
+      "sql": "sql/work_attempts/insert_work_attempt_failure.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "subject",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "state",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "next_attempt_at",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "last_error_class",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "last_error",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "update_work_attempt_failure",
+      "sql": "sql/work_attempts/update_work_attempt_failure.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "state",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "next_attempt_at",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "attempts",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "first_failed_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "last_error_class",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "last_error",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "delete_work_attempt",
+      "sql": "sql/work_attempts/delete_work_attempt.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "subject",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_next_work_retry",
+      "sql": "sql/work_attempts/read_next_work_retry.sql",
+      "row": "StoredNextWorkRetry",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "insert_work_attempt_owed",
+      "sql": "sql/work_attempts/insert_work_attempt_owed.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "subject",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "next_attempt_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "park_work_attempt",
+      "sql": "sql/work_attempts/park_work_attempt.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "subject",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "arm_parked_work_attempt",
+      "sql": "sql/work_attempts/arm_parked_work_attempt.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "subject",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "next_attempt_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_due_work_attempts",
+      "sql": "sql/work_attempts/read_due_work_attempts.sql",
+      "row": "StoredDueWorkAttempt",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_socket_request_waiting",
+      "sql": "sql/socket_requests/insert_socket_request_waiting.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "subject",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "reset_socket_request_waiting",
+      "sql": "sql/socket_requests/reset_socket_request_waiting.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "subject",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "mark_socket_request_sent",
+      "sql": "sql/socket_requests/mark_socket_request_sent.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "subject",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "send_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "connection_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "session_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "sent_version",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "next_attempt_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_socket_request_by_send",
+      "sql": "sql/socket_requests/read_socket_request_by_send.sql",
+      "row": "StoredSocketRequestSend",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "send_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "count_socket_requests_in_flight",
+      "sql": "sql/socket_requests/count_socket_requests_in_flight.sql",
+      "row": "StoredSocketRequestCount",
+      "result": "one",
+      "parameters": [
+        {
+          "name": "connection_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_owed_socket_requests",
+      "sql": "sql/socket_requests/read_owed_socket_requests.sql",
+      "row": "StoredOwedSubject",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "connection_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "after",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "limit",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "update_socket_request_refused",
+      "sql": "sql/socket_requests/update_socket_request_refused.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "subject",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "kind",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "next_attempt_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "attempts",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "first_failed_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "last_error_class",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "last_error",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "now",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

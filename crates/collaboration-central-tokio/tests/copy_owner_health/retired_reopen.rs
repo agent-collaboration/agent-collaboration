@@ -90,20 +90,20 @@ async fn make_history_unsupported(root: &Path) -> ConformanceResult<Vec<HistoryS
     let mut expected = history_stamps(root).await?;
     let mut changed = 0_u64;
     for stamp in &mut expected {
-        if stamp.corpus == "fleet-sync-receiver" && stamp.version == 3 {
+        if stamp.corpus == "fleet-sync-receiver" && stamp.version == 4 {
             stamp.version = 999;
             changed += 1;
         }
     }
     if changed != 1 {
-        return Err("retired fixture did not have exactly one receiver history3 stamp".into());
+        return Err("retired fixture did not have exactly one receiver history4 stamp".into());
     }
     let mut store = sqlx_turso::TursoConnectOptions::new()
         .filename(root.join(format!("copy-{DATABASE}.db")))
         .connect()
         .await?;
     let changed = query::<sqlx_turso::Turso>(
-        "UPDATE central_schema_migrations SET version='999' WHERE corpus='fleet-sync-receiver' AND version='3'",
+        "UPDATE central_schema_migrations SET version='999' WHERE corpus='fleet-sync-receiver' AND version='4'",
     )
     .execute(&mut store)
     .await;

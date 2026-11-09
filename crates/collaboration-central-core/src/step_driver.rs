@@ -1,6 +1,6 @@
 //! Central owns the step boundary; the shared store owns its transaction.
 
-use crate::ObjectHost;
+use crate::ObjectPlatform;
 use durable_steps::{AtomicStore, BoxFuture, StoreError, storage::TransactionScope};
 use sqlx_core::{arguments::IntoArguments, database::Database, encode::Encode, types::Type};
 use std::sync::Arc;
@@ -18,11 +18,11 @@ impl<Effect> CommittedEffects<Effect> {
     }
 }
 
-pub(crate) struct StepDriver<Host: ObjectHost> {
+pub(crate) struct StepDriver<Host: ObjectPlatform> {
     host: Arc<Host>,
 }
 
-impl<Host: ObjectHost> StepDriver<Host>
+impl<Host: ObjectPlatform> StepDriver<Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

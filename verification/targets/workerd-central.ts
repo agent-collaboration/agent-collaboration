@@ -1,12 +1,28 @@
 import { mkdir, readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { createRequire } from "node:module";
-import { Miniflare, Response, convertV4MiniflareOptions } from "miniflare";
+import {
+  Miniflare,
+  Response,
+  convertV4MiniflareOptions,
+  type WorkerdStructuredLog,
+} from "miniflare";
 import { z } from "zod";
 import { CentralOwner } from "../clients/central-owner.ts";
 import { fingerprint, privateDirectory } from "../machines/owned-process.ts";
 import type { Target } from "../declaration.ts";
 import type { CentralTarget } from "./central-target.ts";
+
+async function qualifyWorkerdBundle(target: Extract<Target, { kind: "workerd" }>): Promise<void> {
+  const require = createRequire(import.meta.url);
+  z.object({ version: z.literal("5.20261012.0-beta") }).parse(require("miniflare/package.json"));
+  z.object({ version: z.literal("1.20261012.1") }).parse(require("workerd"));
+  if (
+    (await fingerprint(`${target.bundleDirectory}/index_bg.wasm`)) !== target.wasmSHA256 ||
+    (await fingerprint(`${target.bundleDirectory}/index.js`)) !== target.javascriptSHA256
+  )
+    throw new Error("Worker bundle mismatch");
+}
 
 export class WorkerdCentral implements CentralTarget {
   readonly origin: string;
@@ -17,15 +33,11 @@ export class WorkerdCentral implements CentralTarget {
     this.owner = owner;
     this.runtime = runtime;
   }
-  static async start(target: Extract<Target, { kind: "workerd" }>): Promise<WorkerdCentral> {
-    const require = createRequire(import.meta.url);
-    z.object({ version: z.literal("5.20261012.0-beta") }).parse(require("miniflare/package.json"));
-    z.object({ version: z.literal("1.20261012.1") }).parse(require("workerd"));
-    if (
-      (await fingerprint(`${target.bundleDirectory}/index_bg.wasm`)) !== target.wasmSHA256 ||
-      (await fingerprint(`${target.bundleDirectory}/index.js`)) !== target.javascriptSHA256
-    )
-      throw new Error("Worker bundle mismatch");
+  static async start(
+    target: Extract<Target, { kind: "workerd" }>,
+    observeStructuredLog?: (record: WorkerdStructuredLog) => void,
+  ): Promise<WorkerdCentral> {
+    await qualifyWorkerdBundle(target);
     await mkdir(target.root, { mode: 0o700 });
     await privateDirectory(target.root);
     const source: unknown = await import(pathToFileURL(target.template).href);
@@ -74,6 +86,11 @@ export class WorkerdCentral implements CentralTarget {
         port: 0,
         resourcePersistencePath: target.root,
         cf: false,
+        // Miniflare 5 sends actual Worker console records through this callback,
+        // independently of its framework logger. The observer retains errors.
+        ...(observeStructuredLog === undefined
+          ? {}
+          : { handleStructuredLogs: observeStructuredLog }),
         workers: [
           {
             name: "verification-central",

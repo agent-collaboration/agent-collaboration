@@ -2,13 +2,14 @@
 #![cfg(feature = "conformance")]
 
 use board_sync_protocol::BoardDeliveryTypes;
-use collaboration_central_core::{CoreHost, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo};
-use collaboration_central_tokio::TokioStorageHost;
+use collaboration_central_core::{
+    CoreHost, ObjectAddress, ObjectIo, ObjectPlatform, ObjectRuntime,
+};
 use durable_steps::{
     AtomicStore, CallFailure, CallId, OperationId, StepName, StoreError, Uuid,
     storage::TransactionScope,
 };
-use fleet_mail_delivery::{PublishStatus, StatusStream};
+use fleet_mail_delivery::StatusStream;
 use fleet_protocol::{
     DeliveryStatus, ItemId, PeerId, ReceiverId, StatusCursor, StatusFetchResult, StatusPublication,
     StatusVersion,
@@ -30,8 +31,7 @@ type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 type Acceptance = <BoardDeliveryTypes as fleet_protocol::DeliveryTypes>::Acceptance;
 type Runtime = ObjectRuntime<
     collaboration_central_core::FleetKind,
-    TokioStorageHost<CoreHost<NoObjectCalls>>,
-    NoObjectCalls,
+    crate::io_alarm::IoPlatform<NoObjectCalls>,
 >;
 
 use crate::session_publication_fixture as session_fixture;
@@ -53,8 +53,8 @@ impl WakeScheduler for NoObjectCalls {
         Ok(())
     }
 }
-impl PlatformIo for NoObjectCalls {
-    fn reply_deadline(
+impl ObjectIo for NoObjectCalls {
+    fn event_deadline(
         &self,
         remaining: std::time::Duration,
     ) -> impl std::future::Future<Output = ()> + Send {
@@ -87,8 +87,10 @@ impl Fixture {
             )
             .await?;
         let runtime = ObjectRuntime::fleet(
-            Arc::new(TokioStorageHost::new(object.clone())),
-            io.clone(),
+            Arc::new(crate::io_alarm::io_platform(
+                object.clone(),
+                std::sync::Arc::new(io.clone()),
+            )),
             fleet_project_lease::RegistryConfig {
                 authoritative_receiver: receiver,
                 lease: fleet_project_lease::LeasePolicy {
@@ -120,12 +122,12 @@ impl Fixture {
         let installation = self.installation.clone();
         let now = self.io.now();
         self.object.transaction(move |scope| Box::pin(async move {
-            // Enrollment is the fixture input; stream storage, journal admission and dispatch are real.
+            // Enrollment is the fixture input; stream storage and its owed publication are real.
             query::<sqlx_turso::Turso>("INSERT INTO machine_enrollments(machine_id,service_id,machine_label,access_client_id,credential_hash,state,expires_at,created_at,updated_at) VALUES(?,?,'status fixture',?,?,'enrolled','2033-05-18T03:33:20+00:00','2026-10-18T00:00:00+00:00','2026-10-18T00:00:00+00:00') ON CONFLICT(machine_id) DO NOTHING")
                 .bind(peer.to_string()).bind(installation.as_str()).bind(format!("status-client-{peer}")).bind(format!("status-credential-{peer}"))
                 .execute(scope.executor()).await.map_err(StoreError::backend)?;
             StatusStream::<_, BoardDeliveryTypes>::new(scope, fleet_protocol::Submitter::Machine(peer), route)
-                .append_and_admit::<PublishStatus<TokioObject<CoreHost<NoObjectCalls>>, sqlx_turso::Turso, BoardDeliveryTypes>>(
+                .append(
                     &StatusPublication { item, status: DeliveryStatus::Sent, version: StatusVersion::new(1), cancel: None },
                     now,
                 ).await.map_err(fleet_mail_delivery::delivery_rollback)?;
@@ -170,8 +172,7 @@ fn call() -> TestResult<CallId> {
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
-async fn a_disconnected_leaf_completes_publication_and_fetches_one_revision_after_reopen()
--> TestResult {
+async fn a_disconnected_leaf_keeps_its_publication_owed_and_fetchable_after_reopen() -> TestResult {
     // The real status rules, store, journal and leaf run here. No socket is
     // attached; a live WebSocket and normal session fetch remain higher proof.
     let root = tempfile::tempdir()?;
@@ -188,8 +189,17 @@ async fn a_disconnected_leaf_completes_publication_and_fetches_one_revision_afte
     assert_eq!(stored.events[0].status, DeliveryStatus::Sent);
 
     // A disconnected peer publication finishes, rather than backing off forever.
-    assert_eq!(first.runtime.on_alarm().await?.completed.len(), 1);
-    assert!(first.runtime.on_alarm().await?.completed.is_empty());
+    // A status publication is an owed row, never engine work (4b cutover).
+    let drive = first.runtime.conformance_drive_operations().await?;
+    assert!(drive.completed.is_empty() && drive.failed.is_empty() && drive.retried.is_empty());
+    assert!(
+        first
+            .runtime
+            .conformance_drive_operations()
+            .await?
+            .completed
+            .is_empty()
+    );
     assert_eq!(
         first.io.0.load(Ordering::SeqCst),
         0,
@@ -203,7 +213,14 @@ async fn a_disconnected_leaf_completes_publication_and_fetches_one_revision_afte
     let reopened = Fixture::open(root.path(), installation.clone()).await?;
     assert_eq!(reopened.fetch(peer).await?, stored);
     reopened.publish(peer, installation, item).await?;
-    assert!(reopened.runtime.on_alarm().await?.completed.is_empty());
+    assert!(
+        reopened
+            .runtime
+            .conformance_drive_operations()
+            .await?
+            .completed
+            .is_empty()
+    );
     assert_eq!(reopened.fetch(peer).await?, stored);
     assert_eq!(reopened.io.0.load(Ordering::SeqCst), 0);
     reopened.objects.close().await?;
@@ -241,8 +258,17 @@ async fn a_status_route_for_another_installation_is_refused_without_forwarding()
         "{classified:?}"
     );
     assert_eq!(fixture.fetch(peer).await?, before);
-    assert_eq!(fixture.runtime.on_alarm().await?.completed.len(), 1);
-    assert!(fixture.runtime.on_alarm().await?.completed.is_empty());
+    // A status publication is an owed row, never engine work (4b cutover).
+    let drive = fixture.runtime.conformance_drive_operations().await?;
+    assert!(drive.completed.is_empty() && drive.failed.is_empty() && drive.retried.is_empty());
+    assert!(
+        fixture
+            .runtime
+            .conformance_drive_operations()
+            .await?
+            .completed
+            .is_empty()
+    );
     assert_eq!(fixture.io.0.load(Ordering::SeqCst), 0);
     fixture.objects.close().await?;
     Ok(())
@@ -267,8 +293,17 @@ async fn reopening_between_storage_and_the_live_attempt_keeps_status_fetchable()
 
     let reopened = Fixture::open(root.path(), installation).await?;
     assert_eq!(reopened.fetch(peer).await?, saved);
-    assert_eq!(reopened.runtime.on_alarm().await?.completed.len(), 1);
-    assert!(reopened.runtime.on_alarm().await?.completed.is_empty());
+    // A status publication is an owed row, never engine work (4b cutover).
+    let drive = reopened.runtime.conformance_drive_operations().await?;
+    assert!(drive.completed.is_empty() && drive.failed.is_empty() && drive.retried.is_empty());
+    assert!(
+        reopened
+            .runtime
+            .conformance_drive_operations()
+            .await?
+            .completed
+            .is_empty()
+    );
     assert_eq!(reopened.fetch(peer).await?, saved);
     assert_eq!(reopened.io.0.load(Ordering::SeqCst), 0);
     reopened.objects.close().await?;
@@ -280,21 +315,20 @@ async fn reopening_between_storage_and_the_live_attempt_keeps_status_fetchable()
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
-async fn a_live_status_attempt_never_waits_for_the_router_and_session_fetch_keeps_its_cursor()
--> TestResult {
+async fn a_session_fetch_reads_a_stored_machine_status_with_its_cursor() -> TestResult {
     use board_sync_protocol::BoardConsumerProtocol;
     use collaboration_central_tokio::SocketCommand;
     use fleet_protocol::{
         ClientFrame, DeliveryAnswer, DeliveryRequest, FrameId, OperationAnswer, OperationRequest,
-        ServerCall, ServerFrame, ServerRequest,
+        ServerFrame,
     };
     // Registry report/Welcome replies are the existing fixture stand-in; the
-    // session rules, native socket channel, status store and journal stay real.
+    // session rules, native socket channel and status store stay real.
     let root = tempfile::tempdir()?;
     let fixture = session_fixture::Fixture::open(root.path()).await?;
     let (binding, session, mut socket) = fixture.socket().await?;
     fixture.hello(binding, session).await?;
-    fixture.runtime.on_alarm().await?;
+    fixture.runtime.conformance_drive_operations().await?;
     assert!(matches!(socket.try_recv(), Ok(SocketCommand::Frame(_))));
     let route = ServiceId::try_from("019f0000-0000-7000-8000-000000000001".to_owned())?;
     let item = ItemId::new(Uuid::now_v7())?;
@@ -312,32 +346,26 @@ async fn a_live_status_attempt_never_waits_for_the_router_and_session_fetch_keep
         .len();
     let publication_for_store = publication.clone();
     let now = fixture.io.now();
-    fixture.host.store().transaction(move |scope| Box::pin(async move {
-        StatusStream::<_, BoardDeliveryTypes>::new(scope, fleet_protocol::Submitter::Machine(binding.peer), route)
-            .append_and_admit::<PublishStatus<session_fixture::TestStore, sqlx_turso::Turso, BoardDeliveryTypes>>(&publication_for_store, now)
-            .await.map_err(fleet_mail_delivery::delivery_rollback)?;
-        Ok(())
-    })).await?;
-    // The configured answer deadline is two seconds. This drive must finish
-    // without any Router answer, well before that independent deadline.
-    let driven = tokio::time::timeout(Duration::from_secs(1), fixture.runtime.on_alarm()).await??;
-    assert_eq!(driven.completed.len(), 1);
-    assert!(driven.retried.is_empty());
-    assert_eq!(fixture.runtime.conformance_holder_observation()?.0, 0);
-    let Some(SocketCommand::Frame(bytes)) = socket.try_recv().ok() else {
-        return Err("live status request missing".into());
-    };
-    let ServerFrame::<BoardConsumerProtocol>::Request {
-        body:
-            ServerRequest::Crate(ServerCall::PublishStatus {
-                publication: sent, ..
-            }),
-        ..
-    } = serde_json::from_slice(&bytes)?
-    else {
-        return Err("live request was not PublishStatus".into());
-    };
-    assert_eq!(sent, publication);
+    fixture
+        .host
+        .store()
+        .transaction(move |scope| {
+            Box::pin(async move {
+                StatusStream::<_, BoardDeliveryTypes>::new(
+                    scope,
+                    fleet_protocol::Submitter::Machine(binding.peer),
+                    route,
+                )
+                .append(&publication_for_store, now)
+                .await
+                .map_err(fleet_mail_delivery::delivery_rollback)?;
+                Ok(())
+            })
+        })
+        .await?;
+    // Slice 4b: a stored publication is owed to the Router and waits for its
+    // answer; that live path is proven end to end by the mail relay tests.
+    // Here the session fetch reads the stored revision and its cursor.
     assert_eq!(
         fixture
             .io
@@ -346,9 +374,8 @@ async fn a_live_status_attempt_never_waits_for_the_router_and_session_fetch_keep
             .map_err(|_| "call mutex poisoned")?
             .len(),
         before,
-        "status leaf dispatched another object"
+        "storing a status dispatched an object call"
     );
-
     let frame = FrameId::new(Uuid::now_v7())?;
     fixture
         .runtime

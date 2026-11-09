@@ -2,6 +2,8 @@
 #![cfg(feature = "conformance")]
 
 use crate::session_publication_fixture as session_fixture;
+#[path = "../machine_notices/acknowledgment.rs"]
+mod acknowledgment;
 #[path = "../machine_notices/support.rs"]
 mod support;
 use board_sync_protocol::*;
@@ -9,7 +11,6 @@ use durable_steps::{AtomicStore, StoreError};
 use fleet_protocol::*;
 use fleet_session::SessionKey;
 use session_fixture::{Fixture, TestError};
-use std::sync::atomic::Ordering;
 use support::*;
 
 struct RetentionSeed {
@@ -69,6 +70,26 @@ async fn retained_stream(fixture: &Fixture, peer: PeerId) -> Result<(i64, Vec<i6
     })).await?)
 }
 
+/// The attempt row a subject has for one kind: (state, attempts, last error class, next attempt).
+async fn attempt_row(
+    fixture: &Fixture,
+    subject: PeerId,
+    kind: &'static str,
+) -> Result<Option<(String, i64, Option<String>, Option<i64>)>, TestError> {
+    Ok(fixture.host.store.object.transaction(move |scope| Box::pin(async move {
+        use durable_steps::storage::TransactionScope;
+        use sqlx_core::{query::query, row::Row};
+        let row = query::<sqlx_turso::Turso>("SELECT state, attempts, last_error_class, next_attempt_at FROM central_work_attempts WHERE subject=? AND kind=?")
+            .bind(subject.to_string()).bind(kind).fetch_optional(scope.executor()).await.map_err(StoreError::backend)?;
+        row.map(|row| Ok((
+            row.try_get::<String,_>("state").map_err(StoreError::backend)?,
+            row.try_get::<i64,_>("attempts").map_err(StoreError::backend)?,
+            row.try_get::<Option<String>,_>("last_error_class").map_err(StoreError::backend)?,
+            row.try_get::<Option<i64>,_>("next_attempt_at").map_err(StoreError::backend)?,
+        ))).transpose()
+    })).await?)
+}
+
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Assert the exact production retention window and admitted operation outcome."
@@ -87,15 +108,11 @@ async fn fleet_floor_98_prunes_99_through_110_and_drives_due_work() -> Result<()
         },
     )
     .await?;
-    let call = invocation(&notice(121)?)?;
-    assert!(matches!(
-        fixture.runtime.delivery()?.on_call(call.clone()).await,
-        Err(durable_steps::CallFailure::AnswerLost)
-    ));
+    // A real producer appends 121 in its own transaction, as a kernel event.
+    deliver(&fixture, &invocation(&notice(121)?)?).await?;
 
-    fixture.runtime.on_alarm().await?;
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
 
-    assert_eq!(fixture.runtime.delivery()?.on_call(call).await?, b"null");
     assert_eq!(
         retained_stream(&fixture, peer).await?,
         (110, (111..=121).collect())
@@ -106,7 +123,7 @@ async fn fleet_floor_98_prunes_99_through_110_and_drives_due_work() -> Result<()
 
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "A corrupt stream must not roll back a healthy machine or strand its admitted work."
+    reason = "A corrupt stream must not roll back a healthy machine or stop the wake for its own retry."
 )]
 #[tokio::test]
 async fn one_machine_hole_does_not_block_other_retention_jobs_or_future_wakes()
@@ -134,21 +151,8 @@ async fn one_machine_hole_does_not_block_other_retention_jobs_or_future_wakes()
         },
     )
     .await?;
-    fixture
-        .io
-        .clock_offset_millis
-        .store(5_000, Ordering::SeqCst);
-    let future = invocation(&notice(122)?)?;
-    assert!(matches!(
-        fixture.runtime.delivery()?.on_call(future.clone()).await,
-        Err(durable_steps::CallFailure::AnswerLost)
-    ));
-    fixture.io.clock_offset_millis.store(0, Ordering::SeqCst);
-    let due = invocation(&notice(121)?)?;
-    assert!(matches!(
-        fixture.runtime.delivery()?.on_call(due.clone()).await,
-        Err(durable_steps::CallFailure::AnswerLost)
-    ));
+    // A real producer appends 121 to the healthy machine, as a kernel event.
+    deliver(&fixture, &invocation(&notice(121)?)?).await?;
     fixture
         .io
         .wakes
@@ -156,17 +160,14 @@ async fn one_machine_hole_does_not_block_other_retention_jobs_or_future_wakes()
         .map_err(|_| "wake lock poisoned")?
         .clear();
 
-    let result = fixture.runtime.on_alarm().await;
+    let result = crate::kernel_alarm::deliver_alarm(&fixture.runtime).await;
 
+    // One machine's corrupt stream fails alone (R7): the alarm is delivered,
+    // the healthy stream is pruned and the broken one is left untouched below.
     assert!(
-        matches!(result, Err(StoreError::Corrupt { .. })),
-        "maintenance corruption must remain visible"
+        result.is_ok(),
+        "one stream's corruption must not fail the alarm"
     );
-    assert_eq!(fixture.runtime.delivery()?.on_call(due).await?, b"null");
-    assert!(matches!(
-        fixture.runtime.delivery()?.on_call(future).await,
-        Err(durable_steps::CallFailure::AnswerLost)
-    ));
     assert_eq!(
         retained_stream(&fixture, healthy).await?,
         (110, (111..=121).collect())
@@ -175,6 +176,20 @@ async fn one_machine_hole_does_not_block_other_retention_jobs_or_future_wakes()
         retained_stream(&fixture, broken).await?,
         (98, (99..=120).filter(|position| *position != 105).collect())
     );
+    // The broken stream's failure is kept on its own attempt row (slice 3): it
+    // backs off 30 s from now, and the healthy stream has no row.
+    use runtime_primitives::Clock as _;
+    let retry_at = fixture.io.now().unix_millis() + 30_000;
+    assert_eq!(
+        attempt_row(&fixture, broken, "notice_expiry").await?,
+        Some((
+            "waiting".to_owned(),
+            1,
+            Some("corrupt_row".to_owned()),
+            Some(retry_at)
+        ))
+    );
+    assert_eq!(attempt_row(&fixture, healthy, "notice_expiry").await?, None);
     assert!(
         fixture
             .io
@@ -182,7 +197,7 @@ async fn one_machine_hole_does_not_block_other_retention_jobs_or_future_wakes()
             .lock()
             .map_err(|_| "wake lock poisoned")?
             .iter()
-            .any(|at| at.unix_millis() == 1_792_281_605_000)
+            .any(|at| at.unix_millis() == retry_at)
     );
     fixture.objects.close().await?;
     Ok(())
@@ -279,12 +294,10 @@ async fn machine_notices_survive_missing_admission_disconnect_and_replacement_wi
     deliver(&fixture, &second_call).await?;
     assert_hint(next(&mut socket).await?, 1, 2, &second);
     assert_eq!(rows(&fixture).await?, 2);
-    let acknowledged = fixture
-        .runtime
-        .delivery()?
-        .on_call(second_call.clone())
-        .await?;
-    assert_eq!(acknowledged, b"null");
+    // Replaying the same mutation answers from its recorded decision and
+    // appends no second notice.
+    deliver(&fixture, &second_call).await?;
+    assert_eq!(rows(&fixture).await?, 2);
     assert_page(
         read(&fixture, binding, &mut socket, None).await?,
         &[(1, first.clone()), (2, second.clone())],
@@ -312,10 +325,7 @@ async fn machine_notices_survive_missing_admission_disconnect_and_replacement_wi
     );
 
     let (replacement, _, mut replacement_socket) = admit(&fixture, peer).await?;
-    assert_eq!(
-        fixture.runtime.delivery()?.on_call(second_call).await?,
-        b"null"
-    );
+    deliver(&fixture, &second_call).await?;
     assert_eq!(rows(&fixture).await?, 3);
     assert_page(
         read(&fixture, replacement, &mut replacement_socket, None).await?,
@@ -343,11 +353,8 @@ async fn retention_floor_and_a_restored_older_head_have_explicit_read_outcomes()
         assert_hint(next(&mut socket).await?, position, position, &kind);
     }
     fixture.runtime.on_socket_closed(binding).await?;
-    fixture
-        .io
-        .clock_offset_millis
-        .store(RETENTION, Ordering::SeqCst);
-    fixture.runtime.on_alarm().await?;
+    fixture.io.clock.set_offset(RETENTION);
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
     assert_eq!(rows(&fixture).await?, 0);
     let (binding, _, mut socket) = admit(&fixture, peer).await?;
     assert_eq!(
@@ -385,10 +392,7 @@ async fn retention_floor_and_a_restored_older_head_have_explicit_read_outcomes()
     snapshot_closed_owner(root.path(), saved.path())?;
 
     let fixture = Fixture::reopen(root.path()).await?;
-    fixture
-        .io
-        .clock_offset_millis
-        .store(RETENTION, Ordering::SeqCst);
+    fixture.io.clock.set_offset(RETENTION);
     let (_, _, mut socket) = admit(&fixture, peer).await?;
     let fourth = notice(4)?;
     deliver(&fixture, &invocation(&fourth)?).await?;
@@ -397,10 +401,7 @@ async fn retention_floor_and_a_restored_older_head_have_explicit_read_outcomes()
     drop(fixture);
     // Restore the closed owner in a fresh home, including its SQLite sidecars.
     let fixture = Fixture::reopen(saved.path()).await?;
-    fixture
-        .io
-        .clock_offset_millis
-        .store(RETENTION, Ordering::SeqCst);
+    fixture.io.clock.set_offset(RETENTION);
     let (binding, _, mut socket) = admit(&fixture, peer).await?;
     assert_eq!(
         read(&fixture, binding, &mut socket, Some(4)).await?,

@@ -1,8 +1,9 @@
 //! Copy metadata keeps its own position and reaches Fleet through a durable follow-up.
+use runtime_primitives::Clock as _;
 
 use crate::{
-    CallerKind, CopyDirectorySummary, CopyKind, FleetKind, ObjectAddress, ObjectHost,
-    ObjectRuntime, PlatformIo,
+    CallerKind, CopyDirectorySummary, CopyKind, FleetKind, ObjectAddress, ObjectPlatform,
+    ObjectRuntime,
     caller_context::CallAuthority,
     fleet_record_codec::{decode_json, required},
     object_call_envelope::ObjectCallEnvelope,
@@ -28,7 +29,7 @@ impl CallTarget for DirectorySummaryUpdate {
     type Answer = ();
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
@@ -144,7 +145,7 @@ where
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<CopyKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

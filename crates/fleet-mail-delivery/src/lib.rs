@@ -29,6 +29,11 @@ mod inbox_retirement;
 mod inbox_row;
 mod inbox_storage;
 mod outbox_outcome;
+pub use custody_record::owner_rows::{
+    OutboxOwnerRow, StatusOwedRow, outbox_owner_rows, status_owed_rows,
+};
+pub use outbox_record::owed_work::{JournaledRemoval, JournaledWork, OwedPush, OwedRemoval};
+pub use status_stream::owed_status::{JournaledStatus, OwedStatus};
 mod outbox_record;
 mod outbox_rules;
 mod outbox_status;
@@ -60,7 +65,10 @@ pub use outbox_record::{
     OutboxAdmission, OutboxStatus, OutboxStatusState, ResolvedPush, ResolvedSubmit, SubmitInput,
 };
 pub use outbox_rules::Outbox;
-pub use status_publication::{admit_publications, resolve_publication, retire_publication};
+pub use status_publication::{
+    admit_publications, publication_by_subject, publication_subject, resolve_publication,
+    retire_publication,
+};
 pub use status_stream::{PublicationRef, PublicationTarget, StatusStream};
 
 pub use delivery_calls::*;
@@ -84,10 +92,11 @@ mod outbox_relay;
 mod record_retention;
 mod relay_schema;
 mod relay_sender_authority;
-pub use outbox_record::PushInput;
+pub use outbox_record::{ExpiredPush, PushInput};
 pub use record_retention::{
     DELIVERY_RETENTION_MILLIS, RemoveDeliveryRecord, admit_existing_record_removals,
-    admit_record_removal, item_is_too_old, removal_deadline,
+    admit_record_removal, item_is_too_old, next_relay_record_removal, removal_deadline,
+    remove_expired_relay_records,
 };
 pub use relay_schema::retire_relay_host_tables;
 

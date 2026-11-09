@@ -103,6 +103,10 @@ mod holder_change_task;
 mod settle_reservation_task;
 pub use holder_change_task::HolderChangeTask;
 pub use settle_reservation_task::SettleReservationTask;
+pub use transfer_cancellation::owed_settlement::{
+    OwedSettlement, SettlementState, SettlementStateSource, journaled_owe_settlement,
+    journaled_settlement_state,
+};
 
 #[cfg(test)]
 mod turso_epoch_history_fixture;

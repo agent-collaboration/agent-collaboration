@@ -79,7 +79,7 @@ async fn read_health_with_identity(invalid_id: Option<&str>) -> ConformanceResul
                     return Err("invalid bookkeeping hid an independently readable Copy section".into());
                 }
             } else {
-                bookkeeping(&health, Some(3))?;
+                bookkeeping(&health, Some(4))?;
             }
             Ok(())
         }.await;

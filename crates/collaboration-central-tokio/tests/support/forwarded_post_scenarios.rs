@@ -127,17 +127,17 @@ pub(super) async fn run(base: &str, case: ForwardCase) -> ConformanceResult<()> 
                 println!("FORWARD_CAPACITY_CASE sixteenth_reserved_before_dispatch_seventeenth_overloaded_terminal_frees_slot passed");
             }
             ForwardCase::Deadline => {
-                super::forwarded_post_lifecycle_oracles::deadline(&mut sender, socket, database, |command| control(base, command)).await?;
+                super::forwarded_post_lifecycle_oracles::deadline(&mut sender, socket, database, |command| control(base, command), |now| settle(base, now)).await?;
                 println!("FORWARD_DEADLINE_CASE original_deadline_unanswered_late_reply_cannot_answer_fresh_identity passed");
             }
             ForwardCase::ExactBoundary => {
-                super::forwarded_post_deadline_boundaries::exact_boundary(&mut sender, socket, database, |command| control(base, command)).await?;
+                super::forwarded_post_deadline_boundaries::exact_boundary(&mut sender, socket, database, |command| control(base, command), |now| settle(base, now)).await?;
                 println!("FORWARD_BOUNDARY_CASE pre_boundary_answer_exact_expiry_and_independent_fresh_correlation passed");
             }
             ForwardCase::TerminalRelease => {
                 let sender_owned = register_database(&mut sender, PeerId::try_from(SENDER_PEER.to_owned())?).await?;
                 super::forwarded_post_terminal_slots::terminal_release(&mut sender, socket, database, sender_owned,
-                    |command| control(base, command)).await?;
+                    |command| control(base, command), |now| settle(base, now)).await?;
                 println!("FORWARD_TERMINAL_CASE sender_holds_not_held_answer_and_deadline_each_release_only_their_slot passed");
             }
             ForwardCase::RouteOverlap => {
@@ -204,6 +204,34 @@ fn finish_forwarding<Output>(
         output.ok_or_else(|| "forwarding scenario omitted its output".into())
     } else {
         Err(failures.join("; ").into())
+    }
+}
+
+/// Move the object's clock and wait until every alarm the move made due has
+/// run (`settleClock`, both shells); answers how many alarm events that took.
+pub(super) async fn settle(
+    base: &str,
+    now: collaboration_central_core::RegistryTime,
+) -> ConformanceResult<u64> {
+    let http = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(std::time::Duration::from_secs(10))
+        .build()?;
+    let response = super::holder_writer_retry::owner_post(
+        &http,
+        base,
+        "runtime",
+        serde_json::to_value(collaboration_central_conformance::RuntimeControlRequest {
+            address: collaboration_central_core::ObjectAddress::Fleet,
+            command: collaboration_central_conformance::RuntimeControl::SettleClock { now },
+        })?,
+    )
+    .await?;
+    match serde_json::from_value(response)? {
+        collaboration_central_conformance::RuntimeControlAnswer::ClockSettled { alarm_events } => {
+            Ok(alarm_events)
+        }
+        other => Err(format!("settleClock answered {other:?}").into()),
     }
 }
 

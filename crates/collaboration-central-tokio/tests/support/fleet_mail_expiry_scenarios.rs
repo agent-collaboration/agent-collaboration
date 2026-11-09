@@ -14,7 +14,7 @@ use futures_util::StreamExt;
 use reqwest_websocket::{CloseCode, Message, WebSocket};
 use runtime_primitives::SyncTime;
 use serde_json::{Value, json};
-use std::{future::Future, time::Duration};
+use std::time::Duration;
 
 const NOW: i64 = 1_792_281_600_000;
 const SENDER_SERVICE: &str = "019f0000-0000-7000-8000-000000001071";
@@ -128,41 +128,27 @@ async fn next_request(
     .await?
 }
 
-async fn observe_unanswered_deadline<Observe, Observed>(
+async fn observe_unanswered_resend(
+    base: &str,
+    socket: &mut WebSocket,
     frame: FrameId,
-    observe: &mut Observe,
-) -> ConformanceResult<()>
-where
-    Observe: FnMut() -> Observed,
-    Observed: Future<Output = ConformanceResult<Vec<FrameId>>>,
-{
-    // The recipient never acknowledges this Push. The real platform deadline
-    // must remove its waiter; querying this read-only observer cannot drive it.
-    if !observe().await?.contains(&frame) {
-        return Err("unanswered Push lost its waiter before its deadline".into());
+    sent: &ServerCall<BoardDeliveryTypes>,
+) -> ConformanceResult<()> {
+    // The recipient never answers this Push. It stays owed: after its retry
+    // time (30 s) it is sent again, with a new send id and the same call.
+    set_time(base, NOW + 31_000 + 61_000).await?;
+    let (resent_frame, resent) = next_request(socket).await?;
+    if resent_frame == frame {
+        return Err("the unanswered Push was resent under its old send id".into());
     }
-    tokio::time::timeout(Duration::from_secs(8), async {
-        loop {
-            if !observe().await?.contains(&frame) {
-                return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .map_err(|_| "real reply deadline did not release the unanswered Push waiter")??;
-    println!("FLEET_MAIL_EXPIRY_CASE unanswered_Push_deadline_releases_its_waiter passed");
+    if serde_json::to_vec(&resent)? != serde_json::to_vec(sent)? {
+        return Err("the resent Push changed its call identity, sender or body".into());
+    }
+    println!("FLEET_MAIL_EXPIRY_CASE unanswered_Push_resent_after_its_retry_time passed");
     Ok(())
 }
 
-pub(super) async fn run<Observe, Observed>(
-    base: &str,
-    mut observe: Observe,
-) -> ConformanceResult<()>
-where
-    Observe: FnMut() -> Observed,
-    Observed: Future<Output = ConformanceResult<Vec<FrameId>>>,
-{
+pub(super) async fn run(base: &str) -> ConformanceResult<()> {
     let client = ConformanceClient::new(base)?;
     set_time(base, NOW).await?;
     // HTTP enrollment supplies identity but never opens a B socket. Therefore
@@ -181,7 +167,9 @@ where
         submit(&mut sender.socket, &item).await?;
         // This existing control wakes the real platform alarm; it does not call
         // the SDK expiry helper or read status. No recipient has connected.
-        set_time(base, NOW + 1_001).await?;
+        // Push expiry is a due source held by the 30 s batch cadence, so the
+        // item expiring at NOW + 1 s is published at the next batch slot.
+        set_time(base, NOW + 31_000).await?;
         let (_, ServerCall::PublishStatus { publication, .. }) =
             next_request(&mut sender.socket).await?
         else {
@@ -242,26 +230,23 @@ where
             .await?;
             let sentinel = envelope(None)?;
             submit(&mut sender.socket, &sentinel).await?;
-            set_time(base, NOW + 1_001).await?;
-            let (
-                frame,
-                ServerCall::Push {
-                    submitter,
-                    item: pushed,
-                    ..
-                },
-            ) = next_request(&mut recipient.socket).await?
+            let (frame, call) = next_request(&mut recipient.socket).await?;
+            let ServerCall::Push {
+                submitter,
+                item: pushed,
+                ..
+            } = &call
             else {
                 return Err("reconnected recipient did not receive the sentinel Push".into());
             };
-            if submitter != Submitter::Machine(PeerId::try_from(SENDER_PEER.to_owned())?)
-                || serde_json::to_vec(&pushed)? != serde_json::to_vec(&sentinel)?
+            if *submitter != Submitter::Machine(PeerId::try_from(SENDER_PEER.to_owned())?)
+                || serde_json::to_vec(pushed)? != serde_json::to_vec(&sentinel)?
             {
                 return Err(
                     "expired body reached B, or the sentinel lost its verified sender/bytes".into(),
                 );
             }
-            observe_unanswered_deadline(frame, &mut observe).await?;
+            observe_unanswered_resend(base, &mut recipient.socket, frame, &call).await?;
             Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
         }
         .await;

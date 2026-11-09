@@ -1,7 +1,7 @@
 //! Authenticated Session writes and owner seed publication enter the same copy rules.
 use crate::{
-    CallerKind, CopyDirectorySummary, CopyKind, CoreHost, ObjectAddress, ObjectHost, ObjectRuntime,
-    PlatformIo,
+    CallerKind, CopyDirectorySummary, CopyKind, CoreHost, ObjectAddress, ObjectPlatform,
+    ObjectRuntime,
     caller_context::CallAuthority,
     object_call_envelope::ObjectCallEnvelope,
     object_runtime::ObjectWork,
@@ -19,6 +19,7 @@ use fleet_protocol::{
     DatabaseId, PeerId, Piece, ReceiverId, ReplicationAnswer, ReplicationRequest, SeedAttemptId,
     SeedComplete, SeedPage,
 };
+use runtime_primitives::Clock as _;
 use runtime_primitives::{SyncTime, WakeScheduler};
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
@@ -154,7 +155,7 @@ pub(crate) fn write_database(request: &ReplicationRequest<BoardAnnotation>) -> O
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<CopyKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
@@ -244,12 +245,12 @@ where
                     match effect {
                         CopyWriteEffect::Changed => changes.signal_committed(),
                         CopyWriteEffect::Activate => {
-                            if host.wake().wake_at(io.now()).await.is_err() {
+                            if host.alarm().wake_at(io.now()).await.is_err() {
                                 eprintln!("copy follow-up activation failed; journal retains work");
                             }
                         }
                         CopyWriteEffect::StagedExpiry(at) => {
-                            if let Err(error) = host.wake().wake_at(at).await {
+                            if let Err(error) = host.alarm().wake_at(at).await {
                                 return failure(StoreError::backend(error));
                             }
                         }
@@ -276,7 +277,7 @@ where
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io> {
+impl<Host: ObjectPlatform> ObjectRuntime<CopyKind, Host> {
     pub(crate) async fn drive_copy_followups(&self) -> Result<(), StoreError> {
         let ObjectWork::Copy {
             host,
@@ -352,7 +353,7 @@ where
                             index,
                             acked,
                         } => {
-                            let at = crate::copy_staged_parts::next_expiry(scope)
+                            let at = crate::copy_staged_parts::next_part_deadline(scope)
                                 .await?
                                 .ok_or_else(|| {
                                     StoreError::backend("PartStaged has no staged-part expiry")

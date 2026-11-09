@@ -14,11 +14,11 @@ crate-type = ["cdylib"]
 [dependencies]
 sqlx = { version = "=0.9.0", default-features = false }
 sqlx-core = { version = "=0.9.0", default-features = false }
-sqlx-durable-object = { git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "eec81ee707873b5a8b266f30e0d193c70338415e", default-features = false }
+sqlx-durable-object = { git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "5dbdba7ad2241a67f08f6d312b50cd8ab3bef3b9", default-features = false }
 fleet-protocol = { path = "../../../fleet-protocol", default-features = false }
 fleet-project-copy = { path = "../..", default-features = false }
-durable-steps = { git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "eec81ee707873b5a8b266f30e0d193c70338415e", default-features = false, features = ["durable-object"] }
-runtime-primitives = { git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "eec81ee707873b5a8b266f30e0d193c70338415e", default-features = false, features = ["durable-object"] }
+durable-steps = { git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "5dbdba7ad2241a67f08f6d312b50cd8ab3bef3b9", default-features = false, features = ["durable-object"] }
+runtime-primitives = { git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "5dbdba7ad2241a67f08f6d312b50cd8ab3bef3b9", default-features = false, features = ["durable-object"] }
 worker = { git = "https://github.com/cloudflare/workers-rs", rev = "b171cb4bdd6fa943bb81f429df0a6b0df37e14b3", default-features = false }
 wasm-bindgen = "=0.2.129"
 serde = { version = "1", features = ["derive"] }

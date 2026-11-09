@@ -3,9 +3,8 @@ use crate::FleetKind;
 
 use crate::object_call_envelope::{ObjectCallEnvelope, encode_envelope, encode_refusal};
 use crate::{
-    CallerContext, CallerKind, Dispatch, MayCall, ObjectAddress, ObjectHost, ObjectKind,
-    ObjectRuntime, PlatformIo, RegistryCall, RegistryResult, WireCall, WireKind,
-    caller_context::CallAuthority,
+    CallerContext, CallerKind, Dispatch, MayCall, ObjectAddress, ObjectKind, ObjectPlatform,
+    ObjectRuntime, RegistryCall, RegistryResult, WireCall, WireKind, caller_context::CallAuthority,
 };
 use durable_steps::{
     AtomicStore, CallFailure, CallTarget, NotSentReason, storage::TransactionScope,
@@ -111,7 +110,7 @@ fn refused() -> CallFailure {
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     Host::Store: durable_steps::ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -220,6 +219,29 @@ where
         };
         serde_json::to_vec(&result).map_err(|_| CallFailure::AnswerLost)
     }
+}
+
+/// The edge call a conformance fixture sends for a registry call from
+/// `caller` (the same envelope the HTTP edge builds), so enrollment and
+/// authentication run as call events rather than direct runtime calls.
+#[cfg(feature = "conformance")]
+pub fn encode_edge_registry_call(
+    caller: crate::AccessCaller,
+    call: crate::RegistryCall,
+    call_id: durable_steps::Uuid,
+) -> Result<SerializedObjectCall, CallFailure> {
+    let context = CallerContext::for_verified_edge(caller)
+        .map_err(crate::object_call_envelope::encode_refusal)?;
+    let call_id = crate::ObjectCallId::new(call_id.to_string())
+        .map_err(crate::object_call_envelope::encode_refusal)?;
+    crate::serialize_object_call(
+        &context,
+        crate::Dispatch::<crate::RegistryKind> {
+            call_id,
+            to: (),
+            call,
+        },
+    )
 }
 
 #[cfg(test)]

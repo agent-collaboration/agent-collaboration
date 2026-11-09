@@ -1,6 +1,6 @@
 //! Registry reads the first creation decision; admission stays in Registry.
 use crate::{
-    CallerKind, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, FleetKind, ObjectAddress, ObjectPlatform, ObjectRuntime,
     caller_context::CallAuthority,
     object_call_envelope::ObjectCallEnvelope,
     object_runtime::ObjectWork,
@@ -25,7 +25,7 @@ impl CallTarget for ReadProjectCreationDecision {
     type Request = ProjectId;
     type Answer = Option<ProjectCreationDecision>;
 }
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

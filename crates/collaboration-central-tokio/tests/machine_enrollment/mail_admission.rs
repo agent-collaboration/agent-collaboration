@@ -5,6 +5,21 @@ use board_sync_protocol::BoardDeliveryTypes;
 use fleet_protocol::{DatabaseId, DeliveryEnvelope, DeliveryItem, Epoch, ItemId};
 use serde_json::json;
 
+/// A call as the shells deliver it: a kernel event, so what it owes is sent.
+async fn call_event(fixture: &Fixture, body: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
+    match collaboration_central_core::ObjectKernel::new(&fixture.runtime)
+        .on_event(collaboration_central_core::ObjectEvent::Call {
+            body,
+            storage_bytes: None,
+        })
+        .await
+    {
+        collaboration_central_core::EventReply::CallAnswer(answer) => Ok(answer),
+        collaboration_central_core::EventReply::CallFailure(failure) => Err(failure),
+        _ => Err(CallFailure::AnswerLost),
+    }
+}
+
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Assertions must fail this test while fixture errors propagate through Result."
@@ -86,7 +101,7 @@ async fn corrupt_epoch_history_cannot_be_reported_as_not_writer() -> TestResult 
             "origin":{"installation":origin.installation,"machine":origin.label},"item":item,"originEpoch":1
         }
     }))?;
-    let answer = fixture.runtime.on_call(invocation.clone()).await;
+    let answer = call_event(&fixture, invocation.clone()).await;
     assert!(
         matches!(answer, Err(CallFailure::AnswerLost)),
         "corrupt history produced a MailSubmitAnswer: {answer:?}"
@@ -107,10 +122,9 @@ async fn corrupt_epoch_history_cannot_be_reported_as_not_writer() -> TestResult 
             })
         })
         .await?;
-    let repaired =
-        fixture.runtime.on_call(invocation).await.map_err(|error| {
-            format!("repaired history did not reach Fleet admission: {error:?}")
-        })?;
+    let repaired = call_event(&fixture, invocation)
+        .await
+        .map_err(|error| format!("repaired history did not reach Fleet admission: {error:?}"))?;
     let repaired: serde_json::Value = serde_json::from_slice(&repaired)?;
     assert_eq!(
         repaired.pointer("/value/value/kind"),

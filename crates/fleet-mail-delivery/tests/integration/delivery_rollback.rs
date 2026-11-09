@@ -22,7 +22,7 @@ async fn admit_and_receipt(scope: &mut TursoScope<'_, TestHost>) -> Result<(), D
     };
     let mut relay = Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings);
     relay
-        .submit_relay::<FixturePush<TestTypes>, RecordRemoval>(
+        .submit_relay::<fleet_mail_delivery::JournaledWork<FixturePush<TestTypes>, RecordRemoval>>(
             Submitter::Machine(peer(1)),
             envelope,
             peer(3),
@@ -31,7 +31,7 @@ async fn admit_and_receipt(scope: &mut TursoScope<'_, TestHost>) -> Result<(), D
         )
         .await?;
     relay
-        .receipt::<FixturePublication<TestTypes>>(
+        .receipt::<fleet_mail_delivery::JournaledStatus<FixturePublication<TestTypes>>>(
             peer(2),
             &reference,
             PushResult::Accepted {
@@ -49,7 +49,7 @@ async fn assert_fresh_relay_after_rollback(fixture: &Fixture) {
         .transaction(|scope| {
             Box::pin(async move {
                 let answer = Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .submit_relay::<FixturePush<TestTypes>, RecordRemoval>(
+                    .submit_relay::<fleet_mail_delivery::JournaledWork<FixturePush<TestTypes>, RecordRemoval>>(
                         Submitter::Machine(peer(1)),
                         item(3, "after rollback"),
                         peer(3),
@@ -75,7 +75,7 @@ async fn refusal_after_custody_change_survives_atomic_rollback() {
             Box::pin(async move {
                 admit_and_receipt(scope).await.map_err(delivery_rollback)?;
                 Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .recipient_report::<FixturePublication<TestTypes>>(
+                    .recipient_report::<fleet_mail_delivery::JournaledStatus<FixturePublication<TestTypes>>>(
                         peer(2),
                         RecipientReport {
                             item: item_id(1),

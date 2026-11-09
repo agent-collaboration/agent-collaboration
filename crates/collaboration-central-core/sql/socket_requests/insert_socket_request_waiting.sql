@@ -1,0 +1,1 @@
+INSERT INTO central_work_attempts(id,subject,kind,state,send_id,connection_id,session_id,sent_version,next_attempt_at,attempts,first_failed_at,last_error_class,last_error,created_at,updated_at) VALUES(?1,?2,?3,'waiting',NULL,NULL,NULL,NULL,NULL,0,NULL,NULL,NULL,CAST(?4 AS INTEGER),CAST(?4 AS INTEGER)) ON CONFLICT(subject,kind) DO NOTHING;

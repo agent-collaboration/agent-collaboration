@@ -11,7 +11,7 @@
 )]
 
 use crate::{
-    CoreHost, ObjectHost, PlatformIo, RegistrationEdits, RegistrationSnapshot,
+    CoreHost, ObjectPlatform, RegistrationEdits, RegistrationSnapshot,
     effect_driver::EffectDriver,
     session_scope::CoreSessionScope,
     step_driver::{StepCallback, StepDriver},
@@ -132,14 +132,14 @@ pub(crate) struct SessionCommit {
     pub wake_at: Option<SyncTime>,
 }
 
-pub(crate) struct CoreSessionStore<Host: ObjectHost, Io: PlatformIo> {
+pub(crate) struct CoreSessionStore<Host: ObjectPlatform> {
     host: Arc<Host>,
-    effects: EffectDriver<Host, Io>,
+    effects: EffectDriver<Host>,
 }
-impl<Host: ObjectHost, Io: PlatformIo> CoreSessionStore<Host, Io> {
+impl<Host: ObjectPlatform> CoreSessionStore<Host> {
     pub(crate) fn new(
         host: Arc<Host>,
-        shared_host: Arc<CoreHost<Io>>,
+        shared_host: Arc<CoreHost<Host::Io>>,
         replies: Arc<crate::holder_reply_hub::HolderReplyHub>,
     ) -> Self {
         Self {
@@ -150,24 +150,23 @@ impl<Host: ObjectHost, Io: PlatformIo> CoreSessionStore<Host, Io> {
 }
 
 // Bound wasm monomorphization by erasing callbacks at the existing store boundary.
-type SessionTransactionCallback<Host, Io, Output> =
-    dyn for<'scope, 'transaction> FnOnce(
-            &'scope mut CoreSessionScope<'transaction, Host, Io>,
-        ) -> BoxFuture<'scope, Result<Output, StoreError>>
-        + Send;
+type SessionTransactionCallback<Host, Output> = dyn for<'scope, 'transaction> FnOnce(
+        &'scope mut CoreSessionScope<'transaction, Host>,
+    ) -> BoxFuture<'scope, Result<Output, StoreError>>
+    + Send;
 
-struct SessionTransaction<Host: ObjectHost, Io: PlatformIo, Output>
+struct SessionTransaction<Host: ObjectPlatform, Output>
 where
     Host::Store: ReborrowScope,
 {
     registrations: RegistrationSnapshot,
-    callback: Box<SessionTransactionCallback<Host, Io, Output>>,
+    callback: Box<SessionTransactionCallback<Host, Output>>,
     #[cfg(feature = "conformance")]
     finalize_fault: Option<crate::SessionFinalizeFault>,
-    marker: PhantomData<fn() -> (Host, Io)>,
+    marker: PhantomData<fn() -> Host>,
 }
-impl<Host: ObjectHost, Io: PlatformIo, Output> StepCallback<Host::Store, Host::Database>
-    for SessionTransaction<Host, Io, Output>
+impl<Host: ObjectPlatform, Output> StepCallback<Host::Store, Host::Database>
+    for SessionTransaction<Host, Output>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -190,7 +189,7 @@ where
         inner: &'scope mut <Host::Store as AtomicStore>::Scope<'transaction>,
     ) -> BoxFuture<'scope, Result<(Output, Vec<SessionCommit>), StoreError>> {
         Box::pin(async move {
-            let mut scope = CoreSessionScope::<Host, Io> {
+            let mut scope = CoreSessionScope::<Host> {
                 inner: Host::Store::reborrow(inner),
                 registrations: self.registrations,
                 edits: Default::default(),
@@ -231,7 +230,7 @@ where
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> AtomicStore for CoreSessionStore<Host, Io>
+impl<Host: ObjectPlatform> AtomicStore for CoreSessionStore<Host>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -246,7 +245,7 @@ where
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
 {
-    type Scope<'transaction> = CoreSessionScope<'transaction, Host, Io>;
+    type Scope<'transaction> = CoreSessionScope<'transaction, Host>;
     async fn transaction<Output, Callback>(&self, run: Callback) -> Result<Output, StoreError>
     where
         Output: Send + 'static,
@@ -261,14 +260,14 @@ where
         let effects = self.effects.clone();
         let local = self
             .host
-            .with_local_section(async move {
+            .with_local_section(crate::LocalSection::new(async move {
                 let registrations = host.registrations().await.map_err(StoreError::backend)?;
                 #[cfg(feature = "conformance")]
                 let finalize_fault = host.session_finalize_fault()?;
                 #[cfg(feature = "conformance")]
                 let observation_host = host.clone();
                 let result = StepDriver::new(host)
-                    .run(SessionTransaction::<Host, Io, Output> {
+                    .run(SessionTransaction::<Host, Output> {
                         registrations,
                         callback: Box::new(run),
                         #[cfg(feature = "conformance")]
@@ -288,7 +287,7 @@ where
                 let (output, committed) = result?;
                 let published = effects.publish_registrations(committed).await;
                 Ok::<_, StoreError>((output, published))
-            })
+            }))
             .await
             .map_err(StoreError::backend)??;
         let (output, published) = local;

@@ -37,6 +37,57 @@ async fn times(fixture: &Fixture) -> TestResult<(FeedTimes, Option<ReaderTimes>)
     })).await?)
 }
 
+/// Every attempt row of one kind: (subject, state, attempts, last error class, next attempt).
+type AttemptRow = (String, String, i64, Option<String>, Option<i64>);
+async fn attempts(fixture: &Fixture, kind: &'static str) -> TestResult<Vec<AttemptRow>> {
+    Ok(fixture.store.transaction(move |scope| Box::pin(async move {
+        query::<sqlx_turso::Turso>("SELECT subject,state,attempts,last_error_class,next_attempt_at FROM central_work_attempts WHERE kind=? ORDER BY subject")
+            .bind(kind).fetch_all(scope.executor()).await.map_err(StoreError::backend)?
+            .into_iter().map(|row| Ok((
+                row.try_get("subject").map_err(StoreError::backend)?,
+                row.try_get("state").map_err(StoreError::backend)?,
+                row.try_get("attempts").map_err(StoreError::backend)?,
+                row.try_get("last_error_class").map_err(StoreError::backend)?,
+                row.try_get("next_attempt_at").map_err(StoreError::backend)?,
+            ))).collect::<Result<Vec<_>, StoreError>>()
+    })).await?)
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
+#[tokio::test]
+async fn a_corrupt_feed_entry_backs_feed_retention_off_on_its_attempt_row() -> TestResult {
+    // Arrange: a feed entry whose time can't be decoded sorts before every cutoff.
+    let root = tempfile::tempdir()?;
+    let fixture = Fixture::open(root.path(), NOW).await?;
+    create_workspace(&fixture).await?;
+    let (state, _) = times(&fixture).await?;
+    fixture
+        .sql("UPDATE fleet_feed SET as_of='0000-corrupt'")
+        .await?;
+
+    // Act
+    let read = read_feed(&fixture, 0).await;
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
+
+    // Assert: the read refuses the row instead of skipping it, and retention's
+    // failure is kept on the Fleet object's row, retried 30 s from now.
+    assert!(read.is_err());
+    assert_eq!(
+        attempts(&fixture, "feed_retention").await?,
+        [(
+            state.0,
+            "waiting".to_owned(),
+            1,
+            Some("corrupt_row".to_owned()),
+            Some(NOW + 30_000)
+        )]
+    );
+    fixture.close().await
+}
+
 #[expect(
     clippy::panic_in_result_fn,
     reason = "The assertions compare stable row identities and exact injected times through create, update and retention."
@@ -73,7 +124,7 @@ async fn feed_state_and_reader_keep_their_ids_and_creation_times_as_the_owner_cl
     assert_eq!(updated, (initial.0.clone(), NOW, NOW + 10_000, 4, 0));
     assert_eq!(updated_reader, Some((reader.0, NOW, NOW + 10_000, 2)));
     fixture.io.advance(31 * 24 * 60 * 60 * 1_000);
-    fixture.runtime.on_alarm().await?;
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
     let retained = times(&fixture).await?.0;
     assert_eq!(
         retained,
@@ -101,9 +152,15 @@ async fn fractional_feed_state_and_reader_timestamps_are_refused_on_decode() -> 
     fixture
         .sql("UPDATE fleet_feed_state SET updated_at=1.5")
         .await?;
-    assert!(
-        matches!(fixture.runtime.on_alarm().await, Err(StoreError::Corrupt {field,..}) if field=="fleet.feed_state.updated_at")
-    );
+    // The real read path still refuses the fractional timestamp; it is never coerced.
+    assert!(read_feed(&fixture, 0).await.is_err());
+    // Due work fails alone (R7): the alarm is delivered, and the corrupt feed
+    // source is retried at the next batch slot instead of failing every event.
+    // The corrupt row is the Fleet object's own subject, so the failure can only
+    // be logged: no attempt row of any kind is written (program-design #failures).
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
+    assert!(attempts(&fixture, "feed_retention").await?.is_empty());
+    assert!(attempts(&fixture, "source_read").await?.is_empty());
     fixture
         .sql("UPDATE fleet_feed_state SET updated_at=created_at")
         .await?;

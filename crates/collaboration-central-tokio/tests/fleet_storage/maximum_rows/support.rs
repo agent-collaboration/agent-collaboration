@@ -122,8 +122,9 @@ pub(super) async fn canonical_fixture(fixture: &Fixture, record: Record) -> Test
     // admission and workflow behavior are observed separately.
     let mut expected = record.clone();
     let driver = collaboration_central_core::StepConformance::new(
-        Arc::new(collaboration_central_tokio::TokioStorageHost::new(
+        Arc::new(crate::io_alarm::io_platform(
             fixture.object.clone(),
+            Arc::new(Io::default()),
         )),
         Arc::new(Io::default()),
         runtime_primitives::Clock::now(&Io::default()),

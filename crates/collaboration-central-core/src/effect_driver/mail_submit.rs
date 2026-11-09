@@ -2,7 +2,7 @@
 
 use super::EffectDriver;
 use crate::{
-    ObjectHost, PlatformIo,
+    ObjectPlatform,
     mail_submit_calls::{FleetMailSubmit, MailSubmitReply, MailSubmitRequest},
 };
 use board_sync_protocol::{BoardConsumerAnswer, BoardConsumerProtocol, BoardDeliveryTypes};
@@ -12,7 +12,7 @@ use fleet_protocol::{
 };
 use fleet_session::SessionKey;
 
-impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
+impl<Host: ObjectPlatform> EffectDriver<Host> {
     pub(super) async fn answer_mail_submit(
         &self,
         connection: ConnectionId,

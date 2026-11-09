@@ -1,6 +1,6 @@
 //! Only Registry object calls may reserve or settle a native claim attempt.
 use crate::{
-    CallerKind, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, FleetKind, ObjectAddress, ObjectPlatform, ObjectRuntime,
     caller_context::CallAuthority,
     fleet_claim_step::{ClaimStep, ClaimStepResult},
     object_call_envelope::ObjectCallEnvelope,
@@ -11,12 +11,13 @@ use durable_steps::{
     AtomicStore, CallFailure, CallTarget, NotSentReason, storage::TransactionScope,
 };
 use fleet_protocol::{HolderChangeRequest, SettleOutcome, SettlementRecorded};
+use runtime_primitives::Clock as _;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
 };
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

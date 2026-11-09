@@ -1,7 +1,16 @@
 import { createConnection, createServer, type Server, type Socket } from "node:net";
 import { connect as connectTLS } from "node:tls";
 import { setTimeout } from "node:timers/promises";
+import { randomUUIDv7 } from "node:crypto";
 import { SessionAudit, type SessionSnapshot } from "./session-audit.ts";
+
+export type SessionByteRecord =
+  | { readonly kind: "opened" | "ended"; readonly connection: string }
+  | { readonly kind: "server" | "client"; readonly connection: string; readonly bytes: string };
+export interface SessionGateObservation {
+  readonly protocol: "single" | "batches";
+  readonly observeBytes: (record: SessionByteRecord) => void;
+}
 
 export class SessionGate {
   readonly origin: string;
@@ -11,21 +20,27 @@ export class SessionGate {
   private readonly sockets = new Set<Socket>();
   private paused = false;
   private stopped = false;
+  private readonly captureId = randomUUIDv7();
+  private readonly observation: SessionGateObservation | undefined;
+  private observationFailure: unknown;
   private constructor(
     origin: string,
     server: Server,
     observeFrame?: (value: unknown) => void,
     observeClientFrame?: (value: unknown) => void,
+    observation?: SessionGateObservation,
   ) {
     this.origin = origin;
     this.server = server;
-    this.audit = new SessionAudit(observeFrame);
-    this.outgoingAudit = new SessionAudit(observeClientFrame, "client");
+    this.audit = new SessionAudit(observeFrame, "server", observation?.protocol);
+    this.outgoingAudit = new SessionAudit(observeClientFrame, "client", observation?.protocol);
+    this.observation = observation;
   }
   static async start(
     endpoint: string,
     observeFrame?: (value: unknown) => void,
     observeClientFrame?: (value: unknown) => void,
+    observation?: SessionGateObservation,
   ): Promise<SessionGate> {
     const upstream = new URL(endpoint);
     if (
@@ -57,6 +72,7 @@ export class SessionGate {
       server,
       observeFrame,
       observeClientFrame,
+      observation,
     );
     server.on("connection", (socket): void => {
       gate.accept(socket, upstream);
@@ -135,6 +151,8 @@ export class SessionGate {
     this.track(outgoing);
     const connection = input.session ? this.audit.opened() : undefined;
     const clientConnection = input.session ? this.outgoingAudit.opened() : undefined;
+    const physical = `${this.captureId}:${connection}`;
+    if (connection !== undefined) this.observeBytes({ kind: "opened", connection: physical });
     outgoing.setTimeout(10_000, (): void => {
       outgoing.destroy();
     });
@@ -144,6 +162,7 @@ export class SessionGate {
     outgoing.once("close", (): void => {
       if (connection !== undefined) this.audit.ended(connection);
       if (clientConnection !== undefined) this.outgoingAudit.ended(clientConnection);
+      if (connection !== undefined) this.observeBytes({ kind: "ended", connection: physical });
       downstream.destroy();
     });
     outgoing.once(secure ? "secureConnect" : "connect", (): void => {
@@ -155,13 +174,28 @@ export class SessionGate {
       outgoing.setTimeout(0);
       if (connection !== undefined)
         outgoing.on("data", (chunk: Buffer): void => {
+          this.observeBytes({
+            kind: "server",
+            connection: physical,
+            bytes: chunk.toString("base64"),
+          });
           this.audit.receive(connection, chunk);
         });
       if (clientConnection !== undefined) {
+        this.observeBytes({
+          kind: "client",
+          connection: physical,
+          bytes: input.initial.toString("base64"),
+        });
         this.outgoingAudit.receive(clientConnection, input.initial);
-        downstream.on("data", (chunk: Buffer): void =>
-          this.outgoingAudit.receive(clientConnection, chunk),
-        );
+        downstream.on("data", (chunk: Buffer): void => {
+          this.observeBytes({
+            kind: "client",
+            connection: physical,
+            bytes: chunk.toString("base64"),
+          });
+          this.outgoingAudit.receive(clientConnection, chunk);
+        });
       }
       outgoing.write(input.initial);
       downstream.pipe(outgoing);
@@ -173,6 +207,17 @@ export class SessionGate {
     this.paused = true;
     for (const socket of this.sockets) socket.destroy();
   }
+  private observeBytes(record: SessionByteRecord): void {
+    try {
+      this.observation?.observeBytes(record);
+    } catch (error: unknown) {
+      this.observationFailure ??= error instanceof Error ? error : new Error(String(error));
+    }
+  }
+  requireObservation(): void {
+    if (this.observationFailure !== undefined)
+      throw new Error("Session byte capture failed", { cause: this.observationFailure });
+  }
   resume(): void {
     if (this.stopped) throw new Error("session gate is closed");
     this.paused = false;
@@ -180,6 +225,7 @@ export class SessionGate {
   async ready(previousWelcomes = 0): Promise<SessionSnapshot> {
     const deadline = Date.now() + 30_000;
     while (Date.now() < deadline) {
+      this.requireObservation();
       if (this.stopped || !this.server.listening) throw new Error("session gate not listening");
       const snapshot = this.audit.snapshot();
       if (snapshot.invalidConnections > 0) throw new Error("Session observation invalid");
@@ -190,10 +236,19 @@ export class SessionGate {
   }
   async close(): Promise<void> {
     this.stopped = true;
+    const closedSockets = Promise.all(
+      [...this.sockets].map(
+        (socket): Promise<void> =>
+          new Promise((resolve): void => {
+            socket.once("close", (): void => resolve());
+          }),
+      ),
+    );
     this.pause();
     await new Promise<void>((resolve, reject): void => {
       this.server.close((error): void => (error === undefined ? resolve() : reject(error)));
     });
+    await closedSockets;
     if (this.sockets.size !== 0) throw new Error("gate sockets did not close");
   }
 }

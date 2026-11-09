@@ -36,6 +36,7 @@ impl<S, D, H> Task for HolderChangeTask<S, D, H>
 where
     S: AtomicStore,
     for<'t> H: crate::LeaseChangeHook<S::Scope<'t>>,
+    H: crate::OwedSettlement<S, D>,
     D: Database,
     for<'t> S::Scope<'t>: TransactionScope<Database = D>,
     D::Arguments: IntoArguments<D>,
@@ -74,7 +75,7 @@ where
                 return Ok(Resume::Continue);
             };
             if let Some(answer) =
-                crate::transfer_cancellation::process_cancel::<S, D>(scope, id, now)
+                crate::transfer_cancellation::process_cancel::<S, D, H>(scope, id, now)
                     .await
                     .map_err(storage_error)?
             {
@@ -117,7 +118,7 @@ where
             else {
                 return Ok(());
             };
-            crate::transfer_cancellation::process_cancel::<S, D>(scope, id, now)
+            crate::transfer_cancellation::process_cancel::<S, D, H>(scope, id, now)
                 .await
                 .map_err(storage_error)?;
             let mut record = RegistryStorage(scope)
@@ -162,7 +163,7 @@ where
                     .map_err(storage_error)?;
             }
             if matches!(record.intent.request, HolderChangeRequest::Claim { .. }) {
-                crate::transfer_cancellation::admit_settlement::<S, D>(scope, id, settlement, now)
+                crate::transfer_cancellation::owe_settlement::<S, D, H>(scope, id, settlement, now)
                     .await
                     .map_err(storage_error)?;
             }

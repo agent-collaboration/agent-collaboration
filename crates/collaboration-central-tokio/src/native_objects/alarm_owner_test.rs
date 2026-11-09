@@ -1,7 +1,7 @@
 //! One-shot failures occur at real timer-consumed store boundaries, without HTTP nudges.
 
 use super::super::*;
-use collaboration_central_core::ObjectHost;
+use collaboration_central_core::ObjectPlatform;
 use durable_steps::{
     AtomicStore, JournalScope, OperationContext, OperationFailure, RequestKey, Task,
     storage::{JournalStorage, OperationExecution},
@@ -11,8 +11,7 @@ use serde_json::{Value, json};
 use std::time::Duration;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
-#[path = "../../tests/native_http/support.rs"]
-mod configuration;
+use super::super::test_configuration as configuration;
 async fn open(root: &Path) -> TestResult<Arc<NativeObjects>> {
     open_with_clock(root, Arc::new(runtime_primitives::SystemClock)).await
 }
@@ -60,23 +59,25 @@ fn envelope(database: DatabaseId, kind: &str, target: Value, request: Value) -> 
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
-async fn copy_expiry_cancels_the_real_wait_even_when_that_alarm_inspection_fails() -> TestResult {
+async fn copy_ack_wait_ends_at_its_event_deadline_and_arms_no_alarm() -> TestResult {
     let root = tempfile::tempdir()?;
     let objects = open(root.path()).await?;
     let database = DatabaseId::new(durable_steps::Uuid::now_v7())?;
     let receiver = objects.config.authoritative_receiver;
     let slot = objects.slot(ObjectAddress::Copy(database)).await?;
     ready(&slot).await?;
-    let runtime = slot.runtime.get().ok_or("copy runtime missing")?.clone();
-    let RuntimeFace::Copy(copy) = runtime.as_ref() else {
+    let runtime = slot.current_runtime().ok_or("copy runtime missing")?;
+    let RuntimeFace::Copy(copy_kernel) = runtime.as_ref() else {
         return Err("wrong Copy face".into());
     };
+    let copy = copy_kernel.face();
     copy.on_call(serde_json::to_vec(&envelope(database,"fleet-sync.copy-create",json!({"copy":receiver}),json!({"database":database,"epoch":1,"holder":durable_steps::Uuid::now_v7(),"origin":{"kind":"empty"}})))?).await.map_err(|failure|format!("create: {failure:?}"))?;
     let waiting = runtime.clone();
     let task = tokio::spawn(async move {
-        let RuntimeFace::Copy(copy) = waiting.as_ref() else {
+        let RuntimeFace::Copy(copy_kernel) = waiting.as_ref() else {
             return Err(CallFailure::AnswerLost);
         };
+        let copy = copy_kernel.face();
         copy.await_copy_acked(ReplicationPosition::new(
             Epoch::new(1).map_err(|_| CallFailure::AnswerLost)?,
             CommitSequence::new(1),
@@ -101,15 +102,12 @@ async fn copy_expiry_cancels_the_real_wait_even_when_that_alarm_inspection_fails
         }
     })
     .await??;
-    let host = slot.host.get().ok_or("copy host missing")?;
-    host.observed.inner().fail_next_begin();
-    // No call, alarm or mutation follows the fault arm. Only the real timer runs.
+    // No call, alarm or mutation follows. Only the wait's own event deadline runs (H2).
     let outcome = tokio::time::timeout(Duration::from_secs(2), task).await??;
     assert!(
         matches!(outcome, Err(CallFailure::AnswerLost)),
         "expiry invented progress: {outcome:?}"
     );
-    assert!(host.observed.inner().begin_failed());
     objects.shutdown().await?;
     Ok(())
 }
@@ -120,7 +118,7 @@ struct SavedCopyProbe;
 impl Task for SavedCopyProbe {
     const KIND: &'static str = "central.conformance-copy-task";
     const VERSION: u32 = 1;
-    type Store = <NativeHost as ObjectHost>::Store;
+    type Store = <NativeHost as ObjectPlatform>::Store;
     type Input = Value;
     type Output = Value;
     async fn run<Context: OperationContext<Store = Self::Store>>(
@@ -232,9 +230,11 @@ async fn registry_consumed_wake_recovers_its_saved_operation_after_two_begin_fai
     assert_eq!(observed.request_key, key);
     assert_eq!(host.observed.inner().begin_failures(), 2);
     let copy_slot = objects.slot(ObjectAddress::Copy(database)).await?;
-    let RuntimeFace::Copy(copy) = copy_slot.runtime.get().ok_or("copy missing")?.as_ref() else {
+    let copy_runtime = copy_slot.current_runtime().ok_or("copy missing")?;
+    let RuntimeFace::Copy(copy_kernel) = copy_runtime.as_ref() else {
         return Err("wrong face".into());
     };
+    let copy = copy_kernel.face();
     assert!(
         matches!(copy.read_copy_status().await.map_err(|failure|format!("{failure:?}"))?,CopyStatusAnswer::Status(status) if status.database==database && status.acked.sequence.value()==0)
     );
@@ -246,7 +246,7 @@ struct SavedFleetNotice;
 impl Task for SavedFleetNotice {
     const KIND: &'static str = "central.fleet-notice";
     const VERSION: u32 = 1;
-    type Store = <NativeHost as ObjectHost>::Store;
+    type Store = <NativeHost as ObjectPlatform>::Store;
     type Input = Value;
     type Output = ();
     async fn run<Context: OperationContext<Store = Self::Store>>(
@@ -260,28 +260,29 @@ impl Task for SavedFleetNotice {
     }
 }
 
-async fn completed(
+/// Wait for a saved operation of a removed kind to end refused as unknown_kind.
+async fn refused_unknown_kind(
     host: &NativeHost,
     operation: durable_steps::OperationId,
     key: RequestKey,
 ) -> TestResult {
     tokio::time::timeout(Duration::from_secs(3), async {
         loop {
-            // Read the real public journal outside the fault wrapper. This
-            // observes completion without consuming a fault or nudging an owner.
             let record = host
                 .object
                 .transaction(move |scope| Box::pin(async move { scope.operation(operation).await }))
                 .await?
                 .ok_or("saved operation disappeared")?;
-            match record.execution {
-                OperationExecution::Completed { .. } => {
-                    assert_eq!(record.id, operation);
-                    assert_eq!(record.request_key, key);
+            match &record.execution {
+                OperationExecution::Failed { reason, .. } => {
+                    let refused = format!("{reason:?}");
+                    if record.request_key != key || !refused.contains("unknown_kind") {
+                        return Err(format!("leftover row failed another way: {record:?}").into());
+                    }
                     return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
                 }
-                OperationExecution::Failed { .. } => {
-                    return Err(format!("saved operation failed: {record:?}").into());
+                OperationExecution::Completed { .. } => {
+                    return Err(format!("a removed kind ran to completion: {record:?}").into());
                 }
                 OperationExecution::Running { .. } => tokio::task::yield_now().await,
             }
@@ -295,13 +296,14 @@ async fn completed(
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
-async fn fleet_consumed_wake_recovers_its_saved_notice_after_prune_begin_failure() -> TestResult {
+async fn a_leftover_fleet_notice_row_is_refused_loudly_after_a_consumed_wake() -> TestResult {
     let root = tempfile::tempdir()?;
     let objects = open(root.path()).await?;
     let proof = async {
         let installation = message_board::ServiceId::try_from(durable_steps::Uuid::now_v7().to_string())?;
-        // Initialize the real destination before fault injection, without a
-        // connected transport. The same notice must survive missing admission.
+        // Slice 4b removed the notice task (hard cutover). A leftover journal row
+        // from before it must fail loudly as an unknown kind, never be tolerated
+        // or half-run, even when its wake follows a failed prune begin.
         let target = objects.slot(ObjectAddress::Fleet).await?;
         ready(&target).await?;
         let slot = objects.slot(ObjectAddress::Fleet).await?;
@@ -324,10 +326,10 @@ async fn fleet_consumed_wake_recovers_its_saved_notice_after_prune_begin_failure
         host.observed.inner().fail_next_begin();
         slot.io.wake_at(slot.io.now().after(Duration::from_millis(50))).await?;
         // From this single wake onward, observers only read the owning journal.
-        let completion = completed(host, operation, key).await;
+        let refusal = refused_unknown_kind(host, operation, key).await;
         assert_eq!(host.observed.inner().begin_failures(), 1);
         println!("ALARM_FAILURES maintenance begin_failures=1");
-        completion?;
+        refusal?;
         let target_host = target.host.get().ok_or("notice destination missing")?;
         let rows = target_host.object.transaction(|scope| Box::pin(async move {
             use durable_steps::storage::TransactionScope;
@@ -335,8 +337,7 @@ async fn fleet_consumed_wake_recovers_its_saved_notice_after_prune_begin_failure
             let rows = query::<sqlx_turso::Turso>("SELECT position,kind FROM machine_control_project_notices ORDER BY position").fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
             rows.into_iter().map(|row| Ok((row.try_get::<i64, _>("position").map_err(StoreError::backend)?, row.try_get::<String, _>("kind").map_err(StoreError::backend)?))).collect::<Result<Vec<_>, _>>()
         })).await?;
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows, vec![(1, "project_list_changed".to_owned())]);
+        assert!(rows.is_empty(), "a refused leftover row appended a notice: {rows:?}");
         Ok(())
     }.await;
     objects.shutdown().await?;

@@ -29,7 +29,7 @@ impl Task for CheckpointTask {
         request: &Self::Input,
     ) -> Result<Self::Output, OperationFailure> {
         if let crate::change_checks::CheckedChange::Answer(answer) =
-            crate::change_checks::check::<C, Turso>(
+            crate::change_checks::check::<C, Turso, crate::NoLeaseChangeHook>(
                 ctx,
                 request,
                 &config().map_err(|error| OperationFailure::InvalidPayload {
@@ -41,13 +41,14 @@ impl Task for CheckpointTask {
             return Ok(answer);
         }
         if self.fencing
-            && let Some(answer) = crate::change_completion::outcome::<C, Turso>(
-                ctx,
-                request,
-                "before_fence",
-                Some(HolderChangePhase::Fencing),
-            )
-            .await?
+            && let Some(answer) =
+                crate::change_completion::outcome::<C, Turso, crate::NoLeaseChangeHook>(
+                    ctx,
+                    request,
+                    "before_fence",
+                    Some(HolderChangePhase::Fencing),
+                )
+                .await?
         {
             return Ok(answer);
         }

@@ -346,12 +346,7 @@ async fn main() -> ConformanceResult<()> {
         Scenario::MailboxHeldRetention => mailbox_held_retention_scenario::run(&format!("http://127.0.0.1:{port}")).await,
         Scenario::FleetMailExpiry => {
             let base = format!("http://127.0.0.1:{port}");
-            fleet_mail_expiry_scenarios::run(&base, || async {
-                Ok(client.http.post(format!("{base}/__conformance/admission"))
-                    .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
-                    .json(&json!({"kind":"holderFrames","value":{"service":fleet_mail_expiry_scenarios::RECIPIENT_SERVICE}}))
-                    .send().await?.error_for_status()?.json::<Vec<fleet_protocol::FrameId>>().await?)
-            }).await
+            fleet_mail_expiry_scenarios::run(&base).await
         },
         Scenario::MailboxIdentity => mailbox_identity_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
         Scenario::MailboxCapacity => mailbox_capacity_scenarios::run(&format!("http://127.0.0.1:{port}")).await,

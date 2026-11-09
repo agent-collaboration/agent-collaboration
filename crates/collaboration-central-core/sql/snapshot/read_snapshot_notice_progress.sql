@@ -1,0 +1,1 @@
+SELECT CAST(machine_id AS TEXT) AS machine_id, CAST(last_issued_position AS TEXT) AS last_issued, CAST(expired_through AS TEXT) AS expired_through, CAST(applied_through AS TEXT) AS applied_through FROM machine_control_project_progress ORDER BY machine_id;

@@ -2,7 +2,7 @@
 
 use super::{
     AtomicStore, BoxFuture, ColumnIndex, Database, Decode, Deserialize, Encode, EngineSchema,
-    Executor, Infallible, IntoArguments, ObjectBootstrap, ObjectHost, Serialize, StepCallback,
+    Executor, Infallible, IntoArguments, ObjectBootstrap, ObjectPlatform, Serialize, StepCallback,
     StepResult, StoreError, TransactionScope, Type, corrupt,
 };
 use crate::generated_bootstrap_probes as queries;
@@ -11,6 +11,25 @@ use fleet_protocol::{
     AttachSequence, CopyOrigin, CopyStatusAnswer, CreateCopy, DatabaseId, DeliveryTypes, Epoch,
     ItemId, PeerId, QueryResult, ReplicationAnswer, ReportSchemaSupport, SchemaSupport, SessionId,
 };
+
+impl EngineSchema {
+    /// How many migrations initialize applies to a fresh store of this schema:
+    /// the up migrations of its own corpus and of its central corpus, read
+    /// from the same lists initialize applies.
+    #[must_use]
+    pub fn fresh_migration_count(self) -> usize {
+        let up = |migrations: Vec<&sqlx_core::migrate::Migration>| {
+            migrations
+                .into_iter()
+                .filter(|migration| migration.migration_type.is_up_migration())
+                .count()
+        };
+        up(self.migrations())
+            + self
+                .central_corpus()
+                .map_or(0, |(_, migrations)| up(migrations))
+    }
+}
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -104,7 +123,7 @@ pub enum BootstrapReply {
     CopyStatus(Box<ReplicationAnswer>),
 }
 
-impl<Host: ObjectHost> ObjectBootstrap<Host>
+impl<Host: ObjectPlatform> ObjectBootstrap<Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

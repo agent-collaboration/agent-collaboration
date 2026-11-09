@@ -3,10 +3,10 @@ use crate::FleetKind;
 
 use super::{
     AtomicStore, BoxFuture, Clock, ColumnIndex, Database, Decode, Encode, EnrollmentState,
-    IdSource, Infallible, IntoArguments, ObjectHost, ObjectRuntime, ObjectWork, OwnerIdentity,
-    PeerId, PlatformIo, RevocationDecision, ServiceId, StepCallback, StepDriver, StepResult,
-    StoreError, StoredMachine, SyncTime, TransactionScope, Type, corrupt, operation_pending,
-    queries, readmission, wrong_face,
+    IdSource, Infallible, IntoArguments, ObjectPlatform, ObjectRuntime, ObjectWork, OwnerIdentity,
+    PeerId, RevocationDecision, ServiceId, StepCallback, StepDriver, StepResult, StoreError,
+    StoredMachine, SyncTime, TransactionScope, Type, corrupt, operation_pending, queries,
+    readmission, wrong_face,
 };
 use durable_steps::{
     CallTarget, JournalScope, OperationContext, OperationFailure, OperationId, RequestKey, Task,
@@ -73,7 +73,7 @@ pub(super) async fn in_progress<Scope: JournalStorage>(
     .await
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

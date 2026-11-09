@@ -1,7 +1,7 @@
 //! New outgoing calls need current Fleet enrollment; existing correlations remain independent.
 use crate::fleet_storage_fixture::{FixtureIo, FleetStorageFixture, NOW, TestError};
 use crate::{
-    AdmissionOrigin, LocalSectionFailure, ObjectHost, RegistrationEdits, RegistrationSnapshot,
+    AdmissionOrigin, LocalSectionFailure, ObjectPlatform, RegistrationEdits, RegistrationSnapshot,
     SocketFailure,
 };
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
@@ -22,21 +22,25 @@ struct SelectionHost {
     session: SessionId,
     peer: PeerId,
     sends: AtomicUsize,
-    io: FixtureIo,
+    io: Arc<FixtureIo>,
 }
-impl ObjectHost for SelectionHost {
+impl ObjectPlatform for SelectionHost {
     type Database = sqlx_turso::Turso;
     type Store = Store;
-    type Wake = FixtureIo;
+    type Alarm = FixtureIo;
+    type Io = FixtureIo;
     fn store(&self) -> &Arc<Store> {
         &self.store
     }
-    fn wake(&self) -> &FixtureIo {
+    fn io(&self) -> &Arc<FixtureIo> {
         &self.io
+    }
+    fn alarm(&self) -> &FixtureIo {
+        self.io.as_ref()
     }
     async fn with_local_section<T: Send + 'static>(
         &self,
-        run: impl std::future::Future<Output = T> + Send + 'static,
+        run: crate::LocalSection<T>,
     ) -> Result<T, LocalSectionFailure> {
         Ok(run.await)
     }
@@ -126,7 +130,7 @@ async fn run(revoked: bool) -> Result<(), TestError> {
         session: SessionId::new(durable_steps::Uuid::now_v7())?,
         peer: PEER.to_owned().try_into()?,
         sends: AtomicUsize::new(0),
-        io: FixtureIo,
+        io: Arc::new(FixtureIo),
     });
     let release = call()?;
     let ServerCall::Release {
@@ -229,7 +233,7 @@ async fn outgoing_selection_samples_expiry_after_waiting_for_the_fleet_transacti
         session: SessionId::new(durable_steps::Uuid::now_v7())?,
         peer: PEER.to_owned().try_into()?,
         sends: AtomicUsize::new(0),
-        io: FixtureIo,
+        io: Arc::new(FixtureIo),
     });
     let clock = Arc::new(SelectionClock {
         now: std::sync::atomic::AtomicI64::new(NOW.unix_millis()),

@@ -2,7 +2,7 @@
 use crate::FleetKind;
 
 use crate::{
-    CallerKind, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, ObjectPlatform, ObjectRuntime,
     caller_context::CallAuthority,
     object_call_envelope::ObjectCallEnvelope,
     object_runtime::ObjectWork,
@@ -28,7 +28,7 @@ use sqlx_core::{
 };
 use std::convert::Infallible;
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     Host::Store: durable_steps::ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -137,8 +137,7 @@ where
                 let now = shared_host.now();
                 let policy = config.lease;
                 let hook = crate::fleet_lease_projection_step::FleetLeaseChangeHook::<
-                    crate::session_store::CoreSessionStore<Host, Io>,
-                    crate::machine_notice_delivery::MachineNoticeTask<Host, Io>,
+                    crate::session_store::CoreSessionStore<Host>,
                 >::new(io.clone());
                 let (store, _) = self.session_store().map_err(|_| CallFailure::AnswerLost)?;
                 let reply = store

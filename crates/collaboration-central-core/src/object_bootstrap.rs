@@ -1,7 +1,7 @@
 //! Apply library-owned corpora once, in central's one owned store transaction.
 
 use crate::{
-    ObjectHost, generated_bootstrap,
+    ObjectPlatform, generated_bootstrap,
     step_driver::{StepCallback, StepDriver, StepResult},
 };
 use durable_steps::{AtomicStore, BoxFuture, StoreError, storage::TransactionScope};
@@ -103,14 +103,25 @@ impl EngineSchema {
             Self::Fleet => FLEET_MIGRATIONS.iter().collect(),
         }
     }
+    /// The central corpus initialize applies after this schema's own one, if
+    /// any: the registry's enrollments, the work rows Fleet and Copy keep, or
+    /// the session store's central tables.
+    fn central_corpus(self) -> Option<(&'static str, Vec<&'static sqlx_core::migrate::Migration>)> {
+        match self {
+            Self::Registry => Some(("central-registry", REGISTRY_MIGRATIONS.iter().collect())),
+            Self::Fleet | Self::Copy => Some((WORK_CORPUS, WORK_MIGRATIONS.iter().collect())),
+            Self::Session => Some(("central-session", SESSION_MIGRATIONS.iter().collect())),
+            Self::Delivery => None,
+        }
+    }
 }
 
-pub struct ObjectBootstrap<Host: ObjectHost> {
+pub struct ObjectBootstrap<Host: ObjectPlatform> {
     clock: Arc<dyn Clock>,
     driver: StepDriver<Host>,
     now: runtime_primitives::SyncTime,
 }
-impl<Host: ObjectHost> ObjectBootstrap<Host>
+impl<Host: ObjectPlatform> ObjectBootstrap<Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
@@ -294,27 +305,11 @@ where
                     )
                 })?;
             }
-            if self.schema == EngineSchema::Registry {
-                count += apply_corpus(
-                    scope,
-                    "central-registry",
-                    REGISTRY_MIGRATIONS.iter().collect(),
-                    self.now,
-                    self.clock.as_ref(),
-                )
-                .await?
-                .count;
-            }
-            if self.schema == EngineSchema::Session {
-                count += apply_corpus(
-                    scope,
-                    "central-session",
-                    SESSION_MIGRATIONS.iter().collect(),
-                    self.now,
-                    self.clock.as_ref(),
-                )
-                .await?
-                .count;
+            // Then the schema's central corpus, in the same store transaction.
+            if let Some((corpus, migrations)) = self.schema.central_corpus() {
+                count += apply_corpus(scope, corpus, migrations, self.now, self.clock.as_ref())
+                    .await?
+                    .count;
             }
 
             Ok((BootstrapApplied { count, primary }, Vec::new()))
@@ -343,7 +338,33 @@ static SESSION_MIGRATIONS: std::sync::LazyLock<Vec<sqlx_core::migrate::Migration
                 include_str!("../session_migrations/0012_forward_correlations.sql").into_sql_str(),
                 false,
             ),
+            Migration::new(
+                13,
+                "notice applied through".into(),
+                MigrationType::Simple,
+                include_str!("../session_migrations/0013_notice_applied_through.sql")
+                    .into_sql_str(),
+                false,
+            ),
         ]
+    });
+
+/// The corpus that owns `central_work_attempts` in every Fleet and Copy store.
+pub(crate) const WORK_CORPUS: &str = "central-work";
+
+static WORK_MIGRATIONS: std::sync::LazyLock<Vec<sqlx_core::migrate::Migration>> =
+    std::sync::LazyLock::new(|| {
+        use sqlx_core::{
+            migrate::{Migration, MigrationType},
+            sql_str::SqlSafeStr,
+        };
+        vec![Migration::new(
+            1,
+            "central work attempts".into(),
+            MigrationType::Simple,
+            include_str!("../work_migrations/0001_central_work_attempts.sql").into_sql_str(),
+            false,
+        )]
     });
 
 static REGISTRY_MIGRATIONS: std::sync::LazyLock<Vec<sqlx_core::migrate::Migration>> =

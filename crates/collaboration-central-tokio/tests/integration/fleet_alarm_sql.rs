@@ -125,6 +125,8 @@ fn normalized(sql: &str) -> String {
 
 /// The fixture has one established control stream, no expired data, and no
 /// other task kinds. Actual dispatches and committed appends supply the counts.
+/// The owned SQL of one engine drive: one enrollment lookup per dispatched task
+/// and eight statements per notice append, nothing else.
 pub(super) fn validate_alarm(sql: &[String], dispatches: usize, appends: usize) -> TestResult {
     const STATE: &str = include_str!(
         "../../../collaboration-central-core/sql/machine_notices/read_machine_notice_state.sql"
@@ -140,33 +142,14 @@ pub(super) fn validate_alarm(sql: &[String], dispatches: usize, appends: usize) 
     );
     const LOOKUP: &str =
         include_str!("../../../collaboration-central-core/sql/read_enrollments.sql");
-    let maintenance = [
-        include_str!("../../../collaboration-central-core/sql/fleet/read_fleet_feed_state.sql"),
-        include_str!("../../../collaboration-central-core/sql/fleet/read_expired_fleet_feed.sql"),
-        include_str!(
-            "../../../collaboration-central-core/sql/project_requests/read_project_requests.sql"
-        ),
-        include_str!(
-            "../../../collaboration-central-core/sql/machine_notices/read_machine_notice_peers.sql"
-        ),
-        STATE,
-        BOUNDS,
-        RETAINED,
-        EXPIRY,
-    ]
-    .map(normalized);
+    // Feed, forward and notice maintenance are the object kernel's due sources
+    // now, so an engine drive pays only its dispatched tasks' statements.
     let owned: Vec<_> = sql
         .iter()
         .filter(|statement| only_sdk_tables(statement) != Some(true))
         .map(|statement| normalized(statement))
         .collect();
-    let Some(variable) = owned.strip_prefix(&maintenance) else {
-        return Err(format!(
-            "Fleet alarm maintenance boundary changed: {} owned statements",
-            owned.len()
-        )
-        .into());
-    };
+    let variable = owned.as_slice();
     let append = [STATE, BOUNDS, RETAINED, STATE, BOUNDS,
         include_str!("../../../collaboration-central-core/sql/machine_notices/append_machine_notice.sql"),
         include_str!("../../../collaboration-central-core/sql/machine_notices/advance_machine_notice_head.sql"), EXPIRY,

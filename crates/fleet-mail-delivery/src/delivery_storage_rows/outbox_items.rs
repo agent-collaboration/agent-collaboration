@@ -140,3 +140,99 @@ where
             .transpose()
     }
 }
+
+#[derive(Debug)]
+pub(crate) struct StoredNextPushExpiry {
+    pub next_expiry: Option<String>,
+    pub next_class: Option<String>,
+}
+pub(crate) fn read_next_push_expiry<S>(
+    scope: &mut S,
+) -> impl std::future::Future<Output = Result<StoredNextPushExpiry, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/read_next_push_expiry.sql"
+        )));
+        let row = statement.fetch_one(scope.executor()).await?;
+        Ok(StoredNextPushExpiry {
+            next_expiry: row.try_get("next_expiry")?,
+            next_class: row.try_get("next_class")?,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct StoredExpiredPush {
+    pub item_id: Option<String>,
+    pub recipient_machine_id: Option<String>,
+}
+pub(crate) fn read_expired_pushes<S>(
+    scope: &mut S,
+    now: String,
+    limit: String,
+) -> impl std::future::Future<Output = Result<Vec<StoredExpiredPush>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/read_expired_pushes.sql"
+        )))
+        .bind(now)
+        .bind(limit);
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredExpiredPush {
+                    item_id: row.try_get("item_id")?,
+                    recipient_machine_id: row.try_get("recipient_machine_id")?,
+                })
+            })
+            .collect()
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct StoredOutboxOwner {
+    pub item_id: Option<String>,
+    pub record_kind: Option<String>,
+    pub status_kind: Option<String>,
+}
+pub(crate) fn read_outbox_owner_rows<S>(
+    scope: &mut S,
+) -> impl std::future::Future<Output = Result<Vec<StoredOutboxOwner>, sqlx_core::Error>> + Send
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+{
+    async move {
+        let statement = query::<S::Database>(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/sql/read_outbox_owner_rows.sql"
+        )));
+        let rows = statement.fetch_all(scope.executor()).await?;
+        rows.iter()
+            .map(|row| {
+                Ok(StoredOutboxOwner {
+                    item_id: row.try_get("item_id")?,
+                    record_kind: row.try_get("record_kind")?,
+                    status_kind: row.try_get("status_kind")?,
+                })
+            })
+            .collect()
+    }
+}

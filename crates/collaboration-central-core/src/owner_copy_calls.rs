@@ -1,6 +1,6 @@
 //! Repair is the existing Copy alarm path, with retirement checked first.
 use crate::{
-    CallerKind, CopyKind, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, CopyKind, ObjectPlatform, ObjectRuntime,
     caller_context::CallAuthority,
     object_call_envelope::ObjectCallEnvelope,
     object_runtime::ObjectWork,
@@ -18,7 +18,7 @@ pub enum CopyCallClass {
     Health,
     Ordinary,
 }
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<CopyKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
@@ -162,7 +162,12 @@ where
                     fleet_protocol::CopyStatusAnswer::Retired => CopyOpsAnswer::Retired,
                     fleet_protocol::CopyStatusAnswer::Status(_)
                     | fleet_protocol::CopyStatusAnswer::NotInitialized => {
-                        self.on_alarm().await.map_err(|_| CallFailure::AnswerLost)?;
+                        self.expire_copy_staged_parts()
+                            .await
+                            .map_err(|_| CallFailure::AnswerLost)?;
+                        self.drive_copy_followups()
+                            .await
+                            .map_err(|_| CallFailure::AnswerLost)?;
                         CopyOpsAnswer::Repaired
                     }
                 }

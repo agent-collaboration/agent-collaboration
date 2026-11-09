@@ -21,7 +21,7 @@ pub(crate) enum RepairedFence {
     Answer(HolderChangeAnswer),
 }
 
-pub(crate) async fn repair<C, D>(
+pub(crate) async fn repair<C, D, H>(
     ctx: &mut C,
     request: &HolderChangeRequest,
     copy_fence: Epoch,
@@ -30,6 +30,7 @@ pub(crate) async fn repair<C, D>(
 where
     C: OperationContext,
     D: Database,
+    H: crate::OwedSettlement<C::Store, D>,
     for<'t> <C::Store as AtomicStore>::Scope<'t>: TransactionScope<Database = D>,
     D::Arguments: IntoArguments<D>,
     for<'value> String: Type<D> + Encode<'value, D> + Decode<'value, D>,
@@ -41,13 +42,14 @@ where
     Ok(ctx
         .local(step("repair")?, move |scope| {
             Box::pin(async move {
-                if let Some(answer) = crate::transfer_cancellation::process_cancel::<C::Store, D>(
-                    scope,
-                    change_checks::attempt(&request),
-                    now,
-                )
-                .await
-                .map_err(step_error)?
+                if let Some(answer) =
+                    crate::transfer_cancellation::process_cancel::<C::Store, D, H>(
+                        scope,
+                        change_checks::attempt(&request),
+                        now,
+                    )
+                    .await
+                    .map_err(step_error)?
                 {
                     return Ok(RepairedFence::Answer(answer));
                 }

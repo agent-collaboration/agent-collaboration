@@ -28,7 +28,7 @@ async fn a_failure_after_hook_write_rolls_back_rows_ack_summary_and_admitted_fol
         assert_eq!(fixture.apply(piece).await?,ReplicationAnswer::AlreadyApplied{through:position(1)?});
         assert_eq!(fixture.runtime.copy_summary().await?,before);
         assert_eq!(fixture.counts().await?,(1,1,1));
-        fixture.runtime.on_alarm().await?;
+        crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
         assert_eq!(fixture.summary(true).await?,fixture.summary(false).await?);
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
     }.await;

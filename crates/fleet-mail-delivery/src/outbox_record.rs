@@ -1,4 +1,5 @@
 use crate::DeliveryError;
+pub(crate) mod owed_work;
 use fleet_protocol::*;
 use serde::{Deserialize, Serialize};
 
@@ -206,6 +207,14 @@ pub struct SubmitInput {
     pub digest: ItemDigest,
     pub relay: PeerId,
     pub mailbox: PeerId,
+}
+
+/// A push still owed whose item's validity has passed: the item, and the
+/// machine its push goes to.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ExpiredPush {
+    pub item: ItemId,
+    pub recipient: PeerId,
 }
 
 #[derive(Clone, Serialize, Deserialize)]

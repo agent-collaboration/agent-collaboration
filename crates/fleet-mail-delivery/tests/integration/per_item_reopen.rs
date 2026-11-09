@@ -21,9 +21,9 @@ async fn released_and_terminal_relay_records_reopen_with_explicit_and_legacy_bou
                 let envelope=DeliveryEnvelope::Item(variable_item(identity,"small"));
                 let reference=DeliveryItemRef {item:envelope.id(),digest:envelope.digest().clone()};
                 let mut relay=Outbox::<_,VariableTypes,_>::new(scope,configured,&FixtureBindings);
-                relay.submit_relay::<FixturePush<VariableTypes>,RecordRemoval>(Submitter::Machine(peer(1)),envelope,peer(3),"route".into(),now()).await.map_err(storage_error)?;
-                relay.receipt::<FixturePublication<VariableTypes>>(peer(2),&reference,PushResult::Accepted {accepted_at:now()},now()).await.map_err(storage_error)?;
-                if terminal {relay.recipient_report::<FixturePublication<VariableTypes>>(peer(2),RecipientReport {item:item_id(identity),report_seq:ReportSeq::new(1),outcome:RecipientOutcome::Delivered {acceptance:Acceptance {receipt:"ok".into()}}},now()).await.map_err(storage_error)?;}
+                relay.submit_relay::<fleet_mail_delivery::JournaledWork<FixturePush<VariableTypes>, RecordRemoval>>(Submitter::Machine(peer(1)),envelope,peer(3),"route".into(),now()).await.map_err(storage_error)?;
+                relay.receipt::<fleet_mail_delivery::JournaledStatus<FixturePublication<VariableTypes>>>(peer(2),&reference,PushResult::Accepted {accepted_at:now()},now()).await.map_err(storage_error)?;
+                if terminal {relay.recipient_report::<fleet_mail_delivery::JournaledStatus<FixturePublication<VariableTypes>>>(peer(2),RecipientReport {item:item_id(identity),report_seq:ReportSeq::new(1),outcome:RecipientOutcome::Delivered {acceptance:Acceptance {receipt:"ok".into()}}},now()).await.map_err(storage_error)?;}
             }
             sqlx_core::query::query::<sqlx_turso::Turso>("UPDATE _fleet_sync_outbox_items SET acceptance_bound=NULL WHERE item_id=?1").bind(item_id(2).as_uuid().to_string()).execute(scope.executor()).await?;
             if !terminal {
@@ -45,7 +45,7 @@ async fn released_and_terminal_relay_records_reopen_with_explicit_and_legacy_bou
                 assert_eq!(row.try_get::<String,_>("status_kind")?,if terminal {"delivered"} else {"atRecipient"});
                 let mut relay=Outbox::<_,VariableTypes,_>::new(scope,configured,&FixtureBindings);
                 relay.relay_query(Submitter::Machine(peer(1)),item_id(identity)).await.map_err(storage_error)?;
-                let result=relay.recipient_report::<FixturePublication<VariableTypes>>(peer(2),RecipientReport {item:item_id(identity),report_seq:ReportSeq::new(2),outcome:RecipientOutcome::Delivered {acceptance:Acceptance {receipt:"x".repeat(100)}}},now()).await;
+                let result=relay.recipient_report::<fleet_mail_delivery::JournaledStatus<FixturePublication<VariableTypes>>>(peer(2),RecipientReport {item:item_id(identity),report_seq:ReportSeq::new(2),outcome:RecipientOutcome::Delivered {acceptance:Acceptance {receipt:"x".repeat(100)}}},now()).await;
                 if identity==1 {assert!(matches!(result,Err(DeliveryError::Refused {reason:DeliveryRefusal::TooLarge {field:DeliverySizeField::Acceptance}})));}
                 else {result.map_err(storage_error)?;}
             }

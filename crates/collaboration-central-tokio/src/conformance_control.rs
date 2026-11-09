@@ -131,7 +131,13 @@ async fn control(
     }
     match controls.platform.runtime_control(request).await {
         Ok(observed) => Json(observed).into_response(),
-        Err(error) => (StatusCode::CONFLICT, Json(error.to_string())).into_response(),
+        // A control's own failure is its JSON (seam contract v3.4), as on Cloudflare.
+        Err(crate::native_objects::RuntimeControlError::Control(failure)) => {
+            (StatusCode::CONFLICT, Json(failure)).into_response()
+        }
+        Err(crate::native_objects::RuntimeControlError::Store(error)) => {
+            (StatusCode::CONFLICT, Json(error.to_string())).into_response()
+        }
     }
 }
 

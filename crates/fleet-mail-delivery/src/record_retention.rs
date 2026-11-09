@@ -226,42 +226,113 @@ where
                         ),
                     });
                 }
-                queries::remove_retained_status(scope, item_key(item))
-                    .await
-                    .map_err(sql_error)
-                    .map_err(step_error)?;
-                queries::remove_retained_events(scope, item_key(item))
-                    .await
-                    .map_err(sql_error)
-                    .map_err(step_error)?;
-                if role == crate::DeliveryHostRole::Machine {
-                    queries::drop_inbox_reports(scope, item_key(item))
-                        .await
-                        .map_err(sql_error)
-                        .map_err(step_error)?;
-                    queries::remove_retained_inbox_links(scope, item_key(item))
-                        .await
-                        .map_err(sql_error)
-                        .map_err(step_error)?;
-                }
-                queries::remove_retained_outbox_links(scope, item_key(item))
-                    .await
-                    .map_err(sql_error)
-                    .map_err(step_error)?;
-                if role == crate::DeliveryHostRole::Machine {
-                    queries::drop_inbox_item(scope, item_key(item))
-                        .await
-                        .map_err(sql_error)
-                        .map_err(step_error)?;
-                }
-                queries::remove_retained_outbox(scope, item_key(item))
-                    .await
-                    .map_err(sql_error)
-                    .map_err(step_error)?;
-                Ok(())
+                remove_record(scope, role, item).await.map_err(step_error)
             })
         })
         .await?;
         Ok(())
     }
+}
+
+/// Delete one record's retained rows: its status rows and events, links and
+/// custody (and, on a machine, its inbox reports and item).
+async fn remove_record<S>(
+    scope: &mut S,
+    role: crate::DeliveryHostRole,
+    item: ItemId,
+) -> Result<(), DeliveryError>
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'v> String: Type<S::Database> + Encode<'v, S::Database>,
+{
+    queries::remove_retained_status(scope, item_key(item))
+        .await
+        .map_err(sql_error)?;
+    queries::remove_retained_events(scope, item_key(item))
+        .await
+        .map_err(sql_error)?;
+    if role == crate::DeliveryHostRole::Machine {
+        queries::drop_inbox_reports(scope, item_key(item))
+            .await
+            .map_err(sql_error)?;
+        queries::remove_retained_inbox_links(scope, item_key(item))
+            .await
+            .map_err(sql_error)?;
+    }
+    queries::remove_retained_outbox_links(scope, item_key(item))
+        .await
+        .map_err(sql_error)?;
+    if role == crate::DeliveryHostRole::Machine {
+        queries::drop_inbox_item(scope, item_key(item))
+            .await
+            .map_err(sql_error)?;
+    }
+    queries::remove_retained_outbox(scope, item_key(item))
+        .await
+        .map_err(sql_error)
+}
+
+/// When the earliest retained relay record's retention ends, if one is retained.
+pub async fn next_relay_record_removal<S>(scope: &mut S) -> Result<Option<SyncTime>, DeliveryError>
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'v> Option<String>: Type<S::Database> + Decode<'v, S::Database>,
+    for<'r> &'r str: ColumnIndex<<S::Database as Database>::Row>,
+{
+    let Some(row) = queries::read_earliest_relay_record(scope)
+        .await
+        .map_err(sql_error)?
+    else {
+        return Ok(None);
+    };
+    Ok(Some(removal_deadline(relay_record(row.item_id)?)))
+}
+
+/// Remove up to `limit` relay records whose retention ended, oldest first;
+/// answers how many were removed.
+pub async fn remove_expired_relay_records<S>(
+    scope: &mut S,
+    now: SyncTime,
+    limit: u32,
+) -> Result<usize, DeliveryError>
+where
+    S: TransactionScope,
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'v> String: Type<S::Database> + Encode<'v, S::Database>,
+    for<'v> Option<String>: Type<S::Database> + Decode<'v, S::Database>,
+    for<'r> &'r str: ColumnIndex<<S::Database as Database>::Row>,
+{
+    // An item's retention ended when it was created at or before this time,
+    // so its UUIDv7 id sorts before the first id of the next millisecond.
+    let created_by = now.unix_millis().saturating_sub(DELIVERY_RETENTION_MILLIS);
+    let Ok(next) = u64::try_from(created_by.saturating_add(1)) else {
+        return Ok(0);
+    };
+    let bound = format!(
+        "{:08x}-{:04x}-7000-8000-000000000000",
+        next >> 16,
+        next & 0xffff
+    );
+    let rows = queries::read_relay_records_before(scope, bound, limit.to_string())
+        .await
+        .map_err(sql_error)?;
+    let mut removed = 0;
+    for row in rows {
+        let item = relay_record(row.item_id)?;
+        if now < removal_deadline(item) {
+            continue;
+        }
+        remove_record(scope, crate::DeliveryHostRole::Relay, item).await?;
+        removed += 1;
+    }
+    Ok(removed)
+}
+
+fn relay_record(item: Option<String>) -> Result<ItemId, DeliveryError> {
+    item.and_then(|value| ItemId::try_from(value).ok())
+        .ok_or(DeliveryError::Corrupt {
+            field: "relay record item id",
+        })
 }

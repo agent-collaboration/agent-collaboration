@@ -1,0 +1,1 @@
+SELECT CAST(connection_id AS TEXT) AS connection_id, CAST(session_id AS TEXT) AS session_id, CAST(count(*) AS TEXT) AS in_flight FROM central_work_attempts WHERE state='in_flight' AND kind IN ('push','status') AND connection_id IS NOT NULL AND session_id IS NOT NULL GROUP BY connection_id, session_id ORDER BY connection_id, session_id;

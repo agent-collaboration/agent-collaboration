@@ -116,9 +116,9 @@ fn query_request(item: ItemId) -> TestResult<DeliveryRequest<BoardDeliveryTypes>
 }
 async fn counts(fixture: &FleetStorageFixture) -> TestResult<(i64, i64)> {
     Ok(fixture.object.transaction(|scope|Box::pin(async move {
-        let row=query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM _fleet_sync_outbox_items) AS items,(SELECT count(*) FROM _fleet_sync_operations WHERE kind='fleet-sync.delivery.remove-record') AS removals")
+        let row=query::<sqlx_turso::Turso>("SELECT (SELECT count(*) FROM _fleet_sync_outbox_items) AS items,(SELECT count(*) FROM central_work_attempts) AS owed")
             .fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
-        Ok((row.try_get("items").map_err(StoreError::backend)?,row.try_get("removals").map_err(StoreError::backend)?))
+        Ok((row.try_get("items").map_err(StoreError::backend)?,row.try_get("owed").map_err(StoreError::backend)?))
     })).await?)
 }
 
@@ -173,7 +173,9 @@ async fn current_holder_settles_unknown_project_and_query_preserves_its_owner_af
         matches!(known.statuses.as_slice(),[status] if status.item==item && matches!(&status.state,ItemStatusState::Known {digest:stored,status:DeliveryStatus::Refused {reason:DeliveryRefusal::ProcessingFailed {kind:DeliveryFailureKind::CustodyUnresolvable}},version,cancel:None} if stored==&digest && *version==StatusVersion::new(1)))
     );
     let baseline = counts(&fixture).await?;
-    assert_eq!(baseline, (1, 1));
+    // Settled custody, and no owed row: the mail retention due source removes
+    // the record when its retention ends.
+    assert_eq!(baseline, (1, 0));
     for (peer, service) in [(A, SERVICE_A), (C, SERVICE_C)] {
         assert!(matches!(
             answer(&fixture, peer, service, query_request(item)?, NOW).await?,
@@ -199,10 +201,9 @@ async fn current_holder_settles_unknown_project_and_query_preserves_its_owner_af
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Forged machine, absent/expired Project and old-holder claims must be refused before any custody or removal task is admitted, while unknown Query stays source-free."
+    reason = "Forged machine, absent/expired Project and old-holder claims must be refused before any custody or owed work is admitted, while unknown Query stays source-free."
 )]
-async fn unauthorized_settlement_claims_never_create_negative_custody_or_removal_work() -> TestResult
-{
+async fn unauthorized_settlement_claims_never_create_negative_custody_or_owed_work() -> TestResult {
     let fixture = prepare().await?;
     let item = ItemId::new(durable_steps::Uuid::now_v7())?;
     let digest = ItemDigest::try_from("b".repeat(64))?;
@@ -284,7 +285,7 @@ async fn enrolled_machine_cannot_settle_as_fleet_with_matching_uuid() -> TestRes
     assert_eq!(
         counts(&fixture).await?,
         baseline,
-        "refusal created custody or removal work"
+        "refusal created custody or owed work"
     );
     fixture.close().await
 }

@@ -79,3 +79,6 @@ pub(crate) fn stored_row_id(
     }
     Ok(())
 }
+
+/// Every custody owner row, for a conformance snapshot.
+pub(crate) mod owner_rows;

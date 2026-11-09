@@ -15,6 +15,8 @@ use sqlx_core::{
 };
 
 pub(crate) struct FeedState {
+    /// The one state row's UUIDv7, absent until step 0 creates it.
+    pub id: Option<String>,
     pub head: FleetPosition,
     pub floor: FleetPosition,
 }
@@ -55,11 +57,13 @@ where
             return Err(corrupt("feed_state", "feed exists without its head"));
         }
         return Ok(FeedState {
+            id: None,
             head: FleetPosition::ZERO,
             floor: FleetPosition::ZERO,
         });
     };
-    check_private_id(&required(row.state_id, "feed_state.id")?, "feed_state.id")?;
+    let id = required(row.state_id, "feed_state.id")?;
+    check_private_id(&id, "feed_state.id")?;
     crate::fleet_record_codec::check_millis(
         row.created_at,
         row.created_class,
@@ -81,7 +85,55 @@ where
             "retention floor is beyond feed head",
         ));
     }
-    Ok(FeedState { head, floor })
+    Ok(FeedState {
+        id: Some(id),
+        head,
+        floor,
+    })
+}
+
+/// The Fleet object's failure subject: its feed state row's UUIDv7.
+pub(crate) async fn state_subject<Scope: TransactionScope>(
+    scope: &mut Scope,
+) -> Result<durable_steps::Uuid, StoreError>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    let id = state(scope)
+        .await?
+        .id
+        .ok_or_else(|| corrupt("feed_state", "the Fleet feed state row is missing"))?;
+    durable_steps::Uuid::parse_str(&id).map_err(|error| corrupt("feed_state.id", error))
+}
+
+/// Step 0: create the one feed state row if it doesn't exist yet. Its id is
+/// also the Fleet object's subject for failures with no row of their own.
+/// An existing row is not decoded here: a corrupt row must fail only the work
+/// that reads it, never the object's open (#failures).
+pub(crate) async fn ensure_state<Scope: TransactionScope>(
+    scope: &mut Scope,
+    id: durable_steps::Uuid,
+    now: DateTime<Utc>,
+) -> Result<(), StoreError>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    if !queries::read_fleet_feed_state(scope)
+        .await
+        .map_err(StoreError::backend)?
+        .is_empty()
+    {
+        return Ok(());
+    }
+    queries::initialize_fleet_feed_state(scope, id.to_string(), now.timestamp_millis().to_string())
+        .await
+        .map_err(StoreError::backend)
 }
 
 /// Read exactly the bounded committed range chosen by the caller's head/floor check.
@@ -154,19 +206,17 @@ where
         Type<Scope::Database> + Decode<'value, Scope::Database> + Encode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
-    prune(scope, now).await?;
+    // Append neither prunes nor creates the state row: retention is its own due
+    // source, and step 0 creates the row (#pipeline).
     let state = state(scope).await?;
     if entries.is_empty() {
         return Ok(());
     }
-    if state.head == FleetPosition::ZERO {
-        queries::initialize_fleet_feed_state(
-            scope,
-            row_ids.next()?.to_string(),
-            now.timestamp_millis().to_string(),
-        )
-        .await
-        .map_err(StoreError::backend)?;
+    if state.id.is_none() {
+        return Err(corrupt(
+            "feed_state",
+            "the Fleet feed state row is missing; step 0 creates it",
+        ));
     }
     let mut previous = state.head;
     for entry in entries {
@@ -191,30 +241,36 @@ where
     .map_err(StoreError::backend)
 }
 
-/// Retention is a clock rule even when no new records are appended.
-pub(crate) async fn prune<Scope: TransactionScope>(
+/// The retention cutoff: rows at or before it have passed the 30-day rule.
+fn retention_cutoff(now: DateTime<Utc>) -> Result<String, StoreError> {
+    Ok(timestamp(
+        now.checked_sub_signed(TimeDelta::days(30))
+            .ok_or_else(|| corrupt("feed.retention", "time underflow"))?,
+    ))
+}
+
+/// The floor the feed has at `now` (exclusive): the stored floor advanced over
+/// the contiguous prefix that has passed retention, whether or not retention
+/// has deleted it yet. Reads use this, so they never depend on a prune.
+pub(crate) async fn effective_floor<Scope: TransactionScope>(
     scope: &mut Scope,
+    state: &FeedState,
     now: DateTime<Utc>,
-) -> Result<(), StoreError>
+) -> Result<FleetPosition, StoreError>
 where
     <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
     for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
     for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
-    let state = state(scope).await?;
-    let cutoff = timestamp(
-        now.checked_sub_signed(TimeDelta::days(30))
-            .ok_or_else(|| corrupt("feed.retention", "time underflow"))?,
-    );
+    let cutoff = retention_cutoff(now)?;
     let expired = queries::read_expired_fleet_feed(scope, cutoff.clone())
         .await
         .map_err(StoreError::backend)?;
     if expired.is_empty() {
-        return Ok(());
+        return Ok(state.floor);
     }
-    let mut children =
-        crate::fleet_feed_rows::read_expired(scope, cutoff.clone(), &expired).await?;
+    let mut children = crate::fleet_feed_rows::read_expired(scope, cutoff, &expired).await?;
     let mut floor = state.floor;
     for row in expired {
         let (entry, _) = decode_entry(row, &mut children)?;
@@ -229,6 +285,24 @@ where
         floor = entry.position;
     }
     children.finish()?;
+    Ok(floor)
+}
+
+/// Retention, run only by its due source: delete what passed the 30-day rule
+/// and advance the stored floor in the same transaction.
+pub(crate) async fn prune<Scope: TransactionScope>(
+    scope: &mut Scope,
+    now: DateTime<Utc>,
+) -> Result<(), StoreError>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    let state = state(scope).await?;
+    let floor = effective_floor(scope, &state, now).await?;
+    let cutoff = retention_cutoff(now)?;
     if floor != state.floor {
         queries::advance_fleet_feed_floor(
             scope,
@@ -293,4 +367,51 @@ fn stored_position(
         ));
     }
     FleetPosition::try_from(position).map_err(|error| corrupt("feed.position", error))
+}
+
+/// When the oldest retained feed row passes the 30-day retention rule, if any row is retained.
+pub(crate) async fn next_retention_at<Scope: TransactionScope>(
+    scope: &mut Scope,
+) -> Result<Option<runtime_primitives::SyncTime>, StoreError>
+where
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'value> String: Type<Scope::Database> + Encode<'value, Scope::Database>,
+    for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    let state = state(scope).await?;
+    // While retention fails, its attempt row says when to try again.
+    if let Some(id) = &state.id {
+        let subject =
+            durable_steps::Uuid::parse_str(id).map_err(|error| corrupt("feed_state.id", error))?;
+        match crate::work_attempts::schedule(
+            scope,
+            subject,
+            crate::work_attempts::AttemptKind::FeedRetention,
+        )
+        .await?
+        {
+            crate::work_attempts::SubjectSchedule::Unscheduled => {}
+            crate::work_attempts::SubjectSchedule::RetryAt(at) => return Ok(Some(at)),
+            crate::work_attempts::SubjectSchedule::NotDue => return Ok(None),
+        }
+    }
+    let Some(mut oldest) =
+        queries::read_fleet_feed_page(scope, state.floor.get().to_string(), "1".into())
+            .await
+            .map_err(StoreError::backend)?
+            .into_iter()
+            .next()
+    else {
+        return Ok(None);
+    };
+    let header = crate::fleet_feed_header::decode(&mut oldest)?;
+    // prune() removes rows with as_of <= now - 30 days, so a row becomes due exactly then.
+    let due = header
+        .as_of
+        .checked_add_signed(TimeDelta::days(30))
+        .ok_or_else(|| corrupt("feed.retention", "time overflow"))?;
+    Ok(Some(runtime_primitives::SyncTime::from_unix_millis(
+        due.timestamp_millis(),
+    )))
 }

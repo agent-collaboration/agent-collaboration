@@ -41,14 +41,30 @@ fn declared_tables() -> Result<BTreeMap<String, Cmd>, StoreError> {
             .next_cmd()
             .map_err(|_| corrupt("receiver migration corpus"))?
         {
-            let Cmd::Stmt(Stmt::CreateTable { tbl_name, .. }) = &command else {
-                return Err(corrupt(
-                    "receiver corpus must declare its current table definitions",
-                ));
-            };
-            let name = tbl_name.name.as_str().to_ascii_lowercase();
-            if tables.insert(name, command).is_some() {
-                return Err(corrupt("duplicate receiver corpus table"));
+            // Replay the corpus: a table's current definition is its last
+            // CREATE TABLE not followed by a DROP TABLE. Row copies between
+            // them (a table rebuild) carry no definition.
+            match &command {
+                Cmd::Stmt(Stmt::CreateTable { tbl_name, .. }) => {
+                    let name = tbl_name.name.as_str().to_ascii_lowercase();
+                    if tables.insert(name, command).is_some() {
+                        return Err(corrupt("duplicate receiver corpus table"));
+                    }
+                }
+                Cmd::Stmt(Stmt::DropTable { tbl_name, .. }) => {
+                    if tables
+                        .remove(&tbl_name.name.as_str().to_ascii_lowercase())
+                        .is_none()
+                    {
+                        return Err(corrupt("receiver corpus drops an undeclared table"));
+                    }
+                }
+                Cmd::Stmt(Stmt::Insert { .. }) => {}
+                _ => {
+                    return Err(corrupt(
+                        "receiver corpus must declare its current table definitions",
+                    ));
+                }
             }
         }
     }

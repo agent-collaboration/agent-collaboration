@@ -180,16 +180,13 @@ async fn typed_archive_report_and_finalization_roll_back_together_then_the_same_
     let fixture = Fixture::open(root.path(), NOW).await?;
     prepare(&fixture).await?;
     let before = snapshot(&fixture).await?;
-    let mut wakes = fixture.io.wakes()?;
+    let wakes = fixture.io.wakes()?;
     fixture.sql("CREATE TRIGGER reject_archive_completion BEFORE UPDATE ON fleet_boards BEGIN SELECT RAISE(ABORT,'injected post-report finalization failure'); END").await?;
     let call = report_call()?;
     assert!(report(&fixture, &call).await.is_err());
     assert_eq!(snapshot(&fixture).await?, before);
-    // The outer runtime re-arms existing committed debt after every call,
-    // including a refused mutation; that hint is distinct from new wake intent.
-    if let Some(at) = before.wake_at {
-        wakes.push(at);
-    }
+    // A refused mutation adds no wake intent. Re-arming existing committed debt
+    // after a call is the object kernel's recompute now, not the runtime's.
     assert_eq!(fixture.io.wakes()?, wakes);
     fixture
         .sql("DROP TRIGGER reject_archive_completion")

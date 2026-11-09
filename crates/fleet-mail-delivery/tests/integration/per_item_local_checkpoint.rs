@@ -252,7 +252,7 @@ async fn stored_item_bound_sanitizes_call_checkpoint_before_reopen_without_resen
             .transaction(move |scope| {
                 Box::pin(async move {
                     Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                        .receipt::<PublishTask>(
+                        .receipt::<fleet_mail_delivery::JournaledStatus<PublishTask>>(
                             peer(2),
                             &reference,
                             pushed,

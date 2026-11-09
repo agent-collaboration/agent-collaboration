@@ -1,5 +1,6 @@
 //! One shared-task Host; runtimes supply byte transport, time, IDs and wakes.
 
+use crate::ObjectIo;
 use crate::registry_peer_lookup::PeerDirectory;
 use crate::{
     CallerContext, CopyKind, DeliveryKind, FleetKind, ObjectAddress, RegistryKind,
@@ -15,32 +16,11 @@ use fleet_protocol::{DatabaseId, PeerId, ReceiverId};
 use message_board::ServiceId;
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use serde::de::DeserializeOwned;
-use std::future::Future;
 
 mod copy_followup;
 mod lease_settlement;
 mod registration_gate;
 mod session_routes;
-
-pub trait PlatformIo: Clock + IdSource + WakeScheduler + Send + Sync + 'static {
-    fn reply_deadline(&self, remaining: std::time::Duration) -> impl Future<Output = ()> + Send;
-    #[cfg(feature = "conformance")]
-    fn before_local_call(
-        &self,
-        _request: &[u8],
-    ) -> impl Future<Output = Result<(), CallFailure>> + Send {
-        std::future::ready(Ok(()))
-    }
-    #[cfg(feature = "conformance")]
-    fn drop_local_reply(&self, _request: &[u8]) -> Result<bool, CallFailure> {
-        Ok(false)
-    }
-    fn object_call(
-        &self,
-        destination: ObjectAddress,
-        body: Vec<u8>,
-    ) -> impl Future<Output = Result<Vec<u8>, CallFailure>> + Send;
-}
 
 pub(crate) type LocalFleetCalls = std::sync::Arc<
     dyn Fn(Vec<u8>) -> durable_steps::BoxFuture<'static, Result<Vec<u8>, CallFailure>>
@@ -48,12 +28,10 @@ pub(crate) type LocalFleetCalls = std::sync::Arc<
         + Sync,
 >;
 
-pub struct CoreHost<Io: PlatformIo> {
+pub struct CoreHost<Io: ObjectIo> {
     local_calls: std::sync::Arc<std::sync::OnceLock<LocalFleetCalls>>,
     io: std::sync::Arc<Io>,
     caller: SharedTaskCaller,
-    publication: Option<crate::mail_status_dispatch::PublicationDispatcher>,
-    push: Option<crate::mail_push_dispatch::PushDispatcher>,
     authoritative_receiver: ReceiverId,
     #[cfg(feature = "conformance")]
     dispatches: std::sync::Arc<std::sync::Mutex<Vec<ObjectAddress>>>,
@@ -79,7 +57,7 @@ enum SharedTaskCaller {
     Delivery,
 }
 
-impl<Io: PlatformIo> CoreHost<Io> {
+impl<Io: ObjectIo> CoreHost<Io> {
     #[cfg(feature = "conformance")]
     pub fn conformance_registry(io: Io, authoritative_receiver: ReceiverId) -> Self {
         Self::registry(
@@ -104,8 +82,6 @@ impl<Io: PlatformIo> CoreHost<Io> {
                 lease_publication: lease_store.map(lease_settlement::RegistryLeasePublication::new),
             },
             authoritative_receiver,
-            publication: None,
-            push: None,
             local_calls: Default::default(),
             #[cfg(feature = "conformance")]
             dispatches: Default::default(),
@@ -114,6 +90,11 @@ impl<Io: PlatformIo> CoreHost<Io> {
             #[cfg(feature = "conformance")]
             revocation_probe: Default::default(),
         }
+    }
+
+    /// The platform I/O this host dispatches through; shells expose it as `ObjectPlatform::io`.
+    pub fn io(&self) -> &std::sync::Arc<Io> {
+        &self.io
     }
 
     pub(crate) fn authoritative_receiver(&self) -> ReceiverId {
@@ -125,8 +106,6 @@ impl<Io: PlatformIo> CoreHost<Io> {
             io: std::sync::Arc::new(io),
             caller: SharedTaskCaller::StoreOnly,
             authoritative_receiver,
-            publication: None,
-            push: None,
             local_calls: Default::default(),
             #[cfg(feature = "conformance")]
             dispatches: Default::default(),
@@ -142,8 +121,6 @@ impl<Io: PlatformIo> CoreHost<Io> {
             io: self.io.clone(),
             caller: SharedTaskCaller::Delivery,
             authoritative_receiver: self.authoritative_receiver,
-            publication: self.publication.clone(),
-            push: self.push.clone(),
             local_calls: self.local_calls.clone(),
             #[cfg(feature = "conformance")]
             dispatches: self.dispatches.clone(),
@@ -159,8 +136,6 @@ impl<Io: PlatformIo> CoreHost<Io> {
             io: self.io.clone(),
             caller: SharedTaskCaller::Session(CallerContext::for_machine(installation)),
             authoritative_receiver: self.authoritative_receiver,
-            publication: self.publication.clone(),
-            push: self.push.clone(),
             local_calls: self.local_calls.clone(),
             #[cfg(feature = "conformance")]
             dispatches: self.dispatches.clone(),
@@ -169,17 +144,6 @@ impl<Io: PlatformIo> CoreHost<Io> {
             #[cfg(feature = "conformance")]
             revocation_probe: self.revocation_probe.clone(),
         }
-    }
-    pub(crate) fn with_publication(
-        mut self,
-        publication: crate::mail_status_dispatch::PublicationDispatcher,
-    ) -> Self {
-        self.publication = Some(publication);
-        self
-    }
-    pub(crate) fn with_push(mut self, push: crate::mail_push_dispatch::PushDispatcher) -> Self {
-        self.push = Some(push);
-        self
     }
     pub(crate) fn install_local_calls(
         &self,
@@ -342,12 +306,6 @@ impl<Io: PlatformIo> CoreHost<Io> {
                     );
                 }
                 match Call::KIND {
-                    crate::machine_notice_delivery::DeliverMachineNotice::KIND => {
-                        let target: crate::machine_notice_delivery::DeliverMachineNotice = decode(target)?;
-                        encode_shared_call::<RegistryKind, DeliveryKind, crate::machine_notice_delivery::DeliverMachineNotice>(
-                            caller, (), target, decode(request)?, identity,
-                        )
-                    }
                     #[cfg(feature = "conformance")]
                     crate::conformance_copy_wait::CopyWaitTarget::KIND => to_copy!(
                         crate::conformance_copy_wait::CopyWaitTarget,
@@ -446,37 +404,28 @@ impl<Io: PlatformIo> CoreHost<Io> {
     }
 }
 
-impl<Io: PlatformIo> Clock for CoreHost<Io> {
+impl<Io: ObjectIo> Clock for CoreHost<Io> {
     fn now(&self) -> SyncTime {
         self.io.now()
     }
 }
-impl<Io: PlatformIo> IdSource for CoreHost<Io> {
+impl<Io: ObjectIo> IdSource for CoreHost<Io> {
     fn new_id(&self) -> durable_steps::Uuid {
         self.io.new_id()
     }
 }
-impl<Io: PlatformIo> WakeScheduler for CoreHost<Io> {
+impl<Io: ObjectIo> WakeScheduler for CoreHost<Io> {
     async fn wake_at(&self, at: SyncTime) -> Result<(), WakeFailure> {
         self.io.wake_at(at).await
     }
 }
-impl<Io: PlatformIo> Host for CoreHost<Io> {
+impl<Io: ObjectIo> Host for CoreHost<Io> {
     async fn dispatch<Call: CallTarget>(
         &self,
         target: Call,
         request: Call::Request,
         identity: CallId,
     ) -> Result<Call::Answer, CallFailure> {
-        if Call::KIND
-            == fleet_mail_delivery::PushCall::<board_sync_protocol::BoardDeliveryTypes>::KIND
-            && let Some(push) = &self.push
-        {
-            let target = decode(serde_json::to_value(target).map_err(encode_refusal)?)?;
-            let request = decode(serde_json::to_value(request).map_err(encode_refusal)?)?;
-            let answer = push(target, request, identity).await?;
-            return decode(serde_json::to_value(answer).map_err(encode_refusal)?);
-        }
         if Call::KIND == RegistrationAdmission::KIND {
             let _: RegistrationAdmission =
                 decode(serde_json::to_value(&target).map_err(encode_refusal)?)?;
@@ -501,15 +450,6 @@ impl<Io: PlatformIo> Host for CoreHost<Io> {
             let target = serde_json::to_value(target).map_err(encode_refusal)?;
             let request = serde_json::to_value(request).map_err(encode_refusal)?;
             return decode(self.copy_follow_up(target, request, identity).await?);
-        }
-        if Call::KIND
-            == fleet_mail_delivery::PublishCall::<board_sync_protocol::BoardDeliveryTypes>::KIND
-            && let Some(publication) = &self.publication
-        {
-            let target = decode(serde_json::to_value(target).map_err(encode_refusal)?)?;
-            let request = decode(serde_json::to_value(request).map_err(encode_refusal)?)?;
-            let answer = publication(target, request, identity).await?;
-            return decode(serde_json::to_value(answer).map_err(encode_refusal)?);
         }
         #[cfg(feature = "conformance")]
         let recorded_identity = identity.clone();
@@ -542,6 +482,8 @@ fn no_route() -> CallFailure {
     }
 }
 
+#[cfg(feature = "conformance")]
+pub mod conformance_setup_calls;
 #[cfg(feature = "conformance")]
 mod imported_unheld_fixture;
 #[cfg(feature = "conformance")]

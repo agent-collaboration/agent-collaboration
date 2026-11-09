@@ -1,7 +1,7 @@
 //! Select a live binding under exclusion, then send without holding that section.
 
 use crate::{
-    ObjectHost,
+    ObjectPlatform,
     holder_reply_hub::{HolderReplyHub, ReplyWaiter},
     object_call_envelope::encode_refusal,
 };
@@ -12,7 +12,7 @@ use durable_steps::{
 use fleet_protocol::{FrameId, PeerId, ServerCall, ServerFrame, ServerRequest};
 use fleet_session::{ConnectionRegistration, SessionKey};
 use futures_util::future::{Either, select};
-use runtime_primitives::{Clock, IdSource, WakeScheduler};
+use runtime_primitives::{Clock, IdSource};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
@@ -29,7 +29,7 @@ pub(crate) async fn begin_peer_request<Host, Time, MakeDeadline, Deadline>(
     deadline_after: MakeDeadline,
 ) -> Result<ReplyWaiter, CallFailure>
 where
-    Host: ObjectHost,
+    Host: ObjectPlatform,
     for<'t> <Host::Store as AtomicStore>::Scope<'t>: TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
     for<'v> String: Type<Host::Database> + Encode<'v, Host::Database> + Decode<'v, Host::Database>,
@@ -49,7 +49,7 @@ where
     let selection_host = host.clone();
     let selection_time = time.clone();
     let (connection, waiter, deadline) = host
-        .with_local_section(async move {
+        .with_local_section(crate::LocalSection::new(async move {
             let selection_store = selection_host.store().clone();
             selection_store
                 .transaction(move |scope| {
@@ -98,7 +98,7 @@ where
                 })
                 .await
                 .map_err(|_: StoreError| CallFailure::AnswerLost)?
-        })
+        }))
         .await
         .map_err(|_| unsent())??;
     let remaining = Duration::from_millis(
@@ -110,7 +110,6 @@ where
         .unwrap_or(0),
     );
     let send = async {
-        host.wake().wake_at(deadline).await.map_err(|_| unsent())?;
         host.send_frame(connection, bytes.into())
             .await
             .map_err(|_| CallFailure::AnswerLost)

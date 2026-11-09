@@ -1,0 +1,1 @@
+UPDATE central_work_attempts SET state='in_flight',send_id=?3,connection_id=?4,session_id=?5,sent_version=CAST(?6 AS INTEGER),next_attempt_at=CAST(?7 AS INTEGER),updated_at=CAST(?8 AS INTEGER) WHERE subject=?1 AND kind=?2;

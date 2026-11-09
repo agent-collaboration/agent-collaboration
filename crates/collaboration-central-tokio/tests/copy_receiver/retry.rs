@@ -18,7 +18,7 @@ async fn lost_directory_ack_reopens_with_same_call_and_never_overwrites_a_newer_
         }
     );
     fixture.io.lose_answer.store(true, Ordering::SeqCst);
-    fixture.runtime.on_alarm().await?;
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
     let first = fixture
         .io
         .calls
@@ -54,7 +54,7 @@ async fn lost_directory_ack_reopens_with_same_call_and_never_overwrites_a_newer_
                 through: position(2)?
             }
         );
-        fixture.runtime.on_alarm().await?;
+        crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
         let latest = fixture
             .summary(true)
             .await?
@@ -68,7 +68,7 @@ async fn lost_directory_ack_reopens_with_same_call_and_never_overwrites_a_newer_
             Some(&serde_json::to_value(annotation)?)
         );
         fixture.io.time.fetch_add(60_000, Ordering::SeqCst);
-        fixture.runtime.on_alarm().await?;
+        crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
         let calls = fixture
             .io
             .calls

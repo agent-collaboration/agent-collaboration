@@ -331,10 +331,10 @@ async fn assert_settlement_fits_minimum<
             let envelope:DeliveryEnvelope<D>=serde_json::from_value(serde_json::to_value(envelope).unwrap()).unwrap();
             let reference=DeliveryItemRef {item:envelope.id(),digest:envelope.digest().clone()};
             let mut relay=Outbox::<_,D,_>::new(scope,configured,&FixtureBindings);
-            assert!(matches!(relay.submit_relay::<FixturePush<D>,RecordRemoval>(Submitter::Machine(peer(1)),envelope,peer(3),"a".repeat(62),SyncTime::from_unix_millis(0)).await.map_err(storage_error)?,SubmitResult::Accepted {..}));
-            relay.receipt::<FixturePublication<D>>(peer(2),&reference,PushResult::Accepted {accepted_at:SyncTime::from_unix_millis(0)},SyncTime::from_unix_millis(0)).await.map_err(storage_error)?;
+            assert!(matches!(relay.submit_relay::<fleet_mail_delivery::JournaledWork<FixturePush<D>, RecordRemoval>>(Submitter::Machine(peer(1)),envelope,peer(3),"a".repeat(62),SyncTime::from_unix_millis(0)).await.map_err(storage_error)?,SubmitResult::Accepted {..}));
+            relay.receipt::<fleet_mail_delivery::JournaledStatus<FixturePublication<D>>>(peer(2),&reference,PushResult::Accepted {accepted_at:SyncTime::from_unix_millis(0)},SyncTime::from_unix_millis(0)).await.map_err(storage_error)?;
             for (sequence,outcome) in [(1,RecipientOutcome::Held),(2,RecipientOutcome::Refused {reason:terminal_refusal.clone()})] {
-                assert!(matches!(relay.recipient_report::<FixturePublication<D>>(peer(2),RecipientReport {item:item_id(identity),report_seq:ReportSeq::new(sequence),outcome},SyncTime::from_unix_millis(0)).await.map_err(storage_error)?,ReportResult::Ack {..}));
+                assert!(matches!(relay.recipient_report::<fleet_mail_delivery::JournaledStatus<FixturePublication<D>>>(peer(2),RecipientReport {item:item_id(identity),report_seq:ReportSeq::new(sequence),outcome},SyncTime::from_unix_millis(0)).await.map_err(storage_error)?,ReportResult::Ack {..}));
             }
         }
         let publications=query::<Turso>(include_str!("../support/sql/read_publication_headers.sql")).fetch_all(scope.executor()).await?;

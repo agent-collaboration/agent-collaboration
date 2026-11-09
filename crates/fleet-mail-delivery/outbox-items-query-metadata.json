@@ -64,11 +64,14 @@
     "migrations/0009_typed_report_records.sql": "c0e2513ebbaee9d5dddd9142dca9502993d64acaa9be10a37f0392b6d137b5fc",
     "migrations/0010_restore_status_owed_machine_index.sql": "0d5e0879dfcf320b8b0d37b16ff28e7974cf0d504f76aa93c7124b4d773173aa",
     "migrations/0011_delivery_backfill_markers.sql": "f1b81fb66ae8f5ef044238710f0dbda7dc44253019637a8587e71e82a2129f9a",
-    "outbox-items-queries.json": "c8f94b95184b80e7ef9f07ae4a6d94b0869c6cd77ff595bd5828bc9c4ba57f08",
+    "outbox-items-queries.json": "abec97ab6998cdc879e6dd605463ada7c2d8664519699ef24a15f64a63aec380",
+    "sql/read_expired_pushes.sql": "84fef75342cb8a3dea398fa1acb594a3d01b1a674bd437af93835177d4362f81",
+    "sql/read_next_push_expiry.sql": "9d0b52e107aeb49388c5410d421cf55d316b90483f52464adad11df3cab7be29",
     "sql/read_outbox_item.sql": "ca6253cd74a4fddc227bac7b9c1124f3d1cd9a03174d6bf8f7fd227d36fb839c",
-    "src/delivery_storage_rows/outbox_items.rs": "ee132ddf9673d39c2ae15e0fabb9f5806a1c23fcc112f0a288f4d828d500bdb2"
+    "sql/read_outbox_owner_rows.sql": "ce9538ab393e06b629b68138827f743777cf43e58a10eb3d955a3e922d7e5f3f",
+    "src/delivery_storage_rows/outbox_items.rs": "7408334ee89fd9755075151e4b87f9db904a639a2eb89eae8c2099ce5d80c3b1"
   },
-  "queries_digest": "176d42e84758b21ea5cb731dff98984176ca482ea30024c378dcfc650d53b657",
+  "queries_digest": "5a65da5cdb57426693138b0a979a37aa90de301f285c016140b970aa9476ebf9",
   "queries": [
     {
       "name": "read_outbox_item",
@@ -433,6 +436,73 @@
         },
         {
           "name": "handed_off_at",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        }
+      ]
+    },
+    {
+      "name": "read_next_push_expiry",
+      "bind_slots": 0,
+      "columns": [
+        {
+          "name": "next_expiry",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "next_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        }
+      ]
+    },
+    {
+      "name": "read_expired_pushes",
+      "bind_slots": 2,
+      "columns": [
+        {
+          "name": "item_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "recipient_machine_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "driver"
+        }
+      ]
+    },
+    {
+      "name": "read_outbox_owner_rows",
+      "bind_slots": 0,
+      "columns": [
+        {
+          "name": "item_id",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "record_kind",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "status_kind",
           "sql_type": "TEXT",
           "rust_type": "Option<String>",
           "nullable": null,

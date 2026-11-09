@@ -30,6 +30,9 @@ impl JournalScope for StartupCheckpointScope<'_, '_> {
     async fn ensure_wake(&mut self, at: SyncTime) -> Result<(), StoreError> {
         self.inner.ensure_wake(at).await
     }
+    async fn make_due(&mut self, id: OperationId, now: SyncTime) -> Result<bool, StoreError> {
+        self.inner.make_due(id, now).await
+    }
     async fn admit<T: Task>(
         &mut self,
         key: &RequestKey,

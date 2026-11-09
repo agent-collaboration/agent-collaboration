@@ -51,14 +51,14 @@ impl<
                         match request {
                             DeliveryRequest::Submit { item, .. } => Ok(DeliveryAnswer::Submit(
                                 Outbox::<_, P::Delivery, _>::new(scope, limits, binding.as_ref())
-                                    .submit_relay::<RelayPush<P::Delivery, C>, RelayRemoval>(
+                                    .submit_relay::<fleet_mail_delivery::JournaledWork<RelayPush<P::Delivery, C>, RelayRemoval>>(
                                         owner, item, relay, route, now,
                                     )
                                     .await?,
                             )),
                             DeliveryRequest::Report { report, .. } => Ok(DeliveryAnswer::Report(
                                 Outbox::<_, P::Delivery, _>::new(scope, limits, binding.as_ref())
-                                    .recipient_report::<RelayPublication<P::Delivery>>(
+                                    .recipient_report::<fleet_mail_delivery::JournaledStatus<RelayPublication<P::Delivery>>>(
                                         peer, report, now,
                                     )
                                     .await?,
@@ -85,7 +85,7 @@ impl<
                                 ..
                             } => Ok(DeliveryAnswer::Settle(
                                 Outbox::<_, P::Delivery, _>::new(scope, limits, binding.as_ref())
-                                    .relay_settle::<RelayRemoval>(submitter, item, digest, now)
+                                    .relay_settle::<fleet_mail_delivery::JournaledRemoval<RelayRemoval>>(submitter, item, digest, now)
                                     .await?,
                             )),
                             DeliveryRequest::StatusFetch { after, limit, .. } => {

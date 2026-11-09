@@ -1,8 +1,9 @@
 //! Owner-only fixture control over the live Fleet store, absent from normal builds.
+use runtime_primitives::Clock as _;
 
 use crate::{
     AccessCaller, CallerContext, CallerKind, CentralApplication, CentralPlatform, EdgeKind,
-    FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo, StepConformance, StepControl,
+    FleetKind, ObjectAddress, ObjectPlatform, ObjectRuntime, StepConformance, StepControl,
     StepControlReply,
     caller_context::CallAuthority,
     object_call_envelope::{ObjectCallEnvelope, encode_shared_call},
@@ -61,7 +62,7 @@ pub(crate) async fn control<Platform: CentralPlatform>(
     .await;
     crate::conformance_holder::probe_response(result)
 }
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

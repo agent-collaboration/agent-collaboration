@@ -52,9 +52,7 @@ impl CloudflareCentralPlatform {
 }
 
 impl CentralPlatform for CloudflareCentralPlatform {
-    type Host = crate::CloudflareStorageHost<
-        collaboration_central_core::CoreHost<crate::object_shell::CloudflareObjectIo>,
-    >;
+    type Host = crate::CloudflareStorageHost<crate::object_shell::CloudflareObjectIo>;
     fn clock(&self) -> &dyn Clock {
         &self.clock
     }

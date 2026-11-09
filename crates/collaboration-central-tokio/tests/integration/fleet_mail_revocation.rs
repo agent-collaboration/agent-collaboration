@@ -38,144 +38,6 @@ async fn status(fixture: &Fixture, item: ItemId) -> TestResult<ItemStatus<Accept
 
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "A real mpsc send selected before revoke may finish, but cannot duplicate, advance custody without a receipt, or select again after the committed gate."
-)]
-#[tokio::test]
-async fn selected_push_held_by_native_backpressure_can_finish_after_revoke_without_another_selection()
--> TestResult {
-    use board_sync_protocol::BoardConsumerProtocol;
-    use durable_steps::storage::TransactionScope;
-    use fleet_protocol::{ServerCall, ServerFrame, ServerRequest};
-    use sqlx_core::{query::query, row::Row};
-    let root = tempfile::tempdir()?;
-    let fixture = Fixture::open(root.path(), NOW).await?;
-    let mut recipient = Socket::open(&fixture, B, SERVICE_B).await?;
-    recipient.fill_send_queue(&fixture).await?;
-    let queued = recipient.queued_commands();
-    assert!(queued > 0);
-    let item = envelope(B, SERVICE_B)?;
-    submit(&fixture, &item).await?;
-    let mut selected = fixture.io.reply_deadlines.subscribe();
-    let before = *selected.borrow();
-    let proof = Box::pin(tokio::time::timeout(CAP, async {
-        tokio::try_join!(
-            async {
-                fixture
-                    .runtime
-                    .on_alarm()
-                    .await
-                    .map_err(Box::<dyn std::error::Error + Send + Sync>::from)
-            },
-            async {
-                selected.wait_for(|count| *count == before + 1).await?;
-                // The deadline future is polled only after begin_peer_request has
-                // selected a binding and the real channel send is blocked.
-                assert_eq!(
-                    fixture
-                        .runtime
-                        .revoke_machine(&owner()?, SERVICE_B.to_owned().try_into()?)
-                        .await?,
-                    RevocationDecision::MachineRevoked
-                );
-                let revoked = fixture
-                    .store
-                    .transaction(|scope| {
-                        Box::pin(async move {
-                            let row = query::<sqlx_turso::Turso>(
-                                "SELECT state FROM machine_enrollments WHERE machine_id=?",
-                            )
-                            .bind(B)
-                            .fetch_one(scope.executor())
-                            .await
-                            .map_err(StoreError::backend)?;
-                            row.try_get::<String, _>("state")
-                                .map_err(StoreError::backend)
-                        })
-                    })
-                    .await?;
-                assert_eq!(revoked, "revoked");
-                let ended = async {
-                    fixture
-                        .runtime
-                        .on_alarm()
-                        .await
-                        .map_err(Box::<dyn std::error::Error + Send + Sync>::from)
-                };
-                let release_channel = async {
-                    for _ in 0..queued {
-                        assert!(matches!(
-                            recipient.next().await?,
-                            ServerFrame::Welcome { .. }
-                        ));
-                    }
-                    let mut pushes = 0;
-                    loop {
-                        match recipient.next_command().await? {
-                            SocketCommand::Frame(bytes) => match serde_json::from_slice::<
-                                ServerFrame<BoardConsumerProtocol>,
-                            >(
-                                &bytes
-                            )? {
-                                ServerFrame::Request {
-                                    body:
-                                        ServerRequest::Crate(ServerCall::Push { item: pushed, .. }),
-                                    ..
-                                } => {
-                                    pushes += 1;
-                                    assert_eq!(pushed.id(), item.id());
-                                    assert_eq!(pushed.digest(), item.digest());
-                                    // No Inbox receipt is manufactured from a revoked peer.
-                                }
-                                ServerFrame::Closed { reason } => assert_eq!(
-                                    serde_json::to_value(reason)?,
-                                    json!({"kind":"credentialRejected","value":"revoked"})
-                                ),
-                                other => {
-                                    return Err(format!(
-                                        "unexpected queued frame at revoke edge: {}",
-                                        serde_json::to_string(&other)?
-                                    )
-                                    .into());
-                                }
-                            },
-                            SocketCommand::Close(reason) => {
-                                assert_eq!(
-                                    serde_json::to_value(reason)?,
-                                    json!({"kind":"credentialRejected","value":"revoked"})
-                                );
-                                break;
-                            }
-                        }
-                    }
-                    assert!(pushes <= 1, "a pre-commit selection duplicated its Push");
-                    Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
-                };
-                let (end_report, ()) = tokio::try_join!(ended, release_channel)?;
-                assert!(end_report.failed.is_empty(), "{end_report:?}");
-                Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
-            }
-        )
-    }))
-    .await;
-    let proof = async {
-        let (drive, ()) = proof??;
-        assert!(drive.failed.is_empty(),"{drive:?}");
-        assert_eq!(custody(&fixture,item.id()).await?,("sent".into(),true));
-        assert!(matches!(status(&fixture,item.id()).await?.state,ItemStatusState::Known {status:DeliveryStatus::Sent,version,..} if version.value()==1));
-        assert_eq!(*selected.borrow(),before+1);
-        fixture.io.advance(10_000);
-        assert!(fixture.runtime.on_alarm().await?.failed.is_empty());
-        assert_eq!(*selected.borrow(),before+1,"revoked peer acquired a new selected send");
-        assert_eq!(custody(&fixture,item.id()).await?,("sent".into(),true));
-        assert!(matches!(status(&fixture,item.id()).await?.state,ItemStatusState::Known {status:DeliveryStatus::Sent,version,..} if version.value()==1));
-        Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
-    }.await;
-    fixture.close().await?;
-    proof
-}
-
-#[expect(
-    clippy::panic_in_result_fn,
     reason = "A revoked recipient cannot admit new custody; its earlier queued item and task must remain unchanged."
 )]
 #[tokio::test]
@@ -249,7 +111,7 @@ fn owner() -> TestResult<OwnerIdentity> {
     reason = "Revocation must close the actual recipient socket without sending queued custody or changing Sent/content."
 )]
 #[tokio::test]
-async fn revoked_recipient_gets_no_queued_push_and_fleet_keeps_sent_content() -> TestResult {
+async fn a_revoked_recipient_is_never_resent_its_push_and_fleet_keeps_sent_content() -> TestResult {
     let root = tempfile::tempdir()?;
     let fixture = Fixture::open(root.path(), NOW).await?;
     let mut recipient = Socket::open(&fixture, B, SERVICE_B).await?;
@@ -257,6 +119,8 @@ async fn revoked_recipient_gets_no_queued_push_and_fleet_keeps_sent_content() ->
     submit(&fixture, &item).await?;
     let before = custody(&fixture, item.id()).await?;
     assert_eq!(before, ("sent".into(), true));
+    // A connected recipient is sent its push at once (owed-work design).
+    recipient.push(item.id()).await?;
     let proof = async {
         let revoke = async {
             assert_eq!(
@@ -268,7 +132,7 @@ async fn revoked_recipient_gets_no_queued_push_and_fleet_keeps_sent_content() ->
             );
             // The sender admits the receiving EndSessions task in this Fleet
             // journal. This fixture explicitly drives that newly committed wake.
-            let ended = fixture.runtime.on_alarm().await?;
+            let ended = fixture.runtime.conformance_drive_operations().await?;
             assert!(ended.failed.is_empty(), "{ended:?}");
             Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
         };
@@ -290,8 +154,11 @@ async fn revoked_recipient_gets_no_queued_push_and_fleet_keeps_sent_content() ->
         }))
         .await??;
         assert_eq!(custody(&fixture, item.id()).await?, before);
-        fixture.io.advance(10_000);
-        let driven = fixture.runtime.on_alarm().await?;
+        // Past its retry time the unanswered push is due, but the revoked
+        // machine has no connection: nothing is resent and custody stays.
+        fixture.io.advance(40_000);
+        crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
+        let driven = fixture.runtime.conformance_drive_operations().await?;
         assert!(driven.failed.is_empty(), "{driven:?}");
         assert_eq!(custody(&fixture, item.id()).await?, before);
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
@@ -319,10 +186,11 @@ async fn never_readmitted_recipient_custody_is_removed_at_day_sixty_and_then_too
             .await?,
         RevocationDecision::MachineRevoked
     );
-    fixture.runtime.on_alarm().await?;
+    fixture.runtime.conformance_drive_operations().await?;
     let deadline = fleet_mail_delivery::removal_deadline(item.id()).unix_millis();
     fixture.io.advance(deadline - NOW - 1);
-    assert!(fixture.runtime.on_alarm().await?.failed.is_empty());
+    // Retention is a due source: the alarm runs it (slice 4b), not a journal task.
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
     assert!(matches!(
         status(&fixture, item.id()).await?.state,
         ItemStatusState::Known {
@@ -332,7 +200,7 @@ async fn never_readmitted_recipient_custody_is_removed_at_day_sixty_and_then_too
     ));
     assert_eq!(custody(&fixture, item.id()).await?, ("sent".into(), true));
     fixture.io.advance(1);
-    assert!(fixture.runtime.on_alarm().await?.failed.is_empty());
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
     assert!(matches!(
         status(&fixture, item.id()).await?.state,
         ItemStatusState::Unknown

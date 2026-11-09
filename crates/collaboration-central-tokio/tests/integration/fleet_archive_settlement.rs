@@ -169,7 +169,7 @@ async fn genuine_unheld_hook_and_archive_completion_roll_back_then_retry_togethe
     let request = import_request()?;
     let operation = admit_import(&fixture, request.clone()).await?;
     fixture.sql("CREATE TRIGGER reject_archive_board BEFORE UPDATE ON fleet_boards BEGIN SELECT RAISE(ABORT,'final archive board fault'); END").await?;
-    let report = fixture.runtime.on_alarm().await?;
+    let report = fixture.runtime.conformance_drive_operations().await?;
     assert!(report.failed.is_empty(), "{report:?}");
     assert!(report.retried.contains(&operation), "{report:?}");
     assert_eq!(inspect(&fixture, attempt).await?, before);
@@ -195,7 +195,7 @@ async fn genuine_unheld_hook_and_archive_completion_roll_back_then_retry_togethe
     fixture
         .io
         .advance(retry_at.unix_millis() - fixture.io.now().unix_millis());
-    let report = fixture.runtime.on_alarm().await?;
+    let report = fixture.runtime.conformance_drive_operations().await?;
     assert!(report.failed.is_empty(), "{report:?}");
     require_imported(&fixture, operation).await?;
     let after = inspect(&fixture, attempt).await?;
@@ -207,7 +207,7 @@ async fn genuine_unheld_hook_and_archive_completion_roll_back_then_retry_togethe
     assert!(after.reservation.is_none());
     require_finalized(&before, &after, fixture.io.now().unix_millis())?;
     assert_eq!(admit_import(&fixture, request).await?, operation);
-    fixture.runtime.on_alarm().await?;
+    fixture.runtime.conformance_drive_operations().await?;
     assert_eq!(inspect(&fixture, attempt).await?, after);
     fixture.close().await
 }
@@ -222,7 +222,7 @@ async fn refused_reservation_and_archive_completion_roll_back_then_retry_togethe
     let fixture = Fixture::open(root.path(), NOW).await?;
     fixture.arrange_directory().await?;
     let operation = admit_import(&fixture, import_request()?).await?;
-    fixture.runtime.on_alarm().await?;
+    fixture.runtime.conformance_drive_operations().await?;
     require_imported(&fixture, operation).await?;
     let attempt = durable_steps::Uuid::now_v7();
     assert_eq!(

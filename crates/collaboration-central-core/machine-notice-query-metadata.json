@@ -53,24 +53,27 @@
     "generator:sqlx-turso/src/lib.rs": "32ec3ac4ca4d0d703a452496262928a3a00ddfdf71eac8cbbe4ce1a3da69d9b5",
     "generator:workspace/Cargo.lock": "e6dd6bbdd6d3915326e1bb54c57870a5d55f515e4be70732d385a2c7fd5bebbe",
     "generator:workspace/rust-toolchain.toml": "3baca9098f290c1bc291aa94f22c516487ba2c0865bd9795d1c863b72025ab9c",
-    "machine-notice-queries.json": "ccbec96085ce7139ae4efc24a1d63fb6cbff8a83003f2c883ea29829b6ca7f10",
+    "machine-notice-queries.json": "13b2bf57ee64a1c4239c7f2931a825dba9e1dcf592e44280328ad66d060c389c",
     "registry_migrations/0001_machine_enrollments.sql": "9ad00775473cd1ab27e95a20396eb7b2426accc95e226441bff409055384f3c7",
     "registry_migrations/0002_lease_incarnation.sql": "c43062856051d08a1038ff40e89311918873426a1c158c7b55cb19bc8889aa59",
     "session_migrations/0011_machine_notices.sql": "e29ffcc32b8db2a71355256e7abb49990f5c1a06d33997df0fd86998616f7565",
     "session_migrations/0012_forward_correlations.sql": "9977ffcdc8d42e005fe7b3d1d80f8a3d0bf219c4f5ea87f94d9f34a012b1c8ef",
+    "session_migrations/0013_notice_applied_through.sql": "bbb0b41e702b026c1d3de9bec2cef0b0c57ab0b403b1b8220416ddf7e89f6bb2",
     "sql/machine_notices/advance_machine_notice_floor.sql": "0695a91b9dd5b7067a5750f8414ee9f6b1efa2e1e69046d45da4b0e9b19486e5",
     "sql/machine_notices/advance_machine_notice_head.sql": "2a2471a3442472086dfe21cc2274da09a0cfb7e347d9d11857220ca50f1f9730",
     "sql/machine_notices/append_machine_notice.sql": "b45d8b4154f3cb5b8f8f1eaac265ce731b6302ed8281ed8d5e1c1edf553b2f94",
     "sql/machine_notices/initialize_machine_notice_state.sql": "c3df24656ed893e8ea1c80e9967946aba0248227719d34e06d0243cf561cd2db",
     "sql/machine_notices/prune_machine_notices.sql": "1b16901e6e13b6d3f20b8b95b56f8c214ed5b1b3beff426304799eba9660d441",
+    "sql/machine_notices/read_machine_notice_applied.sql": "132a530f36120f627e1463eb25b51cc788353e26638a04b847fa7723d6853266",
     "sql/machine_notices/read_machine_notice_bounds.sql": "a93dbb17edcbccc469243cac92c89fac80c70248e840410d81248876dc975a9f",
     "sql/machine_notices/read_machine_notice_expiry.sql": "9a5cd236309eb32b61138dac637888bde117b32f67fbc49988a066b788082aa6",
     "sql/machine_notices/read_machine_notice_peers.sql": "24461aefad4b9ac36bb43c5d2bedb70e9f45f43fc90666966179ffadade2ebc5",
     "sql/machine_notices/read_machine_notice_state.sql": "7120627fdfa0979e9fa74e8b5a44f25942a570db1a0b2c90c64adfbcd114b16e",
     "sql/machine_notices/read_machine_notices.sql": "47ce2a3756b2f8ba84879e78f8317f61acb9d28831881b2aed796a642a5a1daa",
-    "src/generated_machine_notices.rs": "8408bd1e8b834fd98e33a3b0b5910143713e9973f8a13f33b3c94a9111050be2"
+    "sql/machine_notices/record_machine_notice_applied.sql": "df64ac3576a622af8020790d86b6164ef8008f983802495d1056f82b4f7d4fb6",
+    "src/generated_machine_notices.rs": "ff1d2dc6134230367015851d5f4940e77df80ed7deeb7789d7a4d30733433109"
   },
-  "queries_digest": "c0e1e134fc66697a4674c2c844476b29bc835e4308efedea232f719f747e0800",
+  "queries_digest": "6560bbd293e07fc6b42c01b7afd9b0e1cb19ae2a167b3b4d51487165a737c29b",
   "queries": [
     {
       "name": "read_machine_notice_state",
@@ -322,6 +325,45 @@
           "type_source": "typeof"
         }
       ]
+    },
+    {
+      "name": "read_machine_notice_applied",
+      "bind_slots": 1,
+      "columns": [
+        {
+          "name": "applied_through",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "applied_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        },
+        {
+          "name": "last_issued_position",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "cast"
+        },
+        {
+          "name": "issued_class",
+          "sql_type": "TEXT",
+          "rust_type": "Option<String>",
+          "nullable": null,
+          "type_source": "typeof"
+        }
+      ]
+    },
+    {
+      "name": "record_machine_notice_applied",
+      "bind_slots": 3,
+      "columns": []
     }
   ]
 }

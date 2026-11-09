@@ -55,16 +55,19 @@ async fn replacement_at_capacity(
     Ok((replacement, delivered))
 }
 
-pub(super) async fn terminal_release<Control, ControlFuture>(
+pub(super) async fn terminal_release<Control, ControlFuture, Settle, SettleFuture>(
     sender: &mut WebSocket,
     holder: &mut WebSocket,
     database: DatabaseId,
     sender_owned: DatabaseId,
     mut control: Control,
+    mut settle_clock: Settle,
 ) -> ConformanceResult<()>
 where
     Control: FnMut(RuntimeControl) -> ControlFuture,
     ControlFuture: Future<Output = ConformanceResult<RuntimeFaultObservation>>,
+    Settle: FnMut(RegistryTime) -> SettleFuture,
+    SettleFuture: Future<Output = ConformanceResult<u64>>,
 {
     let started = SystemTime::now();
     control(RuntimeControl::SetTime {
@@ -94,19 +97,30 @@ where
     for (request, delivered) in outstanding {
         settle(sender, holder, request, delivered).await?;
     }
-    deadline_release(sender, holder, database, started, &mut control).await
+    deadline_release(
+        sender,
+        holder,
+        database,
+        started,
+        &mut control,
+        &mut settle_clock,
+    )
+    .await
 }
 
-async fn deadline_release<Control, ControlFuture>(
+async fn deadline_release<Control, ControlFuture, Settle, SettleFuture>(
     sender: &mut WebSocket,
     holder: &mut WebSocket,
     database: DatabaseId,
     started: SystemTime,
     control: &mut Control,
+    settle_clock: &mut Settle,
 ) -> ConformanceResult<()>
 where
     Control: FnMut(RuntimeControl) -> ControlFuture,
     ControlFuture: Future<Output = ConformanceResult<RuntimeFaultObservation>>,
+    Settle: FnMut(RegistryTime) -> SettleFuture,
+    SettleFuture: Future<Output = ConformanceResult<u64>>,
 {
     let old = post(sender, database).await?;
     let old_delivered = holder_frame(holder).await?;
@@ -119,10 +133,7 @@ where
     if outcome(sender, overflow).await? != ForwardOutcome::Overloaded {
         return Err("deadline setup failed to retain exactly sixteen original slots".into());
     }
-    control(RuntimeControl::SetTime {
-        now: RegistryTime((started + Duration::from_secs(30)).into()),
-    })
-    .await?;
+    settle_clock(RegistryTime((started + Duration::from_secs(30)).into())).await?;
     if outcome(sender, old).await? != ForwardOutcome::Unanswered {
         return Err("older deadline did not return its exact Unanswered outcome".into());
     }

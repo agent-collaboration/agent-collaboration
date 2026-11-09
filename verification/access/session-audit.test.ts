@@ -154,3 +154,24 @@ test("Session snapshots expose no retired mail-waiting counter", (): void => {
   send(audit, connection, { kind: "notice", value: {} });
   assert.equal(Object.hasOwn(audit.snapshot(), "mailWaiting"), false);
 });
+
+test("a connection ending with an incomplete binary message remains invalid evidence", (): void => {
+  const { audit, connection } = openedAudit();
+  const bytes = Buffer.from(JSON.stringify(pushFrame()));
+  audit.receive(connection, websocketFrame(bytes.subarray(0, 73), 2, false));
+  audit.ended(connection);
+  assert.equal(audit.snapshot().invalidConnections, 1);
+});
+
+test("message observers receive the original unmasked payload bytes without JSON re-encoding", (): void => {
+  const seen: Buffer[] = [];
+  const audit = new SessionAudit((_value, exactPayload): void => {
+    seen.push(exactPayload);
+  });
+  const connection = audit.opened();
+  audit.receive(connection, Buffer.from("HTTP/1.1 101 Switching Protocols\r\n\r\n"));
+  const original = Buffer.from('{"kind":"notice","value":{"number":1.0}}');
+  audit.receive(connection, websocketFrame(original));
+  assert.deepEqual(seen, [original]);
+  audit.requireComplete();
+});

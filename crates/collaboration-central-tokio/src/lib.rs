@@ -11,7 +11,9 @@ mod conformance_store;
 mod native_logging;
 mod native_objects;
 mod native_server;
+mod object_alarm_timer;
 mod object_keys;
+pub use object_alarm_timer::ObjectAlarmTimer;
 mod platform;
 mod self_hosted_issuer;
 pub use self_hosted_issuer::{IssuerError, SelfHostedIssuer};
@@ -26,12 +28,19 @@ pub use native_server::{TokioServer, TokioServerError, TokioSettings};
 pub use platform::{TokioCentralPlatform, TokioPlatformError};
 pub use socket_host::SocketCommand;
 
-use collaboration_central_core::ObjectHost;
+use collaboration_central_core::{CoreHost, ObjectAlarm, ObjectIo, ObjectPlatform};
 use durable_steps::Host;
 use fleet_tokio_objects::TokioObject;
 use std::sync::Arc;
 
-pub struct TokioStorageHost<SharedHost: Host> {
+/// One object's platform. `SharedHost` is the durable-steps host its journal
+/// scopes use; `Io` is the object's own clock, ids, deadlines and calls;
+/// `Alarm` is its one alarm, shared with whatever delivers it.
+pub struct TokioStorageHost<
+    Io: ObjectIo,
+    SharedHost: Host = CoreHost<Io>,
+    Alarm: ObjectAlarm = ObjectAlarmTimer,
+> {
     object: Arc<TokioObject<SharedHost>>,
     #[cfg(feature = "conformance")]
     observed: Arc<
@@ -41,13 +50,22 @@ pub struct TokioStorageHost<SharedHost: Host> {
     >,
     #[cfg(feature = "conformance")]
     faults: Arc<collaboration_central_conformance::RuntimeFaults>,
-    wake: Arc<SharedHost>,
+    alarm: Arc<Alarm>,
+    io: Arc<Io>,
     sockets: socket_host::TokioSockets,
 }
 
-impl<SharedHost: Host> TokioStorageHost<SharedHost> {
-    pub fn new(object: Arc<TokioObject<SharedHost>>) -> Self {
-        let wake = object.host();
+impl<Io: ObjectIo, SharedHost: Host, Alarm: ObjectAlarm> TokioStorageHost<Io, SharedHost, Alarm> {
+    /// The socket table's registrations with their peers (S8 snapshot fence).
+    #[cfg(feature = "conformance")]
+    pub(crate) async fn registration_rows(
+        &self,
+    ) -> Vec<collaboration_central_core::conformance_snapshot::RegistrationRow> {
+        self.sockets.registration_rows().await
+    }
+
+    /// `alarm` is the object's one timer, shared with the alarm loop that waits on it.
+    pub fn new(object: Arc<TokioObject<SharedHost>>, io: Arc<Io>, alarm: Arc<Alarm>) -> Self {
         #[cfg(feature = "conformance")]
         let faults = Arc::new(collaboration_central_conformance::RuntimeFaults::default());
         #[cfg(feature = "conformance")]
@@ -63,7 +81,8 @@ impl<SharedHost: Host> TokioStorageHost<SharedHost> {
             observed,
             #[cfg(feature = "conformance")]
             faults,
-            wake,
+            alarm,
+            io,
             sockets: Default::default(),
         }
     }
@@ -72,8 +91,9 @@ impl<SharedHost: Host> TokioStorageHost<SharedHost> {
     pub(crate) fn with_faults(
         object: Arc<TokioObject<SharedHost>>,
         faults: Arc<collaboration_central_conformance::RuntimeFaults>,
+        io: Arc<Io>,
+        alarm: Arc<Alarm>,
     ) -> Self {
-        let wake = object.host();
         let observed = Arc::new(collaboration_central_core::DriveTokenObserver::new(
             Arc::new(conformance_store::ConformanceStore::new(
                 object.clone(),
@@ -84,7 +104,8 @@ impl<SharedHost: Host> TokioStorageHost<SharedHost> {
             object,
             observed,
             faults,
-            wake,
+            alarm,
+            io,
             sockets: Default::default(),
         }
     }
@@ -102,7 +123,9 @@ impl<SharedHost: Host> TokioStorageHost<SharedHost> {
     }
 }
 
-impl<SharedHost: Host> ObjectHost for TokioStorageHost<SharedHost> {
+impl<Io: ObjectIo, SharedHost: Host, Alarm: ObjectAlarm> ObjectPlatform
+    for TokioStorageHost<Io, SharedHost, Alarm>
+{
     type Database = sqlx_turso::Turso;
     #[cfg(not(feature = "conformance"))]
     type Store = TokioObject<SharedHost>;
@@ -110,7 +133,8 @@ impl<SharedHost: Host> ObjectHost for TokioStorageHost<SharedHost> {
     type Store = collaboration_central_core::DriveTokenObserver<
         conformance_store::ConformanceStore<TokioObject<SharedHost>>,
     >;
-    type Wake = SharedHost;
+    type Alarm = Alarm;
+    type Io = Io;
 
     fn store(&self) -> &Arc<Self::Store> {
         #[cfg(feature = "conformance")]
@@ -128,12 +152,15 @@ impl<SharedHost: Host> ObjectHost for TokioStorageHost<SharedHost> {
     ) -> Result<Vec<durable_steps::OperationId>, durable_steps::StoreError> {
         self.observed.rejected_operations()
     }
-    fn wake(&self) -> &Self::Wake {
-        self.wake.as_ref()
+    fn io(&self) -> &Arc<Io> {
+        &self.io
+    }
+    fn alarm(&self) -> &Alarm {
+        self.alarm.as_ref()
     }
     async fn with_local_section<Output: Send + 'static>(
         &self,
-        run: impl std::future::Future<Output = Output> + Send + 'static,
+        run: collaboration_central_core::LocalSection<Output>,
     ) -> Result<Output, collaboration_central_core::LocalSectionFailure> {
         let exclusion = self.object.engine_lock();
         let _guard = exclusion.lock().await;
@@ -159,7 +186,12 @@ impl<SharedHost: Host> ObjectHost for TokioStorageHost<SharedHost> {
         {
             return Ok(());
         }
-        self.sockets.send(to, SocketCommand::Frame(frame)).await
+        #[cfg(feature = "conformance")]
+        let sent = frame.clone();
+        self.sockets.send(to, SocketCommand::Frame(frame)).await?;
+        #[cfg(feature = "conformance")]
+        collaboration_central_core::event_trace::record_send(to, &sent);
+        Ok(())
     }
     async fn close_connection(
         &self,

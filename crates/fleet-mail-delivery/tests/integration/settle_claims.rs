@@ -39,7 +39,7 @@ async fn wire_project_claim_settles_an_unknown_item_and_survives_reopen_and_quer
                 // its Project claim instead of binding Machine(successor).
                 assert_ne!(submitter, Submitter::Machine(successor));
                 let answer = Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                    .relay_settle::<RecordRemoval>(
+                    .relay_settle::<fleet_mail_delivery::JournaledRemoval<RecordRemoval>>(
                         submitter,
                         item,
                         digest,
@@ -86,7 +86,7 @@ async fn wire_project_claim_settles_an_unknown_item_and_survives_reopen_and_quer
                     assert!(matches!(outbox.relay_query(Submitter::Machine(machine), item_id(1)).await,
                         Err(DeliveryError::Refused { reason: DeliveryRefusal::NotSubmitter })));
                     let mismatch = outbox
-                        .relay_settle::<RecordRemoval>(Submitter::Machine(machine), item_id(1), digest.clone(), SyncTime::from_unix_millis(0))
+                        .relay_settle::<fleet_mail_delivery::JournaledRemoval<RecordRemoval>>(Submitter::Machine(machine), item_id(1), digest.clone(), SyncTime::from_unix_millis(0))
                         .await
                         .map_err(storage_error)?;
                     assert!(matches!(mismatch, SettleResult::ItemConflict { .. }));

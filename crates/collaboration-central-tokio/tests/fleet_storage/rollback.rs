@@ -1,10 +1,9 @@
 //! Inject after actual writes, before the real Turso transaction commits.
 use super::support::{Fixture, Io, TestResult, bundle, import_bytes};
 use collaboration_central_core::{
-    CoreHost, FleetKind, LocalSectionFailure, ObjectHost, ObjectRuntime, RegistrationEdits,
+    CoreHost, FleetKind, LocalSectionFailure, ObjectPlatform, ObjectRuntime, RegistrationEdits,
     RegistrationSnapshot, SocketFailure,
 };
-use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{
     AtomicStore, BoxFuture, CallFailure, ReborrowScope, StoreError, storage::TransactionScope,
 };
@@ -12,12 +11,9 @@ use fleet_protocol::{CloseReason, ConnectionId};
 use fleet_session::Bytes;
 use fleet_tokio_objects::TokioObject;
 use sqlx_core::{query::query, row::Row};
-use std::{
-    future::Future,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
 };
 
 type Native = TokioObject<CoreHost<Io>>;
@@ -73,22 +69,26 @@ impl AtomicStore for FaultStore {
     }
 }
 struct FaultHost {
-    native: Arc<TokioStorageHost<CoreHost<Io>>>,
+    native: Arc<crate::io_alarm::IoPlatform<Io>>,
     store: Arc<FaultStore>,
 }
-impl ObjectHost for FaultHost {
+impl ObjectPlatform for FaultHost {
     type Database = sqlx_turso::Turso;
     type Store = FaultStore;
-    type Wake = CoreHost<Io>;
+    type Alarm = crate::io_alarm::IoAlarm<Io>;
+    type Io = Io;
     fn store(&self) -> &Arc<Self::Store> {
         &self.store
     }
-    fn wake(&self) -> &Self::Wake {
-        self.native.wake()
+    fn alarm(&self) -> &Self::Alarm {
+        self.native.alarm()
+    }
+    fn io(&self) -> &std::sync::Arc<Self::Io> {
+        self.native.io()
     }
     async fn with_local_section<Output: Send + 'static>(
         &self,
-        run: impl Future<Output = Output> + Send + 'static,
+        run: collaboration_central_core::LocalSection<Output>,
     ) -> Result<Output, LocalSectionFailure> {
         self.native.with_local_section(run).await
     }
@@ -137,16 +137,18 @@ async fn failure_after_all_import_writes_rolls_back_every_canonical_table() -> T
     let root = tempfile::tempdir()?;
     let fixture = Fixture::open(root.path()).await?;
     let injected = Arc::new(AtomicBool::new(false));
-    let runtime = ObjectRuntime::<FleetKind, _, _>::fleet(
+    let runtime = ObjectRuntime::<FleetKind, _>::fleet(
         Arc::new(FaultHost {
-            native: Arc::new(TokioStorageHost::new(fixture.object.clone())),
+            native: Arc::new(crate::io_alarm::io_platform(
+                fixture.object.clone(),
+                Arc::new(Io::default()),
+            )),
             store: Arc::new(FaultStore {
                 object: fixture.object.clone(),
                 armed: Arc::new(AtomicBool::new(true)),
                 injected: injected.clone(),
             }),
         }),
-        Io::default(),
         fleet_project_lease::RegistryConfig {
             authoritative_receiver: fixture.receiver,
             lease: fleet_project_lease::LeasePolicy {
@@ -218,11 +220,10 @@ async fn creation_directory_ledger_and_binding_roll_back_together_then_retry_onc
         }
         let creation=request(FleetOperation::ProjectDirectoryCreate {project,board,title:ResourceName::try_from("atomic creation".to_owned())?})?;
         let injected=Arc::new(AtomicBool::new(false));
-        let runtime=ObjectRuntime::<FleetKind,_,_>::fleet(Arc::new(FaultHost {
-            native:Arc::new(TokioStorageHost::new(fixture.object.clone())),
+        let runtime=ObjectRuntime::<FleetKind,_>::fleet(Arc::new(FaultHost {
+            native:Arc::new(crate::io_alarm::io_platform(fixture.object.clone(), Arc::new(Io::default()))),
             store:Arc::new(FaultStore {object:fixture.object.clone(),armed:Arc::new(AtomicBool::new(true)),injected:injected.clone()}),
         }),
-Io::default(),
 fleet_project_lease::RegistryConfig { authoritative_receiver: fixture.receiver, lease: fleet_project_lease::LeasePolicy { lease_duration: std::time::Duration::from_secs(60), renew_interval: std::time::Duration::from_secs(20) }, release_unsent_for: std::time::Duration::from_secs(10), move_needs_renewal_within: None },
 collaboration_central_tokio::DeliveryConfig { relay_peer: "019f0000-0000-7000-8000-000000005240".to_owned().try_into()? },
 std::time::Duration::from_secs(2), fleet_protocol::FrameCapabilities::default(),)?;

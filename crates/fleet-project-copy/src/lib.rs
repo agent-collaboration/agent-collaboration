@@ -38,6 +38,8 @@ mod snapshot_install_contract;
 mod snapshot_install_fence;
 #[cfg(test)]
 mod turso_copy_inspection_tests;
+#[cfg(test)]
+mod turso_staged_part_ids_tests;
 pub use snapshot_install_fence::{SNAPSHOT_REPLACED_TABLES, SnapshotFence};
 mod snapshot_install_storage;
 pub use snapshot_install::SnapshotInstallRules;

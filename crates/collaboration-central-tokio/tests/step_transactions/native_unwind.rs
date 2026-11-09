@@ -21,7 +21,10 @@ async fn unwinding_step_rolls_back_all_writes_and_keeps_the_same_store_usable() 
         RequestId::try_from("019f0000-0000-7000-8000-0000000000a3".to_owned())?,
     )?;
     let callback_driver = StepConformance::new(
-        Arc::new(TokioStorageHost::new(fixture.object.clone())),
+        Arc::new(crate::io_alarm::io_platform(
+            fixture.object.clone(),
+            std::sync::Arc::new(FixtureHost),
+        )),
         Arc::new(FixtureHost),
         runtime_primitives::Clock::now(&FixtureHost),
     );

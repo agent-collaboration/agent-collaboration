@@ -13,24 +13,22 @@ async fn retained_notices_are_read_in_numeric_position_order() -> Result<(), Tes
     fixture
         .enroll(peer, "019f0000-0000-7000-8000-000000008111")
         .await?;
-    let page = fixture
-        .object
-        .transaction(move |scope| {
-            Box::pin(async move {
-                for _ in 1..=12 {
-                    append(
-                        scope,
-                        peer,
-                        durable_steps::Uuid::now_v7().to_string(),
-                        BoardNotice::ProjectListChanged {},
-                        NOW,
-                    )
-                    .await?;
-                }
-                read(scope, peer, None, NOW).await
-            })
+    let page = crate::event_owed::scoped(fixture.object.transaction(move |scope| {
+        Box::pin(async move {
+            for _ in 1..=12 {
+                append(
+                    scope,
+                    peer,
+                    durable_steps::Uuid::now_v7().to_string(),
+                    BoardNotice::ProjectListChanged {},
+                    NOW,
+                )
+                .await?;
+            }
+            read(scope, peer, None, NOW).await
         })
-        .await?;
+    }))
+    .await?;
     let NoticeRead::Page { notices, .. } = page else {
         return Err("missing notice page".into());
     };
@@ -57,7 +55,7 @@ async fn inverted_expiry_retains_the_unexpired_prefix_and_its_expired_suffix()
     fixture
         .enroll(peer, "019f0000-0000-7000-8000-000000008112")
         .await?;
-    let (page, times, expiry) = fixture
+    let (page, times, expiry) = crate::event_owed::scoped(fixture
         .object
         .transaction(move |scope| {
             Box::pin(async move {
@@ -91,7 +89,7 @@ async fn inverted_expiry_retains_the_unexpired_prefix_and_its_expired_suffix()
                     .collect::<Result<Vec<_>,StoreError>>()?;
                 Ok((page, times, next_expiry(scope, peer).await?))
             })
-        })
+        }))
         .await?;
     let NoticeRead::Page { notices, .. } = page else {
         return Err("retention lost a valid stream".into());
@@ -148,31 +146,29 @@ async fn machines_keep_independent_notice_positions_and_retention_floors() -> Re
     let expected_first = first_notice.clone();
     let expected_second = second_notice.clone();
 
-    fixture
-        .object
-        .transaction(move |scope| {
-            Box::pin(async move {
-                // Act: each starts at one; expiring A's prefix must leave B's newer row intact.
-                append(
-                    scope,
-                    first,
-                    durable_steps::Uuid::now_v7().to_string(),
-                    first_notice,
-                    NOW,
-                )
-                .await?;
-                append(
-                    scope,
-                    second,
-                    durable_steps::Uuid::now_v7().to_string(),
-                    second_notice,
-                    later,
-                )
-                .await?;
-                Ok(())
-            })
+    crate::event_owed::scoped(fixture.object.transaction(move |scope| {
+        Box::pin(async move {
+            // Act: each starts at one; expiring A's prefix must leave B's newer row intact.
+            append(
+                scope,
+                first,
+                durable_steps::Uuid::now_v7().to_string(),
+                first_notice,
+                NOW,
+            )
+            .await?;
+            append(
+                scope,
+                second,
+                durable_steps::Uuid::now_v7().to_string(),
+                second_notice,
+                later,
+            )
+            .await?;
+            Ok(())
         })
-        .await?;
+    }))
+    .await?;
     let fixture = fixture.reopen().await?;
     let (first_read, second_read, first_expired, second_retained) = fixture
         .object

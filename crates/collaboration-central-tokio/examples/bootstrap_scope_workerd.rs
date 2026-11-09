@@ -97,27 +97,24 @@ impl Client {
     }
 }
 
+/// Each fixture's schema, the migrations a fresh store of it applies (from the
+/// same corpora bootstrap applies), and its probe.
 fn schemas() -> [(&'static str, EngineSchema, usize, Option<BootstrapProbe>); 4] {
-    let delivery_migration_count = fleet_mail_delivery::DELIVERY_MIGRATOR
-        .iter()
-        .filter(|migration| migration.migration_type.is_up_migration())
-        .count();
     [
         (
             "registry",
             EngineSchema::Registry,
-            8,
             Some(BootstrapProbe::Registry),
         ),
-        ("copy", EngineSchema::Copy, 3, Some(BootstrapProbe::Copy)),
-        ("session", EngineSchema::Session, 5, None),
+        ("copy", EngineSchema::Copy, Some(BootstrapProbe::Copy)),
+        ("session", EngineSchema::Session, None),
         (
             "delivery",
             EngineSchema::Delivery,
-            delivery_migration_count,
             Some(BootstrapProbe::Delivery),
         ),
     ]
+    .map(|(fixture, schema, probe)| (fixture, schema, schema.fresh_migration_count(), probe))
 }
 async fn owner_gate(client: &Client) -> ConformanceResult<()> {
     use collaboration_central_conformance::{
@@ -295,7 +292,13 @@ async fn first_process(client: &Client) -> ConformanceResult<String> {
     {
         return Err("real receiver SQL error was not rollback-confirmed unavailable".into());
     }
-    client.initialize("damaged", EngineSchema::Copy, 3).await?;
+    client
+        .initialize(
+            "damaged",
+            EngineSchema::Copy,
+            EngineSchema::Copy.fresh_migration_count(),
+        )
+        .await?;
     if !matches!(client.call("damaged", BootstrapCommand::CopyStatus { database }).await?, BootstrapReply::CopyStatus(answer) if matches!(*answer, ReplicationAnswer::CopyStatus(CopyStatusAnswer::NotInitialized)))
     {
         return Err("receiver did not recover after real bootstrap".into());
@@ -349,7 +352,11 @@ fn enrolled_peer(response: &serde_json::Value) -> ConformanceResult<String> {
 }
 async fn enrollment_cases(client: &Client) -> ConformanceResult<String> {
     client
-        .initialize("enrollment", EngineSchema::Registry, 8)
+        .initialize(
+            "enrollment",
+            EngineSchema::Registry,
+            EngineSchema::Registry.fresh_migration_count(),
+        )
         .await?;
     let request = enrollment_request();
     let expected = enrolled_peer(
@@ -486,7 +493,11 @@ async fn second_process(client: &Client, expected_peer: &str) -> ConformanceResu
         ("unknown", HistoryCorruption::UnknownVersion),
     ] {
         client
-            .initialize(fixture, EngineSchema::Registry, 8)
+            .initialize(
+                fixture,
+                EngineSchema::Registry,
+                EngineSchema::Registry.fresh_migration_count(),
+            )
             .await?;
         client
             .call(

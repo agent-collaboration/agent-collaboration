@@ -197,14 +197,32 @@ async fn retirement_precedence(expected: ExpectedRetirement) -> ConformanceResul
             email: "fixture@example.test".into(),
         },
     )?;
-    let position = composed
-        .runtime
-        .conformance_imported_unheld(
+    // The setup runs as an owner call event, as the shells send it.
+    let (_, body) = collaboration_central_core::conformance_setup_calls::encode_conformance_setup(
+        owner,
+        collaboration_central_core::conformance_setup_calls::ConformanceImportedUnheld,
+        collaboration_central_core::conformance_setup_calls::ImportedUnheldRequest {
             database,
-            owner,
-            collaboration_central_core::ConformanceBoardState::Archived,
-        )
-        .await?;
+            board_state: collaboration_central_core::ConformanceBoardState::Archived,
+        },
+        durable_steps::CallId {
+            operation: durable_steps::OperationId::new(durable_steps::Uuid::now_v7())?,
+            step: durable_steps::StepName::new("conformance_setup")?,
+        },
+    )
+    .map_err(|failure| format!("setup encoding: {failure:?}"))?
+    .into_parts();
+    let collaboration_central_core::EventReply::CallAnswer(answer) =
+        collaboration_central_core::ObjectKernel::new(&composed.runtime)
+            .on_event(collaboration_central_core::ObjectEvent::Call {
+                body,
+                storage_bytes: None,
+            })
+            .await
+    else {
+        return Err("the imported-unheld setup call did not answer".into());
+    };
+    let position: ReplicationPosition = serde_json::from_slice(&answer)?;
     assert_eq!(
         position,
         ReplicationPosition::new(Epoch::new(1)?, CommitSequence::new(1))

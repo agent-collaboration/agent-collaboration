@@ -1,0 +1,1 @@
+UPDATE machine_control_project_progress SET applied_through=CAST(?1 AS INTEGER), updated_at=CAST(?2 AS INTEGER) WHERE machine_id=?3 AND (applied_through IS NULL OR applied_through < CAST(?1 AS INTEGER));

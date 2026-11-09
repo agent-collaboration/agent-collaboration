@@ -2,7 +2,7 @@
 use crate::FleetKind;
 
 use crate::{
-    CoreHost, ObjectHost, ObjectRuntime, PlatformIo, object_runtime::ObjectWork,
+    CoreHost, ObjectPlatform, ObjectRuntime, object_runtime::ObjectWork,
     session_store::CoreSessionStore,
 };
 use durable_steps::{AtomicStore, ReborrowScope, StoreError, storage::TransactionScope};
@@ -12,9 +12,12 @@ use sqlx_core::{
 };
 use std::sync::Arc;
 
-type SessionRuntimeHandles<Host, Io> = (Arc<CoreSessionStore<Host, Io>>, Arc<CoreHost<Io>>);
+type SessionRuntimeHandles<Host> = (
+    Arc<CoreSessionStore<Host>>,
+    Arc<CoreHost<<Host as ObjectPlatform>::Io>>,
+);
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: ObjectPlatform> ObjectRuntime<FleetKind, Host>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -36,7 +39,7 @@ where
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
 {
-    pub(crate) fn session_store(&self) -> Result<SessionRuntimeHandles<Host, Io>, StoreError> {
+    pub(crate) fn session_store(&self) -> Result<SessionRuntimeHandles<Host>, StoreError> {
         match &self.work {
             ObjectWork::Fleet {
                 host,
@@ -60,7 +63,7 @@ where
     async fn session_store_for(
         &self,
         connection: fleet_protocol::ConnectionId,
-    ) -> Result<SessionRuntimeHandles<Host, Io>, StoreError> {
+    ) -> Result<SessionRuntimeHandles<Host>, StoreError> {
         let ObjectWork::Fleet {
             host,
             shared_host,

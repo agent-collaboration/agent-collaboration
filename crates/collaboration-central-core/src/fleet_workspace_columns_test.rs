@@ -140,6 +140,15 @@ pub(crate) async fn prepare() -> TestResult<FleetStorageFixture> {
                     scope,
                 )
                 .await?;
+                // Step 0 also creates the feed state row, as Fleet open does.
+                crate::fleet_feed_store::ensure_state(
+                    scope,
+                    durable_steps::Uuid::parse_str("019f0000-0000-7000-8000-00000000f0f0")
+                        .map_err(StoreError::backend)?,
+                    chrono::DateTime::from_timestamp_millis(NOW.unix_millis())
+                        .ok_or_else(|| StoreError::backend("fixture clock out of range"))?,
+                )
+                .await?;
                 Ok(())
             })
         })

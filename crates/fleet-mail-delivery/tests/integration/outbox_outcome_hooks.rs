@@ -169,7 +169,7 @@ async fn transition(fixture: &Fixture, change: Transition, refuse: bool) -> Resu
                             .await
                     }
                     Transition::Receipt(terminal) => outbox
-                        .receipt::<PublishTask>(
+                        .receipt::<fleet_mail_delivery::JournaledStatus<PublishTask>>(
                             peer(2),
                             &submit_input().reference(),
                             PushResult::Replayed {
@@ -199,7 +199,7 @@ async fn transition(fixture: &Fixture, change: Transition, refuse: bool) -> Resu
                             }
                         };
                         outbox
-                            .recipient_report::<PublishTask>(
+                            .recipient_report::<fleet_mail_delivery::JournaledStatus<PublishTask>>(
                                 peer(2),
                                 RecipientReport {
                                     item: item_id(1),
@@ -256,7 +256,7 @@ async fn relay_fixture(expiry: Option<SyncTime>, now: SyncTime) -> Fixture {
                 )
                 .unwrap();
                 Outbox::<_, TestTypes, _>::new(scope, limits(), &OUTCOME_BINDINGS)
-                    .submit_relay::<OutcomePush, RecordRemoval>(
+                    .submit_relay::<fleet_mail_delivery::JournaledWork<OutcomePush, RecordRemoval>>(
                         Submitter::Machine(peer(1)),
                         DeliveryEnvelope::Item(original),
                         peer(3),
@@ -777,7 +777,7 @@ async fn relay_settlement_projects_unknown_item_refusal_once() {
             .transaction(|scope| {
                 Box::pin(async move {
                     Outbox::<_, TestTypes, _>::new(scope, limits(), &OUTCOME_BINDINGS)
-                        .relay_settle::<RecordRemoval>(
+                        .relay_settle::<fleet_mail_delivery::JournaledRemoval<RecordRemoval>>(
                             Submitter::Machine(peer(1)),
                             item_id(1),
                             submit_input().digest,

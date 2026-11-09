@@ -62,7 +62,7 @@ fn require_accepted(answer: Value) -> TestResult {
 }
 async fn drain(fixture: &Fixture) -> TestResult {
     for _ in 0..8 {
-        let report = fixture.runtime.on_alarm().await?;
+        let report = fixture.runtime.conformance_drive_operations().await?;
         if !report.failed.is_empty() {
             return Err(format!("notice work failed to settle: {report:?}").into());
         }
@@ -175,11 +175,8 @@ async fn board_archiving_notifies_its_shared_holder_once_and_final_reports_hint_
     let request = archive()?;
     let answer = decide(&fixture, &request).await?;
     require_accepted(answer.clone())?;
-    assert!(
-        notices(&fixture).await?.is_empty(),
-        "inbound mutation dispatched a notice before its alarm"
-    );
-    drain(&fixture).await?;
+    // The holder's notice is appended in the archiving mutation's own transaction
+    // (slice 4a: no engine job), so it is there before any alarm or drain.
     let archiving = Notice {
         position: 1,
         kind: "project_list_changed".into(),

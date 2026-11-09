@@ -1,6 +1,6 @@
 //! Read the directory projection that the Fleet's lease hook committed atomically.
 use crate::{
-    ObjectHost,
+    ObjectPlatform,
     fleet_record_codec::corrupt,
     lease_projection::LeaseProjection,
     step_driver::{StepCallback, StepDriver, StepResult},
@@ -25,7 +25,7 @@ pub(crate) trait RegistryLeaseStore: Send + Sync {
 struct BoundRegistryLeaseStore<Host> {
     host: Weak<Host>,
 }
-pub(crate) fn bind<Host: ObjectHost>(host: Weak<Host>) -> Arc<dyn RegistryLeaseStore>
+pub(crate) fn bind<Host: ObjectPlatform>(host: Weak<Host>) -> Arc<dyn RegistryLeaseStore>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
@@ -41,7 +41,7 @@ where
 {
     Arc::new(BoundRegistryLeaseStore { host })
 }
-impl<Host: ObjectHost> RegistryLeaseStore for BoundRegistryLeaseStore<Host>
+impl<Host: ObjectPlatform> RegistryLeaseStore for BoundRegistryLeaseStore<Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

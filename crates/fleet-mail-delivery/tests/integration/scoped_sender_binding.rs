@@ -243,7 +243,7 @@ async fn forged_service_claim_is_rejected_at_relay_and_recipient_without_new_wor
             Box::pin(async move {
                 assert!(matches!(
                     Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                        .submit_relay::<PushTask, RecordRemoval>(
+                        .submit_relay::<fleet_mail_delivery::JournaledWork<PushTask, RecordRemoval>>(
                             Submitter::Machine(peer(1)),
                             DeliveryEnvelope::Item(service_item(1, SERVICE_A)),
                             peer(3),
@@ -422,7 +422,7 @@ async fn missing_cancel_or_relay_binding_admits_no_submission_removal_or_custody
                 assert!(admitted.is_none());
                 assert!(matches!(
                     Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                        .submit_relay::<PushTask, RecordRemoval>(
+                        .submit_relay::<fleet_mail_delivery::JournaledWork<PushTask, RecordRemoval>>(
                             Submitter::Machine(peer(9)),
                             DeliveryEnvelope::Item(service_item(1, SERVICE_A)),
                             peer(3),

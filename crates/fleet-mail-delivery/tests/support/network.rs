@@ -108,7 +108,7 @@ impl TestNetwork {
                                         limits(),
                                         &FixtureBindings,
                                     )
-                                    .submit_relay::<PushTask, RecordRemoval>(
+                                    .submit_relay::<fleet_mail_delivery::JournaledWork<PushTask, RecordRemoval>>(
                                         authenticated_submitter,
                                         resolved.item,
                                         peer(3),
@@ -149,7 +149,7 @@ impl TestNetwork {
                                             limits(),
                                             &FixtureBindings,
                                         )
-                                        .relay_settle::<RecordRemoval>(
+                                        .relay_settle::<fleet_mail_delivery::JournaledRemoval<RecordRemoval>>(
                                             authenticated_submitter,
                                             reference.item,
                                             reference.digest,
@@ -292,7 +292,7 @@ impl TestNetwork {
                     .transaction(move |scope| {
                         Box::pin(async move {
                             Outbox::<_, TestTypes, _>::new(scope, limits(), &FixtureBindings)
-                                .recipient_report::<PublishTask>(peer(2), report, now)
+                                .recipient_report::<fleet_mail_delivery::JournaledStatus<PublishTask>>(peer(2), report, now)
                                 .await
                                 .map_err(storage_error)
                         })

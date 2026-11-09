@@ -99,11 +99,11 @@ pub(crate) fn checked_row_id(
 }
 
 /// Lease facts, directory metadata and both ownership notices share the lease transaction.
-pub(crate) struct FleetLeaseChangeHook<Store, NoticeTask> {
+pub(crate) struct FleetLeaseChangeHook<Store> {
     ids: std::sync::Arc<dyn runtime_primitives::IdSource>,
-    marker: std::marker::PhantomData<fn() -> (Store, NoticeTask)>,
+    marker: std::marker::PhantomData<fn() -> Store>,
 }
-impl<Store, NoticeTask> FleetLeaseChangeHook<Store, NoticeTask> {
+impl<Store> FleetLeaseChangeHook<Store> {
     pub(crate) fn new(ids: std::sync::Arc<dyn runtime_primitives::IdSource>) -> Self {
         Self {
             ids,
@@ -111,8 +111,8 @@ impl<Store, NoticeTask> FleetLeaseChangeHook<Store, NoticeTask> {
         }
     }
 }
-impl<Store, Driver, NoticeTask, Scope> fleet_project_lease::LeaseChangeHook<Scope>
-    for FleetLeaseChangeHook<Store, NoticeTask>
+impl<Store, Driver, Scope> fleet_project_lease::LeaseChangeHook<Scope>
+    for FleetLeaseChangeHook<Store>
 where
     Store: AtomicStore,
     Scope: TransactionScope<Database = Driver> + durable_steps::JournalScope,
@@ -121,14 +121,12 @@ where
     for<'value> String: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'value> Option<String>: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'row> &'row str: ColumnIndex<Driver::Row>,
-    NoticeTask: durable_steps::Task<Input = crate::machine_notice_contract::MachineNoticeAppend>,
 {
     async fn on_lease_change(
         &self,
         scope: &mut Scope,
         change: &fleet_project_lease::LeaseChange,
     ) -> Result<(), fleet_project_lease::LeaseError> {
-        use crate::machine_notice_contract::MachineNoticeAppend;
         let applied = async {
             let now = change.after.changed_at;
             let clock = chrono::DateTime::from_timestamp_millis(now.unix_millis())
@@ -240,33 +238,22 @@ where
                         },
                     ));
                 }
+                // Appended here; the Fleet's notice push sends them after commit.
                 for (peer, notice) in notices {
                     let id = row_ids.next()?;
-                    let (notice, _) = crate::machine_notice_store::append(
-                        scope,
-                        peer,
-                        id.to_string(),
-                        notice,
-                        now,
-                    )
-                    .await?;
-                    let key = durable_steps::RequestKey::new(format!("machine-control-hint:{id}"))
-                        .map_err(StoreError::backend)?;
-                    scope
-                        .admit::<NoticeTask>(&key, &MachineNoticeAppend::Hint { peer, notice })
-                        .await
-                        .map_err(StoreError::backend)?;
-                    scope.ensure_wake(now).await?;
+                    crate::machine_notice_store::append(scope, peer, id.to_string(), notice, now)
+                        .await?;
                 }
             }
             let project = message_board::ProjectId::try_from(change.after.database.to_string())
                 .map_err(StoreError::backend)?;
             crate::fleet_archive_completion::complete_project(scope, &project, clock, &mut row_ids)
                 .await?;
-            crate::fleet_notice_admission::admit_mutation_notices::<Store, Driver, _>(
+            crate::fleet_notice_admission::admit_mutation_notices::<Driver, _>(
                 scope,
                 previous_feed,
                 now,
+                &mut row_ids,
             )
             .await?;
             Ok::<_, StoreError>(())
