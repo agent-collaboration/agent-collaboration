@@ -112,11 +112,17 @@ where
         frame: Vec<u8>,
     ) -> Result<(), StoreError> {
         use runtime_primitives::Clock;
-        let ObjectWork::Fleet { host, .. } = &self.work else {
+        let ObjectWork::Fleet {
+            host,
+            honored_capabilities,
+            ..
+        } = &self.work
+        else {
             return Err(StoreError::Aborted {
                 reason: "session runtime has a different face".into(),
             });
         };
+        let honored_capabilities = *honored_capabilities;
         let installation = host
             .admission_origin(binding.connection)
             .await
@@ -132,9 +138,15 @@ where
                 Box::pin(async move {
                     let now = shared_host.now();
                     crate::machine_notice_store::remember_peer(scope, binding.peer, now).await?;
-                    let effects = fleet_session::frame_received(scope, &binding, &frame, now)
-                        .await
-                        .map_err(StoreError::backend)?;
+                    let effects = fleet_session::frame_received(
+                        scope,
+                        &binding,
+                        &frame,
+                        now,
+                        honored_capabilities,
+                    )
+                    .await
+                    .map_err(StoreError::backend)?;
                     scope
                         .stage_frame_effects(
                             effects,

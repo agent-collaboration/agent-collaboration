@@ -98,6 +98,7 @@ async fn selection_skips_opening_attaching_closed_and_expired_sockets_then_uses_
     for expected in [
         ConnectionRegistration::Opening,
         ConnectionRegistration::Attaching {
+            capabilities: None,
             session_id: session,
             schema_support: fleet_protocol::SchemaSupport { max_version: 7 },
             attach_seq: fleet_protocol::AttachSequence::new(1)?,

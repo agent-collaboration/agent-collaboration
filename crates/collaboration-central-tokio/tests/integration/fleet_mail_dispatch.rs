@@ -57,6 +57,7 @@ impl Socket {
             .on_frame(
                 binding,
                 serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Hello {
+                    capabilities: None,
                     session_id,
                     schema_support: SchemaSupport { max_version: 7 },
                 })?,
@@ -80,6 +81,7 @@ impl Socket {
         use collaboration_central_core::ObjectHost;
         // Valid transport frames occupy the actual native queue; this receiver deliberately holds them.
         let frame = serde_json::to_vec(&ServerFrame::<BoardConsumerProtocol>::Welcome {
+            capabilities: None,
             session_id: self.session_id,
             databases: Vec::new(),
         })?;

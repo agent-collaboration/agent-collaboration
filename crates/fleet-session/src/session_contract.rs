@@ -79,10 +79,16 @@ pub enum ConnectionRegistration {
         session_id: SessionId,
         schema_support: SchemaSupport,
         attach_seq: AttachSequence,
+        /// The offer intersected with the host's honored set at Hello.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        capabilities: Option<FrameCapabilities>,
     },
     Attached {
         session_id: SessionId,
         schema_support: SchemaSupport,
+        /// Admission and Welcome both use this negotiated value unchanged.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        capabilities: Option<FrameCapabilities>,
     },
     Closed,
 }
@@ -130,6 +136,19 @@ pub enum CloseCause {
 }
 
 pub enum SessionEffect<P: ConsumerProtocol = NoConsumer> {
+    RequestBatch {
+        session: SessionKey,
+        batch: RequestBatch<OperationRequest<P>>,
+    },
+    AnswerBatch {
+        session: SessionKey,
+        batch: AnswerBatch<ClientAnswer<P>>,
+    },
+    NoticesApplied {
+        session: SessionKey,
+        frame: FrameId,
+        through: NoticePosition,
+    },
     /// The host gathers current registry/copy status after commit, then sends Welcome.
     /// Report an unreadable copy as Unavailable; close if the overall gather fails.
     Welcome {

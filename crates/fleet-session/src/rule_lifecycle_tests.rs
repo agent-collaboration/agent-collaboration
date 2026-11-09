@@ -62,10 +62,16 @@ async fn replacement_ignores_old_frames_hello_and_late_close() {
     let effects = attach(&mut scope, &next, id).await;
     assert!(effects.iter().any(|effect| matches!(effect, SessionEffect::Close { connection, reason: CloseReason::ConnectionReplaced } if *connection == first.connection)));
     assert!(
-        frame_received::<_, NoConsumer>(&mut scope, &first, &hello(id, 1), now(2))
-            .await
-            .unwrap()
-            .is_empty()
+        frame_received::<_, NoConsumer>(
+            &mut scope,
+            &first,
+            &hello(id, 1),
+            now(2),
+            fleet_protocol::FrameCapabilities::default()
+        )
+        .await
+        .unwrap()
+        .is_empty()
     );
     let request: ClientFrame = ClientFrame::Request {
         frame: FrameId::new(Uuid::from_u128(0x019eef00000070008000000000000005)).unwrap(),
@@ -76,7 +82,8 @@ async fn replacement_ignores_old_frames_hello_and_late_close() {
             &mut scope,
             &first,
             &serde_json::to_vec(&request).unwrap(),
-            now(2)
+            now(2),
+            fleet_protocol::FrameCapabilities::default()
         )
         .await
         .unwrap()
@@ -107,9 +114,15 @@ async fn repeat_hello_changes_no_session_or_attachment_and_requests_a_fresh_welc
     attach(&mut scope, &connection, id).await;
     let sessions = scope.records().await;
     let registrations = scope.registrations.clone();
-    let effects = frame_received::<_, NoConsumer>(&mut scope, &connection, &hello(id, 1), now(2))
-        .await
-        .unwrap();
+    let effects = frame_received::<_, NoConsumer>(
+        &mut scope,
+        &connection,
+        &hello(id, 1),
+        now(2),
+        fleet_protocol::FrameCapabilities::default(),
+    )
+    .await
+    .unwrap();
     assert_eq!(scope.records().await, sessions);
     assert_eq!(scope.registrations, registrations);
     assert!(
@@ -129,6 +142,7 @@ async fn expired_and_malformed_connections_detach_instead_of_ending() {
             &connection,
             b"not json",
             now(if expired { 100 } else { 2 }),
+            fleet_protocol::FrameCapabilities::default(),
         )
         .await
         .unwrap();
@@ -237,6 +251,7 @@ async fn a_connection_attaches_once_and_both_operation_directions_use_the_bindin
         &connection,
         &serde_json::to_vec(&request).unwrap(),
         now(2),
+        fleet_protocol::FrameCapabilities::default(),
     )
     .await
     .unwrap();
@@ -252,17 +267,23 @@ async fn a_connection_attaches_once_and_both_operation_directions_use_the_bindin
             &mut scope,
             &connection,
             &serde_json::to_vec(&answer).unwrap(),
-            now(2)
+            now(2),
+            fleet_protocol::FrameCapabilities::default()
         )
         .await
         .unwrap()
         .as_slice(),
         [SessionEffect::RouteAnswer { .. }]
     ));
-    let changed =
-        frame_received::<_, NoConsumer>(&mut scope, &connection, &hello(session(5), 1), now(2))
-            .await
-            .unwrap();
+    let changed = frame_received::<_, NoConsumer>(
+        &mut scope,
+        &connection,
+        &hello(session(5), 1),
+        now(2),
+        fleet_protocol::FrameCapabilities::default(),
+    )
+    .await
+    .unwrap();
     assert!(changed.iter().any(|effect| matches!(
         effect,
         SessionEffect::Close {

@@ -554,6 +554,9 @@ async fn run_events(
                     receipts = NoticeReceipts::default();
                 }
                 Some(ClientEvent::Unknown { .. } | ClientEvent::Answer { .. }) => {}
+                Some(ClientEvent::RequestBatch { .. } | ClientEvent::AnswerBatch { .. }) => {
+                    // D3 admits the wire vocabulary; D5 owns batch execution.
+                }
                 None => break,
             },
         }

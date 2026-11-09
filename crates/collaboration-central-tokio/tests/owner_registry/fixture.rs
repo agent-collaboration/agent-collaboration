@@ -112,6 +112,7 @@ impl Fixture {
         replacement
             .send(Message::Binary(
                 serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Hello {
+                    capabilities: None,
                     session_id,
                     schema_support: SchemaSupport { max_version },
                 })?

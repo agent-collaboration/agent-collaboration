@@ -5,16 +5,28 @@ import { SessionAudit, type SessionSnapshot } from "./session-audit.ts";
 
 export class SessionGate {
   readonly origin: string;
-  readonly audit = new SessionAudit();
+  readonly audit: SessionAudit;
+  readonly outgoingAudit: SessionAudit;
   private readonly server: Server;
   private readonly sockets = new Set<Socket>();
   private paused = false;
   private stopped = false;
-  private constructor(origin: string, server: Server) {
+  private constructor(
+    origin: string,
+    server: Server,
+    observeFrame?: (value: unknown) => void,
+    observeClientFrame?: (value: unknown) => void,
+  ) {
     this.origin = origin;
     this.server = server;
+    this.audit = new SessionAudit(observeFrame);
+    this.outgoingAudit = new SessionAudit(observeClientFrame, "client");
   }
-  static async start(endpoint: string): Promise<SessionGate> {
+  static async start(
+    endpoint: string,
+    observeFrame?: (value: unknown) => void,
+    observeClientFrame?: (value: unknown) => void,
+  ): Promise<SessionGate> {
     const upstream = new URL(endpoint);
     if (
       !["http:", "https:", "ws:", "wss:"].includes(upstream.protocol) ||
@@ -40,7 +52,12 @@ export class SessionGate {
       server.close();
       throw new Error("invalid gate bind");
     }
-    const gate = new SessionGate(`http://127.0.0.1:${address.port}`, server);
+    const gate = new SessionGate(
+      `http://127.0.0.1:${address.port}`,
+      server,
+      observeFrame,
+      observeClientFrame,
+    );
     server.on("connection", (socket): void => {
       gate.accept(socket, upstream);
     });
@@ -117,6 +134,7 @@ export class SessionGate {
       : createConnection(options);
     this.track(outgoing);
     const connection = input.session ? this.audit.opened() : undefined;
+    const clientConnection = input.session ? this.outgoingAudit.opened() : undefined;
     outgoing.setTimeout(10_000, (): void => {
       outgoing.destroy();
     });
@@ -125,6 +143,7 @@ export class SessionGate {
     });
     outgoing.once("close", (): void => {
       if (connection !== undefined) this.audit.ended(connection);
+      if (clientConnection !== undefined) this.outgoingAudit.ended(clientConnection);
       downstream.destroy();
     });
     outgoing.once(secure ? "secureConnect" : "connect", (): void => {
@@ -138,6 +157,12 @@ export class SessionGate {
         outgoing.on("data", (chunk: Buffer): void => {
           this.audit.receive(connection, chunk);
         });
+      if (clientConnection !== undefined) {
+        this.outgoingAudit.receive(clientConnection, input.initial);
+        downstream.on("data", (chunk: Buffer): void =>
+          this.outgoingAudit.receive(clientConnection, chunk),
+        );
+      }
       outgoing.write(input.initial);
       downstream.pipe(outgoing);
       outgoing.pipe(downstream);

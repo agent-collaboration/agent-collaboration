@@ -81,6 +81,7 @@ async fn inbound_frames_update_retained_contact_at_most_once_per_ten_seconds() {
     tokio::time::advance(Duration::from_secs(1)).await;
     server
         .send(ServerFrame::Welcome {
+            capabilities: None,
             session_id,
             databases: vec![],
         })

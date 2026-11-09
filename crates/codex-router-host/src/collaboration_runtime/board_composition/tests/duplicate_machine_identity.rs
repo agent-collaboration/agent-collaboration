@@ -78,6 +78,7 @@ async fn hello(connection: &mut ReqwestSessionConnection, session_id: SessionId)
     connection
         .send(
             serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Hello {
+                capabilities: None,
                 session_id,
                 schema_support: SchemaSupport { max_version },
             })?

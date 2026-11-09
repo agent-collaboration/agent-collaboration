@@ -60,6 +60,14 @@ impl ConsumerProtocol for RouterConsumerProtocol {
     type ClientAnswer = <BoardConsumerProtocol as ConsumerProtocol>::ClientAnswer;
     type Notice = <BoardConsumerProtocol as ConsumerProtocol>::Notice;
     type Annotation = <BoardConsumerProtocol as ConsumerProtocol>::Annotation;
+
+    fn same_request_kind(left: &Self::Request, right: &Self::Request) -> bool {
+        BoardConsumerProtocol::same_request_kind(left, right)
+    }
+
+    fn same_server_request_kind(left: &Self::ServerRequest, right: &Self::ServerRequest) -> bool {
+        BoardConsumerProtocol::same_server_request_kind(left, right)
+    }
 }
 
 #[cfg(test)]

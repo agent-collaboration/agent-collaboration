@@ -62,6 +62,7 @@ async fn run(revoked: bool, replay: bool) -> Result<(), TestError> {
     };
     let runtime = ObjectRuntime::<DeliveryKind, _, _> {
         work: ObjectWork::Fleet {
+            honored_capabilities: fleet_protocol::FrameCapabilities::default(),
             host: host.clone(),
             io: Arc::new(FixtureIo),
             engine: Arc::new(UnusedEngine),

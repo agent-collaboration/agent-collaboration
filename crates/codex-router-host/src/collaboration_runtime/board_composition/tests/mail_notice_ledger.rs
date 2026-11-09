@@ -147,7 +147,11 @@ impl NoticeLedger {
                         .await
                         .map_err(StoreError::backend)?;
                     let effects = frame_received::<_, BoardConsumerProtocol>(
-                        &mut scope, &binding, &hello, now,
+                        &mut scope,
+                        &binding,
+                        &hello,
+                        now,
+                        fleet_protocol::FrameCapabilities::default(),
                     )
                     .await
                     .map_err(StoreError::backend)?;

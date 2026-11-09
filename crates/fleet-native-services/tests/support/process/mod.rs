@@ -120,12 +120,14 @@ impl ServiceProcess {
             .connect("session", &format!("Bearer peer-{peer}"))
             .await?;
         let hello: ClientFrame<SampleProtocol> = ClientFrame::Hello {
+            capabilities: None,
             session_id: session,
             schema_support: SchemaSupport { max_version: 100 },
         };
         socket.send(serde_json::to_vec(&hello)?.into()).await?;
         match server_frame(&mut socket).await? {
             ServerFrame::Welcome {
+                capabilities: None,
                 session_id,
                 databases,
             } if session_id == session => Ok((socket, databases)),

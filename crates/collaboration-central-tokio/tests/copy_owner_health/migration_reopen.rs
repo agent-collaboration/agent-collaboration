@@ -475,7 +475,8 @@ async fn pending_session_refusals(base: &str) -> ConformanceResult<()> {
         .await?;
     let result = async {
         let session = SessionId::new(Uuid::now_v7())?;
-        socket.send(Message::Binary(serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Hello {session_id:session,schema_support:SchemaSupport {max_version:1}})?.into())).await?;
+        socket.send(Message::Binary(serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Hello {
+ capabilities: None,session_id:session,schema_support:SchemaSupport {max_version:1}})?.into())).await?;
         let welcome = {
             use futures_util::StreamExt;
             match tokio::time::timeout(Duration::from_secs(5),socket.next()).await?.ok_or("pending Welcome missing")?? {
@@ -485,7 +486,8 @@ async fn pending_session_refusals(base: &str) -> ConformanceResult<()> {
             }
         };
         let frame:ServerFrame<BoardConsumerProtocol> = serde_json::from_value(welcome)?;
-        assert!(matches!(frame,ServerFrame::Welcome {session_id,databases} if session_id==session && databases.iter().any(|database|matches!(database,DatabaseStatus::Unavailable {database,lease:Some(_),reason:CopyUnavailableReason::MigrationPending {version:3}} if database.to_string()==PROJECT))),"Welcome lost pending Copy reason");
+        assert!(matches!(frame,ServerFrame::Welcome {
+ capabilities: None,session_id,databases} if session_id==session && databases.iter().any(|database|matches!(database,DatabaseStatus::Unavailable {database,lease:Some(_),reason:CopyUnavailableReason::MigrationPending {version:3}} if database.to_string()==PROJECT))),"Welcome lost pending Copy reason");
         let control = DatabaseId::new(Uuid::now_v7())?;
         let copies=crate::copy_owner_health::copy_wait_scenarios::CopyClient::new(base)?;
         let created=copies.invoke(json!({"kind":"create","value":{"database":control,"epoch":1,"holder":PEER,"origin":{"kind":"empty"}}})).await?;

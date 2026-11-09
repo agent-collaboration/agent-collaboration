@@ -1,0 +1,158 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  CompatibilityWireObservation,
+  requireCompatibleWire,
+  requireExactBacklog,
+  requireCompatiblePair,
+} from "./wire-observation.ts";
+import { SessionAudit } from "../../../access/session-audit.ts";
+
+function encodedAudit(): {
+  audit: SessionAudit;
+  wire: CompatibilityWireObservation;
+  send: (value: unknown) => void;
+} {
+  const wire = new CompatibilityWireObservation();
+  const audit = new SessionAudit((value): void => wire.observe(value));
+  const connection = audit.opened();
+  audit.receive(connection, Buffer.from("HTTP/1.1 101 Switching Protocols\r\n\r\n"));
+  const send = (value: unknown): void => {
+    const bytes = Buffer.from(JSON.stringify(value));
+    assert.ok(bytes.length < 126);
+    audit.receive(connection, Buffer.concat([Buffer.from([130, bytes.length]), bytes]));
+  };
+  send({ kind: "welcome", value: { sessionId: "fixture", databases: [] } });
+  return { audit, wire, send };
+}
+
+test("masked outgoing bytes correlate InvalidShape with the exact request body", (): void => {
+  const wire = new CompatibilityWireObservation();
+  const audit = new SessionAudit((value): void => wire.observeClient(value), "client");
+  const connection = audit.opened();
+  audit.receive(connection, Buffer.from("GET /v1/session HTTP/1.1\r\nHost: fixture\r\n\r\n"));
+  const frame = "019eef00-0000-7000-8000-000000000004";
+  const body = { kind: "consumer", value: null };
+  const bytes = Buffer.from(JSON.stringify({ kind: "request", value: { frame, body } }));
+  assert.ok(bytes.length < 126);
+  const mask = Buffer.from([1, 2, 3, 4]);
+  const payload = Buffer.from(bytes);
+  for (let index = 0; index < payload.length; index += 1)
+    payload[index] = bytes.readUInt8(index) ^ mask.readUInt8(index % 4);
+  const encoded = Buffer.concat([Buffer.from([130, 128 | bytes.length]), mask, payload]);
+  for (const byte of encoded) audit.receive(connection, Buffer.from([byte]));
+  assert.equal(audit.snapshot().invalidConnections, 0);
+  wire.observe({ kind: "welcome", value: {} });
+  const answer = { kind: "invalidShape", value: { field: "body" } };
+  wire.observe({ kind: "answer", value: { frame, body: answer } });
+  assert.deepEqual(wire.correlations(), [{ frame, request: body, answer }]);
+  assert.throws((): void => requireCompatibleWire(wire.snapshot()), /legacy wire/);
+});
+
+test("the shared completion gate rejects a real unsupported encoded frame when only A is corrupted", (): void => {
+  const a = encodedAudit(),
+    b = encodedAudit();
+  const evidence = (): Parameters<typeof requireCompatiblePair>[0] => ({
+    a: { wire: a.wire.snapshot(), audit: a.audit.snapshot() },
+    b: { wire: b.wire.snapshot(), audit: b.audit.snapshot() },
+  });
+  requireCompatiblePair(evidence());
+  a.send({ kind: "unsupportedActualFrame", value: {} });
+  assert.equal(a.audit.snapshot().invalidConnections, 1);
+  assert.equal(b.audit.snapshot().invalidConnections, 0);
+  assert.equal(a.wire.snapshot().unsupportedFrames, 0);
+  assert.throws((): void => requireCompatiblePair(evidence()), /invalid a raw Session audit/);
+});
+
+test("the shared completion gate rejects an unknown B frame and missing audits", (): void => {
+  const a = encodedAudit(),
+    b = encodedAudit();
+  b.send({ kind: "unknownOnB", value: {} });
+  assert.throws(
+    (): void =>
+      requireCompatiblePair({
+        a: { wire: a.wire.snapshot(), audit: a.audit.snapshot() },
+        b: { wire: b.wire.snapshot(), audit: b.audit.snapshot() },
+      }),
+    /invalid b raw Session audit/,
+  );
+  assert.throws(
+    (): void =>
+      requireCompatiblePair({
+        a: { wire: a.wire.snapshot(), audit: undefined },
+        b: { wire: b.wire.snapshot(), audit: b.audit.snapshot() },
+      }),
+    /invalid a raw Session audit/,
+  );
+});
+
+test("legacy Welcome and retained notice page are observed without optional capability leakage", (): void => {
+  const observation = new CompatibilityWireObservation();
+  observation.observe({ kind: "welcome", value: { sessionId: "fixture", databases: [] } });
+  observation.observe({
+    kind: "answer",
+    value: {
+      body: {
+        kind: "consumer",
+        value: {
+          kind: "read",
+          value: {
+            kind: "notices",
+            value: {
+              kind: "page",
+              value: {
+                notices: [{ position: 99n }, { position: 100n }],
+                asOf: "2026-11-08T00:00:00Z",
+              },
+            },
+          },
+        },
+      },
+    },
+  });
+  requireCompatibleWire(observation.snapshot());
+  assert.deepEqual(observation.snapshot().noticePositions, ["99", "100"]);
+});
+
+test("a negotiated field sent to the old client and a refusal cannot receive compatibility credit", (): void => {
+  for (const wrong of [
+    { kind: "welcome", value: { capabilities: { batches: true } } },
+    { kind: "requestBatch", value: { items: [] } },
+    { kind: "answer", value: { body: { kind: "refused", value: "invalidShape" } } },
+  ]) {
+    const observation = new CompatibilityWireObservation();
+    observation.observe({ kind: "welcome", value: {} });
+    observation.observe(wrong);
+    assert.throws((): void => requireCompatibleWire(observation.snapshot()), /legacy wire/);
+  }
+});
+
+test("the backlog evaluator rejects a missing item or a duplicate push and accepts unrelated traffic", (): void => {
+  const expected = Array.from({ length: 50 }, (_, index): string => `item-${index}`);
+  requireExactBacklog(expected, ["unrelated", ...expected]);
+  assert.throws((): void => requireExactBacklog(expected, expected.slice(1)), /50 exact/);
+  assert.throws(
+    (): void => requireExactBacklog(expected, [...expected, expected[0] ?? ""]),
+    /50 exact/,
+  );
+});
+
+test("the real binary-frame audit invokes the callback only after complete fragmented payload arrival", (): void => {
+  const seen: unknown[] = [];
+  const audit = new SessionAudit((value): void => {
+    seen.push(value);
+  });
+  const connection = audit.opened();
+  audit.receive(connection, Buffer.from("HTTP/1.1 101 Switching Protocols\r\n\r\n"));
+  const value = { kind: "welcome", value: { sessionId: "fixture", databases: [] } };
+  const bytes = Buffer.from(JSON.stringify(value));
+  const cut = 20;
+  audit.receive(connection, Buffer.concat([Buffer.from([2, cut]), bytes.subarray(0, cut)]));
+  assert.deepEqual(seen, []);
+  audit.receive(
+    connection,
+    Buffer.concat([Buffer.from([128, bytes.length - cut]), bytes.subarray(cut)]),
+  );
+  assert.deepEqual(seen, [value]);
+  assert.equal(audit.snapshot().invalidConnections, 0);
+});

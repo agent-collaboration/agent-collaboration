@@ -366,6 +366,7 @@ impl NativeObjects {
                         self.config,
                         self.delivery,
                         self.holder_answer_timeout,
+                        fleet_protocol::FrameCapabilities::default(),
                     )?),
                 };
                 runtime.initialize().await?;

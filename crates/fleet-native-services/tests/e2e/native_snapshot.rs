@@ -411,6 +411,7 @@ async fn failed_installs_project_file_owned_positions_in_status_and_fresh_welcom
         assert_eq!(statuses, vec![expected.clone()]);
         let mut welcome_socket = target.connect("session", "Bearer peer-2").await?;
         let hello: ClientFrame<SampleProtocol> = ClientFrame::Hello {
+            capabilities: None,
             session_id: SessionId::new(durable_steps::Uuid::now_v7())?,
             schema_support: SchemaSupport { max_version: 100 },
         };

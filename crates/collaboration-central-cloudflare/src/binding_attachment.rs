@@ -11,7 +11,9 @@
 )]
 
 use collaboration_central_core::AdmissionOrigin;
-use fleet_protocol::{AttachSequence, ConnectionId, PeerId, SchemaSupport, SessionId};
+use fleet_protocol::{
+    AttachSequence, ConnectionId, FrameCapabilities, PeerId, SchemaSupport, SessionId,
+};
 use fleet_session::{ConnectionBinding, ConnectionRegistration, VerifiedPeer};
 use runtime_primitives::SyncTime;
 use serde::{Deserialize, Serialize};
@@ -62,10 +64,14 @@ enum WireRegistration {
         session_id: SessionId,
         schema_support: String,
         attach_seq: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        capabilities: Option<FrameCapabilities>,
     },
     Attached {
         session_id: SessionId,
         schema_support: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        capabilities: Option<FrameCapabilities>,
     },
     Closed,
 }
@@ -92,18 +98,22 @@ impl From<BindingAttachment> for WireBindingAttachment {
         let registration = match attachment.registration {
             ConnectionRegistration::Opening => WireRegistration::Opening,
             ConnectionRegistration::Attaching {
+                capabilities,
                 session_id,
                 schema_support,
                 attach_seq,
             } => WireRegistration::Attaching {
+                capabilities,
                 session_id,
                 schema_support: schema_support.max_version.to_string(),
                 attach_seq: attach_seq.value().to_string(),
             },
             ConnectionRegistration::Attached {
+                capabilities,
                 session_id,
                 schema_support,
             } => WireRegistration::Attached {
+                capabilities,
                 session_id,
                 schema_support: schema_support.max_version.to_string(),
             },
@@ -124,10 +134,12 @@ impl TryFrom<WireBindingAttachment> for BindingAttachment {
         let registration = match wire.registration {
             WireRegistration::Opening => ConnectionRegistration::Opening,
             WireRegistration::Attaching {
+                capabilities,
                 session_id,
                 schema_support,
                 attach_seq,
             } => ConnectionRegistration::Attaching {
+                capabilities,
                 session_id,
                 schema_support: SchemaSupport {
                     max_version: exact_decimal(schema_support, "schemaSupport")?,
@@ -136,9 +148,11 @@ impl TryFrom<WireBindingAttachment> for BindingAttachment {
                     .map_err(|_| AttachmentError { field: "attachSeq" })?,
             },
             WireRegistration::Attached {
+                capabilities,
                 session_id,
                 schema_support,
             } => ConnectionRegistration::Attached {
+                capabilities,
                 session_id,
                 schema_support: SchemaSupport {
                     max_version: exact_decimal(schema_support, "schemaSupport")?,

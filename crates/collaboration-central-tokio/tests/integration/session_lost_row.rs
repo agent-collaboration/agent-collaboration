@@ -117,6 +117,7 @@ async fn reconnect(
     replacement
         .send(Message::Binary(
             serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Hello {
+                capabilities: None,
                 session_id,
                 schema_support: SchemaSupport { max_version: 1 },
             })?
@@ -148,6 +149,7 @@ async fn reconnect(
                 match frame {
                     ServerFrame::Notice { .. } => {}
                     ServerFrame::Welcome {
+                        capabilities: None,
                         session_id: actual,
                         databases,
                     } if actual == session_id

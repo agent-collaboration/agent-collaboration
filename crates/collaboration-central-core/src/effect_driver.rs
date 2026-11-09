@@ -343,28 +343,34 @@ impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
             }
             let sent = match self.shared_host.gather_welcome(peer).await {
                 Ok(databases) => {
+                    // Gathering may yield to a replacement connection. Read its
+                    // current registration and capability offer together after that wait.
+                    let host = self.host.clone();
+                    let current =
+                        self.host
+                            .with_local_section(async move {
+                                host.registrations().await.ok().and_then(|registrations| {
+                                    registrations.get(&connection).copied()
+                                })
+                            })
+                            .await;
+                    let Ok(Some(fleet_session::ConnectionRegistration::Attached {
+                        session_id: attached,
+                        capabilities,
+                        ..
+                    })) = current
+                    else {
+                        continue;
+                    };
+                    if attached != session_id {
+                        continue;
+                    }
                     match serde_json::to_vec(&ServerFrame::<BoardConsumerProtocol>::Welcome {
                         session_id,
                         databases,
+                        capabilities,
                     }) {
-                        Ok(bytes) => {
-                            // Gathering may yield to a replacement connection. Recheck
-                            // the registration after that wait, before using its result.
-                            let host = self.host.clone();
-                            let current = self
-                                .host
-                                .with_local_section(async move {
-                                    host.registrations().await.ok().and_then(|registrations| {
-                                        registrations.get(&connection).copied()
-                                    })
-                                })
-                                .await;
-                            if !matches!(current, Ok(Some(fleet_session::ConnectionRegistration::Attached { session_id: current, .. })) if current == session_id)
-                            {
-                                continue;
-                            }
-                            self.host.send_frame(connection, bytes.into()).await.is_ok()
-                        }
+                        Ok(bytes) => self.host.send_frame(connection, bytes.into()).await.is_ok(),
                         Err(_) => false,
                     }
                 }

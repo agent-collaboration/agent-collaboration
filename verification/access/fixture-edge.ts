@@ -16,6 +16,15 @@ export class FixtureEdge {
     this.origin = origin;
     this.server = server;
   }
+  private track(socket: Socket): void {
+    this.sockets.add(socket);
+    socket.on("error", (): void => {
+      socket.destroy();
+    });
+    socket.once("close", (): void => {
+      this.sockets.delete(socket);
+    });
+  }
   static async start(input: {
     upstream: string;
     assertion: string;
@@ -45,10 +54,7 @@ export class FixtureEdge {
       edge.forwardEnrollment({ incoming, response, upstream, owner: input.owner });
     });
     server.on("connection", (socket): void => {
-      edge.sockets.add(socket);
-      socket.once("close", (): void => {
-        edge.sockets.delete(socket);
-      });
+      edge.track(socket);
     });
     server.on("upgrade", (incoming, downstream, head): void => {
       if (edge.paused) {
@@ -74,9 +80,12 @@ export class FixtureEdge {
         },
       });
       outgoing.once("upgrade", (response, upstreamSocket, upstreamHead): void => {
-        edge.sockets.add(upstreamSocket);
+        edge.track(upstreamSocket);
+        upstreamSocket.on("error", (): void => {
+          upstreamSocket.destroy();
+          downstream.destroy();
+        });
         upstreamSocket.once("close", (): void => {
-          edge.sockets.delete(upstreamSocket);
           downstream.destroy();
         });
         const headers = response.rawHeaders.reduce(

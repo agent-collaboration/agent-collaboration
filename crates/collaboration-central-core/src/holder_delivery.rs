@@ -46,6 +46,7 @@ where
             config,
             delivery,
             holder_answer_timeout,
+            honored_capabilities,
         } = &self.work
         else {
             return Err(StoreError::backend("delivery requires Fleet"));
@@ -60,6 +61,7 @@ where
                 config: *config,
                 delivery: *delivery,
                 holder_answer_timeout: *holder_answer_timeout,
+                honored_capabilities: *honored_capabilities,
             },
             face: PhantomData,
         })

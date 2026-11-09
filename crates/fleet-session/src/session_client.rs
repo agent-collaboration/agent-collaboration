@@ -68,6 +68,12 @@ pub enum ClientError {
 }
 
 pub enum ClientEvent<P: ConsumerProtocol = NoConsumer> {
+    RequestBatch {
+        batch: RequestBatch<ServerRequest<P>>,
+    },
+    AnswerBatch {
+        batch: AnswerBatch<OperationAnswer<P>>,
+    },
     Welcome {
         databases: Vec<DatabaseStatus>,
     },
@@ -117,6 +123,8 @@ pub struct SessionClient<
     store: S,
     state: ClientSessionState,
     schema_support: SchemaSupport,
+    advertised_capabilities: Option<FrameCapabilities>,
+    negotiated_capabilities: Option<FrameCapabilities>,
     backoff: Backoff,
     attempt: u32,
     retry_at: Option<SyncTime>,
@@ -159,6 +167,8 @@ impl<T: SessionTransport, S: SessionClientStore, P: ConsumerProtocol> SessionCli
             store,
             state,
             schema_support,
+            advertised_capabilities: None,
+            negotiated_capabilities: None,
             backoff,
             attempt: 0,
             retry_at: None,
@@ -178,6 +188,17 @@ impl<T: SessionTransport, S: SessionClientStore, P: ConsumerProtocol> SessionCli
 
     pub fn state(&self) -> &ClientSessionState {
         &self.state
+    }
+    /// Select the Hello offer before opening a connection; None retains released bytes.
+    pub fn set_frame_capabilities(
+        &mut self,
+        capabilities: Option<FrameCapabilities>,
+    ) -> Result<(), ClientError> {
+        if self.connection.is_some() {
+            return Err(ClientError::Protocol);
+        }
+        self.advertised_capabilities = capabilities;
+        Ok(())
     }
     /// Select replacement handling before receiving the server's close frame.
     pub fn set_connection_replaced_recovery(&mut self, recovery: ConnectionReplacedRecovery) {
@@ -238,6 +259,7 @@ impl<T: SessionTransport, S: SessionClientStore, P: ConsumerProtocol> SessionCli
         let hello: ClientFrame<P> = ClientFrame::Hello {
             session_id: self.state.session_id,
             schema_support: self.schema_support,
+            capabilities: self.advertised_capabilities,
         };
         let encoded = serde_json::to_vec(&hello).map_err(|_| ClientError::Encoding)?;
         if let Err(error) = connection.send(encoded.into()).await {
@@ -247,6 +269,7 @@ impl<T: SessionTransport, S: SessionClientStore, P: ConsumerProtocol> SessionCli
         }
         self.connection = Some(connection);
         self.welcomed = false;
+        self.negotiated_capabilities = None;
         // Welcome is received through the same pump as every other server frame.
         Ok(())
     }
@@ -259,6 +282,14 @@ impl<T: SessionTransport, S: SessionClientStore, P: ConsumerProtocol> SessionCli
     ) -> Result<(), ClientError> {
         if !self.welcomed {
             return Err(ClientError::NotConnected);
+        }
+        if matches!(body, OperationRequest::NoticesApplied { .. })
+            && !self
+                .negotiated_capabilities
+                .unwrap_or_default()
+                .notices_applied
+        {
+            return Err(ClientError::Protocol);
         }
         if self.pending.contains(&frame) {
             return Err(ClientError::FrameInFlight);
@@ -327,8 +358,14 @@ impl<T: SessionTransport, S: SessionClientStore, P: ConsumerProtocol> SessionCli
                 ServerFrame::Welcome {
                     session_id,
                     databases,
+                    capabilities,
                 } => {
-                    if session_id != self.state.session_id {
+                    if session_id != self.state.session_id
+                        || capabilities.is_some_and(|remote| {
+                            self.advertised_capabilities
+                                .is_none_or(|local| !local.contains(remote))
+                        })
+                    {
                         self.disconnected(Some(CloseReason::MalformedFrame), host)
                             .await?;
                         return Err(ClientError::Protocol);
@@ -336,15 +373,53 @@ impl<T: SessionTransport, S: SessionClientStore, P: ConsumerProtocol> SessionCli
                     self.attempt = 0;
                     self.retry_at = None;
                     self.welcomed = true;
+                    self.negotiated_capabilities = capabilities;
                     return Ok(ClientEvent::Welcome { databases });
                 }
                 ServerFrame::Answer { frame, body } => {
+                    if matches!(body, OperationAnswer::NoticesApplied { .. })
+                        && !self
+                            .negotiated_capabilities
+                            .unwrap_or_default()
+                            .notices_applied
+                    {
+                        self.disconnected(Some(CloseReason::MalformedFrame), host)
+                            .await?;
+                        return Err(ClientError::Protocol);
+                    }
                     if self.pending.remove(&frame) {
                         return Ok(ClientEvent::Answer { frame, body });
                     }
                 }
                 ServerFrame::Request { frame, body } => {
                     return Ok(ClientEvent::Request { frame, body });
+                }
+                ServerFrame::RequestBatch(batch) => {
+                    if !self.welcomed
+                        || !self.negotiated_capabilities.unwrap_or_default().batches
+                        || encoded.len() > MAX_BATCH_BYTES
+                    {
+                        self.disconnected(Some(CloseReason::MalformedFrame), host)
+                            .await?;
+                        return Err(ClientError::Protocol);
+                    }
+                    return Ok(ClientEvent::RequestBatch { batch });
+                }
+                ServerFrame::AnswerBatch(batch) => {
+                    let capabilities = self.negotiated_capabilities.unwrap_or_default();
+                    if !self.welcomed
+                        || !capabilities.batches
+                        || encoded.len() > MAX_BATCH_BYTES
+                        || batch.items().iter().any(|item| {
+                            matches!(item.body, OperationAnswer::NoticesApplied { .. })
+                                && !capabilities.notices_applied
+                        })
+                    {
+                        self.disconnected(Some(CloseReason::MalformedFrame), host)
+                            .await?;
+                        return Err(ClientError::Protocol);
+                    }
+                    return Ok(ClientEvent::AnswerBatch { batch });
                 }
                 ServerFrame::Notice { position, body } => {
                     if position > self.state.notice_cursor {

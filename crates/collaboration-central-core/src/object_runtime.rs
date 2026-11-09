@@ -17,6 +17,7 @@ pub(crate) enum ObjectWork<Host: ObjectHost, Io: PlatformIo> {
         config: fleet_project_lease::RegistryConfig,
         delivery: crate::DeliveryConfig,
         holder_answer_timeout: std::time::Duration,
+        honored_capabilities: fleet_protocol::FrameCapabilities,
     },
     Copy {
         host: Arc<Host>,

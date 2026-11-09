@@ -23,6 +23,7 @@ async fn hello(
     socket
         .send(
             serde_json::to_vec(&ClientFrame::<SampleProtocol>::Hello {
+                capabilities: None,
                 session_id: session,
                 schema_support: SchemaSupport {
                     max_version: maximum,
@@ -78,7 +79,8 @@ fn pending_connection(
     report: &ReportSchemaSupport,
 ) -> TestResult<ConnectionId> {
     snapshot.registrations.iter().find_map(|(connection, registration)| {
-        matches!(registration, ConnectionRegistration::Attaching { session_id, attach_seq, schema_support } if *session_id == report.session_id && *attach_seq == report.attach_seq && *schema_support == report.support).then_some(*connection)
+        matches!(registration, ConnectionRegistration::Attaching {
+ capabilities: None, session_id, attach_seq, schema_support } if *session_id == report.session_id && *attach_seq == report.attach_seq && *schema_support == report.support).then_some(*connection)
     }).ok_or_else(|| "matching Attaching registration missing".into())
 }
 
@@ -209,6 +211,7 @@ async fn finalization_rollback_discards_registration_welcome_and_local_step_then
             .any(|(current, registration)| *current == connection
                 && *registration
                     == ConnectionRegistration::Attached {
+                        capabilities: None,
                         session_id: session,
                         schema_support: SchemaSupport { max_version: 5 }
                     })

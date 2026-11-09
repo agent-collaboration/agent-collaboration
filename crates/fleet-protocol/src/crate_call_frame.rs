@@ -70,3 +70,17 @@ pub enum ClientAnswer<P: ConsumerProtocol = NoConsumer> {
     Crate(ServerCallAnswer<<P::Delivery as DeliveryTypes>::Acceptance>),
     Consumer(P::ClientAnswer),
 }
+
+impl<P: ConsumerProtocol> BatchRequest for ServerRequest<P> {
+    fn same_request_kind(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Crate(left), Self::Crate(right)) => {
+                std::mem::discriminant(left) == std::mem::discriminant(right)
+            }
+            (Self::Consumer(left), Self::Consumer(right)) => {
+                P::same_server_request_kind(left, right)
+            }
+            _ => false,
+        }
+    }
+}

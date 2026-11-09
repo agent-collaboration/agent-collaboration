@@ -120,6 +120,7 @@ async fn hello(
     id: SessionId,
 ) -> TestResult<ServerFrame<FixtureProtocol>> {
     let hello: ClientFrame<FixtureProtocol> = ClientFrame::Hello {
+        capabilities: None,
         session_id: id,
         schema_support: SchemaSupport { max_version: 1 },
     };
@@ -154,6 +155,7 @@ fn assert_welcome(
 ) {
     match frame {
         ServerFrame::Welcome {
+            capabilities: None,
             session_id,
             databases,
         } => {
@@ -360,6 +362,7 @@ async fn localhost_session_journey_uses_two_processes_and_real_websockets() -> T
     .await?;
     control(&mut admin, ControlRequest::FailNextWelcome).await?;
     let retry: ClientFrame<FixtureProtocol> = ClientFrame::Hello {
+        capabilities: None,
         session_id: original_id,
         schema_support: SchemaSupport { max_version: 1 },
     };

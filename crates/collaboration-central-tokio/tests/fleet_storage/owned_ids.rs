@@ -73,6 +73,7 @@ async fn injected_id_source_owns_the_repository_feed_state_and_feed_entry_ids() 
                 .try_into()?,
         },
         std::time::Duration::from_secs(2),
+        fleet_protocol::FrameCapabilities::default(),
     )?;
     let proof=async {
         runtime.on_call(import_bytes(&bundle()?)?).await.map_err(|error|format!("import did not answer: {error:?}"))?;

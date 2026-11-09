@@ -101,12 +101,18 @@ where
     for<'r> &'r str: ColumnIndex<<S::Database as Database>::Row>,
 {
     let report = &input.report;
+    let Some(ConnectionRegistration::Attaching { capabilities, .. }) =
+        scope.registration(&input.connection)
+    else {
+        return Ok(());
+    };
     if now >= input.expires_at
         || scope.registration(&input.connection)
             != Some(ConnectionRegistration::Attaching {
                 session_id: report.session_id,
                 schema_support: report.support,
                 attach_seq: report.attach_seq,
+                capabilities,
             })
     {
         return Ok(());
@@ -128,6 +134,7 @@ where
         ConnectionRegistration::Attached {
             session_id: report.session_id,
             schema_support: report.support,
+            capabilities,
         },
     );
     scope.welcome_after_commit(input.connection, report.peer, report.session_id);

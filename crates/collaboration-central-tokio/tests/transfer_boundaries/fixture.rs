@@ -186,6 +186,7 @@ impl Fixture {
         replacement
             .send(Message::Binary(
                 serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Hello {
+                    capabilities: None,
                     session_id,
                     schema_support: SchemaSupport {
                         max_version: maximum,
@@ -205,7 +206,8 @@ impl Fixture {
             Message::Text(text) => text.into_bytes(),
             _ => return Err("target schema support did not return Welcome data".into()),
         };
-        if !matches!(serde_json::from_slice::<ServerFrame<BoardConsumerProtocol>>(&bytes)?,ServerFrame::Welcome {session_id:actual,databases} if actual==session_id && databases.is_empty())
+        if !matches!(serde_json::from_slice::<ServerFrame<BoardConsumerProtocol>>(&bytes)?,ServerFrame::Welcome {
+ capabilities: None,session_id:actual,databases} if actual==session_id && databases.is_empty())
         {
             return Err("schema-support replacement lost exact empty target Welcome".into());
         }

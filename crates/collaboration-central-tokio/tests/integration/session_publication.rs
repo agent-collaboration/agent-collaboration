@@ -246,6 +246,7 @@ async fn hello_commits_attaching_before_engine_publication_then_welcomes_once()
     assert_eq!(
         fixture.host.registrations().await?.get(&binding.connection),
         Some(&ConnectionRegistration::Attached {
+            capabilities: None,
             session_id,
             schema_support: SchemaSupport { max_version: 7 }
         })

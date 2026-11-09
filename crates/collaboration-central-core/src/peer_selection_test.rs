@@ -56,6 +56,7 @@ impl ObjectHost for SelectionHost {
         Ok([(
             self.connection,
             ConnectionRegistration::Attached {
+                capabilities: None,
                 session_id: self.session,
                 schema_support: fleet_protocol::SchemaSupport { max_version: 7 },
             },

@@ -64,6 +64,7 @@ impl RunningTargetSession {
         socket
             .send(Message::Binary(
                 serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Hello {
+                    capabilities: None,
                     session_id,
                     schema_support: SchemaSupport { max_version: 10 },
                 })?
@@ -82,7 +83,8 @@ impl RunningTargetSession {
             _ => return Err("target missing-Copy Welcome was not data".into()),
         };
         if !matches!(serde_json::from_slice::<ServerFrame<BoardConsumerProtocol>>(&bytes)?,
-                ServerFrame::Welcome {session_id:actual,databases} if actual==session_id && databases.is_empty())
+                ServerFrame::Welcome {
+ capabilities: None,session_id:actual,databases} if actual==session_id && databases.is_empty())
         {
             return Err("target obtained a lease before missing-Copy recovery granted it".into());
         }

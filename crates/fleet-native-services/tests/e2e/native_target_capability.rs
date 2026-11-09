@@ -29,6 +29,7 @@ async fn claim_uses_the_targets_accepted_support_and_replays_its_frozen_refusal(
     target
         .send(
             serde_json::to_vec(&ClientFrame::<SampleProtocol>::Hello {
+                capabilities: None,
                 session_id: session,
                 schema_support: SchemaSupport { max_version: 0 },
             })?

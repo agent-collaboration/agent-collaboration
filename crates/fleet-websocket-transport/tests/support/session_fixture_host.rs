@@ -111,7 +111,16 @@ impl FixtureHost {
                 },
             ],
             RuleInput::Opened => connection_opened(&mut scope, &binding, now).await?,
-            RuleInput::Frame(frame) => frame_received(&mut scope, &binding, &frame, now).await?,
+            RuleInput::Frame(frame) => {
+                frame_received(
+                    &mut scope,
+                    &binding,
+                    &frame,
+                    now,
+                    fleet_protocol::FrameCapabilities::default(),
+                )
+                .await?
+            }
             RuleInput::Closed(cause) => connection_closed(&mut scope, &binding, cause, now).await?,
             RuleInput::Revoke => {
                 scope.state.revoked = true;
@@ -146,6 +155,11 @@ impl FixtureHost {
         let mut expanded = Vec::new();
         for effect in effects {
             match effect {
+                SessionEffect::RequestBatch { .. }
+                | SessionEffect::AnswerBatch { .. }
+                | SessionEffect::NoticesApplied { .. } => {
+                    return Err("legacy fixture received unnegotiated wire admission".into());
+                }
                 SessionEffect::Route {
                     frame,
                     operation: OperationRequest::Consumer(request),
@@ -233,6 +247,11 @@ impl FixtureHost {
     pub async fn dispatch(&self, effects: Vec<SessionEffect<FixtureProtocol>>) -> TestResult {
         for effect in effects {
             let (connection, command) = match effect {
+                SessionEffect::RequestBatch { .. }
+                | SessionEffect::AnswerBatch { .. }
+                | SessionEffect::NoticesApplied { .. } => {
+                    return Err("unexpanded fixture wire admission".into());
+                }
                 SessionEffect::Welcome {
                     connection,
                     peer,
@@ -241,6 +260,7 @@ impl FixtureHost {
                     let command = match self.gather_databases(peer).await {
                         Ok(databases) => SocketCommand::Send(
                             serde_json::to_vec(&ServerFrame::<FixtureProtocol>::Welcome {
+                                capabilities: None,
                                 session_id,
                                 databases,
                             })?

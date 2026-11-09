@@ -158,6 +158,11 @@ where
                 continue;
             }
             match effect {
+                SessionEffect::RequestBatch { .. }
+                | SessionEffect::AnswerBatch { .. }
+                | SessionEffect::NoticesApplied { .. } => {
+                    // D3 admits typed vocabulary only. D4 owns execution and replies.
+                }
                 SessionEffect::Route {
                     session,
                     frame,
@@ -375,6 +380,13 @@ where
         };
         for effect in effects {
             match effect {
+                fleet_session::SessionEffect::RequestBatch { .. }
+                | fleet_session::SessionEffect::AnswerBatch { .. }
+                | fleet_session::SessionEffect::NoticesApplied { .. } => {
+                    return Err(StoreError::Aborted {
+                        reason: "wire admission requires the frame entry point".into(),
+                    });
+                }
                 fleet_session::SessionEffect::Welcome {
                     connection,
                     peer,

@@ -6,6 +6,10 @@ const frameSchema = z.object({
   kind: z.enum(["welcome", "answer", "request", "notice", "closed"]),
   value: z.unknown(),
 });
+const clientFrameSchema = z.object({
+  kind: z.enum(["hello", "request", "answer"]),
+  value: z.unknown(),
+});
 // fleet-sync-protocol 7b69ca0: ServerFrame::Request -> ServerRequest::Crate -> ServerCall::Push.
 const crateRequestSchema = z.object({
   body: z.object({
@@ -38,6 +42,12 @@ export interface SessionSnapshot {
   readonly invalidConnections: number;
 }
 export class SessionAudit {
+  private readonly observeFrame: ((value: unknown) => void) | undefined;
+  private readonly direction: "server" | "client";
+  constructor(observeFrame?: (value: unknown) => void, direction: "server" | "client" = "server") {
+    this.observeFrame = observeFrame;
+    this.direction = direction;
+  }
   private connections = 0;
   private welcomes = 0;
   private invalidConnections = 0;
@@ -81,7 +91,13 @@ export class SessionAudit {
         if (state.pending.length > 65536) throw new Error("upgrade bound");
         return;
       }
-      if (!state.pending.subarray(0, boundary).toString("latin1").startsWith("HTTP/1.1 101 "))
+      const prefix = this.direction === "server" ? "HTTP/1.1 101 " : "GET /v1/session HTTP/1.1\r\n";
+      if (
+        !state.pending
+          .subarray(0, boundary + 2)
+          .toString("latin1")
+          .startsWith(prefix)
+      )
         throw new Error("upgrade absent");
       state.pending = state.pending.subarray(boundary + 4);
       state.upgradePending = false;
@@ -94,7 +110,9 @@ export class SessionAudit {
     if (state.pending.length < 2) return false;
     const first = state.pending.readUInt8(0),
       second = state.pending.readUInt8(1);
-    if ((first & 0x70) !== 0 || (second & 0x80) !== 0) throw new Error("server flags");
+    const masked = (second & 0x80) !== 0;
+    if ((first & 0x70) !== 0 || masked !== (this.direction === "client"))
+      throw new Error("frame flags");
     const opcode = first & 15,
       finished = (first & 128) !== 0;
     let length = second & 127,
@@ -111,8 +129,14 @@ export class SessionAudit {
       offset += width;
     }
     if (length > messageBound) throw new Error("frame bound");
+    const maskOffset = offset;
+    if (masked) offset += 4;
     if (state.pending.length < offset + length) return false;
-    const payload = state.pending.subarray(offset, offset + length);
+    const payload = Buffer.from(state.pending.subarray(offset, offset + length));
+    if (masked)
+      for (let index = 0; index < payload.length; index += 1)
+        payload[index] =
+          payload.readUInt8(index) ^ state.pending.readUInt8(maskOffset + (index % 4));
     state.pending = state.pending.subarray(offset + length);
     if ([8, 9, 10].includes(opcode)) {
       if (!finished || length > 125) throw new Error("control frame");
@@ -130,7 +154,8 @@ export class SessionAudit {
     return true;
   }
   private observe(value: unknown, state: FrameBuffer): void {
-    const message = frameSchema.parse(value);
+    const message = (this.direction === "server" ? frameSchema : clientFrameSchema).parse(value);
+    this.observeFrame?.(value);
     this.frames[message.kind] = (this.frames[message.kind] ?? 0) + 1;
     if (message.kind === "welcome") {
       this.welcomes += 1;

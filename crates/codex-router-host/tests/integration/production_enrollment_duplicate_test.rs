@@ -36,6 +36,7 @@ async fn newer_live_session_is_retained_as_refused_by_host_and_installation_stat
             replacement
                 .send(
                     serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Hello {
+                        capabilities: None,
                         session_id,
                         schema_support: SchemaSupport { max_version },
                     })?

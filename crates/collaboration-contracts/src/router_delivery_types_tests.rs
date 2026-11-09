@@ -9,6 +9,135 @@ use serde_json::json;
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 #[test]
+fn board_and_router_consumers_preserve_typed_request_kinds_in_batches() -> TestResult {
+    check_consumer_batch_kinds::<BoardConsumerProtocol>()?;
+    check_consumer_batch_kinds::<RouterConsumerProtocol>()
+}
+
+fn check_consumer_batch_kinds<P>() -> TestResult
+where
+    P: ConsumerProtocol<
+            Request = board_sync_protocol::BoardConsumerRequest,
+            ServerRequest = board_sync_protocol::BoardServerRequest,
+        >,
+{
+    use board_sync_protocol::{
+        BoardConsumerRequest, BoardPayload, BoardReadScope, BoardServerRequest, ForwardedPost,
+        ForwardedPostKind, VerifiedForwardedPost,
+    };
+    use fleet_protocol::{
+        BatchItem, BatchValidationError, FrameId, OperationRequest, RequestBatch, ServerRequest,
+    };
+    let read = |scope| BoardConsumerRequest::Read {
+        scope,
+        cursor: None,
+    };
+    let post = |kind, text| -> Result<ForwardedPost, serde_json::Error> {
+        Ok(ForwardedPost {
+            kind,
+            body: BoardPayload::encode(&text)?,
+        })
+    };
+    let project = || message_board::ProjectId::try_from(uuid::Uuid::now_v7().to_string());
+    let request_cases = [
+        (
+            read(BoardReadScope::Notices),
+            read(BoardReadScope::Notices),
+            true,
+        ),
+        (
+            read(BoardReadScope::Notices),
+            read(BoardReadScope::FleetRecords),
+            false,
+        ),
+        (
+            read(BoardReadScope::Notices),
+            BoardConsumerRequest::ForwardedPost {
+                project: project()?,
+                post: post(
+                    ForwardedPostKind::ThreadPost,
+                    "different consumer operation",
+                )?,
+            },
+            false,
+        ),
+        (
+            BoardConsumerRequest::ForwardedPost {
+                project: project()?,
+                post: post(ForwardedPostKind::ThreadCreate, "one")?,
+            },
+            BoardConsumerRequest::ForwardedPost {
+                project: project()?,
+                post: post(ForwardedPostKind::ThreadCreate, "two")?,
+            },
+            true,
+        ),
+        (
+            BoardConsumerRequest::ForwardedPost {
+                project: project()?,
+                post: post(ForwardedPostKind::ThreadCreate, "one")?,
+            },
+            BoardConsumerRequest::ForwardedPost {
+                project: project()?,
+                post: post(ForwardedPostKind::ThreadPost, "two")?,
+            },
+            false,
+        ),
+    ];
+    for (left, right, same_kind) in request_cases {
+        let batch = RequestBatch::new(vec![
+            BatchItem {
+                send_id: FrameId::new(uuid::Uuid::now_v7())?,
+                body: OperationRequest::<P>::Consumer(left),
+            },
+            BatchItem {
+                send_id: FrameId::new(uuid::Uuid::now_v7())?,
+                body: OperationRequest::<P>::Consumer(right),
+            },
+        ]);
+        if batch.is_ok() != same_kind
+            || (!same_kind && !matches!(batch, Err(BatchValidationError::MixedRequestKinds)))
+        {
+            return Err("consumer request batch lost its typed operation boundary".into());
+        }
+    }
+    let forwarded = |kind, text| -> Result<BoardServerRequest, Box<dyn std::error::Error>> {
+        Ok(BoardServerRequest::ForwardedPost(VerifiedForwardedPost {
+            project: project()?,
+            origin: message_board::ActorOrigin {
+                installation: uuid::Uuid::now_v7().to_string().try_into()?,
+                machine: "consumer kind fixture".to_owned().try_into()?,
+            },
+            post: post(kind, text)?,
+        }))
+    };
+    for (right_kind, same_kind) in [
+        (ForwardedPostKind::ThreadCreate, true),
+        (ForwardedPostKind::ThreadPost, false),
+    ] {
+        let batch = RequestBatch::new(vec![
+            BatchItem {
+                send_id: FrameId::new(uuid::Uuid::now_v7())?,
+                body: ServerRequest::<P>::Consumer(forwarded(
+                    ForwardedPostKind::ThreadCreate,
+                    "one",
+                )?),
+            },
+            BatchItem {
+                send_id: FrameId::new(uuid::Uuid::now_v7())?,
+                body: ServerRequest::<P>::Consumer(forwarded(right_kind, "two")?),
+            },
+        ]);
+        if batch.is_ok() != same_kind
+            || (!same_kind && !matches!(batch, Err(BatchValidationError::MixedRequestKinds)))
+        {
+            return Err("consumer server batch lost its typed post boundary".into());
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn shared_and_router_items_and_cancels_have_identical_wire_bytes_and_digests() -> TestResult {
     let id = ItemId::new(uuid::Uuid::now_v7())?;
     let sender = serde_json::from_value(json!({

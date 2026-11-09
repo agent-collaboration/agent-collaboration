@@ -127,6 +127,7 @@ async fn publish_before_welcome(socket: WebSocket, item: ItemId) -> TestResult {
     socket
         .send(
             serde_json::to_vec(&ServerFrame::<SampleProtocol>::Welcome {
+                capabilities: None,
                 session_id,
                 databases: Vec::new(),
             })?

@@ -171,6 +171,7 @@ impl<
                     state: Arc::downgrade(&state),
                 }),
                 state.options.socket_timeout,
+                fleet_protocol::FrameCapabilities::default(),
             )
             .await
             .map_err(ServiceError::rule)?,
