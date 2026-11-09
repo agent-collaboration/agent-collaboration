@@ -50,7 +50,7 @@ async function requireNotice(
   input: OfflineNoticeInput,
   attached: AttachedReader,
   transportPosition: bigint,
-  event: D4EventRecord,
+  expectedEvent?: D4EventRecord,
 ): Promise<void> {
   await attached.reader.connection.receive(
     (frame) =>
@@ -74,6 +74,18 @@ async function requireNotice(
   assert.ok(attached.hello.event.kind === "frame");
   const connection = attached.hello.event.connection;
   const bytes = Buffer.from(original.payload).toString("base64");
+  // Admission may deliver catch-up in a following Alarm. Bind the actual
+  // completed send on this new Hello's connection instead of assigning its cause.
+  const candidates =
+    expectedEvent === undefined
+      ? (await input.controls.readEvents(0n)).records.map((record) => record.record)
+      : [expectedEvent];
+  const matching = candidates.filter((event) =>
+    event.sends.some((send) => send.connection === connection && send.frame === bytes),
+  );
+  assert.equal(matching.length, 1, "notice needs exactly one completed source event");
+  const event = matching[0];
+  assert.ok(event);
   assert.equal(
     event.sends.filter((send) => send.connection === connection && send.frame === bytes).length,
     1,
@@ -162,7 +174,7 @@ async function observeRearmed(
   input: OfflineNoticeInput,
   attached: AttachedReader,
 ): Promise<bigint> {
-  await requireNotice(input, attached, 1n, attached.hello);
+  await requireNotice(input, attached, 1n);
   const row = noticeAttempt(await snapshot(input, "reconnected"), input.reader.peer);
   const deadline = attached.hello.exitedAt + 30_000n;
   assert.equal(row.state, "waiting");
