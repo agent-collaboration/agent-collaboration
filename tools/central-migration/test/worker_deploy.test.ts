@@ -249,11 +249,16 @@ test("a dry run checks the inventory and runs cf's own dry run, and never upload
   };
 
   // Act
-  const outcome = await deployWorker("migration", SETTINGS, cf, {
-    dryRun: true,
-    tag: "t",
-    message: "m",
-  });
+  const outcome = await deployWorker(
+    "migration",
+    SETTINGS,
+    { inventory: cf, deploy: cf },
+    {
+      dryRun: true,
+      tag: "t",
+      message: "m",
+    },
+  );
 
   // Assert: nothing uploaded, and the planned diff keeps all five namespaces by id.
   assert.equal(outcome.after, null);
@@ -271,7 +276,12 @@ test("a dry run checks the inventory and runs cf's own dry run, and never upload
 test("an inventory in an unknown shape is refused, not read as empty", async () => {
   const cf: CfRunner = async () => JSON.stringify({ success: false, errors: [] });
   await assert.rejects(
-    deployWorker("old-central", SETTINGS, cf, { dryRun: true, tag: "t", message: "m" }),
+    deployWorker(
+      "old-central",
+      SETTINGS,
+      { inventory: cf, deploy: cf },
+      { dryRun: true, tag: "t", message: "m" },
+    ),
     refusedWith(/unknown shape/),
   );
 });
@@ -304,13 +314,18 @@ test("the real runner renders private files, uploads through cf once, and checks
       artifact,
       scratch,
       cf: join(import.meta.dirname, "support/fake_cf.mjs"),
+      inventoryCf: join(import.meta.dirname, "support/fake_cf.mjs"),
       dryRun: false,
     });
 
-    // Assert: one real deploy between the two inventories; every file private.
-    const log = (JSON.parse(await readFile(statePath, "utf8")) as { log: string[][] }).log.map(
-      (call) => call[0],
-    );
+    // Assert: one real deploy between the two inventories, every cf call scoped
+    // to the settings' account, and every file private.
+    const state = JSON.parse(await readFile(statePath, "utf8")) as {
+      log: string[][];
+      accounts: (string | null)[];
+    };
+    assert.deepEqual(new Set(state.accounts), new Set([SETTINGS.accountId]));
+    const log = state.log.map((call) => call[0]);
     assert.equal(log.filter((call) => call === "deploy").length, 1);
     assert.ok(
       log.indexOf("deploy") > 0 && log.lastIndexOf("durable-objects") > log.indexOf("deploy"),
@@ -334,6 +349,41 @@ test("the real runner renders private files, uploads through cf once, and checks
   }
 });
 
+test("the runner refuses an account cf of another release before reading the inventory", async () => {
+  const root = await mkdtemp(join(tmpdir(), "2026-11-worker-deploy-"));
+  try {
+    // Arrange: an account cf that reports another version.
+    const artifact = join(root, "build");
+    await mkdir(artifact);
+    await writeFile(join(artifact, "worker.js"), "export default {};\n");
+    const statePath = join(root, "cf-state.json");
+    await writeFile(statePath, JSON.stringify({ log: [], deployed: false }));
+    process.env.FAKE_CF_STATE = statePath;
+    process.env.FAKE_CF_VERSION = "1.0.0-beta.17";
+
+    // Act
+    const refused = await guardedRun({
+      kind: "migration",
+      settings: SETTINGS,
+      config: renderConfig("migration", SETTINGS),
+      artifact,
+      scratch: join(root, "scratch"),
+      cf: join(import.meta.dirname, "support/fake_cf.mjs"),
+      inventoryCf: join(import.meta.dirname, "support/fake_cf.mjs"),
+      dryRun: true,
+    }).catch((error: unknown) => error);
+
+    // Assert: refused after only the version call.
+    assert.ok(refused instanceof DeployRefused, String(refused));
+    const { log } = JSON.parse(await readFile(statePath, "utf8")) as { log: string[][] };
+    assert.deepEqual(log, [["--version"]]);
+  } finally {
+    delete process.env.FAKE_CF_STATE;
+    delete process.env.FAKE_CF_VERSION;
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("the runner refuses a cf token environment; cf must use the owner's login", async () => {
   process.env.CLOUDFLARE_API_TOKEN = "x";
   try {
@@ -345,6 +395,7 @@ test("the runner refuses a cf token environment; cf must use the owner's login",
         artifact: "/nonexistent",
         scratch: "/nonexistent-scratch",
         cf: "cf",
+        inventoryCf: "cf",
         dryRun: true,
       }),
       /CLOUDFLARE_API_TOKEN is set/,

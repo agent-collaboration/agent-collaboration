@@ -10,6 +10,11 @@
 // any call that reaches Cloudflare, that cf builds the scratch offline, so its
 // own config loader accepts or refuses the render; the deploy then uploads
 // exactly that build output (`--prebuilt`).
+//
+// The account inventory (namespaces, Worker scripts, Workers custom domains)
+// is read with the account cf, ACCOUNT_CF_VERSION: the pinned cf has no Workers
+// custom-domain listing. It reads only; it never sees the config. Every cf
+// call carries the settings' account id, so no check reads another account.
 
 import { execFile } from "node:child_process";
 import { cp, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
@@ -33,6 +38,8 @@ const PACKAGE_ROOT = resolve(import.meta.dirname, "..");
 const TOOL_MODULES = join(PACKAGE_ROOT, "node_modules");
 /** The pinned cf binary every deploy runs. */
 export const PINNED_CF = join(TOOL_MODULES, ".bin", "cf");
+/** The account cf release the inventory reads are written against. */
+export const ACCOUNT_CF_VERSION = "0.11.0";
 /** Where cf writes the build it checked; `deploy --prebuilt` uploads this. */
 const BUILT_WORKER = ".cloudflare/output/v0/workers/default/worker.config.json";
 
@@ -121,8 +128,10 @@ export interface GuardedRun {
   readonly artifact: string;
   /** Must not exist yet; created with mode 0700. */
   readonly scratch: string;
-  /** The cf that talks to Cloudflare: PINNED_CF; tests pass a stand-in. */
+  /** The cf that uploads: PINNED_CF; tests pass a stand-in. */
   readonly cf: string;
+  /** The cf that reads the account inventory: the account cf on PATH; tests pass a stand-in. */
+  readonly inventoryCf: string;
   readonly dryRun: boolean;
 }
 
@@ -136,25 +145,41 @@ export async function guardedRun(options: GuardedRun): Promise<DeployOutcome> {
   const built = await buildWithPinnedCf(scratch);
   if (built.name !== options.config.worker.name)
     throw new DeployRefused(`cf built ${String(built.name)}, not ${options.config.worker.name}`);
-  const cf: CfRunner = async (args, label) => {
-    try {
-      const { stdout, stderr } = await run(options.cf, [...args], {
-        cwd: scratch,
-        maxBuffer: 64 * 1024 * 1024,
-      });
-      await keepOutput(scratch, label, stdout, stderr);
-      return stdout;
-    } catch (error) {
-      const failed = error as { stdout?: string; stderr?: string };
-      await keepOutput(scratch, label, failed.stdout ?? "", failed.stderr ?? "");
-      throw new Error(`cf ${label} failed; read only the private logs in ${scratch}`);
-    }
-  };
-  const outcome = await deployWorker(options.kind, options.settings, cf, {
-    dryRun: options.dryRun,
-    tag: `s1-${options.kind}`,
-    message: `${options.kind} deploy from tools/central-migration`,
-  });
+  const environment = { ...process.env, CLOUDFLARE_ACCOUNT_ID: options.settings.accountId };
+  const runner =
+    (binary: string): CfRunner =>
+    async (args, label) => {
+      try {
+        const { stdout, stderr } = await run(binary, [...args], {
+          cwd: scratch,
+          env: environment,
+          maxBuffer: 64 * 1024 * 1024,
+        });
+        await keepOutput(scratch, label, stdout, stderr);
+        return stdout;
+      } catch (error) {
+        const failed = error as { stdout?: string; stderr?: string };
+        await keepOutput(scratch, label, failed.stdout ?? "", failed.stderr ?? "");
+        throw new Error(`cf ${label} failed; read only the private logs in ${scratch}`);
+      }
+    };
+  const inventory = runner(options.inventoryCf);
+  const version = await inventory(["--version"], "inventory-cf-version");
+  if (!version.includes(`v${ACCOUNT_CF_VERSION}`) && version.trim() !== ACCOUNT_CF_VERSION) {
+    throw new DeployRefused(
+      `the account cf isn't ${ACCOUNT_CF_VERSION}; its inventory commands differ`,
+    );
+  }
+  const outcome = await deployWorker(
+    options.kind,
+    options.settings,
+    { inventory, deploy: runner(options.cf) },
+    {
+      dryRun: options.dryRun,
+      tag: `s1-${options.kind}`,
+      message: `${options.kind} deploy from tools/central-migration`,
+    },
+  );
   await writeFile(join(scratch, "outcome.json"), JSON.stringify(outcome, null, 2), { mode: 0o600 });
   return outcome;
 }

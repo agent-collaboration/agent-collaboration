@@ -37,6 +37,7 @@ try {
     artifact,
     scratch,
     cf: PINNED_CF,
+    inventoryCf: "cf",
     dryRun: flags.includes("--dry-run"),
   });
   console.log(

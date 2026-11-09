@@ -249,8 +249,17 @@ export function checkAfter(
     refuse(`hostname ${settings.hostname} isn't bound to ${worker} after deploy`);
 }
 
-/** The cf CLI, run in the private scratch directory; returns stdout. */
+/** One cf CLI, run in the private scratch directory; returns stdout. */
 export type CfRunner = (args: readonly string[], label: string) => Promise<string>;
+/**
+ * The two cf roles: `inventory` reads the account (Durable Object namespaces,
+ * Worker scripts, Workers custom domains) and `deploy` uploads the build the
+ * pinned cf checked. They are different releases (deploy_run.ts).
+ */
+export interface CfRunners {
+  readonly inventory: CfRunner;
+  readonly deploy: CfRunner;
+}
 
 /** cf answers a list either as an array or as {success, result} (fleet-ops deploy guard). */
 export function rows(text: string): Record<string, unknown>[] {
@@ -358,18 +367,21 @@ export function plannedChange(kind: WorkerKind): string {
 export async function deployWorker(
   kind: WorkerKind,
   settings: DeploySettings,
-  cf: CfRunner,
+  cf: CfRunners,
   options: { readonly dryRun: boolean; readonly tag: string; readonly message: string },
 ): Promise<DeployOutcome> {
-  const before = await takeInventory(cf, settings, "before");
+  const before = await takeInventory(cf.inventory, settings, "before");
   checkBefore(kind, settings, before);
   const namespaces = planNamespaces(kind, settings, before);
   if (options.dryRun) {
-    await cf(["deploy", "--dry-run", "--prebuilt"], "deploy-dry-run");
+    await cf.deploy(["deploy", "--dry-run", "--prebuilt"], "deploy-dry-run");
     return { kind, dryRun: true, before, after: null, planned: plannedChange(kind), namespaces };
   }
-  await cf(["deploy", "--prebuilt", "--tag", options.tag, "--message", options.message], "deploy");
-  const after = await takeInventory(cf, settings, "after");
+  await cf.deploy(
+    ["deploy", "--prebuilt", "--tag", options.tag, "--message", options.message],
+    "deploy",
+  );
+  const after = await takeInventory(cf.inventory, settings, "after");
   checkAfter(kind, settings, before, after);
   return { kind, dryRun: false, before, after, planned: plannedChange(kind), namespaces };
 }

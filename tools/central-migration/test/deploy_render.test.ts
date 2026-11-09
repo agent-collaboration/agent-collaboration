@@ -142,6 +142,7 @@ test("a render the pinned cf refuses stops the guarded run before any call to Cl
       artifact: await artifactFor("migration", root),
       scratch: join(root, "scratch"),
       cf: join(import.meta.dirname, "support/fake_cf.mjs"),
+      inventoryCf: join(import.meta.dirname, "support/fake_cf.mjs"),
       dryRun: true,
     }).catch((error: unknown) => error);
 
