@@ -6,8 +6,9 @@
 // Every statement an object runs is counted with Cloudflare's rowsWritten, so
 // the report can prove a read or a refused run wrote nothing.
 
+import { exactInteger, stringifyExact } from "./exact_json.ts";
 import { readObjectInventory, readRegistryProjects } from "./object_inventory.ts";
-import type { DurableObjectState, SqlRow, SqlStorage, SqlValue } from "./platform.ts";
+import type { DurableObjectState, SqlStorage, SqlValue } from "./platform.ts";
 
 /** Internal object routes, under a host no client can reach. */
 const INTERNAL = "https://central-migration.internal";
@@ -34,8 +35,11 @@ export interface Statement {
 export interface ReadRequest {
   readonly tables: readonly string[];
 }
-/** A stored value as it travels: a BLOB becomes its lowercase hex. */
-export type ReadValue = string | number | null | { readonly blob: string };
+/**
+ * A stored value as it travels, keeping its SQLite type: TEXT a string, REAL a
+ * number, INTEGER an exact integer (a bigint beyond 2^53), BLOB its lowercase hex.
+ */
+export type ReadValue = string | number | bigint | null | { readonly blob: string };
 export type ReadRow = Readonly<Record<string, ReadValue>>;
 
 export interface ReadReply {
@@ -66,25 +70,10 @@ export type RevertReply =
   | { readonly kind: "notMigrated"; readonly rowsWritten: 0 };
 
 const json = (value: unknown, status = 200): Response =>
-  new Response(JSON.stringify(value), {
+  new Response(stringifyExact(value), {
     status,
     headers: { "content-type": "application/json" },
   });
-
-function encodeRow(row: SqlRow): ReadRow {
-  const encoded: Record<string, ReadValue> = {};
-  for (const [column, value] of Object.entries(row)) {
-    encoded[column] =
-      value instanceof ArrayBuffer
-        ? {
-            blob: Array.from(new Uint8Array(value), (byte) =>
-              byte.toString(16).padStart(2, "0"),
-            ).join(""),
-          }
-        : value;
-  }
-  return encoded;
-}
 
 const quoted = (name: string): string => `"${name.replaceAll('"', '""')}"`;
 
@@ -95,6 +84,42 @@ function tableNames(sql: SqlStorage): string[] {
     )
     .toArray()
     .map((row) => row.name);
+}
+
+const hexOf = (value: ArrayBuffer): string =>
+  Array.from(new Uint8Array(value), (byte) => byte.toString(16).padStart(2, "0")).join("");
+
+/**
+ * Every row of a table with each value's exact stored type. SQLite's own
+ * `SELECT *` hands an INTEGER over as a JavaScript number, which rounds above
+ * 2^53, so integers are read as their decimal text instead.
+ */
+function exactRows(sql: SqlStorage, table: string): { rows: ReadRow[]; rowsWritten: number } {
+  const columns = sql
+    .exec<{ name: string }>("SELECT name FROM pragma_table_info(?) ORDER BY cid", table)
+    .toArray()
+    .map((column) => column.name);
+  const select = columns
+    .map((column, index) => {
+      const name = quoted(column);
+      return `typeof(${name}) AS "t${index}", CASE typeof(${name}) WHEN 'integer' THEN CAST(${name} AS TEXT) ELSE ${name} END AS "v${index}"`;
+    })
+    .join(", ");
+  const cursor = sql.exec(`SELECT ${select} FROM ${quoted(table)} ORDER BY rowid`);
+  const rows = cursor.toArray().map((stored) => {
+    const row: Record<string, ReadValue> = {};
+    columns.forEach((column, index) => {
+      const value = stored[`v${index}`];
+      row[column] =
+        stored[`t${index}`] === "integer"
+          ? exactInteger(String(value))
+          : value instanceof ArrayBuffer
+            ? { blob: hexOf(value) }
+            : (value as string | number | null);
+    });
+    return row;
+  });
+  return { rows, rowsWritten: (cursor as unknown as { rowsWritten: number }).rowsWritten };
 }
 
 function run(sql: SqlStorage, statement: Statement): number {
@@ -136,9 +161,9 @@ abstract class MigrationStorageObject {
     let rowsWritten = 0;
     for (const table of request.tables) {
       if (!tables.includes(table)) continue;
-      const cursor = sql.exec(`SELECT * FROM ${quoted(table)} ORDER BY rowid`);
-      rows[table] = cursor.toArray().map(encodeRow);
-      rowsWritten += (cursor as unknown as { rowsWritten: number }).rowsWritten;
+      const read = exactRows(sql, table);
+      rows[table] = read.rows;
+      rowsWritten += read.rowsWritten;
     }
     return { tables, rows, rowsWritten };
   }
@@ -147,13 +172,13 @@ abstract class MigrationStorageObject {
     const schemaCursor = sql.exec(
       "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE '_cf_%' AND name NOT LIKE 'sqlite_%' ORDER BY type, name",
     );
-    const schema = schemaCursor.toArray().map(encodeRow);
+    const schema = schemaCursor.toArray() as ReadRow[];
     let rowsWritten = (schemaCursor as unknown as { rowsWritten: number }).rowsWritten;
     const rows: Record<string, ReadRow[]> = {};
     for (const table of tableNames(sql)) {
-      const cursor = sql.exec(`SELECT * FROM ${quoted(table)} ORDER BY rowid`);
-      rows[table] = cursor.toArray().map(encodeRow);
-      rowsWritten += (cursor as unknown as { rowsWritten: number }).rowsWritten;
+      const read = exactRows(sql, table);
+      rows[table] = read.rows;
+      rowsWritten += read.rowsWritten;
     }
     return { schema, rows, rowsWritten };
   }

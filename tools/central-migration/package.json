@@ -8,8 +8,9 @@
     "lint": "oxlint --deny-warnings .",
     "format": "oxfmt src/*.ts test scripts *.ts",
     "format:check": "oxfmt --check src/*.ts test scripts *.ts",
-    "test": "pnpm run build && pnpm run build:test-support && node --test \"test/**/*.test.ts\"",
-    "build:test-support": "tsc -p tsconfig.test-build.json"
+    "test": "pnpm run build && pnpm run build:test-support && node --test \"test/*.test.ts\"",
+    "build:test-support": "tsc -p tsconfig.test-build.json",
+    "test:main-central": "pnpm run build && pnpm run build:test-support && node --test \"test/main_central/*.test.ts\""
   },
   "devDependencies": {
     "@types/node": "26.6.5",

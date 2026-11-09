@@ -3,9 +3,13 @@
   "compilerOptions": {
     "noEmit": false,
     "outDir": "build-test",
-    "rootDir": "test/support",
+    "rootDir": ".",
     "types": [],
-    "rewriteRelativeImportExtensions": true
+    "rewriteRelativeImportExtensions": true,
+    "allowImportingTsExtensions": true
   },
-  "include": ["test/support/old_central_stand_in.ts"]
+  "include": [
+    "test/support/old_central_stand_in.ts",
+    "test/support/interrupted_migration_worker.ts"
+  ]
 }

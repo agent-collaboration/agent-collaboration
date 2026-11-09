@@ -3,6 +3,10 @@
 // the migration Worker then opens (Miniflare keeps it under one persistence
 // path, as Cloudflare keeps it under one Worker name). It runs SQL it is given
 // and dumps every table, so a test can compare storage before and after.
+// The dump keeps each value's exact type: integers as exact JSON numbers (a
+// bigint beyond 2^53), BLOBs as hex, so a rounded counter can't compare equal.
+
+import { exactInteger, stringifyExact } from "../../src/exact_json.ts";
 
 interface SqlStorage {
   exec(query: string, ...bindings: unknown[]): { toArray(): Record<string, unknown>[] };
@@ -40,25 +44,42 @@ class OldCentralObject {
       for (const table of tables) {
         const kind = sql.exec("SELECT type FROM sqlite_schema WHERE name = ?", table).toArray();
         if (kind[0]?.type !== "table") continue;
-        rows[table] = sql
-          .exec(`SELECT * FROM "${table}" ORDER BY rowid`)
+        const columns = sql
+          .exec("SELECT name FROM pragma_table_info(?) ORDER BY cid", table)
           .toArray()
-          .map((row) =>
+          .map((column) => String(column.name));
+        const select = columns
+          .map(
+            (column, index) =>
+              `typeof("${column}") AS "t${index}", CASE typeof("${column}") WHEN 'integer' THEN CAST("${column}" AS TEXT) ELSE "${column}" END AS "v${index}"`,
+          )
+          .join(", ");
+        rows[table] = sql
+          .exec(`SELECT ${select} FROM "${table}" ORDER BY rowid`)
+          .toArray()
+          .map((stored) =>
             Object.fromEntries(
-              Object.entries(row).map(([column, value]) => [
-                column,
-                value instanceof ArrayBuffer
-                  ? {
-                      blob: Array.from(new Uint8Array(value), (byte) =>
-                        byte.toString(16).padStart(2, "0"),
-                      ).join(""),
-                    }
-                  : value,
-              ]),
+              columns.map((column, index) => {
+                const value = stored[`v${index}`];
+                return [
+                  column,
+                  stored[`t${index}`] === "integer"
+                    ? exactInteger(String(value))
+                    : value instanceof ArrayBuffer
+                      ? {
+                          blob: Array.from(new Uint8Array(value), (byte) =>
+                            byte.toString(16).padStart(2, "0"),
+                          ).join(""),
+                        }
+                      : value,
+                ];
+              }),
             ),
           );
       }
-      return Response.json({ schema, rows });
+      return new Response(stringifyExact({ schema, rows }), {
+        headers: { "content-type": "application/json" },
+      });
     }
     return new Response("unknown", { status: 404 });
   }

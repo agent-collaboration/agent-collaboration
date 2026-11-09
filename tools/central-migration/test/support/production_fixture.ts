@@ -6,8 +6,9 @@
 // contradiction.
 
 import { createHash } from "node:crypto";
+import { parseExact } from "../../src/exact_json.ts";
 import { SCHEMA_SOURCES } from "../../src/generated/schema_sources.ts";
-import type { startWorker } from "./workerd_harness.ts";
+import { RECEIVER, type startWorker } from "./workerd_harness.ts";
 
 type Runtime = Awaited<ReturnType<typeof startWorker>>;
 
@@ -26,6 +27,14 @@ export const IDS = {
   attachment: "01a1c070-0000-7000-8000-0000000000e5",
   feedState: "01a1c070-0000-7000-8000-0000000000e6",
   operation: "01a1c070-0000-7000-8000-0000000000e7",
+  registration: "01a1c070-0000-7000-8000-0000000000d1",
+  renewal: "01a1c070-0000-7000-8000-0000000000d2",
+  move: "01a1c070-0000-7000-8000-0000000000d3",
+  moveOperation: "01a1c070-0000-7000-8000-0000000000d4",
+  cancelledMove: "01a1c070-0000-7000-8000-0000000000d5",
+  cancelledOperation: "01a1c070-0000-7000-8000-0000000000d6",
+  preview: "01a1c070-0000-7000-8000-0000000000d7",
+  session: "01a1c070-0000-7000-8000-0000000000d8",
 } as const;
 export const PROJECTS = [IDS.projectHeld3, IDS.projectHeld1, IDS.projectRetired] as const;
 
@@ -67,6 +76,62 @@ export interface ProductionSeed {
   /** Retiring classes, keyed by Router installation (O object_location.rs:6,8). */
   connections: Record<string, string[]>;
   mailboxes: Record<string, string[]>;
+  /** S2's facts from each holder Mac's retained file, as migrate's request carries them. */
+  macFiles: {
+    database: string;
+    holder: string;
+    lease: number | bigint;
+    senderReceiver: string;
+    retained: {
+      floor: { epoch: number; sequence: number };
+      head: { epoch: number; sequence: number };
+    };
+  }[];
+}
+
+/**
+ * One valid row in every other lease table, as the old library wrote them
+ * (serde JSON of registry_records.rs and fleet-sync-protocol): the held-at-one
+ * project's registration and a renewal, the held-at-three project's completed
+ * move from lease 2 to Sunclaw, a cancelled move with its cancel record, a
+ * takeover preview, and a schema-support report.
+ */
+function leaseHistory(): string[] {
+  const json = (value: unknown) => quote(JSON.stringify(value));
+  const leaseStatus = {
+    database: IDS.projectHeld1,
+    epoch: 1,
+    holder: IDS.machineA,
+    state: "held",
+    expiresAt: 1_794_240_000_000,
+    remainingMs: 14_400_000,
+  };
+  const moveHistory = [
+    { phase: { phase: "requested" }, enteredAt: 1_794_000_000_000 },
+    { phase: { phase: "releasing" }, enteredAt: 1_794_000_001_000 },
+    {
+      phase: { phase: "released", finalPosition: { epoch: 2, sequence: 20 } },
+      enteredAt: 1_794_000_002_000,
+    },
+    { phase: { phase: "fencing" }, enteredAt: 1_794_000_003_000 },
+    { phase: { phase: "ended" }, enteredAt: 1_794_000_004_000 },
+  ];
+  const cancelledHistory = [
+    { phase: { phase: "requested" }, enteredAt: 1_794_100_000_000 },
+    { phase: { phase: "cancelling" }, enteredAt: 1_794_100_001_000 },
+    { phase: { phase: "ended" }, enteredAt: 1_794_100_002_000 },
+  ];
+  return [
+    `INSERT INTO _fleet_sync_lifecycle_attempts VALUES (${quote(IDS.registration)},${quote(IDS.projectHeld1)},${json({ kind: "register", request: { attempt: IDS.registration, database: IDS.projectHeld1, writer: IDS.machineA, origin: { kind: "empty" } } })},${json({ kind: "registration", answer: { kind: "registered", value: { lease: leaseStatus, replayed: false } } })})`,
+    `INSERT INTO _fleet_sync_renewal_attempts VALUES (${quote(IDS.projectHeld1)},${quote(IDS.renewal)},${json({ request: { attempt: IDS.renewal, database: IDS.projectHeld1, epoch: 1 }, holder: IDS.machineA, answer: { kind: "renewed", value: { recorded: { epoch: 1, expiresAt: 1_794_240_000_000 }, current: leaseStatus, transferInProgress: null, replayed: false } } })})`,
+    `INSERT INTO _fleet_sync_transfer_admissions(attempt,operation,request,requested_by,admitted_at,follow_up,target_schema) VALUES (${quote(IDS.move)},${json(IDS.moveOperation)},${json({ kind: "move", value: { attempt: IDS.move, database: IDS.projectHeld3, fromEpoch: 2, to: IDS.machineB, reason: "moving to Sunclaw" } })},${json("shravan")},'1794000000000',NULL,'null')`,
+    `INSERT INTO _fleet_sync_transfers(attempt,database,intent,outcome,phase,phase_history,cleanup_failed) VALUES (${quote(IDS.move)},${quote(IDS.projectHeld3)},'3',${json({ kind: "granted", value: { epoch: 3, expiresAt: 1_794_014_400_000, start: { epoch: 2, sequence: 20 } } })},${json({ phase: "ended" })},${json(moveHistory)},NULL)`,
+    `INSERT INTO _fleet_sync_transfer_admissions(attempt,operation,request,requested_by,admitted_at,follow_up,target_schema) VALUES (${quote(IDS.cancelledMove)},${json(IDS.cancelledOperation)},${json({ kind: "move", value: { attempt: IDS.cancelledMove, database: IDS.projectHeld1, fromEpoch: 1, to: IDS.machineB, reason: "trying Sunclaw" } })},${json("shravan")},'1794100000000',NULL,${json({ maxVersion: 1 })})`,
+    `INSERT INTO _fleet_sync_transfers(attempt,database,intent,outcome,phase,phase_history,cleanup_failed) VALUES (${quote(IDS.cancelledMove)},${quote(IDS.projectHeld1)},'null',${json({ kind: "cancelled", value: { by: "shravan" } })},${json({ phase: "ended" })},${json(cancelledHistory)},NULL)`,
+    `INSERT INTO _fleet_sync_transfer_cancels VALUES (${quote(IDS.cancelledMove)},${json({ by: "shravan", reason: "changed my mind", at: 1_794_100_001_000 })})`,
+    `INSERT INTO _fleet_sync_takeover_previews VALUES (${quote(IDS.preview)},${quote(IDS.projectHeld3)},${json({ database: IDS.projectHeld3, preview: { token: IDS.preview, fence: 2, acked: { epoch: 2, sequence: 20 }, holder: IDS.machineA, lastSeen: 1_793_999_990_000 } })})`,
+    `INSERT INTO _fleet_sync_schema_support VALUES (${quote(IDS.machineA)},${json({ peer: IDS.machineA, sessionId: IDS.session, attachSeq: 4, support: { maxVersion: 1 } })})`,
+  ];
 }
 
 export function productionSeed(): ProductionSeed {
@@ -118,9 +183,10 @@ export function productionSeed(): ProductionSeed {
     `INSERT INTO _fleet_sync_epoch_floor VALUES (${quote(IDS.projectRetired)},'2')`,
     ...[1, 2, 3].map(
       (epoch) =>
-        `INSERT INTO _fleet_sync_epoch_history VALUES (${quote(IDS.projectHeld3)},'${epoch}',${quote(JSON.stringify({ database: IDS.projectHeld3, epoch, holder: epoch === 2 ? IDS.machineA : IDS.machineB, granted_at: 1_793_923_200_000 + epoch * 86_400_000, ended_at: epoch === 3 ? null : 1_793_923_200_000 + (epoch + 1) * 86_400_000 }))})`,
+        `INSERT INTO _fleet_sync_epoch_history VALUES (${quote(IDS.projectHeld3)},'${epoch}',${quote(JSON.stringify({ database: IDS.projectHeld3, epoch, holder: epoch === 2 ? IDS.machineA : IDS.machineB, granted_at: 1_793_923_200_000 + epoch * 86_400_000, ended_at: epoch === 3 ? null : { epoch, sequence: 10 * epoch } }))})`,
     ),
     `INSERT INTO registry_lease_incarnation VALUES ('01a1c070-0000-7000-8000-0000000000f2','registry','7')`,
+    ...leaseHistory(),
   ];
 
   const workspace = {
@@ -226,18 +292,40 @@ export function productionSeed(): ProductionSeed {
       [IDS.serviceB]: connection(IDS.serviceB),
     },
     mailboxes: { [IDS.serviceA]: mailbox(), [IDS.serviceB]: mailbox() },
+    macFiles: [
+      {
+        database: IDS.projectHeld3,
+        holder: IDS.machineB,
+        lease: 3,
+        senderReceiver: RECEIVER,
+        // A transferred writer at lease 3 whose unacknowledged tail runs past the copy's 3/17.
+        retained: { floor: { epoch: 1, sequence: 0 }, head: { epoch: 3, sequence: 20 } },
+      },
+      {
+        database: IDS.projectHeld1,
+        holder: IDS.machineA,
+        lease: 1,
+        senderReceiver: RECEIVER,
+        retained: { floor: { epoch: 1, sequence: 0 }, head: { epoch: 1, sequence: 17 } },
+      },
+    ],
     copies: {
       [IDS.projectHeld3]: copy(IDS.projectHeld3, IDS.machineB, 3),
       [IDS.projectHeld1]: copy(IDS.projectHeld1, IDS.machineA, 1),
       [IDS.projectRetired]: [
         ...copy(IDS.projectRetired, IDS.machineA, 2),
-        `UPDATE _fleet_sync_copy SET record = ${quote(JSON.stringify({ state: "retired", copy: { database: IDS.projectRetired, retiredAt: 1_794_100_000_000 } }))}`,
+        `UPDATE _fleet_sync_copy SET record = ${quote(JSON.stringify({ state: "retired", copy: { database: IDS.projectRetired, retired_at: 1_794_100_000_000 } }))}`,
       ],
     },
   };
 }
 
-const run = async (runtime: Runtime, binding: string, name: string, statements: string[]) => {
+export const run = async (
+  runtime: Runtime,
+  binding: string,
+  name: string,
+  statements: string[],
+) => {
   const response = await runtime.dispatchFetch(
     `https://central.test/${binding}/${encodeURIComponent(name)}/run`,
     { method: "POST", body: JSON.stringify(statements) },
@@ -274,7 +362,7 @@ export async function snapshot(runtime: Runtime, projects: readonly string[] = P
     const response = await runtime.dispatchFetch(
       `https://central.test/${binding}/${encodeURIComponent(name)}/dump`,
     );
-    objects[`${binding}/${name}`] = await response.json();
+    objects[`${binding}/${name}`] = parseExact(await response.text());
   }
   return objects;
 }

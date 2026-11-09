@@ -3,6 +3,7 @@
 // in place: the registry object, the Fleet tables main doesn't reuse, and the
 // renamed legacy_ tables.
 
+import { exactUnsigned, parseExact, stringifyExact } from "./exact_json.ts";
 import { convertFleetGraph, isUuidV7 } from "./fleet_conversion.ts";
 import type { NewRow } from "./fleet_conversion.ts";
 import {
@@ -55,7 +56,7 @@ export const FLEET_VERIFY_READ = [
 export const COPY_VERIFY_READ = ["_fleet_sync_copy", ledgerTable("fleet-sync-receiver")];
 
 const rows = (reply: ReadReply, table: string): readonly ReadRow[] => reply.rows[table] ?? [];
-const canonical = (value: unknown): string => JSON.stringify(value);
+const canonical = (value: unknown): string => stringifyExact(value);
 const sorted = (list: readonly unknown[]): string[] => list.map(canonical).sort();
 
 function sameRows(name: string, actual: readonly unknown[], expected: readonly unknown[]): Check {
@@ -198,19 +199,27 @@ export async function verifyMigration(
     ),
   );
 
-  // Lease incarnation: the larger of production's two counters.
+  // Lease incarnation: exactly the larger of production's two counters, compared as
+  // integers from their stored text so no rounding can hide a difference.
   const counters = [
     ...rows(registry, "registry_lease_incarnation"),
     ...rows(fleet, "lease_incarnation_fence"),
-  ].map((row) => Number(row.incarnation));
+  ].map((row) => exactUnsigned(row.incarnation));
   const incarnation = rows(fleet, "lease_incarnation");
+  const largest = counters.reduce<bigint | null>(
+    (larger, counter) =>
+      counter === null || larger === null ? null : counter > larger ? counter : larger,
+    counters.length === 0 ? null : 0n,
+  );
+  const stored = exactUnsigned(incarnation[0]?.incarnation);
   checks.push({
     name: "lease_incarnation",
     ok:
       counters.length === 0
         ? incarnation.length === 0
-        : incarnation.length === 1 &&
-          incarnation[0]?.incarnation === Math.max(...counters) &&
+        : largest !== null &&
+          incarnation.length === 1 &&
+          stored === largest &&
           incarnation[0]?.name === "fleet",
     detail: `stored ${canonical(incarnation)}, production counters ${canonical(counters)}`,
   });
@@ -219,28 +228,47 @@ export async function verifyMigration(
   for (const table of LEASE_TABLES)
     checks.push(sameRows(table, rows(fleet, table), rows(registry, table)));
 
-  // Each copy: receiver records, and its state still agrees with the registry.
+  // Each copy: its receiver records, stamped when that copy committed. A copy
+  // migrated by an earlier, interrupted run keeps its own earlier stamp; no copy
+  // can be stamped after the Fleet, which commits last.
   const leases = new Map(
     rows(registry, "_fleet_sync_leases").map((row) => [
       String(row.database),
-      JSON.parse(String(row.record)) as { holder?: string; epoch?: number },
+      parseExact(String(row.record)) as { holder?: string; epoch?: number | bigint },
     ]),
   );
-  const receiver = await expectedLedger("fleet-sync-receiver", installedOn);
   for (const [project, copy] of Object.entries(copies)) {
+    const records = rows(copy, ledgerTable("fleet-sync-receiver"));
+    const copyStamp = String(records[0]?.installed_on ?? "");
+    const stampOk =
+      /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(copyStamp) && copyStamp <= installedOn;
+    if (!stampOk) {
+      checks.push({
+        name: `copy ${project} records`,
+        ok: false,
+        detail: `stamp ${copyStamp} is not a whole-second time at or before the Fleet's ${installedOn}`,
+      });
+      continue;
+    }
     checks.push(
-      sameRows(`copy ${project} records`, rows(copy, ledgerTable("fleet-sync-receiver")), receiver),
+      sameRows(
+        `copy ${project} records`,
+        records,
+        await expectedLedger("fleet-sync-receiver", copyStamp),
+      ),
     );
     const lease = leases.get(project);
     if (lease?.holder !== undefined) {
-      const record = JSON.parse(String(rows(copy, "_fleet_sync_copy")[0]?.record ?? "null")) as {
+      const record = parseExact(String(rows(copy, "_fleet_sync_copy")[0]?.record ?? "null")) as {
         state?: string;
-        copy?: { fence?: number; holder?: string };
+        copy?: { fence?: number | bigint; holder?: string };
       } | null;
+      const fence = exactUnsigned(record?.copy?.fence) ?? 0n;
+      const leaseEpoch = exactUnsigned(lease.epoch) ?? 0n;
       const agrees =
         record?.state === "following" &&
-        (record.copy?.fence ?? 0) <= (lease.epoch ?? 0) &&
-        (record.copy?.fence !== lease.epoch || record.copy?.holder === lease.holder);
+        fence <= leaseEpoch &&
+        (fence !== leaseEpoch || record.copy?.holder === lease.holder);
       checks.push({ name: `copy ${project} state`, ok: agrees, detail: canonical(record) });
     }
   }

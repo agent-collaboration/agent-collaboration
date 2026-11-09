@@ -6,10 +6,25 @@ A TypeScript Worker, deployed under central's name with central's five SQLite st
 
 | Call | What it does |
 | --- | --- |
-| `GET /admin/v1/migration/inventory` | The dry run. Every project with its holder, lease number, directory entry, copy state and action, every stop (R7), the run's counts, and a full dump of the three retiring classes. Writes nothing (`rowsWritten` 0). |
-| `POST /admin/v1/migration/migrate` | Re-runs the inventory's checks. Any stop refuses the whole run before the first write. Otherwise it writes each copy, then the Fleet object, each in one storage transaction. A second run reports `alreadyMigrated` and writes nothing. |
-| `GET /admin/v1/migration/verify` | Reads back every carried row and each copy's records and state, against the old sources still in place. |
-| `POST /admin/v1/migration/revert` | Before PD7 step 5 only: drops main's tables and renames the `legacy_` tables back. Refused when nothing was migrated. |
+| `GET /admin/v1/migration/inventory` | Central's side of the dry run: every project with its holder, lease number, directory entry and Copy facts (state, role, fence, holder, start, acknowledged position, schema), the configured authoritative receiver, every stop, the counts, and a full dump of the three retiring classes. Writes nothing (`rowsWritten` 0). |
+| `POST /admin/v1/migration/inventory` | The same, with migrate's body: migrate's whole decision as a dry run. |
+| `POST /admin/v1/migration/migrate` | Body: S2's facts from each holder Mac (below). Re-runs every check; any stop refuses the whole run before the first write. Otherwise it writes each copy, then the Fleet object, each in one storage transaction. A run interrupted between objects resumes on the next call, and a finished run reports `alreadyMigrated` and writes nothing. |
+| `GET /admin/v1/migration/verify` | Reads back every carried row and each copy's records and state, against the old sources still in place. Each copy's records carry the time that copy committed, no later than the Fleet's. |
+| `POST /admin/v1/migration/revert` | Before PD7 step 5 only: every copy, then the Fleet (whose marker goes last), drops main's tables and renames the `legacy_` tables back. An interrupted revert, or one after a migrate that stopped before the Fleet, finishes on the next call. Refused when nothing was migrated; migrate refuses while a revert is unfinished. |
+
+### Migrate's body: the holder Macs' retained files (S2)
+
+```json
+{ "macFiles": [ { "database": "<project UUIDv7>", "holder": "<writer UUIDv7>", "lease": 3,
+  "senderReceiver": "<receiver UUIDv7>",
+  "retained": { "floor": { "epoch": 1, "sequence": 0 }, "head": { "epoch": 3, "sequence": 20 } } } ] }
+```
+
+One entry per held project, read from the Mac's sealed backup without opening a writer. Migrate stops when an entry is missing or names an unheld project, when the file's writer or lease differs from the registry's, when its sender's receiver differs from central's configured `authoritativeReceiver` (CENTRAL_REGISTRY_CONFIG, deployed with this Worker), or when the Copy's acknowledged position is outside `floor`..`head`.
+
+### What is refused before any write (R7)
+
+Besides the shape, history, journal, holder, directory and Copy contradictions, every carried value is decoded the way main's first open decodes it: each library lease table row as fleet-sync-lease `validate_legacy_rows` reads it (`src/lease_records.ts`), each Copy record as the receiver's `CopyRecord::validate`, each enrollment as `StoredMachine::decode` (`src/enrollment_record.ts`), and both incarnation counters as canonical decimals within i64. Integers stay exact end to end (`src/exact_json.ts`): a value beyond 2^53 is read as its decimal text and bound back through `CAST(? AS INTEGER)`.
 
 The owner check mirrors central's rules (`src/owner_access.ts`, with file:line references to main).
 
@@ -32,11 +47,14 @@ From this folder:
 pnpm install --frozen-lockfile
 pnpm run check && pnpm run lint && pnpm run format:check
 pnpm test   # builds, then runs the tests in real workerd through Miniflare
+# Main's own central over the migrated storage (needs this checkout's Worker build):
+worker-build ../../crates/collaboration-central-cloudflare --profile worker-release --no-opt -- --locked --no-default-features
+MAIN_CENTRAL_BUILD="$PWD/../../crates/collaboration-central-cloudflare/build" pnpm run test:main-central
 node scripts/generate_schema_sources.ts   # after a schema source changes
 ```
 
 - **Embedded SQL:** `src/generated/schema_sources.ts` holds production's DDL (git `2636806a5`, fleet-sync `b9da4b5`) and main's migration sets, byte-for-byte. A test fails when the file is stale.
-- **How the tests run:** they seed production's exact schema through a test-only stand-in for the old central (`test/support/old_central_stand_in.ts`), under the same Worker name and persistence path, then run the migration Worker over that storage. No test waits on time.
+- **How the tests run:** they seed production's exact schema through a test-only stand-in for the old central (`test/support/old_central_stand_in.ts`), under the same Worker name and persistence path, then run the migration Worker over that storage. Interrupted runs use a test-only entry (`test/support/interrupted_migration_worker.ts`) that runs the real migrate and revert with a fixed run time and stops after a chosen number of object writes. No test waits on time.
 - **Deploy configs:** `scripts/deploy_configs.ts` derives PD7's two configurations from the live target's own config:
   - step 2, the migration Worker;
   - step 5, main's central, with the three retired classes as `deleted` tombstones.

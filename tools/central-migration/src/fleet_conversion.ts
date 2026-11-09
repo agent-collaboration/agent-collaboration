@@ -3,6 +3,7 @@
 // value is checked before any write, and a value main's types reject stops the
 // run with the row named (R7) instead of being rewritten.
 
+import { I64_MAX, parseExact } from "./exact_json.ts";
 import type { ReadRow as SqlRow } from "./storage_objects.ts";
 
 export class Rejected extends Error {}
@@ -23,10 +24,11 @@ function optionalText(value: unknown, where: string): string | null {
 function uuid(value: unknown, where: string): string {
   return isUuidV7(value) ? value : reject(where, "expected a canonical UUIDv7");
 }
-function count(value: unknown, where: string): number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
-    ? value
-    : reject(where, "expected a nonnegative integer");
+/** A nonnegative integer main stores in an i64 column, kept exact (a bigint beyond 2^53). */
+function count(value: unknown, where: string): number | bigint {
+  if (typeof value === "number" && Number.isSafeInteger(value) && value >= 0) return value;
+  if (typeof value === "bigint" && value >= 0n && value <= I64_MAX) return value;
+  return reject(where, "expected a nonnegative integer within i64");
 }
 function oneOf<T extends string>(value: unknown, allowed: readonly T[], where: string): T {
   return typeof value === "string" && (allowed as readonly string[]).includes(value)
@@ -41,7 +43,7 @@ function object(value: unknown, where: string): Record<string, unknown> {
 function parsePayload(row: SqlRow, where: string): Record<string, unknown> {
   let value: unknown;
   try {
-    value = JSON.parse(text(row.payload, `${where}.payload`));
+    value = parseExact(text(row.payload, `${where}.payload`));
   } catch (error) {
     if (error instanceof Rejected) throw error;
     return reject(`${where}.payload`, "not JSON");
@@ -49,7 +51,8 @@ function parsePayload(row: SqlRow, where: string): Record<string, unknown> {
   return object(value, `${where}.payload`);
 }
 
-export type NewRow = Record<string, string | number | null>;
+/** A row to write: exact integers (bigint beyond 2^53) and BLOBs as read keep their type. */
+export type NewRow = Record<string, string | number | bigint | null | { readonly blob: string }>;
 
 /** The envelope columns every carried graph row shares (column-map-fleet.md, common table). */
 function envelopeColumns(
@@ -319,7 +322,7 @@ export function convertFleetGraph(
     const where = `repository_attachments/${String(row.attachment_id)}`;
     let reference: unknown;
     try {
-      reference = JSON.parse(text(row.repository_reference, `${where}.repository_reference`));
+      reference = parseExact(text(row.repository_reference, `${where}.repository_reference`));
     } catch (error) {
       if (error instanceof Rejected) throw error;
       reject(`${where}.repository_reference`, "not JSON");
@@ -345,11 +348,30 @@ export function convertFleetGraph(
   return rows;
 }
 
-/** `INSERT INTO table(columns) VALUES(?, …)` for one row, in the row's key order. */
+/**
+ * `INSERT INTO table(columns) VALUES(?, …)` for one row, in the row's key order.
+ * A bigint binds as its decimal text through CAST(? AS INTEGER), since a Durable
+ * Object binding takes no bigint; a BLOB binds as hex through unhex(?).
+ */
 export function insertStatement(table: string, row: NewRow) {
   const columns = Object.keys(row);
+  const placeholders = columns.map((column) => {
+    const value = row[column];
+    return typeof value === "bigint"
+      ? "CAST(? AS INTEGER)"
+      : typeof value === "object" && value !== null
+        ? "unhex(?)"
+        : "?";
+  });
   return {
-    sql: `INSERT INTO ${table}(${columns.join(",")}) VALUES(${columns.map(() => "?").join(",")})`,
-    bindings: columns.map((column) => row[column] ?? null),
+    sql: `INSERT INTO ${table}(${columns.join(",")}) VALUES(${placeholders.join(",")})`,
+    bindings: columns.map((column) => {
+      const value = row[column] ?? null;
+      return typeof value === "bigint"
+        ? value.toString()
+        : typeof value === "object" && value !== null
+          ? value.blob
+          : value;
+    }),
   };
 }

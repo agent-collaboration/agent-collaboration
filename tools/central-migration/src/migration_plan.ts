@@ -2,9 +2,27 @@
 // it (R7), and either stop with every contradiction named, or produce each
 // object's single transaction of statements. Nothing here touches storage.
 
-import { Rejected, convertFleetGraph, insertStatement, isUuidV7 } from "./fleet_conversion.ts";
+import { enrollmentRow } from "./enrollment_record.ts";
+import { I64_MAX, exactUnsigned, parseExact } from "./exact_json.ts";
+import { Rejected, convertFleetGraph, insertStatement } from "./fleet_conversion.ts";
+import { Invalid } from "./serde_shapes.ts";
+import { checkLeaseTables, decodeCopyRecord, type CopyRecord } from "./lease_records.ts";
+import type { MacFileEvidence } from "./mac_file_evidence.ts";
+import {
+  compareMacFile,
+  configuredReceiverOf,
+  copyReportOf,
+  type CopyReport,
+} from "./holder_file_checks.ts";
+import {
+  checkHistory,
+  checkJournal,
+  checkShape,
+  receiverChecksumsMatch,
+  rows,
+  type Stop,
+} from "./storage_checks.ts";
 import type { CarriedFleetRows, NewRow } from "./fleet_conversion.ts";
-import type { ReadRow } from "./storage_objects.ts";
 import {
   COPY_RENAMED,
   FLEET_RENAMED,
@@ -22,32 +40,26 @@ import {
 import { SCHEMA_SOURCES } from "./generated/schema_sources.ts";
 import type { ReadReply, Statement } from "./storage_objects.ts";
 
-export interface Stop {
-  readonly object: string;
-  readonly subject: string;
-  readonly reason: string;
-}
+export type { CopyReport, MacFileEvidence, Stop };
 
 export interface ProjectReport {
   readonly project: string;
   readonly holder: string | null;
-  readonly leaseNumber: number | null;
+  readonly leaseNumber: bigint | null;
   readonly lifecycle: string;
   readonly directory: {
     readonly workspace: string;
     readonly board: string;
     readonly name: string;
   } | null;
-  readonly copy: {
-    readonly state: string;
-    readonly fence: number | null;
-    readonly holder: string | null;
-  } | null;
+  readonly copy: CopyReport | null;
   readonly action: "carry" | "stop";
 }
 
 export interface MigrationPlan {
   readonly runTime: number;
+  /** Old central's authoritative receiver (its CENTRAL_REGISTRY_CONFIG), or null when unreadable. */
+  readonly configuredReceiver: string | null;
   readonly stops: readonly Stop[];
   readonly projects: readonly ProjectReport[];
   readonly counts: Readonly<Record<string, number>>;
@@ -89,114 +101,15 @@ export const COPY_READ = [
   "central_schema_migration_failures",
 ];
 
-const rows = (reply: ReadReply, table: string): readonly ReadRow[] => reply.rows[table] ?? [];
-
 function json(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "string") return null;
   try {
-    const parsed: unknown = JSON.parse(value);
+    const parsed: unknown = parseExact(value);
     return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
       ? (parsed as Record<string, unknown>)
       : null;
   } catch {
     return null;
-  }
-}
-const asNumber = (value: unknown): number | null =>
-  typeof value === "number" && Number.isSafeInteger(value)
-    ? value
-    : typeof value === "string" && /^\d+$/.test(value)
-      ? Number(value)
-      : null;
-
-/** Production stored checksums as a JSON array of bytes (O object_bootstrap.rs:479–481). */
-function decodeChecksum(text: unknown): Uint8Array | null {
-  if (typeof text !== "string") return null;
-  try {
-    const bytes: unknown = JSON.parse(text);
-    if (
-      !Array.isArray(bytes) ||
-      bytes.length !== 48 ||
-      !bytes.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255)
-    ) {
-      return null;
-    }
-    return Uint8Array.from(bytes as number[]);
-  } catch {
-    return null;
-  }
-}
-
-function checkShape(
-  object: string,
-  reply: ReadReply,
-  expected: readonly string[],
-  exact: boolean,
-  stops: Stop[],
-) {
-  const present = new Set(reply.tables);
-  const missing = expected.filter((table) => !present.has(table));
-  const extra = exact ? reply.tables.filter((table) => !expected.includes(table)) : [];
-  if (missing.length > 0 || extra.length > 0) {
-    stops.push({
-      object,
-      subject: "storage shape",
-      reason: `not production's shape: missing [${missing.join(", ")}], unexpected [${extra.join(", ")}]`,
-    });
-  }
-}
-
-function checkHistory(
-  object: string,
-  reply: ReadReply,
-  sets: Readonly<Record<string, readonly number[]>>,
-  stops: Stop[],
-) {
-  const failures = rows(reply, "central_schema_migration_failures");
-  if (failures.length > 0) {
-    stops.push({
-      object,
-      subject: "migration failures",
-      reason: `migration-failure rows present for ${failures.map((row) => String(row.corpus)).join(", ")}`,
-    });
-  }
-  const recorded = new Map<string, number[]>();
-  for (const row of rows(reply, "central_schema_migrations")) {
-    const corpus = String(row.corpus);
-    const version = asNumber(row.version);
-    if (version === null || decodeChecksum(row.checksum) === null) {
-      stops.push({ object, subject: `set ${corpus}`, reason: "unreadable migration record" });
-      continue;
-    }
-    recorded.set(
-      corpus,
-      [...(recorded.get(corpus) ?? []), version].sort((a, b) => a - b),
-    );
-  }
-  const wanted = Object.keys(sets).sort();
-  const found = [...recorded.keys()].sort();
-  for (const corpus of new Set([...wanted, ...found])) {
-    const expected = sets[corpus] ?? [];
-    const actual = recorded.get(corpus) ?? [];
-    if (expected.join(",") !== actual.join(",")) {
-      stops.push({
-        object,
-        subject: `set ${corpus}`,
-        reason: `migration set is [${actual.join(",")}], production's full set is [${expected.join(",")}]`,
-      });
-    }
-  }
-}
-
-function checkJournal(object: string, reply: ReadReply, stops: Stop[]) {
-  for (const row of rows(reply, "_fleet_sync_operations")) {
-    if (row.state === "running") {
-      stops.push({
-        object,
-        subject: `operation ${String(row.operation_id)}`,
-        reason: `unfinished journal operation ${String(row.kind)}; let it finish on the old central`,
-      });
-    }
   }
 }
 
@@ -212,52 +125,6 @@ export function uuidV7(nowMillis: number): string {
   bytes[8] = ((bytes[8] ?? 0) & 0x3f) | 0x80;
   const value = hex(bytes);
   return `${value.slice(0, 8)}-${value.slice(8, 12)}-${value.slice(12, 16)}-${value.slice(16, 20)}-${value.slice(20)}`;
-}
-
-const MILLIS_RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/;
-
-/** PD3: an enrollment in main's shape, or the reason main's decoder would reject it. */
-function enrollment(row: ReadRow, runTimeText: string): NewRow | string {
-  const peer = row.peer_id;
-  if (!isUuidV7(peer)) return "machine id is not a canonical UUIDv7";
-  for (const field of [
-    "service_id",
-    "machine_label",
-    "access_client_id",
-    "credential_hash",
-    "expires_at",
-  ]) {
-    if (typeof row[field] !== "string" || row[field] === "") return `${field} missing`;
-  }
-  const hash = String(row.credential_hash);
-  if (hash.trim() !== hash || /\p{Cc}/u.test(hash))
-    return "credential hash has whitespace or control characters";
-  if (row.state !== "enrolled" && row.state !== "revoked")
-    return `state ${String(row.state)} is neither enrolled nor revoked`;
-  if (Number.isNaN(Date.parse(String(row.expires_at)))) return "expires_at is not a time";
-  if (
-    row.last_seen !== null &&
-    !(typeof row.last_seen === "string" && MILLIS_RFC3339.test(row.last_seen))
-  ) {
-    return "last_seen is not millisecond RFC 3339";
-  }
-  for (const field of ["last_revocation_operation", "last_enrollment_operation"]) {
-    if (row[field] !== null && !isUuidV7(row[field])) return `${field} is not a canonical UUIDv7`;
-  }
-  return {
-    machine_id: peer,
-    service_id: String(row.service_id),
-    machine_label: String(row.machine_label),
-    access_client_id: String(row.access_client_id),
-    credential_hash: hash,
-    state: String(row.state),
-    expires_at: String(row.expires_at),
-    last_seen_at: (row.last_seen as string | null) ?? null,
-    last_revocation_operation_id: (row.last_revocation_operation as string | null) ?? null,
-    last_enrollment_operation_id: (row.last_enrollment_operation as string | null) ?? null,
-    created_at: runTimeText,
-    updated_at: runTimeText,
-  };
 }
 
 async function setRecords(set: MigrationSetName, installedOn: string): Promise<Statement[]> {
@@ -286,15 +153,30 @@ const TABLE_ORDER: (keyof CarriedFleetRows)[] = [
   "fleet_repository_attachments",
 ];
 
-/**
- * The whole decision. `runTime` is one recorded instant, whole seconds, used
- * for every created_at, updated_at and installed_on the run writes.
- */
-export async function planMigration(old: OldStorage, runTime: number): Promise<MigrationPlan> {
+export interface PlanOptions {
+  /** One recorded instant, whole seconds, for every created_at, updated_at and installed_on written. */
+  readonly runTime: number;
+  /** Old central's CENTRAL_REGISTRY_CONFIG text, as deployed with the migration Worker. */
+  readonly registryConfig: string | undefined;
+  /** S2's Mac-file facts; null for inventory, which reports central's side only. */
+  readonly macFiles: readonly MacFileEvidence[] | null;
+}
+
+/** The whole decision: every R7 stop, or each object's single transaction. */
+export async function planMigration(old: OldStorage, options: PlanOptions): Promise<MigrationPlan> {
+  const { runTime } = options;
   const stops: Stop[] = [];
   const runTimeText = new Date(runTime).toISOString();
   const installedOn = runTimeText.replace("T", " ").slice(0, 19);
   const { registry, fleet } = old;
+  const configuredReceiver = configuredReceiverOf(options.registryConfig);
+  if (configuredReceiver === null) {
+    stops.push({
+      object: "central config",
+      subject: "authoritative receiver",
+      reason: "CENTRAL_REGISTRY_CONFIG names no canonical UUIDv7 authoritativeReceiver",
+    });
+  }
 
   checkShape("registry", registry, PRODUCTION_TABLES.registry, true, stops);
   checkShape("fleet", fleet, PRODUCTION_TABLES.fleet, true, stops);
@@ -302,11 +184,15 @@ export async function planMigration(old: OldStorage, runTime: number): Promise<M
   checkHistory("fleet", fleet, PRODUCTION_SETS.fleet, stops);
   checkJournal("registry", registry, stops);
   checkJournal("fleet", fleet, stops);
+  // Every carried lease-table row, as main's first open decodes it (R7, I1).
+  for (const stop of checkLeaseTables(registry)) {
+    stops.push({ object: "registry", subject: `${stop.table} ${stop.row}`, reason: stop.reason });
+  }
 
   // Machines (PD3).
   const machines = new Map<string, NewRow>();
   for (const row of rows(registry, "machine_enrollments")) {
-    const converted = enrollment(row, runTimeText);
+    const converted = enrollmentRow(row, runTimeText);
     if (typeof converted === "string") {
       stops.push({
         object: "registry",
@@ -317,6 +203,7 @@ export async function planMigration(old: OldStorage, runTime: number): Promise<M
       machines.set(String(converted.machine_id), converted);
     }
   }
+  const macFiles = new Map((options.macFiles ?? []).map((file) => [file.database, file]));
 
   // Projects: registry record, lease, directory entry and copy (R7).
   const leases = new Map(
@@ -362,7 +249,7 @@ export async function planMigration(old: OldStorage, runTime: number): Promise<M
       });
     const lease = leases.get(project) ?? null;
     const holder = typeof lease?.holder === "string" ? lease.holder : null;
-    const leaseNumber = asNumber(lease?.epoch);
+    const leaseNumber = exactUnsigned(lease?.epoch);
     if (holder !== null && !machines.has(holder)) {
       stops.push({
         object: "registry",
@@ -387,24 +274,55 @@ export async function planMigration(old: OldStorage, runTime: number): Promise<M
           reason: "stored receiver checksums differ from main's",
         });
       }
-      const copyRecord = json(rows(copyReply, "_fleet_sync_copy")[0]?.record);
-      const state = String(copyRecord?.state ?? "missing");
-      const status = (state === "following" ? copyRecord?.copy : null) as Record<
-        string,
-        unknown
-      > | null;
-      const fence = asNumber(status?.fence);
-      const copyHolder = typeof status?.holder === "string" ? status.holder : null;
-      copy = { state, fence, holder: copyHolder };
+      const storedCopy = rows(copyReply, "_fleet_sync_copy")[0]?.record;
+      let record: CopyRecord | null = null;
+      try {
+        record = decodeCopyRecord(storedCopy);
+      } catch (error) {
+        if (!(error instanceof Invalid)) throw error;
+        stops.push({
+          object: `copy ${project}`,
+          subject,
+          reason: `main refuses the copy record: ${error.message}`,
+        });
+      }
+      copy =
+        record === null
+          ? {
+              state: "unreadable",
+              role: null,
+              fence: null,
+              holder: null,
+              start: null,
+              acked: null,
+              schema: null,
+            }
+          : copyReportOf(record);
+      const { state, fence } = copy;
+      const copyHolder = copy.holder;
+      if (record !== null && record.state === "retired" && record.database !== project) {
+        stops.push({
+          object: `copy ${project}`,
+          subject,
+          reason: `retired copy names ${record.database}`,
+        });
+      }
+      if (record !== null && record.state !== "retired" && record.status.database !== project) {
+        stops.push({
+          object: `copy ${project}`,
+          subject,
+          reason: `copy names ${record.status.database}`,
+        });
+      }
       // A retired copy is preserved only beside a retired registry record (PD5, 81d442e3).
-      if ((state === "retired") !== (lifecycle === "retired")) {
+      if (record !== null && (state === "retired") !== (lifecycle === "retired")) {
         stops.push({
           object: `copy ${project}`,
           subject,
           reason: `copy is ${state} but the registry lifecycle is ${lifecycle}`,
         });
       }
-      if (holder !== null) {
+      if (holder !== null && record !== null) {
         if (state !== "following") {
           stops.push({
             object: `copy ${project}`,
@@ -423,6 +341,17 @@ export async function planMigration(old: OldStorage, runTime: number): Promise<M
             subject,
             reason: `copy holder ${String(copyHolder)} differs from the registry's ${holder} at lease ${leaseNumber}`,
           });
+        } else if (options.macFiles !== null) {
+          const mismatch = compareMacFile(
+            project,
+            holder,
+            leaseNumber,
+            copy,
+            configuredReceiver,
+            macFiles.get(project),
+          );
+          if (mismatch !== null)
+            stops.push({ object: `copy ${project}`, subject, reason: mismatch });
         }
       }
     }
@@ -442,6 +371,15 @@ export async function planMigration(old: OldStorage, runTime: number): Promise<M
       copy,
       action: stops.length === before ? "carry" : "stop",
     });
+  }
+  for (const project of macFiles.keys()) {
+    if (!projects.some((report) => report.project === project && report.holder !== null)) {
+      stops.push({
+        object: "mac files",
+        subject: `project ${project}`,
+        reason: "retained-file facts name a project central holds no lease for",
+      });
+    }
   }
   for (const project of directory.keys()) {
     if (!registered.has(project)) {
@@ -478,6 +416,34 @@ export async function planMigration(old: OldStorage, runTime: number): Promise<M
       subject: "feed state",
       reason: `expected one feed state row, found ${feedState.length}`,
     });
+  const lastPosition = exactUnsigned(feedState[0]?.last_position);
+  if (feedState.length === 1 && (lastPosition === null || lastPosition > I64_MAX)) {
+    stops.push({
+      object: "fleet",
+      subject: "feed state",
+      reason: "the feed head is not an integer main can store",
+    });
+  }
+  // Lease incarnation: the exact larger of production's two counters, each a
+  // canonical decimal main parses (fleet_lease_projection_step.rs) and an i64 it can store.
+  const incarnations: bigint[] = [];
+  for (const [object, table] of [
+    ["registry", "registry_lease_incarnation"],
+    ["fleet", "lease_incarnation_fence"],
+  ] as const) {
+    for (const row of rows(object === "registry" ? registry : fleet, table)) {
+      const counter = typeof row.incarnation === "string" ? exactUnsigned(row.incarnation) : null;
+      if (counter === null || counter > I64_MAX) {
+        stops.push({
+          object,
+          subject: `${table} ${String(row.name)}`,
+          reason: `incarnation ${String(row.incarnation)} is not a canonical decimal within i64`,
+        });
+      } else {
+        incarnations.push(counter);
+      }
+    }
+  }
 
   const counts: Record<string, number> = {
     projects: projects.length,
@@ -487,7 +453,7 @@ export async function planMigration(old: OldStorage, runTime: number): Promise<M
       : Object.fromEntries(TABLE_ORDER.map((table) => [table, graph[table].length]))),
   };
   if (stops.length > 0 || graph === null) {
-    return { runTime, stops, projects, counts, fleet: [], copies: {} };
+    return { runTime, configuredReceiver, stops, projects, counts, fleet: [], copies: {} };
   }
 
   // Fleet: rename same-name tables, create main's sets, carry, then record.
@@ -501,31 +467,28 @@ export async function planMigration(old: OldStorage, runTime: number): Promise<M
   for (const table of TABLE_ORDER)
     for (const row of graph[table]) statements.push(insertStatement(table, row));
   const [head] = feedState;
-  const lastPosition = asNumber(head?.last_position) ?? 0;
   // Head and floor both at the old head (PD4): a Router behind it sees an
   // expired cursor and rebuilds; one at it reads an empty page.
   statements.push(
     insertStatement("fleet_feed_state", {
       state_id: String(head?.state_id),
       name: String(head?.name),
-      last_position: lastPosition,
-      retained_through: lastPosition,
+      last_position: lastPosition ?? 0n,
+      retained_through: lastPosition ?? 0n,
       created_at: runTime,
       updated_at: runTime,
     }),
   );
   for (const machine of machines.values())
     statements.push(insertStatement("machine_enrollments", machine));
-  const incarnations = [
-    ...rows(registry, "registry_lease_incarnation").map((row) => asNumber(row.incarnation)),
-    ...rows(fleet, "lease_incarnation_fence").map((row) => asNumber(row.incarnation)),
-  ].filter((value): value is number => value !== null);
   if (incarnations.length > 0) {
     statements.push(
       insertStatement("lease_incarnation", {
         row_id: uuidV7(runTime),
         name: "fleet",
-        incarnation: Math.max(...incarnations),
+        incarnation: incarnations.reduce((larger, counter) =>
+          counter > larger ? counter : larger,
+        ),
         created_at: runTimeText,
         updated_at: runTimeText,
       }),
@@ -553,18 +516,5 @@ export async function planMigration(old: OldStorage, runTime: number): Promise<M
       ...receiverRecords,
     ];
   }
-  return { runTime, stops, projects, counts, fleet: statements, copies };
-}
-
-/** Production's receiver records must already equal main's checksums (identical files). */
-export async function receiverChecksumsMatch(reply: ReadReply): Promise<boolean> {
-  for (const row of rows(reply, "central_schema_migrations")) {
-    const migration = MAIN_SETS["fleet-sync-receiver"].find(
-      (candidate) => candidate.version === asNumber(row.version),
-    );
-    const stored = decodeChecksum(row.checksum);
-    if (migration === undefined || stored === null) return false;
-    if (hex(stored) !== hex(await migrationChecksum(migration.sql))) return false;
-  }
-  return true;
+  return { runTime, configuredReceiver, stops, projects, counts, fleet: statements, copies };
 }

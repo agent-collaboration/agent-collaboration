@@ -8,6 +8,10 @@ import { withProduction } from "./support/migration_run.ts";
 import { IDS, type ProductionSeed } from "./support/production_fixture.ts";
 
 const quote = (value: string): string => `'${value.replaceAll("'", "''")}'`;
+/** A project central holds no lease for has no holder Mac, so no retained-file facts. */
+const dropMacFile = (production: ProductionSeed, project: string) => {
+  production.macFiles = production.macFiles.filter((file) => file.database !== project);
+};
 const copyOf = (production: ProductionSeed, project: string): string[] =>
   production.copies[project] ?? [];
 
@@ -42,11 +46,13 @@ const CONTRADICTIONS: Contradiction[] = [
   },
   {
     name: "a directory entry has no registry record",
-    edit: (production) =>
+    edit: (production) => {
       production.registry.push(
         `DELETE FROM _fleet_sync_databases WHERE database = ${quote(IDS.projectHeld1)}`,
         `DELETE FROM _fleet_sync_leases WHERE database = ${quote(IDS.projectHeld1)}`,
-      ),
+      );
+      dropMacFile(production, IDS.projectHeld1);
+    },
     object: "fleet",
     subject: `project ${IDS.projectHeld1}`,
     reason: /directory entry has no registry record/,
@@ -153,11 +159,190 @@ const CONTRADICTIONS: Contradiction[] = [
     name: "a copy is retired but its registry record is not",
     edit: (production) =>
       copyOf(production, IDS.projectHeld1).push(
-        `UPDATE _fleet_sync_copy SET record = ${quote(JSON.stringify({ state: "retired", copy: { database: IDS.projectHeld1, retiredAt: 1_794_100_000_000 } }))}`,
+        `UPDATE _fleet_sync_copy SET record = ${quote(JSON.stringify({ state: "retired", copy: { database: IDS.projectHeld1, retired_at: 1_794_100_000_000 } }))}`,
       ),
     object: `copy ${IDS.projectHeld1}`,
     subject: `project ${IDS.projectHeld1}`,
     reason: /copy is retired but the registry lifecycle is registered/,
+  },
+  // I1: carried values main's first open decodes and refuses.
+  {
+    name: "a registry record's revision change is zero",
+    edit: (production) =>
+      production.registry.push(
+        `UPDATE _fleet_sync_databases SET record = json_set(record, '$.revision.change', 0) WHERE database = ${quote(IDS.projectHeld3)}`,
+      ),
+    object: "registry",
+    subject: `_fleet_sync_databases ${IDS.projectHeld3} [row 1]`,
+    reason: /record\.revision\.change: must be at least 1/,
+  },
+  {
+    name: "a registry record's revision epoch differs from its lease's",
+    edit: (production) =>
+      production.registry.push(
+        `UPDATE _fleet_sync_databases SET record = json_set(record, '$.revision.epoch', 2) WHERE database = ${quote(IDS.projectHeld3)}`,
+      ),
+    object: "registry",
+    subject: `_fleet_sync_databases ${IDS.projectHeld3} [row 1]`,
+    reason: /registry revision grant/,
+  },
+  {
+    name: "an epoch history row ends in a later epoch",
+    edit: (production) =>
+      production.registry.push(
+        `UPDATE _fleet_sync_epoch_history SET record = json_set(record, '$.ended_at.epoch', 2) WHERE database = ${quote(IDS.projectHeld3)} AND epoch = '1'`,
+      ),
+    object: "registry",
+    subject: `_fleet_sync_epoch_history ${IDS.projectHeld3}/1 [row 1]`,
+    reason: /ends in a later epoch/,
+  },
+  {
+    name: "an epoch history row's end is a bare time, not a replication position",
+    edit: (production) =>
+      production.registry.push(
+        `UPDATE _fleet_sync_epoch_history SET record = json_set(record, '$.ended_at', 1794009600000) WHERE database = ${quote(IDS.projectHeld3)} AND epoch = '1'`,
+      ),
+    object: "registry",
+    subject: `_fleet_sync_epoch_history ${IDS.projectHeld3}/1 [row 1]`,
+    reason: /record\.ended_at: expected an object/,
+  },
+  {
+    name: "a lease expires before it was last renewed",
+    edit: (production) =>
+      production.registry.push(
+        `UPDATE _fleet_sync_leases SET record = json_set(record, '$.expires_at', 1) WHERE database = ${quote(IDS.projectHeld1)}`,
+      ),
+    object: "registry",
+    subject: `_fleet_sync_leases ${IDS.projectHeld1} [row 2]`,
+    reason: /before last_renewed_at/,
+  },
+  {
+    name: "an epoch floor is not a canonical decimal",
+    edit: (production) =>
+      production.registry.push(
+        `UPDATE _fleet_sync_epoch_floor SET epoch = '03' WHERE database = ${quote(IDS.projectHeld3)}`,
+      ),
+    object: "registry",
+    subject: `_fleet_sync_epoch_floor ${IDS.projectHeld3} [row 1]`,
+    reason: /canonical decimal epoch/,
+  },
+  {
+    name: "an enrollment's expiry is a date without a time",
+    edit: (production) =>
+      production.registry.push(
+        `UPDATE machine_enrollments SET expires_at = '2027-01-01' WHERE peer_id = ${quote(IDS.machineA)}`,
+      ),
+    object: "registry",
+    subject: `machine ${IDS.machineA}`,
+    reason: /expires_at is not an RFC 3339 date and time/,
+  },
+  {
+    name: "an enrollment's last-seen time is finer than a millisecond",
+    edit: (production) =>
+      production.registry.push(
+        `UPDATE machine_enrollments SET last_seen = '2026-11-09T11:59:00.123456Z' WHERE peer_id = ${quote(IDS.machineA)}`,
+      ),
+    object: "registry",
+    subject: `machine ${IDS.machineA}`,
+    reason: /last_seen is not an RFC 3339 time at a whole millisecond/,
+  },
+  {
+    name: "a copy's start is after its acknowledged position",
+    edit: (production) =>
+      copyOf(production, IDS.projectHeld3).push(
+        `UPDATE _fleet_sync_copy SET record = json_set(record, '$.copy.start', json('{"epoch":3,"sequence":18}'))`,
+      ),
+    object: `copy ${IDS.projectHeld3}`,
+    subject: `project ${IDS.projectHeld3}`,
+    reason: /main refuses the copy record: copy state/,
+  },
+  {
+    name: "a copy record lacks its schema identity",
+    edit: (production) =>
+      copyOf(production, IDS.projectHeld1).push(
+        `UPDATE _fleet_sync_copy SET record = json_remove(record, '$.copy.schema')`,
+      ),
+    object: `copy ${IDS.projectHeld1}`,
+    subject: `project ${IDS.projectHeld1}`,
+    reason: /main refuses the copy record: .*missing field schema/,
+  },
+  {
+    name: "a finished move's phase history skips a phase main requires",
+    edit: (production) =>
+      production.registry.push(
+        `UPDATE _fleet_sync_transfers SET phase_history = json_remove(phase_history, '$[2]') WHERE attempt = ${quote(IDS.move)}`,
+      ),
+    object: "registry",
+    subject: `_fleet_sync_transfers ${IDS.move} [row 1]`,
+    reason: /holder-change phase history main refuses/,
+  },
+  {
+    name: "a registration attempt records an import outcome",
+    edit: (production) =>
+      production.registry.push(
+        `UPDATE _fleet_sync_lifecycle_attempts SET outcome = json('{"kind":"import","answer":{"kind":"imported"}}') WHERE attempt = ${quote(IDS.registration)}`,
+      ),
+    object: "registry",
+    subject: `_fleet_sync_lifecycle_attempts ${IDS.registration} [row 1]`,
+    reason: /outcome kind differs from the intent/,
+  },
+  // I5: incarnation counters main can't parse or store.
+  {
+    name: "an incarnation counter is not canonical decimal",
+    edit: (production) =>
+      production.registry.push("UPDATE registry_lease_incarnation SET incarnation = '007'"),
+    object: "registry",
+    subject: "registry_lease_incarnation registry",
+    reason: /incarnation 007 is not a canonical decimal within i64/,
+  },
+  {
+    name: "an incarnation counter is beyond i64",
+    edit: (production) =>
+      production.fleet.push(
+        "UPDATE lease_incarnation_fence SET incarnation = '9223372036854775808'",
+      ),
+    object: "fleet",
+    subject: "lease_incarnation_fence registry",
+    reason: /incarnation 9223372036854775808 is not a canonical decimal within i64/,
+  },
+  // I2: S2's retained-file facts against central's records.
+  {
+    name: "central's configured receiver differs from the one the Mac's sender is registered with",
+    edit: (production) => {
+      const file = production.macFiles.find((candidate) => candidate.database === IDS.projectHeld3);
+      if (file !== undefined) file.senderReceiver = "01a1c070-0000-7000-8000-0000000000c2";
+    },
+    object: `copy ${IDS.projectHeld3}`,
+    subject: `project ${IDS.projectHeld3}`,
+    reason:
+      /registered with receiver 01a1c070-0000-7000-8000-0000000000c2; central is configured with/,
+  },
+  {
+    name: "a copy's acknowledged position isn't inside the holder file's retained window",
+    edit: (production) => {
+      const file = production.macFiles.find((candidate) => candidate.database === IDS.projectHeld3);
+      if (file !== undefined) file.retained.floor = { epoch: 3, sequence: 18 };
+    },
+    object: `copy ${IDS.projectHeld3}`,
+    subject: `project ${IDS.projectHeld3}`,
+    reason: /acknowledged position 3\/17 is outside the Mac's retained window 3\/18 through 3\/20/,
+  },
+  {
+    name: "the Mac's file is at another lease number",
+    edit: (production) => {
+      const file = production.macFiles.find((candidate) => candidate.database === IDS.projectHeld1);
+      if (file !== undefined) file.lease = 2;
+    },
+    object: `copy ${IDS.projectHeld1}`,
+    subject: `project ${IDS.projectHeld1}`,
+    reason: /the Mac's file is writer .* at lease 2; central's registry says .* at 1/,
+  },
+  {
+    name: "a held project has no retained-file facts",
+    edit: (production) => dropMacFile(production, IDS.projectHeld1),
+    object: `copy ${IDS.projectHeld1}`,
+    subject: `project ${IDS.projectHeld1}`,
+    reason: /no retained-file facts from the holder Mac/,
   },
 ];
 
@@ -169,7 +354,7 @@ for (const contradiction of CONTRADICTIONS) {
 
       // Act
       const migrate = await run.call("migrate", "POST");
-      const inventory = await run.call("inventory");
+      const inventory = await run.call("inventory", "POST", { macFiles: run.production.macFiles });
 
       // Assert: stopped, named, and nothing written anywhere.
       assert.equal(migrate.status, 409, JSON.stringify(migrate.body));

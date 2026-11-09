@@ -23,7 +23,7 @@ const BUILDS = {
   },
   "old-central-stand-in": {
     root: join(TOOLS_ROOT, "build-test"),
-    entry: "old_central_stand_in.js",
+    entry: "test/support/old_central_stand_in.js",
   },
 } as const;
 
