@@ -431,6 +431,40 @@ async fn a_failed_hold_write_leaves_the_dm_unmarked_and_the_backoff_holds_it() {
 }
 
 #[tokio::test]
+async fn a_failed_position_capture_still_delivers_a_dm_to_a_running_target() {
+    let fixture = Box::pin(OwnerFixture::new()).await;
+    fixture.attach_journal().await;
+    *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
+    fixture.held_mail.fail_next_capture();
+    let push_id = insert(&fixture, MessageDelivery::Queue, None).await;
+    let clock_at_start = fixture.clock.monotonic_now();
+    let runtime = fixture.runtime_without_board().await;
+    // The DM's check cannot record a journal position; nothing will be held on it, so it
+    // is delivered in the same pass, with no backoff.
+    assert_eq!(request(&runtime).await.payload.push_id, push_id);
+    fixture.assert_capture_faults_taken();
+    runtime.completions.send(DeliveryOutcome::Started).unwrap();
+    bounded_observe(&runtime, |event| {
+        assert!(
+            !matches!(event, OwnerObservation::PassFailed(_)),
+            "a pass failed: {event:?}"
+        );
+        matches!(event, OwnerObservation::DirectMessageSettled)
+    })
+    .await;
+    assert_eq!(
+        record(&fixture, &push_id).await.delivery_state,
+        PushDeliveryState::Delivered
+    );
+    assert_eq!(
+        fixture.clock.monotonic_now(),
+        clock_at_start,
+        "no clock advance"
+    );
+    runtime.close().await;
+}
+
+#[tokio::test]
 async fn restored_guarded_generation_mismatch_is_terminal_without_any_broadened_attempt() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     let pinned = guard();

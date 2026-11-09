@@ -4,7 +4,7 @@
 //! any release all succeed. A failure fails the pass, and its backoff checks again; a
 //! journal position that cannot be read from owes a check that records a fresh one.
 use super::super::super::subscription_service::OwnerObservation;
-use super::native_held_mail_proofs::{attach_journal, send_held, thread_loaded};
+use super::native_held_mail_proofs::{send_held, thread_loaded};
 use super::*;
 use crate::native_worker_faults;
 use collaboration_protocol::PushId;
@@ -46,6 +46,18 @@ async fn direct_messages_pass_failed(runtime: &OwnerRuntime) {
     .await;
 }
 
+/// Reads the owner's events up to its next sleep and fails if any pass failed on the way.
+async fn asleep_with_no_failed_pass(runtime: &OwnerRuntime) {
+    observed(runtime, "a sleep with no failed pass before it", |event| {
+        assert!(
+            !matches!(event, OwnerObservation::PassFailed(_)),
+            "a pass failed: {event:?}"
+        );
+        matches!(event, OwnerObservation::Sleeping(_))
+    })
+    .await;
+}
+
 async fn next_request(
     runtime: &OwnerRuntime,
     reason: &str,
@@ -70,7 +82,7 @@ async fn delivery_state(native: &NativeMailOwner, push_id: &PushId) -> PushDeliv
 #[tokio::test]
 async fn an_expired_journal_position_owes_one_check_which_records_a_fresh_position() {
     let fixture = Box::pin(OwnerFixture::new()).await;
-    let journal = attach_journal(&fixture).await;
+    let journal = fixture.attach_journal().await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime_without_board().await;
     let peer = PeerId::new(uuid::Uuid::now_v7()).unwrap();
@@ -142,7 +154,7 @@ async fn an_expired_journal_position_owes_one_check_which_records_a_fresh_positi
 #[tokio::test]
 async fn a_failed_position_capture_fails_the_pass_and_the_retry_keeps_the_mail_held() {
     let fixture = Box::pin(OwnerFixture::new()).await;
-    let journal = attach_journal(&fixture).await;
+    let journal = fixture.attach_journal().await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime_without_board().await;
     let peer = PeerId::new(uuid::Uuid::now_v7()).unwrap();
@@ -213,9 +225,45 @@ async fn insert_queued_direct_message(fixture: &OwnerFixture) -> PushId {
 }
 
 #[tokio::test]
+async fn a_failed_position_capture_still_releases_mail_to_a_running_target() {
+    let fixture = Box::pin(OwnerFixture::new()).await;
+    fixture.attach_journal().await;
+    *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
+    let runtime = fixture.runtime_without_board().await;
+    let peer = PeerId::new(uuid::Uuid::now_v7()).unwrap();
+    let (app, native) = native_application(&fixture, &runtime, peer);
+    let target = target_session(&fixture.reader).unwrap();
+    let (input, held) = send_held(&app, &target, "released though the capture fails").await;
+    checked_while_not_running(&runtime, &held.push_id).await;
+    asleep_with_nothing_due(&runtime).await;
+
+    // The target runs and its check cannot record a journal position. Nothing will be
+    // held on that check, so the release goes ahead in the same pass, with no backoff.
+    let clock_at_signal = fixture.clock.monotonic_now();
+    *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
+    fixture.held_mail.fail_next_capture();
+    fixture.held_mail.provider_completed();
+    let request = next_request(&runtime, "release despite the failed capture").await;
+    assert_eq!(request.payload.push_id, held.push_id);
+    fixture.assert_capture_faults_taken();
+    asleep_with_no_failed_pass(&runtime).await;
+    assert_eq!(
+        fixture.clock.monotonic_now(),
+        clock_at_signal,
+        "no clock advance"
+    );
+    runtime.completions.send(DeliveryOutcome::Started).unwrap();
+    await_native_completion(&runtime, 1).await;
+    await_compaction(&native, reference_for_request(&input, &held.push_id, peer)).await;
+    drop(app);
+    runtime.close().await;
+    fixture.close_native(native).await;
+}
+
+#[tokio::test]
 async fn a_later_check_keeps_the_held_mails_earlier_position_so_a_load_between_them_owes_a_check() {
     let fixture = Box::pin(OwnerFixture::new()).await;
-    let journal = attach_journal(&fixture).await;
+    let journal = fixture.attach_journal().await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime_without_board().await;
     let peer = PeerId::new(uuid::Uuid::now_v7()).unwrap();

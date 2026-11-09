@@ -119,26 +119,6 @@ async fn held_native_mail_waits_for_a_load_signal_and_holds_no_presence_timer() 
     fixture.close_native(native).await;
 }
 
-/// A real lifecycle journal, prepared and handed to the fixture's readers.
-pub(super) async fn attach_journal(
-    fixture: &OwnerFixture,
-) -> Arc<lifecycle_observation::LifecycleStore> {
-    let journal = Arc::new(lifecycle_observation::LifecycleStore::new(
-        lifecycle_observation::ObservationJournal::open(
-            &fixture.directory.path().join("session-registry.sqlite"),
-            SERVICE_ID.to_owned().try_into().unwrap(),
-        )
-        .await
-        .unwrap(),
-    ));
-    journal
-        .prepare(chrono::Utc::now().timestamp())
-        .await
-        .unwrap();
-    *fixture.held_mail.journal.lock().unwrap() = Some(Arc::clone(&journal));
-    journal
-}
-
 /// A native observation of the reader's own thread going idle, as the observer records
 /// a thread that loaded.
 pub(super) fn thread_loaded(
@@ -158,7 +138,7 @@ pub(super) fn thread_loaded(
 #[tokio::test]
 async fn a_codex_thread_that_loads_during_the_check_still_releases_its_held_mail() {
     let fixture = Box::pin(OwnerFixture::new()).await;
-    let journal = attach_journal(&fixture).await;
+    let journal = fixture.attach_journal().await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime_without_board().await;
     let peer = PeerId::new(uuid::Uuid::now_v7()).unwrap();
@@ -265,7 +245,7 @@ async fn explicit_reader_reconcile_releases_native_held_mail_before_the_next_pre
 #[tokio::test]
 async fn a_journal_record_for_another_thread_checks_nothing_and_its_own_load_releases() {
     let fixture = Box::pin(OwnerFixture::new()).await;
-    let journal = attach_journal(&fixture).await;
+    let journal = fixture.attach_journal().await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime_without_board().await;
     let peer = PeerId::new(uuid::Uuid::now_v7()).unwrap();

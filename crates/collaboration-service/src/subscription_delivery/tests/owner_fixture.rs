@@ -96,6 +96,35 @@ impl HeldMailTestSignals {
 mod owner_setup;
 
 impl OwnerFixture {
+    /// A real lifecycle journal, prepared and handed to readers this fixture starts.
+    pub async fn attach_journal(&self) -> Arc<lifecycle_observation::LifecycleStore> {
+        let journal = Arc::new(lifecycle_observation::LifecycleStore::new(
+            lifecycle_observation::ObservationJournal::open(
+                &self.directory.path().join("session-registry.sqlite"),
+                SERVICE_ID.to_owned().try_into().unwrap(),
+            )
+            .await
+            .unwrap(),
+        ));
+        journal
+            .prepare(chrono::Utc::now().timestamp())
+            .await
+            .unwrap();
+        *self.held_mail.journal.lock().unwrap() = Some(Arc::clone(&journal));
+        journal
+    }
+
+    /// Asserts the readers took every capture fault the test injected.
+    pub fn assert_capture_faults_taken(&self) {
+        assert_eq!(
+            self.held_mail
+                .failed_captures
+                .load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "the injected capture fault fired"
+        );
+    }
+
     pub async fn assert_no_legacy_message_tables(&self) {
         use sqlx::Connection as _;
         let mut read = sqlx::SqliteConnection::connect_with(
