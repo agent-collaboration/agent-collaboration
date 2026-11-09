@@ -132,6 +132,39 @@ impl ExternalProviderSupervisor {
             .send_modify(|revision| *revision = revision.wrapping_add(1));
     }
 
+    /// Holds `operation_id` live, as admitting it to a provider does.
+    #[cfg(test)]
+    pub(crate) fn hold_live_operation(&self, operation_id: OperationId) {
+        self.inner
+            .live_operations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .operations
+            .insert(operation_id, Arc::new(LiveOperation::pending()));
+    }
+
+    /// Publishes a held operation's result through the path a finished operation takes,
+    /// with no store write. Returns whether the operation was held.
+    #[cfg(test)]
+    pub(crate) async fn publish_held_result(&self, operation_id: &OperationId) -> bool {
+        let live = self
+            .inner
+            .live_operations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .operations
+            .get(operation_id)
+            .cloned();
+        let Some(live) = live else {
+            return false;
+        };
+        let result = Err(unavailable_failure(operation_id.clone(), None));
+        self.inner
+            .publish_result(operation_id.clone(), &live, result)
+            .await;
+        true
+    }
+
     /// A receiver that wakes after each live operation publishes its result. Subscribe
     /// before checking an operation, so a completion in between is not missed.
     #[must_use]
@@ -580,6 +613,17 @@ impl SupervisorInner {
                 }
             }
         };
+        self.publish_result(operation_id, &live, result).await;
+    }
+
+    /// Publishes a live operation's result. Its protection from retention ends here, with
+    /// no store write, so the completion signal moves only after the result is set.
+    async fn publish_result(
+        &self,
+        operation_id: OperationId,
+        live: &LiveOperation,
+        result: Result<ConversationOperationSettlement, ConversationOperationFailure>,
+    ) {
         *live.result.lock().await = Some(result);
         live.changed.notify_waiters();
         self.completions
