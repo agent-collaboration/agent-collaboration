@@ -96,6 +96,20 @@ impl ObjectAlarmTimer {
                         () = tokio::time::sleep_until(expected.trigger) => {
                             let mut current = self.pending.lock().await;
                             if *current == Some(expected) {
+                                // The wall trigger was derived from business time
+                                // when it was stored. Deliver only once business
+                                // time has reached the alarm: a frozen (injected)
+                                // clock short of it must wake nothing, and a wake a
+                                // millisecond early re-sleeps rather than fires.
+                                if self.clock.now() < expected.at
+                                    && let Ok(trigger) = self.trigger_for(expected.at)
+                                {
+                                    *current = Some(PendingAlarm {
+                                        at: expected.at,
+                                        trigger,
+                                    });
+                                    continue;
+                                }
                                 *current = None;
                                 return expected.at;
                             }
