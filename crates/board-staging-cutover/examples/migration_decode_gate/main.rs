@@ -18,6 +18,8 @@ mod table_coverage;
 
 #[cfg(test)]
 mod gate_test;
+#[cfg(test)]
+mod retained_records_test;
 
 use std::process::ExitCode;
 

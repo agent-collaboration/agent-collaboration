@@ -25,8 +25,8 @@ const LEDGER: Coverage = Coverage::NotReadByMain(
 const JOURNAL: Coverage = Coverage::NotReadByMain(
     "the durable-steps journal main's library adopts (main-central proves it)",
 );
-const NO_PUBLIC_DECODER: Coverage = Coverage::MustBeEmpty(
-    "receiver record with no public decoder; any row stops the run until the gate decodes it",
+const RETAINED: Coverage = Coverage::Decoded(
+    "inspect_retained_records: the receiver's own reader, its count equal to the stored rows",
 );
 
 pub const FLEET: &[(&str, Coverage)] = &[
@@ -164,7 +164,7 @@ pub const COPY: &[(&str, Coverage)] = &[
     ),
     (
         "_fleet_sync_staged_parts",
-        Coverage::Decoded("inspect_copy staged parts"),
+        Coverage::Decoded("inspect_copy staged parts, and each payload as apply reads it"),
     ),
     (
         "_fleet_sync_schema_steps",
@@ -178,13 +178,13 @@ pub const COPY: &[(&str, Coverage)] = &[
         "_fleet_sync_copy_tables",
         Coverage::Decoded("replicated schema membership (TableName)"),
     ),
-    ("_fleet_sync_fence_receipts", NO_PUBLIC_DECODER),
-    ("_fleet_sync_seed", NO_PUBLIC_DECODER),
-    ("_fleet_sync_seed_pages", NO_PUBLIC_DECODER),
-    ("_fleet_sync_seed_attempts", NO_PUBLIC_DECODER),
-    ("_fleet_sync_creation", NO_PUBLIC_DECODER),
-    ("_fleet_sync_install", NO_PUBLIC_DECODER),
-    ("_fleet_sync_install_pages", NO_PUBLIC_DECODER),
+    ("_fleet_sync_fence_receipts", RETAINED),
+    ("_fleet_sync_seed", RETAINED),
+    ("_fleet_sync_seed_pages", RETAINED),
+    ("_fleet_sync_seed_attempts", RETAINED),
+    ("_fleet_sync_creation", RETAINED),
+    ("_fleet_sync_install", RETAINED),
+    ("_fleet_sync_install_pages", RETAINED),
     ("_fleet_sync_hook_migrations", LEDGER),
     ("_sqlx_migrations_fleet_sync_receiver", LEDGER),
     (

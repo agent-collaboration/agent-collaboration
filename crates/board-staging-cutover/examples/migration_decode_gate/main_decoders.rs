@@ -5,15 +5,19 @@
 //!   table; `StoredMachine::decode` for each enrolled machine; the canonical
 //!   record decoder for every workspace, board, ADR and directory entry; and,
 //!   per directory entry, the Copy summary and lease projection decoders.
-//! - Copy: fleet-sync-receiver's `copy_status`, which validates the Copy record.
+//! - Copy: fleet-sync-receiver's `copy_status`, which validates the Copy record,
+//!   its Copy inspection, and its retained-record inspection (every receiver
+//!   record family through the receiver's own readers).
 //!
 //! The Fleet also gets: repository attachments per workspace (orphans
 //! included), the lease incarnation, the feed state and retained range, and
 //! each request ledger record. table_coverage.rs lists what covers every table.
 
 use crate::candidate_image::{ObjectImage, TypedValue};
+use board_sync_protocol::BoardAnnotation;
 use durable_steps::storage::TransactionScope;
 use fleet_sync_protocol::{CopyStatusAnswer, DatabaseId};
+use fleet_sync_receiver::RetainedFamily;
 use message_board::{RecordId, RecordKind, RecordRef};
 use serde::Serialize;
 use sqlx_core::connection::Connection;
@@ -189,9 +193,14 @@ pub async fn decode_fleet(
 
 /// One Copy, as main's health and retention read it: fleet-sync-receiver's
 /// `copy_status` and full `inspect_copy` (record, schema fingerprint, staged
-/// parts), then the receiver's own row rules for the families it reads
-/// elsewhere: each receipt's digest (`PieceDigest`) and each replicated table
-/// name (`TableName`, outside the reserved namespace).
+/// parts); then `inspect_retained_records` (the `inspect` feature, enabled only
+/// in this crate's dev-dependencies), which reads the creation request, fence
+/// receipts, seed record, pages and attempts, install marker and page receipts,
+/// and every staged part's payload through the receiver's own readers, and
+/// whose per-family counts must equal the Copy's stored rows; then the
+/// receiver's own row rules for the families it reads elsewhere: each
+/// receipt's digest (`PieceDigest`) and each replicated table name
+/// (`TableName`, outside the reserved namespace).
 pub async fn decode_copy(
     project: &str,
     image: &ObjectImage,
@@ -243,7 +252,40 @@ pub async fn decode_copy(
     }
     let status = fleet_sync_receiver::copy_status(&mut TursoScope(&mut transaction)).await;
     let inspection = fleet_sync_receiver::inspect_copy(&mut TursoScope(&mut transaction)).await;
+    let retained = fleet_sync_receiver::inspect_retained_records::<_, BoardAnnotation>(
+        &mut TursoScope(&mut transaction),
+    )
+    .await;
     transaction.rollback().await?;
+    match retained {
+        Ok(records) => {
+            for (family, decoded) in [
+                (RetainedFamily::Creation, records.creation),
+                (RetainedFamily::FenceReceipts, records.fence_receipts),
+                (RetainedFamily::Seed, records.seed),
+                (RetainedFamily::SeedPages, records.seed_pages),
+                (RetainedFamily::SeedAttempts, records.seed_attempts),
+                (RetainedFamily::Install, records.install),
+                (RetainedFamily::InstallPages, records.install_pages),
+                (RetainedFamily::StagedParts, records.staged_parts),
+            ] {
+                let stored = image.row_count(family.table());
+                if decoded != stored {
+                    refuse(
+                        family.table(),
+                        format!("main's receiver readers decode {decoded} of {stored} rows"),
+                    );
+                }
+            }
+        }
+        Err(refusal) => refuse(
+            refusal.family.table(),
+            format!(
+                "main's receiver reader refuses {}: {}",
+                refusal.row, refusal.detail
+            ),
+        ),
+    }
     match status {
         Ok(CopyStatusAnswer::Status(_) | CopyStatusAnswer::Retired) => {}
         Ok(CopyStatusAnswer::NotInitialized) => {

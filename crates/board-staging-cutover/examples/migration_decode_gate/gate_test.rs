@@ -15,7 +15,7 @@ fn fixture() -> Value {
 }
 
 /// The fixture with its candidate edited and its digest recomputed, so only main's decoders judge it.
-fn edited(edit: impl FnOnce(&mut Value)) -> String {
+pub(super) fn edited(edit: impl FnOnce(&mut Value)) -> String {
     let mut inventory = fixture();
     let text = inventory["candidateText"].as_str().expect("candidate text");
     let mut candidate: Value = serde_json::from_str(text).expect("candidate parses");
@@ -401,7 +401,7 @@ fn every_table_mains_fleet_migrations_create_is_decoded_or_must_be_empty() {
 }
 
 /// Adds one row to a table of the first Copy (the held-at-three project).
-fn add_copy_row(candidate: &mut Value, table: &str, row: Value) {
+pub(super) fn add_copy_row(candidate: &mut Value, table: &str, row: Value) {
     let copies = candidate["copies"].as_object_mut().expect("copies");
     let copy = copies.values_mut().next().expect("one copy");
     copy["tables"][table]["rows"]
@@ -410,51 +410,11 @@ fn add_copy_row(candidate: &mut Value, table: &str, row: Value) {
         .push(row);
 }
 
-fn text(value: &str) -> Value {
+pub(super) fn text(value: &str) -> Value {
     serde_json::json!({ "kind": "text", "value": value })
 }
-fn integer(value: i64) -> Value {
+pub(super) fn integer(value: i64) -> Value {
     serde_json::json!({ "kind": "integer", "value": value.to_string() })
-}
-
-/// G3: main inspects each Copy's retained library records after its receiver
-/// migration; the gate must refuse what that inspection marks Damaged.
-#[tokio::test]
-async fn a_staged_part_with_a_non_integer_time_is_refused_and_a_valid_staged_part_passes() {
-    // Arrange: one staged part of transaction {epoch 3, commit 18}.
-    let staged = |staged_at: &str| {
-        let staged_at = staged_at.to_owned();
-        edited(move |candidate| {
-            add_copy_row(
-                candidate,
-                "_fleet_sync_staged_parts",
-                serde_json::json!([
-                    text(r#"{"epoch":3,"commitId":18}"#),
-                    integer(0),
-                    text(&staged_at),
-                    text("{}")
-                ]),
-            );
-        })
-    };
-
-    // Act
-    let valid = run_gate(&staged("1794000000000")).await;
-    let refused = run_gate(&staged("not-an-i64")).await;
-
-    // Assert
-    assert_eq!(valid.outcome, Outcome::Pass, "{valid:?}");
-    assert_eq!(refused.outcome, Outcome::Refused, "{refused:?}");
-    assert!(
-        refused
-            .refusals
-            .iter()
-            .any(|refusal| refusal.object.starts_with("copy ")
-                && refusal.row == "inspection"
-                && refusal.reason.contains("damaged")),
-        "{:?}",
-        refused.refusals
-    );
 }
 
 #[tokio::test]
