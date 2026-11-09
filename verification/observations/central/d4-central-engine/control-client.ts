@@ -151,7 +151,8 @@ export class D4ControlClient {
     this.passivity = input.passivity;
     this.clockPassivity = input.clockPassivity;
   }
-  private requireTokio(): void {
+  /** Gate native-only proof journeys before they can issue any control. */
+  requireTokio(): void {
     if (this.shell !== "tokio") throw new Error("Tokio-only D4 control");
   }
   private async control(command: unknown): Promise<unknown> {
@@ -196,12 +197,11 @@ export class D4ControlClient {
     doneSchema.parse(await this.control({ kind: "duplicateAlarm" }));
   }
   async settleClock(now: string): Promise<bigint> {
-    this.requireTokio();
     if (this.clockPassivity !== "observed")
       throw new Error("D4 clock drain/passivity is unqualified");
     // RegistryTime is transparently serialized DateTime<Utc>, not an epoch integer.
-    // Draft v3.4: the alarm loop acknowledges this clock epoch only after any
-    // caused Alarm events finish and their S1 records reach the ring.
+    // v3.8: both shells acknowledge only after caused Alarm events finish
+    // and their S1 records are retained. Workerd delivery is injected.
     return z
       .object({
         kind: z.literal("clockSettled"),

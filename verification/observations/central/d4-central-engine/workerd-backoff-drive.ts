@@ -7,6 +7,10 @@ import type { ControlledMailActor, CompleteClientFrame } from "./controlled-mail
 import type { D4ControlClient } from "./control-client.ts";
 import type { D4EventRecord } from "./event-observation.ts";
 import type { D4Snapshot } from "./snapshot-observation.ts";
+import {
+  observeClockPositioningNegative,
+  type D4ClockPositioningCut,
+} from "./clock-observation.ts";
 
 interface WorkerdBackoffInput {
   readonly sender: ControlledMailActor;
@@ -20,8 +24,9 @@ interface WorkerdBackoffInput {
     readonly businessAtLeast: bigint;
     readonly item: string | null;
   }) => Promise<D4EventRecord>;
-  /** Existing SetTime, separately qualified passive and preserving the real stored alarm. */
+  /** Workerd-only positioning; qualify no dispatch and retain the real platform deadline. */
   readonly ageBusinessClock: (now: bigint) => Promise<void>;
+  readonly positionFutureClock: (now: bigint) => Promise<D4ClockPositioningCut>;
 }
 type Attempt = D4Snapshot["attempts"][number];
 const isPush = (frame: unknown): boolean =>
@@ -153,6 +158,17 @@ async function retireAtAgedBoundary(input: WorkerdBackoffInput, before: Attempt)
     BigInt(Date.now()) < before.nextAttemptAt,
     "aging must precede the actual platform deadline",
   );
+  const future = await input.positionFutureClock(before.nextAttemptAt - 1n);
+  assert.equal(future.storedBefore, alarm);
+  const negative = observeClockPositioningNegative(future);
+  assert.equal(negative.kind, "futureAlarm");
+  await input.receipt.save("workerd-o3-future-clock-negative.json", {
+    cut: future,
+    observation: negative,
+  });
+  const positioned = await observed(input, before.subject, "future-before-aging");
+  assert.deepEqual(positioned.row, before, "future positioning changed the owning attempt");
+  requireSlot(input, positioned.snapshot, positioned.row, 1n);
   await input.ageBusinessClock(at);
   assert.equal(
     await input.controls.readAlarm(),

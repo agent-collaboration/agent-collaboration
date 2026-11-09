@@ -57,6 +57,7 @@ export async function observeTokioDrainedHour(input: {
   readonly from: string;
   readonly through: string;
 }) {
+  input.controls.requireTokio();
   const from = z.iso.datetime().parse(input.from);
   const through = z.iso.datetime().parse(input.through);
   const elapsed = Date.parse(through) - Date.parse(from);

@@ -165,6 +165,23 @@ test("SettleClock requires the settled clock epoch reply and preserves its exact
   }
 });
 
+test("v3.8 settleClock uses the same exact settled reply on both shells", async (): Promise<void> => {
+  for (const shell of ["tokio", "workerd"] as const) {
+    const input = await fixture([{ kind: "clockSettled", value: { alarmEvents: 1n } }]);
+    try {
+      assert.equal(await client(input, { shell }).settleClock("2026-11-09T00:00:00Z"), 1n);
+      assert.deepEqual(input.requests, [
+        {
+          address: { kind: "fleet" },
+          command: { kind: "settleClock", value: { now: "2026-11-09T00:00:00Z" } },
+        },
+      ]);
+    } finally {
+      await input.close();
+    }
+  }
+});
+
 test("Tokio-only controls never leak onto workerd", async (): Promise<void> => {
   const input = await fixture([]);
   try {
@@ -174,7 +191,6 @@ test("Tokio-only controls never leak onto workerd", async (): Promise<void> => {
       (): Promise<unknown> => controls.readEvents(0n),
       (): Promise<unknown> => controls.duplicateAlarm(),
       (): Promise<unknown> => controls.rebuildAtQuiescence(true),
-      (): Promise<unknown> => controls.settleClock("2026-11-08T00:00:00Z"),
       (): Promise<unknown> => controls.barrier("beforeClaim", null),
     ])
       await assert.rejects(call, /Tokio-only/);

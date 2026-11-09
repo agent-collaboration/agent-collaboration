@@ -9,6 +9,10 @@ import type { D4ControlClient } from "./control-client.ts";
 import type { D4EventRecord } from "./event-observation.ts";
 import { unsigned64Schema } from "./event-observation.ts";
 import type { D4Snapshot } from "./snapshot-observation.ts";
+import {
+  observeClockPositioningNegative,
+  type D4ClockPositioningCut,
+} from "./clock-observation.ts";
 
 export type WindowRefillCase = "giveUp" | "expiry" | "statusAck";
 interface WindowRefillInput {
@@ -19,6 +23,7 @@ interface WindowRefillInput {
   readonly controls: D4ControlClient;
   readonly receipt: Receipt;
   readonly completeClientFrame: CompleteClientFrame;
+  readonly positionFutureClock: (now: bigint) => Promise<D4ClockPositioningCut>;
 }
 function isRequest(frame: unknown, kind: string): boolean {
   return (
@@ -89,6 +94,22 @@ async function fillPushes(
   return { items, pushes };
 }
 async function firstAutomaticAlarm(input: WindowRefillInput, now: bigint): Promise<D4EventRecord> {
+  const before = await snapshot(input, "clock-before");
+  const stored = await input.controls.readAlarm();
+  assert.ok(stored !== null);
+  const future = await input.positionFutureClock(stored - 1n);
+  assert.equal(future.storedBefore, stored);
+  const negative = observeClockPositioningNegative(future);
+  assert.equal(negative.kind, "futureAlarm");
+  await input.receipt.save(`o2-${input.kind}-future-clock-negative.json`, {
+    cut: future,
+    observation: negative,
+  });
+  assert.deepEqual(
+    await snapshot(input, "clock-after"),
+    before,
+    "future positioning changed owning state",
+  );
   const cursor = (await input.controls.readEvents(0n)).through;
   await input.controls.alarmDelivery(true);
   assert.ok(
