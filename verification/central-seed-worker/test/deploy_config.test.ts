@@ -1,4 +1,4 @@
-// The seed Worker can only be configured for a staging central.
+// The seed Worker is never configured for production's central.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
@@ -41,7 +41,7 @@ test("a staging target gets the seed entrypoint and its own name as the seed tar
   });
 });
 
-test("production's central, or a target not named staging, is refused", () => {
+test("production's central is refused, and the allocated S1 name is accepted", () => {
   assert.throws(() => seedWorkerConfig(target("collaboration-central"), "w.js"), /production/);
   assert.throws(
     () =>
@@ -51,8 +51,10 @@ test("production's central, or a target not named staging, is refused", () => {
       ),
     /production/,
   );
-  assert.throws(
-    () => seedWorkerConfig(target("collaboration-central-test"), "w.js"),
-    /doesn't say staging/,
+  // The S1 staging Worker's allocated name; first-upload-only is the deploy's guard, not the name.
+  assert.equal(
+    seedWorkerConfig(target("collaboration-central-s1-migration"), "w.js").worker.env
+      .STAGING_SEED_TARGET?.value,
+    "collaboration-central-s1-migration",
   );
 });

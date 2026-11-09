@@ -2,26 +2,25 @@
 // central target's own config (the cf CLI format). It refuses production's
 // target outright, and sets the STAGING_SEED_TARGET binding to the staging
 // Worker's name, which the Worker requires before it writes anything.
+//
+// The name itself isn't a guard: the seed deploys only as a first upload
+// (tools/central-migration/scripts/worker_deploy.ts checkBefore refuses an
+// existing Worker, its namespaces or its hostname), so it can never replace a
+// live central, whatever the staging Worker is called.
 
 import {
   checkLiveTarget,
   type WorkerConfig,
 } from "../../../tools/central-migration/scripts/deploy_configs.ts";
+import { PRODUCTION } from "../../../tools/central-migration/scripts/worker_deploy.ts";
 
-/** Production central's identity (fleet-ops production live-target.json): never a seed target. */
-export const PRODUCTION = {
-  worker: "collaboration-central",
-  domain: "central.agent-collaboration.com",
-} as const;
+export { PRODUCTION };
 
 export function seedWorkerConfig(staging: WorkerConfig, entrypoint: string): WorkerConfig {
   checkLiveTarget(staging);
   const domains = (staging.worker.domains as readonly string[] | undefined) ?? [];
   if (staging.worker.name === PRODUCTION.worker || domains.includes(PRODUCTION.domain)) {
     throw new Error("refusing to configure the staging seed Worker for production's central");
-  }
-  if (!/staging/.test(staging.worker.name)) {
-    throw new Error(`refusing a target whose name doesn't say staging: ${staging.worker.name}`);
   }
   return {
     ...staging,
