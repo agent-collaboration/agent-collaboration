@@ -25,6 +25,8 @@ import type { WorkerConfig } from "./deploy_configs.ts";
 import {
   BUILD_RULES,
   DeployRefused,
+  ENTRYPOINTS,
+  SEED_ENTRY_MODULE,
   deployWorker,
   type CfRunner,
   type DeployOutcome,
@@ -79,6 +81,11 @@ export async function stageScratch(
   const tool = await pinnedTool();
   await mkdir(scratch, { mode: 0o700 });
   await cp(resolve(artifact), join(scratch, "artifact"), { recursive: true, errorOnExist: true });
+  if (kind === "seed")
+    await writeFile(join(scratch, ENTRYPOINTS.seed), SEED_ENTRY_MODULE, {
+      mode: 0o600,
+      flag: "wx",
+    });
   const rendered = `export default ${JSON.stringify(config, null, 2)};\n`;
   await writeFile(join(scratch, "cloudflare.config.ts"), rendered, { mode: 0o600 });
   await writeFile(join(scratch, "wrangler.config.ts"), BUILD_RULES[kind], { mode: 0o600 });

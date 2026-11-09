@@ -9,6 +9,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
+import { Miniflare, convertV4MiniflareOptions } from "miniflare";
 import type { WorkerConfig } from "../scripts/deploy_configs.ts";
 import { buildWithPinnedCf, guardedRun, stageScratch } from "../scripts/deploy_run.ts";
 import {
@@ -152,5 +153,42 @@ test("a render the pinned cf refuses stops the guarded run before any call to Cl
     assert.deepEqual(log, []);
   }).finally(() => {
     delete process.env.FAKE_CF_STATE;
+  });
+});
+
+test("cf's build of the real migration Worker artifact loads in workerd", async () => {
+  // Arrange: this package's own build (pnpm test builds it first).
+  const artifact = join(import.meta.dirname, "../build");
+  await withScratch(async (root) => {
+    const scratch = join(root, "scratch");
+    await stageScratch("migration", renderConfig("migration", SETTINGS), artifact, scratch);
+
+    // Act
+    const built = await buildWithPinnedCf(scratch);
+
+    // Assert: workerd resolves cf's bundle, main module first, as the upload does.
+    const bundle = join(scratch, ".cloudflare/output/v0/workers/default/bundle");
+    const manifest = built.manifest as { mainModule: string; modules: Record<string, unknown> };
+    const names = [
+      manifest.mainModule,
+      ...Object.keys(manifest.modules).filter((name) => name !== manifest.mainModule),
+    ];
+    const runtime = new Miniflare(
+      convertV4MiniflareOptions({
+        workers: [
+          {
+            name: "migration-bundle",
+            compatibilityDate: SETTINGS.compatibilityDate,
+            modulesRoot: bundle,
+            modules: names.map((name) => ({ type: "ESModule", path: join(bundle, name) })),
+          },
+        ],
+      }),
+    );
+    try {
+      await runtime.ready;
+    } finally {
+      await runtime.dispose();
+    }
   });
 });

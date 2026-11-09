@@ -69,22 +69,34 @@ export interface DeploySettings {
   };
 }
 
+/**
+ * The seed's tsc entry, nested under the repository layout. cf's build moves the
+ * main module to the bundle root, so the seed deploys through SEED_ENTRY_MODULE,
+ * a root-level module re-exporting it, and its relative imports still resolve.
+ */
+export const SEED_TSC_ENTRY = "verification/central-seed-worker/src/worker.js";
+export const SEED_ENTRY_MODULE = `export * from "./${SEED_TSC_ENTRY}";\nexport { default } from "./${SEED_TSC_ENTRY}";\n`;
 /** Where each kind's entry module sits inside the copied artifact directory. */
 export const ENTRYPOINTS: Readonly<Record<WorkerKind, string>> = {
-  seed: "artifact/verification/central-seed-worker/src/worker.js",
+  seed: "artifact/seed_entry.js",
   migration: "artifact/worker.js",
   "old-central": "artifact/index.js",
   "main-central": "artifact/index.js",
 };
-/** cf's build-step rules per artifact: tsc output as ES modules, or worker-build's JS with its wasm. */
+/**
+ * cf's build-step rules per artifact: tsc output as ES modules, or worker-build's
+ * JS with its wasm. Modules are collected from the whole copied artifact
+ * (`baseDir`), since the seed's entry imports modules outside its own directory.
+ */
+const buildRules = (rule: string) =>
+  `export default { noBundle: true, baseDir: "artifact", rules: [${rule}] };\n`;
+const ES_MODULES = '{ type: "ESModule", globs: ["**/*.js"], fallthrough: false }';
+const COMPILED_WASM = '{ type: "CompiledWasm", globs: ["**/*.wasm"], fallthrough: false }';
 export const BUILD_RULES: Readonly<Record<WorkerKind, string>> = {
-  seed: 'export default { noBundle: true, rules: [{ type: "ESModule", globs: ["**/*.js"], fallthrough: false }] };\n',
-  migration:
-    'export default { noBundle: true, rules: [{ type: "ESModule", globs: ["**/*.js"], fallthrough: false }] };\n',
-  "old-central":
-    'export default { noBundle: true, rules: [{ type: "CompiledWasm", globs: ["**/*.wasm"], fallthrough: false }] };\n',
-  "main-central":
-    'export default { noBundle: true, rules: [{ type: "CompiledWasm", globs: ["**/*.wasm"], fallthrough: false }] };\n',
+  seed: buildRules(ES_MODULES),
+  migration: buildRules(ES_MODULES),
+  "old-central": buildRules(COMPILED_WASM),
+  "main-central": buildRules(COMPILED_WASM),
 };
 
 export class DeployRefused extends Error {}
