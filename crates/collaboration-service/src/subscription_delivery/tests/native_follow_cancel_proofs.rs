@@ -1,5 +1,6 @@
 //! Membership cancellation starts with the real frozen follow and its replicated cause.
 use super::native_follow_mail_proofs::{follow_application, frozen_follow};
+use super::native_held_mail_proofs::checked_while_wakeable_then_loaded;
 use super::*;
 use board_sync_protocol::BoardDeliveryBody;
 use collaboration_mail_protocol::NotificationSource;
@@ -318,7 +319,8 @@ async fn a_real_membership_end_prevents_its_held_follow_through_a_frozen_child()
     }
     // Local controls need no central ACK (840). Readiness reaches the real
     // pre-injection publisher check; no fixture releases custody or fabricates outcomes.
-    *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
+    // The target loads after the reader checked it.
+    checked_while_wakeable_then_loaded(&fixture, &runtime, &push_id).await;
     let settled = async {
         loop {
             let outcome = native

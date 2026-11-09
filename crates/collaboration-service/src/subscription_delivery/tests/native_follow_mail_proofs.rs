@@ -1,4 +1,5 @@
 //! Follow allocation uses the project transaction and native custody, including held work.
+use super::native_held_mail_proofs::checked_while_wakeable_then_loaded;
 use super::*;
 use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
 use collaboration_mail_protocol::NotificationSource;
@@ -183,9 +184,8 @@ async fn held_follow_keeps_its_frozen_item_ranges_and_link_until_one_native_acce
     );
     assert!(runtime.requests.lock().await.try_recv().is_err());
 
-    // Act through the existing readiness cadence, without calling release_held.
-    *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
-    fixture.clock.advance_without_tokio_time(30);
+    // The target loads after the reader checked it, without calling release_held.
+    checked_while_wakeable_then_loaded(&fixture, &runtime, &held.push_id).await;
     let request = tokio::time::timeout(Duration::from_secs(10), async {
         runtime.requests.lock().await.recv().await.unwrap()
     })
