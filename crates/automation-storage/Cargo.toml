@@ -30,7 +30,7 @@ sqlite-storage-maintenance = { path = "../sqlite-storage-maintenance", version =
 
 [dev-dependencies]
 tempfile = "3.27.0"
-sqlite-storage-maintenance = { path = "../sqlite-storage-maintenance", features = ["test-support"] }
+sqlite-storage-maintenance = { path = "../sqlite-storage-maintenance", version = "0.1.118", features = ["test-support"] }
 
 [[test]]
 name = "integration"

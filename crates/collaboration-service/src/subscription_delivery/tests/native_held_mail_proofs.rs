@@ -119,6 +119,39 @@ async fn held_native_mail_waits_for_a_load_signal_and_holds_no_presence_timer() 
     fixture.close_native(native).await;
 }
 
+/// Bounds a wait for an event the owner causes; it only stops a hang.
+const HELD_CHECK_EVENT: Duration = Duration::from_secs(10);
+
+/// A reader checks held `item` while its target is not running and waits on its signals,
+/// holding it; then the target loads. With no presence timer, only that load signal checks
+/// the item again, so a test that releases held mail must send it.
+///
+/// The signal goes only once a reader holds the item and waits. A reader started later,
+/// as when a membership end replaces the owner, checks the item itself and so owes nothing
+/// for a signal sent before it existed; that check then finds the target running.
+pub(super) async fn checked_while_wakeable_then_loaded(
+    fixture: &OwnerFixture,
+    runtime: &OwnerRuntime,
+    item: &collaboration_protocol::PushId,
+) {
+    tokio::time::timeout(
+        HELD_CHECK_EVENT,
+        runtime.observe(|event| {
+            matches!(event, OwnerObservation::NativeHeldChecked { item: checked, running: false } if checked == item)
+        }),
+    )
+    .await
+    .expect("the reader checked the held item while its target was not running");
+    tokio::time::timeout(
+        HELD_CHECK_EVENT,
+        runtime.observe(|event| matches!(event, OwnerObservation::Sleeping(_))),
+    )
+    .await
+    .expect("the reader holding the item waited on its signals");
+    *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
+    fixture.held_mail.observation_retried();
+}
+
 /// A native observation of the reader's own thread going idle, as the observer records
 /// a thread that loaded.
 pub(super) fn thread_loaded(

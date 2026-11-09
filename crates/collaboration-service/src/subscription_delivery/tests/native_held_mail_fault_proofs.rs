@@ -107,11 +107,13 @@ async fn an_expired_journal_position_owes_one_check_which_records_a_fresh_positi
     let now = chrono::Utc::now().timestamp();
     journal.append(&thread_loaded(&other), now).await.unwrap();
     journal.maintain(now + 90 * 86_400).await.unwrap();
+    // Counted while the check is paused, so a later check the owner runs before this test
+    // reads its events is not already in the count.
+    let checks_before = fixture.presence.checks();
     answer_signal.send(()).unwrap();
     checked_while_not_running(&runtime, &held.push_id).await;
 
     // The reader cannot read after its position, so it owes one check.
-    let checks_before = fixture.presence.checks();
     observed(&runtime, "a signal that owed a check", |event| {
         matches!(event, OwnerObservation::HeldMailSignalTaken { owed: true })
     })
