@@ -79,6 +79,9 @@ pub(super) struct ScriptedSessionBackend {
     pub(super) load_commands: Mutex<Vec<SessionTargetCommand>>,
     pub(super) prompt_commands: Mutex<Vec<PromptSessionCommand>>,
     pub(super) steer_commands: Mutex<Vec<SteerSessionCommand>>,
+    pub(super) publish_user_receipts: std::sync::atomic::AtomicBool,
+    pub(super) steer_receipt_gate: Mutex<Option<Arc<Notify>>>,
+    pub(super) steer_failure: Mutex<Option<CommandFailure>>,
     pub(super) steer_gate: Mutex<Option<Arc<Notify>>>,
     pub(super) steer_started: Notify,
     pub(super) turn_command_order: Mutex<Vec<&'static str>>,
@@ -126,6 +129,9 @@ impl ScriptedSessionBackend {
             load_commands: Mutex::new(Vec::new()),
             prompt_commands: Mutex::new(Vec::new()),
             steer_commands: Mutex::new(Vec::new()),
+            publish_user_receipts: false.into(),
+            steer_receipt_gate: Mutex::new(None),
+            steer_failure: Mutex::new(None),
             steer_gate: Mutex::new(None),
             steer_started: Notify::new(),
             turn_command_order: Mutex::new(Vec::new()),
@@ -147,6 +153,46 @@ impl ScriptedSessionBackend {
             prompt_submitted: Notify::new(),
             skill_views: Mutex::new(HashMap::new()),
         }))
+    }
+
+    fn publish_receipt(
+        &self,
+        input_id: session_event_model::InputId,
+        submission: session_event_model::ProviderSubmission,
+        injected: bool,
+    ) {
+        let mut history = self.history.lock().expect("history");
+        let mut publish = |event| {
+            let event = collaboration_contracts::HubEvent {
+                sequence: u64::try_from(history.len()).expect("count") + 10,
+                event,
+            };
+            history.push(event.clone());
+            let _sent = self.events.send(event);
+        };
+        if injected {
+            publish(SessionEvent::InputAccepted {
+                input_id,
+                turn_id: "turn-1".into(),
+            });
+        }
+        let text = submission
+            .content
+            .iter()
+            .filter_map(|block| match block {
+                session_event_model::PromptContent::Text { text } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect::<String>();
+        let item_id = Uuid::now_v7().to_string();
+        publish(SessionEvent::ItemStarted {
+            item: session_event_model::SessionItem {
+                item_id: item_id.clone(),
+                kind: session_event_model::SessionItemKind::UserMessage,
+                text: Some(text),
+            },
+        });
+        publish(SessionEvent::ItemCompleted { item_id });
     }
 
     pub(super) fn actor() -> Result<Identity, serde_json::Error> {
@@ -226,6 +272,7 @@ impl SessionCommandPort for ScriptedSessionBackend {
     }
     fn prompt(&self, command: PromptSessionCommand) -> CommandFuture<'_, SessionTurnHandle> {
         let input_id = command.input_id.clone();
+        let submission = command.submission.clone();
         let gate = self.prompt_gate.lock().expect("test lock").clone();
         self.prompt_commands
             .lock()
@@ -239,9 +286,12 @@ impl SessionCommandPort for ScriptedSessionBackend {
             sequence: 1,
             event: SessionEvent::TurnStarted {
                 turn_id: "turn-1".into(),
-                input_id,
+                input_id: input_id.clone(),
             },
         });
+        if self.publish_user_receipts.load(Ordering::Acquire) {
+            self.publish_receipt(input_id, submission, false);
+        }
         self.prompt_submitted.notify_one();
         Box::pin(async move {
             if let Some(gate) = gate {
@@ -257,6 +307,16 @@ impl SessionCommandPort for ScriptedSessionBackend {
         self.steer_started.notify_one();
         Box::pin(async move {
             if let Some(gate) = gate {
+                gate.notified().await;
+            }
+            if let Some(failure) = self.steer_failure.lock().expect("failure").take() {
+                return Err(failure);
+            }
+            if self.publish_user_receipts.load(Ordering::Acquire) {
+                self.publish_receipt(command.input_id.clone(), command.submission.clone(), true);
+            }
+            let receipt_gate = self.steer_receipt_gate.lock().expect("receipt gate").take();
+            if let Some(gate) = receipt_gate {
                 gate.notified().await;
             }
             self.steer_commands.lock().expect("test lock").push(command);

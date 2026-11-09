@@ -6,7 +6,9 @@ import { AcpExchange } from "./acp-exchange.ts";
 const mode = requireArgument(2);
 const receipt = requireArgument(3);
 const agent = new AcpExchange();
-await agent.initialize("submitted-prompt-fixture");
+await agent.initialize("submitted-prompt-fixture", {
+  agentCapabilities: { promptCapabilities: { image: true } },
+});
 await agent.newSession();
 let promptCount = 0;
 try {

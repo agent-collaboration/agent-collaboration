@@ -164,6 +164,7 @@ enum PendingAppServerInteraction {
 }
 
 pub(crate) struct AppServerEventForwarding {
+    pub(crate) user_receipts: crate::native_user_receipts::NativeUserReceipts,
     actor: Identity,
     broker: Option<Arc<ServiceInteractionBroker>>,
     turn_ids: HashMap<SessionRef, String>,
@@ -174,6 +175,7 @@ pub(crate) struct AppServerEventForwarding {
 impl AppServerEventForwarding {
     pub(crate) fn new(actor: Identity, broker: Option<Arc<ServiceInteractionBroker>>) -> Self {
         Self {
+            user_receipts: crate::native_user_receipts::NativeUserReceipts::default(),
             actor,
             broker,
             turn_ids: HashMap::new(),
@@ -210,11 +212,13 @@ impl AppServerEventForwarding {
     pub(crate) fn project(&mut self, session: &SessionRef, event: &HubEvent) -> Vec<Value> {
         let thread_id = thread_alias(session);
         match &event.event {
-            SessionEvent::TurnStarted { turn_id, .. } => {
+            SessionEvent::TurnStarted { turn_id, input_id } => {
+                self.user_receipts.accept(session, &thread_id, input_id);
                 self.turn_ids.insert(session.clone(), turn_id.clone());
                 render_turn_event(session, event).into_iter().collect()
             }
             SessionEvent::TurnEnded { .. } => {
+                self.user_receipts.complete_turn(session);
                 self.turn_ids.remove(session);
                 self.items
                     .retain(|(item_session, _), _| item_session != session);
@@ -222,10 +226,17 @@ impl AppServerEventForwarding {
             }
             SessionEvent::ItemStarted { item } | SessionEvent::ItemUpdated { item } => {
                 let turn_id = self.turn_ids.get(session).map(String::as_str).unwrap_or("");
-                let Some(translated) = translate_session_item(item, &thread_id, turn_id) else {
+                let Some(mut translated) = translate_session_item(item, &thread_id, turn_id) else {
                     self.items.remove(&(session.clone(), item.item_id.clone()));
                     return Vec::new();
                 };
+                if matches!(item.kind, session_event_model::SessionItemKind::UserMessage) {
+                    self.user_receipts.stamp(
+                        session,
+                        &mut translated.thread_item,
+                        self.items.get(&(session.clone(), item.item_id.clone())),
+                    );
+                }
                 let previous = self.items.insert(
                     (session.clone(), item.item_id.clone()),
                     translated.thread_item.clone(),
@@ -340,6 +351,10 @@ impl AppServerEventForwarding {
                     "threadId":thread_id,"turnId":turn_id,"item":item,
                     "completedAtMs":chrono::Utc::now().timestamp_millis()
                 }})]
+            }
+            SessionEvent::InputAccepted { input_id, .. } => {
+                self.user_receipts.accept(session, &thread_id, input_id);
+                Vec::new()
             }
             SessionEvent::InteractionRequested { interaction } => {
                 self.present_interaction(session, interaction, &thread_id)

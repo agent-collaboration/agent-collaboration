@@ -435,8 +435,13 @@ fn thread_start_response(summary: &HubSessionSummary) -> Value {
     })
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The connection allocates input identity before dispatch so events can precede the reply."
+)]
 pub(super) async fn handle_app_server_turn_request(
     method: &str,
+    input_id: session_event_model::InputId,
     params: Value,
     commands: Arc<dyn SessionCommandPort>,
     events: Arc<dyn SessionEventHub>,
@@ -481,7 +486,7 @@ pub(super) async fn handle_app_server_turn_request(
             let handle = commands
                 .prompt(PromptSessionCommand {
                     target: session,
-                    input_id: session_event_model::InputId::generate(),
+                    input_id,
                     submission: content,
                     actor,
                 })
@@ -499,7 +504,6 @@ pub(super) async fn handle_app_server_turn_request(
                 .ok_or(ThreadMethodError::InvalidParams)?
                 .to_owned();
             let content = parse_turn_input(&params, &session).await?;
-            let input_id = session_event_model::InputId::generate();
             let outcome = commands
                 .steer(SteerSessionCommand {
                     target: session.clone(),
