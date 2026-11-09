@@ -624,3 +624,7 @@ mod sync_tests;
 #[cfg(test)]
 #[path = "router_session_app_server_activity_test.rs"]
 mod activity_tests;
+
+#[cfg(test)]
+#[path = "native_provider_service_tier_test.rs"]
+mod service_tier_tests;
