@@ -111,7 +111,13 @@ impl RecipientRuntime {
         );
         let client = SessionClient::<_, _, BoardConsumerProtocol>::load(
             transport.clone(),
-            MachineSessionStore::open(root).await?,
+            MachineSessionStore::from_cache(std::sync::Arc::new(
+                message_board_storage::FleetStore::open(
+                    &root.join(message_board_storage::FleetStore::FILE_NAME),
+                )
+                .await?
+                .cache(),
+            )),
             &UuidV7Ids,
             SchemaSupport { max_version: 1 },
             Backoff {
@@ -153,13 +159,22 @@ impl RecipientRuntime {
                 .expect("32-byte fixture cursor key"),
         ));
         let projects = Arc::new(ProjectWriters::new(
-            root,
-            inputs.peer,
-            &registry,
-            requests.clone(),
-            inputs.receiver,
-            ready.clone(),
-            stopped.clone(),
+            crate::collaboration_runtime::board_composition::project_writers::ProjectWriterInputs {
+                cache: Arc::new(
+                    message_board_storage::FleetStore::open(
+                        &root.join(message_board_storage::FleetStore::FILE_NAME),
+                    )
+                    .await?
+                    .cache(),
+                ),
+                directory: root,
+                peer: inputs.peer,
+                registry: &registry,
+                requests: requests.clone(),
+                receiver: inputs.receiver,
+                welcomed: ready.clone(),
+                stopped: stopped.clone(),
+            },
         ));
         let shutdown = tokio_util::sync::CancellationToken::new();
         let mut tasks = JoinSet::new();
@@ -167,8 +182,17 @@ impl RecipientRuntime {
         tasks.spawn(run_events(
             events,
             requests,
-            MachineNoticeReactions::open(root).await?,
+            MachineNoticeReactions::open(
+                message_board_storage::FleetStore::open(
+                    &root.join(message_board_storage::FleetStore::FILE_NAME),
+                )
+                .await
+                .map_err(std::io::Error::other)?
+                .cache(),
+            )
+            .await?,
             MachineSessionEventOwners {
+                link_failures: None,
                 projects: projects.clone(),
                 admission: Weak::new(),
                 fleet: Weak::new(),

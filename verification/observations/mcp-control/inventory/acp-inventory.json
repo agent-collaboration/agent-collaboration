@@ -1,0 +1,667 @@
+{
+  "schemaCrate": "agent-client-protocol-schema",
+  "schemaVersion": "1.9.1",
+  "protocol": "v1",
+  "enabledFeatures": [],
+  "dispositions": {
+    "qualified": "First-PR representation with a deciding lifecycle case; claimed only when that case passes on the declared target, currently the controlled peer. Actual provider profiles still require F3.",
+    "represented": "An existing MCP tool or observation represents it, but the first PR does not qualify it.",
+    "hostOwned": "The Host performs it on its own provider connection; MCP neither forwards nor exposes it.",
+    "unsupported": "No facade offer exists; the current profile does not advertise it.",
+    "compileGated": "Behind a schema feature this workspace does not enable; an inventory entry, never a support claim."
+  },
+  "rows": [
+    {
+      "name": "initialize",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": null,
+      "disposition": "hostOwned",
+      "tools": ["endpoints_list", "provider_session_inspect"],
+      "proof": null,
+      "note": "MCP initialize/discovery is a different negotiation; availability is reported, never forwarded."
+    },
+    {
+      "name": "authenticate",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": null,
+      "disposition": "hostOwned",
+      "tools": ["provider_session_inspect"],
+      "proof": null,
+      "note": "Host-owned provider handshake; credentials are never exported."
+    },
+    {
+      "name": "providers/list",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": "unstable_llm_providers",
+      "disposition": "compileGated",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "providers/set",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": "unstable_llm_providers",
+      "disposition": "compileGated",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "providers/disable",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": "unstable_llm_providers",
+      "disposition": "compileGated",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "session/new",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": null,
+      "disposition": "qualified",
+      "tools": ["conversation_create", "conversation_create_and_prompt"],
+      "proof": "lifecycle.create",
+      "note": "Existing create admission, creator/Approver/policy and inspectable operation."
+    },
+    {
+      "name": "session/load",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": null,
+      "disposition": "qualified",
+      "tools": ["conversation_load"],
+      "proof": "lifecycle.load",
+      "note": "Load replay is not resume."
+    },
+    {
+      "name": "session/set_mode",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["conversation_settings_set", "conversation_settings_accept"],
+      "proof": null,
+      "note": "Existing qualified mode setter; not re-qualified by this PR."
+    },
+    {
+      "name": "session/set_config_option",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["conversation_settings_set", "conversation_settings_accept"],
+      "proof": null,
+      "note": "Mode/model/effort only; other categories and value kinds are a named facade gap."
+    },
+    {
+      "name": "session/prompt",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": null,
+      "disposition": "qualified",
+      "tools": [
+        "conversation_prompt",
+        "conversation_create_and_prompt",
+        "conversation_operation_show",
+        "conversation_operation_wait"
+      ],
+      "proof": "lifecycle.prompt",
+      "note": "Text input only; media and embedded context are a named facade gap."
+    },
+    {
+      "name": "session/cancel",
+      "kind": "notification",
+      "direction": "clientToAgent",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["conversation_cancel", "conversation_operation_show"],
+      "proof": null,
+      "note": "Exact target operation; positive proof is the controlled causal hold only. An MCP transport cancellation never means an exact operation cancel."
+    },
+    {
+      "name": "session/list",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["provider_sessions_list"],
+      "proof": null,
+      "note": "Managed provider inventory; a list read does not resume."
+    },
+    {
+      "name": "session/delete",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": null,
+      "disposition": "unsupported",
+      "tools": [],
+      "proof": null,
+      "note": "No qualified owner or representation."
+    },
+    {
+      "name": "session/fork",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": "unstable_session_fork",
+      "disposition": "compileGated",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "session/resume",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["conversation_resume"],
+      "proof": null,
+      "note": "Resume without provider replay; positive proof is the full controlled peer only. The selected Claude profile advertises it with its actual F3 pending; Cursor native methods are unsupported and refuse with a typed binding or none refusal."
+    },
+    {
+      "name": "session/close",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["conversation_close"],
+      "proof": null,
+      "note": "Current close owner and observed result; no deletion or shared-process shutdown promise. Positive proof is the full controlled peer only; the selected Claude profile advertises it with its actual F3 pending; Cursor native methods are unsupported and refuse with a typed binding or none refusal."
+    },
+    {
+      "name": "logout",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": null,
+      "disposition": "unsupported",
+      "tools": [],
+      "proof": null,
+      "note": "Not a facade offer."
+    },
+    {
+      "name": "nes/start",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": "unstable_nes",
+      "disposition": "compileGated",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "nes/suggest",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": "unstable_nes",
+      "disposition": "compileGated",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "nes/accept",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": "unstable_nes",
+      "disposition": "compileGated",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "nes/reject",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": "unstable_nes",
+      "disposition": "compileGated",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "nes/close",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": "unstable_nes",
+      "disposition": "compileGated",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "document/didOpen",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": "unstable_nes",
+      "disposition": "compileGated",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "document/didChange",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": "unstable_nes",
+      "disposition": "compileGated",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "document/didClose",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": "unstable_nes",
+      "disposition": "compileGated",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "document/didSave",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": "unstable_nes",
+      "disposition": "compileGated",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "document/didFocus",
+      "kind": "method",
+      "direction": "clientToAgent",
+      "gate": "unstable_nes",
+      "disposition": "compileGated",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "mcp/message",
+      "kind": "method",
+      "direction": "both",
+      "gate": "unstable_mcp_over_acp",
+      "disposition": "compileGated",
+      "tools": [],
+      "proof": null,
+      "note": "Not a tunnel; excluded by the owner."
+    },
+    {
+      "name": "mcp/connect",
+      "kind": "method",
+      "direction": "agentToClient",
+      "gate": "unstable_mcp_over_acp",
+      "disposition": "compileGated",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "mcp/disconnect",
+      "kind": "method",
+      "direction": "agentToClient",
+      "gate": "unstable_mcp_over_acp",
+      "disposition": "compileGated",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "$/cancel_request",
+      "kind": "notification",
+      "direction": "both",
+      "gate": null,
+      "disposition": "hostOwned",
+      "tools": [],
+      "proof": null,
+      "note": "JSON-RPC request cancellation on the Host's own connection; MCP call cancellation only detaches the caller."
+    },
+    {
+      "name": "session/request_permission",
+      "kind": "method",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["approval_list", "approval_decide", "events_observe"],
+      "proof": null,
+      "note": "Broker and stored Approver settle; a caller cannot manufacture a Human or persistent consent."
+    },
+    {
+      "name": "elicitation/create",
+      "kind": "method",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["question_list", "question_answer", "events_observe"],
+      "proof": null,
+      "note": "Existing question broker; not an auto-approval route."
+    },
+    {
+      "name": "elicitation/complete",
+      "kind": "notification",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["events_observe"],
+      "proof": null,
+      "note": "Observed as interaction resolution."
+    },
+    {
+      "name": "fs/read_text_file",
+      "kind": "method",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "unsupported",
+      "tools": [],
+      "proof": null,
+      "note": "The outgoing client advertises no filesystem capability."
+    },
+    {
+      "name": "fs/write_text_file",
+      "kind": "method",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "unsupported",
+      "tools": [],
+      "proof": null,
+      "note": "The outgoing client advertises no filesystem capability."
+    },
+    {
+      "name": "terminal/create",
+      "kind": "method",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "unsupported",
+      "tools": [],
+      "proof": null,
+      "note": "The outgoing client advertises no terminal capability."
+    },
+    {
+      "name": "terminal/output",
+      "kind": "method",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "unsupported",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "terminal/release",
+      "kind": "method",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "unsupported",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "terminal/wait_for_exit",
+      "kind": "method",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "unsupported",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "terminal/kill",
+      "kind": "method",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "unsupported",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "session/update",
+      "kind": "notification",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "qualified",
+      "tools": ["events_observe", "provider_session_inspect"],
+      "proof": "output.agentMessage",
+      "note": "Per-variant dispositions below; snapshots retain latest item state, not every delta."
+    },
+    {
+      "name": "user_message_chunk",
+      "kind": "sessionUpdate",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["events_observe"],
+      "proof": null,
+      "note": "userMessage item."
+    },
+    {
+      "name": "agent_message_chunk",
+      "kind": "sessionUpdate",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "qualified",
+      "tools": ["events_observe"],
+      "proof": "output.agentMessage",
+      "note": "agentMessage item with cumulative text."
+    },
+    {
+      "name": "agent_thought_chunk",
+      "kind": "sessionUpdate",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["events_observe"],
+      "proof": null,
+      "note": "agentThought item."
+    },
+    {
+      "name": "tool_call",
+      "kind": "sessionUpdate",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["events_observe"],
+      "proof": null,
+      "note": "toolCall item."
+    },
+    {
+      "name": "tool_call_update",
+      "kind": "sessionUpdate",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["events_observe"],
+      "proof": null,
+      "note": "toolCall item status."
+    },
+    {
+      "name": "plan",
+      "kind": "sessionUpdate",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["events_observe"],
+      "proof": null,
+      "note": "plan item."
+    },
+    {
+      "name": "plan_update",
+      "kind": "sessionUpdate",
+      "direction": "agentToClient",
+      "gate": "unstable_plan_operations",
+      "disposition": "compileGated",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "plan_removed",
+      "kind": "sessionUpdate",
+      "direction": "agentToClient",
+      "gate": "unstable_plan_operations",
+      "disposition": "compileGated",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "available_commands_update",
+      "kind": "sessionUpdate",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["provider_session_inspect"],
+      "proof": null,
+      "note": "Command/skill inventory."
+    },
+    {
+      "name": "current_mode_update",
+      "kind": "sessionUpdate",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["events_observe", "provider_session_inspect"],
+      "proof": null,
+      "note": "settingsChanged."
+    },
+    {
+      "name": "config_option_update",
+      "kind": "sessionUpdate",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["events_observe", "provider_session_inspect"],
+      "proof": null,
+      "note": "settingsChanged."
+    },
+    {
+      "name": "session_info_update",
+      "kind": "sessionUpdate",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["events_observe"],
+      "proof": null,
+      "note": "sessionInfo item."
+    },
+    {
+      "name": "usage_update",
+      "kind": "sessionUpdate",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["events_observe"],
+      "proof": null,
+      "note": "usage item."
+    },
+    {
+      "name": "notice",
+      "kind": "sessionUpdate",
+      "direction": "agentToClient",
+      "gate": "unstable_session_notices",
+      "disposition": "compileGated",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "compaction_update",
+      "kind": "sessionUpdate",
+      "direction": "agentToClient",
+      "gate": "unstable_session_compaction",
+      "disposition": "compileGated",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "compaction_summary_chunk",
+      "kind": "sessionUpdate",
+      "direction": "agentToClient",
+      "gate": "unstable_session_compaction",
+      "disposition": "compileGated",
+      "tools": [],
+      "proof": null,
+      "note": ""
+    },
+    {
+      "name": "cursor/list_available_models",
+      "kind": "extension",
+      "direction": "clientToAgent",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["provider_session_inspect"],
+      "proof": null,
+      "note": "Cursor model catalogue the Host reads."
+    },
+    {
+      "name": "cursor/create_plan",
+      "kind": "extension",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["events_observe"],
+      "proof": null,
+      "note": "plan item."
+    },
+    {
+      "name": "cursor/update_todos",
+      "kind": "extension",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["events_observe"],
+      "proof": null,
+      "note": "plan item."
+    },
+    {
+      "name": "cursor/ask_question",
+      "kind": "extension",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["question_list", "question_answer"],
+      "proof": null,
+      "note": "Question broker."
+    },
+    {
+      "name": "_meta.steering",
+      "kind": "extension",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "hostOwned",
+      "tools": [],
+      "proof": null,
+      "note": "Agent capability the Host's own queue/steer delivery consumes (provider_capability_report.rs:92, provider_session_actor.rs:534-556); message_send keeps its delivery semantics."
+    },
+    {
+      "name": "_meta.skill",
+      "kind": "extension",
+      "direction": "agentToClient",
+      "gate": null,
+      "disposition": "represented",
+      "tools": ["provider_session_inspect"],
+      "proof": null,
+      "note": "Claude available-command classification (claude_behavior.rs:201)."
+    }
+  ],
+  "facadeGaps": [
+    "Rich prompt input (media, embedded context) has no typed public MCP input.",
+    "Provider config categories beyond mode/model/effort are not writable.",
+    "Client MCP server setup is absent from public create/load/resume input.",
+    "Optional and extension mappings beyond the rows above are unqualified.",
+    "Operation-to-turn correlation is not exposed; an isolated case earns causal correlation only."
+  ]
+}

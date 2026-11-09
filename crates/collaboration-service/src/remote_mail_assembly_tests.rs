@@ -25,7 +25,14 @@ pub(super) async fn unwelcomed_session(directory: &Path, peer: PeerId) -> MailDe
             bound,
         )
         .unwrap(),
-        MachineSessionStore::open(directory).await.unwrap(),
+        MachineSessionStore::from_cache(std::sync::Arc::new(
+            message_board_storage::FleetStore::open(
+                &directory.join(message_board_storage::FleetStore::FILE_NAME),
+            )
+            .await
+            .unwrap()
+            .cache(),
+        )),
         &UuidV7Ids,
         SchemaSupport { max_version: 1 },
         Backoff {

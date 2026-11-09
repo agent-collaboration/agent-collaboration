@@ -61,6 +61,7 @@ async fn snapshot_baseline_is_repaired_before_offline_admission_without_waiting_
     // shutdown path to release prepared per-project handles before closing admission.
     board
         .start()
+        .session
         .ok_or("prepared session missing")?
         .shutdown()
         .await?;

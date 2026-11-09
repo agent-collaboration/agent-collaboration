@@ -24,6 +24,9 @@ use provider_conversation_submission::{
     spawn_provider_prompt, submit_provider_cancel, submit_provider_create,
 };
 
+#[path = "provider_pending_hub_races/human_mcp_control_test.rs"]
+mod human_mcp_control_test;
+
 async fn start_host(root: &Path) -> TestResult<CollaborationRuntime> {
     std::fs::set_permissions(root, std::fs::Permissions::from_mode(0o700))?;
     let provider = root.join("pending-hub-provider.ts");

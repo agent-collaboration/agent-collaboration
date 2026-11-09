@@ -14,6 +14,8 @@ collaboration composition, provider routes, wakes and native inventory.
 one Fleet database (`fleet.sqlite`, no older store beside it), that a second
 process asking to write it gets the store's lock error, and that a restart keeps
 the board cursor key the composition installed.
+Runtime replacement cases hold a real status probe across an app-server schema
+change and require one Unavailable terminal for each cancelled operator request.
 Library unit tests remain colocated with their implementations.
 
 The aggregate declares shared helper implementations once. Other directories

@@ -132,7 +132,7 @@ async fn imported_claim_seeds_verifies_renews_then_publishes_before_first_board_
         .welcomed
         .subscribe();
     let admission = board.admission.clone();
-    let running = board.start().ok_or("session not started")?;
+    let running = board.start().session.ok_or("session not started")?;
     wait_welcome(ready).await?;
     assert!(registry.existing_project(&project).await?.is_none());
     let request = ProjectClaimRequest {

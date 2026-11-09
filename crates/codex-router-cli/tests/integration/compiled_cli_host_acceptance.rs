@@ -237,6 +237,7 @@ async fn run_host_install_journey(atomic_install: bool) -> Result<(), Box<dyn st
     let port = reserve_loopback_port()?;
     install_debug_profile(&codex_home, port)?;
     write_providers_disabled(&router_root)?;
+    let provider_configuration = std::fs::read(router_root.join("settings.jsonc"))?;
     let candidate_binary = PathBuf::from(env!("CARGO_BIN_EXE_codex-router"));
     let prior_binary = std::env::var_os("CODEX_ROUTER_RESTART_PRIOR_BINARY").map(PathBuf::from);
     let old_install = directory.path().join("old-install");
@@ -506,6 +507,10 @@ async fn run_host_install_journey(atomic_install: bool) -> Result<(), Box<dyn st
             &replacement_binary, &router_root, &codex_home, &socket_path, &["status"],
         ).await?;
         check(String::from_utf8_lossy(&after.stderr).contains("no shared Codex host is running"), "status did not report absence after stop")?;
+        check(
+            std::fs::read(router_root.join("settings.jsonc"))? == provider_configuration,
+            "Host replacement changed the fixture's provider configuration",
+        )?;
         Ok::<(), Box<dyn std::error::Error>>(())
     }
     .await;

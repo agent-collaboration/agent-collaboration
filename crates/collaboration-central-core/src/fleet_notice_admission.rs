@@ -55,9 +55,7 @@ where
                 ),
                 MachineNoticeInput {
                     installation,
-                    notice: BoardNotice::BoardArchiving {
-                        board: board.board_id.clone(),
-                    },
+                    notice: BoardNotice::ProjectListChanged {},
                 },
                 now,
             )
@@ -79,7 +77,7 @@ where
                 &key,
                 &MachineNoticeInput {
                     installation: reader.installation,
-                    notice: BoardNotice::FleetFeedAdvanced { through: head },
+                    notice: BoardNotice::ProjectListChanged {},
                 },
             )
             .await

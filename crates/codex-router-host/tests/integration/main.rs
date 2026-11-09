@@ -63,6 +63,7 @@ mod router_executable_status;
 mod router_settings;
 mod runtime_lifecycle;
 mod runtime_restart;
+mod runtime_status_retirement;
 mod session_message_route_composition;
 mod shared_fleet_store;
 mod singleton_authority;

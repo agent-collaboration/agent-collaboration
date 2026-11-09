@@ -247,6 +247,8 @@ pub enum ExternalProviderRuntimeError {
         failed: crate::FailedProviderSetting,
         not_applied: Box<[crate::NotAppliedProviderSetting]>,
     },
+    #[error("session history replay admission failed before provider load")]
+    HistoryReplayAdmissionFailed,
     #[error("session history replay could not begin")]
     HistoryReplayUnavailable,
     #[error(

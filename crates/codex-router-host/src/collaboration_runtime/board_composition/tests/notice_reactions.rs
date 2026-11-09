@@ -6,7 +6,6 @@ use board_sync_protocol::{BoardConsumerProtocol, BoardNotice, NoticeRead, Positi
 use fleet_sync_protocol::{Epoch, NoticePosition};
 use fleet_sync_tokio_runner::SessionRequests;
 use message_board_storage::FleetRecordSnapshot;
-use std::os::unix::fs::PermissionsExt;
 
 #[path = "archive_sync_barrier.rs"]
 mod archive_sync_barrier;
@@ -81,7 +80,7 @@ impl Runtime {
             0,
             "local fixture inputs must be prepared before authentication starts"
         );
-        let running = board.start().ok_or("session not started")?;
+        let running = board.start().session.ok_or("session not started")?;
         timeout(BOUND, central.auth.entered.notified()).await?;
         central.release()?;
         wait_welcome(ready).await?;
@@ -130,20 +129,83 @@ impl Runtime {
         self.directory.path().join("component-notice-progress")
     }
     async fn reactions(&self) -> Result<MachineNoticeReactions, io::Error> {
-        MachineNoticeReactions::open(&self.progress_directory()).await
+        self.ensure_progress_session().await?;
+        // As at Host start: older runtime files are imported once before the
+        // reactions read their progress through a view of the Fleet database.
+        let cache = message_board_storage::FleetStore::open(
+            &self
+                .progress_directory()
+                .join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await
+        .map_err(io::Error::other)?
+        .cache();
+        cache
+            .import_legacy_runtime(&self.progress_directory())
+            .await
+            .map_err(io::Error::other)?;
+        MachineNoticeReactions::open(cache).await
+    }
+    async fn ensure_progress_session(&self) -> io::Result<()> {
+        let component = board_fleet_sync::MachineSessionStore::from_cache(std::sync::Arc::new(
+            message_board_storage::FleetStore::open(
+                &self
+                    .progress_directory()
+                    .join(message_board_storage::FleetStore::FILE_NAME),
+            )
+            .await
+            .map_err(io::Error::other)?
+            .cache(),
+        ));
+        if component.load().await.map_err(io::Error::other)?.is_none() {
+            let native = board_fleet_sync::MachineSessionStore::from_cache(std::sync::Arc::new(
+                message_board_storage::FleetStore::open(
+                    &self
+                        .directory
+                        .path()
+                        .join("router")
+                        .join(message_board_storage::FleetStore::FILE_NAME),
+                )
+                .await
+                .map_err(io::Error::other)?
+                .cache(),
+            ));
+            let state = native
+                .load()
+                .await
+                .map_err(io::Error::other)?
+                .ok_or_else(|| io::Error::other("actual SDK session missing from fixture"))?;
+            component.save(&state).await.map_err(io::Error::other)?;
+        }
+        Ok(())
     }
     async fn set_progress(&self, position: u64) -> TestResult {
-        MachineNoticeProgressStore::open(&self.progress_directory())
+        self.ensure_progress_session().await?;
+        MachineNoticeProgressStore::from_cache(
+            message_board_storage::FleetStore::open(
+                &self
+                    .progress_directory()
+                    .join(message_board_storage::FleetStore::FILE_NAME),
+            )
             .await?
-            .save(NoticePosition::new(position))
-            .await?;
+            .cache(),
+        )
+        .save(NoticePosition::new(position))
+        .await?;
         Ok(())
     }
     async fn progress(&self) -> Result<NoticePosition, Box<dyn std::error::Error + Send + Sync>> {
-        Ok(MachineNoticeProgressStore::open(&self.progress_directory())
+        Ok(MachineNoticeProgressStore::from_cache(
+            message_board_storage::FleetStore::open(
+                &self
+                    .progress_directory()
+                    .join(message_board_storage::FleetStore::FILE_NAME),
+            )
             .await?
-            .load()
-            .await?)
+            .cache(),
+        )
+        .load()
+        .await?)
     }
     #[expect(
         clippy::panic_in_result_fn,
@@ -431,9 +493,7 @@ async fn failed_handling_does_not_save_the_position_and_retry_uses_the_same_hint
     let mut reactions = runtime.reactions().await?;
     let notice = PositionedBoardNotice {
         position: NoticePosition::new(6),
-        kind: BoardNotice::FleetFeedAdvanced {
-            through: FleetPosition::ZERO,
-        },
+        kind: serde_json::from_value(serde_json::json!({"kind":"projectListChanged","value":{}}))?,
     };
     assert!(
         reactions
@@ -505,8 +565,11 @@ async fn progress_write_failure_rehandles_the_hint_without_changing_lease_author
     runtime.set_progress(5).await?;
     let mut reactions = runtime.reactions().await?;
     let before = runtime.accepted_renewal_count()?;
-    let progress_directory = runtime.progress_directory().join("machine-session");
-    tokio::fs::set_permissions(&progress_directory, std::fs::Permissions::from_mode(0o500)).await?;
+    let failure = CacheWriteFailure::hold(
+        &runtime.progress_directory(),
+        CacheWriteTarget::NoticeProgress,
+    )
+    .await?;
     let failed_save = reactions
         .handle_pushed_notice(
             runtime.notice(6),
@@ -517,7 +580,7 @@ async fn progress_write_failure_rehandles_the_hint_without_changing_lease_author
             &runtime.requests,
         )
         .await;
-    tokio::fs::set_permissions(&progress_directory, std::fs::Permissions::from_mode(0o700)).await?;
+    failure.restore().await?;
     assert!(failed_save.is_err());
     assert_eq!(runtime.progress().await?, NoticePosition::new(5));
     assert_eq!(
@@ -550,3 +613,6 @@ async fn progress_write_failure_rehandles_the_hint_without_changing_lease_author
     drop(writer);
     runtime.close().await
 }
+
+#[path = "orphan_notice_replay_test.rs"]
+mod orphan_notice_replay_test;

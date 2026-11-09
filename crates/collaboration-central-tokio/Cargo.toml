@@ -39,7 +39,7 @@ chrono.workspace = true
 collaboration-central-core = { version = "0.1.96", path = "../collaboration-central-core" }
 durable-steps = { workspace = true, features = ["turso"] }
 fleet-sync-tokio-runner.workspace = true
-sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "84935efdab03615843611bb5723983d7655e6e26", default-features = false }
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "0b2742975ca8b20270929b89f4959c1987bdb090", default-features = false }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }

@@ -77,7 +77,7 @@ async fn inline_install_renewal_survives_revocation_readmission_and_a_fresh_sess
         .subscribe();
     let registry = projects.registry()?;
     let admission = board.admission.clone();
-    let running = board.start().ok_or("session not started")?;
+    let running = board.start().session.ok_or("session not started")?;
     wait_welcome(welcomed).await?;
     let request = ProjectClaimRequest {
         request_id: message_board::RequestId::generate(),
@@ -122,7 +122,7 @@ async fn inline_install_renewal_survives_revocation_readmission_and_a_fresh_sess
     let mut owner = slot.lock().await;
     let install_attempt =
         crate::collaboration_runtime::board_composition::install_attempts::recorded_attempt(
-            &projects.directory,
+            &projects.cache,
             &project,
             epoch,
         )
@@ -180,7 +180,13 @@ async fn inline_install_renewal_survives_revocation_readmission_and_a_fresh_sess
     let file = std::fs::metadata(database.path())?;
     let file_identity = (file.dev(), file.ino());
     let root = projects.directory.clone();
-    let session_store = board_fleet_sync::MachineSessionStore::open(&root).await?;
+    let session_store = board_fleet_sync::MachineSessionStore::from_cache(std::sync::Arc::new(
+        message_board_storage::FleetStore::open(
+            &root.join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await?
+        .cache(),
+    ));
     let old_session = session_store.load().await?.ok_or("old session")?.session_id;
     control(&central, "armDelivery").await?;
     let revoke_base = central.base_url().to_owned();
@@ -210,9 +216,15 @@ async fn inline_install_renewal_survives_revocation_readmission_and_a_fresh_sess
     })
     .await?;
     let terminal = running.shutdown().await;
+    let terminal = terminal.expect_err("normal pump must report its terminal revocation");
     assert!(
-        terminal.is_err(),
-        "normal pump must report its terminal revocation"
+        matches!(
+            terminal
+                .get_ref()
+                .and_then(|error| error.downcast_ref::<fleet_sync_session::ClientError>()),
+            Some(fleet_sync_session::ClientError::Revoked)
+        ),
+        "terminal result was not typed Revoked: {terminal}"
     );
     grant_notice.release()?;
     drop(grant_notice);
@@ -250,13 +262,18 @@ async fn inline_install_renewal_survives_revocation_readmission_and_a_fresh_sess
         .clone();
     let registry = projects.registry()?;
     let admission = board.admission.clone();
-    let running = board.start().ok_or("fresh runtime")?;
+    let running = board.start().session.ok_or("fresh runtime")?;
     wait_welcome(projects.welcomed.clone()).await?;
-    let fresh = board_fleet_sync::MachineSessionStore::open(&root)
+    let fresh = board_fleet_sync::MachineSessionStore::from_cache(std::sync::Arc::new(
+        message_board_storage::FleetStore::open(
+            &root.join(message_board_storage::FleetStore::FILE_NAME),
+        )
         .await?
-        .load()
-        .await?
-        .ok_or("fresh session identity")?;
+        .cache(),
+    ))
+    .load()
+    .await?
+    .ok_or("fresh session identity")?;
     assert_ne!(fresh.session_id, old_session);
     let writer = projects.ensure(&project).await?;
     timeout(BOUND,async {loop {

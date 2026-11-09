@@ -387,7 +387,7 @@ impl BoardFixture {
             .await?;
             runtime.disconnect().await?;
             let fleet = FleetClient::new(
-                message_board_storage::FleetStore::open(
+                &message_board_storage::FleetStore::open(
                     &(_directory.path()).join(message_board_storage::FleetStore::FILE_NAME),
                 )
                 .await?,

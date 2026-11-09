@@ -1,4 +1,6 @@
 //! Real library custody, journal admission and push rows share commit and rollback.
+#[path = "stuck_sent_mail_test.rs"]
+mod stuck_sent_mail;
 use crate::{InteractionAtomicStore, InteractionStore, push_records};
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
 use collaboration_protocol::{PushHeaderFacts, PushId, PushKind, PushOrigin, PushRecordDraft};

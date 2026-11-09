@@ -37,6 +37,17 @@ where
             })
         };
         let answer = match operation {
+            // D2 owns Fleet-originated sends; enrollment never grants Fleet settlement authority.
+            OperationRequest::Delivery(DeliveryRequest::Settle {
+                submitter: Submitter::Fleet(_),
+                ..
+            }) => {
+                return Ok(Some(OperationAnswer::Delivery(
+                    DeliveryAnswer::DeliveryUnavailable {
+                        reason: DeliveryRefusal::NotSubmitter,
+                    },
+                )));
+            }
             OperationRequest::Lease(LeaseRequest::Register(_)) => Some(OperationAnswer::Lease(
                 LeaseAnswer::Register(RegistrationAnswer::Refused(
                     RegistrationRefusal::DatabaseRejected { reason: reason()? },

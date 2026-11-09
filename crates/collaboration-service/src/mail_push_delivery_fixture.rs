@@ -242,7 +242,7 @@ impl Runtime {
                 .await
                 .unwrap();
         let fleet = Arc::new(collaboration_runtime::FleetClient::new(
-            message_board_storage::FleetStore::open(
+            &message_board_storage::FleetStore::open(
                 &(directory).join(message_board_storage::FleetStore::FILE_NAME),
             )
             .await

@@ -16,6 +16,13 @@ pub(super) struct ProductionEnrollmentFixture {
 }
 impl ProductionEnrollmentFixture {
     pub async fn start(location: EnrollmentLocation) -> TestResult<Self> {
+        Self::start_with_legacy_state(location, None).await
+    }
+
+    pub async fn start_with_legacy_state(
+        location: EnrollmentLocation,
+        legacy_state: Option<&[u8]>,
+    ) -> TestResult<Self> {
         let root = fixture_root()?;
         let directory = root.path().join("collaboration");
         let peer = collaboration_runtime::load_installation_peer(&directory)?;
@@ -41,6 +48,10 @@ impl ProductionEnrollmentFixture {
                 return Err(error.into());
             }
         };
+        if let Some(state) = legacy_state {
+            std::fs::create_dir(directory.join("machine-session"))?;
+            std::fs::write(directory.join("machine-session/state.json"), state)?;
+        }
         let host = match OwnedHost::spawn(root.path(), router.address()) {
             Ok(host) => host,
             Err(error) => {
@@ -63,16 +74,35 @@ impl ProductionEnrollmentFixture {
     where
         Observe: for<'fixture> std::ops::AsyncFnOnce(&'fixture Self) -> TestResult,
     {
+        self.run_then_read_stopped(observe, async |_: &Path, (): ()| Ok(()))
+            .await
+    }
+
+    /// Runs the observation, stops the Host so it releases its one Fleet database,
+    /// then lets `read_stopped` inspect the collaboration directory before cleanup.
+    pub async fn run_then_read_stopped<Observed, Observe, ReadStopped>(
+        self,
+        observe: Observe,
+        read_stopped: ReadStopped,
+    ) -> TestResult
+    where
+        Observe: for<'fixture> std::ops::AsyncFnOnce(&'fixture Self) -> TestResult<Observed>,
+        ReadStopped:
+            for<'directory> std::ops::AsyncFnOnce(&'directory Path, Observed) -> TestResult,
+    {
+        let observed = std::cell::RefCell::new(None);
         owned_process_test_support::scenario_finalization::run_scenario(
             self,
             async |fixture: &mut Self| {
-                observe(fixture)
+                let value = observe(fixture)
                     .await
-                    .map_err(|error| io::Error::other(error.to_string()).into())
+                    .map_err(|error| io::Error::other(error.to_string()))?;
+                observed.replace(Some(value));
+                Ok(())
             },
             async |fixture| {
                 fixture
-                    .finalize(Ok(()))
+                    .finalize(observed.take(), read_stopped)
                     .await
                     .map_err(|error| io::Error::other(error.to_string()).into())
             },
@@ -82,14 +112,31 @@ impl ProductionEnrollmentFixture {
         .map_err(io::Error::other)
         .map_err(Into::into)
     }
-    async fn finalize(mut self, observed: TestResult) -> TestResult {
+
+    async fn finalize<Observed, ReadStopped>(
+        mut self,
+        observed: Option<Observed>,
+        read_stopped: ReadStopped,
+    ) -> TestResult
+    where
+        ReadStopped:
+            for<'directory> std::ops::AsyncFnOnce(&'directory Path, Observed) -> TestResult,
+    {
         // Attempt every owned cleanup before returning an observation or cleanup error.
         let stopped = self.host.stop().await;
+        // A failed observation leaves nothing to read; its error is the scenario's.
+        let read = match (&stopped, observed) {
+            (Ok(status), Some(observed)) if status.success() => {
+                read_stopped(&self.directory, observed).await
+            }
+            (_, None) => Ok(()),
+            _ => Err("Host did not stop cleanly, so its store was not read".into()),
+        };
         let router_stopped = self.router.finish().await;
         let central_stopped = self.central.shutdown().await.map_err(io::Error::other);
         let children_gone = assert_owned_children_gone(self.root.path()).await;
-        observed?;
         require(stopped?.success(), "Host shutdown failed")?;
+        read?;
         router_stopped?;
         central_stopped?;
         children_gone

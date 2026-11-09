@@ -11,6 +11,9 @@ API requests, refusals and lost responses; ACP conversations and native adapter
 settlement; service and repository discovery; subscriptions, permissions and
 nonregular history files. Library unit tests remain colocated.
 
+`installation_identity_test` sends schema-valid link records over the real
+service socket and checks installation-peer agreement and endpoint presence.
+
 The aggregate declares the shared scripted API fixture once. Two former roots
 register the same two ACP cases: their four existing case names call one copy
 of each execution body in the colocated `acp_aggregate_prompt_outputs_test.rs`.

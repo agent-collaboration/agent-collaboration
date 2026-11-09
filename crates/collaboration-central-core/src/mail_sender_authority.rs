@@ -67,5 +67,7 @@ where
             }))
         }
         Submitter::Machine(owner) => Ok(owner == peer),
+        // D2 owns Fleet-originated sends; a session claim never grants Fleet authority.
+        Submitter::Fleet(_) => Ok(false),
     }
 }

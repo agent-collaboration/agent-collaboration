@@ -60,7 +60,30 @@ impl CollaborationRuntime {
         if let Some(session) = self.board_session.take()
             && let Err(error) = session.shutdown().await
         {
-            failure.get_or_insert(error);
+            let refusal_observed =
+                if super::board_composition::RunningMachineSession::is_expected_refusal_error(
+                    &error,
+                ) {
+                    match self.fleet_link.read().await {
+                        Ok(Some(record)) => {
+                            super::board_composition::RunningMachineSession::is_observed_refusal(
+                                &error, &record,
+                            )
+                        }
+                        Err(observation_error) => {
+                            tracing::warn!(%observation_error, session_error = %error, "Fleet link observation failed during shutdown; retaining session failure");
+                            false
+                        }
+                        Ok(None) => false,
+                    }
+                } else {
+                    false
+                };
+            if refusal_observed {
+                tracing::info!(event = "fleet.link.refusalObservedAtShutdown", %error, "Fleet refusal was already observed; Host cleanup completed");
+            } else {
+                failure.get_or_insert(error);
+            }
         }
         if let Some(route) = self.provider_delivery_route.take() {
             route.shutdown_queue().await;
@@ -181,6 +204,11 @@ impl CollaborationRuntime {
                     ));
                 }
             }
+        }
+        // Last user gone: the link owner ended with the board session and the Fleet
+        // client with admission, so nothing can still write through a view.
+        if let Some(fleet_store) = self.fleet_store.take() {
+            fleet_store.close().await;
         }
         if let Some(journal) = self.journal.take() {
             match std::sync::Arc::try_unwrap(journal) {

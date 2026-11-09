@@ -129,12 +129,12 @@ impl ProjectAdmission {
             )
         })?;
         registry.close().await?;
-        let fleet = Arc::try_unwrap(self.fleet).map_err(|_| {
+        // The Fleet client holds views only; the Fleet database's owner closes it.
+        Arc::try_unwrap(self.fleet).map_err(|_| {
             ProjectAdmissionError::InvalidRecord(
                 "fleet client still owned during shutdown".to_owned(),
             )
         })?;
-        fleet.close().await;
         Ok(())
     }
     pub async fn submit(

@@ -1,1 +1,1 @@
-SELECT CAST(MIN(position) AS TEXT) AS first_position, typeof(MIN(position)) AS first_class, CAST(MAX(position) AS TEXT) AS last_position, typeof(MAX(position)) AS last_class FROM machine_control_notices WHERE machine_id=?;
+SELECT CAST(MIN(position) AS TEXT) AS first_position, typeof(MIN(position)) AS first_class, CAST(MAX(position) AS TEXT) AS last_position, typeof(MAX(position)) AS last_class FROM machine_control_project_notices WHERE machine_id=?;

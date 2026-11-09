@@ -118,7 +118,7 @@ async fn run_claim_after_import(interrupted: bool) -> TestResult {
         .subscribe();
     let admission = board.admission.clone();
     let session_requests = board.session.as_ref().ok_or("session")?.requests.clone();
-    let running = board.start().ok_or("running session")?;
+    let running = board.start().session.ok_or("running session")?;
     wait_welcome(ready).await?;
     let before = session_requests
         .request(OperationRequest::Replication(

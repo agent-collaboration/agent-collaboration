@@ -14,9 +14,11 @@ use collaboration_runtime::ProjectStoreRegistry;
 use collaboration_service::MailDeliveryRuntime;
 use collaboration_service::NotificationPublisher;
 use collaboration_service::ProjectAdmission;
-use fleet_sync_protocol::{DatabaseStatus, Notice, NoticePosition, PeerId, SchemaSupport};
+use fleet_sync_protocol::{
+    DatabaseStatus, Notice, NoticePosition, PeerId, SchemaSupport, SessionId,
+};
 use fleet_sync_session::{ClientEvent, SessionClient};
-use fleet_sync_tokio_runner::{SessionPump, SessionRequests};
+use fleet_sync_tokio_runner::{SessionPump, SessionRecoveryPolicy, SessionRequests};
 use runtime_primitives::{Backoff, UuidV7Ids};
 use std::{
     future::Future,
@@ -74,6 +76,7 @@ pub(super) struct PreparedMachineSession {
     pub projects: Arc<ProjectWriters>,
     pub(super) welcomed: watch::Sender<bool>,
     stop: watch::Sender<bool>,
+    link_failures: board_fleet_sync::FleetLinkPublisher,
 }
 
 pub(crate) struct RunningMachineSession {
@@ -89,7 +92,15 @@ impl PreparedMachineSession {
         inputs: BoardSessionInputs,
         registry: &Arc<ProjectStoreRegistry>,
         enrollment_directory: &Path,
+        link: &super::machine_link::PreparedMachineLink,
     ) -> io::Result<Self> {
+        let cache = link.cache.clone();
+        cache
+            .import_legacy_runtime(directory)
+            .await
+            .map_err(io::Error::other)?;
+        let store = MachineSessionStore::from_cache(cache.clone());
+        let link_failures = link.publisher.clone();
         let schema = BoardProjectSchema::new().map_err(io::Error::other)?;
         let max_version = schema
             .supported_schemas()
@@ -109,9 +120,7 @@ impl PreparedMachineSession {
         );
         let client = SessionClient::<_, _, BoardConsumerProtocol>::load(
             transport,
-            MachineSessionStore::open(directory)
-                .await
-                .map_err(io::Error::other)?,
+            store,
             &UuidV7Ids,
             SchemaSupport { max_version },
             Backoff {
@@ -122,12 +131,8 @@ impl PreparedMachineSession {
         )
         .await
         .map_err(io::Error::other)?;
-        let (requests, events, pump) = SessionPump::new(
-            client,
-            inputs.endpoint,
-            inputs.credential,
-            SESSION_CALL_TIMEOUT,
-        );
+        let (requests, events, pump) =
+            create_machine_session_pump(client, inputs.endpoint, inputs.credential);
         let (welcomed, readiness) = watch::channel(false);
         let (stop, stopped) = watch::channel(false);
         let central_reads = Arc::new(super::central_read_copy::CentralReadCopies::new(
@@ -141,17 +146,21 @@ impl PreparedMachineSession {
             .attach_central_reads(central_reads)
             .map_err(io::Error::other)?;
         let projects = Arc::new(ProjectWriters::new(
-            directory,
-            inputs.peer,
-            registry,
-            requests.clone(),
-            inputs.receiver,
-            readiness,
-            stopped,
+            super::project_writers::ProjectWriterInputs {
+                cache,
+                directory,
+                peer: inputs.peer,
+                registry,
+                requests: requests.clone(),
+                receiver: inputs.receiver,
+                welcomed: readiness,
+                stopped,
+            },
         ));
         projects.prepare_existing().await?;
-        let notices = MachineNoticeReactions::open(directory).await?;
+        let notices = MachineNoticeReactions::open(link.cache.as_ref().clone()).await?;
         Ok(Self {
+            link_failures,
             pump,
             events,
             requests,
@@ -164,19 +173,20 @@ impl PreparedMachineSession {
         })
     }
 
-    /// Activation follows successful Host assembly; preparation starts no task or socket.
+    /// Activation opens the socket after Host assembly; preparation observes failures independently.
     pub fn start(
         self,
         admission: Weak<ProjectAdmission>,
         fleet: Weak<FleetClient>,
         mail: Weak<MailDeliveryRuntime>,
         publisher: Weak<NotificationPublisher>,
+        link_tasks: JoinSet<io::Result<()>>,
     ) -> RunningMachineSession {
         let stop = self.stop.clone();
         #[cfg(any(test, feature = "runtime-test-support"))]
         let projects = Arc::downgrade(&self.projects);
         let mut task = JoinSet::new();
-        task.spawn(self.run(admission, fleet, mail, publisher));
+        task.spawn(self.run(admission, fleet, mail, publisher, link_tasks));
         RunningMachineSession {
             stop,
             task,
@@ -191,6 +201,7 @@ impl PreparedMachineSession {
         fleet: Weak<FleetClient>,
         mail: Weak<MailDeliveryRuntime>,
         publisher: Weak<NotificationPublisher>,
+        mut tasks: JoinSet<io::Result<()>>,
     ) -> io::Result<()> {
         let Self {
             pump,
@@ -200,27 +211,59 @@ impl PreparedMachineSession {
             projects,
             welcomed,
             stop,
+            link_failures,
             ..
         } = self;
-        let mut tasks = JoinSet::new();
         let stopped = stop.subscribe();
-        tasks.spawn(async move { pump.run(stopped).await.map_err(io::Error::other) });
+        let link_state = pump.link_state();
+        let link_events = pump.observe_link();
+        link_failures.attach_session(link_state);
+        let log_stop = stop.subscribe();
+        tasks.spawn(async move {
+            board_fleet_sync::FleetLinkPublisher::observe_events(link_events).await;
+            await_machine_stop(log_stop).await
+        });
+        let failures = link_failures.clone();
+        let stopping = stop.clone();
+        tasks.spawn(async move {
+            let result = pump.run(stopped).await;
+            let outcome = match result {
+                Ok(()) if *stopping.borrow() => Ok(()),
+                Ok(()) => Err(io::Error::other("machine session stopped unexpectedly")),
+                Err(error) if expected_terminal(&error) => Err(io::Error::other(error)),
+                Err(error) => {
+                    failures.session_stopped(&error);
+                    Err(io::Error::other(error))
+                }
+            };
+            stopping.send_replace(true);
+            outcome
+        });
         let stopped = stop.subscribe();
+        let events_stop = stopped.clone();
         let handling = projects.clone();
-        tasks.spawn(run_events(
-            events,
-            requests,
-            notices,
-            MachineSessionEventOwners {
-                projects: handling,
-                admission,
-                fleet,
-                mail,
-                publisher,
-            },
-            welcomed,
-            stopped,
-        ));
+        tasks.spawn(async move {
+            let result = run_events(
+                events,
+                requests,
+                notices,
+                MachineSessionEventOwners {
+                    projects: handling,
+                    admission,
+                    fleet,
+                    mail,
+                    publisher,
+                    link_failures: Some(link_failures),
+                },
+                welcomed,
+                stopped,
+            )
+            .await;
+            if result.is_ok() {
+                await_machine_stop(events_stop).await?;
+            }
+            result
+        });
         let first = tasks.join_next().await;
         let requested = *stop.borrow();
         stop.send_replace(true);
@@ -230,25 +273,81 @@ impl PreparedMachineSession {
             _ if !requested => Some(io::Error::other("machine session stopped unexpectedly")),
             _ => None,
         };
-        while let Some(result) = tasks.join_next().await {
-            match result {
-                Ok(Ok(())) => {}
-                Ok(Err(error)) => {
-                    failure.get_or_insert(error);
-                }
-                Err(error) => {
-                    failure.get_or_insert(io::Error::other(error));
-                }
-            }
-        }
+        drain_session_tasks(&mut tasks, &mut failure).await;
         if let Err(error) = projects.shutdown().await {
-            failure.get_or_insert(error);
+            retain_session_failure(&mut failure, error);
         }
         failure.map_or(Ok(()), Err)
     }
 }
 
 impl RunningMachineSession {
+    #[cfg(test)]
+    pub(in crate::collaboration_runtime) async fn wait_for_stop_for_test(&self) -> io::Result<()> {
+        await_machine_stop(self.stop.subscribe()).await
+    }
+
+    pub(in crate::collaboration_runtime) fn is_expected_refusal_error(error: &io::Error) -> bool {
+        expected_terminal_io(error)
+    }
+
+    #[cfg(test)]
+    pub(in crate::collaboration_runtime) fn failed_for_test(error: io::Error) -> Self {
+        let (stop, _stopped) = watch::channel(false);
+        let mut task = JoinSet::new();
+        task.spawn(async move { Err(error) });
+        Self {
+            stop,
+            task,
+            projects: Weak::new(),
+        }
+    }
+
+    pub(in crate::collaboration_runtime) fn is_observed_refusal(
+        error: &io::Error,
+        record: &board_sync_protocol::FleetLinkRecord,
+    ) -> bool {
+        use board_sync_protocol::{FleetLinkFailureReason, FleetLinkRefusal, FleetLinkState};
+        use fleet_sync_protocol::AuthRefusal;
+        use fleet_sync_session::{ClientError, ConnectFailure};
+        let Some(native) = error
+            .get_ref()
+            .and_then(|error| error.downcast_ref::<ClientError>())
+        else {
+            return false;
+        };
+        let FleetLinkState::Refused { reason, .. } = &record.state else {
+            return false;
+        };
+        match (native, reason) {
+            (
+                ClientError::Revoked,
+                FleetLinkRefusal::CredentialRejected {
+                    reason: AuthRefusal::Revoked,
+                },
+            )
+            | (ClientError::ReplacedByNewerSession, FleetLinkRefusal::IdentityInUseElsewhere)
+            | (ClientError::ConnectionReplaced, FleetLinkRefusal::IdentityInUseElsewhere)
+            | (
+                ClientError::Connect(ConnectFailure::InvalidEndpoint),
+                FleetLinkRefusal::SessionFailure {
+                    reason: FleetLinkFailureReason::InvalidEndpoint,
+                },
+            )
+            | (
+                ClientError::Connect(ConnectFailure::InvalidCredential),
+                FleetLinkRefusal::SessionFailure {
+                    reason: FleetLinkFailureReason::InvalidCredential,
+                },
+            ) => true,
+            (
+                ClientError::CredentialRejected { reason: expected },
+                FleetLinkRefusal::CredentialRejected { reason: observed },
+            ) => expected == observed,
+            _ => false,
+        }
+    }
+
     #[cfg(feature = "runtime-test-support")]
     pub(in crate::collaboration_runtime) async fn replicate_project_for_test(
         &self,
@@ -277,12 +376,93 @@ impl Drop for RunningMachineSession {
     }
 }
 
+async fn await_machine_stop(mut stopped: watch::Receiver<bool>) -> io::Result<()> {
+    while !*stopped.borrow() {
+        stopped.changed().await.map_err(io::Error::other)?;
+    }
+    Ok(())
+}
+
+fn expected_terminal(error: &fleet_sync_session::ClientError) -> bool {
+    use fleet_sync_session::{ClientError, ConnectFailure};
+    matches!(
+        error,
+        ClientError::Revoked
+            | ClientError::CredentialRejected { .. }
+            | ClientError::ReplacedByNewerSession
+            | ClientError::ConnectionReplaced
+            | ClientError::Connect(
+                ConnectFailure::InvalidEndpoint | ConnectFailure::InvalidCredential
+            )
+    )
+}
+
+fn expected_terminal_io(error: &io::Error) -> bool {
+    error
+        .get_ref()
+        .and_then(|error| error.downcast_ref::<fleet_sync_session::ClientError>())
+        .is_some_and(expected_terminal)
+}
+
+fn retain_session_failure(failure: &mut Option<io::Error>, next: io::Error) {
+    if failure
+        .as_ref()
+        .is_none_or(|current| expected_terminal_io(current) && !expected_terminal_io(&next))
+    {
+        *failure = Some(next);
+    }
+}
+
+async fn drain_session_tasks(tasks: &mut JoinSet<io::Result<()>>, failure: &mut Option<io::Error>) {
+    while let Some(result) = tasks.join_next().await {
+        match result {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => retain_session_failure(failure, error),
+            Err(error) => retain_session_failure(failure, io::Error::other(error)),
+        }
+    }
+}
+
+type MachineSessionPumpParts<T, S> = (
+    SessionRequests<BoardConsumerProtocol>,
+    mpsc::Receiver<ClientEvent<BoardConsumerProtocol>>,
+    SessionPump<T, S, BoardConsumerProtocol>,
+);
+
+// Keep the Host's selected policy in the same constructor used by its recovery
+// tests. Tests replace external ports while keeping this policy and pump real.
+fn create_machine_session_pump<
+    T: fleet_sync_session::SessionTransport,
+    S: fleet_sync_session::SessionClientStore,
+>(
+    client: SessionClient<T, S, BoardConsumerProtocol>,
+    endpoint: fleet_sync_session::Endpoint,
+    credential: fleet_sync_session::PeerCredential,
+) -> MachineSessionPumpParts<T, S> {
+    let (requests, events, pump) =
+        SessionPump::new(client, endpoint, credential, SESSION_CALL_TIMEOUT);
+    (
+        requests,
+        events,
+        pump.with_recovery_policy(SessionRecoveryPolicy {
+            connection_replaced: fleet_sync_tokio_runner::ConnectionReplacedRecovery::Terminal,
+            welcome_timeout: Some(Duration::from_secs(30)),
+            ..SessionRecoveryPolicy::default()
+        }),
+    )
+}
+
+#[cfg(test)]
+#[path = "machine_session_recovery_test.rs"]
+mod recovery_tests;
+
 enum SessionCompletion {
     Operation(io::Result<()>),
     Reaction(notice_dispatch::ReactionCompletion),
 }
 
 struct MachineSessionEventOwners {
+    link_failures: Option<board_fleet_sync::FleetLinkPublisher>,
     projects: Arc<ProjectWriters>,
     admission: Weak<ProjectAdmission>,
     fleet: Weak<FleetClient>,
@@ -331,9 +511,13 @@ async fn run_events(
             },
             result = handlers.join_next(), if !handlers.is_empty() => match result {
                 Some(Ok(SessionCompletion::Reaction(completed))) => {
-                    finish_reaction(completed, generation, &mut reactions, &mut receipts, &requests, &owners.projects).await?;
+                    finish_reaction(completed, generation, &mut reactions, &mut receipts, &requests, &owners.projects, owners.link_failures.as_ref()).await?;
                 }
-                Some(Ok(SessionCompletion::Operation(Err(error)))) => tracing::warn!(%error, "machine-session operation unavailable"),
+                Some(Ok(SessionCompletion::Operation(Err(error)))) => {
+                    if let Some(error) = error.get_ref().and_then(|error| error.downcast_ref::<fleet_sync_session::ClientError>())
+                        && let Some(failures) = &owners.link_failures { failures.session_failed(error); }
+                    tracing::warn!(%error, "machine-session operation unavailable");
+                },
                 Some(Err(error)) => tracing::warn!(%error, "machine-session operation task failed"),
                 _ => {},
             },
@@ -346,21 +530,25 @@ async fn run_events(
                     status_interval.reset();
                     spawn_welcome_recovery(&mut handlers, &owners, databases);
                     reactions.catch_up(generation);
-                    for (position, notice) in deferred_notices.drain(..) {
-                        queue_notice(&mut reactions, &mut receipts, generation, position, notice);
+                    for (session_id, position, notice) in deferred_notices.drain(..) {
+                        queue_notice(&mut reactions, &mut receipts, generation, session_id, position, notice);
                     }
                 }
                 Some(ClientEvent::Request { frame, body }) => {
                     spawn_operation(&mut handlers, answer_server_call(owners.projects.clone(), owners.admission.clone(), owners.mail.clone(), owners.publisher.clone(), requests.clone(), frame, body));
                 }
-                Some(ClientEvent::Notice { position, body }) => {
+                Some(ClientEvent::Notice { session_id, position, body }) => {
                     if *welcomed.borrow() {
-                        queue_notice(&mut reactions, &mut receipts, generation, position, body);
+                        queue_notice(&mut reactions, &mut receipts, generation, session_id, position, body);
                     } else {
-                        deferred_notices.push((position, body));
+                        deferred_notices.push((session_id, position, body));
                     }
                 }
-                Some(ClientEvent::Disconnected { .. }) => {
+                Some(ClientEvent::Disconnected { reason, .. }) => {
+                    if matches!(reason, Some(fleet_sync_protocol::CloseReason::MalformedFrame))
+                        && let Some(failures) = &owners.link_failures {
+                        failures.session_failed(&fleet_sync_session::ClientError::Protocol);
+                    }
                     welcomed.send_replace(false);
                     generation = generation.checked_add(1).ok_or_else(|| io::Error::other("notice generation exhausted"))?;
                     deferred_notices.clear();
@@ -460,8 +648,10 @@ fn spawn_project_lifecycle(
 ) {
     if let ProjectLifecycleSignal::WritingConfirmed(project) = &signal {
         let project = project.clone();
+        let projects = owners.projects.clone();
         let mail = owners.mail.clone();
         spawn_operation(handlers, async move {
+            projects.observe_completed_install(&project).await?;
             if let Some(mail) = mail.upgrade() {
                 mail.subscription_delivery()
                     .start_inherited_project_readers(&project)
@@ -547,24 +737,30 @@ fn queue_notice(
     reactions: &mut notice_dispatch::NoticeReactionQueue,
     receipts: &mut NoticeReceipts,
     generation: u64,
+    session_id: SessionId,
     position: NoticePosition,
     notice: Notice<BoardConsumerProtocol>,
 ) {
     if receipts.begin(position) {
-        reactions.notice(generation, position, notice);
+        reactions.notice(generation, session_id, position, notice);
     }
 }
 
-// This transport owner alone sends ACKs. The separate consumer progress file
+// This transport owner alone sends ACKs. The separate consumer progress record
 // records machine-read positions, which may also advance through catch-up.
 async fn acknowledge_handled_prefix(
     requests: &SessionRequests<BoardConsumerProtocol>,
     receipts: &mut NoticeReceipts,
+    session_id: SessionId,
+    failures: Option<&board_fleet_sync::FleetLinkPublisher>,
 ) {
     if let Some(position) = receipts.handled_prefix() {
-        match requests.acknowledge_notice(position).await {
+        match requests.acknowledge_notice(session_id, position).await {
             Ok(()) => receipts.acknowledged(position),
             Err(error) => {
+                if let Some(failures) = failures {
+                    failures.session_failed(&error);
+                }
                 receipts.acknowledgement_failed();
                 tracing::warn!(%error, ?position, "notice acknowledgement unavailable");
             }
@@ -579,6 +775,7 @@ async fn finish_reaction(
     receipts: &mut NoticeReceipts,
     requests: &SessionRequests<BoardConsumerProtocol>,
     _projects: &Arc<ProjectWriters>,
+    failures: Option<&board_fleet_sync::FleetLinkPublisher>,
 ) -> io::Result<()> {
     let notice_dispatch::ReactionCompletion {
         generation: completed_generation,
@@ -591,12 +788,16 @@ async fn finish_reaction(
             notice_dispatch::ReactionOutcome::CatchUp(Err(error)) => {
                 tracing::warn!(%error, "machine notice catch-up unavailable")
             }
-            notice_dispatch::ReactionOutcome::Notice { position, outcome } => {
+            notice_dispatch::ReactionOutcome::Notice {
+                session_id,
+                position,
+                outcome,
+            } => {
                 if let Err(error) = &outcome {
                     tracing::warn!(%error, ?position, "notice remains unacknowledged");
                 }
                 receipts.complete(position, outcome.is_ok());
-                acknowledge_handled_prefix(requests, receipts).await;
+                acknowledge_handled_prefix(requests, receipts, session_id, failures).await;
                 #[cfg(test)]
                 {
                     use super::project_writers::NoticeHandling;

@@ -12,7 +12,6 @@ use fleet_sync_protocol::{NoticePosition, OperationAnswer, OperationRequest};
 use fleet_sync_tokio_runner::SessionRequests;
 use std::{
     io,
-    path::Path,
     sync::{Arc, Weak},
 };
 
@@ -22,10 +21,9 @@ pub(super) struct MachineNoticeReactions {
 }
 
 impl MachineNoticeReactions {
-    pub async fn open(directory: &Path) -> io::Result<Self> {
-        let progress = MachineNoticeProgressStore::open(directory)
-            .await
-            .map_err(io::Error::other)?;
+    /// Reads handled progress through a view of the Host's one Fleet database.
+    pub async fn open(cache: message_board_storage::FleetCache) -> io::Result<Self> {
+        let progress = MachineNoticeProgressStore::from_cache(cache);
         let handled_through = progress.load().await.map_err(io::Error::other)?;
         Ok(Self {
             progress,
@@ -171,7 +169,7 @@ async fn reconcile_notice(
         BoardNotice::LeaseSuperseded { project, .. } => {
             projects.prompt_superseded_writer(project).await
         }
-        BoardNotice::FleetFeedAdvanced { .. } | BoardNotice::BoardArchiving { .. } => {
+        BoardNotice::ProjectListChanged {} => {
             super::archive_observation::synchronize_and_observe(projects, admission, fleet).await
         }
     }

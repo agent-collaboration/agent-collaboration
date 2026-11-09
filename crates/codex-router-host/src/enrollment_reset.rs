@@ -230,7 +230,15 @@ async fn clear_router_state(directory: &Path, fleet_store: ResetFleetStore<'_>) 
         }
     }
     .map_err(io::Error::other)?;
-    let cleared = store.cache().clear_central_derived_cache().await;
+    let cache = store.cache();
+    let cleared = async {
+        // Resume/progress files were deliberately discarded above. Commit any
+        // unfinished legacy attempts before removing their old directory.
+        cache.import_legacy_runtime(directory).await?;
+        cache.clear_central_derived_cache().await?;
+        cache.clear_machine_runtime().await
+    }
+    .await;
     store.close().await;
     cleared.map_err(io::Error::other)?;
     for child in [

@@ -133,7 +133,13 @@ impl Reader {
         )?;
         let client = SessionClient::<_, _, BoardConsumerProtocol>::load(
             transport,
-            MachineSessionStore::open(root).await?,
+            MachineSessionStore::from_cache(std::sync::Arc::new(
+                message_board_storage::FleetStore::open(
+                    &root.join(message_board_storage::FleetStore::FILE_NAME),
+                )
+                .await?
+                .cache(),
+            )),
             &UuidV7Ids,
             SchemaSupport { max_version: 1 },
             Backoff {
@@ -150,7 +156,7 @@ impl Reader {
             BOUND,
         );
         let fleet = Arc::new(FleetClient::new(
-            message_board_storage::FleetStore::open(
+            &message_board_storage::FleetStore::open(
                 &(root).join(message_board_storage::FleetStore::FILE_NAME),
             )
             .await?,
@@ -188,10 +194,7 @@ impl Reader {
         self.stop.send_replace(true);
         tokio::time::timeout(BOUND, self.task).await???;
         self.ingress.shutdown().await?;
-        Arc::try_unwrap(self.fleet)
-            .map_err(|_| "reader still in use")?
-            .close()
-            .await;
+        drop(Arc::try_unwrap(self.fleet).map_err(|_| "reader still in use")?);
         Ok(())
     }
 }

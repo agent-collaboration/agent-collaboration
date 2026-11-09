@@ -68,5 +68,5 @@ export function journeyRecord(plan: JourneyPlan, name: string): JsonObject {
   return readObservedJson(readFileSync(join(plan.evidence, `${name}.json`)));
 }
 export function providerRecord(value: JsonObject): JsonObject {
-  return observedObject(value.record === undefined ? value : value.record);
+  return observedObject(value["record"] === undefined ? value : value["record"]);
 }

@@ -14,7 +14,7 @@ runtime-test-support = ["interaction-storage/runtime-test-support"]
 workspace = true
 
 [dependencies]
-sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "84935efdab03615843611bb5723983d7655e6e26", optional = true }
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "0b2742975ca8b20270929b89f4959c1987bdb090", optional = true }
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
 fleet-sync-tokio-runner.workspace = true
@@ -56,7 +56,7 @@ thiserror.workspace = true
 [dev-dependencies]
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts", features = ["test-support"] }
 fleet-sync-delivery = { workspace = true, features = ["test-support"] }
-sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "84935efdab03615843611bb5723983d7655e6e26" }
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "0b2742975ca8b20270929b89f4959c1987bdb090" }
 tempfile = "3.27.0"
 tokio = { workspace = true, features = ["test-util"] }
 tracing-subscriber.workspace = true

@@ -24,10 +24,15 @@ pub use discovery::FleetDiscoveryKey;
 #[path = "fleet_cache_rebuild.rs"]
 mod rebuild;
 pub use rebuild::FleetCacheRebuild;
+#[path = "fleet_runtime_state.rs"]
+mod runtime;
+pub use runtime::SnapshotInstallAttempt;
+#[cfg(feature = "test-support")]
+pub use runtime::{MachineNoticeProgressObservation, observe_machine_notice_progress};
 
-// Only these central-derived tables are cleared; login and session registrations
-// in this store survive enrollment. D1 removes file-based snapshot install attempts
-// during reset; D3 will move those attempts into a kept table.
+// Projection replacement preserves machine-owned state. Enrollment reset calls
+// clear_machine_runtime separately to discard the old session and link observation;
+// unfinished install attempts survive re-enrollment.
 const CENTRAL_CACHE_DELETIONS: [&str; 3] = [
     "DELETE FROM cached_fleet_records",
     "DELETE FROM fleet_cache_rebuild_records",

@@ -82,7 +82,7 @@ async fn offline_project_creation_waits_for_the_central_decision_before_registra
             RequestResult::Decided(RequestDecision::Accepted { .. })
         ));
     }
-    connected.close().await;
+    drop(connected);
     runtime.shutdown().await?;
 
     let offered = make_request(FleetOperation::ProjectDirectoryCreate {
@@ -90,14 +90,11 @@ async fn offline_project_creation_waits_for_the_central_decision_before_registra
         board,
         title: "queued project".to_owned().try_into()?,
     });
-    let offline = FleetClient::new(
-        message_board_storage::FleetStore::open(
-            &(directory.path()).join(message_board_storage::FleetStore::FILE_NAME),
-        )
-        .await?,
-        registration.clone(),
-        None,
-    );
+    let offline_store = message_board_storage::FleetStore::open(
+        &(directory.path()).join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?;
+    let offline = FleetClient::new(&offline_store, registration.clone(), None);
     assert_eq!(
         offline.submit(&offered, &origin).await?.result,
         RequestResult::PendingUnreachable
@@ -128,7 +125,8 @@ async fn offline_project_creation_waits_for_the_central_decision_before_registra
             .exists()
     );
     assert_no_local_fleet_authority(directory.path()).await?;
-    offline.close().await;
+    drop(offline);
+    offline_store.close().await;
 
     let (reconnected, runtime) =
         board_central_test_support::fleet_client(directory.path(), registration.clone(), &origin)
@@ -150,7 +148,7 @@ async fn offline_project_creation_waits_for_the_central_decision_before_registra
     assert!(!registrations.is_empty());
     assert!(registrations.iter().all(|actual| actual == &project));
     assert_no_local_fleet_authority(directory.path()).await?;
-    reconnected.close().await;
+    drop(reconnected);
     runtime.shutdown().await?;
     Ok(())
 }
@@ -180,11 +178,12 @@ async fn central_reply_cache_and_original_outbox_input_survive_restart()
         installation: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
         machine: MachineLabel::try_from("fleet fixture".to_owned())?,
     };
+    let offline_store = message_board_storage::FleetStore::open(
+        &(directory.path()).join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?;
     let offline = FleetClient::new(
-        message_board_storage::FleetStore::open(
-            &(directory.path()).join(message_board_storage::FleetStore::FILE_NAME),
-        )
-        .await?,
+        &offline_store,
         std::sync::Arc::new(native_registry::PendingRegistration),
         None,
     );
@@ -192,7 +191,8 @@ async fn central_reply_cache_and_original_outbox_input_survive_restart()
         offline.submit(&request, &origin).await?.result,
         RequestResult::PendingUnreachable
     );
-    offline.close().await;
+    drop(offline);
+    offline_store.close().await;
     let (client, runtime) = board_central_test_support::fleet_client(
         directory.path(),
         std::sync::Arc::new(native_registry::PendingRegistration),
@@ -235,13 +235,14 @@ async fn central_reply_cache_and_original_outbox_input_survive_restart()
         message_board_storage::FleetOutboxState::Decided { .. }
     ));
     drop(outbox);
-    client.close().await;
+    drop(client);
     runtime.shutdown().await?;
+    let offline_replay_store = message_board_storage::FleetStore::open(
+        &(directory.path()).join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?;
     let offline_replay = FleetClient::new(
-        message_board_storage::FleetStore::open(
-            &(directory.path()).join(message_board_storage::FleetStore::FILE_NAME),
-        )
-        .await?,
+        &offline_replay_store,
         std::sync::Arc::new(native_registry::PendingRegistration),
         None,
     );
@@ -256,7 +257,8 @@ async fn central_reply_cache_and_original_outbox_input_survive_restart()
             .await?,
         Some(Record::Workspace(workspace.clone()))
     );
-    offline_replay.close().await;
+    drop(offline_replay);
+    offline_replay_store.close().await;
     let (reopened, runtime) = board_central_test_support::fleet_client(
         directory.path(),
         std::sync::Arc::new(native_registry::PendingRegistration),
@@ -280,7 +282,7 @@ async fn central_reply_cache_and_original_outbox_input_survive_restart()
         RequestResult::ConflictingRequest
     );
     assert_no_local_fleet_authority(directory.path()).await?;
-    reopened.close().await;
+    drop(reopened);
     runtime.shutdown().await?;
     Ok(())
 }

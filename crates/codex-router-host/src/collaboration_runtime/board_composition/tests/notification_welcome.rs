@@ -27,7 +27,7 @@ async fn welcome_publishes_an_eligible_remote_handoff_after_its_acknowledgement_
         MailHarness::open_configured(directory.path(), None, false, true, None, Some(central))
             .await?;
     let fleet = Arc::new(FleetClient::new(
-        message_board_storage::FleetStore::open(
+        &message_board_storage::FleetStore::open(
             &harness
                 .root
                 .join(message_board_storage::FleetStore::FILE_NAME),

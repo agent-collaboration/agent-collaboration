@@ -7,6 +7,8 @@ mod fleet_store;
 mod legacy_fleet_sources;
 #[cfg(feature = "test-support")]
 pub mod router_store_contents;
+#[cfg(feature = "test-support")]
+pub use fleet_cache::{MachineNoticeProgressObservation, observe_machine_notice_progress};
 pub use fleet_store::FleetStore;
 pub use legacy_fleet_sources::LegacyFleetSource;
 mod fleet_outbox;
@@ -106,7 +108,7 @@ pub use update_ledger::{
 pub use cursor_store::{CursorSigningKey, CursorStore};
 pub use fleet_cache::{
     FleetCache, FleetCacheRebuild, FleetCacheSnapshot, FleetDiscoveryKey, FleetListFilter,
-    FleetRecordSnapshot, StoredFleetRecord,
+    FleetRecordSnapshot, SnapshotInstallAttempt, StoredFleetRecord,
 };
 pub use fleet_outbox::{FleetOutbox, FleetOutboxEntry, FleetOutboxState};
 pub use fleet_storage_error::FleetStorageError;

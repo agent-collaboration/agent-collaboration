@@ -10,6 +10,141 @@ use support::{Fixture, TestError};
 
 #[expect(
     clippy::panic_in_result_fn,
+    reason = "Behavioral assertions must fail while fixture errors propagate."
+)]
+#[tokio::test]
+async fn closed_socket_cleanup_does_not_require_a_live_admission_and_other_sessions_continue()
+-> Result<(), TestError> {
+    let directory = tempfile::tempdir()?;
+    let fixture = Fixture::open(directory.path()).await?;
+    let (dead, dead_session, mut dead_socket) = fixture.socket().await?;
+    let healthy_installation: message_board::ServiceId =
+        durable_steps::Uuid::now_v7().to_string().try_into()?;
+    let (healthy, healthy_session, mut healthy_socket) = fixture
+        .socket_as(
+            fleet_sync_protocol::PeerId::new(durable_steps::Uuid::now_v7())?,
+            healthy_installation.clone(),
+        )
+        .await?;
+    fixture.hello(dead, dead_session).await?;
+    fixture.hello(healthy, healthy_session).await?;
+    fixture.runtime.on_alarm().await?;
+    assert!(matches!(
+        dead_socket.try_recv(),
+        Ok(SocketCommand::Frame(_))
+    ));
+    assert!(matches!(
+        healthy_socket.try_recv(),
+        Ok(SocketCommand::Frame(_))
+    ));
+    *fixture
+        .host
+        .send_failure
+        .lock()
+        .map_err(|_| "send failure mutex poisoned")? = Some(dead.connection);
+    for installation in [
+        "019f0000-0000-7000-8000-000000000001",
+        healthy_installation.as_str(),
+    ] {
+        let call = serde_json::to_vec(&serde_json::json!({
+            "source":{"kind":"fleet"},"sourceFace":"fleet","authority":{"kind":"object"},
+            "destination":{"kind":"fleet"},"destinationFace":"delivery",
+            "identity":{"operation":durable_steps::Uuid::now_v7(),"step":"fanout_notice"},
+            "kind":"central.machine-notice","target":{"installation":installation},
+            "request":{"kind":"projectListChanged","value":{}}
+        }))?;
+        assert!(matches!(
+            fixture.runtime.delivery()?.on_call(call).await,
+            Err(durable_steps::CallFailure::AnswerLost)
+        ));
+    }
+    fixture.runtime.on_alarm().await?;
+    assert!(
+        fixture
+            .host
+            .send_failure
+            .lock()
+            .map_err(|_| "send failure mutex poisoned")?
+            .is_none(),
+        "failed A send was never attempted"
+    );
+    let Some(SocketCommand::Frame(bytes)) = healthy_socket.try_recv().ok() else {
+        return Err("B notice was blocked by A's failed send".into());
+    };
+    assert!(matches!(
+        serde_json::from_slice::<
+            fleet_sync_protocol::ServerFrame<board_sync_protocol::BoardConsumerProtocol>,
+        >(&bytes)?,
+        fleet_sync_protocol::ServerFrame::Notice {
+            body: fleet_sync_protocol::Notice::Consumer(board_sync_protocol::PositionedBoardNotice {
+                position,
+                kind: board_sync_protocol::BoardNotice::ProjectListChanged {},
+            }),
+            ..
+        } if position.value() == 1
+    ));
+    drop(dead_socket);
+    assert_eq!(
+        fixture.host.admission_origin(dead.connection).await,
+        Err(collaboration_central_core::SocketFailure::Closed)
+    );
+    let closed = fixture.runtime.on_socket_closed(dead).await;
+    assert!(
+        closed.is_ok(),
+        "close callback incorrectly rediscovered dead socket admission: {closed:?}"
+    );
+    fixture.hello(healthy, healthy_session).await?;
+    assert!(matches!(
+        healthy_socket.try_recv(),
+        Ok(SocketCommand::Frame(_))
+    ));
+    let (fresh, fresh_session, mut fresh_socket) = fixture
+        .socket_as(
+            fleet_sync_protocol::PeerId::new(durable_steps::Uuid::now_v7())?,
+            durable_steps::Uuid::now_v7().to_string().try_into()?,
+        )
+        .await?;
+    fixture.hello(fresh, fresh_session).await?;
+    fixture.runtime.on_alarm().await?;
+    assert!(matches!(
+        fresh_socket.try_recv(),
+        Ok(SocketCommand::Frame(_))
+    ));
+    fixture.objects.close().await?;
+    Ok(())
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The absent connection must be harmless while fixture errors propagate."
+)]
+#[tokio::test]
+async fn close_callback_for_absent_native_socket_is_idempotent() -> Result<(), TestError> {
+    let directory = tempfile::tempdir()?;
+    let fixture = Fixture::open(directory.path()).await?;
+    let binding = fleet_sync_session::ConnectionBinding::new(
+        fleet_sync_protocol::ConnectionId::new(durable_steps::Uuid::now_v7())?,
+        fleet_sync_session::VerifiedPeer {
+            peer: fleet_sync_protocol::PeerId::new(durable_steps::Uuid::now_v7())?,
+            expires_at: runtime_primitives::SyncTime::from_unix_millis(1_900_000_000_000),
+        },
+    );
+    assert_eq!(
+        fixture.host.admission_origin(binding.connection).await,
+        Err(collaboration_central_core::SocketFailure::NotConnected)
+    );
+    let first = fixture.runtime.on_socket_closed(binding).await;
+    assert!(
+        first.is_ok(),
+        "callback's own binding unnecessarily required live admission: {first:?}"
+    );
+    fixture.runtime.on_socket_closed(binding).await?;
+    fixture.objects.close().await?;
+    Ok(())
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]

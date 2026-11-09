@@ -16,10 +16,13 @@ pub use thread_subscription_wait::{
     ThreadSubscriptionWaitOutcome, ThreadSubscriptionWaitRequest, ThreadSubscriptionWaitResult,
 };
 mod cli_output_contract;
+mod fleet_host_status;
+pub use board_sync_protocol::{FleetLinkRecord, FleetLinkState};
 pub use cli_output_contract::{
     ConversationRecord, ConversationTerminalReason, EffortChange, FiniteCommandRecord,
     NativeObservationRecord, ObservationCloseReason,
 };
+pub use fleet_host_status::{KnownStuckMail, StuckMailSummary};
 mod operation_failure_contract;
 pub use operation_failure_contract::{
     AdapterOperationFailure, OperationEffect, OperationFailureKind,
@@ -169,7 +172,7 @@ pub use endpoint_inventory::EndpointInventory;
 mod identity_schemas;
 mod installation_peer_identity;
 pub use installation_peer_identity::{
-    InstallationIdentity, InstallationPeerId, InstallationPeerIdentityError,
+    CentralLinkObservation, InstallationIdentity, InstallationPeerId, InstallationPeerIdentityError,
 };
 mod protocol_type_schemas;
 pub use protocol_type_schemas::protocol_type_schemas;

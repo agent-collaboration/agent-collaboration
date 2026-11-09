@@ -48,6 +48,9 @@ mod request_admission;
 mod retained_lifecycle;
 mod startup_convergence;
 mod status_observation;
+#[cfg(test)]
+#[path = "lifecycle_owner_test.rs"]
+mod tests;
 mod update_activation;
 
 use retained_lifecycle::RuntimeState;
@@ -194,6 +197,26 @@ pub struct HostRuntime;
 
 pub type HostProgressCallback<'a> = &'a mut (dyn FnMut(Option<crate::HostProgress>) + Send);
 
+fn cancel_status_observation(
+    active_status: &mut Option<request_admission::ActiveStatusObservation>,
+    snapshot: HostSnapshot,
+) {
+    let Some(active) = active_status.take() else {
+        return;
+    };
+    for (request, response) in active.responses {
+        request_admission::send_terminal_response(
+            response,
+            request,
+            TerminalClassification::Unavailable,
+            snapshot.clone(),
+            "status observation cancelled because the collaboration runtime is retiring",
+        );
+    }
+    // Release any storage owner retained by the cancelled read before retirement.
+    drop(active.future);
+}
+
 impl HostRuntime {
     /// Acquires authority, converges startup, then owns all retained handles.
     pub async fn run(
@@ -203,14 +226,14 @@ impl HostRuntime {
     ) -> Result<HostExit, HostError> {
         let startup_started_at = tokio::time::Instant::now();
         let instance = HostInstance::acquire(config.coordination_paths().clone())?;
-        Self::run_owned(
+        Box::pin(Self::run_owned(
             config,
             child_launch_plans,
             update_inputs,
             instance,
             startup_started_at,
             None,
-        )
+        ))
         .await
     }
 
@@ -224,14 +247,14 @@ impl HostRuntime {
         let startup_started_at = tokio::time::Instant::now();
         let instance =
             HostInstance::acquire_inherited(config.coordination_paths().clone(), marker)?;
-        Self::run_owned(
+        Box::pin(Self::run_owned(
             config,
             child_launch_plans,
             update_inputs,
             instance,
             startup_started_at,
             None,
-        )
+        ))
         .await
     }
 
@@ -259,14 +282,14 @@ impl HostRuntime {
         instance: HostInstance,
         progress: Option<HostProgressCallback<'_>>,
     ) -> Result<HostExit, HostError> {
-        Self::run_owned(
+        Box::pin(Self::run_owned(
             config,
             child_launch_plans,
             update_inputs,
             instance,
             tokio::time::Instant::now(),
             progress,
-        )
+        ))
         .await
     }
 
@@ -387,6 +410,7 @@ impl HostRuntime {
         loop {
             if let Some(owner) = &mut collaboration {
                 let result = if active_host_replacement.is_some() {
+                    cancel_status_observation(&mut active_status, state.snapshot());
                     owner.shutdown().await
                 } else {
                     owner
@@ -397,11 +421,13 @@ impl HostRuntime {
                             } else {
                                 None
                             },
+                            || cancel_status_observation(&mut active_status, state.snapshot()),
                         )
                         .await
                 };
                 if let Err(error) = result {
                     tracing::error!("collaboration lifecycle synchronization failed");
+                    cancel_status_observation(&mut active_status, state.snapshot());
                     let cleanup = owner.shutdown().await;
                     if config.remote_access().is_some() {
                         let error = match cleanup {
@@ -434,6 +460,7 @@ impl HostRuntime {
             tokio::select! {
                 never = &mut login_reload, if matches!(state.phase, HostPhase::Steady) && app_server.is_some() => match never {},
                 failure = collaboration_lifecycle::wait_failure(&mut collaboration), if collaboration.is_some() => {
+                    cancel_status_observation(&mut active_status, state.snapshot());
                     match failure {
                         crate::CollaborationFailure::LocalListener(error) => {
                             tracing::error!("collaboration listener failed");
@@ -482,6 +509,10 @@ impl HostRuntime {
                         || retained_updater.is_some()
                         || active_status.is_some();
                     request_admission::handle_operator_work(work, request_admission::OperatorRuntimeContext {
+                        fleet_observation: match &collaboration {
+                            Some(owner) => owner.observe_fleet(),
+                            None => Box::pin(async { crate::FleetHostObservation::Unavailable { message: "collaboration runtime is not configured".to_owned() } }),
+                        },
                         state: &mut state,
                         app_server: &mut app_server,
                         router_child: &mut router_child,
@@ -754,6 +785,7 @@ impl HostRuntime {
                     });
                 }
                 _ = interrupt.recv() => {
+                    cancel_status_observation(&mut active_status, state.snapshot());
                     let collaboration_shutdown = match &mut collaboration {
                         Some(owner) => owner.shutdown().await,
                         None => Ok(()),
@@ -776,6 +808,7 @@ impl HostRuntime {
                     return Ok(HostExit::Signal);
                 }
                 _ = terminate.recv() => {
+                    cancel_status_observation(&mut active_status, state.snapshot());
                     let collaboration_shutdown = match &mut collaboration {
                         Some(owner) => owner.shutdown().await,
                         None => Ok(()),
@@ -798,6 +831,7 @@ impl HostRuntime {
                     return Ok(HostExit::Signal);
                 }
                 _ = hangup.recv() => {
+                    cancel_status_observation(&mut active_status, state.snapshot());
                     let collaboration_shutdown = match &mut collaboration {
                         Some(owner) => owner.shutdown().await,
                         None => Ok(()),
