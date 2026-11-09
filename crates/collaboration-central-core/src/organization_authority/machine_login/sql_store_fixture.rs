@@ -103,7 +103,8 @@ impl SqlStoreFixture {
     pub fn port(&self) -> FixturePort {
         SqlEnrollmentPort::new(
             self.object.clone(),
-            OrganizationId::try_from(uuid7(ORGANIZATION)).unwrap_or_else(|_| unreachable!()),
+            OrganizationId::try_from(uuid7(ORGANIZATION))
+                .expect("the fixture organization is a UUIDv7"),
         )
     }
 

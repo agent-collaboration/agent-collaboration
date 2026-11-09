@@ -39,7 +39,7 @@ impl Default for EnrollmentStore {
             organization: OrganizationId::try_from(super::test_fixtures::uuid7(
                 super::test_fixtures::ORGANIZATION,
             ))
-            .unwrap_or_else(|_| unreachable!("the fixture organization is a UUIDv7")),
+            .expect("the fixture organization is a UUIDv7"),
             approval_requests: BTreeMap::new(),
             enrollments: BTreeMap::new(),
             installations: BTreeMap::new(),

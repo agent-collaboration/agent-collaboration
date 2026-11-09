@@ -39,7 +39,7 @@ async fn enrolled(port: &FixturePort, request: u64, at_ms: i64, ids: u64) -> Enr
     let DeviceLoginDecision::Approved { enrollment_id } = answer else {
         panic!("expected Approved, got {answer:?}");
     };
-    let suffix = u64::from_str_radix(&enrollment_id.as_str()[24..], 16).unwrap();
+    let suffix = u64::from_str_radix(enrollment_id.as_str().get(24..).unwrap(), 16).unwrap();
     let granted = decide_machine_token(
         port,
         DecideMachineToken {
@@ -58,7 +58,7 @@ async fn enrolled(port: &FixturePort, request: u64, at_ms: i64, ids: u64) -> Enr
 }
 
 fn connection(id: &EnrollmentId, peer: u64) -> AdmitMachineConnection {
-    let suffix = u64::from_str_radix(&id.as_str()[24..], 16).unwrap();
+    let suffix = u64::from_str_radix(id.as_str().get(24..).unwrap(), 16).unwrap();
     AdmitMachineConnection {
         organization_id: organization(),
         enrollment_id: id.clone(),
@@ -85,6 +85,10 @@ async fn admit(port: &FixturePort, request: AdmitMachineConnection) -> MachineCo
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "a test asserts its outcomes and propagates fixture failures with ?"
+)]
 async fn admission_reads_the_real_store_live() -> Result<(), TestError> {
     let fixture = SqlStoreFixture::b3(&[WORKSPACE_A]).await?;
     let port = fixture.port();
@@ -134,6 +138,10 @@ async fn admission_reads_the_real_store_live() -> Result<(), TestError> {
 /// Revocation bumps the generation, ends every earlier approval (ABA) and
 /// leaves the machine nothing: no Grant, no connection.
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "a test asserts its outcomes and propagates fixture failures with ?"
+)]
 async fn revocation_on_the_real_store_ends_the_machine_and_every_earlier_approval()
 -> Result<(), TestError> {
     let fixture = SqlStoreFixture::b3(&[WORKSPACE_A]).await?;
@@ -196,7 +204,7 @@ async fn revocation_on_the_real_store_ends_the_machine_and_every_earlier_approva
         after.enrollment.unwrap().state,
         StoredEnrollmentState::Revoked { .. }
     ));
-    let suffix = u64::from_str_radix(&pending.as_str()[24..], 16).unwrap();
+    let suffix = u64::from_str_radix(pending.as_str().get(24..).unwrap(), 16).unwrap();
     let late = decide_machine_token(
         &port,
         DecideMachineToken {
@@ -228,6 +236,10 @@ async fn revocation_on_the_real_store_ends_the_machine_and_every_earlier_approva
 /// After the switch each machine is keyed by its peer id with its former id
 /// recorded: the same mapping logs in, another installation can't take it.
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "a test asserts its outcomes and propagates fixture failures with ?"
+)]
 async fn a_converted_former_id_links_its_own_machine_only() -> Result<(), TestError> {
     let former = "0b6a1c5e-2f3d-4a8b-9c1d-2e3f4a5b6c7d";
     let fixture = SqlStoreFixture::pre_b3(vec![LegacyMachine {

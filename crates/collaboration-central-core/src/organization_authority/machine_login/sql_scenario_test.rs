@@ -8,6 +8,10 @@ use fleet_sync_protocol::ReceiverId;
 use fleet_sync_tokio_runner::{ObjectKey, ObjectStore};
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "a test asserts its outcomes and propagates fixture failures with ?"
+)]
 async fn the_tokio_store_produces_the_shared_scenario_report() -> Result<(), TestError> {
     let root = tempfile::tempdir()?;
     let objects = ObjectStore::open(root.path()).await?;

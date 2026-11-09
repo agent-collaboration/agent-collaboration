@@ -54,6 +54,10 @@ async fn legacy_rows(fixture: &SqlStoreFixture) -> Result<Vec<String>, TestError
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "a test asserts its outcomes and propagates fixture failures with ?"
+)]
 async fn todays_machines_convert_once_keeping_ids_labels_former_ids_and_exact_times()
 -> Result<(), TestError> {
     let fixture = SqlStoreFixture::pre_b3(vec![
@@ -111,6 +115,10 @@ async fn todays_machines_convert_once_keeping_ids_labels_former_ids_and_exact_ti
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "a test asserts its outcomes and propagates fixture failures with ?"
+)]
 async fn an_empty_fleet_converts_and_reinitializes() -> Result<(), TestError> {
     let fixture = SqlStoreFixture::pre_b3(Vec::new()).await?;
     assert_eq!(fixture.initialize_b3().await?, 2);
@@ -156,6 +164,10 @@ async fn assert_conversion_refused(
 /// columns, so the owner's switch can be fixed from the error alone. It shows
 /// no stored value, and the whole switch rolls back.
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "a test asserts its outcomes and propagates fixture failures with ?"
+)]
 async fn an_invalid_or_finer_than_millisecond_time_names_every_refused_row_and_changes_nothing()
 -> Result<(), TestError> {
     let unparseable = "yesterday";

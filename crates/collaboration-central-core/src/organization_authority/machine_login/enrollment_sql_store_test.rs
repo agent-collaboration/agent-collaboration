@@ -81,6 +81,10 @@ fn of_installation() -> EnrollmentQuery {
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "a test asserts its outcomes and propagates fixture failures with ?"
+)]
 async fn the_staged_corpus_initializes_once_and_a_second_initialization_applies_nothing()
 -> Result<(), TestError> {
     let fixture = SqlStoreFixture::pre_b3(Vec::new()).await?;
@@ -90,6 +94,10 @@ async fn the_staged_corpus_initializes_once_and_a_second_initialization_applies_
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "a test asserts its outcomes and propagates fixture failures with ?"
+)]
 async fn an_approval_and_its_first_grant_round_trip_through_the_real_store() -> Result<(), TestError>
 {
     let fixture = SqlStoreFixture::b3(&[WORKSPACE_A, WORKSPACE_B]).await?;
@@ -173,12 +181,16 @@ async fn an_approval_and_its_first_grant_round_trip_through_the_real_store() -> 
 
 /// The enrollment's own machine client has the enrollment's ID.
 fn enrollment_suffix(id: &EnrollmentId) -> u64 {
-    u64::from_str_radix(&id.as_str()[24..], 16).unwrap()
+    u64::from_str_radix(id.as_str().get(24..).unwrap(), 16).unwrap()
 }
 
 /// The approved SQL keeps no request body, so a repeated request ID is refused
 /// as pending the owner, and nothing is written. Not N03's success.
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "a test asserts its outcomes and propagates fixture failures with ?"
+)]
 async fn a_repeated_request_is_pending_the_owner_on_the_real_store() -> Result<(), TestError> {
     let fixture = SqlStoreFixture::b3(&[WORKSPACE_A]).await?;
     let port = fixture.port();
@@ -207,6 +219,10 @@ async fn a_repeated_request_is_pending_the_owner_on_the_real_store() -> Result<(
 }
 
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "a test asserts its outcomes and propagates fixture failures with ?"
+)]
 async fn refusals_write_nothing_to_the_real_store() -> Result<(), TestError> {
     let fixture = SqlStoreFixture::b3(&[WORKSPACE_A]).await?;
     let port = fixture.port();
@@ -248,6 +264,10 @@ async fn refusals_write_nothing_to_the_real_store() -> Result<(), TestError> {
 /// The records of one approval, a superseding first Grant and an automatic
 /// expiry each keep their own key; a retried decision adds none.
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "a test asserts its outcomes and propagates fixture failures with ?"
+)]
 async fn every_record_of_a_machine_keeps_its_own_key_on_the_real_store() -> Result<(), TestError> {
     let fixture = SqlStoreFixture::b3(&[WORKSPACE_A, WORKSPACE_B]).await?;
     let port = fixture.port();
@@ -369,6 +389,10 @@ async fn change_records(
 /// BA1 on the real store: of two approvals at one generation, the first Grant
 /// wins; the other is refused superseded and never activates.
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "a test asserts its outcomes and propagates fixture failures with ?"
+)]
 async fn of_two_approvals_the_first_grant_wins_on_the_real_store() -> Result<(), TestError> {
     let fixture = SqlStoreFixture::b3(&[WORKSPACE_A]).await?;
     let port = fixture.port();
@@ -410,6 +434,10 @@ async fn of_two_approvals_the_first_grant_wins_on_the_real_store() -> Result<(),
 
 /// N10 on the real store: approved at minute 9, the code expires at minute 10.
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "a test asserts its outcomes and propagates fixture failures with ?"
+)]
 async fn the_codes_own_deadline_lapses_an_approval_on_the_real_store() -> Result<(), TestError> {
     for (at_ms, lapses) in [(NOW_MS - 1, false), (NOW_MS, true), (NOW_MS + 1, true)] {
         let fixture = SqlStoreFixture::b3(&[WORKSPACE_A]).await?;
@@ -468,6 +496,10 @@ async fn the_codes_own_deadline_lapses_an_approval_on_the_real_store() -> Result
 
 /// A new owning handle over the same persistence reads the same facts.
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "a test asserts its outcomes and propagates fixture failures with ?"
+)]
 async fn the_real_store_reads_back_the_same_after_reopening() -> Result<(), TestError> {
     let fixture = SqlStoreFixture::b3(&[WORKSPACE_A, WORKSPACE_B]).await?;
     let port = fixture.port();
@@ -500,6 +532,10 @@ async fn the_real_store_reads_back_the_same_after_reopening() -> Result<(), Test
 /// An engine refusal after real writes rolls the whole decision back: the
 /// enrollment, allowance and record written first are gone too.
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "a test asserts its outcomes and propagates fixture failures with ?"
+)]
 async fn a_write_failing_after_others_rolls_the_whole_transaction_back() -> Result<(), TestError> {
     use super::super::enrollment_records::{AllowanceRow, EnrollmentChange};
     let fixture = SqlStoreFixture::b3(&[WORKSPACE_A]).await?;
@@ -527,7 +563,7 @@ async fn a_write_failing_after_others_rolls_the_whole_transaction_back() -> Resu
 
     let failed = port
         .transact(EnrollmentQuery::default(), move |_| {
-            let mut duplicate = stored.clone();
+            let mut duplicate = stored;
             duplicate.id = enrollment(0x7777);
             Decided::writing(
                 (),

@@ -221,6 +221,10 @@ async fn the_engine_refuses_a_duplicate_request_id_or_machine_client() -> Result
 
 /// Each invalid stored enrollment is refused when read, with nothing written.
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "a test asserts its outcomes and propagates fixture failures with ?"
+)]
 async fn an_invalid_stored_enrollment_is_refused_on_read_never_coerced() -> Result<(), TestError> {
     let rows = [
         // An unknown state.
@@ -334,6 +338,10 @@ async fn an_invalid_stored_enrollment_is_refused_on_read_never_coerced() -> Resu
 /// A former service id is set once: linking another to a machine that has one
 /// fails the transaction, and nothing changes.
 #[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "a test asserts its outcomes and propagates fixture failures with ?"
+)]
 async fn a_former_service_id_is_never_replaced() -> Result<(), TestError> {
     let fixture = SqlStoreFixture::b3(&[WORKSPACE_A]).await?;
     fixture
