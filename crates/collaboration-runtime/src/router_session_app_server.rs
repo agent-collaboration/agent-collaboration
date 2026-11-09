@@ -620,3 +620,7 @@ mod unsupported_tests;
 #[cfg(test)]
 #[path = "router_session_app_server_sync_test.rs"]
 mod sync_tests;
+
+#[cfg(test)]
+#[path = "router_session_app_server_activity_test.rs"]
+mod activity_tests;
