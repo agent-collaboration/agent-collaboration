@@ -339,6 +339,7 @@ pub async fn serve_router_session_app_server_connection(
                     }
                     for notification in forwarding.project(&session, &event) {
                         websocket.send(Message::Text(notification.to_string().into())).await?;
+                        forwarding.user_receipts.delivered(&notification);
                     }
                 }
                 continue;
@@ -516,6 +517,7 @@ async fn attach_session_events(
                 websocket
                     .send(Message::Text(notification.to_string().into()))
                     .await?;
+                forwarding.user_receipts.delivered(&notification);
             }
         }
     }

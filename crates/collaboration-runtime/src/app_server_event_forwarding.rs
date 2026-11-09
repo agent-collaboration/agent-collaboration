@@ -189,6 +189,7 @@ impl AppServerEventForwarding {
         self.items
             .retain(|(item_session, _), _| item_session != session);
         let thread_id = thread_alias(session);
+        self.user_receipts.complete_turn(&thread_id);
         let mut resolved = Vec::new();
         self.pending.retain(|request_id, interaction| {
             let belongs_to_session = match interaction {
@@ -213,12 +214,12 @@ impl AppServerEventForwarding {
         let thread_id = thread_alias(session);
         match &event.event {
             SessionEvent::TurnStarted { turn_id, input_id } => {
-                self.user_receipts.accept(session, &thread_id, input_id);
+                self.user_receipts.accept(&thread_id, input_id);
                 self.turn_ids.insert(session.clone(), turn_id.clone());
                 render_turn_event(session, event).into_iter().collect()
             }
             SessionEvent::TurnEnded { .. } => {
-                self.user_receipts.complete_turn(session);
+                self.user_receipts.complete_turn(&thread_id);
                 self.turn_ids.remove(session);
                 self.items
                     .retain(|(item_session, _), _| item_session != session);
@@ -243,7 +244,9 @@ impl AppServerEventForwarding {
                 };
                 if matches!(item.kind, session_event_model::SessionItemKind::UserMessage) {
                     self.user_receipts.stamp(
-                        session,
+                        &thread_id,
+                        &item.item_id,
+                        matches!(event.event, SessionEvent::ItemStarted { .. }),
                         &mut translated.thread_item,
                         self.items.get(&(session.clone(), item.item_id.clone())),
                     );
@@ -364,7 +367,7 @@ impl AppServerEventForwarding {
                 }})]
             }
             SessionEvent::InputAccepted { input_id, .. } => {
-                self.user_receipts.accept(session, &thread_id, input_id);
+                self.user_receipts.accept(&thread_id, input_id);
                 Vec::new()
             }
             SessionEvent::InteractionRequested { interaction } => {

@@ -80,6 +80,7 @@ pub(super) struct ScriptedSessionBackend {
     pub(super) prompt_commands: Mutex<Vec<PromptSessionCommand>>,
     pub(super) steer_commands: Mutex<Vec<SteerSessionCommand>>,
     pub(super) publish_user_receipts: std::sync::atomic::AtomicBool,
+    pub(super) defer_user_receipt_completion: std::sync::atomic::AtomicBool,
     pub(super) steer_receipt_gate: Mutex<Option<Arc<Notify>>>,
     pub(super) steer_failure: Mutex<Option<CommandFailure>>,
     pub(super) steer_gate: Mutex<Option<Arc<Notify>>>,
@@ -130,6 +131,7 @@ impl ScriptedSessionBackend {
             prompt_commands: Mutex::new(Vec::new()),
             steer_commands: Mutex::new(Vec::new()),
             publish_user_receipts: false.into(),
+            defer_user_receipt_completion: false.into(),
             steer_receipt_gate: Mutex::new(None),
             steer_failure: Mutex::new(None),
             steer_gate: Mutex::new(None),
@@ -192,7 +194,9 @@ impl ScriptedSessionBackend {
                 text: Some(text),
             },
         });
-        publish(SessionEvent::ItemCompleted { item_id });
+        if !self.defer_user_receipt_completion.load(Ordering::Acquire) {
+            publish(SessionEvent::ItemCompleted { item_id });
+        }
     }
 
     pub(super) fn actor() -> Result<Identity, serde_json::Error> {
@@ -282,14 +286,16 @@ impl SessionCommandPort for ScriptedSessionBackend {
             .lock()
             .expect("test lock")
             .insert(self.session.clone(), SessionState::Running);
-        let _sent = self.events.send(collaboration_contracts::HubEvent {
+        let turn_started = collaboration_contracts::HubEvent {
             sequence: 1,
             event: SessionEvent::TurnStarted {
                 turn_id: "turn-1".into(),
                 input_id: input_id.clone(),
             },
-        });
+        };
+        let _sent = self.events.send(turn_started.clone());
         if self.publish_user_receipts.load(Ordering::Acquire) {
+            self.history.lock().expect("history").push(turn_started);
             self.publish_receipt(input_id, submission, false);
         }
         self.prompt_submitted.notify_one();
