@@ -1,4 +1,4 @@
-//! Inventory labels survive replay-log resets without becoming persisted history.
+//! In-memory inventory labels and observed activity survive replay-log resets.
 use serde::{Deserialize, Deserializer};
 use session_event_model::{SessionItem, SessionItemKind};
 
@@ -6,9 +6,18 @@ use session_event_model::{SessionItem, SessionItemKind};
 pub(super) struct SessionInventoryMetadata {
     first_user_item: Option<SessionItem>,
     session_name: Option<String>,
+    latest_activity_at_seconds: Option<i64>,
 }
 
 impl SessionInventoryMetadata {
+    pub(super) fn observe_activity_at(&mut self, observed_at_seconds: i64) {
+        self.latest_activity_at_seconds = Some(observed_at_seconds);
+    }
+
+    pub(super) fn latest_activity_at_seconds(&self) -> Option<i64> {
+        self.latest_activity_at_seconds
+    }
+
     pub(super) fn observe_item(&mut self, item: &SessionItem) {
         match item.kind {
             SessionItemKind::UserMessage => {
