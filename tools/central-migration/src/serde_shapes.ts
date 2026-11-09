@@ -203,6 +203,43 @@ export function fromJsonText<T>(parse: (text: string) => unknown, decoder: Decod
     } catch {
       return invalid(path, "not JSON");
     }
+    // serde's derived structs refuse a repeated field; JSON.parse would keep the last.
+    const duplicate = duplicateKey(textValue);
+    if (duplicate !== null) return invalid(path, `duplicate field ${duplicate}`);
     return decoder(parsed, path);
   };
+}
+
+/**
+ * The first key that appears twice in one JSON object of `text`, or null.
+ * `text` is already known to be valid JSON; keys compare after unescaping.
+ */
+export function duplicateKey(text: string): string | null {
+  type Frame =
+    | { readonly kind: "object"; readonly keys: Set<string>; expectKey: boolean }
+    | { readonly kind: "array" };
+  const frames: Frame[] = [];
+  let index = 0;
+  while (index < text.length) {
+    const character = text[index];
+    const top = frames.at(-1);
+    if (character === '"') {
+      let end = index + 1;
+      while (text[end] !== '"') end += text[end] === "\\" ? 2 : 1;
+      if (top?.kind === "object" && top.expectKey) {
+        const key = JSON.parse(text.slice(index, end + 1)) as string;
+        if (top.keys.has(key)) return key;
+        top.keys.add(key);
+        top.expectKey = false;
+      }
+      index = end + 1;
+      continue;
+    }
+    if (character === "{") frames.push({ kind: "object", keys: new Set(), expectKey: true });
+    else if (character === "[") frames.push({ kind: "array" });
+    else if (character === "}" || character === "]") frames.pop();
+    else if (character === "," && top?.kind === "object") top.expectKey = true;
+    index += 1;
+  }
+  return null;
 }

@@ -286,6 +286,26 @@ const CONTRADICTIONS: Contradiction[] = [
     subject: `_fleet_sync_lifecycle_attempts ${IDS.registration} [row 1]`,
     reason: /outcome kind differs from the intent/,
   },
+  {
+    name: "a lease record repeats a field",
+    edit: (production) =>
+      production.registry.push(
+        `UPDATE _fleet_sync_leases SET record = replace(record, '"epoch":1', '"epoch":1,"epoch":1') WHERE database = ${quote(IDS.projectHeld1)}`,
+      ),
+    object: "registry",
+    subject: `_fleet_sync_leases ${IDS.projectHeld1} [row 2]`,
+    reason: /record: duplicate field epoch/,
+  },
+  {
+    name: "a copy record repeats a field",
+    edit: (production) =>
+      copyOf(production, IDS.projectHeld1).push(
+        `UPDATE _fleet_sync_copy SET record = replace(record, '"role":"authoritative"', '"role":"authoritative","role":"follower"')`,
+      ),
+    object: `copy ${IDS.projectHeld1}`,
+    subject: `project ${IDS.projectHeld1}`,
+    reason: /main refuses the copy record: _fleet_sync_copy\.record: duplicate field role/,
+  },
   // I5: incarnation counters main can't parse or store.
   {
     name: "an incarnation counter is not canonical decimal",
