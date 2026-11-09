@@ -1,0 +1,89 @@
+{
+  "source": "Digests are computed by the Rust side: crates/board-staging-cutover/tests/integration/seed_digest_fixture.rs recomputes each case with fleet_sync_protocol::TableDigestBuilder and fails unless it equals the recorded digest. The seed Worker's tests must reproduce the same digests from rows seeded into SQLite. Each column holds only values its declared type keeps unchanged; 'loose' has no declared type. No -0.0 here: SQLite stores an integral REAL as an integer, so a stored -0.0 reads back as 0.0 (the serde -0.0 form is covered by the port's unit test).",
+  "cases": [
+    {
+      "name": "empty table",
+      "columns": "id TEXT PRIMARY KEY",
+      "rows": [],
+      "digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "name": "every SQLite storage class, integers beyond 2^53 and edge reals",
+      "columns": "id TEXT PRIMARY KEY, whole INTEGER, ratio REAL, small REAL, payload BLOB, note TEXT, loose",
+      "rows": [
+        [
+          { "kind": "text", "value": "01a1c0b9-0000-7000-8000-000000000001" },
+          { "kind": "integer", "value": 9007199254740993 },
+          { "kind": "real", "value": 0.1 },
+          { "kind": "real", "value": 1.5e-7 },
+          { "kind": "blob", "value": "AAEC/w==" },
+          { "kind": "text", "value": "café \"quoted\" \\ tab\tend" },
+          { "kind": "null" }
+        ],
+        [
+          { "kind": "text", "value": "01a1c0b9-0000-7000-8000-000000000002" },
+          { "kind": "integer", "value": -9223372036854775808 },
+          { "kind": "real", "value": 1.0 },
+          { "kind": "real", "value": 0.001 },
+          { "kind": "blob", "value": "" },
+          { "kind": "text", "value": "" },
+          { "kind": "null" }
+        ],
+        [
+          { "kind": "text", "value": "01a1c0b9-0000-7000-8000-000000000003" },
+          { "kind": "integer", "value": 9223372036854775807 },
+          { "kind": "real", "value": -2.5 },
+          { "kind": "real", "value": 100.0 },
+          { "kind": "blob", "value": "/w==" },
+          { "kind": "text", "value": "line\nbreak" },
+          { "kind": "integer", "value": 0 }
+        ],
+        [
+          { "kind": "text", "value": "01a1c0b9-0000-7000-8000-000000000004" },
+          { "kind": "integer", "value": -1 },
+          { "kind": "real", "value": 1e21 },
+          { "kind": "real", "value": 5e-324 },
+          { "kind": "null" },
+          { "kind": "text", "value": "emoji 🦁" },
+          { "kind": "real", "value": 1.7976931348623157e308 }
+        ],
+        [
+          { "kind": "text", "value": "01a1c0b9-0000-7000-8000-000000000005" },
+          { "kind": "integer", "value": 42 },
+          { "kind": "real", "value": 123456789012345680 },
+          { "kind": "real", "value": 1e16 },
+          { "kind": "blob", "value": "AA==" },
+          { "kind": "text", "value": "x" },
+          { "kind": "text", "value": "loose text" }
+        ]
+      ],
+      "digest": "5d6201ab6091f183f2bcee8ab2096c8c5b2d319db2e2c861014d9025ebd4fa24"
+    }
+  ],
+  "schema": {
+    "note": "The seed test's schema steps; the fingerprint is fleet_sync_protocol::schema_fingerprint over the sqlite_schema entries these steps create, computed by the Rust fixture test.",
+    "steps": [
+      "CREATE TABLE board_values(id TEXT PRIMARY KEY, whole INTEGER, ratio REAL, small REAL, payload BLOB, note TEXT, loose)",
+      "CREATE TABLE board_notes(id TEXT PRIMARY KEY, value_id TEXT REFERENCES board_values(id))",
+      "CREATE INDEX board_notes_by_value ON board_notes(value_id)"
+    ],
+    "entries": [
+      {
+        "kind": "table",
+        "name": "board_values",
+        "sql": "CREATE TABLE board_values(id TEXT PRIMARY KEY, whole INTEGER, ratio REAL, small REAL, payload BLOB, note TEXT, loose)"
+      },
+      {
+        "kind": "table",
+        "name": "board_notes",
+        "sql": "CREATE TABLE board_notes(id TEXT PRIMARY KEY, value_id TEXT REFERENCES board_values(id))"
+      },
+      {
+        "kind": "index",
+        "name": "board_notes_by_value",
+        "sql": "CREATE INDEX board_notes_by_value ON board_notes(value_id)"
+      }
+    ],
+    "fingerprint": "906cc6f809daf481345fe6807c5fd9a3460c97edb0898c739f4a802bbb37d315"
+  }
+}

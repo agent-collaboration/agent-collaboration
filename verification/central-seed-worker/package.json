@@ -1,0 +1,28 @@
+{
+  "name": "codex-router-central-seed-worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "check": "tsc --noEmit",
+    "lint": "oxlint --deny-warnings .",
+    "format": "oxfmt src/*.ts test scripts *.ts",
+    "format:check": "oxfmt --check src/*.ts test scripts *.ts",
+    "test": "pnpm run build && pnpm run build:test-support && node --test \"test/*.test.ts\"",
+    "build:test-support": "pnpm --dir ../../tools/central-migration run build:test-support",
+    "test:old-central": "pnpm run build && node --test \"test/old_central/*.test.ts\""
+  },
+  "devDependencies": {
+    "@types/node": "26.6.5",
+    "lossless-json": "4.3.3",
+    "miniflare": "5.20261012.0-beta",
+    "oxfmt": "0.74.0",
+    "oxlint": "1.89.0",
+    "typescript": "7.0.2",
+    "workerd": "1.20261012.1"
+  },
+  "engines": {
+    "node": "26.11.1"
+  },
+  "packageManager": "pnpm@12.14.0"
+}

@@ -169,6 +169,9 @@ const sources = {
     // O session_runtime.rs:279–299: a Connection runs the session and delivery sets.
     connection: [...sessionProduction, ...centralSessionProduction, ...deliveryProduction],
     mailbox: deliveryProduction,
+    // The Copy's consumer hook migration (O copy_receiver_rules.rs COPY_MIGRATIONS),
+    // recorded in the library's _fleet_sync_hook_migrations, for the staging seed.
+    copySummary: productionFile("copy_migrations/0001_copy_summary.sql"),
     journal: durableSteps,
   },
 };
