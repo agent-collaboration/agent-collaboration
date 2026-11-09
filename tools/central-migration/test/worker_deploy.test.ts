@@ -349,40 +349,42 @@ test("the real runner renders private files, uploads through cf once, and checks
   }
 });
 
-test("the runner refuses an account cf of another release before reading the inventory", async () => {
-  const root = await mkdtemp(join(tmpdir(), "2026-11-worker-deploy-"));
-  try {
-    // Arrange: an account cf that reports another version.
-    const artifact = join(root, "build");
-    await mkdir(artifact);
-    await writeFile(join(artifact, "worker.js"), "export default {};\n");
-    const statePath = join(root, "cf-state.json");
-    await writeFile(statePath, JSON.stringify({ log: [], deployed: false }));
-    process.env.FAKE_CF_STATE = statePath;
-    process.env.FAKE_CF_VERSION = "1.0.0-beta.17";
+for (const reported of ["1.0.0-beta.17", "0.11.0-beta.1", "0.11.01"]) {
+  test(`the runner refuses an account cf reporting ${reported} before reading the inventory`, async () => {
+    const root = await mkdtemp(join(tmpdir(), "2026-11-worker-deploy-"));
+    try {
+      // Arrange: an account cf that reports another version.
+      const artifact = join(root, "build");
+      await mkdir(artifact);
+      await writeFile(join(artifact, "worker.js"), "export default {};\n");
+      const statePath = join(root, "cf-state.json");
+      await writeFile(statePath, JSON.stringify({ log: [], deployed: false }));
+      process.env.FAKE_CF_STATE = statePath;
+      process.env.FAKE_CF_VERSION = reported;
 
-    // Act
-    const refused = await guardedRun({
-      kind: "migration",
-      settings: SETTINGS,
-      config: renderConfig("migration", SETTINGS),
-      artifact,
-      scratch: join(root, "scratch"),
-      cf: join(import.meta.dirname, "support/fake_cf.mjs"),
-      inventoryCf: join(import.meta.dirname, "support/fake_cf.mjs"),
-      dryRun: true,
-    }).catch((error: unknown) => error);
+      // Act
+      const refused = await guardedRun({
+        kind: "migration",
+        settings: SETTINGS,
+        config: renderConfig("migration", SETTINGS),
+        artifact,
+        scratch: join(root, "scratch"),
+        cf: join(import.meta.dirname, "support/fake_cf.mjs"),
+        inventoryCf: join(import.meta.dirname, "support/fake_cf.mjs"),
+        dryRun: true,
+      }).catch((error: unknown) => error);
 
-    // Assert: refused after only the version call.
-    assert.ok(refused instanceof DeployRefused, String(refused));
-    const { log } = JSON.parse(await readFile(statePath, "utf8")) as { log: string[][] };
-    assert.deepEqual(log, [["--version"]]);
-  } finally {
-    delete process.env.FAKE_CF_STATE;
-    delete process.env.FAKE_CF_VERSION;
-    await rm(root, { recursive: true, force: true });
-  }
-});
+      // Assert: refused after only the version call.
+      assert.ok(refused instanceof DeployRefused, String(refused));
+      const { log } = JSON.parse(await readFile(statePath, "utf8")) as { log: string[][] };
+      assert.deepEqual(log, [["--version"]]);
+    } finally {
+      delete process.env.FAKE_CF_STATE;
+      delete process.env.FAKE_CF_VERSION;
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+}
 
 test("the runner refuses a cf token environment; cf must use the owner's login", async () => {
   process.env.CLOUDFLARE_API_TOKEN = "x";

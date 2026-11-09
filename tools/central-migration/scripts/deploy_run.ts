@@ -178,9 +178,12 @@ export async function guardedRun(options: GuardedRun): Promise<DeployOutcome> {
     };
   const inventory = runner(options.inventoryCf, inventoryHome);
   const version = await inventory(["--version"], "inventory-cf-version");
-  if (!version.includes(`v${ACCOUNT_CF_VERSION}`) && version.trim() !== ACCOUNT_CF_VERSION) {
+  // The banner's one complete version token must be exactly the release: a
+  // prefix match would take 0.11.0-beta.1 or 0.11.01.
+  const tokens = version.match(/\d+\.\d+\.\d+[0-9A-Za-z.+-]*/g) ?? [];
+  if (tokens.length !== 1 || tokens[0] !== ACCOUNT_CF_VERSION) {
     throw new DeployRefused(
-      `the account cf isn't ${ACCOUNT_CF_VERSION}; its inventory commands differ`,
+      `the account cf reports ${tokens.join(", ") || "no version"}, not ${ACCOUNT_CF_VERSION}; its inventory commands differ`,
     );
   }
   const outcome = await deployWorker(
