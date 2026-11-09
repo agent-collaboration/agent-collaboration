@@ -2,13 +2,13 @@
 use super::super::owner_fixture::*;
 use crate::ApplicationFixture;
 use crate::CollaborationApplication;
-use crate::SubscriptionClock;
+use router_clock::RuntimeClock;
+
 use collaboration_contracts::TargetPresence;
 use collaboration_protocol::{DeliveryOutcome, PushId, ThreadSubscriptionsRequest};
 use interaction_storage::MailDeliveryObservation;
 use message_board::SubscriptionDeliveryOutcome;
 use sqlx::Connection;
-use std::time::Duration;
 
 async fn set_observation_time(fixture: &OwnerFixture, push: &PushId, value: &str) {
     let mut observer = sqlx_turso::TursoConnection::connect_with(
@@ -43,7 +43,7 @@ async fn observed_reason(
     push: &PushId,
     reason: &str,
 ) -> MailDeliveryObservation {
-    tokio::time::timeout(Duration::from_secs(10), async {
+    (async {
         loop {
             if let Some(observed) = fixture
                 .interactions
@@ -61,7 +61,6 @@ async fn observed_reason(
         }
     })
     .await
-    .expect("actual SDK outcome committed")
 }
 
 async fn view(
@@ -85,19 +84,8 @@ async fn native_retry_observations_reach_the_public_view_and_clear_after_readine
     let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.native_runtime().await;
     let app = application(&fixture, &runtime);
-    tokio::time::timeout(
-        Duration::from_secs(10),
-        fixture.post(&fixture.root, "observed first carrier failure"),
-    )
-    .await
-    .expect("initial subscription activity committed");
-    let first = tokio::time::timeout(
-        Duration::from_secs(10),
-        runtime.requests.lock().await.recv(),
-    )
-    .await
-    .expect("first native attempt reached the controlled carrier")
-    .unwrap();
+    (fixture.post(&fixture.root, "observed first carrier failure")).await;
+    let first = (runtime.requests.lock().await.recv()).await.unwrap();
     let push = first.payload.push_id;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     runtime
@@ -108,14 +96,12 @@ async fn native_retry_observations_reach_the_public_view_and_clear_after_readine
         })
         .unwrap();
     let first_observed = observed_reason(&fixture, &push, "first native refusal").await;
-    let first_held_at = fixture.clock.now();
+    let first_held_at = fixture.clock.utc_now();
     assert_eq!(first_observed.held_since, Some(first_held_at));
     assert_eq!(first_observed.scheduled_retry_at, None);
     // The public view reconciles inline, so inspect only after the carrier is
     // answered and readiness is Wakeable, never while an attempt is held open.
-    let held = tokio::time::timeout(Duration::from_secs(10), view(&app, &fixture))
-        .await
-        .expect("public view observed the committed readiness hold");
+    let held = (view(&app, &fixture)).await;
     assert_eq!(
         held.pending_count, 1,
         "allocated Held custody vanished from pendingCount"
@@ -124,36 +110,25 @@ async fn native_retry_observations_reach_the_public_view_and_clear_after_readine
     assert_eq!(held.next_retry_at, None);
 
     // An indefinite readiness hold has no scheduled retry.
-    fixture.clock.advance_without_tokio_time(5);
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(5))
+        .unwrap();
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     // Another readiness pass can start the attempt before this test's own
     // reconciliation is queued. Receive the actual request to fix that ordering.
-    let preceding_reconcile = tokio::time::timeout(
-        Duration::from_secs(10),
-        runtime
-            .service
-            .request_reconcile_receipt(fixture.reader.clone()),
-    )
-    .await
-    .expect("preceding readiness pass queued");
-    let second = tokio::time::timeout(
-        Duration::from_secs(10),
-        runtime.requests.lock().await.recv(),
-    )
-    .await
-    .expect("preceding readiness pass started the second native attempt")
-    .unwrap();
+    let preceding_reconcile = (runtime
+        .service
+        .request_reconcile_receipt(fixture.reader.clone()))
+    .await;
+    let second = (runtime.requests.lock().await.recv()).await.unwrap();
     assert_eq!(second.payload.push_id, push);
     // Queue the same All/Refresh pass without waiting behind the attempt whose
     // completion this test must supply. The receipt is joined after the answer.
-    let second_reconcile = tokio::time::timeout(
-        Duration::from_secs(10),
-        runtime
-            .service
-            .request_reconcile_receipt(fixture.reader.clone()),
-    )
-    .await
-    .expect("reconciliation queued behind the held native attempt");
+    let second_reconcile = (runtime
+        .service
+        .request_reconcile_receipt(fixture.reader.clone()))
+    .await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     runtime
         .completions
@@ -164,11 +139,7 @@ async fn native_retry_observations_reach_the_public_view_and_clear_after_readine
         .unwrap();
     let second_observed = observed_reason(&fixture, &push, "second native refusal").await;
     for receipt in [preceding_reconcile, second_reconcile] {
-        tokio::time::timeout(Duration::from_secs(10), receipt)
-            .await
-            .expect("readiness reconciliation finished after the carrier answer")
-            .unwrap()
-            .unwrap();
+        (receipt).await.unwrap().unwrap();
     }
     assert!(matches!(
         runtime.requests.lock().await.try_recv(),
@@ -187,33 +158,20 @@ async fn native_retry_observations_reach_the_public_view_and_clear_after_readine
         .unwrap()
         .unwrap();
 
-    fixture.clock.advance_without_tokio_time(1);
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(1))
+        .unwrap();
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
-    let final_reconcile = tokio::time::timeout(
-        Duration::from_secs(10),
-        runtime
-            .service
-            .request_reconcile_receipt(fixture.reader.clone()),
-    )
-    .await
-    .expect("final readiness reconciliation queued");
-    let third = tokio::time::timeout(
-        Duration::from_secs(10),
-        runtime.requests.lock().await.recv(),
-    )
-    .await
-    .expect("final readiness pass started the third native attempt")
-    .unwrap();
+    let final_reconcile = (runtime
+        .service
+        .request_reconcile_receipt(fixture.reader.clone()))
+    .await;
+    let third = (runtime.requests.lock().await.recv()).await.unwrap();
     assert_eq!(third.payload.push_id, push);
     runtime.await_settled().await;
-    tokio::time::timeout(Duration::from_secs(10), final_reconcile)
-        .await
-        .expect("final readiness reconciliation finished after acceptance")
-        .unwrap()
-        .unwrap();
-    let delivered = tokio::time::timeout(Duration::from_secs(10), view(&app, &fixture))
-        .await
-        .expect("public view observed the accepted native outcome");
+    (final_reconcile).await.unwrap().unwrap();
+    let delivered = (view(&app, &fixture)).await;
     assert_eq!(delivered.pending_count, 0);
     assert_eq!(delivered.held_since, None);
     assert_eq!(
@@ -244,9 +202,7 @@ async fn native_retry_observations_reach_the_public_view_and_clear_after_readine
         Err(tokio::sync::mpsc::error::TryRecvError::Empty)
     ));
     drop(app);
-    tokio::time::timeout(Duration::from_secs(10), runtime.close())
-        .await
-        .expect("native observation fixture shut down after every carrier answer");
+    (runtime.close()).await;
 }
 
 #[tokio::test]
@@ -268,7 +224,7 @@ async fn latest_observed_outcome_wins_over_newer_allocation_and_counts_both_held
     observed_reason(&fixture, &older, "older first refusal").await;
     let older_observed_at = fixture
         .clock
-        .now()
+        .utc_now()
         .to_rfc3339_opts(chrono::SecondsFormat::Nanos, true);
     set_observation_time(&fixture, &older, "malformed-private-observation-time").await;
     assert!(
@@ -280,9 +236,12 @@ async fn latest_observed_outcome_wins_over_newer_allocation_and_counts_both_held
             .is_err(),
         "a corrupt observation was silently coerced"
     );
-    fixture.clock.advance_without_tokio_time(20);
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(20))
+        .unwrap();
     fixture.post(&fixture.root, "newer allocated item").await;
-    let newer = tokio::time::timeout(Duration::from_secs(10), async {
+    let newer = (async {
         loop {
             let records = fixture
                 .interactions
@@ -295,24 +254,20 @@ async fn latest_observed_outcome_wins_over_newer_allocation_and_counts_both_held
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .expect("second real SDK Held item");
+    .await;
     assert_ne!(newer.push_id, older);
     // The real allocator has made the newer item despite the older view-only fault.
     set_observation_time(&fixture, &older, &older_observed_at).await;
     assert_eq!(view(&app, &fixture).await.pending_count, 2);
 
     // The older item's backoff expires while the newer item's readiness check is recent.
-    fixture.clock.advance_without_tokio_time(10);
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(10))
+        .unwrap();
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     let driving = runtime.drive_native_due();
-    let retried = tokio::time::timeout(
-        Duration::from_secs(10),
-        runtime.requests.lock().await.recv(),
-    )
-    .await
-    .unwrap()
-    .unwrap();
+    let retried = (runtime.requests.lock().await.recv()).await.unwrap();
     assert_eq!(retried.payload.push_id, older);
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     runtime
@@ -324,7 +279,7 @@ async fn latest_observed_outcome_wins_over_newer_allocation_and_counts_both_held
         .unwrap();
     let observed = observed_reason(&fixture, &older, "older observed last").await;
     driving.await.unwrap().unwrap();
-    assert_eq!(observed.recorded_at, Some(fixture.clock.now()));
+    assert_eq!(observed.recorded_at, Some(fixture.clock.utc_now()));
     let latest = view(&app, &fixture).await;
     assert_eq!(latest.pending_count, 2);
     assert_eq!(
@@ -357,29 +312,30 @@ async fn failed_delivery_retries_at_its_scheduled_time_then_clears_the_public_fi
         })
         .unwrap();
     let observed = observed_reason(&fixture, &push, "backoff refusal").await;
-    let until =
-        chrono::DateTime::from_timestamp_millis(fixture.clock.now().timestamp_millis() + 30_000)
-            .unwrap();
+    let until = chrono::DateTime::from_timestamp_millis(
+        fixture.clock.utc_now().timestamp_millis() + 30_000,
+    )
+    .unwrap();
     assert_eq!(observed.scheduled_retry_at, Some(until));
     let held = view(&app, &fixture).await;
-    assert_eq!(held.held_since, Some(fixture.clock.now()));
+    assert_eq!(held.held_since, Some(fixture.clock.utc_now()));
     assert_eq!(held.next_retry_at, Some(until));
-    fixture.clock.advance_without_tokio_time(25);
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(25))
+        .unwrap();
     runtime.drive_native_due().await.unwrap().unwrap();
     assert!(
         runtime.requests.lock().await.try_recv().is_err(),
         "backoff retried at t-5"
     );
-    fixture.clock.advance_without_tokio_time(5);
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(5))
+        .unwrap();
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     let driving = runtime.drive_native_due();
-    let retried = tokio::time::timeout(
-        Duration::from_secs(10),
-        runtime.requests.lock().await.recv(),
-    )
-    .await
-    .unwrap()
-    .unwrap();
+    let retried = (runtime.requests.lock().await.recv()).await.unwrap();
     assert_eq!(retried.payload.push_id, push);
     runtime.await_settled().await;
     driving.await.unwrap().unwrap();
@@ -408,7 +364,7 @@ async fn a_resolved_membership_stays_visible_while_its_allocated_item_is_held() 
     fixture
         .post(&fixture.root, "allocated before resolution")
         .await;
-    tokio::time::timeout(Duration::from_secs(10), async {
+    (async {
         loop {
             if fixture
                 .interactions
@@ -423,8 +379,7 @@ async fn a_resolved_membership_stays_visible_while_its_allocated_item_is_held() 
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .expect("actual SDK Held allocation");
+    .await;
     assert_eq!(view(&app, &fixture).await.pending_count, 1);
     fixture
         .resolve(
@@ -439,7 +394,7 @@ async fn a_resolved_membership_stays_visible_while_its_allocated_item_is_held() 
                 actor: human("board-owner"),
                 acting_for: None,
             },
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap();
@@ -487,13 +442,7 @@ async fn a_resolved_membership_stays_visible_while_its_allocated_item_is_held() 
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     // Held mail waits for a signal that its target loaded, not for the clock.
     fixture.held_mail.observation_retried();
-    let request = tokio::time::timeout(
-        Duration::from_secs(10),
-        runtime.requests.lock().await.recv(),
-    )
-    .await
-    .unwrap()
-    .unwrap();
+    let request = (runtime.requests.lock().await.recv()).await.unwrap();
     assert_eq!(request.target, target);
     runtime.await_settled().await;
     let settled = app

@@ -10,18 +10,14 @@ use serde_json::{Value, json};
 use std::{
     os::unix::fs::OpenOptionsExt as _,
     path::{Path, PathBuf},
-    time::Duration,
 };
-
-/// The bound for a prompt the Router is expected to send.
-const PROMPT_BOUND: Duration = Duration::from_secs(30);
-
-/// How often the journal, written by another process, is read while waiting.
-const JOURNAL_READ_INTERVAL: Duration = Duration::from_millis(20);
+use tokio::{io::AsyncReadExt, net::UnixListener, sync::watch, task::JoinHandle};
 
 pub struct AcpRecipient {
     pub target: SessionRef,
     journal: PathBuf,
+    journal_updates: watch::Receiver<u64>,
+    journal_notices: JoinHandle<()>,
 }
 
 impl AcpRecipient {
@@ -30,6 +26,9 @@ impl AcpRecipient {
     /// restarts the Host for the provider to start.
     pub fn arm(directory: &Path, service_id: &str, session: &str) -> FixtureResult<Self> {
         let journal = directory.join("fixture-provider-acp.jsonl");
+        let journal_signal = directory.join("acp-journal.sock");
+        let notices = UnixListener::bind(&journal_signal)?;
+        let (revision, journal_updates) = watch::channel(0_u64);
         let launch = json!({
             "executable": node_test_fixture::node_executable()?,
             "arguments": [
@@ -37,6 +36,7 @@ impl AcpRecipient {
                     .canonicalize()?,
                 "journal",
                 journal,
+                journal_signal,
             ],
         });
         std::fs::OpenOptions::new()
@@ -51,7 +51,20 @@ impl AcpRecipient {
             "endpoint": {"serviceId": service_id, "endpointId": "cursor-local"},
             "sessionId": session,
         }))?;
-        Ok(Self { target, journal })
+        let journal_notices = tokio::spawn(async move {
+            while let Ok((mut notice, _)) = notices.accept().await {
+                let mut observed = [0_u8; 8];
+                if notice.read_exact(&mut observed).await.is_ok() && &observed == b"observed" {
+                    revision.send_modify(|value| *value = value.wrapping_add(1));
+                }
+            }
+        });
+        Ok(Self {
+            target,
+            journal,
+            journal_updates,
+            journal_notices,
+        })
     }
 
     /// Makes the recipient present: the Host's provider loads its session. A load
@@ -114,29 +127,19 @@ impl AcpRecipient {
     }
 
     /// Waits for a prompt containing `needle`, and returns its text.
-    pub async fn expect_text_with_timeout(
-        &self,
-        needle: &str,
-        bound: Duration,
-    ) -> FixtureResult<String> {
-        tokio::time::timeout(bound, async {
-            loop {
-                if let Some(text) = self
-                    .prompts()?
-                    .into_iter()
-                    .find(|text| text.contains(needle))
-                {
-                    return FixtureResult::Ok(text);
-                }
-                tokio::time::sleep(JOURNAL_READ_INTERVAL).await;
-            }
-        })
-        .await
-        .map_err(|_| format!("no prompt containing {needle:?} reached the recipient"))?
-    }
-
     pub async fn expect_text(&self, needle: &str) -> FixtureResult<String> {
-        self.expect_text_with_timeout(needle, PROMPT_BOUND).await
+        let mut updates = self.journal_updates.clone();
+        loop {
+            updates.borrow_and_update();
+            if let Some(text) = self
+                .prompts()?
+                .into_iter()
+                .find(|text| text.contains(needle))
+            {
+                return Ok(text);
+            }
+            updates.changed().await?;
+        }
     }
 
     pub async fn expect_marker(&self, marker: &str) -> FixtureResult {
@@ -159,3 +162,13 @@ impl AcpRecipient {
         Ok(u64::try_from(self.prompts()?.len())?)
     }
 }
+
+impl Drop for AcpRecipient {
+    fn drop(&mut self) {
+        self.journal_notices.abort();
+    }
+}
+
+#[cfg(test)]
+#[path = "acp_recipient_test.rs"]
+mod tests;

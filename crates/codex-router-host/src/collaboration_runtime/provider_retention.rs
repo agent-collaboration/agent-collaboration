@@ -7,7 +7,8 @@ use collaboration_runtime::{
     BatchOutcome, ProviderOperationStore, ProviderOperationStoreError, WakeDrivenWorkerLoop,
     WorkerObservation, WorkerPass, provider_operation_retention_cutoff_ms,
 };
-use runtime_primitives::{Clock, SyncTime};
+use router_clock::RuntimeClock;
+use runtime_primitives::SyncTime;
 use std::{num::NonZeroU32, sync::Arc};
 use tokio::sync::Mutex;
 
@@ -15,8 +16,8 @@ impl CollaborationRuntime {
     pub async fn configure_provider_operation_retention(
         &mut self,
         retention_days: Option<NonZeroU32>,
-        clock: Arc<dyn Clock>,
     ) -> io::Result<u64> {
+        let clock = self.clock.clone();
         let now_ms = clock.now().unix_millis();
         let cutoff_ms = provider_operation_retention_cutoff_ms(now_ms, retention_days)
             .map_err(io::Error::other)?;
@@ -71,7 +72,7 @@ pub(super) async fn provider_retention_loop(
     store: Arc<Mutex<ProviderOperationStore>>,
     supervisor: Option<Arc<ExternalProviderSupervisor>>,
     retention_days: Option<NonZeroU32>,
-    clock: Arc<dyn Clock>,
+    clock: Arc<dyn RuntimeClock>,
 ) -> (WakeDrivenWorkerLoop, ProviderRetentionPass) {
     let commits = store.lock().await.subscribe_commits();
     let mut worker_loop =

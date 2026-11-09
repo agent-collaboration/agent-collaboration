@@ -154,7 +154,7 @@ impl FleetClient {
     /// deletable; the first pass drains whatever is already due.
     pub async fn run_outbox_retention(
         &self,
-        clock: Arc<dyn runtime_primitives::Clock>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
         shutdown: CancellationToken,
     ) {
         let (worker_loop, mut pass) = outbox_retention::outbox_retention_loop(&self.outbox, clock);

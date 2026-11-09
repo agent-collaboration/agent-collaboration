@@ -7,7 +7,7 @@ use collaboration_runtime::AutomationRetentionWorker;
 use collaboration_service::BoardAvailability;
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
-use collaboration_service::SystemSubscriptionClock;
+
 use collaboration_service::{ProjectAdmission, ProjectAdmissionProps};
 use sqlx::{ConnectOptions, Connection};
 use std::path::PathBuf;
@@ -29,10 +29,15 @@ impl BoardControlFixture {
         reason = "Fixed test vectors define these indices."
     )]
     async fn start() -> Self {
+        let clock = std::sync::Arc::new(router_clock::ManualClock::new(
+            chrono::DateTime::UNIX_EPOCH + chrono::Duration::seconds(1_792_432_800),
+        ));
+
         let directory = tempfile::tempdir().expect("isolated Control databases");
-        let registry = crate::native_registry::new_registry(directory.path())
-            .await
-            .expect("fixture enrollment");
+        let registry =
+            crate::native_registry::new_registry_with_clock(directory.path(), clock.clone())
+                .await
+                .expect("fixture enrollment");
         let origin = message_board::ActorOrigin {
             installation: message_board::ServiceId::try_from(SERVICE_ID.to_owned())
                 .expect("fixture service"),
@@ -49,6 +54,7 @@ impl BoardControlFixture {
         let fleet = Arc::new(fleet);
         let admission = Arc::new(
             ProjectAdmission::new(ProjectAdmissionProps {
+                clock: clock.clone(),
                 registry: registry.clone(),
                 fleet: fleet.clone(),
                 identity: MachineIdentity::new(
@@ -86,7 +92,12 @@ impl BoardControlFixture {
             delivery: delivery.clone(),
             presence: presence.clone(),
             machine_identity: machine.clone(),
-            clock: Arc::new(SystemSubscriptionClock),
+            clock: Arc::new(
+                router_clock::ManualClock::starting_at(
+                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
+                )
+                .unwrap(),
+            ),
         });
         owner.start().await.expect("real reader owner starts");
         let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
@@ -103,7 +114,12 @@ impl BoardControlFixture {
                 actors: owner.clone(),
                 presence,
                 machine,
-                clock: Arc::new(SystemSubscriptionClock),
+                clock: Arc::new(
+                    router_clock::ManualClock::starting_at(
+                        runtime_primitives::SyncTime::from_unix_millis(1792432800000),
+                    )
+                    .unwrap(),
+                ),
             },
         )
         .expect("compose native push owner");

@@ -15,19 +15,23 @@ use fleet_sync_delivery::{Outbox, delivery_rollback};
 use fleet_sync_protocol::{
     DeliveryItem, DeliveryStatus, ItemId, PeerId, StatusPublication, StatusVersion,
 };
+use router_clock::RuntimeClock;
 use serde_json::json;
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 pub(super) fn service(last: u8) -> collaboration_protocol::UuidIdentity {
     format!("00000000-0000-4000-8000-{last:012}")
         .try_into()
         .unwrap()
 }
-pub(super) fn create_request(deadline: chrono::DateTime<chrono::Utc>) -> WakeSendRequest {
+pub(super) fn create_request(
+    deadline: chrono::DateTime<chrono::Utc>,
+    clock: &dyn router_clock::RuntimeClock,
+) -> WakeSendRequest {
     serde_json::from_value(json!({
         "operationId":OperationId::generate(),"requestedBy":{"kind":"owner"},"replace":false,
         "message":{"target":{"endpoint":{"serviceId":service(2),"endpointId":"codex-local"},"sessionId":"late-replay"},"content":{"kind":"humanUser","text":"retained remote wake"},"delivery":"auto"},
-        "timing":{"kind":"at","at":(chrono::Utc::now()+chrono::Duration::seconds(60)).to_rfc3339_opts(chrono::SecondsFormat::Millis,true)},
+        "timing":{"kind":"at","at":(clock.utc_now()+chrono::Duration::seconds(60)).to_rfc3339_opts(chrono::SecondsFormat::Millis,true)},
         "expiry":{"kind":"at","at":deadline.to_rfc3339_opts(chrono::SecondsFormat::Millis,true)}
     })).unwrap()
 }
@@ -135,13 +139,11 @@ async fn publish_recorded_status(
         .await
         .unwrap();
 }
-async fn after_deadline(runtime: &Runtime, deadline: chrono::DateTime<chrono::Utc>) {
-    let remaining = (deadline - chrono::Utc::now()).to_std().unwrap_or_default();
-    tokio::time::sleep(remaining + Duration::from_millis(20)).await;
-    runtime.fixture.host.clock.store(
-        chrono::Utc::now().timestamp_millis(),
-        std::sync::atomic::Ordering::SeqCst,
-    );
+fn after_deadline(runtime: &Runtime, deadline: chrono::DateTime<chrono::Utc>) {
+    let target = runtime_primitives::SyncTime::from_unix_millis(deadline.timestamp_millis() + 20);
+    if target > runtime_primitives::Clock::now(runtime.fixture.host.clock.as_ref()) {
+        runtime.fixture.host.clock.advance_to(target).unwrap();
+    }
 }
 fn mail_runtime(source: &Runtime) -> Arc<MailDeliveryRuntime> {
     Arc::new(source.local_mail_runtime())
@@ -151,14 +153,18 @@ async fn assert_late_creation_replay(remember_creation: bool) {
     // Arrange a real owning mutation and its canonical SDK result before the deadline.
     let source = Runtime::new().await;
     let owner = Runtime::new().await;
-    let deadline = chrono::Utc::now() + chrono::Duration::seconds(2);
-    let request = create_request(deadline);
+    let deadline = source.fixture.host.clock.utc_now() + chrono::Duration::seconds(2);
+    let request = create_request(deadline, source.fixture.host.clock.as_ref());
     let frozen = creation_mail(&request, deadline);
     let owner_service = service(2);
-    let snapshot = WakeOperations::new(&owner_service, Some(&owner.automation))
-        .wake_send_local(request.clone())
-        .await
-        .unwrap();
+    let snapshot = WakeOperations::new(
+        owner.fixture.host.clock.clone(),
+        &owner_service,
+        Some(&owner.automation),
+    )
+    .wake_send_local(request.clone())
+    .await
+    .unwrap();
     freeze(&source, &frozen).await;
     if remember_creation {
         source
@@ -176,14 +182,18 @@ async fn assert_late_creation_replay(remember_creation: bool) {
         Some(serde_json::from_value(json!({"kind":"snapshot","value":snapshot})).unwrap()),
     )
     .await;
-    after_deadline(&source, deadline).await;
+    after_deadline(&source, deadline);
     let mail = mail_runtime(&source);
     let sender_service = service(1);
     // Act: the identical public operation is retried after its immutable deadline.
-    let replay = WakeOperations::new(&sender_service, Some(&source.automation))
-        .with_remote(Some(&mail))
-        .wake_send(request)
-        .await;
+    let replay = WakeOperations::new(
+        source.fixture.host.clock.clone(),
+        &sender_service,
+        Some(&source.automation),
+    )
+    .with_remote(Some(&mail))
+    .wake_send(request)
+    .await;
     // Assert: the original answer, not today's expired projection or a new timer.
     assert_eq!(
         serde_json::to_value(replay.expect("late creation must replay")).unwrap(),
@@ -204,17 +214,21 @@ async fn wake_operations_remote_creation_late_replay_returns_recorded_result() {
 #[tokio::test]
 async fn wake_operations_remote_expired_new_request_has_no_custody() {
     let source = Runtime::new().await;
-    let deadline = chrono::Utc::now() - chrono::Duration::seconds(1);
-    let request = create_request(deadline);
+    let deadline = source.fixture.host.clock.utc_now() - chrono::Duration::seconds(1);
+    let request = create_request(deadline, source.fixture.host.clock.as_ref());
     let id = ItemId::new(uuid::Uuid::parse_str(request.operation_id.as_str()).unwrap()).unwrap();
-    after_deadline(&source, deadline).await;
+    after_deadline(&source, deadline);
     let mail = mail_runtime(&source);
     let sender_service = service(1);
-    let error = WakeOperations::new(&sender_service, Some(&source.automation))
-        .with_remote(Some(&mail))
-        .wake_send(request)
-        .await
-        .expect_err("a new expired request must not dispatch");
+    let error = WakeOperations::new(
+        source.fixture.host.clock.clone(),
+        &sender_service,
+        Some(&source.automation),
+    )
+    .with_remote(Some(&mail))
+    .wake_send(request)
+    .await
+    .expect_err("a new expired request must not dispatch");
     assert!(matches!(
         error.reason,
         collaboration_protocol::WakeFailureReason::DeadlineExpired
@@ -252,10 +266,14 @@ async fn wake_operations_remote_expired_new_request_has_no_custody() {
 async fn assert_late_pause_replay(retain_result: bool, retention_age: Option<chrono::Duration>) {
     let source = Runtime::new().await;
     let owner = Runtime::new().await;
-    let creation_deadline = chrono::Utc::now() + chrono::Duration::seconds(120);
-    let creation = create_request(creation_deadline);
+    let creation_deadline = source.fixture.host.clock.utc_now() + chrono::Duration::seconds(120);
+    let creation = create_request(creation_deadline, source.fixture.host.clock.as_ref());
     let owner_service = service(2);
-    let owner_ops = WakeOperations::new(&owner_service, Some(&owner.automation));
+    let owner_ops = WakeOperations::new(
+        owner.fixture.host.clock.clone(),
+        &owner_service,
+        Some(&owner.automation),
+    );
     let snapshot = owner_ops.wake_send_local(creation.clone()).await.unwrap();
     freeze(&source, &creation_mail(&creation, creation_deadline)).await;
     source
@@ -270,7 +288,7 @@ async fn assert_late_pause_replay(retain_result: bool, retention_age: Option<chr
         wakeup_id: snapshot.definition.wakeup_id.clone(),
     };
     // An already frozen control is close to its deadline when this process resumes.
-    let deadline = chrono::Utc::now() + chrono::Duration::seconds(1);
+    let deadline = source.fixture.host.clock.utc_now() + chrono::Duration::seconds(1);
     let frozen = pause_mail(&request, &snapshot, deadline);
     freeze(&source, &frozen).await;
     let paused = owner_ops.wake_pause_local(request.clone()).await.unwrap();
@@ -279,11 +297,11 @@ async fn assert_late_pause_replay(retain_result: bool, retention_age: Option<chr
     let result = retain_result
         .then(|| serde_json::from_value(json!({"kind":"mutation","value":paused})).unwrap());
     publish_recorded_status(&source, &owner, frozen.clone(), result).await;
-    after_deadline(&source, deadline).await;
+    after_deadline(&source, deadline);
     if let Some(age) = retention_age {
         collaboration_runtime::AutomationRetentionWorker::new(
             source.automation.clone(),
-            std::sync::Arc::new(runtime_primitives::SystemClock),
+            source.fixture.host.clock.clone(),
         )
         .prune_batch((deadline + age).timestamp_millis())
         .await
@@ -305,10 +323,14 @@ async fn assert_late_pause_replay(retain_result: bool, retention_age: Option<chr
     }
     let mail = mail_runtime(&source);
     let sender_service = service(1);
-    let replay = WakeOperations::new(&sender_service, Some(&source.automation))
-        .with_remote(Some(&mail))
-        .wake_pause(request)
-        .await;
+    let replay = WakeOperations::new(
+        source.fixture.host.clock.clone(),
+        &sender_service,
+        Some(&source.automation),
+    )
+    .with_remote(Some(&mail))
+    .wake_pause(request)
+    .await;
     if retain_result {
         assert_eq!(
             serde_json::to_value(replay.expect("late pause must replay")).unwrap(),

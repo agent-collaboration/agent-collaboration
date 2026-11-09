@@ -153,7 +153,7 @@ impl MailDeliveryRuntime {
         let item = outgoing_mail_message(&draft, &self.service, self.config.owner)
             .map_err(|_| PushDeliveryFailure::StoreFailed)?;
         let config = self.config;
-        let now = self.clock.now();
+        let now = self.clock.utc_now();
         let consumer = self.consumer.clone();
         let admission = self
             .store

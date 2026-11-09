@@ -5,8 +5,7 @@ pub use super::follow_fixture::{
 use super::{
     central_pair::{SecondHost, await_writer, central, settled_view},
     fixture::{BoardFixture, at, fields, identity},
-    takeover_controls::{self as controls, BOUND},
-    takeover_readbacks as readbacks,
+    takeover_controls as controls, takeover_readbacks as readbacks,
     takeover_recipients::{self as recipients, AcpRecipients},
 };
 use board_central_test_support::{DispatchCallSelector, ObjectAddress};
@@ -76,10 +75,7 @@ async fn prove_transfer(
     let copied = controls::copy_ack(fixture).await?;
     transfer_unallocated_range(fixture, second, kind, &range, copied).await?;
     peers.start_second(second, 1).await?;
-    let recipient_line = peers
-        .second()?
-        .expect_text_with_timeout("router://", BOUND)
-        .await?;
+    let recipient_line = peers.second()?.expect_text("router://").await?;
     let stopped = second.stop_for_readback().await?;
     let original = only_item(readbacks::deliveries(
         readbacks::handoffs(&stopped, &fixture.project, 2).await?,

@@ -536,6 +536,7 @@ async fn native_delivery_does_not_retain_its_broker_owner() {
     let weak_port = Arc::downgrade(&broker_port);
     let native_route: Arc<dyn collaboration_contracts::SessionDeliveryRoute> = Arc::new(
         collaboration_runtime::CodexAppServerDeliveryRoute::new(
+            std::sync::Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
             service_id.clone(),
             collaboration_runtime::EndpointDirectory::new(service_id),
             backend,

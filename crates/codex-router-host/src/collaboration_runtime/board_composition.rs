@@ -16,6 +16,8 @@ use collaboration_service::ProjectAdmissionProps;
 use machine_session::PreparedMachineSession;
 use message_board::ProjectId;
 use message_board_storage::FleetStore;
+
+#[cfg(test)]
 use runtime_primitives::SystemClock;
 use std::{
     io,
@@ -175,6 +177,7 @@ pub(super) async fn open_board_admission_with_enrollment(
     enrollment_directory: &Path,
 ) -> io::Result<BoardComposition> {
     Box::pin(open_observed_board_admission(
+        Arc::new(router_clock::SystemRuntimeClock::new()),
         directory,
         identity,
         session_inputs,
@@ -185,6 +188,7 @@ pub(super) async fn open_board_admission_with_enrollment(
 }
 
 pub(super) async fn open_observed_board_admission(
+    clock: Arc<dyn router_clock::RuntimeClock>,
     directory: &Path,
     identity: MachineIdentity,
     session_inputs: Option<BoardSessionInputs>,
@@ -225,6 +229,7 @@ pub(super) async fn open_observed_board_admission(
         None => None,
     };
     let result = prepare_board_admission(
+        clock,
         &fleet_store,
         directory,
         identity,
@@ -273,6 +278,7 @@ pub(super) async fn open_observed_board_admission(
 }
 
 async fn prepare_board_admission(
+    clock: Arc<dyn router_clock::RuntimeClock>,
     fleet_store: &FleetStore,
     directory: &Path,
     identity: MachineIdentity,
@@ -297,7 +303,7 @@ async fn prepare_board_admission(
     let registry = Arc::new(ProjectStoreRegistry::new(
         directory,
         session_inputs.as_ref().map(|inputs| inputs.peer),
-        Arc::new(SystemClock),
+        clock.clone(),
         cursor_key,
     ));
     let session = match session_inputs {
@@ -329,6 +335,7 @@ async fn prepare_board_admission(
         session.as_ref().map(|session| session.requests.clone()),
     ));
     let admission = ProjectAdmission::new(ProjectAdmissionProps {
+        clock: clock.clone(),
         registry,
         fleet: fleet.clone(),
         identity,

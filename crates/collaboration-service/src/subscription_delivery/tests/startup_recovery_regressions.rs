@@ -1,13 +1,13 @@
-//! Combined native startup states must use normal restoration and acknowledged ownership.
-use super::super::SubscriptionClock;
+//! Combined native startup states must
 use super::super::tests::{owner_fixture::*, startup_fixture::*};
 use super::*;
 use message_board::*;
+use router_clock::RuntimeClock;
 use sqlx::{ConnectOptions, Connection};
-use std::{sync::atomic::Ordering, time::Duration};
+use std::sync::atomic::Ordering;
 use tracing_subscriber::layer::SubscriberExt;
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn deferred_project_restores_an_abandoned_selection_despite_the_same_readers_healthy_owner() {
     let evidence = Arc::new(StartupEvidence::default());
     let _trace = tracing::subscriber::set_default(
@@ -21,14 +21,14 @@ async fn deferred_project_restores_an_abandoned_selection_despite_the_same_reade
         .await;
     let mut windows = fixture.store.lock().await;
     windows
-        .rescan_missing_subscription_windows(&fixture.reader, fixture.clock.now())
+        .rescan_missing_subscription_windows(&fixture.reader, fixture.clock.utc_now())
         .await
         .unwrap();
     let (batch, settlement) = windows
         .select_subscription_notice(
             &fixture.reader,
             std::slice::from_ref(&fixture.root),
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
             usize::MAX,
         )
         .await
@@ -57,6 +57,7 @@ async fn deferred_project_restores_an_abandoned_selection_despite_the_same_reade
         .await
         .unwrap()
         .unwrap();
+    tokio::time::pause();
     let mut held = exhaust_project_readers(&project).await;
     evidence.timeout.store(false, Ordering::SeqCst);
     let before = held[0]
@@ -79,15 +80,11 @@ async fn deferred_project_restores_an_abandoned_selection_despite_the_same_reade
     );
     runtime.await_settled().await;
     release_project_readers(held).await;
-    tokio::time::timeout(
-        std::time::Duration::from_secs(5),
-        fixture.clock.not_due_check_now(retry_at),
-    )
-    .await
-    .expect("the startup task waits for its first retry");
+    (fixture.clock.not_due_check_now(retry_at)).await;
     fixture
         .clock
-        .advance_by_without_tokio_time(retry_at.duration_since(fixture.clock.monotonic_now()));
+        .advance(retry_at.saturating_duration_since(fixture.clock.monotonic_now()))
+        .unwrap();
     // No reader action: A's existing owner must not protect B's pre-crash selection.
     evidence.state("finished").await;
     let restored = fixture
@@ -132,7 +129,7 @@ async fn deferred_project_restores_an_abandoned_selection_despite_the_same_reade
     runtime.close().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn deferred_handoff_replaces_an_owner_that_accepts_then_drops_its_command() {
     let evidence = Arc::new(StartupEvidence::default());
     let _trace = tracing::subscriber::set_default(
@@ -148,6 +145,7 @@ async fn deferred_handoff_replaces_an_owner_that_accepts_then_drops_its_command(
         .await
         .unwrap()
         .unwrap();
+    tokio::time::pause();
     let held = exhaust_project_readers(&project).await;
     evidence.timeout.store(false, Ordering::SeqCst);
     let runtime = fixture.native_runtime().await;
@@ -163,11 +161,11 @@ async fn deferred_handoff_replaces_an_owner_that_accepts_then_drops_its_command(
         .await
         .insert(fixture.reader.clone(), stale_sender);
     release_project_readers(held).await;
-    fixture.clock.advance_without_tokio_time(1);
-    let accepted = tokio::time::timeout(Duration::from_secs(5), stale_receiver.recv())
-        .await
-        .unwrap()
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(1))
         .unwrap();
+    let accepted = (stale_receiver.recv()).await.unwrap();
     let ReaderDeliveryCommand::Reconcile { scope, reply, .. } = accepted else {
         panic!("scoped reconciliation handoff")
     };
@@ -194,7 +192,7 @@ async fn deferred_handoff_replaces_an_owner_that_accepts_then_drops_its_command(
     runtime.close().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn terminal_project_removal_survives_a_later_shared_failure_across_retry_passes() {
     let evidence = Arc::new(StartupEvidence::default());
     let _trace = tracing::subscriber::set_default(
@@ -214,6 +212,7 @@ async fn terminal_project_removal_survives_a_later_shared_failure_across_retry_p
         .await
         .unwrap()
         .unwrap();
+    tokio::time::pause();
     let held_broken = exhaust_project_readers(&broken).await;
     let held_healthy = exhaust_project_readers(&healthy).await;
     evidence.timeout.store(false, Ordering::SeqCst);
@@ -253,13 +252,11 @@ async fn terminal_project_removal_survives_a_later_shared_failure_across_retry_p
     // Removing the terminal project is progress, so the wait restarts at 1 s and
     // then backs off while the shared failure persists.
     for wait_seconds in [1, 1, 2] {
-        fixture.clock.advance_without_tokio_time(wait_seconds);
-        pending.push(
-            tokio::time::timeout(Duration::from_secs(5), passes.recv())
-                .await
-                .unwrap()
-                .unwrap(),
-        );
+        fixture
+            .clock
+            .advance(std::time::Duration::from_secs(wait_seconds))
+            .unwrap();
+        pending.push((passes.recv()).await.unwrap());
     }
     assert_eq!(
         pending,
@@ -289,7 +286,10 @@ async fn terminal_project_removal_survives_a_later_shared_failure_across_retry_p
         .await
         .unwrap();
     automation.close().await.unwrap();
-    fixture.clock.advance_without_tokio_time(4);
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(4))
+        .unwrap();
     let notice = activity(&fixture, &runtime).await;
     assert_eq!(
         notice.ranges,
@@ -322,7 +322,7 @@ async fn recovering_project_does_not_wait_for_an_owner_without_membership() {
         .await
         .insert(unrelated, unrelated_sender);
     let probe = fixture.store.lock().await.clone();
-    let result=tokio::time::timeout(Duration::from_secs(5),async {
+    let result=(async {
         tokio::select! {
             outcome=runtime.service.restore_deferred_project(&probe,&fixture.project) => outcome.map(|outcome| matches!(outcome, super::subscription_startup_recovery::StartupProjectOutcome::Restored)),
             _=unrelated_receiver.recv() => Ok(false),
@@ -330,7 +330,7 @@ async fn recovering_project_does_not_wait_for_an_owner_without_membership() {
     }).await;
     runtime.close().await;
     assert!(
-        matches!(result, Ok(Ok(true))),
+        matches!(result, Ok(true)),
         "project recovery commanded or waited for an unrelated reader owner"
     );
 }

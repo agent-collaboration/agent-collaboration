@@ -14,18 +14,51 @@ use std::{
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::{Layer, layer::SubscriberExt};
 
-/// The wall clock beside Tokio's clock: every advance, including the paused runtime
-/// jumping to the worker's timer, moves both together.
-struct PausedWallClock {
-    base: SyncTime,
-    started: tokio::time::Instant,
+#[tokio::test]
+async fn record_expiry_reads_and_waits_only_on_the_injected_clock() {
+    use router_clock::{ClockInstant, ManualClock};
+    use std::time::Duration;
+
+    let journal = Journal::open().await;
+    journal
+        .append(&backend_observation(), seconds("2001-01-15T10:00:00Z"))
+        .await;
+    let clock = Arc::new(ManualClock::new(at("2001-03-15T10:00:00Z")));
+    let observation = Arc::new(RetentionObservation::default());
+    let shutdown = CancellationToken::new();
+    let task = tokio::spawn({
+        let store = journal.store.clone();
+        let clock = clock.clone();
+        let observation = observation.clone();
+        let shutdown = shutdown.clone();
+        async move { store.run_retention(&*clock, &shutdown, &observation).await }
+    });
+    observation.observed.asleep_at_least(1).await;
+    let deadline = ClockInstant::ZERO.after(Duration::from_secs(1));
+    assert!(
+        clock.has_not_due_check_now(deadline),
+        "retention must register its injected sleep"
+    );
+    assert_eq!(journal.count("lifecycle_records").await, 1);
+
+    clock.advance(Duration::from_millis(999)).unwrap();
+    clock.not_due_check_now(deadline).await;
+    assert_eq!(journal.count("lifecycle_records").await, 1);
+    clock.advance(Duration::from_millis(1)).unwrap();
+    observation.observed.asleep_at_least(2).await;
+
+    assert_eq!(journal.count("lifecycle_records").await, 0);
+    assert_eq!(
+        observation.observed.snapshot().last_expiry_entered_at,
+        Some(SyncTime::from_unix_millis(
+            at("2001-03-15T10:00:01Z").timestamp_millis()
+        ))
+    );
+    shutdown.cancel();
+    task.await.unwrap();
 }
 
-impl Clock for PausedWallClock {
-    fn now(&self) -> SyncTime {
-        self.base.after(self.started.elapsed())
-    }
-}
+use router_clock::ManualClock;
 
 fn at(text: &str) -> DateTime<Utc> {
     DateTime::parse_from_rfc3339(text)
@@ -131,7 +164,7 @@ async fn fixture_connection(path: &Path) -> SqliteConnection {
 
 struct RunningRetention {
     observation: Arc<RetentionObservation>,
-    clock: Arc<PausedWallClock>,
+    clock: Arc<ManualClock>,
     shutdown: CancellationToken,
     task: tokio::task::JoinHandle<()>,
 }
@@ -139,10 +172,7 @@ struct RunningRetention {
 impl RunningRetention {
     /// Starts the loop at `wall` and returns once its first pass has gone to sleep.
     async fn start(journal: &Journal, wall: &str) -> Self {
-        let clock = Arc::new(PausedWallClock {
-            base: SyncTime::from_unix_millis(at(wall).timestamp_millis()),
-            started: tokio::time::Instant::now(),
-        });
+        let clock = Arc::new(ManualClock::new(at(wall)));
         let observation = Arc::new(RetentionObservation::default());
         let shutdown = CancellationToken::new();
         let task = tokio::spawn({
@@ -152,9 +182,7 @@ impl RunningRetention {
             let clock = clock.clone();
             async move { store.run_retention(&*clock, &shutdown, &observation).await }
         });
-        tokio::time::timeout(SLEEP_GUARD, observation.observed.asleep_at_least(1))
-            .await
-            .expect("the first pass goes to sleep");
+        observation.observed.asleep_at_least(1).await;
         Self {
             observation,
             clock,
@@ -173,23 +201,20 @@ impl RunningRetention {
             .and_then(|deadline| DateTime::from_timestamp_millis(deadline.unix_millis()))
     }
 
-    /// Asserts the latest expiry began at `due`, as the pass read its clock on waking, up
-    /// to the paused timer's 2 ms rounding: a timer that fires late fails this.
+    /// The pass must enter at the exact deadline the manual clock reached.
     fn assert_last_expiry_entered_at(&self, due: DateTime<Utc>) {
         let entered = self.snapshot().last_expiry_entered_at.unwrap();
         let late = entered.unix_millis() - due.timestamp_millis();
-        assert!(
-            (0..=2).contains(&late),
-            "the expiry began {late} ms after {due}"
-        );
+        assert_eq!(late, 0, "the pass began {late} ms after {due}");
     }
 
-    /// Lets the paused clock reach the loop's timer and returns once that pass has slept.
+    /// Advances the manual clock to the armed deadline and awaits the resulting pass.
     async fn run_to_the_armed_time(&self) {
         let sleeps = self.snapshot().sleeps;
-        tokio::time::pause();
+        self.clock
+            .advance_to(self.snapshot().armed.unwrap())
+            .unwrap();
         self.observation.observed.asleep_at_least(sleeps + 1).await;
-        tokio::time::resume();
     }
 
     async fn stop(self) {
@@ -197,9 +222,6 @@ impl RunningRetention {
         self.task.await.unwrap();
     }
 }
-
-/// Bounds, in real time, a wait for a pass the test expects; it only stops a hang.
-const SLEEP_GUARD: std::time::Duration = std::time::Duration::from_secs(30);
 
 #[tokio::test]
 async fn a_record_is_armed_at_the_first_whole_second_the_rule_allows_and_expired_only_then() {
@@ -300,15 +322,11 @@ async fn a_commit_that_leaves_nothing_due_reads_the_due_time_and_expires_nothing
     journal
         .append(&backend_observation(), seconds("2026-02-01T00:00:00Z"))
         .await;
-    tokio::time::timeout(
-        SLEEP_GUARD,
-        worker
-            .observation
-            .observed
-            .asleep_at_least(before.sleeps + 1),
-    )
-    .await
-    .expect("the append wakes the loop");
+    worker
+        .observation
+        .observed
+        .asleep_at_least(before.sleeps + 1)
+        .await;
 
     let after = worker.snapshot();
     assert!(after.due_reads > before.due_reads, "the commit was read");
@@ -387,11 +405,8 @@ async fn a_failed_expiry_retries_at_one_two_four_seconds_and_recovers_with_no_ne
         worker.run_to_the_armed_time().await;
         let next = worker.armed().unwrap();
         let step = (next - previous).num_milliseconds();
-        // The pass starts at the armed time or up to the paused timer's 2 ms after it.
-        assert!(
-            (expected..=expected + 2).contains(&step),
-            "step {step}, expected {expected}"
-        );
+        // The manual clock reaches each retry's exact deadline.
+        assert_eq!(step, expected, "retry delay must match its exact deadline");
         previous = next;
     }
     assert_eq!(*failures.lock().unwrap(), 1, "one warning for the run");

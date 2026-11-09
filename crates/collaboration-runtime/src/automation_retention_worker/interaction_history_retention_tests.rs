@@ -300,7 +300,9 @@ async fn retention_worker_prunes_real_broker_history_and_sqlite_payloads_with_on
     let mut seed =
         TursoConnection::connect_with(&TursoConnectOptions::new().filename(&history_path)).await?;
     let initial_record = history_value(INITIAL_REQUEST, "initial-history-body", None)?;
-    let initial_stamp = Utc::now().to_rfc3339_opts(SecondsFormat::Nanos, true);
+    let initial_stamp = "2026-01-15T08:00:00.123456789Z"
+        .parse::<DateTime<Utc>>()?
+        .to_rfc3339_opts(SecondsFormat::Nanos, true);
     let mut transaction = seed.begin().await?;
     sqlx::query(
         "INSERT INTO typed_interaction_history (request_id,record_json,created_at) VALUES (?,?,?)",
@@ -410,7 +412,12 @@ async fn retention_worker_prunes_real_broker_history_and_sqlite_payloads_with_on
     let shared_store = Arc::new(Mutex::new(store));
     let worker = AutomationRetentionWorker::new(
         shared_store.clone(),
-        std::sync::Arc::new(runtime_primitives::SystemClock),
+        std::sync::Arc::new(
+            router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+                1792432800000,
+            ))
+            .unwrap(),
+        ),
     )
     .with_interaction_broker(broker.clone())
     .with_native_push_store(native.clone());

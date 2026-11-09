@@ -50,13 +50,12 @@ impl MailDeliveryRuntime {
                 field: "local project notification".to_owned(),
             });
         }
-        let draft = collaboration_runtime::received_mail_push(&item, self.clock.now()).map_err(
-            |error| DeliveryTransactionFailure::Corrupt {
+        let draft = collaboration_runtime::received_mail_push(&item, self.clock.utc_now())
+            .map_err(|error| DeliveryTransactionFailure::Corrupt {
                 field: error.to_string(),
-            },
-        )?;
+            })?;
         let config = self.config;
-        let now = SyncTime::from_unix_millis(self.clock.now().timestamp_millis());
+        let now = SyncTime::from_unix_millis(self.clock.utc_now().timestamp_millis());
         let consumer = self.consumer.clone();
         let admitted = self
             .store

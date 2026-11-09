@@ -8,7 +8,7 @@ use collaboration_service::ApplicationFixture;
 use collaboration_service::BoardAvailability;
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
-use collaboration_service::SystemSubscriptionClock;
+
 use serde_json::json;
 use std::sync::Arc;
 
@@ -38,7 +38,12 @@ async fn message_to_missing_endpoint_reports_no_native_effects() {
             delivery: Arc::clone(&delivery),
             presence: Arc::clone(&presence),
             machine_identity: machine_identity.clone(),
-            clock: Arc::new(SystemSubscriptionClock),
+            clock: Arc::new(
+                router_clock::ManualClock::starting_at(
+                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
+                )
+                .unwrap(),
+            ),
         });
     subscription_delivery.start().await.unwrap();
     let identity = ApplicationFixture::new(id, id)
@@ -55,7 +60,12 @@ async fn message_to_missing_endpoint_reports_no_native_effects() {
             actors: subscription_delivery.clone(),
             presence,
             machine: machine_identity,
-            clock: Arc::new(SystemSubscriptionClock),
+            clock: Arc::new(
+                router_clock::ManualClock::starting_at(
+                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
+                )
+                .unwrap(),
+            ),
         },
     )
     .unwrap();

@@ -88,6 +88,7 @@ else {
       // An end-to-end recipient for any session: every request is journaled, a prompt
       // ends its turn, and anything else is accepted as it stands.
       appendFileSync(requireArgument(3), `${wireJson(request)}\n`);
+      await sendSocketNotice(requireArgument(4), "observed");
       agent.respond(request, request.method === "session/prompt" ? { stopReason: "end_turn" } : {});
     } else {
       assert.ok(request.method === "session/load" || request.method === "session/prompt");

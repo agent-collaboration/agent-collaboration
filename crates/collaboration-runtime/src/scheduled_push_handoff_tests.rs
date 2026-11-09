@@ -281,16 +281,11 @@ async fn a_locked_interaction_writer_fails_the_schedule_push_admission_before_an
         .execute(&mut lock_holder)
         .await?;
     // The Run steps toward submission; the step that admits its push meets the lock. The
-    // insert retries a busy database only within its 5 s window; this bound outlasts that
-    // window and only stops a hang.
+    // insert retries a busy database only within its inherited 5 s window; nextest
+    // supplies the outer process bound.
     let mut locked_error = None;
     for _ in 0..4 {
-        let locked_step = tokio::time::timeout(
-            std::time::Duration::from_secs(6),
-            Box::pin(worker.step(run_id.clone())),
-        )
-        .await
-        .map_err(|_| "the push admission did not fail within its bound")?;
+        let locked_step = (Box::pin(worker.step(run_id.clone()))).await;
         if let Err(error) = locked_step {
             locked_error = Some(error);
             break;

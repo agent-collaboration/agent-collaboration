@@ -75,12 +75,13 @@ impl CollaborationRuntime {
             observer_id: new_service_uuid()?,
         };
         let rechecks = self.observation_rechecks.clone();
+        let clock = self.clock.clone();
         self.observer_task = Some(tokio::spawn(async move {
             let retired = admission.retirement();
             let attempt = |retry: super::observation_recheck::ObserverRetry| {
                 let admission = &admission;
                 let (store, scope, schemas) = (&store, &scope, &schemas);
-                let (rechecks, retired) = (&rechecks, retired.clone());
+                let (rechecks, retired, clock) = (&rechecks, retired.clone(), clock.clone());
                 async move {
                     use super::observation_recheck::ObserverAttempt;
                     let connection = codex_native_integration::NativeProtocolConnection::connect(
@@ -93,7 +94,7 @@ impl CollaborationRuntime {
                     }
                     let Ok(connection) = connection else {
                         if retry.failures_so_far == 0 {
-                            record_coverage_lost(store, scope).await;
+                            record_coverage_lost(store, scope, &*clock).await;
                             tracing::warn!(
                                 "native lifecycle observation connection unavailable; it retries with backoff"
                             );
@@ -136,7 +137,12 @@ impl CollaborationRuntime {
                     }
                 }
             };
-            super::observation_recheck::observe_with_restart(retired.clone(), attempt).await;
+            super::observation_recheck::observe_with_restart(
+                retired.clone(),
+                clock.clone(),
+                attempt,
+            )
+            .await;
         }));
         Ok(())
     }
@@ -227,8 +233,10 @@ impl CollaborationRuntime {
 async fn record_coverage_lost(
     store: &lifecycle_observation::LifecycleStore,
     scope: &collaboration_protocol::ObservationScope,
+    clock: &dyn router_clock::RuntimeClock,
 ) {
-    let observed_at = chrono::Utc::now()
+    let now = clock.utc_now();
+    let observed_at = now
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
         .try_into();
     if let Ok(observed_at) = observed_at {
@@ -239,8 +247,6 @@ async fn record_coverage_lost(
             subject: collaboration_protocol::LifecycleSubject::Backend,
             change: collaboration_protocol::LifecycleChange::CoverageLost,
         };
-        let _recorded = store
-            .append(&observation, chrono::Utc::now().timestamp())
-            .await;
+        let _recorded = store.append(&observation, now.timestamp()).await;
     }
 }

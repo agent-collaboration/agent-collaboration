@@ -571,7 +571,7 @@ async fn push_writes_signal_their_commit_and_push_reads_do_not() {
             target.clone(),
             PushOrigin::Session(session("claude-local", "sender-thread")),
             "body",
-            Utc::now(),
+            chrono::DateTime::UNIX_EPOCH,
         ))
         .await
         .expect("insert");
@@ -583,12 +583,12 @@ async fn push_writes_signal_their_commit_and_push_reads_do_not() {
         .expect("pending read");
     let reads_bumped = commit_bumped(&mut commits);
     store
-        .mark_push_read(&push_id, &target, Utc::now())
+        .mark_push_read(&push_id, &target, chrono::DateTime::UNIX_EPOCH)
         .await
         .expect("first read mark");
     let first_mark_bumped = commit_bumped(&mut commits);
     store
-        .mark_push_read(&push_id, &target, Utc::now())
+        .mark_push_read(&push_id, &target, chrono::DateTime::UNIX_EPOCH)
         .await
         .expect("repeated read mark");
     let repeated_mark_bumped = commit_bumped(&mut commits);

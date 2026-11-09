@@ -36,6 +36,10 @@ async fn run_cli(
 
 #[tokio::test]
 async fn shed_commands_report_an_overload_to_retry() {
+    let clock = std::sync::Arc::new(router_clock::ManualClock::new(
+        chrono::DateTime::from_timestamp_millis(1792432800000).expect("fixed fixture time"),
+    ));
+
     // Arrange: one request slot, held by a first-fire wait.
     let directory = tempfile::Builder::new()
         .permissions(std::fs::Permissions::from_mode(0o700))
@@ -56,7 +60,8 @@ async fn shed_commands_report_an_overload_to_retry() {
     .expect("real central fixture");
     let admission = Arc::new(
         ProjectAdmission::new(ProjectAdmissionProps {
-            registry: native_registry::new_registry(directory.path())
+            clock: clock.clone(),
+            registry: native_registry::new_registry_with_clock(directory.path(), clock.clone())
                 .await
                 .expect("native registry"),
             fleet: Arc::new(fleet),

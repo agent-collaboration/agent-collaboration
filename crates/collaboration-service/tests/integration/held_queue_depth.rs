@@ -23,7 +23,6 @@ use collaboration_service::CollaborationApplication;
 
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
-use collaboration_service::SystemSubscriptionClock;
 
 use serde_json::json;
 use std::{
@@ -200,7 +199,12 @@ async fn records_sequential_admission_costs_at_held_depths_and_the_real_capacity
         delivery: route.clone(),
         presence: route.clone(),
         machine_identity: machine.clone(),
-        clock: Arc::new(SystemSubscriptionClock),
+        clock: Arc::new(
+            router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+                1792432800000,
+            ))
+            .unwrap(),
+        ),
     });
     service.start().await?;
     let identity = ApplicationFixture::new(
@@ -217,7 +221,12 @@ async fn records_sequential_admission_costs_at_held_depths_and_the_real_capacity
             actors: service.clone(),
             presence: route.clone(),
             machine,
-            clock: Arc::new(SystemSubscriptionClock),
+            clock: Arc::new(
+                router_clock::ManualClock::starting_at(
+                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
+                )
+                .unwrap(),
+            ),
         },
     )?;
     let app = (identity).build();

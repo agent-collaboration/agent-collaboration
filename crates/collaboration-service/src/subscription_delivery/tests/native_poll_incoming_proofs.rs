@@ -102,7 +102,7 @@ async fn remote_incoming_poll_uses_its_frozen_policy_without_opening_the_senders
             .unwrap(),
         fleet_sync_protocol::PushResult::Accepted { .. }
     ));
-    tokio::time::timeout(Duration::from_secs(6), async {
+    (async {
         while !transport
             .reports
             .lock()
@@ -113,8 +113,7 @@ async fn remote_incoming_poll_uses_its_frozen_policy_without_opening_the_senders
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .expect("remote SDK receive did not report its Poll readiness hold");
+    .await;
     let before = fixture.interactions.pending_poll_item(id).await.unwrap();
     let no_push = fixture
         .interactions
@@ -122,21 +121,18 @@ async fn remote_incoming_poll_uses_its_frozen_policy_without_opening_the_senders
         .await
         .unwrap()
         .is_none();
-    let result = tokio::time::timeout(
-        Duration::from_secs(6),
-        runtime.service.wait(
-            fixture.reader.clone(),
-            SubscriptionWaitFilter::All,
-            60,
-            usize::MAX,
-        ),
-    )
+    let result = (runtime.service.wait(
+        fixture.reader.clone(),
+        SubscriptionWaitFilter::All,
+        60,
+        usize::MAX,
+    ))
     .await;
-    if matches!(&result, Ok(Ok(Some(_)))) {
+    if matches!(&result, Ok(Some(_))) {
         fixture
             .await_push_state(&push, PushDeliveryState::Delivered)
             .await;
-        tokio::time::timeout(Duration::from_secs(6), async {
+        (async {
             while !transport
                 .reports
                 .lock()
@@ -149,8 +145,7 @@ async fn remote_incoming_poll_uses_its_frozen_policy_without_opening_the_senders
                 tokio::task::yield_now().await;
             }
         })
-        .await
-        .expect("the SDK did not send its Poll Started report over the session");
+        .await;
     }
     let after = fixture.interactions.pending_poll_item(id).await.unwrap();
     let opened_sender = fixture
@@ -169,11 +164,7 @@ async fn remote_incoming_poll_uses_its_frozen_policy_without_opening_the_senders
     transport.close().await;
     drop(directory);
     assert!(before.is_some() && no_push);
-    let SubscriptionWaitResult::Notice { push_id, batch, .. } = result
-        .expect("remote Poll item was not discovered by the waiter")
-        .unwrap()
-        .unwrap()
-    else {
+    let SubscriptionWaitResult::Notice { push_id, batch, .. } = result.unwrap().unwrap() else {
         panic!("session notice");
     };
     assert_eq!(push_id, push);

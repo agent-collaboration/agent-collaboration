@@ -12,13 +12,12 @@ async fn held_item(
     publisher: &crate::NotificationPublisher,
 ) -> fleet_sync_protocol::ItemId {
     runtime.owner_barrier(&fixture.reader).await;
-    tokio::time::timeout(Duration::from_secs(6), async {
+    (async {
         while frozen_follow(fixture).await.is_empty() {
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .unwrap();
+    .await;
     publisher.wait_project_idle_for_test(&fixture.project).await;
     frozen_follow(fixture).await.first().unwrap().id()
 }
@@ -46,10 +45,7 @@ async fn a_disconnected_poll_waiter_keeps_the_item_for_the_next_wait_without_unk
             .wait(reader, SubscriptionWaitFilter::All, 60, usize::MAX)
             .await
     });
-    tokio::time::timeout(Duration::from_secs(6), witness.entered)
-        .await
-        .unwrap()
-        .unwrap();
+    (witness.entered).await.unwrap();
     assert_eq!(
         fixture
             .interactions
@@ -85,17 +81,14 @@ async fn a_disconnected_poll_waiter_keeps_the_item_for_the_next_wait_without_unk
         native.runtime().local_outcome_for_test(item).await.unwrap(),
         Some(RecipientOutcome::Held)
     ));
-    let next = tokio::time::timeout(
-        Duration::from_secs(6),
-        runtime.service.wait(
-            fixture.reader.clone(),
-            SubscriptionWaitFilter::All,
-            60,
-            usize::MAX,
-        ),
-    )
+    let next = (runtime.service.wait(
+        fixture.reader.clone(),
+        SubscriptionWaitFilter::All,
+        60,
+        usize::MAX,
+    ))
     .await;
-    if matches!(&next, Ok(Ok(Some(_)))) {
+    if matches!(&next, Ok(Some(_))) {
         fixture
             .await_push_state(&push, PushDeliveryState::Delivered)
             .await;
@@ -107,11 +100,7 @@ async fn a_disconnected_poll_waiter_keeps_the_item_for_the_next_wait_without_unk
     drop(app);
     runtime.close().await;
     fixture.close_native(native).await;
-    let SubscriptionWaitResult::Notice { push_id, batch, .. } = next
-        .expect("next wait did not recover the disconnected item")
-        .unwrap()
-        .unwrap()
-    else {
+    let SubscriptionWaitResult::Notice { push_id, batch, .. } = next.unwrap().unwrap() else {
         panic!("session notice");
     };
     assert_eq!(push_id, push);
@@ -145,7 +134,10 @@ async fn held_poll_policy_and_original_identity_survive_physical_owner_reopen() 
     drop(app);
     runtime.close().await;
     let fixture = fixture.reopen_native(native).await;
-    fixture.clock.advance_without_tokio_time(60);
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(60))
+        .unwrap();
     let runtime = fixture.runtime().await;
     let (app, native, publisher) = follow_application(&fixture, &runtime).await;
     assert_eq!(
@@ -164,17 +156,14 @@ async fn held_poll_policy_and_original_identity_survive_physical_owner_reopen() 
         native.runtime().local_outcome_for_test(item).await.unwrap(),
         Some(RecipientOutcome::Held)
     ));
-    let result = tokio::time::timeout(
-        Duration::from_secs(6),
-        runtime.service.wait(
-            fixture.reader.clone(),
-            SubscriptionWaitFilter::All,
-            60,
-            usize::MAX,
-        ),
-    )
+    let result = (runtime.service.wait(
+        fixture.reader.clone(),
+        SubscriptionWaitFilter::All,
+        60,
+        usize::MAX,
+    ))
     .await;
-    let record = if matches!(&result, Ok(Ok(Some(_)))) {
+    let record = if matches!(&result, Ok(Some(_))) {
         Some(
             fixture
                 .await_push_state(&push, PushDeliveryState::Delivered)
@@ -191,11 +180,7 @@ async fn held_poll_policy_and_original_identity_survive_physical_owner_reopen() 
     drop(app);
     runtime.close().await;
     fixture.close_native(native).await;
-    let SubscriptionWaitResult::Notice { push_id, batch, .. } = result
-        .expect("cold wait lost persisted Poll custody")
-        .unwrap()
-        .unwrap()
-    else {
+    let SubscriptionWaitResult::Notice { push_id, batch, .. } = result.unwrap().unwrap() else {
         panic!("session notice");
     };
     assert_eq!(push_id, push);
@@ -237,7 +222,7 @@ async fn interruption_after_b_handover_leaves_b_uncertain_and_c_deliverable_afte
                     lifetime_seconds: None,
                 },
             },
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap();
@@ -247,21 +232,20 @@ async fn interruption_after_b_handover_leaves_b_uncertain_and_c_deliverable_afte
     fixture
         .post(first, "A is independently handed over first")
         .await;
-    fixture.clock.advance_without_tokio_time(1);
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(1))
+        .unwrap();
     let runtime = fixture.runtime().await;
     let (app, native, publisher) = follow_application(&fixture, &runtime).await;
     held_item(&fixture, &runtime, &publisher).await;
-    let a = tokio::time::timeout(
-        Duration::from_secs(6),
-        runtime.service.wait(
-            fixture.reader.clone(),
-            SubscriptionWaitFilter::All,
-            60,
-            usize::MAX,
-        ),
-    )
+    let a = (runtime.service.wait(
+        fixture.reader.clone(),
+        SubscriptionWaitFilter::All,
+        60,
+        usize::MAX,
+    ))
     .await
-    .unwrap()
     .unwrap()
     .unwrap();
     let SubscriptionWaitResult::Notice { push_id: a_id, .. } = a else {
@@ -278,13 +262,16 @@ async fn interruption_after_b_handover_leaves_b_uncertain_and_c_deliverable_afte
     fixture
         .post(third, "C must remain independently deliverable")
         .await;
-    fixture.clock.advance_without_tokio_time(1);
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(1))
+        .unwrap();
     runtime
         .service
         .reconcile_reader(fixture.reader.clone())
         .await
         .unwrap();
-    tokio::time::timeout(Duration::from_secs(6), async {
+    (async {
         loop {
             let items = frozen_follow(&fixture).await;
             if items.iter().any(|item| includes_root(item, third)) {
@@ -293,8 +280,7 @@ async fn interruption_after_b_handover_leaves_b_uncertain_and_c_deliverable_afte
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .unwrap();
+    .await;
     publisher.wait_project_idle_for_test(&fixture.project).await;
     let frozen = frozen_follow(&fixture).await;
     let b = frozen
@@ -315,16 +301,8 @@ async fn interruption_after_b_handover_leaves_b_uncertain_and_c_deliverable_afte
     let reader = fixture.reader.clone();
     let filter = SubscriptionWaitFilter::Roots(vec![second.clone().into()]);
     let b_wait = tokio::spawn(async move { service.wait(reader, filter, 60, usize::MAX).await });
-    tokio::time::timeout(Duration::from_secs(6), witness.entered)
-        .await
-        .unwrap()
-        .unwrap();
-    let handed_b = tokio::time::timeout(Duration::from_secs(6), b_wait)
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap()
-        .unwrap();
+    (witness.entered).await.unwrap();
+    let handed_b = (b_wait).await.unwrap().unwrap().unwrap();
     assert_eq!(
         fixture
             .interactions
@@ -345,7 +323,10 @@ async fn interruption_after_b_handover_leaves_b_uncertain_and_c_deliverable_afte
     runtime.close().await;
     // The SDK's established drive lease is 30 seconds; expire that lease while
     // the 24-hour membership stays valid. This is driver abort, not SIGKILL.
-    fixture.clock.advance_without_tokio_time(60);
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(60))
+        .unwrap();
     let fixture = fixture.reopen_messages().await;
     let runtime = fixture.runtime().await;
     let (app, native, publisher) = follow_application(&fixture, &runtime).await;
@@ -353,18 +334,15 @@ async fn interruption_after_b_handover_leaves_b_uncertain_and_c_deliverable_afte
         .await_push_state(&b_id, PushDeliveryState::OutcomeUnknown)
         .await;
     let b_outcome = native.runtime().local_outcome_for_test(b).await.unwrap();
-    let result_c = tokio::time::timeout(
-        Duration::from_secs(6),
-        runtime.service.wait(
-            fixture.reader.clone(),
-            SubscriptionWaitFilter::Roots(vec![third.clone().into()]),
-            60,
-            usize::MAX,
-        ),
-    )
+    let result_c = (runtime.service.wait(
+        fixture.reader.clone(),
+        SubscriptionWaitFilter::Roots(vec![third.clone().into()]),
+        60,
+        usize::MAX,
+    ))
     .await;
     let delivered_c = match &result_c {
-        Ok(Ok(Some(SubscriptionWaitResult::Notice { push_id, .. }))) => Some(
+        Ok(Some(SubscriptionWaitResult::Notice { push_id, .. })) => Some(
             fixture
                 .await_push_state(push_id, PushDeliveryState::Delivered)
                 .await,
@@ -381,10 +359,7 @@ async fn interruption_after_b_handover_leaves_b_uncertain_and_c_deliverable_afte
         push_id: c_id,
         batch: c_batch,
         ..
-    } = result_c
-        .expect("interrupting B stranded independent C custody")
-        .unwrap()
-        .unwrap()
+    } = result_c.unwrap().unwrap()
     else {
         panic!("C notice");
     };

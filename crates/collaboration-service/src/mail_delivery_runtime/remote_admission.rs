@@ -76,7 +76,7 @@ impl MailDeliveryRuntime {
         let target = draft.target;
         let limits = self.config.limits;
         let submitter = fleet_sync_protocol::Submitter::Machine(self.config.owner);
-        let now = self.clock.now();
+        let now = self.clock.utc_now();
         let answer = self
             .store
             .transaction({

@@ -4,7 +4,6 @@ use crate::MailDeliveryRuntime;
 use fleet_sync_protocol::{
     DeliveryEnvelope, DeliveryStatus, ItemId, PeerId, StatusPublication, StatusVersion,
 };
-use std::sync::atomic::Ordering;
 
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;
 
@@ -20,7 +19,10 @@ fn set_day(runtime: &Runtime, item: ItemId, day: i64) {
         .fixture
         .host
         .clock
-        .store(creation_millis(item) + day * DAY_MS, Ordering::SeqCst);
+        .advance_to(runtime_primitives::SyncTime::from_unix_millis(
+            creation_millis(item) + day * DAY_MS,
+        ))
+        .unwrap();
 }
 
 #[tokio::test]

@@ -1,8 +1,9 @@
 //! A failed owner pass, and a failed held-push clean-up, retry on a 1 s to 30 s backoff
 //! and log once per run of failures.
-use super::super::{SubscriptionClock, subscription_service::OwnerObservation};
+use super::super::subscription_service::OwnerObservation;
 use super::owner_fixture::*;
 use super::startup_fixture::{exhaust_project_readers, release_project_readers};
+use router_clock::RuntimeClock;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex as StdMutex},
@@ -62,8 +63,8 @@ type OwnerEvents = tokio::sync::broadcast::Receiver<OwnerObservation>;
 
 /// The deadline an owner arms after a failed attempt; each failed pass ends in one sleep.
 /// The bound only stops a hang; it outlasts the paused test's storage acquire timeout.
-async fn next_failed_attempt(events: &mut OwnerEvents) -> tokio::time::Instant {
-    tokio::time::timeout(Duration::from_secs(60), async {
+async fn next_failed_attempt(events: &mut OwnerEvents) -> router_clock::ClockInstant {
+    (async {
         loop {
             if let OwnerObservation::Sleeping(Some(deadline)) = events.recv().await.unwrap() {
                 return deadline;
@@ -71,36 +72,38 @@ async fn next_failed_attempt(events: &mut OwnerEvents) -> tokio::time::Instant {
         }
     })
     .await
-    .expect("the owner made no attempt")
 }
 
 /// Stops the clock just short of `deadline` and requires the sleeper to look and keep
 /// waiting with no attempt, then moves the clock exactly to the deadline.
 async fn step_to_deadline<TAttempt: std::fmt::Debug>(
-    clock: &TestClock,
-    deadline: tokio::time::Instant,
+    clock: &ManualClock,
+    deadline: router_clock::ClockInstant,
     early_attempt: impl std::future::Future<Output = TAttempt>,
 ) {
-    let remaining = deadline.duration_since(clock.monotonic_now());
-    clock.advance_by_without_tokio_time(remaining - JUST_BEFORE);
+    let remaining = deadline.saturating_duration_since(clock.monotonic_now());
+    clock.advance(remaining - JUST_BEFORE).unwrap();
     tokio::select! {
         () = clock.not_due_check_now(deadline) => {}
         attempt = early_attempt => {
             panic!("retried {JUST_BEFORE:?} before its deadline: {attempt:?}")
         }
     }
-    clock.advance_by_without_tokio_time(JUST_BEFORE);
+    clock.advance(JUST_BEFORE).unwrap();
 }
 
 /// Walks the owner through one full backoff schedule from its first failed attempt and
 /// returns the deadline the last attempt armed. Each step's delay is exact, no attempt
 /// happens just before it, and exactly one happens at it.
-async fn walk_owner_backoff(runtime: &OwnerRuntime, clock: &TestClock) -> tokio::time::Instant {
+async fn walk_owner_backoff(
+    runtime: &OwnerRuntime,
+    clock: &ManualClock,
+) -> router_clock::ClockInstant {
     let mut events = runtime.observations.lock().await;
     let mut deadline = next_failed_attempt(&mut events).await;
     let mut armed = Vec::new();
     for _ in BACKOFF_SECONDS {
-        armed.push(deadline.duration_since(clock.monotonic_now()));
+        armed.push(deadline.saturating_duration_since(clock.monotonic_now()));
         let expected: Vec<Duration> = BACKOFF_SECONDS[..armed.len()]
             .iter()
             .map(|seconds| Duration::from_secs(*seconds))
@@ -112,7 +115,7 @@ async fn walk_owner_backoff(runtime: &OwnerRuntime, clock: &TestClock) -> tokio:
     deadline
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn a_failed_owner_pass_backs_off_from_one_to_thirty_seconds_and_logs_once_per_run() {
     let (counts, _trace) = retry_log("subscription_owner_retry");
     let fixture = Box::pin(OwnerFixture::new()).await;
@@ -128,6 +131,7 @@ async fn a_failed_owner_pass_backs_off_from_one_to_thirty_seconds_and_logs_once_
         .unwrap();
 
     for streak in 1..=2 {
+        tokio::time::pause();
         let held = exhaust_project_readers(&project).await;
         runtime.reconcile(&fixture.reader).await;
         let last_deadline = walk_owner_backoff(&runtime, &fixture.clock).await;
@@ -138,18 +142,19 @@ async fn a_failed_owner_pass_backs_off_from_one_to_thirty_seconds_and_logs_once_
         );
         // Recovery needs only the retry clock: no post, reconcile or store write.
         release_project_readers(held).await;
-        fixture.clock.advance_by_without_tokio_time(
-            last_deadline.duration_since(fixture.clock.monotonic_now()),
-        );
-        tokio::time::timeout(Duration::from_secs(60), async {
+        tokio::time::resume();
+        fixture
+            .clock
+            .advance(last_deadline.saturating_duration_since(fixture.clock.monotonic_now()))
+            .unwrap();
+        (async {
             while logged(&counts, "recovered") < streak {
                 runtime
                     .observe(|event| matches!(event, OwnerObservation::Sleeping(_)))
                     .await;
             }
         })
-        .await
-        .expect("the owner pass recovered once its storage did");
+        .await;
         while runtime.observations.lock().await.try_recv().is_ok() {}
     }
     runtime.close().await;
@@ -191,7 +196,7 @@ async fn a_failed_held_push_cleanup_backs_off_from_one_to_thirty_seconds_and_log
                 reader: fixture.reader.clone(),
                 scope: SubscriptionScope::thread(fixture.root.clone()),
             },
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap();
@@ -213,21 +218,17 @@ async fn a_failed_held_push_cleanup_backs_off_from_one_to_thirty_seconds_and_log
         .unwrap();
     fixture
         .clock
-        .advance_by_without_tokio_time(last_deadline.duration_since(fixture.clock.monotonic_now()));
-    tokio::time::timeout(
-        Duration::from_secs(5),
-        runtime
-            .observe(|event| matches!(event, OwnerObservation::HeldSubscriptionPushesSettled(1))),
-    )
-    .await
-    .expect("the retried clean-up settled the held push");
+        .advance(last_deadline.saturating_duration_since(fixture.clock.monotonic_now()))
+        .unwrap();
+    (runtime.observe(|event| matches!(event, OwnerObservation::HeldSubscriptionPushesSettled(1))))
+        .await;
     assert_copied_snapshot_state(&fixture, &held_id, PushDeliveryState::Rejected).await;
     assert_eq!(logged(&counts, "recovered"), 1);
     observer.close().await.unwrap();
     runtime.close().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn deferred_startup_recovery_backs_off_from_one_to_thirty_seconds_and_logs_once() {
     use super::startup_fixture::{StartupEvidence, StartupTrace, activity, expected_range};
     use sqlx::Connection;
@@ -243,6 +244,7 @@ async fn deferred_startup_recovery_backs_off_from_one_to_thirty_seconds_and_logs
         .await
         .unwrap()
         .unwrap();
+    tokio::time::pause();
     let held = exhaust_project_readers(&project).await;
     let runtime = fixture.native_runtime().await;
     tokio::time::resume();
@@ -266,21 +268,15 @@ async fn deferred_startup_recovery_backs_off_from_one_to_thirty_seconds_and_logs
 
     let mut armed = Vec::new();
     for _ in BACKOFF_SECONDS {
-        armed.push(deadline.duration_since(fixture.clock.monotonic_now()));
+        armed.push(deadline.saturating_duration_since(fixture.clock.monotonic_now()));
         let expected: Vec<Duration> = BACKOFF_SECONDS[..armed.len()]
             .iter()
             .map(|seconds| Duration::from_secs(*seconds))
             .collect();
         assert_eq!(armed, expected);
         step_to_deadline(&fixture.clock, deadline, passes.recv()).await;
-        tokio::time::timeout(Duration::from_secs(5), passes.recv())
-            .await
-            .expect("the startup task made no attempt at its deadline")
-            .unwrap();
-        deadline = tokio::time::timeout(Duration::from_secs(5), deadlines.recv())
-            .await
-            .expect("the startup task armed no next wait")
-            .unwrap();
+        (passes.recv()).await.unwrap();
+        deadline = (deadlines.recv()).await.unwrap();
     }
 
     let blocked = evidence
@@ -299,7 +295,8 @@ async fn deferred_startup_recovery_backs_off_from_one_to_thirty_seconds_and_logs
     interactions.close().await.unwrap();
     fixture
         .clock
-        .advance_by_without_tokio_time(deadline.duration_since(fixture.clock.monotonic_now()));
+        .advance(deadline.saturating_duration_since(fixture.clock.monotonic_now()))
+        .unwrap();
     let notice = activity(&fixture, &runtime).await;
     assert_eq!(
         notice.ranges,

@@ -59,7 +59,7 @@ impl AutomationOperations {
                 operation_id: request.operation_id,
                 definition,
                 imported_continuity: agent_automation::ContinuityInput::None,
-                now_ms: chrono::Utc::now().timestamp_millis(),
+                now_ms: self.clock.utc_now().timestamp_millis(),
             })
             .await
             .map(|record| ScheduleInspection {
@@ -120,7 +120,7 @@ impl AutomationOperations {
                     expected_change_id: request.expected_change_id,
                     definition,
                 },
-                now_ms: chrono::Utc::now().timestamp_millis(),
+                now_ms: self.clock.utc_now().timestamp_millis(),
             })
             .await;
         project_schedule(store, mutated, context, ScheduleAccess::Mutate).await
@@ -180,7 +180,7 @@ impl AutomationOperations {
                 operation_id: request.operation_id,
                 schedule_id: request.schedule_id,
                 edit: ScheduleEdit::SetEnabled { enabled },
-                now_ms: chrono::Utc::now().timestamp_millis(),
+                now_ms: self.clock.utc_now().timestamp_millis(),
             })
             .await;
         project_schedule(store, mutated, context, ScheduleAccess::Mutate).await
@@ -284,7 +284,7 @@ impl AutomationOperations {
                 operation_id: request.operation_id,
                 package_utf8: &request.package_utf8,
                 overwrite: request.overwrite,
-                now_ms: chrono::Utc::now().timestamp_millis(),
+                now_ms: self.clock.utc_now().timestamp_millis(),
             })
             .await;
         match imported {

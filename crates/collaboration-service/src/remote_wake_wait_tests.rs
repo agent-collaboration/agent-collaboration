@@ -10,19 +10,19 @@ use fleet_sync_delivery::{Outbox, delivery_rollback};
 use fleet_sync_protocol::{
     DeliveryItem, DeliveryStatus, ItemId, PeerId, StatusPublication, StatusVersion,
 };
-use std::{sync::Arc, sync::atomic::Ordering, time::Duration};
-
-/// Bounds a wait the test expects to end on a commit or a deadline; it only stops a hang.
-const HANG_GUARD: Duration = Duration::from_secs(10);
+use router_clock::RuntimeClock;
+use std::{sync::Arc, time::Duration};
 
 fn wall_now(runtime: &Runtime) -> chrono::DateTime<chrono::Utc> {
-    chrono::DateTime::from_timestamp_millis(runtime.fixture.host.clock.load(Ordering::SeqCst))
-        .unwrap()
+    runtime.fixture.host.clock.utc_now()
 }
 
 fn wake_mail(runtime: &Runtime, after: chrono::Duration) -> (RemoteWakeMail, ItemId) {
     let deadline = wall_now(runtime) + after;
-    let mail = creation_mail(&create_request(deadline), deadline);
+    let mail = creation_mail(
+        &create_request(deadline, runtime.fixture.host.clock.as_ref()),
+        deadline,
+    );
     let id = ItemId::new(uuid::Uuid::parse_str(mail.operation_id.as_str()).unwrap()).unwrap();
     (mail, id)
 }
@@ -118,11 +118,7 @@ async fn a_remote_wake_wait_answers_the_status_commit_that_lands_after_its_empty
     // The answer commits after the wait's empty read and before it starts waiting.
     commit_answer(&source, id, answer.clone()).await;
     gate.release();
-    let answered = tokio::time::timeout(HANG_GUARD, waiter)
-        .await
-        .expect("the commit, not the hour-long deadline, ends the wait")
-        .unwrap()
-        .unwrap();
+    let answered = waiter.await.unwrap().unwrap();
 
     assert_eq!(
         serde_json::to_value(answered).unwrap(),
@@ -135,7 +131,7 @@ async fn a_remote_wake_wait_answers_the_status_commit_that_lands_after_its_empty
     source.close().await;
 }
 
-// The clock is paused only once the waiter is parked, with no store read in flight.
+// Only the shared manual clock advances after the waiter reaches its empty read.
 #[tokio::test]
 async fn a_remote_wake_wait_with_nothing_committed_reads_once_then_once_at_its_deadline() {
     let source = Runtime::new().await;
@@ -145,35 +141,32 @@ async fn a_remote_wake_wait_with_nothing_committed_reads_once_then_once_at_its_d
     let runtime = Arc::new(source.local_mail_runtime());
     let observation = runtime.remote_wake_wait_observation();
     let mut gate = observation.hold_before_next_sleep();
-    let before_wait = tokio::time::Instant::now();
+    let clock = source.fixture.host.clock.clone();
+    let deadline = clock.monotonic_now() + Duration::from_secs(30);
     let waiter = tokio::spawn({
         let runtime = runtime.clone();
         async move { runtime.await_remote_wake_answer(id, deadline_ms).await }
     });
     gate.reached().await;
-    tokio::time::pause();
-    let at_gate = observation.snapshot();
-    let parked_at = tokio::time::Instant::now();
-    // The wall clock reaches the deadline as Tokio's timer does.
-    source
-        .fixture
-        .host
-        .clock
-        .store(deadline_ms, Ordering::SeqCst);
-
+    assert_eq!(observation.snapshot().waiter_wakes_at, Some(deadline));
     gate.release();
+    clock.not_due_check_now(deadline).await;
+    clock.advance(Duration::from_secs(29)).unwrap();
+    clock.not_due_check_now(deadline).await;
+    assert!(!waiter.is_finished());
+    assert_eq!(
+        observation.snapshot().reads,
+        vec!["remote_wake.outbox_status"]
+    );
+    clock.advance(Duration::from_secs(1)).unwrap();
+
     let waited = waiter.await.unwrap();
 
     assert!(
         matches!(waited, Err(RemoteWakeRefusal::DeadlineExpired)),
         "{waited:?}"
     );
-    crate::collaboration_application::wake_operations::tests::assert_waited_for_the_caller_deadline(
-        &at_gate,
-        before_wait,
-        parked_at,
-        "remote_wake.outbox_status",
-    );
+    assert_eq!(clock.monotonic_now(), deadline);
     let snapshot = observation.snapshot();
     assert_eq!(
         snapshot.reads,

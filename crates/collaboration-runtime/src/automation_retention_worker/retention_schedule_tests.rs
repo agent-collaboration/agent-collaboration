@@ -2,8 +2,7 @@
 //! allows a row to go, deletes nothing before it, and a commit that makes nothing due
 //! deletes nothing.
 //!
-//! SQLite answers on background threads, so each test runs on real time until the worker
-//! is asleep, and pauses Tokio only while the worker's own timer is the only one pending.
+//! Real store operations remain asynchronous; only the manual clock advances deadlines.
 use super::retention_test_harness::*;
 use crate::LoopSnapshot;
 use agent_automation::{InstructionText, OperationId};
@@ -307,12 +306,7 @@ async fn settling_an_old_push_wakes_the_worker_through_the_interaction_store_and
         )
         .await
         .unwrap();
-    tokio::time::timeout(
-        COMMIT_WAKE_GUARD,
-        worker.observation.asleep_at_least(before_settlement + 1),
-    )
-    .await
-    .expect("the settlement commit woke the worker");
+    (worker.observation.asleep_at_least(before_settlement + 1)).await;
 
     let woke = worker.snapshot();
     assert_eq!(
@@ -379,7 +373,7 @@ async fn settling_a_pending_approval_arms_the_history_timer_at_its_due_time() {
     .unwrap();
     history.close().await.unwrap();
     let created_at = at(&created_at);
-    let worker = RunningWorker::start_full(&store, None, Some(broker.clone()), Utc::now()).await;
+    let worker = RunningWorker::start_full(&store, None, Some(broker.clone()), created_at).await;
     let parked = worker.snapshot();
     assert_eq!(armed(&parked), None, "a pending approval holds no timer");
 
@@ -388,12 +382,7 @@ async fn settling_a_pending_approval_arms_the_history_timer_at_its_due_time() {
         .cancel_typed_approval("aging-approval", "retention proof")
         .await
         .unwrap();
-    tokio::time::timeout(
-        COMMIT_WAKE_GUARD,
-        worker.observation.asleep_at_least(parked.sleeps + 1),
-    )
-    .await
-    .expect("the interaction commit woke the worker");
+    (worker.observation.asleep_at_least(parked.sleeps + 1)).await;
 
     let expected_due =
         sqlite_storage_maintenance::first_deletable_at(created_at, 2, created_at).unwrap();

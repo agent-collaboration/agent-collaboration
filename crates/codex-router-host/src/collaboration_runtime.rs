@@ -112,6 +112,7 @@ pub enum CollaborationFailure {
     TailnetExposure(#[source] io::Error),
 }
 pub struct CollaborationRuntime {
+    clock: std::sync::Arc<dyn router_clock::RuntimeClock>,
     fleet_link: board_fleet_sync::FleetLinkObservation,
     interactions: std::sync::Weak<interaction_storage::InteractionStore>,
     #[cfg(test)]
@@ -173,6 +174,13 @@ pub struct CollaborationRuntime {
 pub(crate) use fleet_observation::FleetObservationFuture;
 
 impl CollaborationRuntime {
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    #[must_use]
+    pub fn runtime_test_sleep_was_checked(&self, delay: std::time::Duration) -> bool {
+        self.clock
+            .has_not_due_check_now(self.clock.monotonic_now() + delay)
+    }
+
     pub(crate) fn observe_fleet(&self) -> FleetObservationFuture {
         let link = self.fleet_link.clone();
         let interactions = self.interactions.clone();

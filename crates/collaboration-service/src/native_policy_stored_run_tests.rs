@@ -115,6 +115,7 @@ async fn stored_two_attempts(
         collaboration_runtime::EndpointDirectory::new(fixture.backend.endpoint.service_id.clone());
     directory.publish(fixture.endpoint.clone())?;
     let route = collaboration_runtime::CodexAppServerDeliveryRoute::new(
+        fixture.clock.clone(),
         fixture.backend.endpoint.service_id.clone(),
         directory,
         fixture.backend.clone(),

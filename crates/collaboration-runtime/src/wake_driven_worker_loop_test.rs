@@ -1,6 +1,7 @@
-//! The loop on Tokio's paused clock with the wall clock that moves with it.
+//! The real loop driven only by its injected manual clock.
 use super::{BatchOutcome, WakeDrivenWorkerLoop, WorkerPass};
-use crate::{WorkerObservation, paused_wall_clock::PausedWallClock};
+use crate::WorkerObservation;
+use router_clock::ManualClock;
 use runtime_primitives::{Clock, SyncTime};
 use std::{
     collections::VecDeque,
@@ -11,6 +12,51 @@ use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
 const BASE_MS: i64 = 1_800_000_000_000;
+
+#[test]
+fn due_work_waits_and_reads_only_the_injected_clock() {
+    use router_clock::{ClockInstant, ManualClock};
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let clock = Arc::new(ManualClock::new("2001-01-01T00:00:00Z".parse().unwrap()));
+        let due = SyncTime::from_unix_millis(978_307_210_000);
+        let work = Arc::new(Mutex::new(FakeWork {
+            due: Some((due, "due")),
+            ..FakeWork::default()
+        }));
+        let worker = WakeDrivenWorkerLoop::new("injected-clock", clock.clone());
+        let observation = worker.observation();
+        let shutdown = CancellationToken::new();
+        let mut task = tokio::spawn({
+            let shutdown = shutdown.clone();
+            let mut pass = FakePass {
+                work: work.clone(),
+                commits: None,
+            };
+            async move { worker.run(&mut pass, shutdown).await }
+        });
+        let deadline = ClockInstant::ZERO.after(Duration::from_secs(10));
+        observation.asleep_at_least(1).await;
+        assert_eq!(observation.snapshot().armed_deadline, Some(due));
+        tokio::select! {
+            () = clock.not_due_check_now(deadline) => {},
+            result = &mut task => panic!("worker stopped before its injected sleep: {result:?}"),
+        }
+
+        clock.advance(Duration::from_secs(9)).unwrap();
+        clock.not_due_check_now(deadline).await;
+        assert!(work.lock().unwrap().handled.is_empty());
+        clock.advance(Duration::from_secs(1)).unwrap();
+        observation.asleep_at_least(2).await;
+
+        assert_eq!(work.lock().unwrap().handled, [("due", due)]);
+        shutdown.cancel();
+        task.await.unwrap();
+    });
+}
 
 fn at(offset: Duration) -> SyncTime {
     SyncTime::from_unix_millis(BASE_MS).after(offset)
@@ -81,7 +127,7 @@ impl WorkerPass for FakePass {
 
 struct RunningLoop {
     work: Arc<Mutex<FakeWork>>,
-    clock: Arc<PausedWallClock>,
+    clock: Arc<ManualClock>,
     commits: watch::Sender<u64>,
     observation: WorkerObservation,
     shutdown: CancellationToken,
@@ -93,7 +139,7 @@ impl RunningLoop {
         let pass_commits = work.committed_during_next_due.is_some();
         let work = Arc::new(Mutex::new(work));
         let (commits, receiver) = watch::channel(0);
-        let clock = Arc::new(PausedWallClock::starting_at(at(Duration::ZERO)));
+        let clock = Arc::new(ManualClock::starting_at(at(Duration::ZERO)).unwrap());
         let worker = WakeDrivenWorkerLoop::new("fake", clock.clone()).wake_on(receiver);
         let observation = worker.observation();
         let shutdown = CancellationToken::new();
@@ -135,7 +181,7 @@ impl RunningLoop {
     }
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn startup_drains_every_committed_batch_then_sleeps_with_no_timer() {
     let worker = RunningLoop::start(FakeWork {
         batches: VecDeque::from(["first", "second", "third"]),
@@ -155,13 +201,13 @@ async fn startup_drains_every_committed_batch_then_sleeps_with_no_timer() {
     worker.stop().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn an_idle_hour_makes_no_reads_and_holds_no_timer() {
     let worker = RunningLoop::start(FakeWork::default());
     worker.observation.asleep_at_least(1).await;
     let asleep = worker.observation.snapshot();
 
-    tokio::time::sleep(Duration::from_secs(3600)).await;
+    worker.clock.advance(Duration::from_secs(3600)).unwrap();
 
     let after_an_hour = worker.observation.snapshot();
     assert_eq!(asleep.reads, ["fake batch", "fake next due"]);
@@ -170,7 +216,7 @@ async fn an_idle_hour_makes_no_reads_and_holds_no_timer() {
     worker.stop().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn a_commit_wakes_the_sleeping_loop_without_a_clock_advance() {
     let worker = RunningLoop::start(FakeWork::default());
     worker.observation.asleep_at_least(1).await;
@@ -182,7 +228,7 @@ async fn a_commit_wakes_the_sleeping_loop_without_a_clock_advance() {
     worker.stop().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn a_commit_between_the_empty_read_and_sleep_is_still_handled() {
     let worker = RunningLoop::start(FakeWork::default());
     let mut gate = worker.observation.hold_before_next_sleep();
@@ -197,7 +243,7 @@ async fn a_commit_between_the_empty_read_and_sleep_is_still_handled() {
     worker.stop().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn a_commit_during_the_pass_after_its_empty_read_is_handled_before_sleeping() {
     let worker = RunningLoop::start(FakeWork {
         committed_during_next_due: Some("during the pass"),
@@ -211,7 +257,7 @@ async fn a_commit_during_the_pass_after_its_empty_read_is_handled_before_sleepin
     worker.stop().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn due_work_runs_at_its_due_time_on_one_timer_and_does_not_fire_again() {
     let due = at(Duration::from_secs(10));
     let worker = RunningLoop::start(FakeWork {
@@ -221,9 +267,10 @@ async fn due_work_runs_at_its_due_time_on_one_timer_and_does_not_fire_again() {
     worker.observation.asleep_at_least(1).await;
     let armed = worker.observation.snapshot().armed_deadline;
 
+    worker.clock.advance_to(due).unwrap();
     worker.observation.asleep_at_least(2).await;
     let after_due = worker.observation.snapshot();
-    tokio::time::sleep(Duration::from_secs(3600)).await;
+    worker.clock.advance(Duration::from_secs(3600)).unwrap();
 
     assert_eq!(armed, Some(due));
     assert_eq!(
@@ -253,11 +300,12 @@ async fn retry_delays(
         let armed = worker.observation.snapshot().armed_deadline.unwrap();
         delays.push((armed.unix_millis() - pass_started.unix_millis()) / 1_000);
         pass_started = armed;
+        worker.clock.advance_to(armed).unwrap();
     }
     delays
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn a_failed_pass_retries_at_one_two_four_seconds_up_to_thirty_and_logs_once_per_run() {
     let (warnings, _subscriber) =
         crate::captured_warnings_test_support::CapturedWarnings::install();
@@ -300,7 +348,7 @@ async fn a_failed_pass_retries_at_one_two_four_seconds_up_to_thirty_and_logs_onc
     worker.stop().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn a_closed_source_is_removed_and_does_not_keep_waking_the_loop() {
     let worker = RunningLoop::start(FakeWork::default());
     worker.observation.asleep_at_least(1).await;
@@ -323,8 +371,6 @@ async fn a_closed_source_is_removed_and_does_not_keep_waking_the_loop() {
         1,
         "the closed source is removed once"
     );
-    tokio::time::sleep(Duration::from_secs(3600)).await;
-
     assert_eq!(observation.snapshot().passes, 1, "closing wakes no pass");
     shutdown.cancel();
     task.await.unwrap();
@@ -380,30 +426,24 @@ async fn batches_run_with(cancel_during_batch: Option<u32>, shutdown: Cancellati
         cancel_during_batch,
         shutdown: shutdown.clone(),
     };
-    let worker = WakeDrivenWorkerLoop::new(
-        "endless",
-        Arc::new(PausedWallClock::starting_at(at(Duration::ZERO))),
-    );
-    let started = tokio::time::Instant::now();
+    let clock = Arc::new(ManualClock::starting_at(at(Duration::ZERO)).unwrap());
+    let worker = WakeDrivenWorkerLoop::new("endless", clock.clone());
+    let started = clock.now();
 
     worker.run(&mut pass, shutdown).await;
 
-    assert_eq!(
-        tokio::time::Instant::now(),
-        started,
-        "shutdown needs no clock advance"
-    );
+    assert_eq!(clock.now(), started, "shutdown needs no clock advance");
     *batches.lock().unwrap()
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn shutdown_during_a_batch_lets_it_finish_and_starts_no_other() {
     let ran = batches_run_with(Some(1), CancellationToken::new()).await;
 
     assert_eq!(ran, 1, "no batch starts after shutdown");
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn a_loop_started_after_shutdown_runs_no_pass() {
     let shutdown = CancellationToken::new();
     shutdown.cancel();

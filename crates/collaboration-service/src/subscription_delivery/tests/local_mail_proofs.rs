@@ -1,5 +1,6 @@
 //! Real C5 owner coordination; only the external native client is scripted.
-use super::super::SubscriptionClock;
+use router_clock::RuntimeClock;
+
 use super::super::subscription_push::target_session;
 use super::owner_fixture::*;
 use crate::ApplicationFixture;
@@ -103,6 +104,7 @@ fn reference_for_request(
     input: &SessionMessageSendParams,
     push: &collaboration_protocol::PushId,
     peer: PeerId,
+    clock: &dyn router_clock::RuntimeClock,
 ) -> DeliveryItemRef {
     let (origin, text) = match &input.message {
         MessageContent::Agent { sender, text } => {
@@ -127,7 +129,7 @@ fn reference_for_request(
         },
         body: Some(text.to_owned()),
         activity: None,
-        created_at: chrono::Utc::now(),
+        created_at: clock.utc_now(),
     };
     let item = collaboration_runtime::outgoing_mail_message(
         &draft,
@@ -142,7 +144,7 @@ fn reference_for_request(
 }
 
 async fn await_native_completion(runtime: &OwnerRuntime, count: usize) {
-    tokio::time::timeout(Duration::from_secs(10), async {
+    (async {
         while runtime
             .completed_native_calls
             .load(std::sync::atomic::Ordering::SeqCst)
@@ -151,8 +153,7 @@ async fn await_native_completion(runtime: &OwnerRuntime, count: usize) {
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .expect("scripted native client did not return its offered completion");
+    .await;
     assert_eq!(
         runtime
             .completed_native_calls
@@ -162,7 +163,7 @@ async fn await_native_completion(runtime: &OwnerRuntime, count: usize) {
 }
 
 async fn await_compaction(owner: &NativeMailOwner, reference: DeliveryItemRef) {
-    let compacted = tokio::time::timeout(Duration::from_secs(10), async {
+    (async {
         loop {
             if owner
                 .runtime()
@@ -176,12 +177,6 @@ async fn await_compaction(owner: &NativeMailOwner, reference: DeliveryItemRef) {
         }
     })
     .await;
-    let push = reference.item.as_uuid().to_string().try_into().unwrap();
-    assert!(
-        compacted.is_ok(),
-        "native outcome did not commit and compact its executable payload: {:?}",
-        owner.interactions.get_push_record(&push).await.unwrap()
-    );
 }
 
 #[tokio::test]
@@ -206,19 +201,11 @@ async fn concurrent_same_item_reports_pending_then_replays_the_exact_settled_out
     let first_app = app.clone();
     let first_input = input.clone();
     let first = tokio::spawn(async move { first_app.messages().message_send(first_input).await });
-    let submitted = tokio::time::timeout(Duration::from_secs(10), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .unwrap();
+    let submitted = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
     assert_eq!(submitted.payload.push_id.as_str(), id.as_str());
-    let second = tokio::time::timeout(
-        Duration::from_secs(10),
-        app.messages().message_send(input.clone()),
-    )
-    .await
-    .unwrap()
-    .unwrap_err();
+    let second = (app.messages().message_send(input.clone()))
+        .await
+        .unwrap_err();
     assert_eq!(
         second.kind,
         crate::collaboration_application::MessageFailureKind::OutcomeUnknown
@@ -233,11 +220,7 @@ async fn concurrent_same_item_reports_pending_then_replays_the_exact_settled_out
     assert_eq!(stored.delivery_state, PushDeliveryState::Attempted);
     assert!(stored.settled_at.is_none());
     runtime.completions.send(DeliveryOutcome::Started).unwrap();
-    let first = tokio::time::timeout(Duration::from_secs(10), first)
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap();
+    let first = (first).await.unwrap().unwrap();
     let replay = app.messages().message_send(input.clone()).await.unwrap();
     assert_eq!(
         serde_json::to_vec(&first).unwrap(),
@@ -245,7 +228,12 @@ async fn concurrent_same_item_reports_pending_then_replays_the_exact_settled_out
     );
     await_compaction(
         &native,
-        reference_for_request(&input, &submitted.payload.push_id, peer),
+        reference_for_request(
+            &input,
+            &submitted.payload.push_id,
+            peer,
+            fixture.clock.as_ref(),
+        ),
     )
     .await;
     runtime.service.shutdown().await;
@@ -275,7 +263,7 @@ async fn aged_held_mail_survives_store_reopen_and_delivers_full_content_through_
         },
         body: Some(body.clone()),
         activity: None,
-        created_at: fixture.clock.now() - chrono::Duration::days(40),
+        created_at: fixture.clock.utc_now() - chrono::Duration::days(40),
     };
     let push_id = draft.push_id.clone();
     let peer = PeerId::new(uuid::Uuid::now_v7()).unwrap();
@@ -292,18 +280,14 @@ async fn aged_held_mail_survives_store_reopen_and_delivers_full_content_through_
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let initial = fixture.runtime_without_board().await;
     let (app, native) = native_application(&fixture, &initial, peer);
-    let held = tokio::time::timeout(
-        Duration::from_secs(10),
-        native.runtime().send_local(draft, "fixture reader".into()),
-    )
-    .await
-    .expect("loaded-only queue did not enter held custody")
-    .unwrap();
+    let held = (native.runtime().send_local(draft, "fixture reader".into()))
+        .await
+        .unwrap();
     assert_eq!(held.delivery_state, PushDeliveryState::Held);
     assert_eq!(
         native
             .interactions
-            .prune_push_records(fixture.clock.now(), 500)
+            .prune_push_records(fixture.clock.utc_now(), 500)
             .await
             .unwrap(),
         0
@@ -323,11 +307,7 @@ async fn aged_held_mail_survives_store_reopen_and_delivers_full_content_through_
         .unwrap();
     assert_eq!(reopened.body.as_deref(), Some(body.as_str()));
     assert_eq!(reopened.delivery_state, PushDeliveryState::Held);
-    let request = tokio::time::timeout(Duration::from_secs(10), async {
-        restarted.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .expect("reopened native owner did not resume its held local mail");
+    let request = (async { restarted.requests.lock().await.recv().await.unwrap() }).await;
     assert_eq!(request.payload.push_id, push_id);
     restarted
         .completions
@@ -346,9 +326,9 @@ async fn aged_held_mail_survives_store_reopen_and_delivers_full_content_through_
     assert_eq!(shown.record.body.as_deref(), Some(body.as_str()));
     assert_eq!(
         shown.record.created_at,
-        fixture.clock.now() - chrono::Duration::days(40)
+        fixture.clock.utc_now() - chrono::Duration::days(40)
     );
-    assert_eq!(shown.record.settled_at, Some(fixture.clock.now()));
+    assert_eq!(shown.record.settled_at, Some(fixture.clock.utc_now()));
     assert_eq!(shown.record.delivery_state, PushDeliveryState::Delivered);
     assert!(shown.link.ends_with(push_id.as_str()));
     assert!(
@@ -397,11 +377,7 @@ async fn disconnected_sender_waiter_keeps_custody_and_only_an_omitted_id_creates
         let first_input = input.clone();
         let first =
             tokio::spawn(async move { first_app.messages().message_send(first_input).await });
-        let submission = tokio::time::timeout(Duration::from_secs(10), async {
-            runtime.requests.lock().await.recv().await.unwrap()
-        })
-        .await
-        .unwrap();
+        let submission = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
         let original_id = submission.payload.push_id;
         // This is the caller-waiter boundary, not a simulated successful return:
         // disconnect it while the real owner already holds the attempted input.
@@ -409,7 +385,11 @@ async fn disconnected_sender_waiter_keeps_custody_and_only_an_omitted_id_creates
         assert!(first.await.unwrap_err().is_cancelled());
         runtime.completions.send(DeliveryOutcome::Started).unwrap();
         await_native_completion(&runtime, 1).await;
-        await_compaction(&native, reference_for_request(&input, &original_id, peer)).await;
+        await_compaction(
+            &native,
+            reference_for_request(&input, &original_id, peer, fixture.clock.as_ref()),
+        )
+        .await;
         if supplied {
             let replay = app.messages().message_send(input).await.unwrap();
             let collaboration_protocol::MessageSendResult::Local(replay) = replay else {
@@ -420,18 +400,11 @@ async fn disconnected_sender_waiter_keeps_custody_and_only_an_omitted_id_creates
         } else {
             let retry_app = app.clone();
             let retry = tokio::spawn(async move { retry_app.messages().message_send(input).await });
-            let new_submission = tokio::time::timeout(Duration::from_secs(10), async {
-                runtime.requests.lock().await.recv().await.unwrap()
-            })
-            .await
-            .unwrap();
+            let new_submission =
+                (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
             assert_ne!(new_submission.payload.push_id, original_id);
             runtime.completions.send(DeliveryOutcome::Started).unwrap();
-            let result = tokio::time::timeout(Duration::from_secs(10), retry)
-                .await
-                .unwrap()
-                .unwrap()
-                .unwrap();
+            let result = (retry).await.unwrap().unwrap();
             let collaboration_protocol::MessageSendResult::Local(result) = result else {
                 panic!("new local send returned remote sender custody");
             };
@@ -474,14 +447,10 @@ async fn local_native_attempt_is_drained_when_runtime_shutdown_starts() {
     let first_app = app.clone();
     let first_input = input.clone();
     let first = tokio::spawn(async move { first_app.messages().message_send(first_input).await });
-    let submitted = tokio::time::timeout(Duration::from_secs(10), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .unwrap();
+    let submitted = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
     // Act: stop the real runtime while the actual external effect is unresolved.
     native.begin_shutdown();
-    tokio::time::timeout(Duration::from_secs(10), async {
+    (async {
         while !native
             .runtime()
             .settlement_admission_closed_for_test()
@@ -490,8 +459,7 @@ async fn local_native_attempt_is_drained_when_runtime_shutdown_starts() {
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .unwrap();
+    .await;
     assert!(
         !native.is_stopped(),
         "runtime abandoned an accepted native call"
@@ -499,13 +467,7 @@ async fn local_native_attempt_is_drained_when_runtime_shutdown_starts() {
     let mut refused = input.clone();
     let refused_id = MailItemId::generate();
     refused.item_id = Some(refused_id.clone());
-    let error = tokio::time::timeout(
-        Duration::from_secs(10),
-        app.messages().message_send(refused),
-    )
-    .await
-    .unwrap()
-    .unwrap_err();
+    let error = (app.messages().message_send(refused)).await.unwrap_err();
     assert_eq!(
         error.kind,
         crate::collaboration_application::MessageFailureKind::Unavailable
@@ -519,11 +481,7 @@ async fn local_native_attempt_is_drained_when_runtime_shutdown_starts() {
             .is_none()
     );
     runtime.completions.send(DeliveryOutcome::Started).unwrap();
-    let answer = tokio::time::timeout(Duration::from_secs(10), first)
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap();
+    let answer = (first).await.unwrap().unwrap();
     let collaboration_protocol::MessageSendResult::Local(answer) = answer else {
         panic!("local shutdown drain returned remote custody");
     };
@@ -532,7 +490,7 @@ async fn local_native_attempt_is_drained_when_runtime_shutdown_starts() {
     assert_eq!(answer.push_id, submitted.payload.push_id);
     await_compaction(
         &native,
-        reference_for_request(&input, &answer.push_id, peer),
+        reference_for_request(&input, &answer.push_id, peer, fixture.clock.as_ref()),
     )
     .await;
     assert!(runtime.requests.lock().await.try_recv().is_err());

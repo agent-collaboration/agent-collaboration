@@ -8,9 +8,10 @@
 //! per run of failures, and the next pass that succeeds clears the retry.
 use crate::wake_driven_worker_observation::WorkerObservation;
 use futures_util::future::select_all;
-use runtime_primitives::{Clock, SyncTime};
+use router_clock::RuntimeClock;
+use runtime_primitives::SyncTime;
 use sqlite_storage_maintenance::FailedPassBackoff;
-use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
+use std::{future::Future, pin::Pin, sync::Arc};
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
@@ -72,14 +73,14 @@ pub trait WorkerPass: Send {
 
 pub struct WakeDrivenWorkerLoop {
     worker: &'static str,
-    clock: Arc<dyn Clock>,
+    clock: Arc<dyn RuntimeClock>,
     sources: Vec<Box<dyn WakeSource>>,
     observation: WorkerObservation,
 }
 
 impl WakeDrivenWorkerLoop {
     /// Subscribe each source with [`Self::wake_on`] before the loop's first read.
-    pub fn new(worker: &'static str, clock: Arc<dyn Clock>) -> Self {
+    pub fn new(worker: &'static str, clock: Arc<dyn RuntimeClock>) -> Self {
         Self {
             worker,
             clock,
@@ -167,15 +168,11 @@ impl WakeDrivenWorkerLoop {
         deadline: Option<SyncTime>,
         shutdown: &CancellationToken,
     ) -> bool {
-        let wait = deadline.map(|due| {
-            let millis = due
-                .unix_millis()
-                .saturating_sub(self.clock.now().unix_millis());
-            Duration::from_millis(u64::try_from(millis).unwrap_or(0))
-        });
+        let wait = deadline.map(|due| self.clock.wall_deadline(due));
+        let clock = self.clock.clone();
         let mut timer = std::pin::pin!(async move {
             match wait {
-                Some(wait) => tokio::time::sleep(wait).await,
+                Some(deadline) => clock.sleep_until(deadline).await,
                 None => std::future::pending::<()>().await,
             }
         });

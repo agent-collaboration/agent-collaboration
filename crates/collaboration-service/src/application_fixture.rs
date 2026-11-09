@@ -13,7 +13,7 @@ pub struct ApplicationFixture {
     pub(crate) subscription_delivery: Option<crate::SubscriptionDeliveryService>,
     pub(crate) subscription_presence:
         Option<std::sync::Arc<dyn collaboration_contracts::TargetPresenceProbe>>,
-    pub(crate) subscription_clock: std::sync::Arc<dyn crate::SubscriptionClock>,
+    pub(crate) runtime_clock: std::sync::Arc<dyn router_clock::RuntimeClock>,
     pub(crate) service_id: UuidIdentity,
     pub(crate) installation_peer: Option<fleet_sync_protocol::PeerId>,
     pub(crate) fleet_link: board_fleet_sync::FleetLinkObservation,
@@ -131,6 +131,7 @@ impl ApplicationFixture {
         mut self,
         admission: std::sync::Arc<crate::ProjectAdmission>,
     ) -> Self {
+        self.runtime_clock = admission.clock.clone();
         self.project_admission = Some(admission);
         self.attach_follow_admission();
         self
@@ -140,17 +141,20 @@ impl ApplicationFixture {
         service: crate::SubscriptionDeliveryService,
         presence: std::sync::Arc<dyn collaboration_contracts::TargetPresenceProbe>,
     ) -> Self {
-        self.subscription_clock = service.subscription_clock();
+        self.runtime_clock = service.runtime_clock();
         self.subscription_delivery = Some(service);
         self.subscription_presence = Some(presence);
         self.attach_follow_admission();
         self
     }
-    pub fn with_subscription_clock(
+    pub fn runtime_clock(&self) -> std::sync::Arc<dyn router_clock::RuntimeClock> {
+        self.runtime_clock.clone()
+    }
+    pub fn with_runtime_clock(
         mut self,
-        clock: std::sync::Arc<dyn crate::SubscriptionClock>,
+        clock: std::sync::Arc<dyn router_clock::RuntimeClock>,
     ) -> Self {
-        self.subscription_clock = clock;
+        self.runtime_clock = clock;
         self
     }
     fn attach_follow_admission(&self) {
@@ -172,9 +176,7 @@ impl ApplicationFixture {
         self.automation.as_ref().map(|store| {
             let worker = collaboration_runtime::AutomationRetentionWorker::new(
                 std::sync::Arc::clone(store),
-                std::sync::Arc::new(crate::subscription_delivery::SubscriptionRuntimeClock(
-                    self.subscription_clock.clone(),
-                )),
+                self.runtime_clock.clone(),
             );
             let worker = match self.interaction_store.as_ref() {
                 Some(store) => worker.with_native_push_store(std::sync::Arc::clone(store)),
@@ -209,9 +211,7 @@ impl ApplicationFixture {
                     self.native_backend.clone(),
                     self.configuration.clone(),
                     self.machine_identity.clone(),
-                    std::sync::Arc::new(crate::subscription_delivery::SubscriptionRuntimeClock(
-                        self.subscription_clock.clone(),
-                    )),
+                    self.runtime_clock.clone(),
                 )
             })
     }
@@ -228,9 +228,7 @@ impl ApplicationFixture {
                     self.configuration.clone(),
                     self.machine_identity.clone(),
                     std::sync::Arc::clone(interactions),
-                    std::sync::Arc::new(crate::subscription_delivery::SubscriptionRuntimeClock(
-                        self.subscription_clock.clone(),
-                    )),
+                    self.runtime_clock.clone(),
                 )
             })
     }
@@ -425,7 +423,12 @@ impl ApplicationFixture {
             project_admission: None,
             subscription_delivery: None,
             subscription_presence: None,
-            subscription_clock: std::sync::Arc::new(crate::SystemSubscriptionClock),
+            runtime_clock: std::sync::Arc::new(
+                router_clock::ManualClock::starting_at(
+                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
+                )
+                .map_err(|error| error.to_string())?,
+            ),
             directory: EndpointDirectory::new(service_id),
         })
     }
@@ -497,7 +500,7 @@ impl ApplicationFixture {
             self.notification_publisher.clone(),
             self.subscription_delivery.clone(),
             self.subscription_presence.clone(),
-            self.subscription_clock.clone(),
+            self.runtime_clock.clone(),
             self.interaction_store.clone(),
             self.project_replication.clone(),
             session_context,
@@ -527,6 +530,7 @@ impl ApplicationFixture {
             self.directory.clone(),
         );
         let automation = crate::collaboration_application::AutomationOperations::new(
+            self.runtime_clock.clone(),
             self.router_identity(),
             self.automation.clone(),
             self.configuration.clone(),
@@ -540,6 +544,7 @@ impl ApplicationFixture {
             self.approval_broker.clone(),
         );
         let wakes = crate::collaboration_application::WakeOperations::new(
+            self.runtime_clock.clone(),
             &self.service_id.clone(),
             self.automation.clone().as_ref(),
         )

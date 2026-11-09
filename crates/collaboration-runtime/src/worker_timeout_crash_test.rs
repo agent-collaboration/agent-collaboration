@@ -14,7 +14,6 @@ use std::{
     collections::BTreeMap,
     os::unix::fs::DirBuilderExt,
     path::{Path, PathBuf},
-    time::Duration,
 };
 use tokio_tungstenite::tungstenite::Message;
 const ROOT_ENV: &str = "WORKER_TIMEOUT_TEST_ROOT";
@@ -41,25 +40,24 @@ pub(super) fn checkpoint(stage: &str) {
 }
 #[tokio::test]
 async fn worker_timeout_crash_preserves_occupancy_until_exact_cessation() -> TestResult<()> {
+    let selector = format!(
+        "{}::worker_timeout_crash_child",
+        module_path!()
+            .split_once("::")
+            .ok_or("child selector must have a module")?
+            .1
+    );
     for stage in ["stop-intent", "interrupt-response"] {
         let root =
             PathBuf::from("/tmp").join(format!("worker-stop-{}", OperationId::generate().as_str()));
         std::fs::DirBuilder::new().mode(0o700).create(&root)?;
-        let output = tokio::time::timeout(
-            Duration::from_secs(15),
-            tokio::process::Command::new(std::env::current_exe()?)
-                .args([
-                    "--exact",
-                    "scheduled_run_worker::timeout_crash_tests::worker_timeout_crash_child",
-                    "--ignored",
-                    "--nocapture",
-                ])
-                .env(ROOT_ENV, &root)
-                .env(STAGE_ENV, stage)
-                .kill_on_drop(true)
-                .output(),
-        )
-        .await??;
+        let output = tokio::process::Command::new(std::env::current_exe()?)
+            .args(["--exact", selector.as_str(), "--ignored", "--nocapture"])
+            .env(ROOT_ENV, &root)
+            .env(STAGE_ENV, stage)
+            .kill_on_drop(true)
+            .output()
+            .await?;
         if output.status.code() != Some(EXIT_CODE) {
             return Err(format!(
                 "{stage}: expected checkpoint exit, got {:?}; {}",
@@ -264,6 +262,7 @@ async fn recover(root: &Path) -> TestResult<()> {
     let timing = serde_json::to_value(&before.evidence.timing)?;
     let socket = root.join("recovered.sock");
     let listener = tokio::net::UnixListener::bind(&socket)?;
+    let (steps_completed, completion) = tokio::sync::oneshot::channel::<()>();
     let backend = tokio::spawn(async move {
         for status in ["inProgress", "interrupted"] {
             let (stream, _) = listener.accept().await?;
@@ -325,11 +324,10 @@ async fn recover(root: &Path) -> TestResult<()> {
                 ))
                 .await?;
         }
-        if tokio::time::timeout(Duration::from_millis(100), listener.accept())
-            .await
-            .is_ok()
-        {
-            return Err("recovery made an extra native call".into());
+        tokio::select! {
+            biased;
+            _ = listener.accept() => return Err("recovery made an extra native call".into()),
+            _ = completion => {},
         }
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     });
@@ -371,7 +369,10 @@ async fn recover(root: &Path) -> TestResult<()> {
             return Err("unrelated completion or acknowledgment released occupancy".into());
         }
     }
-    tokio::time::timeout(Duration::from_secs(3), backend).await???;
+    steps_completed
+        .send(())
+        .map_err(|_| "native observer stopped before all steps completed")?;
+    backend.await??;
     drop(worker);
     drop(store);
     Ok(())
@@ -443,18 +444,25 @@ async fn fixture_worker(
         backend.endpoint.service_id.clone(),
         Some("Timeout Fixture"),
     )?;
+    let clock = Arc::new(
+        router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+            1792432800000,
+        ))
+        .unwrap(),
+    );
     Ok(ScheduledRunWorker {
         store,
         interactions: Arc::new(
             interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
         ),
         execution: Arc::new(crate::CodexAppServerScheduledRuns::new(
+            clock.clone(),
             backend.clone(),
             Arc::new(crate::UnmaterializedThreadHolder::new()),
         )),
         backend: Some(backend),
         configuration: crate::AutomationConfigurationHandle::default(),
         machine_identity,
-        clock: std::sync::Arc::new(runtime_primitives::SystemClock),
+        clock: clock.clone(),
     })
 }

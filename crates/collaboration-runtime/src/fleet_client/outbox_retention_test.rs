@@ -2,11 +2,12 @@
 //! settlement, deletes only once the strict cutoff passes, ignores a request its creation
 //! input still keeps, and retries a failed prune on its backoff.
 use super::outbox_retention_loop;
-use crate::{LoopSnapshot, WorkerObservation, paused_wall_clock::PausedWallClock};
+use crate::{LoopSnapshot, WorkerObservation};
 use chrono::{DateTime, Utc};
 use fleet_admission::{FleetOperation, FleetRequest};
 use message_board::*;
 use message_board_storage::{FleetOutbox, FleetStore};
+use router_clock::{ManualClock, RuntimeClock};
 use runtime_primitives::{Clock, SyncTime};
 use sqlx::Connection;
 use std::{
@@ -95,7 +96,7 @@ async fn settle_protected_creation(outbox: &FleetOutbox, settled: DateTime<Utc>)
 
 struct RunningOutboxWorker {
     observation: WorkerObservation,
-    clock: Arc<PausedWallClock>,
+    clock: Arc<ManualClock>,
     prunes_entered_at: Arc<StdMutex<Vec<SyncTime>>>,
     shutdown: CancellationToken,
     task: tokio::task::JoinHandle<()>,
@@ -104,9 +105,9 @@ struct RunningOutboxWorker {
 impl RunningOutboxWorker {
     /// Starts the worker at `wall` and returns once its first pass has gone to sleep.
     async fn start(outbox: &FleetOutbox, wall: DateTime<Utc>) -> Self {
-        let clock = Arc::new(PausedWallClock::starting_at(SyncTime::from_unix_millis(
-            wall.timestamp_millis(),
-        )));
+        let clock = Arc::new(
+            ManualClock::starting_at(SyncTime::from_unix_millis(wall.timestamp_millis())).unwrap(),
+        );
         let (worker_loop, mut pass) = outbox_retention_loop(outbox, clock.clone());
         let prunes_entered_at = pass.prunes_entered_at.clone();
         let observation = worker_loop.observation();
@@ -115,9 +116,13 @@ impl RunningOutboxWorker {
             let shutdown = shutdown.clone();
             async move { worker_loop.run(&mut pass, shutdown).await }
         });
-        tokio::time::timeout(WAKE_GUARD, observation.asleep_at_least(1))
-            .await
-            .expect("the first pass goes to sleep");
+        observation.asleep_at_least(1).await;
+        if let Some(deadline) = observation.snapshot().armed_deadline {
+            assert!(
+                clock.has_not_due_check_now(clock.wall_deadline(deadline)),
+                "worker must register its injected sleep"
+            );
+        }
         Self {
             observation,
             clock,
@@ -145,23 +150,20 @@ impl RunningOutboxWorker {
             .count()
     }
 
-    /// Asserts the latest prune began at `due`, as the pass read its clock on waking, up
-    /// to the paused timer's 2 ms rounding: a timer that fires late fails this.
+    /// The pass must enter at the exact deadline the manual clock reached.
     fn assert_last_prune_entered_at(&self, due: DateTime<Utc>) {
         let entered = *self.prunes_entered_at.lock().unwrap().last().unwrap();
         let late = entered.unix_millis() - due.timestamp_millis();
-        assert!(
-            (0..=2).contains(&late),
-            "the prune began {late} ms after {due}"
-        );
+        assert_eq!(late, 0, "the pass began {late} ms after {due}");
     }
 
-    /// Lets the paused clock reach the worker's timer and returns once that pass has slept.
+    /// Advances the manual clock to the armed deadline and awaits the resulting pass.
     async fn run_to_the_armed_time(&self) {
         let sleeps = self.snapshot().sleeps;
-        tokio::time::pause();
+        self.clock
+            .advance_to(self.snapshot().armed_deadline.unwrap())
+            .unwrap();
         self.observation.asleep_at_least(sleeps + 1).await;
-        tokio::time::resume();
     }
 
     async fn stop(self) {
@@ -169,9 +171,6 @@ impl RunningOutboxWorker {
         self.task.await.unwrap();
     }
 }
-
-/// Bounds, in real time, a wait for a pass the test expects; it only stops a hang.
-const WAKE_GUARD: std::time::Duration = std::time::Duration::from_secs(30);
 
 async fn open_outbox(directory: &Path) -> (FleetStore, FleetOutbox) {
     let store = FleetStore::open(&directory.join("fleet.sqlite"))
@@ -233,9 +232,7 @@ async fn a_protected_oldest_request_does_not_fire_and_completing_its_input_delet
 
     let sleeps = worker.snapshot().sleeps;
     outbox.complete_creation_input(&protected).await.unwrap();
-    tokio::time::timeout(WAKE_GUARD, worker.observation.asleep_at_least(sleeps + 1))
-        .await
-        .expect("completing the input wakes the worker");
+    (worker.observation.asleep_at_least(sleeps + 1)).await;
 
     assert!(outbox.request(&protected).await.unwrap().is_none());
     assert_eq!(worker.prunes(), 1);
@@ -325,11 +322,8 @@ async fn a_failed_prune_retries_at_one_two_four_seconds_and_recovers_with_no_new
         worker.run_to_the_armed_time().await;
         let next = worker.armed().unwrap();
         let step = (next - previous).num_milliseconds();
-        // The pass starts at the armed time or up to the paused timer's 2 ms after it.
-        assert!(
-            (expected..=expected + 2).contains(&step),
-            "step {step}, expected {expected}"
-        );
+        // The manual clock reaches each retry's exact deadline.
+        assert_eq!(step, expected, "retry delay must match its exact deadline");
         previous = next;
     }
     assert_eq!(*failures.lock().unwrap(), 1, "one warning for the run");
@@ -359,9 +353,7 @@ async fn protection_removed_before_the_due_time_arms_it_and_deletes_the_request_
 
     let sleeps = worker.snapshot().sleeps;
     outbox.complete_creation_input(&protected).await.unwrap();
-    tokio::time::timeout(WAKE_GUARD, worker.observation.asleep_at_least(sleeps + 1))
-        .await
-        .expect("completing the input wakes the worker");
+    (worker.observation.asleep_at_least(sleeps + 1)).await;
 
     assert_eq!(worker.armed(), Some(at("2026-03-15T10:00:00.001Z")));
     assert_eq!(worker.prunes(), 0, "not yet due");
@@ -406,12 +398,7 @@ async fn a_commit_that_leaves_nothing_due_reads_the_due_time_and_deletes_nothing
         )
         .await
         .unwrap();
-    tokio::time::timeout(
-        WAKE_GUARD,
-        worker.observation.asleep_at_least(before.sleeps + 1),
-    )
-    .await
-    .expect("the settlement wakes the worker");
+    (worker.observation.asleep_at_least(before.sleeps + 1)).await;
 
     let after = worker.snapshot();
     assert!(

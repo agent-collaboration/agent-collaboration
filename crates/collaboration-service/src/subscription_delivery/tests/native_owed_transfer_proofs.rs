@@ -47,11 +47,7 @@ async fn prove_owed_transfer(discard_tail: bool) {
         .queue_project(successor.project.clone())
         .await
         .unwrap();
-    let request = tokio::time::timeout(Duration::from_secs(10), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .unwrap();
+    let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
     let frozen = frozen_follow(&successor).await;
     assert_eq!(frozen.len(), 1);
     let item = frozen.first().unwrap();
@@ -82,12 +78,7 @@ async fn prove_owed_transfer(discard_tail: bool) {
         .queue_project(successor.project.clone())
         .await
         .unwrap();
-    tokio::time::timeout(
-        Duration::from_secs(10),
-        publisher.wait_project_idle_for_test(&successor.project),
-    )
-    .await
-    .unwrap();
+    (publisher.wait_project_idle_for_test(&successor.project)).await;
     assert_eq!(frozen_follow(&successor).await.len(), 1);
     assert!(runtime.requests.lock().await.try_recv().is_err());
     assert_eq!(

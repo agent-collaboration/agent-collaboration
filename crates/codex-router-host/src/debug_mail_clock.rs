@@ -1,12 +1,11 @@
 //! One frozen mail clock and a private, causally acknowledged debug control stream.
 use chrono::{DateTime, Utc};
-use collaboration_service::{MailDeliveryRuntime, SubscriptionClock};
+use collaboration_service::MailDeliveryRuntime;
+use router_clock::{ManualClock, RuntimeClock};
 use std::{io, path::Path, sync::Arc};
 use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader},
     net::UnixStream,
-    sync::watch,
-    time::Instant,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -33,73 +32,15 @@ enum ClockReply {
     Stepped { now: DateTime<Utc> },
 }
 
-#[derive(Clone, Copy)]
-struct ClockReading {
-    wall: DateTime<Utc>,
-    monotonic: Instant,
-}
-
-struct SteppedMailClock {
-    reading: watch::Sender<ClockReading>,
-}
-
-impl SteppedMailClock {
-    fn new(now: DateTime<Utc>) -> Self {
-        Self {
-            reading: watch::channel(ClockReading {
-                wall: now,
-                monotonic: Instant::now(),
-            })
-            .0,
-        }
-    }
-
-    fn advance_to(&self, now: DateTime<Utc>) -> io::Result<()> {
-        let previous = *self.reading.borrow();
-        let elapsed = (now - previous.wall)
-            .to_std()
-            .map_err(|_| io::Error::other("debug mail clock cannot move backwards"))?;
-        let monotonic = previous
-            .monotonic
-            .checked_add(elapsed)
-            .ok_or_else(|| io::Error::other("debug mail clock step exceeds monotonic range"))?;
-        self.reading.send_replace(ClockReading {
-            wall: now,
-            monotonic,
-        });
-        Ok(())
-    }
-}
-
-impl SubscriptionClock for SteppedMailClock {
-    fn now(&self) -> DateTime<Utc> {
-        self.reading.borrow().wall
-    }
-
-    fn monotonic_now(&self) -> Instant {
-        self.reading.borrow().monotonic
-    }
-
-    fn sleep_until(
-        &self,
-        deadline: Instant,
-    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>> {
-        Box::pin(async move {
-            let mut reading = self.reading.subscribe();
-            loop {
-                if reading.borrow_and_update().monotonic >= deadline {
-                    return;
-                }
-                if reading.changed().await.is_err() {
-                    return;
-                }
-            }
-        })
-    }
+fn advance_clock_to(clock: &ManualClock, now: DateTime<Utc>) -> io::Result<()> {
+    let elapsed = (now - clock.utc_now())
+        .to_std()
+        .map_err(|_| io::Error::other("debug mail clock cannot move backwards"))?;
+    clock.advance(elapsed).map_err(io::Error::other)
 }
 
 pub(crate) struct PreparedMailClock {
-    clock: Arc<SteppedMailClock>,
+    clock: Arc<ManualClock>,
     control: BufReader<UnixStream>,
 }
 
@@ -132,12 +73,12 @@ impl PreparedMailClock {
         crate::debug_runtime_barrier::validate_barrier_socket(&input.control_socket)?;
         let control = UnixStream::connect(input.control_socket).await?;
         Ok(Some(Self {
-            clock: Arc::new(SteppedMailClock::new(input.now)),
+            clock: Arc::new(ManualClock::new(input.now)),
             control: BufReader::new(control),
         }))
     }
 
-    pub(crate) fn clock(&self) -> Arc<dyn SubscriptionClock> {
+    pub(crate) fn clock(&self) -> Arc<dyn RuntimeClock> {
         self.clock.clone()
     }
 
@@ -160,7 +101,7 @@ impl PreparedMailClock {
 
     async fn serve(&mut self, mail: Arc<MailDeliveryRuntime>) -> io::Result<()> {
         self.reply(ClockReply::Ready {
-            now: self.clock.now(),
+            now: self.clock.utc_now(),
         })
         .await?;
         loop {
@@ -180,12 +121,12 @@ impl PreparedMailClock {
                 ));
             }
             let step: ClockStep = serde_json::from_slice(&frame).map_err(io::Error::other)?;
-            self.clock.advance_to(step.now)?;
+            advance_clock_to(&self.clock, step.now)?;
             mail.runtime_test_run_due_record_removals()
                 .await
                 .map_err(io::Error::other)?;
             self.reply(ClockReply::Stepped {
-                now: self.clock.now(),
+                now: self.clock.utc_now(),
             })
             .await?;
         }

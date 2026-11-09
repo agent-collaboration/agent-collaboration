@@ -60,6 +60,18 @@ impl CollaborationRuntime {
         enrollment_reset_directory: Option<std::path::PathBuf>,
     ) -> io::Result<Self> {
         let mut owner_human_id = inputs.owner_human_id.clone();
+        #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+        let mail_clock_control =
+            crate::debug_mail_clock::PreparedMailClock::load(&inputs.directory).await?;
+        #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+        let worker_clock: std::sync::Arc<dyn router_clock::RuntimeClock> = match &mail_clock_control
+        {
+            Some(control) => control.clock(),
+            None => std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
+        };
+        #[cfg(not(all(debug_assertions, feature = "runtime-test-support")))]
+        let worker_clock: std::sync::Arc<dyn router_clock::RuntimeClock> =
+            std::sync::Arc::new(router_clock::SystemRuntimeClock::new());
         let service_id = load_service_identity(&inputs.directory)?;
         let installation_peer = load_installation_peer(&inputs.directory)?;
         if inputs
@@ -140,6 +152,7 @@ impl CollaborationRuntime {
         > = std::sync::Arc::new(collaboration_contracts::UnacknowledgedProjectReplication);
         let mut configuration = collaboration_runtime::AutomationConfigurationHandle::default();
         let (opened_board, fleet_link) = board_composition::open_observed_board_admission(
+            worker_clock.clone(),
             &inputs.directory,
             machine_identity.clone(),
             inputs.board_session,
@@ -286,6 +299,7 @@ impl CollaborationRuntime {
         let message_routes =
             crate::session_message_route_composition::compose_session_message_routes(
                 crate::session_message_route_composition::SessionMessageRouteInputs {
+                    clock: worker_clock.clone(),
                     provider_endpoints,
                     directory: endpoint_directory.clone(),
                     native_backend: native_backend.clone(),
@@ -305,15 +319,6 @@ impl CollaborationRuntime {
             dyn collaboration_contracts::ScheduledRunExecution,
         > = message_routes.router.clone();
         let provider_delivery_route = message_routes.provider_route;
-        #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
-        let mail_clock_control =
-            crate::debug_mail_clock::PreparedMailClock::load(&inputs.directory).await?;
-        let subscription_clock: std::sync::Arc<dyn collaboration_service::SubscriptionClock> =
-            std::sync::Arc::new(collaboration_service::SystemSubscriptionClock);
-        #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
-        let subscription_clock = mail_clock_control
-            .as_ref()
-            .map_or(subscription_clock, |control| control.clock());
         let interactions = approval_broker.interaction_store();
         // Created before the readers and the scheduler that subscribe to it.
         let observation_rechecks = super::observation_recheck::ObservationRechecks::new();
@@ -333,7 +338,7 @@ impl CollaborationRuntime {
                     delivery: std::sync::Arc::clone(&session_delivery),
                     presence: std::sync::Arc::clone(&subscription_presence),
                     machine_identity: machine_identity.clone(),
-                    clock: std::sync::Arc::clone(&subscription_clock),
+                    clock: std::sync::Arc::clone(&worker_clock),
                 },
             )
         });
@@ -374,7 +379,7 @@ impl CollaborationRuntime {
                         actors: actors.clone(),
                         presence: subscription_presence.clone(),
                         machine: machine_identity.clone(),
-                        clock: subscription_clock.clone(),
+                        clock: worker_clock.clone(),
                     },
                     mail_session,
                     &inputs.directory,
@@ -425,8 +430,6 @@ impl CollaborationRuntime {
             );
         }
         // The one wall clock every Host worker compares due times against.
-        let worker_clock: std::sync::Arc<dyn runtime_primitives::Clock> =
-            std::sync::Arc::new(runtime_primitives::SystemClock);
         let wake_worker = automation_store.as_ref().map(|store| {
             collaboration_runtime::WakeTimingWorker::new(
                 store.clone(),
@@ -538,7 +541,7 @@ impl CollaborationRuntime {
                 subscription_delivery
                     .as_ref()
                     .map(|_| subscription_presence.clone()),
-                subscription_clock.clone(),
+                worker_clock.clone(),
                 Some(interactions.clone()),
                 project_replication,
                 session_context,
@@ -573,6 +576,7 @@ impl CollaborationRuntime {
                 );
             let automation =
                 collaboration_service::collaboration_application::AutomationOperations::new(
+                    worker_clock.clone(),
                     identity.clone(),
                     automation_store.clone(),
                     configuration.clone(),
@@ -592,6 +596,7 @@ impl CollaborationRuntime {
                     approval_broker.clone(),
                 ));
             let wakes = collaboration_service::collaboration_application::WakeOperations::new(
+                worker_clock.clone(),
                 &service_id.clone(),
                 automation_store.clone().as_ref(),
             )
@@ -844,6 +849,7 @@ impl CollaborationRuntime {
             tokio::spawn(
                 super::observation_recheck::recheck_while_journal_unavailable(
                     observation_rechecks.clone(),
+                    worker_clock.clone(),
                     shutdown.clone(),
                 ),
             )
@@ -859,6 +865,7 @@ impl CollaborationRuntime {
             })
         });
         let mut runtime = Self {
+            clock: worker_clock,
             fleet_link,
             interactions: interactions_reader,
             #[cfg(test)]

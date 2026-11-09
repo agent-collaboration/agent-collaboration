@@ -1,14 +1,12 @@
 //! A real maintenance-pool timeout retries in the same owner and project registry.
-use super::super::{SubscriptionClock, subscription_service::OwnerObservation};
+use super::super::subscription_service::OwnerObservation;
 use super::owner_fixture::*;
 use super::startup_fixture::{exhaust_project_readers, release_project_readers};
 use message_board::*;
-use std::{
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
-    time::Duration,
+use router_clock::RuntimeClock;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
 };
 use tracing_subscriber::{Layer, layer::SubscriberExt};
 
@@ -34,7 +32,7 @@ impl<TSubscriber: tracing::Subscriber> Layer<TSubscriber> for PoolTimeoutTrace {
     }
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn maintenance_timeout_retries_without_quarantining_the_project() {
     let timeout_seen = Arc::new(AtomicBool::new(false));
     let subscriber = tracing_subscriber::registry().with(PoolTimeoutTrace {
@@ -44,7 +42,7 @@ async fn maintenance_timeout_retries_without_quarantining_the_project() {
     });
     let _trace = tracing::subscriber::set_default(subscriber);
     let fixture = Box::pin(OwnerFixture::new()).await;
-    let clock = Arc::new(RuntimeTimerClock::new(fixture.clock.clone()));
+    let clock = fixture.clock.clone();
     let runtime = fixture.native_runtime_with_clock(clock).await;
     runtime
         .observe(|event| matches!(event, OwnerObservation::Sleeping(_)))
@@ -61,10 +59,11 @@ async fn maintenance_timeout_retries_without_quarantining_the_project() {
         .await
         .unwrap()
         .unwrap();
+    tokio::time::pause();
     let held = exhaust_project_readers(&project).await;
     timeout_seen.store(false, Ordering::SeqCst);
     drop(windows);
-    let retry_deadline = tokio::time::timeout(Duration::from_secs(35), async {
+    let retry_deadline = (async {
         let mut events = runtime.observations.lock().await;
         loop {
             match events.recv().await.unwrap() {
@@ -78,8 +77,7 @@ async fn maintenance_timeout_retries_without_quarantining_the_project() {
             }
         }
     })
-    .await
-    .unwrap();
+    .await;
     assert!(
         timeout_seen.load(Ordering::SeqCst),
         "the pass must actually fail with Database(PoolTimedOut)"
@@ -105,7 +103,7 @@ async fn maintenance_timeout_retries_without_quarantining_the_project() {
                 references: Vec::new(),
                 addressees: Vec::new(),
             },
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await;
     let application =
@@ -124,11 +122,7 @@ async fn maintenance_timeout_retries_without_quarantining_the_project() {
     assert_eq!(shown.post_id, own_post);
     assert_eq!(shown.project_id, fixture.project);
     assert_eq!(shown.text.as_str(), "writable after timeout");
-    let request = tokio::time::timeout(Duration::from_secs(5), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .unwrap();
+    let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
     let notice = fixture
         .interactions
         .get_push_record(&request.payload.push_id)

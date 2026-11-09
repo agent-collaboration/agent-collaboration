@@ -151,12 +151,17 @@ async fn exercise_scheduled_run(
         gate,
         codex_home: root.clone(),
     };
+    let runtime_clock = std::sync::Arc::new(router_clock::ManualClock::new(
+        chrono::DateTime::UNIX_EPOCH + chrono::Duration::seconds(1_792_432_800),
+    ));
     let identity = ApplicationFixture::new(service_id, service_id)?
         .with_endpoints(vec![description])?
         .with_automation_store(store.clone())
         .with_interaction_store(interactions.clone())
+        .with_runtime_clock(runtime_clock.clone())
         .with_scheduled_run_execution(Arc::new(
             collaboration_runtime::CodexAppServerScheduledRuns::new(
+                runtime_clock.clone(),
                 native_backend.clone(),
                 Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
             ),
@@ -427,7 +432,7 @@ async fn exercise_scheduled_run(
     let schedule=client.create_schedule(serde_json::from_value::<ScheduleCreateRequest>(json!({"operationId":OperationId::generate(),"definition":{"instructionId":instruction.instruction_id,"timing":{"kind":"at","at":"2026-01-01T00:00:00.000Z"},"enabled":true,"destination":{"kind":"freshEachRun","endpoint":target.endpoint,"cwd":"/fresh-fixture"},"executionTimeoutSeconds":120,"model":"gpt-5.6-sol","effort":"medium"}}))?).await?;
     if frozen_inputs {
         // Admit with the original fresh-thread definition, then edit only future work.
-        let now = chrono::Utc::now().timestamp_millis();
+        let now = router_clock::RuntimeClock::utc_now(runtime_clock.as_ref()).timestamp_millis();
         store
             .lock()
             .await

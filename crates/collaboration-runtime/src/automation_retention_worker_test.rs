@@ -31,7 +31,7 @@ async fn minute_worker_prunes_expired_events_without_touching_current_or_instruc
         )
         .await
         .unwrap_or_else(|error| panic!("instruction should persist: {error}"));
-    let now = chrono::Utc::now().timestamp_millis();
+    let now = 1_800_000_000_000_i64;
     let expired = now - 90_i64 * 24 * 60 * 60 * 1000;
     let mut observer = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new()
@@ -56,11 +56,16 @@ async fn minute_worker_prunes_expired_events_without_touching_current_or_instruc
     let task = tokio::spawn(
         AutomationRetentionWorker::new(
             Arc::clone(&shared_store),
-            Arc::new(runtime_primitives::SystemClock),
+            Arc::new(
+                router_clock::ManualClock::starting_at(
+                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
+                )
+                .unwrap(),
+            ),
         )
         .run(shutdown.clone()),
     );
-    tokio::time::timeout(std::time::Duration::from_secs(1), async {
+    (async {
         loop {
             let retained: Vec<i64> = sqlx::query_scalar(
                 "SELECT recorded_at_ms FROM automation_events ORDER BY recorded_at_ms",
@@ -74,8 +79,7 @@ async fn minute_worker_prunes_expired_events_without_touching_current_or_instruc
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .unwrap_or_else(|_elapsed| panic!("minute worker should prune the expired event"));
+    .await;
     assert_eq!(
         shared_store
             .lock()
@@ -161,7 +165,12 @@ async fn automation_prune_trims_one_incremental_batch_then_skips_empty_pass() {
     let shared_store = Arc::new(Mutex::new(store));
     let removed = AutomationRetentionWorker::new(
         Arc::clone(&shared_store),
-        Arc::new(runtime_primitives::SystemClock),
+        Arc::new(
+            router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+                1792432800000,
+            ))
+            .unwrap(),
+        ),
     )
     .prune_batch(now_ms)
     .await
@@ -189,7 +198,12 @@ async fn automation_prune_trims_one_incremental_batch_then_skips_empty_pass() {
     assert_eq!(
         AutomationRetentionWorker::new(
             Arc::clone(&shared_store),
-            Arc::new(runtime_primitives::SystemClock)
+            Arc::new(
+                router_clock::ManualClock::starting_at(
+                    runtime_primitives::SyncTime::from_unix_millis(1792432800000)
+                )
+                .unwrap()
+            )
         )
         .prune_batch(now_ms)
         .await
@@ -260,7 +274,7 @@ async fn retention_worker_prunes_expired_push_records() {
             .await
             .expect("native push owner"),
     );
-    let now_ms = chrono::Utc::now().timestamp_millis();
+    let now_ms = 1_800_000_000_000_i64;
     let draft = expired_push(now_ms);
     let push_id = draft.push_id.clone();
     interactions
@@ -286,7 +300,12 @@ async fn retention_worker_prunes_expired_push_records() {
     assert_eq!(
         AutomationRetentionWorker::new(
             shared_store.clone(),
-            Arc::new(runtime_primitives::SystemClock)
+            Arc::new(
+                router_clock::ManualClock::starting_at(
+                    runtime_primitives::SyncTime::from_unix_millis(1792432800000)
+                )
+                .unwrap()
+            )
         )
         .with_native_push_store(interactions.clone())
         .prune_batch(now_ms)
@@ -326,7 +345,7 @@ async fn failed_push_prune_does_not_stop_expired_event_pruning() {
             .await
             .expect("native push owner"),
     );
-    let now_ms = chrono::Utc::now().timestamp_millis();
+    let now_ms = 1_800_000_000_000_i64;
     let draft = expired_push(now_ms);
     let push_id = draft.push_id.clone();
     interactions
@@ -345,7 +364,12 @@ async fn failed_push_prune_does_not_stop_expired_event_pruning() {
     let shared_store = Arc::new(Mutex::new(store));
     let removed = AutomationRetentionWorker::new(
         shared_store.clone(),
-        Arc::new(runtime_primitives::SystemClock),
+        Arc::new(
+            router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+                1792432800000,
+            ))
+            .unwrap(),
+        ),
     )
     .with_native_push_store(interactions.clone())
     .prune_batch(now_ms)

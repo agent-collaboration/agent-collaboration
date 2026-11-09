@@ -207,7 +207,7 @@ async function prepareWorkerStartup(plan: WorkerStartupPlan): Promise<PreparedWo
   const deadline = /(?:Z|[+-][0-9]{2}:?[0-9]{2})$/.test(plan.deadline)
     ? Date.parse(plan.deadline)
     : Number.NaN;
-  if (!Number.isFinite(deadline) || Date.now() >= deadline)
+  if (!Number.isFinite(deadline) || runtimeClock.wallNow() >= deadline)
     throw new Error("expired worker observation allocation");
   if (
     realpathSync(process.cwd()) !== realpathSync(plan.repository) ||
@@ -299,7 +299,7 @@ function requireActiveProcesses(input: {
   readonly knownRouter: Map<number, ProcessIdentity>;
   readonly knownHost: Map<number, ProcessIdentity>;
 }): void {
-  if (input.interrupted || Date.now() >= input.deadline)
+  if (input.interrupted || runtimeClock.wallNow() >= input.deadline)
     throw new Error("worker observation interrupted or expired");
   for (const { child, known } of [
     { child: input.router, known: input.knownRouter },
@@ -398,7 +398,7 @@ async function observeWorkerStartup(
       );
       if (fixture.additionalRequests !== 0n)
         throw new Error("fixture received unexpected requests");
-      const end = BigInt(Date.now() + plan.idle_milliseconds);
+      const end = BigInt(runtimeClock.wallNow() + plan.idle_milliseconds);
       if (states.some((state) => state.deadline !== null && state.deadline <= end))
         throw new Error("a domain deadline falls inside the proposed idle window");
       saveRecord(join(plan.evidence, "startup.json"), {

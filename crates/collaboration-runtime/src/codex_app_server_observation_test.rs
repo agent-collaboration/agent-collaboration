@@ -8,8 +8,9 @@ use collaboration_contracts::{
 };
 use collaboration_protocol::{CodexGeneration, EndpointRef, SessionRef};
 use futures_util::{SinkExt as _, StreamExt as _};
+use router_clock::{ClockInstant, ManualClock, RuntimeClock};
 use serde_json::{Value, json};
-use std::{collections::BTreeMap, sync::Arc};
+use std::{collections::BTreeMap, sync::Arc, time::Duration};
 use tokio_tungstenite::tungstenite::Message;
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -17,7 +18,6 @@ type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 const SERVICE: &str = "00000000-0000-4000-8000-000000000001";
 
 /// What the fake app-server does with one connection.
-#[derive(Clone, Copy)]
 enum Answer {
     /// Closes the connection before answering anything.
     Drop,
@@ -25,6 +25,10 @@ enum Answer {
     Turn(&'static str),
     /// Answers with a history that does not contain the recorded turn.
     NoSuchTurn,
+    Hold {
+        reached: tokio::sync::oneshot::Sender<()>,
+        finish: tokio::sync::oneshot::Receiver<()>,
+    },
 }
 
 async fn serve(listener: tokio::net::UnixListener, answers: Vec<Answer>) -> TestResult {
@@ -54,6 +58,11 @@ async fn serve(listener: tokio::net::UnixListener, answers: Vec<Answer>) -> Test
         let data = match answer {
             Answer::Turn(status) => json!([{"id":"worker-turn","status":status,"items":[]}]),
             Answer::NoSuchTurn | Answer::Drop => json!([]),
+            Answer::Hold { reached, finish } => {
+                reached.send(()).map_err(|_| "observation test stopped")?;
+                let _ = finish.await;
+                continue;
+            }
         };
         socket
             .send(Message::Text(
@@ -66,7 +75,10 @@ async fn serve(listener: tokio::net::UnixListener, answers: Vec<Answer>) -> Test
     Ok(())
 }
 
-fn route(socket: std::path::PathBuf) -> TestResult<(CodexAppServerScheduledRuns, SessionRef)> {
+fn route(
+    socket: std::path::PathBuf,
+    clock: Arc<dyn RuntimeClock>,
+) -> TestResult<(CodexAppServerScheduledRuns, SessionRef)> {
     let target: SessionRef = serde_json::from_value(json!({
         "endpoint":{"serviceId":SERVICE,"endpointId":"codex-local"},
         "sessionId":"worker-thread"
@@ -97,6 +109,7 @@ fn route(socket: std::path::PathBuf) -> TestResult<(CodexAppServerScheduledRuns,
     let gate = crate::NativeGenerationGate::default();
     gate.activate(generation, socket, Some(schemas))?;
     let route = CodexAppServerScheduledRuns::new(
+        clock,
         NativeControlBackend {
             endpoint: target.endpoint.clone(),
             gate,
@@ -105,6 +118,10 @@ fn route(socket: std::path::PathBuf) -> TestResult<(CodexAppServerScheduledRuns,
         Arc::new(crate::UnmaterializedThreadHolder::new()),
     );
     Ok((route, target))
+}
+
+fn manual_clock() -> Arc<ManualClock> {
+    Arc::new(ManualClock::new("2001-01-01T00:00:00Z".parse().unwrap()))
 }
 
 fn running_context(target: &SessionRef) -> TestResult<RunObservationContext> {
@@ -151,7 +168,7 @@ async fn a_failed_read_is_an_unreachable_client_and_only_a_read_turn_is_running(
             Answer::Turn("completed"),
         ],
     ));
-    let (route, target) = route(socket)?;
+    let (route, target) = route(socket, manual_clock())?;
 
     let failed_read = route.observe_settlement(running_context(&target)?).await;
     let running = route.observe_settlement(running_context(&target)?).await;
@@ -193,7 +210,7 @@ async fn a_stopped_turn_absent_from_its_history_is_not_observed_and_a_running_on
             Answer::NoSuchTurn,
         ],
     ));
-    let (route, target) = route(socket)?;
+    let (route, target) = route(socket, manual_clock())?;
     let stopping = || -> TestResult<RunObservationContext> {
         let mut context = running_context(&target)?;
         context.phase = RunPhase::Stopping;
@@ -217,5 +234,50 @@ async fn a_stopped_turn_absent_from_its_history_is_not_observed_and_a_running_on
         matches!(absent_before_the_stop, Ok(RunSettlement::Pending)),
         "before the stop the deadline still acts: {absent_before_the_stop:?}"
     );
+    Ok(())
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions report violated deadline contracts."
+)]
+async fn a_turn_observation_times_out_at_its_injected_deadline() -> TestResult {
+    let directory = tempfile::Builder::new().prefix("obs-").tempdir_in("/tmp")?;
+    let socket = directory.path().join("native.sock");
+    let listener = tokio::net::UnixListener::bind(&socket)?;
+    let (reached, request_received) = tokio::sync::oneshot::channel();
+    let (finish, finished) = tokio::sync::oneshot::channel();
+    let server = tokio::spawn(serve(
+        listener,
+        vec![Answer::Hold {
+            reached,
+            finish: finished,
+        }],
+    ));
+    let clock = manual_clock();
+    let (route, target) = route(socket, clock.clone())?;
+    let context = running_context(&target)?;
+    let observed = tokio::spawn(async move { route.observe_settlement(context).await });
+    request_received.await?;
+    let deadline = ClockInstant::ZERO.after(Duration::from_secs(20));
+    assert!(
+        clock.has_not_due_check_now(deadline),
+        "observation must register its injected read deadline"
+    );
+
+    clock.advance(Duration::from_secs(19))?;
+    clock.not_due_check_now(deadline).await;
+    assert!(!observed.is_finished());
+    clock.advance(Duration::from_secs(1))?;
+
+    assert!(matches!(
+        observed.await?,
+        Err(DeliveryContractError::ClientOperation)
+    ));
+    finish
+        .send(())
+        .map_err(|_| "native test server ended early")?;
+    server.await??;
     Ok(())
 }

@@ -29,6 +29,11 @@ async fn project_admission(
     Arc<collaboration_runtime::FleetClient>,
     board_central_test_support::FleetTestRuntime,
 ) {
+    let clock = std::sync::Arc::new(router_clock::ManualClock::new(
+        chrono::DateTime::from_timestamp_millis(1792432800000)
+            .ok_or_else(|| std::io::Error::other("fixed fixture time"))?,
+    ));
+
     let registry = crate::native_board_test_fixture::new_registry(directory)
         .await
         .expect("native project registry");
@@ -50,6 +55,7 @@ async fn project_admission(
     let admission = Arc::new(
         collaboration_service::ProjectAdmission::new(
             collaboration_service::ProjectAdmissionProps {
+                clock: clock.clone(),
                 registry: registry.clone(),
                 fleet: fleet.clone(),
                 identity: collaboration_contracts::MachineIdentity::new(

@@ -10,9 +10,10 @@
 //! succeeds clears the retry.
 use super::{LifecycleStore, lifecycle_maintenance_error_class};
 use crate::JournalError;
-use runtime_primitives::{Clock, SyncTime};
+use router_clock::RuntimeClock;
+use runtime_primitives::SyncTime;
 use sqlite_storage_maintenance::FailedPassBackoff;
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, thiserror::Error)]
@@ -39,7 +40,7 @@ impl LifecycleStore {
     /// the first pass: it expires whatever is already due.
     pub async fn run_maintenance(
         &self,
-        clock: Arc<dyn Clock>,
+        clock: Arc<dyn RuntimeClock>,
         shutdown: CancellationToken,
     ) -> Result<(), JournalError> {
         self.run_retention(&*clock, &shutdown, &RetentionObservation::default())
@@ -49,7 +50,7 @@ impl LifecycleStore {
 
     async fn run_retention(
         &self,
-        clock: &dyn Clock,
+        clock: &dyn RuntimeClock,
         shutdown: &CancellationToken,
         observation: &RetentionObservation,
     ) {
@@ -88,13 +89,10 @@ impl LifecycleStore {
                 continue;
             }
             observation.armed(deadline);
-            let wait = deadline.map(|due| {
-                let millis = due.unix_millis().saturating_sub(clock.now().unix_millis());
-                Duration::from_millis(u64::try_from(millis).unwrap_or(0))
-            });
+            let wait = deadline.map(|due| clock.wall_deadline(due));
             let timer = async move {
                 match wait {
-                    Some(wait) => tokio::time::sleep(wait).await,
+                    Some(deadline) => clock.sleep_until(deadline).await,
                     None => std::future::pending::<()>().await,
                 }
             };

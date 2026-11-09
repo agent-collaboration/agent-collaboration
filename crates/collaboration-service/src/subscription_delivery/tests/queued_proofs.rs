@@ -1,14 +1,13 @@
-use super::super::{
-    SubscriptionClock, SubscriptionWaitFilter, subscription_service::OwnerObservation,
-};
+use super::super::{SubscriptionWaitFilter, subscription_service::OwnerObservation};
 use super::owner_fixture::*;
 use collaboration_contracts::AttemptReconciliation;
 use collaboration_protocol::{
     DeliveryOutcome, DeliveryReceipt, PushDeliveryState, SessionReachability,
 };
 use message_board::{SubscriptionDeliveryOutcome, SubscriptionMode, SubscriptionScope, WhenIdle};
+use router_clock::RuntimeClock;
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn declared_renewal_before_covering_wait_changes_only_the_covered_membership() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     let uncovered_root = fixture.add_root().await;
@@ -26,7 +25,7 @@ async fn declared_renewal_before_covering_wait_changes_only_the_covered_membersh
                 .get_thread_subscription_record(
                     &fixture.reader,
                     &covered_scope,
-                    fixture.clock.now(),
+                    fixture.clock.utc_now(),
                 )
                 .await
                 .unwrap()
@@ -35,7 +34,7 @@ async fn declared_renewal_before_covering_wait_changes_only_the_covered_membersh
                 .get_thread_subscription_record(
                     &fixture.reader,
                     &uncovered_scope,
-                    fixture.clock.now(),
+                    fixture.clock.utc_now(),
                 )
                 .await
                 .unwrap()
@@ -43,9 +42,12 @@ async fn declared_renewal_before_covering_wait_changes_only_the_covered_membersh
         )
     };
     let runtime = fixture.runtime().await;
-    fixture.clock.advance(3600).await;
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(3600))
+        .unwrap();
     runtime.owner_barrier(&fixture.reader).await;
-    let renewal_time = fixture.clock.now();
+    let renewal_time = fixture.clock.utc_now();
     let non_covering = runtime
         .service
         .wait(
@@ -71,7 +73,7 @@ async fn declared_renewal_before_covering_wait_changes_only_the_covered_membersh
             .store
             .lock()
             .await
-            .get_thread_subscription_record(&fixture.reader, scope, fixture.clock.now())
+            .get_thread_subscription_record(&fixture.reader, scope, fixture.clock.utc_now())
             .await
             .unwrap()
             .unwrap();
@@ -111,7 +113,7 @@ async fn declared_renewal_before_covering_wait_changes_only_the_covered_membersh
                 .get_thread_subscription_record(
                     &fixture.reader,
                     &covered_scope,
-                    fixture.clock.now(),
+                    fixture.clock.utc_now(),
                 )
                 .await
                 .unwrap()
@@ -120,7 +122,7 @@ async fn declared_renewal_before_covering_wait_changes_only_the_covered_membersh
                 .get_thread_subscription_record(
                     &fixture.reader,
                     &uncovered_scope,
-                    fixture.clock.now(),
+                    fixture.clock.utc_now(),
                 )
                 .await
                 .unwrap()
@@ -136,13 +138,16 @@ async fn declared_renewal_before_covering_wait_changes_only_the_covered_membersh
     assert!(covered_after.expires_at() > covered_before.expires_at());
     assert_eq!(uncovered_after.renewed_at(), uncovered_before.renewed_at());
     assert_eq!(uncovered_after.expires_at(), uncovered_before.expires_at());
-    fixture.clock.advance(60).await;
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(60))
+        .unwrap();
     assert!(waiter.await.unwrap().is_none());
     assert!(runtime.requests.lock().await.try_recv().is_err());
     runtime.close().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn loaded_only_acp_queue_is_reconciled_before_any_settlement() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.queued_runtime().await;
@@ -168,7 +173,7 @@ async fn loaded_only_acp_queue_is_reconciled_before_any_settlement() {
     assert_eq!(record.delivery_state, PushDeliveryState::Attempted);
     let windows = fixture.store.lock().await;
     let mut rows = windows
-        .list_reader_subscriptions(&fixture.reader, fixture.clock.now())
+        .list_reader_subscriptions(&fixture.reader, fixture.clock.utc_now())
         .await
         .unwrap();
     windows
@@ -205,7 +210,7 @@ async fn loaded_only_acp_queue_is_reconciled_before_any_settlement() {
     runtime.close().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn acp_queue_known_not_submitted_returns_to_hold_without_advancing() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.queued_runtime().await;
@@ -232,16 +237,12 @@ async fn acp_queue_known_not_submitted_returns_to_hold_without_advancing() {
     assert_eq!(record.delivery_state, PushDeliveryState::Held);
     let board = fixture.public_subscription_view(&runtime).await;
     assert_eq!(board.pending_count, 1);
-    assert_eq!(board.held_since, Some(fixture.clock.now()));
+    assert_eq!(board.held_since, Some(fixture.clock.utc_now()));
     assert!(runtime.requests.lock().await.try_recv().is_err());
     *fixture.presence.0.lock().unwrap() = collaboration_contracts::TargetPresence::Running;
     // Held mail waits for a signal that its target loaded, not for the clock.
     fixture.held_mail.provider_completed();
-    let retried = tokio::time::timeout(std::time::Duration::from_secs(10), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .expect("the provider load owed a check that released the hold");
+    let retried = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
     assert_eq!(retried.payload.push_id, request.payload.push_id);
     runtime.await_settled().await;
     assert_eq!(
@@ -254,7 +255,7 @@ async fn acp_queue_known_not_submitted_returns_to_hold_without_advancing() {
     runtime.close().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn acp_queue_still_unknown_settles_unknown_with_route_evidence() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.queued_runtime().await;

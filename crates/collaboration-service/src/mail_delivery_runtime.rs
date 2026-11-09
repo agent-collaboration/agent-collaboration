@@ -1,7 +1,6 @@
 //! One SDK engine owns local mail custody and native outcome projection.
 use crate::MailPushDelivery;
 use crate::MailPushDeliveryProps;
-use crate::SubscriptionClock;
 use crate::subscription_delivery::SubscriptionRuntimeClock;
 use collaboration_contracts::LoadPolicy;
 use collaboration_contracts::RouterConsumerProtocol;
@@ -30,6 +29,7 @@ use interaction_storage::{
     InteractionAtomicStore, InteractionStore, mark_mail_push_attempted_in_scope,
     read_mail_push_in_scope,
 };
+use router_clock::RuntimeClock;
 use runtime_primitives::{Clock, SyncTime, WakeScheduler};
 use serde_json::Value;
 use std::sync::{Arc, OnceLock, Weak};
@@ -99,7 +99,7 @@ pub struct MailDeliveryRuntime {
     pub(crate) binding: Arc<MachineSenderBinding>,
     reader_actors: crate::SubscriptionDeliveryService,
     service: message_board::ServiceId,
-    clock: Arc<dyn SubscriptionClock>,
+    clock: Arc<dyn RuntimeClock>,
     session: Option<MailDeliverySession>,
     /// Reports the remote-wake wait's reads and sleeps; production keeps nothing.
     remote_wake_wait: collaboration_runtime::WorkerObservation,
@@ -299,6 +299,8 @@ impl MailDeliveryRuntime {
             config,
             session: session.clone(),
         });
+        // The SDK still waits on its Tokio timer until it can accept an injected
+        // timer. That inherited engine waiting is tracked under clock C.
         let host = Arc::new(TokioHost::new(
             router.clone(),
             SubscriptionRuntimeClock(clock.clone()),
@@ -431,7 +433,7 @@ impl MailDeliveryRuntime {
 struct MailConsumer {
     reader_actors: crate::SubscriptionDeliveryService,
     carrier: MailPushDelivery,
-    clock: Arc<dyn SubscriptionClock>,
+    clock: Arc<dyn RuntimeClock>,
     wakes: OnceLock<LocalWakeOwner>,
 }
 impl DeliveryConsumer<TursoScope<'_, MailHost>> for MailConsumer {
@@ -441,7 +443,7 @@ impl DeliveryConsumer<TursoScope<'_, MailHost>> for MailConsumer {
         scope: &mut TursoScope<'_, MailHost>,
         item: &DeliveryItem<RouterDeliveryTypes>,
     ) -> Result<(), DeliveryError> {
-        project_received_mail(scope, item, self.clock.now()).await?;
+        project_received_mail(scope, item, self.clock.utc_now()).await?;
         if collaboration_runtime::received_mail_push::is_poll_mail(item) {
             let target = item.recipient().address.clone().try_into().map_err(|_| {
                 DeliveryError::Corrupt {
@@ -465,7 +467,7 @@ impl DeliveryConsumer<TursoScope<'_, MailHost>> for MailConsumer {
             .await
             .map_err(|error| DeliveryError::Storage(error.to_string()))?;
         let poll_outcome = pending_poll.is_some();
-        project_mail_outcome(scope, item, outcome, observation, self.clock.now()).await?;
+        project_mail_outcome(scope, item, outcome, observation, self.clock.utc_now()).await?;
         if let Some(pending) = pending_poll
             && !matches!(outcome, RecipientOutcome::Held)
         {
@@ -514,7 +516,7 @@ impl DeliveryConsumer<TursoScope<'_, MailHost>> for MailConsumer {
         target: ItemId,
         outcome: &RecipientOutcome<CarrierAcceptance>,
     ) -> Result<(), DeliveryError> {
-        project_mail_cancel_outcome(scope, cancel, target, outcome, self.clock.now()).await
+        project_mail_cancel_outcome(scope, cancel, target, outcome, self.clock.utc_now()).await
     }
     async fn release_gate(
         &self,
@@ -676,7 +678,7 @@ impl NativeMailOwner {
             pending_start: _,
         } = self;
         shutdown.cancel();
-        let joined = tokio::time::timeout(std::time::Duration::from_secs(10), running).await?;
+        let joined = running.await;
         joined??;
         drop(mail);
         Ok(interactions)

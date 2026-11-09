@@ -62,7 +62,7 @@ impl ScheduleTimingWorker {
         backend: Option<crate::NativeControlBackend>,
         configuration: crate::AutomationConfigurationHandle,
         machine_identity: collaboration_contracts::MachineIdentity,
-        clock: Arc<dyn runtime_primitives::Clock>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Self {
         Self {
             store: Arc::clone(&store),
@@ -368,7 +368,8 @@ impl SchedulePass {
                 let runner = self.runner.clone();
                 self.steps.spawn(id.clone(), async move {
                     matches!(
-                        tokio::time::timeout(
+                        router_clock::timeout(
+                            &*runner.clock,
                             STEP_TIMEOUT,
                             Box::pin(runner.step_reporting_client(id))
                         )

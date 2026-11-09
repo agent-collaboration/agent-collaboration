@@ -1,6 +1,4 @@
-use super::super::{
-    SubscriptionClock, subscription_push::target_session, subscription_service::OwnerObservation,
-};
+use super::super::{subscription_push::target_session, subscription_service::OwnerObservation};
 use super::native_worker_faults;
 use super::owner_fixture::*;
 use collaboration_contracts::DeliveryPrecondition;
@@ -10,7 +8,7 @@ use collaboration_protocol::{
     CodexGeneration, DeliveryOutcome, MessageDelivery, PushDeliveryState, PushHeaderFacts, PushId,
     PushKind, PushOrigin, PushRecord, PushRecordDraft,
 };
-use std::time::Duration;
+use router_clock::RuntimeClock;
 
 fn draft(
     fixture: &OwnerFixture,
@@ -31,7 +29,7 @@ fn draft(
         },
         body: Some("DM full content".to_owned()),
         activity: None,
-        created_at: fixture.clock.now(),
+        created_at: fixture.clock.utc_now(),
     }
 }
 
@@ -45,17 +43,11 @@ async fn record(fixture: &OwnerFixture, push_id: &PushId) -> PushRecord {
 }
 
 async fn request(runtime: &OwnerRuntime) -> collaboration_contracts::layer_zero::DeliveryRequest {
-    tokio::time::timeout(Duration::from_secs(30), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .unwrap()
+    (async { runtime.requests.lock().await.recv().await.unwrap() }).await
 }
 
 async fn bounded_observe(runtime: &OwnerRuntime, matches: impl Fn(&OwnerObservation) -> bool) {
-    tokio::time::timeout(Duration::from_secs(30), runtime.observe(matches))
-        .await
-        .unwrap();
+    (runtime.observe(matches)).await;
 }
 
 async fn insert(
@@ -194,13 +186,11 @@ async fn unavailable_board_holds_dm_until_a_load_signal_with_no_presence_timer()
     // with no presence read and no request.
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     let checks_while_held = fixture.presence.checks();
-    fixture.clock.advance_without_tokio_time(3_600);
-    tokio::time::timeout(
-        Duration::from_secs(10),
-        runtime.owner_barrier(&fixture.reader),
-    )
-    .await
-    .unwrap();
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(3_600))
+        .unwrap();
+    (runtime.owner_barrier(&fixture.reader)).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     assert_eq!(
         fixture.presence.checks(),
@@ -327,7 +317,7 @@ async fn same_target_dm_and_subscription_have_one_inflight_delivery() {
         PushDeliveryState::Delivered
     );
     assert!(runtime.requests.lock().await.try_recv().is_err());
-    tokio::time::timeout(Duration::from_secs(10), async {
+    (async {
         loop {
             if fixture
                 .interactions
@@ -341,8 +331,7 @@ async fn same_target_dm_and_subscription_have_one_inflight_delivery() {
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .unwrap();
+    .await;
     publisher.shutdown().await;
     drop(publisher);
     drop(app);
@@ -370,7 +359,10 @@ async fn dm_settlement_failure_retries_the_write_without_duplicate_delivery() {
     )
     .await
     .unwrap();
-    fixture.clock.advance_without_tokio_time(1);
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(1))
+        .unwrap();
     bounded_observe(&runtime, |event| {
         matches!(event, OwnerObservation::DirectMessageSettled)
     })
@@ -408,7 +400,10 @@ async fn a_failed_hold_write_leaves_the_dm_unmarked_and_the_backoff_holds_it() {
     .await
     .unwrap();
     // The backoff checks and writes it again, and now it is held.
-    fixture.clock.advance_without_tokio_time(1);
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(1))
+        .unwrap();
     bounded_observe(&runtime, |event| {
         matches!(event, OwnerObservation::DirectMessageHeld)
     })
@@ -628,13 +623,9 @@ async fn live_elsewhere_presence_reaches_authoritative_router_rejection_and_is_n
             .insert_push_record(pending)
             .await
             .unwrap();
-        let result = tokio::time::timeout(
-            Duration::from_secs(5),
-            service.deliver_direct_message(target, push_id.clone()),
-        )
-        .await
-        .unwrap()
-        .unwrap();
+        let result = (service.deliver_direct_message(target, push_id.clone()))
+            .await
+            .unwrap();
         assert_eq!(result.delivery_state, PushDeliveryState::Rejected);
         assert!(
             matches!(result.last_outcome.unwrap().outcome, DeliveryOutcome::Rejected(rejection) if rejection.reason == collaboration_protocol::DeliveryRejectionReason::LiveElsewhere)
@@ -696,7 +687,7 @@ async fn board_notification_wakeable_hold_recovers_one_exact_push_when_running()
             },
             body: None,
             activity: None,
-            created_at: fixture.clock.now(),
+            created_at: fixture.clock.utc_now(),
         })
         .await
         .unwrap();

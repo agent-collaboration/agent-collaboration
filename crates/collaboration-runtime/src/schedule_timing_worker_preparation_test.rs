@@ -89,7 +89,7 @@ impl SchedulerFixture {
     }
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -104,16 +104,16 @@ async fn a_preparation_that_cannot_reach_its_client_is_retried_on_the_backoff() 
     settled(&scheduler).await?;
     let interval = Duration::from_secs(u64::from(INTERVAL_SECONDS));
 
-    advance(interval).await;
+    advance(&fixture.clock, interval).await;
     settled(&scheduler).await?;
     let armed = scheduler.observation.snapshot().armed_deadline;
-    advance(Duration::from_secs(1)).await;
+    advance(&fixture.clock, Duration::from_secs(1)).await;
     settled(&scheduler).await?;
     fixture
         .route
         .initial_evidence_unreachable
         .store(false, Ordering::Release);
-    advance(Duration::from_secs(2)).await;
+    advance(&fixture.clock, Duration::from_secs(2)).await;
     let run = fixture.executing_and_asleep(&scheduler).await?;
 
     assert_eq!(armed, Some(at(interval + Duration::from_secs(1))));
@@ -131,7 +131,7 @@ async fn a_preparation_that_cannot_reach_its_client_is_retried_on_the_backoff() 
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -147,11 +147,11 @@ async fn a_target_preparation_that_cannot_reach_its_client_is_retried_on_the_bac
     settled(&scheduler).await?;
     let interval = Duration::from_secs(u64::from(INTERVAL_SECONDS));
 
-    advance(interval).await;
+    advance(&fixture.clock, interval).await;
     settled(&scheduler).await?;
     let armed = scheduler.observation.snapshot().armed_deadline;
     let (_, phase_after_failure) = fixture.run_phase().await?.ok_or("the Run was admitted")?;
-    advance(Duration::from_secs(1)).await;
+    advance(&fixture.clock, Duration::from_secs(1)).await;
     let run = fixture.executing_and_asleep(&scheduler).await?;
 
     assert_eq!(phase_after_failure, RunPhase::Preparing);
@@ -166,7 +166,7 @@ async fn a_target_preparation_that_cannot_reach_its_client_is_retried_on_the_bac
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -180,11 +180,11 @@ async fn a_fresh_session_submission_that_cannot_reach_its_client_is_retried_on_t
     settled(&scheduler).await?;
     let interval = Duration::from_secs(u64::from(INTERVAL_SECONDS));
 
-    advance(interval).await;
+    advance(&fixture.clock, interval).await;
     settled(&scheduler).await?;
     let armed = scheduler.observation.snapshot().armed_deadline;
     let (run, phase_after_failure) = fixture.run_phase().await?.ok_or("the Run was admitted")?;
-    advance(Duration::from_secs(1)).await;
+    advance(&fixture.clock, Duration::from_secs(1)).await;
     settled(&scheduler).await?;
     let phase_after_retry = fixture.read_phase(&run).await?;
 

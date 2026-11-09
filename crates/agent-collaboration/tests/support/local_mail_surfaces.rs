@@ -18,7 +18,6 @@ use collaboration_service::BoardAvailability;
 
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
-use collaboration_service::SystemSubscriptionClock;
 
 use serde_json::{Value, json};
 use std::{
@@ -140,7 +139,12 @@ impl Surfaces {
             delivery: carrier.clone(),
             presence: carrier.clone(),
             machine_identity: machine_identity.clone(),
-            clock: Arc::new(SystemSubscriptionClock),
+            clock: Arc::new(
+                router_clock::ManualClock::starting_at(
+                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
+                )
+                .unwrap(),
+            ),
         });
         delivery.start().await?;
         let mut identity = ApplicationFixture::new(SERVICE, SERVICE)?
@@ -161,7 +165,12 @@ impl Surfaces {
                 actors: delivery.clone(),
                 presence: carrier.clone(),
                 machine: machine_identity,
-                clock: Arc::new(SystemSubscriptionClock),
+                clock: Arc::new(
+                    router_clock::ManualClock::starting_at(
+                        runtime_primitives::SyncTime::from_unix_millis(1792432800000),
+                    )
+                    .unwrap(),
+                ),
             },
             session,
         )?;

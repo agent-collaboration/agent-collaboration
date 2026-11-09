@@ -1,8 +1,8 @@
 use super::ProjectSubscriptionRecord;
 use chrono::{DateTime, Utc};
 use message_board::{ProjectId, SubscriptionMode, SubscriptionScope, ThreadId};
+use router_clock::ClockInstant;
 use std::{collections::HashMap, time::Duration};
-use tokio::time::Instant;
 
 pub(super) struct RootSubscriptionFacts {
     pub project: ProjectId,
@@ -47,8 +47,8 @@ pub(super) fn root_facts(
 pub(super) fn wall_deadline(
     wall: DateTime<Utc>,
     now: DateTime<Utc>,
-    monotonic: Instant,
-) -> Instant {
+    monotonic: ClockInstant,
+) -> ClockInstant {
     monotonic
         .checked_add(
             wall.signed_duration_since(now)

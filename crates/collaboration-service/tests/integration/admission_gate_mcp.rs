@@ -1,10 +1,10 @@
 //! V2 gates keep unrecorded authority outcomes distinct from terminal decisions.
 use crate::accepted_snapshot;
 use crate::board_fixture;
-use crate::controlled_clock::ControlledClock;
 use crate::native_authority;
 use board_fixture::{BoardFixture, TestError, accepted, fixture_peer};
 use message_board::*;
+use router_clock::ManualClock;
 use runtime_primitives::{Clock, SystemClock};
 use serde_json::json;
 use sqlx::{ConnectOptions, Connection};
@@ -16,7 +16,9 @@ use std::sync::Arc;
 )]
 async fn native_expiry_does_not_record_a_request_and_same_epoch_renewal_evaluates_it_again()
 -> Result<(), TestError> {
-    let clock = Arc::new(ControlledClock::at(SystemClock.now()));
+    let clock = Arc::new(ManualClock::starting_at(
+        runtime_primitives::SyncTime::from_unix_millis(1_800_000_000_000),
+    )?);
     let initial = clock.now();
     let fixture = BoardFixture::start_with_clock(clock.clone()).await?;
     let (project, workstream) = fixture.project().await?;
@@ -40,7 +42,7 @@ async fn native_expiry_does_not_record_a_request_and_same_epoch_renewal_evaluate
         expires_at: expires,
         remaining_ms: 14_400_000,
     };
-    clock.set(expires);
+    clock.advance_to(expires)?;
     let reply = fixture.api.call("task_create", request.clone()).await?;
     assert_eq!(
         reply.pointer("/result/result/kind"),
@@ -103,7 +105,9 @@ async fn a_seeded_writer_replays_known_requests_and_evaluates_unknown_requests()
     reason = "Assertions prove the test contract; Result propagates fixture errors."
 )]
 async fn schema_mismatch_is_a_gate_result_and_expiry_still_has_priority() -> Result<(), TestError> {
-    let clock = Arc::new(ControlledClock::at(SystemClock.now()));
+    let clock = Arc::new(ManualClock::starting_at(
+        runtime_primitives::SyncTime::from_unix_millis(1_800_000_000_000),
+    )?);
     let initial = clock.now();
     let fixture = BoardFixture::start_with_clock(clock.clone()).await?;
     let project = ProjectId::generate();
@@ -123,7 +127,7 @@ async fn schema_mismatch_is_a_gate_result_and_expiry_still_has_priority() -> Res
         Some(&json!("schemaNotReady")),
         "{mismatch}"
     );
-    clock.set(initial.after(board_fleet_sync::BOARD_LEASE_POLICY.lease_duration));
+    clock.advance_to(initial.after(board_fleet_sync::BOARD_LEASE_POLICY.lease_duration))?;
     let expired = fixture.api.call("task_create", request).await?;
     assert_eq!(
         expired.pointer("/result/result/kind"),

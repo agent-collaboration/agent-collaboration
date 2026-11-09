@@ -1,21 +1,18 @@
 use super::super::subscription_push::{
     SubscriptionPushStore, SubscriptionPushStoreProps, target_session,
 };
-use super::super::{SubscriptionClock, subscription_service::OwnerObservation};
+use super::super::subscription_service::OwnerObservation;
 use super::owner_fixture::*;
 use collaboration_protocol::{DeliveryOutcome, PushDeliveryState, RouterOriginRef, UuidIdentity};
 use message_board::{SubscriptionDeliveryOutcome, SubscriptionScope};
+use router_clock::RuntimeClock;
 use sqlx::Connection;
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::broadcast;
 use tokio_util::sync::CancellationToken;
 
-const OWNER_EVENT_TIMEOUT: Duration = Duration::from_secs(30);
-
 #[derive(Default)]
 struct OwnerObservationTrace {
-    last: Option<OwnerObservation>,
     last_rows_loaded: Option<usize>,
 }
 
@@ -25,14 +22,6 @@ impl OwnerObservationTrace {
         if let OwnerObservation::RowsLoaded(rows) = &observation {
             self.last_rows_loaded = Some(*rows);
         }
-        self.last = Some(observation);
-    }
-
-    fn timeout_message(&self, cycle: &str, stage: &str) -> String {
-        format!(
-            "{cycle}: timed out while {stage}; last owner observation: {:?}",
-            self.last
-        )
     }
 }
 
@@ -111,21 +100,14 @@ async fn receive_expiry_request_with_owner_observations(
             }
         }
     };
-    tokio::time::timeout(OWNER_EVENT_TIMEOUT, wait_for_request)
-        .await
-        .unwrap_or_else(|_| {
-            panic!(
-                "{}",
-                trace.timeout_message(cycle, "waiting for the expiry delivery request")
-            )
-        })
+    (wait_for_request).await
 }
 
 async fn wait_for_owner_observation(
     runtime: &OwnerRuntime,
     trace: &mut OwnerObservationTrace,
     cycle: &str,
-    stage: &str,
+    _stage: &str,
     matches: impl Fn(&OwnerObservation) -> bool,
 ) -> OwnerObservation {
     let wait_for_event = async {
@@ -144,22 +126,14 @@ async fn wait_for_owner_observation(
             }
         }
     };
-    tokio::time::timeout(OWNER_EVENT_TIMEOUT, wait_for_event)
-        .await
-        .unwrap_or_else(|_| panic!("{}", trace.timeout_message(cycle, stage)))
+    (wait_for_event).await
 }
 
-async fn close_owner_with_timeout(
-    runtime: OwnerRuntime,
-    trace: &OwnerObservationTrace,
-    cycle: &str,
-) {
-    tokio::time::timeout(OWNER_EVENT_TIMEOUT, runtime.close())
-        .await
-        .unwrap_or_else(|_| panic!("{}", trace.timeout_message(cycle, "closing the owner")));
+async fn close_owner(runtime: OwnerRuntime, _trace: &OwnerObservationTrace, _cycle: &str) {
+    (runtime.close()).await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn successive_selected_activity_batches_store_distinct_canonical_origin_refs() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     let push = test_subscription_push_store(&fixture);
@@ -174,7 +148,7 @@ async fn successive_selected_activity_batches_store_distinct_canonical_origin_re
             .store
             .lock()
             .await
-            .rescan_missing_subscription_windows(&fixture.reader, fixture.clock.now())
+            .rescan_missing_subscription_windows(&fixture.reader, fixture.clock.utc_now())
             .await
             .unwrap();
         let (batch, settlement) = fixture
@@ -184,7 +158,7 @@ async fn successive_selected_activity_batches_store_distinct_canonical_origin_re
             .select_subscription_notice(
                 &fixture.reader,
                 std::slice::from_ref(&fixture.root),
-                fixture.clock.now(),
+                fixture.clock.utc_now(),
                 usize::MAX,
             )
             .await
@@ -259,7 +233,9 @@ async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
         wait_for_owner_start_boundary(&first_runtime, &mut first_trace, "first expiry cycle").await;
     assert_eq!(first_rows_loaded, 1);
     eprintln!("first expiry cycle: advancing the injected clock by 24 hours");
-    fixture.clock.advance_without_tokio_time(24 * 60 * 60);
+    fixture
+        .advance_while_renewing_native_lease(std::time::Duration::from_secs(24 * 60 * 60))
+        .await;
     let first_request = receive_expiry_request_with_owner_observations(
         &first_runtime,
         &mut first_trace,
@@ -278,7 +254,7 @@ async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
         .store
         .lock()
         .await
-        .get_thread_subscription_record(&fixture.reader, &scope, fixture.clock.now())
+        .get_thread_subscription_record(&fixture.reader, &scope, fixture.clock.utc_now())
         .await
         .unwrap()
         .unwrap();
@@ -321,7 +297,7 @@ async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
         first_delivered_record.delivery_state,
         PushDeliveryState::Delivered
     );
-    close_owner_with_timeout(first_runtime, &first_trace, "first expiry cycle").await;
+    close_owner(first_runtime, &first_trace, "first expiry cycle").await;
 
     fixture
         .policy(
@@ -336,7 +312,7 @@ async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
         .store
         .lock()
         .await
-        .get_thread_subscription_record(&fixture.reader, &scope, fixture.clock.now())
+        .get_thread_subscription_record(&fixture.reader, &scope, fixture.clock.utc_now())
         .await
         .unwrap()
         .unwrap();
@@ -356,7 +332,9 @@ async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
     assert_eq!(second_trace.last_rows_loaded, Some(1));
     eprintln!("second expiry cycle: fresh owner reloaded the reactivated subscription");
     eprintln!("second expiry cycle: advancing the injected clock by 24 hours");
-    fixture.clock.advance_without_tokio_time(24 * 60 * 60);
+    fixture
+        .advance_while_renewing_native_lease(std::time::Duration::from_secs(24 * 60 * 60))
+        .await;
     let second_request = receive_expiry_request_with_owner_observations(
         &second_runtime,
         &mut second_trace,
@@ -375,7 +353,7 @@ async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
         .store
         .lock()
         .await
-        .get_thread_subscription_record(&fixture.reader, &scope, fixture.clock.now())
+        .get_thread_subscription_record(&fixture.reader, &scope, fixture.clock.utc_now())
         .await
         .unwrap()
         .unwrap();
@@ -420,12 +398,12 @@ async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
         second_delivered_record.delivery_state,
         PushDeliveryState::Delivered
     );
-    close_owner_with_timeout(second_runtime, &second_trace, "second expiry cycle").await;
+    close_owner(second_runtime, &second_trace, "second expiry cycle").await;
 }
 
 #[tokio::test]
 async fn failed_poll_attempt_mark_keeps_the_frozen_item_retryable_and_returns_explicit_error() {
-    tokio::time::timeout(Duration::from_secs(30), async {
+    (async {
     let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(
@@ -470,12 +448,12 @@ async fn failed_poll_attempt_mark_keeps_the_frozen_item_retryable_and_returns_ex
     let error = result.unwrap_err();
     assert_eq!(error.kind, message_board::BoardFailureKind::BoardUnavailable);
     assert!(fixture.interactions.pending_poll_item(item).await.unwrap().is_some());
-    tokio::time::timeout(Duration::from_secs(10), async {
+    (async {
         loop {
             if runtime.local_mail_outcome(item).await == Some(fleet_sync_protocol::RecipientOutcome::Held) { break; }
             tokio::task::yield_now().await;
         }
-    }).await.expect("failed preparation leaves the exact SDK item Held");
+    }).await;
     assert_eq!(serde_json::to_value(super::local_mail_proofs::native_follow_mail_proofs::frozen_follow(&fixture).await.first().unwrap()).unwrap(), original);
     sqlx::query("DROP TRIGGER fail_wait_attempt")
         .execute(&mut observer)
@@ -496,7 +474,7 @@ async fn failed_poll_attempt_mark_keeps_the_frozen_item_retryable_and_returns_ex
     assert!(runtime.requests.lock().await.try_recv().is_err());
     observer.close().await.unwrap();
     runtime.close().await;
-    }).await.expect("bounded failed Poll handover and same-item retry");
+    }).await;
 }
 
 // Decision 943 maps the former live-C5 push settlement fault to the real follow

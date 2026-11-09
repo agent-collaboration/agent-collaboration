@@ -6,7 +6,9 @@
 //! restarts with this backoff) or the lifecycle journal failed to open at start-up. A
 //! failed open is not retried; it stays failed until the Host restarts, so its re-checks
 //! continue on the capped backoff for the Host's lifetime.
+use router_clock::RuntimeClock;
 use runtime_primitives::Backoff;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
@@ -46,6 +48,7 @@ impl ObservationRechecks {
 /// observation backoff, until shutdown.
 pub(crate) async fn recheck_while_journal_unavailable(
     rechecks: ObservationRechecks,
+    clock: Arc<dyn RuntimeClock>,
     shutdown: CancellationToken,
 ) {
     let mut attempt = 0;
@@ -53,7 +56,7 @@ pub(crate) async fn recheck_while_journal_unavailable(
         let delay = OBSERVATION_RETRY_BACKOFF.delay(attempt);
         tokio::select! {
             () = shutdown.cancelled() => return,
-            () = tokio::time::sleep(delay) => {}
+            () = clock.sleep_for(delay) => {}
         }
         rechecks.recheck();
         attempt = attempt.saturating_add(1);
@@ -90,6 +93,7 @@ pub(crate) struct ObserverRetry {
 /// coverage resets the backoff.
 pub(crate) async fn observe_with_restart<TAttempt, TFuture>(
     retired: CancellationToken,
+    clock: Arc<dyn RuntimeClock>,
     mut attempt: TAttempt,
 ) where
     TAttempt: FnMut(ObserverRetry) -> TFuture,
@@ -124,7 +128,7 @@ pub(crate) async fn observe_with_restart<TAttempt, TFuture>(
         is_retry = true;
         tokio::select! {
             () = retired.cancelled() => return,
-            () = tokio::time::sleep(delay) => {}
+            () = clock.sleep_for(delay) => {}
         }
     }
 }

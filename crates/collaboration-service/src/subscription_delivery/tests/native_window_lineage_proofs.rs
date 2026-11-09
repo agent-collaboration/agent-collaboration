@@ -16,7 +16,7 @@ async fn a_mixed_epoch_window_freezes_round_trips_and_passes_actual_admission() 
     let mut windows = owner.store.lock().await;
     assert_eq!(
         windows
-            .rescan_missing_subscription_windows(&owner.reader, owner.clock.now())
+            .rescan_missing_subscription_windows(&owner.reader, owner.clock.utc_now())
             .await
             .unwrap(),
         2
@@ -25,7 +25,7 @@ async fn a_mixed_epoch_window_freezes_round_trips_and_passes_actual_admission() 
         .propose_follow_batches(
             &owner.reader,
             std::slice::from_ref(&owner.root),
-            owner.clock.now(),
+            owner.clock.utc_now(),
             std::slice::from_ref(&owner.project),
             &[],
         )
@@ -48,7 +48,7 @@ async fn a_mixed_epoch_window_freezes_round_trips_and_passes_actual_admission() 
     input.roots = restored;
     let allocated = owner
         .admission
-        .allocate_follow_batch(&owner.project, input, owner.clock.now())
+        .allocate_follow_batch(&owner.project, input, owner.clock.utc_now())
         .await
         .unwrap();
     assert!(
@@ -129,14 +129,14 @@ async fn discarded_window_and_selection_resume_without_losing_or_duplicating_cur
     read.finish().await.unwrap();
     assert_eq!(
         windows
-            .rescan_missing_subscription_windows(&owner.reader, owner.clock.now())
+            .rescan_missing_subscription_windows(&owner.reader, owner.clock.utc_now())
             .await
             .unwrap(),
         2
     );
     assert_eq!(
         windows
-            .rescan_missing_subscription_windows(&owner.reader, owner.clock.now())
+            .rescan_missing_subscription_windows(&owner.reader, owner.clock.utc_now())
             .await
             .unwrap(),
         0
@@ -145,7 +145,7 @@ async fn discarded_window_and_selection_resume_without_losing_or_duplicating_cur
         .select_subscription_notice(
             &owner.reader,
             std::slice::from_ref(&owner.root),
-            owner.clock.now(),
+            owner.clock.utc_now(),
             usize::MAX,
         )
         .await
@@ -164,7 +164,7 @@ async fn discarded_window_and_selection_resume_without_losing_or_duplicating_cur
         .expect("settlement must preserve the selected cursor's actual assigning epoch");
     assert_eq!(
         windows
-            .rescan_missing_subscription_windows(&owner.reader, owner.clock.now())
+            .rescan_missing_subscription_windows(&owner.reader, owner.clock.utc_now())
             .await
             .unwrap(),
         0
@@ -197,7 +197,7 @@ async fn unknown_epoch_and_future_position_cursors_are_refused_without_rewriting
         .store
         .lock()
         .await
-        .rescan_missing_subscription_windows(&owner.reader, owner.clock.now())
+        .rescan_missing_subscription_windows(&owner.reader, owner.clock.utc_now())
         .await
         .unwrap();
     let member = current_membership(&owner).await;
@@ -229,7 +229,7 @@ async fn unknown_epoch_and_future_position_cursors_are_refused_without_rewriting
             .store
             .lock()
             .await
-            .rescan_missing_subscription_windows(&owner.reader, owner.clock.now())
+            .rescan_missing_subscription_windows(&owner.reader, owner.clock.utc_now())
             .await;
         let error = result.expect_err("invalid project cursor was accepted");
         assert_eq!(error.kind, message_board::BoardFailureKind::InvalidRecord);

@@ -8,9 +8,15 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use tokio::{net::UnixListener, sync::mpsc};
+use tokio::{
+    net::UnixListener,
+    sync::{Notify, mpsc},
+};
 use tokio_tungstenite::tungstenite::Message;
 use tracing_subscriber::layer::SubscriberExt as _;
+
+#[path = "../support/host_clock_control.rs"]
+mod host_clock_control;
 
 /// The warning an observer that never restored coverage logs once per run of failures.
 const NEVER_RECOVERED: &str = "native lifecycle observation failed before restoring coverage";
@@ -26,7 +32,10 @@ struct Reports {
 }
 
 /// Records warnings and the restart loop's chosen backoffs.
-struct ObserverReports(Arc<Mutex<Reports>>);
+struct ObserverReports {
+    reports: Arc<Mutex<Reports>>,
+    changed: Arc<Notify>,
+}
 impl<TSubscriber: tracing::Subscriber> tracing_subscriber::Layer<TSubscriber> for ObserverReports {
     #[expect(clippy::panic, reason = "A poisoned report lock fails the test.")]
     fn on_event(
@@ -54,7 +63,7 @@ impl<TSubscriber: tracing::Subscriber> tracing_subscriber::Layer<TSubscriber> fo
         let mut fields = Fields::default();
         event.record(&mut fields);
         let mut reports = self
-            .0
+            .reports
             .lock()
             .unwrap_or_else(|error| panic!("reports: {error}"));
         if *event.metadata().level() == tracing::Level::WARN {
@@ -64,6 +73,29 @@ impl<TSubscriber: tracing::Subscriber> tracing_subscriber::Layer<TSubscriber> fo
         {
             reports.delays.push(Duration::from_millis(delay_ms));
         }
+        self.changed.notify_one();
+    }
+}
+
+async fn reported_delay(
+    reports: &Mutex<Reports>,
+    changed: &Notify,
+    index: usize,
+) -> std::io::Result<Duration> {
+    loop {
+        let notified = changed.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
+        if let Some(delay) = reports
+            .lock()
+            .map_err(|_| std::io::Error::other("observer report lock poisoned"))?
+            .delays
+            .get(index)
+            .copied()
+        {
+            return Ok(delay);
+        }
+        notified.await;
     }
 }
 
@@ -192,9 +224,12 @@ async fn schema_export(
 #[tokio::test]
 async fn an_observer_that_never_restores_coverage_backs_off_with_one_warning_until_it_recovers() {
     let reports = Arc::new(Mutex::new(Reports::default()));
-    let _subscriber = tracing::subscriber::set_default(
-        tracing_subscriber::registry().with(ObserverReports(Arc::clone(&reports))),
-    );
+    let report_changed = Arc::new(Notify::new());
+    let _subscriber =
+        tracing::subscriber::set_default(tracing_subscriber::registry().with(ObserverReports {
+            reports: reports.clone(),
+            changed: report_changed.clone(),
+        }));
     let directory = tempfile::Builder::new()
         .prefix("observer-restart-")
         .tempdir_in("/tmp")
@@ -202,6 +237,8 @@ async fn an_observer_that_never_restores_coverage_backs_off_with_one_warning_unt
     let root = directory.path().to_path_buf();
     std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700))
         .unwrap_or_else(|error| panic!("directory permissions: {error}"));
+    let clock_listener =
+        host_clock_control::prepare(&root).unwrap_or_else(|error| panic!("clock input: {error}"));
     let mut runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
         board_session: None,
         directory: root.clone(),
@@ -215,6 +252,9 @@ async fn an_observer_that_never_restores_coverage_backs_off_with_one_warning_unt
     })
     .await
     .unwrap_or_else(|error| panic!("runtime start: {error}"));
+    let mut clock_control = host_clock_control::HostClockControl::connected(clock_listener)
+        .await
+        .unwrap_or_else(|error| panic!("clock control: {error}"));
     let (identity, export) = schema_export(&root).await;
     let listener = UnixListener::bind(root.join("backend.sock"))
         .unwrap_or_else(|error| panic!("backend fixture: {error}"));
@@ -226,10 +266,6 @@ async fn an_observer_that_never_restores_coverage_backs_off_with_one_warning_unt
     let (accepted, mut accepted_at) = mpsc::unbounded_channel();
     let server = tokio::spawn(serve(listener, script, accepted));
 
-    // Paused Tokio time only makes the waits instant. While the observer's journal writes
-    // run, a paused runtime jumps ahead, so connection times cannot show the backoff; the
-    // restart loop reports each wait it chose.
-    tokio::time::pause();
     runtime
         .backend_ready(
             "2026-09-05T12:00:00Z"
@@ -243,13 +279,25 @@ async fn an_observer_that_never_restores_coverage_backs_off_with_one_warning_unt
         )
         .await
         .unwrap_or_else(|error| panic!("backend ready: {error}"));
-    for _ in 0..connections {
+    for connection in 0..connections {
+        if connection > 0 {
+            let delay = reported_delay(&reports, &report_changed, connection - 1)
+                .await
+                .unwrap_or_else(|error| panic!("retry report: {error}"));
+            assert!(
+                runtime.runtime_test_sleep_was_checked(delay),
+                "observer retry did not wait on the Host's shared ManualClock"
+            );
+            clock_control
+                .advance(delay)
+                .await
+                .unwrap_or_else(|error| panic!("clock step: {error}"));
+        }
         accepted_at
             .recv()
             .await
             .unwrap_or_else(|| panic!("the observer connected again"));
     }
-    tokio::time::resume();
     runtime
         .shutdown()
         .await

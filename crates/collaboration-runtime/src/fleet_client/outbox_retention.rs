@@ -2,7 +2,7 @@
 //! moment the retention rule allows a settled request to go, and deletes only then.
 use crate::{BatchOutcome, WakeDrivenWorkerLoop, WorkerObservation, WorkerPass};
 use message_board_storage::{FleetOutbox, RouterLocalStorageError};
-use runtime_primitives::{Clock, SyncTime};
+use runtime_primitives::SyncTime;
 use std::sync::Arc;
 
 const OUTBOX_PRUNE_BATCH: u32 = 500;
@@ -20,7 +20,7 @@ pub(crate) enum OutboxRetentionError {
 /// The loop, subscribed to the Fleet database's commits, and the pass it drives.
 pub(crate) fn outbox_retention_loop(
     outbox: &FleetOutbox,
-    clock: Arc<dyn Clock>,
+    clock: Arc<dyn router_clock::RuntimeClock>,
 ) -> (WakeDrivenWorkerLoop, OutboxRetentionPass) {
     let worker_loop = WakeDrivenWorkerLoop::new("fleet_outbox_retention", clock)
         .wake_on(outbox.subscribe_commits());

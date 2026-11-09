@@ -76,7 +76,7 @@ impl ReaderDeliveryOwner {
                     &record.push_id,
                     None,
                     reason,
-                    self.clock.now(),
+                    self.clock.utc_now(),
                 )
                 .await
                 .map_err(|_| BoardError::board_unavailable())?;
@@ -95,7 +95,7 @@ impl ReaderDeliveryOwner {
         for range in &activity.ranges {
             let thread_scope = SubscriptionScope::thread(range.thread_id.clone());
             let covering = match board
-                .get_thread_subscription_record(&self.reader, &thread_scope, self.clock.now())
+                .get_thread_subscription_record(&self.reader, &thread_scope, self.clock.utc_now())
                 .await?
             {
                 Some(record) => Some(record), // Thread overrides also shadow Topic scopes when ended.
@@ -104,13 +104,13 @@ impl ReaderDeliveryOwner {
                         .get_thread_subscription_record(
                             &self.reader,
                             &SubscriptionScope::project(range.project_id.clone()),
-                            self.clock.now(),
+                            self.clock.utc_now(),
                         )
                         .await?
                 }
             };
             if covering.is_some_and(|record| {
-                record.state().is_delivery_eligible() && record.expires_at() > self.clock.now()
+                record.state().is_delivery_eligible() && record.expires_at() > self.clock.utc_now()
             }) {
                 return Ok(false);
             }

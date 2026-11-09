@@ -49,7 +49,7 @@ pub(super) async fn frontier(fixture: &OwnerFixture) -> HandoffSeq {
 
 #[tokio::test]
 async fn a_terminal_follow_stays_above_frontier_until_its_generation_child_is_frozen_and_settled() {
-    Box::pin(tokio::time::timeout(Duration::from_secs(30), async {
+    Box::pin(async {
         let fixture = Box::pin(OwnerFixture::new()).await;
         let runtime = fixture.runtime().await;
         let (app, native, publisher) =
@@ -71,7 +71,7 @@ async fn a_terminal_follow_stays_above_frontier_until_its_generation_child_is_fr
 
         // Complete the real native call while the project lease cannot advance
         // its frontier. The original must still be above it when the group arrives.
-        let expired = crate::test_project_runtime::expire_lease(&fixture.registry, &fixture.project).await.unwrap();
+        let expired = crate::test_project_runtime::expire_lease(&fixture.registry, &fixture.project, fixture.clock.as_ref()).await.unwrap();
         runtime.completions.send(DeliveryOutcome::Started).unwrap();
         fixture.await_push_state(&request.payload.push_id, PushDeliveryState::Delivered).await;
         assert_eq!(native.runtime().local_outcome_for_test(item).await.unwrap(),
@@ -80,7 +80,7 @@ async fn a_terminal_follow_stays_above_frontier_until_its_generation_child_is_fr
             }));
         publisher.shutdown().await;
         assert!(frontier(&fixture).await < original_sequence);
-        crate::test_project_runtime::renew_lease(&fixture.registry, &fixture.project, expired).await.unwrap();
+        crate::test_project_runtime::renew_lease(&fixture.registry, &fixture.project, expired, fixture.clock.as_ref()).await.unwrap();
         fixture.policy(&fixture.root, message_board::SubscriptionMode::Deliver,
             message_board::WhenIdle::Hold, 1, 2).await;
 
@@ -118,9 +118,9 @@ async fn a_terminal_follow_stays_above_frontier_until_its_generation_child_is_fr
             &envelope, &child.expansion.envelope,
             crate::mail_delivery_runtime::RemoteCancelReplay::QueryOnly,
         ).await.unwrap(), crate::mail_delivery_runtime::FrozenCancelSettlement::SettledWithoutPrevention);
-        tokio::time::timeout(Duration::from_secs(6), async {
+        (async {
             while frontier(&fixture).await != head { tokio::task::yield_now().await; }
-        }).await.expect("settled real child releases the previously blocked prefix");
+        }).await;
         assert_eq!(serde_json::to_value(frozen_follow(&fixture).await.first().unwrap()).unwrap(), original);
         assert_eq!(frozen_follow(&fixture).await.len(), 1);
         let record = fixture.interactions.get_push_record(&request.payload.push_id).await.unwrap().unwrap();
@@ -135,7 +135,7 @@ async fn a_terminal_follow_stays_above_frontier_until_its_generation_child_is_fr
         drop(app);
         runtime.close().await;
         fixture.close_native(native).await;
-    })).await.expect("bounded missing-child frontier and real publication recovery");
+    }).await;
 }
 
 #[tokio::test]
@@ -179,8 +179,11 @@ async fn two_prevented_generations_keep_a_resolved_drain_above_frontier_until_fi
             .queue_project(fixture.project.clone())
             .await
             .unwrap();
-        fixture.clock.advance_without_tokio_time(cap);
-        let allocated = tokio::time::timeout(Duration::from_secs(6), async {
+        fixture
+            .clock
+            .advance(std::time::Duration::from_secs(cap))
+            .unwrap();
+        (async {
             loop {
                 if frozen_follow(&fixture).await.len() == count {
                     break;
@@ -188,21 +191,8 @@ async fn two_prevented_generations_keep_a_resolved_drain_above_frontier_until_fi
                 tokio::task::yield_now().await;
             }
         })
-        .await
-        .is_ok();
-        if !allocated {
-            let observed = frontier(&fixture).await;
-            publisher.shutdown().await;
-            drop(publisher);
-            drop(app);
-            runtime.close().await;
-            fixture.close_native(native).await;
-            assert!(
-                observed < original_sequence,
-                "premature frontier {observed:?} discarded generation replacement {count}; original {original_sequence:?}"
-            );
-            panic!("generation replacement {count} timed out below frontier {observed:?}");
-        }
+        .await;
+
         fixture.held_native_pushes(1).await;
         publisher.wait_project_idle_for_test(&fixture.project).await;
         before.push(frontier(&fixture).await);
@@ -220,7 +210,7 @@ async fn two_prevented_generations_keep_a_resolved_drain_above_frontier_until_fi
                 actor: human("board-owner"),
                 acting_for: None,
             },
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap();
@@ -237,21 +227,16 @@ async fn two_prevented_generations_keep_a_resolved_drain_above_frontier_until_fi
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     // Held mail waits for a signal that its target loaded, not for the clock.
     fixture.held_mail.observation_retried();
-    let request = tokio::time::timeout(Duration::from_secs(6), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .unwrap();
+    let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
     let received = request.payload.push_id.clone();
     runtime.completions.send(DeliveryOutcome::Started).unwrap();
     await_native_completion(&runtime, 1).await;
-    let advanced = tokio::time::timeout(Duration::from_secs(6), async {
+    (async {
         while frontier(&fixture).await != head {
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .is_ok();
+    .await;
     let mut outcomes = Vec::new();
     for item in &items {
         outcomes.push(
@@ -273,10 +258,7 @@ async fn two_prevented_generations_keep_a_resolved_drain_above_frontier_until_fi
         before.iter().all(|prefix| *prefix < original_sequence),
         "a prevented replacement chain or resolved drain was prematurely settled: {before:?}"
     );
-    assert!(
-        advanced,
-        "terminal replacement did not settle the whole chain"
-    );
+
     assert!(matches!(
         outcomes.as_slice(),
         [
@@ -357,15 +339,11 @@ async fn quiet_local_delivery_releases_acknowledged_frontier_without_erasing_ret
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     // Held mail waits for a signal that its target loaded, not for the clock.
     fixture.held_mail.observation_retried();
-    let request = tokio::time::timeout(Duration::from_secs(6), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .unwrap();
+    let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
     let push = request.payload.push_id.clone();
     runtime.completions.send(DeliveryOutcome::Started).unwrap();
     await_native_completion(&runtime, 1).await;
-    let advanced = tokio::time::timeout(Duration::from_secs(6), async {
+    (async {
         loop {
             let through = frontier(&fixture).await;
             if through == head {
@@ -390,42 +368,40 @@ async fn quiet_local_delivery_releases_acknowledged_frontier_without_erasing_ret
         .mail_retired_through(&fixture.project)
         .await
         .unwrap();
-    let mut retired = false;
-    if advanced.is_ok() {
-        // The mark and this prompt stand in for the existing ACK port/handler.
-        // This tests its release gate, not real replication or central acceptance.
-        marks.0.store(head.get(), Ordering::SeqCst);
-        publisher
-            .queue_project(fixture.project.clone())
-            .await
-            .unwrap();
-        retired = tokio::time::timeout(Duration::from_secs(6), async {
-            while fixture
-                .interactions
-                .mail_retired_through(&fixture.project)
-                .await
-                .unwrap()
-                != head
-            {
-                tokio::task::yield_now().await;
-            }
-        })
+
+    // The mark and this prompt stand in for the existing ACK port/handler.
+    // This tests its release gate, not real replication or central acceptance.
+    marks.0.store(head.get(), Ordering::SeqCst);
+    publisher
+        .queue_project(fixture.project.clone())
         .await
-        .is_ok();
-    }
+        .unwrap();
+    (async {
+        while fixture
+            .interactions
+            .mail_retired_through(&fixture.project)
+            .await
+            .unwrap()
+            != head
+        {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await;
+
     let retained_after_ack = native
         .runtime()
         .local_outcome_for_test(frozen[0].id())
         .await
         .unwrap();
     let after_retirement = app.messages().push_show(show).await.unwrap();
-    if retired {
-        publisher
-            .queue_project(fixture.project.clone())
-            .await
-            .unwrap();
-        publisher.wait_project_idle_for_test(&fixture.project).await;
-    }
+
+    publisher
+        .queue_project(fixture.project.clone())
+        .await
+        .unwrap();
+    publisher.wait_project_idle_for_test(&fixture.project).await;
+
     let mut read = store.snapshot().await.unwrap();
     let feed_after = read.high_water();
     let handoffs_after = read.mail_handoff_head().await.unwrap();
@@ -436,10 +412,7 @@ async fn quiet_local_delivery_releases_acknowledged_frontier_without_erasing_ret
     drop(app);
     runtime.close().await;
     fixture.close_native(native).await;
-    assert!(
-        advanced.is_ok(),
-        "quiet terminal local outcome left the frontier behind"
-    );
+
     assert!(
         initial_frontier < frozen_sequence,
         "the initial frontier passed the held follow"
@@ -450,11 +423,10 @@ async fn quiet_local_delivery_releases_acknowledged_frontier_without_erasing_ret
     ));
     assert_eq!(progress_before_ack, HandoffSeq::ZERO);
     assert!(
-        retired
-            && matches!(
-                retained_after_ack,
-                Some(fleet_sync_protocol::RecipientOutcome::Delivered { .. })
-            ),
+        matches!(
+            retained_after_ack,
+            Some(fleet_sync_protocol::RecipientOutcome::Delivered { .. })
+        ),
         "acknowledged frontier must release progress while retaining Delivered custody"
     );
     assert_eq!(

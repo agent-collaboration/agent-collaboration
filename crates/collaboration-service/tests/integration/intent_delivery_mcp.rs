@@ -16,7 +16,6 @@ use collaboration_service::ApplicationFixture;
 use collaboration_service::{
     BoardAvailability, IntentReply, MailPushDeliveryProps, NotificationPublisher, ProjectAdmission,
     ProjectAdmissionProps, SubscriptionDeliveryService, SubscriptionDeliveryServiceProps,
-    SystemSubscriptionClock,
 };
 use message_board::*;
 use serde_json::{Value, json};
@@ -80,9 +79,14 @@ impl SessionDeliveryRoute for CapturingEndpoint {
 )]
 async fn explicit_intent_is_claimed_and_sent_as_a_stored_board_notification()
 -> Result<(), TestError> {
+    let clock = std::sync::Arc::new(router_clock::ManualClock::new(
+        chrono::DateTime::UNIX_EPOCH + chrono::Duration::seconds(1_792_432_800),
+    ));
+
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
-    let registry = crate::native_registry::new_registry(directory.path()).await?;
+    let registry =
+        crate::native_registry::new_registry_with_clock(directory.path(), clock.clone()).await?;
     let origin = ActorOrigin {
         installation: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
         machine: MachineLabel::try_from("intent proof".to_owned())?,
@@ -95,6 +99,7 @@ async fn explicit_intent_is_claimed_and_sent_as_a_stored_board_notification()
     .await?;
     let fleet = Arc::new(fleet);
     let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
+        clock: clock.clone(),
         registry: registry.clone(),
         fleet: fleet.clone(),
         identity: MachineIdentity::new(
@@ -133,7 +138,12 @@ async fn explicit_intent_is_claimed_and_sent_as_a_stored_board_notification()
             )?,
             Some("intent proof"),
         )?,
-        clock: Arc::new(SystemSubscriptionClock),
+        clock: Arc::new(
+            router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+                1792432800000,
+            ))
+            .unwrap(),
+        ),
     });
     let identity = ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
@@ -155,7 +165,12 @@ async fn explicit_intent_is_claimed_and_sent_as_a_stored_board_notification()
                     .try_into()?,
                 Some("intent proof"),
             )?,
-            clock: Arc::new(SystemSubscriptionClock),
+            clock: Arc::new(
+                router_clock::ManualClock::starting_at(
+                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
+                )
+                .unwrap(),
+            ),
         },
     )?;
     let publisher = Arc::new(NotificationPublisher::new(

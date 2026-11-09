@@ -84,7 +84,7 @@ pub struct ScheduledRunWorker {
     pub configuration: crate::AutomationConfigurationHandle,
     pub machine_identity: collaboration_contracts::MachineIdentity,
     /// The wall clock deadlines and record times compare against.
-    pub clock: Arc<dyn runtime_primitives::Clock>,
+    pub clock: Arc<dyn router_clock::RuntimeClock>,
 }
 
 impl ScheduledRunWorker {
@@ -132,7 +132,7 @@ impl ScheduledRunWorker {
             record.phase,
             RunPhase::SummaryRequired | RunPhase::SummaryRunning | RunPhase::SummaryBlocked
         ) {
-            return self.step_summary(record).await;
+            return Box::pin(self.step_summary(record)).await;
         }
         match record.phase {
             RunPhase::Preparing => Box::pin(self.step_preparation(record)).await,
@@ -225,7 +225,14 @@ impl ScheduledRunWorker {
             // not sent again; only a retry reads the history again.
             return Ok(StepProgress::SettlementNotObserved);
         }
-        if crate::run_reconciliation::persist_settlement(&self.store, &record, settlement).await? {
+        if crate::run_reconciliation::persist_settlement(
+            &self.store,
+            &record,
+            settlement,
+            self.now_ms(),
+        )
+        .await?
+        {
             return Ok(StepProgress::Stepped);
         }
         if record.phase == RunPhase::Stopping
@@ -239,7 +246,7 @@ impl ScheduledRunWorker {
         }
         let sink = crate::scheduled_run_evidence_sink::StoredRunEvidenceSink::new(
             Arc::clone(&self.store),
-            Arc::clone(&self.clock),
+            self.clock.clone(),
             self.configuration.clone(),
             record.run_id.clone(),
             record.schedule_id.clone(),
@@ -344,7 +351,7 @@ impl ScheduledRunWorker {
         };
         let sink = crate::scheduled_run_evidence_sink::StoredRunEvidenceSink::new(
             Arc::clone(&self.store),
-            Arc::clone(&self.clock),
+            self.clock.clone(),
             self.configuration.clone(),
             id.clone(),
             record.schedule_id.clone(),
@@ -632,7 +639,7 @@ impl ScheduledRunWorker {
         let destination = preparation_destination(&inputs)?;
         let sink = crate::scheduled_run_evidence_sink::StoredRunEvidenceSink::new(
             Arc::clone(&self.store),
-            Arc::clone(&self.clock),
+            self.clock.clone(),
             self.configuration.clone(),
             record.run_id.clone(),
             record.schedule_id.clone(),

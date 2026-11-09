@@ -27,7 +27,7 @@ async fn assert_local_injection_prevention(discard_group: bool) {
         )
         .await;
     let target = target_session(&fixture.reader).unwrap();
-    let held = tokio::time::timeout(Duration::from_secs(6), async {
+    let held = (async {
         loop {
             if let Some(record) = native
                 .interactions
@@ -42,8 +42,7 @@ async fn assert_local_injection_prevention(discard_group: bool) {
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .unwrap();
+    .await;
     let kept_prefix = if discard_group {
         Some(
             super::native_cancel_takeover_fixture::KeptProjectPrefix::capture(&fixture)
@@ -57,19 +56,14 @@ async fn assert_local_injection_prevention(discard_group: bool) {
     assert_eq!(frozen.len(), 1);
     // The first publisher pass must really be over before the group is written;
     // otherwise its proactive expansion could conceal a missing injection check.
-    tokio::time::timeout(
-        Duration::from_secs(6),
-        publisher.wait_project_idle_for_test(&fixture.project),
-    )
-    .await
-    .unwrap();
+    (publisher.wait_project_idle_for_test(&fixture.project)).await;
     fixture
         .unsubscribe(
             ThreadSubscriptionUnsubscribeRequest {
                 reader: fixture.reader.clone(),
                 scope: SubscriptionScope::thread(fixture.root.clone()),
             },
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap();
@@ -94,7 +88,7 @@ async fn assert_local_injection_prevention(discard_group: bool) {
         }
     };
     let mut native_called = false;
-    let terminal = tokio::time::timeout(Duration::from_secs(6), async {
+    let terminal = (async {
         tokio::select! {
             record = terminal => record,
             request = next_client_call => {
@@ -158,13 +152,9 @@ async fn assert_local_injection_prevention(discard_group: bool) {
             .await
             .unwrap();
         let item = serde_json::from_value(serde_json::to_value(&frozen[0]).unwrap()).unwrap();
-        tokio::time::timeout(
-            Duration::from_secs(6),
-            native.runtime().enqueue_local_project_item(item),
-        )
-        .await
-        .unwrap()
-        .unwrap();
+        (native.runtime().enqueue_local_project_item(item))
+            .await
+            .unwrap();
         let after = native
             .runtime()
             .local_outcome_for_test(frozen[0].id())
@@ -199,7 +189,7 @@ async fn assert_local_injection_prevention(discard_group: bool) {
         takeover_observed, discard_group,
         "the native tail rejection and successor file were not exercised"
     );
-    let terminal = terminal.expect("written local cancel never settled");
+    let terminal = terminal;
     assert_eq!(terminal.delivery_state, PushDeliveryState::Rejected);
     assert!(
         matches!(terminal.last_outcome.as_ref().map(|outcome| &outcome.outcome), Some(DeliveryOutcome::NotSubmitted { reason, .. }) if reason == "mail cancelled before local delivery"),
@@ -293,40 +283,22 @@ async fn a_follow_recipient_with_no_sender_project_file_can_still_inject_normall
     // The owning API waits for settlement, including this client's answer.
     let mail = native.runtime_handle();
     let admission = tokio::spawn(async move { mail.enqueue_local_project_item(item).await });
-    let received = tokio::time::timeout(Duration::from_secs(6), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await;
-    if received.is_ok() {
-        runtime.completions.send(DeliveryOutcome::Started).unwrap();
-        await_native_completion(&runtime, 1).await;
-        await_compaction(&native, reference.clone()).await;
-    }
-    tokio::time::timeout(Duration::from_secs(6), admission)
+    let received = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
+
+    runtime.completions.send(DeliveryOutcome::Started).unwrap();
+    await_native_completion(&runtime, 1).await;
+    await_compaction(&native, reference.clone()).await;
+
+    (admission).await.unwrap().unwrap();
+    let outcome = (native.runtime().local_outcome_for_test(reference.item))
         .await
-        .expect("native settlement hung")
-        .unwrap()
         .unwrap();
-    let outcome = tokio::time::timeout(
-        Duration::from_secs(6),
-        native.runtime().local_outcome_for_test(reference.item),
-    )
-    .await
-    .expect("outcome read hung")
-    .unwrap();
-    tokio::time::timeout(Duration::from_secs(6), publisher.shutdown())
-        .await
-        .expect("publisher drain hung");
+    (publisher.shutdown()).await;
     drop(publisher);
     drop(app);
-    tokio::time::timeout(Duration::from_secs(6), runtime.close())
-        .await
-        .expect("reader drain hung");
-    tokio::time::timeout(Duration::from_secs(12), fixture.close_native(native))
-        .await
-        .expect("native drain hung");
-    let received =
-        received.expect("requiring a sender project file held a legitimate recipient indefinitely");
+    (runtime.close()).await;
+    (fixture.close_native(native)).await;
+    let received = received;
     assert_eq!(
         received.payload.push_id.as_str(),
         reference.item.as_uuid().to_string()

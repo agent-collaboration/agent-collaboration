@@ -30,7 +30,7 @@ fn tasks(capacity: usize) -> Tasks {
 impl Tasks {
     /// Waits until `count` reports are queued.
     async fn reports_queued(&self, count: usize) -> TestResult {
-        crate::paused_worker_test_support::wait_until("the tasks reported", || {
+        crate::worker_test_support::wait_until("the tasks reported", || {
             self.tasks.finished.len() >= count
         })
         .await
@@ -77,7 +77,7 @@ async fn a_task_an_event_overtook_wakes_the_loop_and_asks_for_a_sweep() -> TestR
     let woken_while_running = fixture.woken();
     drop(held);
     fixture.reports_queued(1).await?;
-    crate::paused_worker_test_support::wait_until("the report woke the loop", || {
+    crate::worker_test_support::wait_until("the report woke the loop", || {
         fixture.wakes.has_changed().unwrap_or(false)
     })
     .await?;

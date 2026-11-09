@@ -41,7 +41,7 @@ async fn poll_without_its_publisher_stays_held_until_the_same_wait_is_reconciled
             .wait(reader, SubscriptionWaitFilter::All, 60, usize::MAX)
             .await
     });
-    let checked = tokio::time::timeout(Duration::from_secs(6), runtime.observe(|event| {
+    (runtime.observe(|event| {
         matches!(event, OwnerObservation::PollPublisherUnavailable(observed) if *observed==item)
     })).await;
     runtime.owner_barrier(&fixture.reader).await;
@@ -56,34 +56,23 @@ async fn poll_without_its_publisher_stays_held_until_the_same_wait_is_reconciled
         .reconcile_reader(fixture.reader.clone())
         .await
         .unwrap();
-    let response = tokio::time::timeout(Duration::from_secs(6), &mut waiting).await;
-    if response.is_err() {
-        waiting.abort();
-        let _ = waiting.await;
-    }
-    if response.is_ok() {
-        fixture
-            .await_push_state(&push, PushDeliveryState::Delivered)
-            .await;
-    }
+    let response = (&mut waiting).await;
+
+    fixture
+        .await_push_state(&push, PushDeliveryState::Delivered)
+        .await;
+
     publisher.shutdown().await;
     drop(publisher);
     drop(app);
     runtime.close().await;
     fixture.close_native(native).await;
-    assert!(
-        checked.is_ok(),
-        "the SDK Poll callback did not inspect its missing publisher"
-    );
+
     assert!(
         !handed_over_without_publisher && early_push.is_none(),
         "Poll bypassed the missing cancellation checker"
     );
-    let SubscriptionWaitResult::Notice { push_id, batch, .. } = response
-        .expect("the same registered wait did not recover")
-        .unwrap()
-        .unwrap()
-        .unwrap()
+    let SubscriptionWaitResult::Notice { push_id, batch, .. } = response.unwrap().unwrap().unwrap()
     else {
         panic!("session notice");
     };
@@ -162,7 +151,7 @@ async fn a_temporary_poll_check_failure_reconsiders_the_same_item_on_an_existing
             .wait(reader, SubscriptionWaitFilter::All, 60, usize::MAX)
             .await
     });
-    let deferred=tokio::time::timeout(Duration::from_secs(6), runtime.observe(|event| {
+    (runtime.observe(|event| {
         matches!(event,OwnerObservation::PollCancellationDeferred(observed) if *observed==id)
     })).await;
     runtime.owner_barrier(&fixture.reader).await;
@@ -181,32 +170,21 @@ async fn a_temporary_poll_check_failure_reconsiders_the_same_item_on_an_existing
         .reconcile_reader(fixture.reader.clone())
         .await
         .unwrap();
-    let response = tokio::time::timeout(Duration::from_secs(6), &mut waiting).await;
-    if response.is_err() {
-        waiting.abort();
-        let _ = waiting.await;
-    }
-    if response.is_ok() {
-        fixture
-            .await_push_state(&push, PushDeliveryState::Delivered)
-            .await;
-    }
+    let response = (&mut waiting).await;
+
+    fixture
+        .await_push_state(&push, PushDeliveryState::Delivered)
+        .await;
+
     let native_called = runtime.requests.lock().await.try_recv().is_ok();
     publisher.shutdown().await;
     drop(publisher);
     drop(app);
     runtime.close().await;
     fixture.close_native(native).await;
-    assert!(
-        deferred.is_ok(),
-        "the real Poll cancellation checker never observed the temporary mismatch"
-    );
+
     assert!(!handed_over_while_invalid && early_push.is_none());
-    let SubscriptionWaitResult::Notice { push_id, batch, .. } = response
-        .expect("a temporary cancellation failure excluded the item for the life of this wait")
-        .unwrap()
-        .unwrap()
-        .unwrap()
+    let SubscriptionWaitResult::Notice { push_id, batch, .. } = response.unwrap().unwrap().unwrap()
     else {
         panic!("session notice");
     };

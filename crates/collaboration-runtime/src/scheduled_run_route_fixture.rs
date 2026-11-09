@@ -156,7 +156,9 @@ pub async fn provider_worker_fixture_counting_submits(
         execution: fake,
         backend: None,
         configuration: crate::AutomationConfigurationHandle::default(),
-        clock: std::sync::Arc::new(runtime_primitives::SystemClock),
+        clock: std::sync::Arc::new(router_clock::ManualClock::starting_at(
+            runtime_primitives::SyncTime::from_unix_millis(1792432800000),
+        )?),
         machine_identity: collaboration_contracts::MachineIdentity::new(
             service.to_owned().try_into()?,
             Some("Schedule Fixture"),

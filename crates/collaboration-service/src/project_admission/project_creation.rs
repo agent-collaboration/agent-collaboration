@@ -3,7 +3,6 @@ use super::{
     ProjectAdmission, ProjectAdmissionError,
     request_gate::{ReadyRequest, RequestGate, RequestGateInput},
 };
-use chrono::Utc;
 use fleet_admission::{FleetOperation, FleetRequest};
 use message_board::request_canonical::creation_hash;
 use message_board::{
@@ -160,7 +159,7 @@ impl ProjectAdmission {
                     epoch,
                     high_water,
                 } = *ready;
-                let now = Utc::now();
+                let now = self.clock.utc_now();
                 let actor = RecordedActor::declared(request.actor.clone());
                 let scope = RecordScope {
                     workspace: board.workspace_id.clone(),

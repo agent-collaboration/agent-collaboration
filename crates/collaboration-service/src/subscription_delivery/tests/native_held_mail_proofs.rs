@@ -23,13 +23,9 @@ pub(super) async fn send_held(
         mode: MessageDelivery::Queue,
         generation_guard: None,
     };
-    let collaboration_protocol::MessageSendResult::Local(held) = tokio::time::timeout(
-        Duration::from_secs(10),
-        app.messages().message_send(input.clone()),
-    )
-    .await
-    .expect("loaded-only queue did not enter held custody")
-    .unwrap() else {
+    let collaboration_protocol::MessageSendResult::Local(held) =
+        (app.messages().message_send(input.clone())).await.unwrap()
+    else {
         panic!("held local message returned remote custody");
     };
     assert_eq!(held.delivery_state, PushDeliveryState::Held);
@@ -54,26 +50,22 @@ async fn held_native_mail_waits_for_a_load_signal_and_holds_no_presence_timer() 
             .unwrap()
             .is_empty()
     );
-    tokio::time::timeout(Duration::from_secs(10), runtime.observe(|event| matches!(event,
-        OwnerObservation::NativeHeldChecked { item, running: false } if item == &held.push_id
-    ))).await.unwrap();
-    tokio::time::timeout(
-        Duration::from_secs(10),
-        runtime.observe(|event| matches!(event, OwnerObservation::Sleeping(None))),
-    )
-    .await
-    .unwrap();
+    (runtime.observe(|event| {
+        matches!(event,
+            OwnerObservation::NativeHeldChecked { item, running: false } if item == &held.push_id
+        )
+    }))
+    .await;
+    (runtime.observe(|event| matches!(event, OwnerObservation::Sleeping(None)))).await;
     fixture.assert_no_legacy_message_tables().await;
 
     // An hour with no signal checks nothing.
     let checks_while_held = fixture.presence.checks();
-    fixture.clock.advance_without_tokio_time(3_600);
-    tokio::time::timeout(
-        Duration::from_secs(10),
-        runtime.owner_barrier(&fixture.reader),
-    )
-    .await
-    .unwrap();
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(3_600))
+        .unwrap();
+    (runtime.owner_barrier(&fixture.reader)).await;
     assert_eq!(
         fixture.presence.checks(),
         checks_while_held,
@@ -86,9 +78,12 @@ async fn held_native_mail_waits_for_a_load_signal_and_holds_no_presence_timer() 
         reason: "fixture reader is unreachable".into(),
     };
     fixture.held_mail.observation_retried();
-    tokio::time::timeout(Duration::from_secs(10), runtime.observe(|event| matches!(event,
-        OwnerObservation::NativeHeldChecked { item, running: false } if item == &held.push_id
-    ))).await.unwrap();
+    (runtime.observe(|event| {
+        matches!(event,
+            OwnerObservation::NativeHeldChecked { item, running: false } if item == &held.push_id
+        )
+    }))
+    .await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     assert_eq!(
         native
@@ -104,23 +99,20 @@ async fn held_native_mail_waits_for_a_load_signal_and_holds_no_presence_timer() 
     // A provider load is a signal too; this time the target runs, and the mail goes.
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     fixture.held_mail.provider_completed();
-    let request = tokio::time::timeout(Duration::from_secs(10), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .unwrap();
+    let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
     assert_eq!(request.payload.push_id, held.push_id);
     runtime.completions.send(DeliveryOutcome::Started).unwrap();
     await_native_completion(&runtime, 1).await;
-    await_compaction(&native, reference_for_request(&input, &held.push_id, peer)).await;
+    await_compaction(
+        &native,
+        reference_for_request(&input, &held.push_id, peer, fixture.clock.as_ref()),
+    )
+    .await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     drop(app);
     runtime.close().await;
     fixture.close_native(native).await;
 }
-
-/// Bounds a wait for an event the owner causes; it only stops a hang.
-const HELD_CHECK_EVENT: Duration = Duration::from_secs(10);
 
 /// A reader checks held `item` while its target is not running and waits on its signals,
 /// holding it; then the target loads. With no presence timer, only that load signal checks
@@ -134,20 +126,10 @@ pub(super) async fn checked_while_wakeable_then_loaded(
     runtime: &OwnerRuntime,
     item: &collaboration_protocol::PushId,
 ) {
-    tokio::time::timeout(
-        HELD_CHECK_EVENT,
-        runtime.observe(|event| {
+    (runtime.observe(|event| {
             matches!(event, OwnerObservation::NativeHeldChecked { item: checked, running: false } if checked == item)
-        }),
-    )
-    .await
-    .expect("the reader checked the held item while its target was not running");
-    tokio::time::timeout(
-        HELD_CHECK_EVENT,
-        runtime.observe(|event| matches!(event, OwnerObservation::Sleeping(_))),
-    )
-    .await
-    .expect("the reader holding the item waited on its signals");
+        })).await;
+    (runtime.observe(|event| matches!(event, OwnerObservation::Sleeping(_)))).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     fixture.held_mail.observation_retried();
 }
@@ -186,25 +168,22 @@ async fn a_codex_thread_that_loads_during_the_check_still_releases_its_held_mail
     let (input, held) = send_held(&app, &target, "release on the load the check missed").await;
     *fixture.presence.2.lock().unwrap() = Some(PresencePause { read, answer });
     fixture.held_mail.observation_retried();
-    tokio::time::timeout(Duration::from_secs(10), read_signal)
-        .await
-        .unwrap()
-        .unwrap();
+    (read_signal).await.unwrap();
     journal
-        .append(&thread_loaded(&target), chrono::Utc::now().timestamp())
+        .append(&thread_loaded(&target), fixture.clock.utc_now().timestamp())
         .await
         .unwrap();
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     answer_signal.send(()).unwrap();
-    let request = tokio::time::timeout(Duration::from_secs(10), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .expect("the load recorded during the check owed another check");
+    let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
     assert_eq!(request.payload.push_id, held.push_id);
     runtime.completions.send(DeliveryOutcome::Started).unwrap();
     await_native_completion(&runtime, 1).await;
-    await_compaction(&native, reference_for_request(&input, &held.push_id, peer)).await;
+    await_compaction(
+        &native,
+        reference_for_request(&input, &held.push_id, peer, fixture.clock.as_ref()),
+    )
+    .await;
     drop(app);
     runtime.close().await;
     fixture.close_native(native).await;
@@ -230,45 +209,35 @@ async fn explicit_reader_reconcile_releases_native_held_mail_before_the_next_pre
         mode: MessageDelivery::Queue,
         generation_guard: None,
     };
-    let collaboration_protocol::MessageSendResult::Local(held) = tokio::time::timeout(
-        Duration::from_secs(10),
-        app.messages().message_send(input.clone()),
-    )
-    .await
-    .expect("loaded-only queue did not enter held custody")
-    .unwrap() else {
+    let collaboration_protocol::MessageSendResult::Local(held) =
+        (app.messages().message_send(input.clone())).await.unwrap()
+    else {
         panic!("held local message returned remote custody");
     };
     assert_eq!(held.delivery_state, PushDeliveryState::Held);
     // Startup may already have emitted Sleeping. Wait for this held item's
     // actual unloaded readiness check before changing its presence.
-    tokio::time::timeout(Duration::from_secs(10), runtime.observe(|event| matches!(event,
-        OwnerObservation::NativeHeldChecked { item, running: false } if item == &held.push_id
-    ))).await.unwrap();
-    tokio::time::timeout(
-        Duration::from_secs(10),
-        runtime.owner_barrier(&fixture.reader),
-    )
-    .await
-    .unwrap();
+    (runtime.observe(|event| {
+        matches!(event,
+            OwnerObservation::NativeHeldChecked { item, running: false } if item == &held.push_id
+        )
+    }))
+    .await;
+    (runtime.owner_barrier(&fixture.reader)).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
-    tokio::time::timeout(
-        Duration::from_secs(10),
-        runtime.service.reconcile_reader(fixture.reader.clone()),
-    )
-    .await
-    .unwrap()
-    .unwrap();
-    let request = tokio::time::timeout(Duration::from_secs(10), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .unwrap();
+    (runtime.service.reconcile_reader(fixture.reader.clone()))
+        .await
+        .unwrap();
+    let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
     assert_eq!(request.payload.push_id, held.push_id);
     runtime.completions.send(DeliveryOutcome::Started).unwrap();
     await_native_completion(&runtime, 1).await;
-    await_compaction(&native, reference_for_request(&input, &held.push_id, peer)).await;
+    await_compaction(
+        &native,
+        reference_for_request(&input, &held.push_id, peer, fixture.clock.as_ref()),
+    )
+    .await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     drop(app);
     runtime.close().await;
@@ -285,32 +254,25 @@ async fn a_journal_record_for_another_thread_checks_nothing_and_its_own_load_rel
     let (app, native) = native_application(&fixture, &runtime, peer);
     let target = target_session(&fixture.reader).unwrap();
     let (input, held) = send_held(&app, &target, "release only on this thread's load").await;
-    tokio::time::timeout(Duration::from_secs(10), runtime.observe(|event| matches!(event,
-        OwnerObservation::NativeHeldChecked { item, running: false } if item == &held.push_id
-    ))).await.unwrap();
-    tokio::time::timeout(
-        Duration::from_secs(10),
-        runtime.owner_barrier(&fixture.reader),
-    )
-    .await
-    .unwrap();
+    (runtime.observe(|event| {
+        matches!(event,
+            OwnerObservation::NativeHeldChecked { item, running: false } if item == &held.push_id
+        )
+    }))
+    .await;
+    (runtime.owner_barrier(&fixture.reader)).await;
 
     // Another thread on the same endpoint loads: the journal commits, nothing is owed.
     let checks_while_held = fixture.presence.checks();
     let mut other = target.clone();
     other.session_id = "another-thread".to_owned().try_into().unwrap();
     journal
-        .append(&thread_loaded(&other), chrono::Utc::now().timestamp())
+        .append(&thread_loaded(&other), fixture.clock.utc_now().timestamp())
         .await
         .unwrap();
-    tokio::time::timeout(
-        Duration::from_secs(10),
-        runtime.observe(|event| {
-            matches!(event, OwnerObservation::HeldMailSignalTaken { owed: false })
-        }),
-    )
-    .await
-    .expect("the reader took the journal commit and owed nothing");
+    (runtime
+        .observe(|event| matches!(event, OwnerObservation::HeldMailSignalTaken { owed: false })))
+    .await;
     assert_eq!(
         fixture.presence.checks(),
         checks_while_held,
@@ -321,18 +283,18 @@ async fn a_journal_record_for_another_thread_checks_nothing_and_its_own_load_rel
     // Its own thread loads: one check, and the mail goes.
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     journal
-        .append(&thread_loaded(&target), chrono::Utc::now().timestamp())
+        .append(&thread_loaded(&target), fixture.clock.utc_now().timestamp())
         .await
         .unwrap();
-    let request = tokio::time::timeout(Duration::from_secs(10), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .expect("its own thread's load owed a check");
+    let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
     assert_eq!(request.payload.push_id, held.push_id);
     runtime.completions.send(DeliveryOutcome::Started).unwrap();
     await_native_completion(&runtime, 1).await;
-    await_compaction(&native, reference_for_request(&input, &held.push_id, peer)).await;
+    await_compaction(
+        &native,
+        reference_for_request(&input, &held.push_id, peer, fixture.clock.as_ref()),
+    )
+    .await;
     drop(app);
     runtime.close().await;
     fixture.close_native(native).await;
@@ -348,24 +310,27 @@ async fn held_mail_whose_target_is_not_running_goes_back_through_delivery_instea
     let (app, native) = native_application(&fixture, &runtime, peer);
     let target = target_session(&fixture.reader).unwrap();
     let (input, held) = send_held(&app, &target, "held, then its terminal is gone").await;
-    tokio::time::timeout(Duration::from_secs(10), runtime.observe(|event| matches!(event,
-        OwnerObservation::NativeHeldChecked { item, running: false } if item == &held.push_id
-    ))).await.unwrap();
+    (runtime.observe(|event| {
+        matches!(event,
+            OwnerObservation::NativeHeldChecked { item, running: false } if item == &held.push_id
+        )
+    }))
+    .await;
 
     // The next check finds a target that is not running and that nothing can start. Its
     // mail is not kept held for a load that will never come: it goes back through delivery,
     // whose route refuses it.
     *fixture.presence.0.lock().unwrap() = TargetPresence::NotRunning;
     fixture.held_mail.observation_retried();
-    let request = tokio::time::timeout(Duration::from_secs(10), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .expect("mail held for a target that is not running went back to delivery");
+    let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
     assert_eq!(request.payload.push_id, held.push_id);
     runtime.completions.send(DeliveryOutcome::Started).unwrap();
     await_native_completion(&runtime, 1).await;
-    await_compaction(&native, reference_for_request(&input, &held.push_id, peer)).await;
+    await_compaction(
+        &native,
+        reference_for_request(&input, &held.push_id, peer, fixture.clock.as_ref()),
+    )
+    .await;
     drop(app);
     runtime.close().await;
     fixture.close_native(native).await;
@@ -403,14 +368,10 @@ async fn mail_held_when_the_runtime_reopens_for_a_target_not_running_is_refused_
     // reader's first check runs: no load signal, no observation retry, no clock move.
     let fixture = fixture.reopen_native(native).await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::NotRunning;
-    let clock_at_reopen = fixture.clock.now();
+    let clock_at_reopen = fixture.clock.utc_now();
     let restarted = fixture.runtime_without_board().await;
     let (app, native) = native_application(&fixture, &restarted, peer);
-    let request = tokio::time::timeout(Duration::from_secs(10), async {
-        restarted.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .expect("the first check sent the held mail back to delivery");
+    let request = (async { restarted.requests.lock().await.recv().await.unwrap() }).await;
     assert_eq!(request.payload.push_id, held.push_id);
 
     // The peer route refuses it, and the refusal is final.
@@ -419,7 +380,7 @@ async fn mail_held_when_the_runtime_reopens_for_a_target_not_running_is_refused_
         .send(peer_not_running_refusal())
         .unwrap();
     await_native_completion(&restarted, 1).await;
-    let settled = tokio::time::timeout(Duration::from_secs(10), async {
+    let settled = (async {
         loop {
             let record = native
                 .interactions
@@ -436,15 +397,9 @@ async fn mail_held_when_the_runtime_reopens_for_a_target_not_running_is_refused_
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .expect("the refused mail settled");
+    .await;
     // With nothing left to hold, the reader's owner has no more work and stops.
-    tokio::time::timeout(
-        Duration::from_secs(10),
-        restarted.observe(|event| matches!(event, OwnerObservation::Stopped)),
-    )
-    .await
-    .expect("the reader's owner stopped with nothing left to hold");
+    (restarted.observe(|event| matches!(event, OwnerObservation::Stopped))).await;
 
     assert_eq!(
         settled.delivery_state,
@@ -464,7 +419,7 @@ async fn mail_held_when_the_runtime_reopens_for_a_target_not_running_is_refused_
         restarted.requests.lock().await.try_recv().is_err(),
         "exactly one delivery request"
     );
-    assert_eq!(fixture.clock.now(), clock_at_reopen, "no clock move");
+    assert_eq!(fixture.clock.utc_now(), clock_at_reopen, "no clock move");
     drop(app);
     restarted.close().await;
     fixture.close_native(native).await;

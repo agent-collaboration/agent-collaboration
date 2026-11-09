@@ -65,7 +65,7 @@ impl WorkerObservation {
     /// A waiter calls this after the read that found nothing and before it waits, with the
     /// time its timer will fire: it records that time, counts the sleep and holds at the gate.
     #[cfg(any(test, feature = "test-support"))]
-    pub async fn read_found_nothing(&self, wakes_at: tokio::time::Instant) {
+    pub async fn read_found_nothing(&self, wakes_at: router_clock::ClockInstant) {
         self.observed
             .update(|snapshot| snapshot.waiter_wakes_at = Some(wakes_at));
         self.observed.slept(None).await;
@@ -73,7 +73,10 @@ impl WorkerObservation {
 
     /// A waiter calls this after the read that found nothing and before it waits.
     #[cfg(not(any(test, feature = "test-support")))]
-    pub fn read_found_nothing(&self, wakes_at: tokio::time::Instant) -> std::future::Ready<()> {
+    pub fn read_found_nothing(
+        &self,
+        wakes_at: router_clock::ClockInstant,
+    ) -> std::future::Ready<()> {
         let _ = wakes_at;
         std::future::ready(())
     }
@@ -105,7 +108,7 @@ mod observed {
         /// The worker's tasks that have not reported yet.
         pub tasks_running: usize,
         /// When a waiter's timer fires, as it reported before its latest sleep.
-        pub waiter_wakes_at: Option<tokio::time::Instant>,
+        pub waiter_wakes_at: Option<router_clock::ClockInstant>,
     }
 
     struct HeldSleep {

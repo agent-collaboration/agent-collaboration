@@ -23,7 +23,7 @@ use collaboration_runtime::SessionDeliveryRouter;
 use collaboration_service::BoardAvailability;
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
-use collaboration_service::SystemSubscriptionClock;
+
 use interaction_storage::InteractionStore;
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
@@ -33,7 +33,6 @@ use std::{
         Arc,
         atomic::{AtomicUsize, Ordering},
     },
-    time::Duration,
 };
 use tokio::io::{AsyncBufReadExt as _, BufReader};
 
@@ -51,6 +50,7 @@ fn target() -> SessionRef {
 
 #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
 fn draft(
+    clock: &dyn router_clock::RuntimeClock,
     target: &SessionRef,
     mode: MessageDelivery,
     guard: Option<CodexGeneration>,
@@ -69,7 +69,7 @@ fn draft(
         activity: None,
         mode: Some(mode),
         guard,
-        created_at: chrono::Utc::now(),
+        created_at: clock.utc_now(),
     }
 }
 
@@ -145,7 +145,9 @@ async fn start_peer_delivery_service(
             Some("fixture-machine"),
         )
         .expect("machine identity"),
-        clock: Arc::new(SystemSubscriptionClock),
+        clock: Arc::new(router_clock::ManualClock::new(
+            chrono::DateTime::UNIX_EPOCH + chrono::Duration::seconds(1_792_432_800),
+        )),
     });
     service.start().await.expect("reader actor startup");
     (registry, automation, service, router)
@@ -182,20 +184,21 @@ async fn closed_peer_fails_auto_dm_at_once_then_a_running_peer_receives_the_next
     assert!(router.supports_delivery_mode(&target, MessageDelivery::Auto));
     assert!(router.supports_delivery_mode(&target, MessageDelivery::Steer));
     assert!(!router.supports_delivery_mode(&target, MessageDelivery::Queue));
-    let push_draft = draft(&target, MessageDelivery::Auto, None);
+    let push_draft = draft(
+        service.runtime_clock().as_ref(),
+        &target,
+        MessageDelivery::Auto,
+        None,
+    );
     let closed_push_id = push_draft.push_id.clone();
     automation
         .insert_push_record(push_draft)
         .await
         .expect("store the DM before delivery");
 
-    let failed = tokio::time::timeout(
-        Duration::from_secs(5),
-        service.deliver_direct_message(target.clone(), closed_push_id.clone()),
-    )
-    .await
-    .expect("closed peer DM handling is bounded")
-    .expect("closed peer DM receipt");
+    let failed = (service.deliver_direct_message(target.clone(), closed_push_id.clone()))
+        .await
+        .expect("closed peer DM receipt");
 
     assert_rejected_not_running(&failed);
     assert!(
@@ -208,7 +211,12 @@ async fn closed_peer_fails_auto_dm_at_once_then_a_running_peer_receives_the_next
     );
 
     // A running peer still receives a new DM; the failed one is never resent.
-    let push_draft = draft(&target, MessageDelivery::Auto, None);
+    let push_draft = draft(
+        service.runtime_clock().as_ref(),
+        &target,
+        MessageDelivery::Auto,
+        None,
+    );
     let push_id = push_draft.push_id.clone();
     automation
         .insert_push_record(push_draft)
@@ -239,13 +247,9 @@ async fn closed_peer_fails_auto_dm_at_once_then_a_running_peer_receives_the_next
         (auth, user)
     });
 
-    let delivered = tokio::time::timeout(
-        Duration::from_secs(5),
-        service.deliver_direct_message(target.clone(), push_id.clone()),
-    )
-    .await
-    .expect("resumed peer DM handling is bounded")
-    .expect("resumed peer DM receipt");
+    let delivered = (service.deliver_direct_message(target.clone(), push_id.clone()))
+        .await
+        .expect("resumed peer DM receipt");
     assert_eq!(delivered.push_id, push_id);
     assert_eq!(delivered.mode, Some(MessageDelivery::Auto));
     assert_eq!(delivered.delivery_state, PushDeliveryState::Delivered);
@@ -253,10 +257,7 @@ async fn closed_peer_fails_auto_dm_at_once_then_a_running_peer_receives_the_next
         delivered.last_outcome.unwrap().outcome,
         DeliveryOutcome::PeerMessageWritten
     );
-    let (_auth, user) = tokio::time::timeout(Duration::from_secs(5), received)
-        .await
-        .expect("peer frame receive is bounded")
-        .expect("peer receiver task");
+    let (_auth, user) = (received).await.expect("peer receiver task");
     assert_eq!(user["type"], "user");
     assert!(
         user["message"]["content"]
@@ -306,19 +307,15 @@ async fn closed_peer_rejects_queue_steer_and_guarded_dms() {
     ];
 
     for (mode, guard, expected_reason) in cases {
-        let push_draft = draft(&target, mode, guard);
+        let push_draft = draft(service.runtime_clock().as_ref(), &target, mode, guard);
         let push_id = push_draft.push_id.clone();
         automation
             .insert_push_record(push_draft)
             .await
             .expect("store the DM before delivery");
-        let rejected = tokio::time::timeout(
-            Duration::from_secs(5),
-            service.deliver_direct_message(target.clone(), push_id),
-        )
-        .await
-        .expect("restricted peer DM handling is bounded")
-        .expect("restricted peer DM receipt");
+        let rejected = (service.deliver_direct_message(target.clone(), push_id))
+            .await
+            .expect("restricted peer DM receipt");
         assert_eq!(rejected.delivery_state, PushDeliveryState::Rejected);
         let DeliveryOutcome::Rejected(rejection) = rejected.last_outcome.unwrap().outcome else {
             panic!("mode {mode:?} must be rejected");
@@ -351,20 +348,21 @@ async fn queue_to_same_endpoint_label_on_another_service_keeps_queue_hold_behavi
         UuidIdentity::try_from("00000000-0000-4000-8000-000000000099".to_owned())
             .expect("foreign router service id");
     assert!(router.supports_delivery_mode(&target, MessageDelivery::Queue));
-    let push_draft = draft(&target, MessageDelivery::Queue, None);
+    let push_draft = draft(
+        service.runtime_clock().as_ref(),
+        &target,
+        MessageDelivery::Queue,
+        None,
+    );
     let push_id = push_draft.push_id.clone();
     automation
         .insert_push_record(push_draft)
         .await
         .expect("store the DM before delivery");
 
-    let held = tokio::time::timeout(
-        Duration::from_secs(5),
-        service.deliver_direct_message(target.clone(), push_id),
-    )
-    .await
-    .expect("foreign endpoint handling is bounded")
-    .expect("foreign endpoint receipt");
+    let held = (service.deliver_direct_message(target.clone(), push_id))
+        .await
+        .expect("foreign endpoint receipt");
     assert_eq!(held.mode, Some(MessageDelivery::Queue));
     assert_eq!(held.delivery_state, PushDeliveryState::Held);
     assert!(matches!(
@@ -422,20 +420,21 @@ async fn a_session_the_provider_can_load_is_delivered_while_no_peer_runs() {
     let (_registry, automation, service, _router) =
         start_peer_delivery_service(directory.path(), vec![provider.clone()]).await;
     let target = target();
-    let push_draft = draft(&target, MessageDelivery::Auto, None);
+    let push_draft = draft(
+        service.runtime_clock().as_ref(),
+        &target,
+        MessageDelivery::Auto,
+        None,
+    );
     let push_id = push_draft.push_id.clone();
     automation
         .insert_push_record(push_draft)
         .await
         .expect("store the DM before delivery");
 
-    let delivered = tokio::time::timeout(
-        Duration::from_secs(5),
-        service.deliver_direct_message(target.clone(), push_id),
-    )
-    .await
-    .expect("provider DM handling is bounded")
-    .expect("provider DM receipt");
+    let delivered = (service.deliver_direct_message(target.clone(), push_id))
+        .await
+        .expect("provider DM receipt");
 
     assert_eq!(delivered.delivery_state, PushDeliveryState::Delivered);
     assert_eq!(

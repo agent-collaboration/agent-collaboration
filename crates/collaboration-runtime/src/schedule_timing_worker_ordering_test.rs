@@ -2,8 +2,8 @@
 //! the scheduler's wake, a completion that arrives while its Run is being checked, and
 //! stop requests whose outcome is unknown.
 use super::{
-    CollectionLimit, INTERVAL_SECONDS, RunPhase, SchedulerFixture, TIMEOUT_SECONDS, TestResult,
-    advance, at, observe, settled, settled_holding, turn_completed, wait_until,
+    INTERVAL_SECONDS, RunPhase, SchedulerFixture, TIMEOUT_SECONDS, TestResult, advance, at,
+    observe, settled, settled_holding, turn_completed, wait_until,
 };
 use runtime_primitives::Clock;
 use std::{
@@ -12,7 +12,7 @@ use std::{
 };
 use tokio::sync::Mutex;
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -27,7 +27,7 @@ async fn a_step_whose_commit_woke_the_loop_before_its_report_still_continues() -
 
     // The preparation step records its route, a commit, and is held before it reports;
     // the commit wakes a pass that finds the Run still active and goes back to sleep.
-    advance(interval).await;
+    advance(&fixture.clock, interval).await;
     settled_holding(&scheduler.observation).await?;
     let (_, phase_while_held) = fixture.run_phase().await?.ok_or("the Run was admitted")?;
     drop(held);
@@ -43,7 +43,7 @@ async fn a_step_whose_commit_woke_the_loop_before_its_report_still_continues() -
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -63,12 +63,16 @@ async fn a_stop_with_an_unknown_outcome_before_its_intent_is_retried() -> TestRe
     let interval = Duration::from_secs(u64::from(INTERVAL_SECONDS));
     let deadline = interval + Duration::from_secs(u64::from(TIMEOUT_SECONDS));
 
-    advance(interval).await;
+    advance(&fixture.clock, interval).await;
     let run = fixture.executing_and_asleep(&scheduler).await?;
-    advance(Duration::from_secs(u64::from(TIMEOUT_SECONDS))).await;
+    advance(
+        &fixture.clock,
+        Duration::from_secs(u64::from(TIMEOUT_SECONDS)),
+    )
+    .await;
     settled(&scheduler).await?;
     let phase_after_unknown = fixture.read_phase(&run).await?;
-    advance(Duration::from_secs(1)).await;
+    advance(&fixture.clock, Duration::from_secs(1)).await;
     settled(&scheduler).await?;
 
     assert_eq!(
@@ -86,7 +90,7 @@ async fn a_stop_with_an_unknown_outcome_before_its_intent_is_retried() -> TestRe
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -103,12 +107,16 @@ async fn a_stop_with_an_unknown_outcome_after_its_intent_sends_one_interrupt_and
     let interval = Duration::from_secs(u64::from(INTERVAL_SECONDS));
     let deadline = interval + Duration::from_secs(u64::from(TIMEOUT_SECONDS));
 
-    advance(interval).await;
+    advance(&fixture.clock, interval).await;
     let run = fixture.executing_and_asleep(&scheduler).await?;
-    advance(Duration::from_secs(u64::from(TIMEOUT_SECONDS))).await;
+    advance(
+        &fixture.clock,
+        Duration::from_secs(u64::from(TIMEOUT_SECONDS)),
+    )
+    .await;
     settled(&scheduler).await?;
     let phase_after_unknown = fixture.read_phase(&run).await?;
-    advance(Duration::from_secs(1)).await;
+    advance(&fixture.clock, Duration::from_secs(1)).await;
     settled(&scheduler).await?;
     let reads_before_completion = fixture.route.settlement_reads.load(Ordering::Acquire);
     fixture.route.turn_completed.store(true, Ordering::Release);
@@ -135,7 +143,7 @@ async fn a_stop_with_an_unknown_outcome_after_its_intent_sends_one_interrupt_and
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -145,7 +153,11 @@ async fn a_completion_consumed_while_its_run_is_being_checked_still_settles_the_
     let fixture = SchedulerFixture::with_one_schedule().await?;
     let first = fixture.start()?;
     settled(&first).await?;
-    advance(Duration::from_secs(u64::from(INTERVAL_SECONDS))).await;
+    advance(
+        &fixture.clock,
+        Duration::from_secs(u64::from(INTERVAL_SECONDS)),
+    )
+    .await;
     let run = fixture.executing_and_asleep(&first).await?;
     first.stop().await;
     let reads_before = fixture.route.settlement_reads.load(Ordering::Acquire);
@@ -171,9 +183,8 @@ async fn a_completion_consumed_while_its_run_is_being_checked_still_settles_the_
     settled_holding(&scheduler.observation).await?;
     let phase_while_held = fixture.read_phase(&run).await?;
     drop(held);
-    let limit = CollectionLimit::start("the completed Run settled");
     while fixture.read_phase(&run).await? == RunPhase::Executing {
-        limit.next().await?;
+        tokio::task::yield_now().await;
     }
 
     assert_eq!(phase_while_held, RunPhase::Executing);
@@ -193,22 +204,25 @@ impl SchedulerFixture {
     async fn executing_run_for_a_new_scheduler(&self) -> TestResult<agent_automation::RunId> {
         let first = self.start()?;
         settled(&first).await?;
-        advance(Duration::from_secs(u64::from(INTERVAL_SECONDS))).await;
+        advance(
+            &self.clock,
+            Duration::from_secs(u64::from(INTERVAL_SECONDS)),
+        )
+        .await;
         let run = self.executing_and_asleep(&first).await?;
         first.stop().await;
         Ok(run)
     }
 
     async fn settles(&self, run: &agent_automation::RunId) -> TestResult<RunPhase> {
-        let limit = CollectionLimit::start("the completed Run settled");
         while self.read_phase(run).await? == RunPhase::Executing {
-            limit.next().await?;
+            tokio::task::yield_now().await;
         }
         self.read_phase(run).await
     }
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -250,7 +264,7 @@ async fn a_report_enqueued_before_the_event_is_taken_is_stepped_by_that_sweep() 
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."

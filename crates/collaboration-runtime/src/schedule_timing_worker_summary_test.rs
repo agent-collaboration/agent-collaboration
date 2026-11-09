@@ -7,6 +7,7 @@ use agent_automation::{
 };
 use collaboration_protocol::{CodexGeneration, EndpointRef, SessionRef};
 use futures_util::{SinkExt as _, StreamExt as _};
+use router_clock::ClockInstant;
 use runtime_primitives::{Clock, SyncTime};
 use serde_json::{Value, json};
 use sqlx::Connection as _;
@@ -29,6 +30,7 @@ struct NativeScript {
     interrupt_ends_turn: bool,
     /// After an interrupt, this many reads find the turn absent from the history.
     absent_reads_after_interrupt: usize,
+    held_history: Option<Arc<tokio::sync::Notify>>,
 }
 
 /// Answers each connection: the summary turn is in progress until interrupted, and an
@@ -36,7 +38,7 @@ struct NativeScript {
 /// with an error.
 async fn serve_running_summary(
     listener: tokio::net::UnixListener,
-    clock: Arc<crate::paused_wall_clock::PausedWallClock>,
+    clock: Arc<router_clock::ManualClock>,
     requests: Arc<std::sync::Mutex<Vec<NativeRequest>>>,
     script: NativeScript,
 ) -> TestResult<()> {
@@ -92,7 +94,12 @@ async fn serve_running_summary(
             }
             _ => return Err(format!("unexpected request {request}").into()),
         };
-        requests.lock().unwrap().push((method, clock.now()));
+        requests.lock().unwrap().push((method.clone(), clock.now()));
+        if method == "thread/turns/list"
+            && let Some(hold) = &script.held_history
+        {
+            hold.notified().await;
+        }
         socket
             .send(Message::Text(
                 json!({"id":request.get("id"),"result":result})
@@ -312,7 +319,39 @@ fn interrupt(at_time: SyncTime) -> NativeRequest {
     ("turn/interrupt".to_owned(), at_time)
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions report violated deadline contracts."
+)]
+async fn a_summary_read_timeout_uses_the_injected_clock_and_arms_its_retry() -> TestResult<()> {
+    let rig = SummaryRig::start(NativeScript {
+        held_history: Some(Arc::new(tokio::sync::Notify::new())),
+        ..NativeScript::default()
+    })
+    .await?;
+    answered(&rig.requests, 1).await?;
+    let deadline = ClockInstant::ZERO.after(Duration::from_secs(20));
+    assert!(
+        rig.fixture.clock.has_not_due_check_now(deadline),
+        "summary must register its injected read deadline"
+    );
+
+    advance(&rig.fixture.clock, Duration::from_secs(19)).await;
+    rig.fixture.clock.not_due_check_now(deadline).await;
+    assert_eq!(rig.requests(), [list(at(Duration::ZERO))]);
+    advance(&rig.fixture.clock, Duration::from_secs(1)).await;
+    settled(&rig.scheduler).await?;
+
+    assert_eq!(rig.armed(), Some(at(Duration::from_secs(21))));
+    assert_eq!(
+        rig.fixture.summary_phase(&rig.run).await?,
+        Some(SummaryPhase::Running)
+    );
+    rig.stop().await
+}
+
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -323,13 +362,13 @@ async fn a_running_summary_is_interrupted_once_at_its_deadline() -> TestResult<(
 
     rig.answered(1).await?;
     let armed = rig.armed();
-    advance(Duration::from_secs(SUMMARY_SECONDS - 1)).await;
+    advance(&rig.fixture.clock, Duration::from_secs(SUMMARY_SECONDS - 1)).await;
     settled(&rig.scheduler).await?;
     let before_deadline = rig.requests().len();
-    advance(Duration::from_secs(1)).await;
+    advance(&rig.fixture.clock, Duration::from_secs(1)).await;
     rig.answered(4).await?;
     let armed_after = rig.armed();
-    advance(Duration::from_secs(3_600)).await;
+    advance(&rig.fixture.clock, Duration::from_secs(3_600)).await;
     settled(&rig.scheduler).await?;
 
     assert_eq!(armed, Some(deadline), "the summary deadline arms the timer");
@@ -355,7 +394,7 @@ async fn a_running_summary_is_interrupted_once_at_its_deadline() -> TestResult<(
     rig.stop().await
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -372,11 +411,11 @@ async fn a_deadline_stop_that_cannot_connect_is_retried_and_sent_once() -> TestR
     let retry = at(Duration::from_secs(SUMMARY_SECONDS + 1));
 
     rig.answered(1).await?;
-    advance(Duration::from_secs(SUMMARY_SECONDS)).await;
+    advance(&rig.fixture.clock, Duration::from_secs(SUMMARY_SECONDS)).await;
     rig.answered(2).await?;
     let armed_after_failed_stop = rig.armed();
     let phase_after_failed_stop = rig.fixture.summary_phase(&rig.run).await?;
-    advance(Duration::from_secs(1)).await;
+    advance(&rig.fixture.clock, Duration::from_secs(1)).await;
     rig.answered(5).await?;
 
     assert_eq!(phase_after_failed_stop, Some(SummaryPhase::Running));
@@ -408,7 +447,7 @@ async fn a_deadline_stop_that_cannot_connect_is_retried_and_sent_once() -> TestR
     rig.stop().await
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -424,7 +463,7 @@ async fn a_summary_read_that_cannot_connect_before_its_deadline_is_retried() -> 
     settled(&rig.scheduler).await?;
     let armed_after_failed_read = rig.armed();
     let before_retry = rig.requests();
-    advance(Duration::from_secs(1)).await;
+    advance(&rig.fixture.clock, Duration::from_secs(1)).await;
     rig.answered(1).await?;
     let armed_after_retry = rig.armed();
 
@@ -443,7 +482,7 @@ async fn a_summary_read_that_cannot_connect_before_its_deadline_is_retried() -> 
     rig.stop().await
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -460,11 +499,11 @@ async fn a_stopped_summary_absent_from_its_history_is_read_again_until_it_settle
     let retry = at(Duration::from_secs(SUMMARY_SECONDS + 1));
 
     rig.answered(1).await?;
-    advance(Duration::from_secs(SUMMARY_SECONDS)).await;
+    advance(&rig.fixture.clock, Duration::from_secs(SUMMARY_SECONDS)).await;
     rig.answered(4).await?;
     let armed_while_absent = rig.armed();
     let phase_while_absent = rig.fixture.summary_phase(&rig.run).await?;
-    advance(Duration::from_secs(1)).await;
+    advance(&rig.fixture.clock, Duration::from_secs(1)).await;
     rig.answered(5).await?;
 
     assert_eq!(phase_while_absent, Some(SummaryPhase::Stopping));

@@ -21,6 +21,7 @@ const MAX_ACTIVE_DISPATCHES: usize = 16;
 const INVENTORY_BATCH: u32 = 100;
 
 pub struct WakeTimingWorker {
+    clock: Arc<dyn router_clock::RuntimeClock>,
     store: Arc<Mutex<AutomationStore>>,
     native: crate::wakeup_delivery_sender::WakeDeliverySender,
     observation: WorkerObservation,
@@ -36,16 +37,17 @@ impl WakeTimingWorker {
         configuration: crate::AutomationConfigurationHandle,
         machine_identity: collaboration_contracts::MachineIdentity,
         interactions: Arc<interaction_storage::InteractionStore>,
-        clock: Arc<dyn runtime_primitives::Clock>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Self {
         let native = crate::wakeup_delivery_sender::WakeDeliverySender {
             delivery,
             configuration,
             machine_identity,
             interactions,
-            clock,
+            clock: clock.clone(),
         };
         Self {
+            clock,
             store,
             native,
             observation: WorkerObservation::default(),
@@ -108,7 +110,7 @@ impl WakeTimingWorker {
         #[cfg(any(test, feature = "test-support"))]
         self.observation
             .track_running_tasks(deliveries.running_tasks());
-        let worker = WakeDrivenWorkerLoop::new("wake-ups", Arc::clone(&self.native.clock))
+        let worker = WakeDrivenWorkerLoop::new("wake-ups", self.clock)
             .with_observation(self.observation)
             .wake_on(commits)
             .wake_on(configuration)

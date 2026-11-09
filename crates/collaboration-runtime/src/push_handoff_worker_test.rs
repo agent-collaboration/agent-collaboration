@@ -1,16 +1,16 @@
-//! The push hand-off alone on Tokio's paused clock, with real automation and interaction
+//! The push hand-off alone on the injected manual clock, with real automation and interaction
 //! stores: it sleeps until an automation commit, applies what is owed, and retries a
 //! failed read on the backoff with one warning.
 use super::PushHandoffWorker;
 use crate::{
     WorkerObservation,
     captured_warnings_test_support::CapturedWarnings,
-    paused_wall_clock::PausedWallClock,
-    paused_worker_test_support::{CollectionLimit, NoAutoAdvance, TestResult, advance, settled},
+    worker_test_support::{TestResult, advance, settled},
 };
 use agent_automation::{ExpiryRule, OperationId, TimingRule};
 use automation_storage::{AutomationStore, MAX_OWED_PUSH_OPERATION_BATCH, WakeCreate};
 use collaboration_protocol::SavedMessage;
+use router_clock::ManualClock;
 use runtime_primitives::{Clock, SyncTime};
 use serde_json::json;
 use std::{sync::Arc, time::Duration};
@@ -24,10 +24,9 @@ fn at(offset: Duration) -> SyncTime {
 }
 
 struct HandoffFixture {
-    _no_auto_advance: NoAutoAdvance,
     root: tempfile::TempDir,
     store: Arc<Mutex<AutomationStore>>,
-    clock: Arc<PausedWallClock>,
+    clock: Arc<ManualClock>,
     observation: WorkerObservation,
     shutdown: CancellationToken,
     task: tokio::task::JoinHandle<()>,
@@ -35,7 +34,6 @@ struct HandoffFixture {
 
 impl HandoffFixture {
     async fn start() -> TestResult<Self> {
-        let no_auto_advance = NoAutoAdvance::hold();
         let root = tempfile::tempdir()?;
         let store = Arc::new(Mutex::new(
             AutomationStore::open(&root.path().join("automation.sqlite")).await?,
@@ -44,13 +42,15 @@ impl HandoffFixture {
             interaction_storage::InteractionStore::open(root.path().join("interaction.sqlite"))
                 .await?,
         );
-        let clock = Arc::new(PausedWallClock::starting_at(at(Duration::ZERO)));
+        let clock = Arc::new(ManualClock::starting_at(at(Duration::ZERO)).unwrap());
         let worker = PushHandoffWorker::new(Arc::clone(&store), interactions);
         let observation = worker.observation();
         let shutdown = CancellationToken::new();
-        let task = tokio::spawn(worker.run(Arc::clone(&clock) as Arc<dyn Clock>, shutdown.clone()));
+        let task = tokio::spawn(worker.run(
+            Arc::clone(&clock) as Arc<dyn router_clock::RuntimeClock>,
+            shutdown.clone(),
+        ));
         Ok(Self {
-            _no_auto_advance: no_auto_advance,
             root,
             store,
             clock,
@@ -120,7 +120,7 @@ impl HandoffFixture {
     }
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -130,7 +130,7 @@ async fn an_idle_handoff_holds_no_timer_and_reads_nothing_for_an_hour() -> TestR
     settled(&fixture.observation).await?;
     let asleep = fixture.observation.snapshot();
 
-    advance(Duration::from_secs(3_600)).await;
+    advance(&fixture.clock, Duration::from_secs(3_600)).await;
 
     assert_eq!(asleep.reads, ["owed push operations"]);
     assert_eq!(asleep.armed_deadline, None);
@@ -143,7 +143,7 @@ async fn an_idle_handoff_holds_no_timer_and_reads_nothing_for_an_hour() -> TestR
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -154,10 +154,9 @@ async fn a_committed_push_admission_wakes_the_handoff_with_no_clock_advance() ->
     let started_at = fixture.clock.now();
 
     fixture.owe_one_push().await?;
-    let limit = CollectionLimit::start("the owed admission was applied");
     let mut owed = fixture.owed().await?;
     while owed > 0 {
-        limit.next().await?;
+        tokio::task::yield_now().await;
         owed = fixture.owed().await?;
     }
     settled(&fixture.observation).await?;
@@ -169,7 +168,7 @@ async fn a_committed_push_admission_wakes_the_handoff_with_no_clock_advance() ->
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -188,13 +187,13 @@ async fn a_failed_handoff_read_retries_on_the_backoff_with_one_warning() -> Test
     let evaluation = fixture.owe_one_push().await;
     settled(&fixture.observation).await?;
     let first_retry = fixture.observation.snapshot().armed_deadline;
-    advance(Duration::from_secs(1)).await;
+    advance(&fixture.clock, Duration::from_secs(1)).await;
     settled(&fixture.observation).await?;
     let second_retry = fixture.observation.snapshot().armed_deadline;
     sqlx::query("ALTER TABLE owed_push_operations_hidden RENAME TO owed_push_operations")
         .execute(&mut fault)
         .await?;
-    advance(Duration::from_secs(2)).await;
+    advance(&fixture.clock, Duration::from_secs(2)).await;
     settled(&fixture.observation).await?;
     let handoff_warnings = warnings
         .events()

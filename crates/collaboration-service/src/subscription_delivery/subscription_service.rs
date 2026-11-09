@@ -1,3 +1,4 @@
+use router_clock::RuntimeClock;
 #[path = "follow_admission_port.rs"]
 mod follow_admission_port;
 #[cfg(test)]
@@ -21,7 +22,7 @@ mod subscription_startup_recovery;
 use super::ReaderSubscriptionSnapshot;
 use super::reader_scan_scope::ReaderScanScope;
 use super::{
-    BoardAvailability, SubscriptionClock,
+    BoardAvailability,
     reader_delivery_owner::{
         ReaderDeliveryCommand, ReaderDeliveryOwner, ReaderDeliveryOwnerProps,
         ReaderReconcilePurpose,
@@ -45,7 +46,7 @@ pub struct SubscriptionDeliveryServiceProps {
     pub delivery: Arc<dyn SessionMessageDelivery>,
     pub presence: Arc<dyn TargetPresenceProbe>,
     pub machine_identity: MachineIdentity,
-    pub clock: Arc<dyn SubscriptionClock>,
+    pub clock: Arc<dyn RuntimeClock>,
 }
 
 #[cfg(test)]
@@ -62,7 +63,7 @@ pub(super) enum OwnerObservation {
     WaitQueued,
     ReconcileRequested,
     ActivityLagged,
-    Sleeping(Option<tokio::time::Instant>),
+    Sleeping(Option<router_clock::ClockInstant>),
     DirectMessageQueued,
     MailAttemptQueued(PushId),
     PollCancellationDeferred(fleet_sync_protocol::ItemId),
@@ -98,7 +99,7 @@ struct ServiceInner {
     board_availability: BoardAvailability,
     push: Arc<SubscriptionPushStore>,
     presence: Arc<dyn TargetPresenceProbe>,
-    clock: Arc<dyn SubscriptionClock>,
+    clock: Arc<dyn RuntimeClock>,
     owners: Mutex<HashMap<Identity, mpsc::Sender<ReaderDeliveryCommand>>>,
     start_gate: Mutex<bool>,
     shutdown: CancellationToken,
@@ -112,7 +113,7 @@ struct ServiceInner {
     startup_passes: tokio::sync::broadcast::Sender<Vec<ProjectId>>,
     /// Each deadline the startup recovery task arms before its next attempt.
     #[cfg(test)]
-    startup_retry_deadlines: tokio::sync::broadcast::Sender<tokio::time::Instant>,
+    startup_retry_deadlines: tokio::sync::broadcast::Sender<router_clock::ClockInstant>,
 }
 
 #[derive(Clone)]
@@ -138,7 +139,7 @@ impl SubscriptionDeliveryService {
     }
 
     #[must_use]
-    pub fn subscription_clock(&self) -> Arc<dyn SubscriptionClock> {
+    pub fn runtime_clock(&self) -> Arc<dyn RuntimeClock> {
         Arc::clone(&self.inner.clock)
     }
 
@@ -195,7 +196,7 @@ impl SubscriptionDeliveryService {
             BoardAvailability::Available(store) => {
                 let mut store = store.lock().await;
                 let restored = store
-                    .restore_active_and_draining(self.inner.clock.now())
+                    .restore_active_and_draining(self.inner.clock.utc_now())
                     .await?;
                 // Windows contain only shared storage handles. Deferred native reads must
                 // not hold the service's window-store gate across another pool timeout.
@@ -625,7 +626,7 @@ impl SubscriptionDeliveryService {
     #[cfg(test)]
     pub(super) fn observe_startup_retry_deadlines(
         &self,
-    ) -> tokio::sync::broadcast::Receiver<tokio::time::Instant> {
+    ) -> tokio::sync::broadcast::Receiver<router_clock::ClockInstant> {
         self.inner.startup_retry_deadlines.subscribe()
     }
 

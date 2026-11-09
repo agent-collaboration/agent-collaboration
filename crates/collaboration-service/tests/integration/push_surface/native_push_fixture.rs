@@ -203,7 +203,12 @@ pub(super) async fn setup() -> (
             delivery: delivery.clone(),
             presence: presence.clone(),
             machine_identity: machine.clone(),
-            clock: Arc::new(collaboration_service::SystemSubscriptionClock),
+            clock: Arc::new(
+                router_clock::ManualClock::starting_at(
+                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
+                )
+                .unwrap(),
+            ),
         },
     );
     actors.start().await.expect("single owner starts");
@@ -220,7 +225,12 @@ pub(super) async fn setup() -> (
             actors: actors.clone(),
             presence,
             machine,
-            clock: Arc::new(collaboration_service::SystemSubscriptionClock),
+            clock: Arc::new(
+                router_clock::ManualClock::starting_at(
+                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
+                )
+                .unwrap(),
+            ),
         },
     )
     .expect("compose native mail");

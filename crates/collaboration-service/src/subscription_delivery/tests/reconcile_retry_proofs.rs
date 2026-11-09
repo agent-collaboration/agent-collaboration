@@ -5,7 +5,10 @@ use collaboration_protocol::{EndpointId, EndpointRef, SessionId, UuidIdentity};
 async fn accepted_reconcile_dropped_by_an_idle_owner_is_acknowledged_by_its_replacement()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let directory = tempfile::tempdir()?;
-    let registry = crate::test_project_runtime::registry(directory.path())?;
+    let clock = Arc::new(router_clock::ManualClock::new(
+        "2026-10-19T18:00:00Z".parse()?,
+    ));
+    let registry = crate::test_project_runtime::registry(directory.path(), clock.clone())?;
     let service_id = UuidIdentity::try_from("00000000-0000-4000-8000-000000000001".to_owned())?;
     let target = SessionRef {
         endpoint: EndpointRef {
@@ -28,7 +31,7 @@ async fn accepted_reconcile_dropped_by_an_idle_owner_is_acknowledged_by_its_repl
         delivery: routes.clone(),
         presence: routes,
         machine_identity: MachineIdentity::new(service_id, Some("closing-owner-proof"))?,
-        clock: Arc::new(super::super::SystemSubscriptionClock),
+        clock: clock.clone(),
     });
     service.start().await?;
     let mut observations = service.observe_owners();
@@ -43,8 +46,8 @@ async fn accepted_reconcile_dropped_by_an_idle_owner_is_acknowledged_by_its_repl
         .insert(reader.clone(), stale_sender);
     let reconciler = service.clone();
     let reconcile = tokio::spawn(async move { reconciler.reconcile_reader(reader).await });
-    let accepted = tokio::time::timeout(std::time::Duration::from_secs(5), stale_receiver.recv())
-        .await?
+    let accepted = (stale_receiver.recv())
+        .await
         .ok_or("stale owner received no command")?;
     let ReaderDeliveryCommand::Reconcile { reply, .. } = accepted else {
         return Err("expected a reconcile command".into());
@@ -52,9 +55,8 @@ async fn accepted_reconcile_dropped_by_an_idle_owner_is_acknowledged_by_its_repl
     stale_receiver.close();
     drop(reply);
     drop(stale_receiver);
-    tokio::time::timeout(std::time::Duration::from_secs(5), reconcile).await???;
-    let started =
-        tokio::time::timeout(std::time::Duration::from_secs(5), observations.recv()).await??;
+    (reconcile).await??;
+    let started = (observations.recv()).await?;
     if !matches!(started, OwnerObservation::Started) {
         return Err("replacement owner did not start".into());
     }

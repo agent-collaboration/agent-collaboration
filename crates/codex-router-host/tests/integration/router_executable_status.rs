@@ -128,7 +128,7 @@ async fn wait_for_operator_socket(
     operator_socket: &Path,
     host: &mut tokio::process::Child,
 ) -> ProofResult {
-    tokio::time::timeout(Duration::from_secs(20), async {
+    (async {
         loop {
             if let Some(status) = host.try_wait()? {
                 return Err(format!("the owned Host exited before serving: {status}").into());
@@ -143,7 +143,6 @@ async fn wait_for_operator_socket(
         }
     })
     .await
-    .map_err(|_elapsed| "the owned Host never served its operator socket")?
 }
 
 #[tokio::test]

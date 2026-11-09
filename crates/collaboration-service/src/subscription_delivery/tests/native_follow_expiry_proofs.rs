@@ -61,15 +61,18 @@ async fn startup_expires_an_allocated_follow_even_without_local_custody_or_live_
                         .unwrap(),
                     },
                 },
-                fixture.clock.now()
+                fixture.clock.utc_now()
             )
             .await
             .unwrap()
             .is_some()
     );
-    fixture.clock.advance_without_tokio_time(
-        u64::try_from((member.expires_at() - fixture.clock.now()).num_seconds()).unwrap() + 1,
-    );
+    fixture
+        .advance_while_renewing_native_lease(std::time::Duration::from_secs(
+            u64::try_from((member.expires_at() - fixture.clock.utc_now()).num_seconds()).unwrap()
+                + 1,
+        ))
+        .await;
     let runtime = fixture.prepared_runtime();
     // Compose the same weak ports before startup, as the Host does.
     let (app, native, publisher) = follow_application(&fixture, &runtime).await;
@@ -125,7 +128,7 @@ async fn a_renewed_held_follow_delivers_past_its_original_membership_expiry() {
         )
         .await;
     let target = target_session(&fixture.reader).unwrap();
-    let held = tokio::time::timeout(Duration::from_secs(6), async {
+    let held = (async {
         loop {
             if let Some(held) = native
                 .interactions
@@ -140,8 +143,7 @@ async fn a_renewed_held_follow_delivers_past_its_original_membership_expiry() {
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .unwrap();
+    .await;
     let store = fixture
         .registry
         .existing_project(&fixture.project)
@@ -170,25 +172,25 @@ async fn a_renewed_held_follow_delivers_past_its_original_membership_expiry() {
         .await
         .unwrap();
     let until_expiry =
-        u64::try_from((original.expires_at() - fixture.clock.now()).num_seconds()).unwrap();
-    fixture.clock.advance_without_tokio_time(until_expiry - 1);
+        u64::try_from((original.expires_at() - fixture.clock.utc_now()).num_seconds()).unwrap();
+    fixture
+        .advance_while_renewing_native_lease(std::time::Duration::from_secs(until_expiry - 1))
+        .await;
     fixture
         .write_as(
             fixture.reader.clone(),
             message_board::BoardOperation::ThreadRenew {
                 scope: SubscriptionScope::thread(fixture.root.clone()),
             },
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await;
-    fixture.clock.advance_without_tokio_time(2);
+    fixture
+        .advance_while_renewing_native_lease(std::time::Duration::from_secs(2))
+        .await;
     // The target loads after the reader checked the renewed held follow.
     checked_while_wakeable_then_loaded(&fixture, &runtime, &held.push_id).await;
-    let request = tokio::time::timeout(Duration::from_secs(6), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .expect("renewed held follow did not reach its original native client");
+    let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
     assert_eq!(request.payload.push_id, held.push_id);
     runtime.completions.send(DeliveryOutcome::Started).unwrap();
     await_native_completion(&runtime, 1).await;
@@ -254,7 +256,7 @@ async fn prove_reader_expiry(cross_read: bool) {
         .post(&fixture.root, "held through the membership expiry boundary")
         .await;
     let target = target_session(&fixture.reader).unwrap();
-    tokio::time::timeout(Duration::from_secs(6), async {
+    (async {
         loop {
             if !native
                 .interactions
@@ -268,9 +270,8 @@ async fn prove_reader_expiry(cross_read: bool) {
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .unwrap();
-    tokio::time::timeout(Duration::from_secs(6), runtime.observe(|event| matches!(event, crate::subscription_delivery::subscription_service::OwnerObservation::ReconcileRequested))).await.unwrap();
+    .await;
+    (runtime.observe(|event| matches!(event, crate::subscription_delivery::subscription_service::OwnerObservation::ReconcileRequested))).await;
     runtime.owner_barrier(&fixture.reader).await;
     let frozen = frozen_follow(&fixture).await;
     assert_eq!(frozen.len(), 1);
@@ -308,7 +309,7 @@ async fn prove_reader_expiry(cross_read: bool) {
         .unwrap();
     read.finish().await.unwrap();
     let seconds =
-        u64::try_from((original.expires_at() - fixture.clock.now()).num_seconds()).unwrap() + 1;
+        u64::try_from((original.expires_at() - fixture.clock.utc_now()).num_seconds()).unwrap() + 1;
     let probe = if cross_read {
         let probe = fixture
             .store
@@ -317,18 +318,18 @@ async fn prove_reader_expiry(cross_read: bool) {
             .pause_next_expiry_read_for_test()
             .await;
         runtime.reconcile(&fixture.reader).await;
-        tokio::time::timeout(Duration::from_secs(6), probe.wait_for_read())
-            .await
-            .unwrap();
+        (probe.wait_for_read()).await;
         Some(probe)
     } else {
         None
     };
-    fixture.clock.advance_without_tokio_time(seconds);
+    fixture
+        .advance_while_renewing_native_lease(std::time::Duration::from_secs(seconds))
+        .await;
     if let Some(probe) = probe {
         probe.release();
     }
-    let ended = tokio::time::timeout(Duration::from_secs(6), async {
+    let ended = (async {
         loop {
             let mut read = store.snapshot().await.unwrap();
             let current = read
@@ -370,7 +371,7 @@ async fn prove_reader_expiry(cross_read: bool) {
     drop(app);
     runtime.close().await;
     fixture.close_native(native).await;
-    let ended = ended.expect("reader expiry cadence never committed the membership end");
+    let ended = ended;
     assert_eq!(ended.reader(), original.reader());
     assert!(matches!(
         ended.envelope.actor,

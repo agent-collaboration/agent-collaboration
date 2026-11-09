@@ -332,7 +332,7 @@ async fn assert_class_backs_off_and_recovers(class: FaultedClass) {
         run_to_the_armed_time(&worker).await;
         let next = armed(&worker.snapshot()).unwrap();
         let step = (next - previous).num_milliseconds();
-        // The pass starts at the armed time or up to the paused timer's 2 ms after it.
+        // The manual clock reaches each retry's exact deadline.
         assert!(
             (expected..=expected + 2).contains(&step),
             "{context}: step {step}, expected {expected}"

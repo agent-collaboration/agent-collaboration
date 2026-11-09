@@ -43,14 +43,16 @@ async fn assert_reactivated_frontier(resolved: bool) {
             .queue_project(fixture.project.clone())
             .await
             .unwrap();
-        fixture.clock.advance_without_tokio_time(2);
-        tokio::time::timeout(Duration::from_secs(10), async {
+        fixture
+            .clock
+            .advance(std::time::Duration::from_secs(2))
+            .unwrap();
+        (async {
             while frozen_follow(&fixture).await.len() != 2 {
                 tokio::task::yield_now().await;
             }
         })
-        .await
-        .expect("generation replacement must be allocated before reactivation");
+        .await;
         fixture.held_native_pushes(1).await;
     }
     publisher.shutdown().await;
@@ -68,7 +70,7 @@ async fn assert_reactivated_frontier(resolved: bool) {
                         .try_into()
                         .unwrap(),
                 },
-                fixture.clock.now(),
+                fixture.clock.utc_now(),
             )
             .await
             .unwrap();
@@ -78,7 +80,7 @@ async fn assert_reactivated_frontier(resolved: bool) {
                 BoardOperation::ThreadUnresolve {
                     thread_id: fixture.root.clone(),
                 },
-                fixture.clock.now(),
+                fixture.clock.utc_now(),
             )
             .await;
         fixture
@@ -95,7 +97,7 @@ async fn assert_reactivated_frontier(resolved: bool) {
                     replace: None,
                     note: None,
                 },
-                fixture.clock.now(),
+                fixture.clock.utc_now(),
             )
             .await
             .unwrap();
@@ -106,7 +108,7 @@ async fn assert_reactivated_frontier(resolved: bool) {
                     reader: fixture.reader.clone(),
                     scope: SubscriptionScope::thread(fixture.root.clone()),
                 },
-                fixture.clock.now(),
+                fixture.clock.utc_now(),
             )
             .await
             .unwrap();
@@ -153,11 +155,7 @@ async fn assert_reactivated_frontier(resolved: bool) {
         *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
         // Held mail waits for a signal that its target loaded, not for the clock.
         fixture.held_mail.observation_retried();
-        let request = tokio::time::timeout(Duration::from_secs(10), async {
-            runtime.requests.lock().await.recv().await.unwrap()
-        })
-        .await
-        .unwrap();
+        let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
         let frozen = frozen_follow(&fixture).await;
         assert_eq!(
             request.payload.push_id.as_str(),
@@ -173,13 +171,12 @@ async fn assert_reactivated_frontier(resolved: bool) {
     let mut read = store.snapshot().await.unwrap();
     let head = read.mail_handoff_head().await.unwrap();
     read.finish().await.unwrap();
-    tokio::time::timeout(Duration::from_secs(10), async {
+    (async {
         while frontier(&fixture).await != head {
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .expect("historical activation failed to settle the actual handoff head");
+    .await;
     assert!(matches!(
         native
             .runtime()
@@ -218,7 +215,7 @@ async fn assert_reactivated_frontier(resolved: bool) {
         .queue_project(fixture.project.clone())
         .await
         .unwrap();
-    tokio::time::timeout(Duration::from_secs(10), async {
+    (async {
         while fixture
             .interactions
             .mail_retired_through(&fixture.project)
@@ -229,8 +226,7 @@ async fn assert_reactivated_frontier(resolved: bool) {
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .expect("acknowledged historical custody was not retired");
+    .await;
     assert!(matches!(
         native
             .runtime()

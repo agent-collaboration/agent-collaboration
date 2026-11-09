@@ -14,8 +14,8 @@ use collaboration_protocol::{
 };
 use collaboration_runtime::{
     LoopSnapshot, ProviderOperationAdmission, ProviderOperationStore, WorkerObservation,
-    paused_wall_clock::PausedWallClock,
 };
+use router_clock::{ManualClock, RuntimeClock};
 use runtime_primitives::{Clock, SyncTime};
 use sqlx::Connection;
 use std::{
@@ -28,9 +28,6 @@ use tokio_util::sync::CancellationToken;
 use tracing_subscriber::{Layer, layer::SubscriberExt};
 
 const WORKER: &str = "provider_operation_retention";
-
-/// Bounds, in real time, a wait for a pass the test expects; it only stops a hang.
-const WAKE_GUARD: std::time::Duration = std::time::Duration::from_secs(30);
 
 fn at(text: &str) -> DateTime<Utc> {
     DateTime::parse_from_rfc3339(text)
@@ -148,7 +145,7 @@ impl Operations {
 
 struct RunningRetention {
     observation: WorkerObservation,
-    clock: Arc<PausedWallClock>,
+    clock: Arc<ManualClock>,
     prunes_entered_at: Arc<StdMutex<Vec<SyncTime>>>,
     shutdown: CancellationToken,
     task: tokio::task::JoinHandle<()>,
@@ -161,9 +158,9 @@ impl RunningRetention {
         retention_days: Option<NonZeroU32>,
         wall: DateTime<Utc>,
     ) -> Self {
-        let clock = Arc::new(PausedWallClock::starting_at(SyncTime::from_unix_millis(
-            wall.timestamp_millis(),
-        )));
+        let clock = Arc::new(
+            ManualClock::starting_at(SyncTime::from_unix_millis(wall.timestamp_millis())).unwrap(),
+        );
         let (worker_loop, mut pass) = provider_retention_loop(
             Arc::clone(&operations.store),
             Some(Arc::clone(&operations.supervisor)),
@@ -178,9 +175,13 @@ impl RunningRetention {
             let shutdown = shutdown.clone();
             async move { worker_loop.run(&mut pass, shutdown).await }
         });
-        tokio::time::timeout(WAKE_GUARD, observation.asleep_at_least(1))
-            .await
-            .expect("the first pass goes to sleep");
+        observation.asleep_at_least(1).await;
+        if let Some(deadline) = observation.snapshot().armed_deadline {
+            assert!(
+                clock.has_not_due_check_now(clock.wall_deadline(deadline)),
+                "worker must register its injected sleep"
+            );
+        }
         Self {
             observation,
             clock,
@@ -214,28 +215,24 @@ impl RunningRetention {
 
     /// Returns once the worker has slept after the pass a change it was just given wakes.
     async fn asleep_after(&self, sleeps: u64, cause: &str) {
-        tokio::time::timeout(WAKE_GUARD, self.observation.asleep_at_least(sleeps + 1))
-            .await
-            .unwrap_or_else(|_| panic!("{cause} wakes the worker"));
+        eprintln!("provider retention: waiting for {cause}");
+        (self.observation.asleep_at_least(sleeps + 1)).await;
     }
 
-    /// Asserts the latest prune began at `due`, as the pass read its clock on waking, up
-    /// to the paused timer's 2 ms rounding: a timer that fires late fails this.
+    /// The pass must enter at the exact deadline the manual clock reached.
     fn assert_last_prune_entered_at(&self, due: DateTime<Utc>) {
         let entered = *self.prunes_entered_at.lock().unwrap().last().unwrap();
         let late = entered.unix_millis() - due.timestamp_millis();
-        assert!(
-            (0..=2).contains(&late),
-            "the prune began {late} ms after {due}"
-        );
+        assert_eq!(late, 0, "the pass began {late} ms after {due}");
     }
 
-    /// Lets the paused clock reach the worker's timer and returns once that pass has slept.
+    /// Advances the manual clock to the armed deadline and awaits the resulting pass.
     async fn run_to_the_armed_time(&self) {
         let sleeps = self.snapshot().sleeps;
-        tokio::time::pause();
+        self.clock
+            .advance_to(self.snapshot().armed_deadline.unwrap())
+            .unwrap();
         self.observation.asleep_at_least(sleeps + 1).await;
-        tokio::time::resume();
     }
 
     async fn stop(self) {
@@ -440,11 +437,8 @@ async fn a_failed_prune_retries_at_one_two_four_seconds_and_recovers_with_no_new
         worker.run_to_the_armed_time().await;
         let next = worker.armed().unwrap();
         let step = (next - previous).num_milliseconds();
-        // The pass starts at the armed time or up to the paused timer's 2 ms after it.
-        assert!(
-            (expected..=expected + 2).contains(&step),
-            "step {step}, expected {expected}"
-        );
+        // The manual clock reaches each retry's exact deadline.
+        assert_eq!(step, expected, "retry delay must match its exact deadline");
         previous = next;
     }
     assert_eq!(*failures.lock().unwrap(), 1, "one warning for the run");

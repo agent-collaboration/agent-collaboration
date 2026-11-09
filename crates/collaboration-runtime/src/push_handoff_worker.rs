@@ -53,7 +53,11 @@ impl PushHandoffWorker {
     /// One Host-owned instance runs after exclusive startup and drains on shutdown. It
     /// sleeps until automation commits: owed push operations are due at once, so there
     /// is no timer except the failed-pass retry.
-    pub async fn run(self, clock: Arc<dyn runtime_primitives::Clock>, shutdown: CancellationToken) {
+    pub async fn run(
+        self,
+        clock: Arc<dyn router_clock::RuntimeClock>,
+        shutdown: CancellationToken,
+    ) {
         let commits = self.automation.lock().await.subscribe_commits();
         let worker = crate::WakeDrivenWorkerLoop::new("push hand-off", clock)
             .with_observation(self.observation.clone())

@@ -16,6 +16,7 @@ use fleet_sync_protocol::DeliveryStatus;
 use serde::{Serialize, de::DeserializeOwned};
 
 pub(crate) struct LocalWakeOwner {
+    clock: Arc<dyn router_clock::RuntimeClock>,
     pub service: collaboration_protocol::UuidIdentity,
     pub store: Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>,
     pub permits: Arc<tokio::sync::Semaphore>,
@@ -34,6 +35,7 @@ impl MailDeliveryRuntime {
         permits: Arc<tokio::sync::Semaphore>,
     ) -> Result<(), String> {
         let owner = LocalWakeOwner {
+            clock: self.clock.clone(),
             service,
             store,
             permits,
@@ -79,7 +81,7 @@ impl MailDeliveryRuntime {
             .outbox_status(id)
             .await
             .map_err(|_| RemoteWakeRefusal::RemoteUnavailable)?;
-        if self.clock.now().timestamp_millis() >= request.valid_until_ms {
+        if self.clock.utc_now().timestamp_millis() >= request.valid_until_ms {
             return expired_wake_answer(state, previously_prepared);
         }
         if previously_prepared && let Some(answer) = retained_wake_answer(state)? {
@@ -146,7 +148,7 @@ impl MailDeliveryRuntime {
                         Box::pin(async move {
                             // Peer lookup or the store lock may have consumed the deadline.
                             // Inspect custody again atomically, without admitting expired work.
-                            let admitted_at = clock.now();
+                            let admitted_at = clock.utc_now();
                             if admitted_at.timestamp_millis() >= deadline_ms {
                                 return Outbox::<_, RouterDeliveryTypes, _>::new(
                                     scope,
@@ -221,7 +223,7 @@ impl MailDeliveryRuntime {
             if let Some(answer) = retained_wake_answer(state)? {
                 return Ok(answer);
             }
-            let remaining_ms = deadline_ms.saturating_sub(self.clock.now().timestamp_millis());
+            let remaining_ms = deadline_ms.saturating_sub(self.clock.utc_now().timestamp_millis());
             let Ok(remaining_ms) = u64::try_from(remaining_ms) else {
                 return Err(RemoteWakeRefusal::DeadlineExpired);
             };
@@ -344,9 +346,12 @@ impl LocalWakeOwner {
         {
             return fail(RemoteWakeRefusal::InvalidRecord);
         }
-        let wakes =
-            crate::collaboration_application::WakeOperations::new(&self.service, Some(&self.store))
-                .with_wait_capacity(&self.permits);
+        let wakes = crate::collaboration_application::WakeOperations::new(
+            self.clock.clone(),
+            &self.service,
+            Some(&self.store),
+        )
+        .with_wait_capacity(&self.permits);
         use collaboration_mail_protocol::RemoteWakeRequest as R;
         // Every control's frozen target must match the actual local wake before mutation.
         if let R::Show { wakeup_id }
@@ -438,7 +443,7 @@ impl LocalWakeOwner {
                     after,
                     deadline,
                 } => {
-                    let remaining = (deadline.as_datetime() - chrono::Utc::now())
+                    let remaining = (deadline.as_datetime() - self.clock.utc_now())
                         .to_std()
                         .map_err(|_| invalid_wake())?;
                     let wait = collaboration_protocol::WakeWaitRequest {
@@ -449,7 +454,13 @@ impl LocalWakeOwner {
                                 .map_err(|_| invalid_wake())?,
                         ),
                     };
-                    match tokio::time::timeout(remaining, wakes.wake_wait_local(wait)).await {
+                    match router_clock::timeout(
+                        self.clock.as_ref(),
+                        remaining,
+                        wakes.wake_wait_local(wait),
+                    )
+                    .await
+                    {
                         Ok(Ok(answer)) => Ok(RemoteWakeResult::Wait(
                             convert(answer).map_err(|_| invalid_wake())?,
                         )),

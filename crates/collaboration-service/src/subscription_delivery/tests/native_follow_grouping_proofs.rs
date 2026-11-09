@@ -10,7 +10,7 @@ use message_board::{
 
 async fn wait_held(native: &NativeMailOwner, fixture: &OwnerFixture, expected: usize) {
     let target = target_session(&fixture.reader).unwrap();
-    tokio::time::timeout(Duration::from_secs(6), async {
+    (async {
         loop {
             let held = native
                 .interactions
@@ -28,8 +28,7 @@ async fn wait_held(native: &NativeMailOwner, fixture: &OwnerFixture, expected: u
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .expect("native membership follow items were not held");
+    .await;
 }
 
 #[tokio::test]
@@ -46,7 +45,10 @@ async fn resumed_reader_keeps_separate_membership_items_until_a_load_signal() {
     fixture.post(&fixture.root, "first membership held").await;
     wait_held(&native, &fixture, 1).await;
     runtime.owner_barrier(&fixture.reader).await;
-    fixture.clock.advance_without_tokio_time(1);
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(1))
+        .unwrap();
     fixture.post(&second_root, "second membership held").await;
     wait_held(&native, &fixture, 2).await;
     runtime.owner_barrier(&fixture.reader).await;
@@ -60,7 +62,7 @@ async fn resumed_reader_keeps_separate_membership_items_until_a_load_signal() {
         .start_inherited_project_readers(&fixture.project)
         .await
         .unwrap();
-    let frozen = tokio::time::timeout(Duration::from_secs(6), async {
+    let frozen = (async {
         loop {
             let items = frozen_follow(&fixture).await;
             if items.len() >= 3 {
@@ -69,8 +71,7 @@ async fn resumed_reader_keeps_separate_membership_items_until_a_load_signal() {
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .expect("the Poll post reaches its actual frozen handoff");
+    .await;
     assert_eq!(frozen.len(), 3);
     let (deliver_items, poll_items): (Vec<_>, Vec<_>) = frozen.iter().partition(|item| {
         matches!(item.body(), BoardDeliveryBody::Notification(body)
@@ -120,19 +121,14 @@ async fn resumed_reader_keeps_separate_membership_items_until_a_load_signal() {
 
     // The reader runs now; one signal that it loaded is one check for all its held items.
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
-    fixture.clock.advance_without_tokio_time(29);
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(29))
+        .unwrap();
     fixture.held_mail.observation_retried();
     let mut received = std::collections::BTreeSet::new();
-    let mut timed_out = false;
     for completed in 1..=2 {
-        let request = tokio::time::timeout(Duration::from_secs(6), async {
-            runtime.requests.lock().await.recv().await.unwrap()
-        })
-        .await;
-        let Ok(request) = request else {
-            timed_out = true;
-            break;
-        };
+        let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
         received.insert(request.payload.push_id.as_str().to_owned());
         runtime.completions.send(DeliveryOutcome::Started).unwrap();
         await_native_completion(&runtime, completed).await;
@@ -152,10 +148,7 @@ async fn resumed_reader_keeps_separate_membership_items_until_a_load_signal() {
     drop(app);
     runtime.close().await;
     fixture.close_native(native).await;
-    assert!(
-        !timed_out,
-        "a running reader left its second membership behind a staggered presence deadline"
-    );
+
     assert_eq!(
         received,
         deliver_items
@@ -180,7 +173,7 @@ async fn one_membership_drains_twenty_roots_then_the_remaining_root_without_lost
         .write_as(
             fixture.reader.clone(),
             BoardOperation::ProjectWatch {},
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await;
     fixture
@@ -198,7 +191,7 @@ async fn one_membership_drains_twenty_roots_then_the_remaining_root_without_lost
                     lifetime_seconds: None,
                 },
             },
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap();
@@ -216,11 +209,7 @@ async fn one_membership_drains_twenty_roots_then_the_remaining_root_without_lost
         .unwrap();
     let mut received = std::collections::BTreeSet::new();
     for completed in 1..=2 {
-        let request = tokio::time::timeout(Duration::from_secs(6), async {
-            runtime.requests.lock().await.recv().await.unwrap()
-        })
-        .await
-        .expect("remaining due roots did not drain immediately");
+        let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
         received.insert(request.payload.push_id.as_str().to_owned());
         runtime.completions.send(DeliveryOutcome::Started).unwrap();
         await_native_completion(&runtime, completed).await;

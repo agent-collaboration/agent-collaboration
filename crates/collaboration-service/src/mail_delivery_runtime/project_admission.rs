@@ -80,7 +80,7 @@ impl MailDeliveryRuntime {
                 },
             )?,
         );
-        let now = self.clock.now();
+        let now = self.clock.utc_now();
         let read_context = collaboration_protocol::MailReadContext::Project {
             project: project.clone(),
             handoff: item

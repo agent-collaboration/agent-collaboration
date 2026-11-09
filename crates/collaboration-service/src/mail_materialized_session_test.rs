@@ -2,7 +2,7 @@
 use crate::mail_delivery_projection_tests::fixture::{Fixture, ProjectionTask};
 use crate::{
     BoardAvailability, MailPushDelivery, MailPushDeliveryProps, SubscriptionDeliveryService,
-    SubscriptionDeliveryServiceProps, SystemSubscriptionClock,
+    SubscriptionDeliveryServiceProps,
 };
 use collaboration_contracts::{MachineIdentity, SessionDeliveryRoute};
 use collaboration_protocol::{CodexGeneration, MessageDelivery, PushDeliveryState, SessionRef};
@@ -12,7 +12,7 @@ use collaboration_runtime::{
 };
 use durable_steps::{AtomicStore, StoreError};
 use fleet_sync_delivery::Inbox;
-use fleet_sync_protocol::{RecipientOutcome, SyncTime};
+use fleet_sync_protocol::RecipientOutcome;
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{
@@ -43,7 +43,7 @@ async fn materialized_unloaded_session_holds_mail_then_delivers_after_readiness(
         MachineIdentity::new(target.endpoint.service_id.clone(), Some("native proof")).unwrap();
     let loaded = Arc::new(AtomicBool::new(false));
     let inputs = Arc::new(AtomicUsize::new(0));
-    let route = native_route(&target, socket, root.path());
+    let route = native_route(fixture.host.clock.clone(), &target, socket, root.path());
     let delivery = Arc::new(SessionDeliveryRouter::new(vec![route]));
     let actors = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
         board_availability: BoardAvailability::Unavailable,
@@ -51,7 +51,7 @@ async fn materialized_unloaded_session_holds_mail_then_delivers_after_readiness(
         delivery: delivery.clone(),
         presence: delivery.clone(),
         machine_identity: machine.clone(),
-        clock: Arc::new(SystemSubscriptionClock),
+        clock: fixture.host.clock.clone(),
     });
     actors.start().await.unwrap();
     *fixture.host.consumer.native.lock().unwrap() =
@@ -60,7 +60,7 @@ async fn materialized_unloaded_session_holds_mail_then_delivers_after_readiness(
             actors: actors.clone(),
             presence: delivery,
             machine,
-            clock: Arc::new(SystemSubscriptionClock),
+            clock: fixture.host.clock.clone(),
         })));
     let server = tokio::spawn(serve_materialized_thread(
         listener,
@@ -131,7 +131,7 @@ async fn release_ready_item(
 ) {
     let config = fixture.host.config;
     let binding = fixture.host.binding.clone();
-    let now = SyncTime::from_unix_millis(fixture.host.clock.load(Ordering::SeqCst));
+    let now = runtime_primitives::Clock::now(fixture.host.clock.as_ref());
     fixture
         .store
         .transaction(move |scope| {
@@ -161,6 +161,7 @@ async fn release_ready_item(
 }
 
 fn native_route(
+    clock: Arc<dyn router_clock::RuntimeClock>,
     target: &SessionRef,
     socket: std::path::PathBuf,
     home: &std::path::Path,
@@ -206,6 +207,7 @@ fn native_route(
     let gate = NativeGenerationGate::default();
     gate.activate(generation, socket, Some(schemas)).unwrap();
     Arc::new(CodexAppServerDeliveryRoute::new(
+        clock,
         target.endpoint.service_id.clone(),
         endpoints,
         NativeControlBackend {

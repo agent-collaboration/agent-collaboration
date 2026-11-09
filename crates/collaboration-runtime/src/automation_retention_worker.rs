@@ -15,7 +15,7 @@ const INTERACTION_PRUNE_BATCH: u32 = 500;
 
 pub struct AutomationRetentionWorker {
     store: Arc<Mutex<AutomationStore>>,
-    clock: Arc<dyn runtime_primitives::Clock>,
+    clock: Arc<dyn router_clock::RuntimeClock>,
     interaction_broker: Option<Arc<crate::ServiceInteractionBroker>>,
     native_push_store: Option<Arc<interaction_storage::InteractionStore>>,
 }
@@ -23,7 +23,7 @@ pub struct AutomationRetentionWorker {
 impl AutomationRetentionWorker {
     pub fn new(
         store: Arc<Mutex<AutomationStore>>,
-        clock: Arc<dyn runtime_primitives::Clock>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Self {
         Self {
             store,

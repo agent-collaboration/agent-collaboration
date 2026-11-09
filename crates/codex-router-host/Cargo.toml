@@ -14,6 +14,7 @@ bench = false
 
 [features]
 runtime-test-support = [
+    "router-clock/test-support",
     "collaboration-service/runtime-test-support",
     "collaboration-runtime/runtime-test-support",
     "collaboration-runtime/test-support",
@@ -28,6 +29,7 @@ keychain-test-support = [
 workspace = true
 
 [dependencies]
+router-clock.workspace = true
 nix = { workspace = true, features = ["event"] }
 sha2.workspace = true
 codex-acp-adapter = { path = "../codex-acp-adapter", version = "0.1.14" }
@@ -80,6 +82,7 @@ toml = "1.1.2"
 tracing-subscriber.workspace = true
 
 [dev-dependencies]
+router-clock = { workspace = true, features = ["test-support"] }
 collaboration-central-tokio = { path = "../collaboration-central-tokio", version = "0.1.126", features = ["test-support"] }
 collaboration-application-test-support = { path = "../collaboration-application-test-support", version = "0.1.126" }
 owned-process-test-support = { path = "../owned-process-test-support", version = "0.1.126" }

@@ -146,7 +146,12 @@ async fn message_server(
                 Some("mcp-message-test"),
             )
             .expect("machine identity"),
-            clock: std::sync::Arc::new(collaboration_service::SystemSubscriptionClock),
+            clock: std::sync::Arc::new(
+                router_clock::ManualClock::starting_at(
+                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
+                )
+                .unwrap(),
+            ),
         },
     );
     owner.start().await.expect("delivery owner starts");
@@ -166,7 +171,12 @@ async fn message_server(
                 Some("mcp-message-test"),
             )
             .expect("machine"),
-            clock: std::sync::Arc::new(collaboration_service::SystemSubscriptionClock),
+            clock: std::sync::Arc::new(
+                router_clock::ManualClock::starting_at(
+                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
+                )
+                .unwrap(),
+            ),
         },
     )
     .expect("native mail owner");

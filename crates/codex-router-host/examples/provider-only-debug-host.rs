@@ -102,15 +102,8 @@ async fn main() -> ExampleResult<()> {
         vec![ExternalProviderStartup::Launch(provider)],
     )
     .await?;
-    // Provider operation retention starts as the Host lifecycle starts it: default
-    // retention on the system clock (lifecycle_owner/collaboration_lifecycle.rs).
-    if let Err(error) = runtime
-        .configure_provider_operation_retention(
-            None,
-            std::sync::Arc::new(runtime_primitives::SystemClock),
-        )
-        .await
-    {
+    // Provider retention uses the clock the Host already composed.
+    if let Err(error) = runtime.configure_provider_operation_retention(None).await {
         let cleanup = runtime.shutdown().await;
         return Err(match cleanup {
             Ok(()) => error.into(),

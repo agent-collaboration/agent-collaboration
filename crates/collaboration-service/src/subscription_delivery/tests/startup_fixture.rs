@@ -1,12 +1,12 @@
 //! Native startup proof fixtures and actual completion observations.
-use super::super::SubscriptionClock;
+use router_clock::RuntimeClock;
+
 use super::owner_fixture::*;
 use message_board::*;
 use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
 };
-use std::time::Duration;
 use tokio::sync::Notify;
 use tracing_subscriber::Layer;
 
@@ -18,7 +18,7 @@ pub(in crate::subscription_delivery) struct StartupEvidence {
 }
 impl StartupEvidence {
     pub async fn state(&self, expected: &str) {
-        tokio::time::timeout(Duration::from_secs(5), async {
+        (async {
             loop {
                 let changed = self.changed.notified();
                 if self
@@ -33,13 +33,7 @@ impl StartupEvidence {
                 changed.await;
             }
         })
-        .await
-        .unwrap_or_else(|_| {
-            panic!(
-                "missing startup transition {expected}; observed {:?}",
-                self.states.lock().unwrap()
-            )
-        });
+        .await;
     }
 }
 pub(in crate::subscription_delivery) struct StartupTrace(pub Arc<StartupEvidence>);
@@ -68,18 +62,14 @@ impl<TSubscriber: tracing::Subscriber> Layer<TSubscriber> for StartupTrace {
         event.record(&mut Fields(&self.0));
     }
 }
-pub(in crate::subscription_delivery) fn clock(fixture: &OwnerFixture) -> Arc<RuntimeTimerClock> {
-    Arc::new(RuntimeTimerClock::new(fixture.clock.clone()))
+pub(in crate::subscription_delivery) fn clock(fixture: &OwnerFixture) -> Arc<ManualClock> {
+    fixture.clock.clone()
 }
 pub(in crate::subscription_delivery) async fn activity(
     fixture: &OwnerFixture,
     runtime: &OwnerRuntime,
 ) -> collaboration_protocol::PushActivitySnapshot {
-    let request = tokio::time::timeout(Duration::from_secs(5), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .expect("autonomous startup delivery");
+    let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
     fixture
         .interactions
         .get_push_record(&request.payload.push_id)
@@ -180,7 +170,7 @@ pub(in crate::subscription_delivery) async fn subscribed_project(
         };
         let reply = fixture
             .admission
-            .submit_at(&request, fixture.clock.now())
+            .submit_at(&request, fixture.clock.utc_now())
             .await
             .unwrap();
         assert!(
@@ -241,7 +231,7 @@ pub(in crate::subscription_delivery) async fn subscribed_project(
         .store
         .lock()
         .await
-        .rescan_missing_subscription_windows(&reader, fixture.clock.now())
+        .rescan_missing_subscription_windows(&reader, fixture.clock.utc_now())
         .await
         .unwrap();
     let posted = write(

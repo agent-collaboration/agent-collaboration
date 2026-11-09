@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/router-clock",
     "crates/tailnet-verification-host",
     "crates/board-central-test-support",
     "crates/agent-router-update",
@@ -67,6 +68,7 @@ license = "MIT OR Apache-2.0"
 publish = false
 
 [workspace.dependencies]
+router-clock = { path = "crates/router-clock", version = "0.1.136" }
 fleet-sync-protocol = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "0b2742975ca8b20270929b89f4959c1987bdb090" }
 durable-steps = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "0b2742975ca8b20270929b89f4959c1987bdb090", default-features = false }
 fleet-sync-query-gen = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "0b2742975ca8b20270929b89f4959c1987bdb090", default-features = false }

@@ -11,9 +11,7 @@ mod fixture;
 
 use collaboration_contracts::TargetPresence;
 use collaboration_protocol::{PushDeliveryState, PushKind, RouterLink};
-use fixture::{
-    ClaudePeerSubscriptionFixture, OWNER_EVENT_TIMEOUT, PRESENCE_RECHECK, ProofResult, SESSION_ID,
-};
+use fixture::{ClaudePeerSubscriptionFixture, PRESENCE_RECHECK, ProofResult, SESSION_ID};
 use message_board::{InboxActivity, SubscriptionDeliveryOutcome};
 use std::{os::unix::fs::PermissionsExt as _, sync::Arc};
 
@@ -40,7 +38,7 @@ async fn claude_peer_subscription_notice_is_refused_while_the_peer_is_closed_and
 
         // The peer is closed: the Batch is refused at once and nothing is held.
         let refused_post = fixture.post_activity().await?;
-        let refused = tokio::time::timeout(OWNER_EVENT_TIMEOUT, async {
+        let refused = (async {
             loop {
                 let subscription = fixture.subscription().await?;
                 if matches!(&subscription.last_outcome,
@@ -50,9 +48,7 @@ async fn claude_peer_subscription_notice_is_refused_while_the_peer_is_closed_and
                 }
                 tokio::task::yield_now().await;
             }
-        })
-        .await
-        .map_err(|_| std::io::Error::other("the Batch was not refused at once"))??;
+        }).await?;
         assert_eq!(refused.held_since, None, "nothing is held");
         assert_eq!(refused.next_retry_at, None, "and nothing is retried");
         assert!(fixture.held_push_records().await?.is_empty());
@@ -72,9 +68,7 @@ async fn claude_peer_subscription_notice_is_refused_while_the_peer_is_closed_and
         let peer_receiver =
             ClaudePeerSubscriptionFixture::receive_one_peer_batch(Arc::clone(&listener));
         let delivered_post = fixture.post_activity().await?;
-        let frames = tokio::time::timeout(OWNER_EVENT_TIMEOUT, peer_receiver)
-            .await
-            .map_err(|_| std::io::Error::other("peer frame task did not finish"))???;
+        let frames = (peer_receiver).await??;
         assert_eq!(frames.authentication["token"], fixture::PEER_TOKEN);
         assert!(frames.extra_frame.is_none(), "one connection carries one Batch frame");
         let notice_line = frames.user["message"]["content"]

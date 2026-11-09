@@ -16,7 +16,6 @@ use collaboration_runtime::SessionDeliveryRouter;
 
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
-use collaboration_service::SystemSubscriptionClock;
 
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
@@ -147,6 +146,7 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
         .with_native_backend(native_backend.clone())
         .unwrap_or_else(|error| panic!("binding: {error}"));
     let route: Arc<dyn SessionDeliveryRoute> = Arc::new(CodexAppServerDeliveryRoute::new(
+        identity.runtime_clock(),
         service_id
             .to_owned()
             .try_into()
@@ -173,7 +173,12 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
             delivery: Arc::clone(&delivery),
             presence: Arc::clone(&presence),
             machine_identity: machine_identity.clone(),
-            clock: Arc::new(SystemSubscriptionClock),
+            clock: Arc::new(
+                router_clock::ManualClock::starting_at(
+                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
+                )
+                .unwrap(),
+            ),
         });
     subscription_delivery
         .start()
@@ -195,7 +200,12 @@ async fn sdk_inspection_and_exact_interrupt_use_native_backend_with_generation_g
             actors: subscription_delivery.clone(),
             presence,
             machine: machine_identity,
-            clock: Arc::new(SystemSubscriptionClock),
+            clock: Arc::new(
+                router_clock::ManualClock::starting_at(
+                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
+                )
+                .unwrap(),
+            ),
         },
     )
     .unwrap();

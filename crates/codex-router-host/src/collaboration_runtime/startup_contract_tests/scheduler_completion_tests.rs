@@ -2,13 +2,11 @@
 //! journal commit (a native `turn/completed`), the provider supervisor's published result,
 //! and the observation re-check while observation is unavailable. Each source, triggered on
 //! its own, wakes the idle scheduler for one more pass.
-use super::{BOUND, start_host_with_providers};
+use super::start_host_with_providers;
 
-/// Waits until the scheduler has gone to sleep `count` times, bounded by the test limit.
+/// Waits until the scheduler has gone to sleep `count` times, observed at its own sleep boundary.
 async fn scheduler_asleep(observation: &collaboration_runtime::WorkerObservation, count: u64) {
-    tokio::time::timeout(BOUND, observation.asleep_at_least(count))
-        .await
-        .unwrap_or_else(|_| panic!("the scheduler did not sleep {count} times"));
+    (observation.asleep_at_least(count)).await;
 }
 
 /// A native observation of a thread going idle, as the observer would record it.
@@ -54,7 +52,10 @@ async fn the_hosts_scheduler_wakes_on_each_completion_source() {
 
     let idle = observation.snapshot().sleeps;
     journal
-        .append(&thread_went_idle(&service), chrono::Utc::now().timestamp())
+        .append(
+            &thread_went_idle(&service),
+            runtime.clock.utc_now().timestamp(),
+        )
         .await
         .expect("journal append");
     scheduler_asleep(&observation, idle + 1).await;

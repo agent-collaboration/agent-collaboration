@@ -55,7 +55,11 @@ impl SchedulerFixture {
     async fn one_executing_run(&self) -> TestResult<RunId> {
         let first = self.start()?;
         settled(&first).await?;
-        advance(Duration::from_secs(u64::from(INTERVAL_SECONDS))).await;
+        advance(
+            &self.clock,
+            Duration::from_secs(u64::from(INTERVAL_SECONDS)),
+        )
+        .await;
         let run = self.executing_and_asleep(&first).await?;
         first.stop().await;
         self.route.observed_runs.lock().unwrap().clear();
@@ -76,7 +80,7 @@ impl SchedulerFixture {
     }
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -111,7 +115,7 @@ async fn more_runs_than_slots_and_than_a_batch_are_each_stepped_once_with_no_clo
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -156,7 +160,7 @@ async fn runs_after_a_full_batch_waiting_for_retries_are_stepped_with_no_clock_a
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -309,16 +313,15 @@ impl CursorFixture {
 
     /// Waits for `run` to leave Executing, then for the scheduler to settle.
     async fn settles(&self, run: &RunId) -> TestResult<super::RunPhase> {
-        let limit = super::CollectionLimit::start("the completed Run settled");
         while self.fixture.read_phase(run).await? == super::RunPhase::Executing {
-            limit.next().await?;
+            tokio::task::yield_now().await;
         }
         settled(&self.scheduler).await?;
         self.fixture.read_phase(run).await
     }
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -354,7 +357,7 @@ async fn a_completion_for_a_run_in_flight_behind_a_full_table_is_checked_again()
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -394,7 +397,7 @@ async fn a_completion_for_an_idle_run_the_scan_has_passed_is_checked_again() -> 
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -430,9 +433,8 @@ async fn a_completion_that_resumes_a_sweep_past_its_run_is_followed_by_a_full_sw
     fixture.route.per_run.complete(target.clone());
     completions.send_modify(|revision| *revision = revision.wrapping_add(1));
     first_sleep.release();
-    let limit = super::CollectionLimit::start("the completed Run settled");
     while fixture.read_phase(&target).await? == super::RunPhase::Executing {
-        limit.next().await?;
+        tokio::task::yield_now().await;
     }
     settled(&scheduler).await?;
 
@@ -482,7 +484,7 @@ impl SchedulerFixture {
     }
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -515,7 +517,7 @@ async fn two_running_turns_an_event_overtook_are_checked_again_once_and_then_go_
     drop(held);
     settled(&scheduler).await?;
     let reads_after_event = fixture.observed_runs().len();
-    advance(Duration::from_secs(3_600)).await;
+    advance(&fixture.clock, Duration::from_secs(3_600)).await;
     settled(&scheduler).await?;
 
     assert_eq!(
@@ -531,7 +533,7 @@ async fn two_running_turns_an_event_overtook_are_checked_again_once_and_then_go_
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -549,7 +551,7 @@ async fn a_deadline_that_comes_due_behind_a_full_table_is_acted_on_at_its_time()
     // every Run shares comes due.
     cursor.held(STEP_SLOTS).await?;
     let armed = cursor.scheduler.observation.snapshot().armed_deadline;
-    advance(Duration::from_secs(120)).await;
+    advance(&cursor.fixture.clock, Duration::from_secs(120)).await;
     settled_holding(&cursor.scheduler.observation).await?;
     drop(held);
     wait_until("every Run's stop was requested", || {
@@ -587,7 +589,7 @@ impl SchedulerFixture {
     }
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -621,15 +623,15 @@ async fn a_deadline_that_passes_while_failed_passes_retry_is_acted_on_behind_the
     settled_holding(&cursor.scheduler.observation).await?;
     let first_retry = cursor.scheduler.observation.snapshot().armed_deadline;
     // The retries at 1 s and 3 s fail too; the deadline passes before the store is back.
-    advance(Duration::from_secs(1)).await;
+    advance(&cursor.fixture.clock, Duration::from_secs(1)).await;
     settled_holding(&cursor.scheduler.observation).await?;
-    advance(Duration::from_secs(2)).await;
+    advance(&cursor.fixture.clock, Duration::from_secs(2)).await;
     settled_holding(&cursor.scheduler.observation).await?;
     let failed_passes = cursor.scheduler.observation.snapshot().passes;
     sqlx::query("ALTER TABLE schedule_timing_state_hidden RENAME TO schedule_timing_state")
         .execute(&mut fault)
         .await?;
-    advance(Duration::from_secs(117)).await;
+    advance(&cursor.fixture.clock, Duration::from_secs(117)).await;
     settled_holding(&cursor.scheduler.observation).await?;
     drop(held);
     wait_until("every Run's stop was requested", || {
@@ -654,7 +656,7 @@ async fn a_deadline_that_passes_while_failed_passes_retry_is_acted_on_behind_the
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -691,7 +693,7 @@ async fn a_deadline_that_passes_after_a_single_failed_next_due_is_acted_on_behin
     sqlx::query("ALTER TABLE schedule_timing_state_hidden RENAME TO schedule_timing_state")
         .execute(&mut fault)
         .await?;
-    advance(Duration::from_secs(120)).await;
+    advance(&cursor.fixture.clock, Duration::from_secs(120)).await;
     settled_holding(&cursor.scheduler.observation).await?;
     drop(held);
     wait_until("every Run's stop was requested", || {
@@ -716,7 +718,7 @@ async fn a_deadline_that_passes_after_a_single_failed_next_due_is_acted_on_behin
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -732,7 +734,7 @@ async fn a_stopped_turn_absent_from_its_history_is_read_again_on_its_retry_and_s
     settled(&scheduler).await?;
     let interval = Duration::from_secs(u64::from(INTERVAL_SECONDS));
     let timeout = Duration::from_secs(u64::from(super::TIMEOUT_SECONDS));
-    advance(interval).await;
+    advance(&fixture.clock, interval).await;
     let run = fixture.executing_and_asleep(&scheduler).await?;
     // No later occurrence: once the deadline has acted, nothing else is due.
     fixture.disable_schedule().await?;
@@ -740,7 +742,7 @@ async fn a_stopped_turn_absent_from_its_history_is_read_again_on_its_retry_and_s
 
     // The deadline stores the stop and sends it; the read after it finds the stopped turn
     // absent from its history. No deadline is left to step the Run again.
-    advance(timeout).await;
+    advance(&fixture.clock, timeout).await;
     settled(&scheduler).await?;
     let phase_while_absent = fixture.read_phase(&run).await?;
     let retry_at = scheduler.observation.snapshot().armed_deadline;
@@ -753,7 +755,7 @@ async fn a_stopped_turn_absent_from_its_history_is_read_again_on_its_retry_and_s
         .map(|due| due.unix_millis().saturating_sub(now.unix_millis()))
         .and_then(|millis| u64::try_from(millis).ok())
         .ok_or("no retry was armed for the absent stopped turn")?;
-    advance(Duration::from_millis(wait)).await;
+    advance(&fixture.clock, Duration::from_millis(wait)).await;
     settled(&scheduler).await?;
 
     assert_eq!(phase_while_absent, super::RunPhase::Stopping);

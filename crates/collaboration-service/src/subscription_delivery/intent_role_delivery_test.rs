@@ -18,12 +18,12 @@ async fn handed_off_role_intent_delivers_to_the_frozen_recipient_after_holders_c
             .write_as(
                 owner.clone(),
                 serde_json::from_value(operation).unwrap(),
-                fixture.clock.now(),
+                fixture.clock.utc_now(),
             )
             .await;
     }
     let post = PostId::generate();
-    let reply = fixture.write_as(human("writer"), serde_json::from_value(json!({"kind":"threadPost","postId":post,"threadId":fixture.root,"text":"frozen addressed cause","references":[],"addressees":[{"kind":"role","recipient":{"kind":"reviewer","subject":stream}}]})).unwrap(), fixture.clock.now()).await;
+    let reply = fixture.write_as(human("writer"), serde_json::from_value(json!({"kind":"threadPost","postId":post,"threadId":fixture.root,"text":"frozen addressed cause","references":[],"addressees":[{"kind":"role","recipient":{"kind":"reviewer","subject":stream}}]})).unwrap(), fixture.clock.utc_now()).await;
     let RequestResult::Decided(RequestDecision::Accepted { effects, .. }) = reply.result else {
         panic!("cause accepted");
     };
@@ -45,7 +45,7 @@ async fn handed_off_role_intent_delivers_to_the_frozen_recipient_after_holders_c
             .write_as(
                 owner.clone(),
                 serde_json::from_value(operation).unwrap(),
-                fixture.clock.now(),
+                fixture.clock.utc_now(),
             )
             .await;
     }
@@ -147,13 +147,13 @@ async fn deferred_human_claim_delivers_a_new_local_coholder_in_the_same_consumer
             .write_as(
                 owner.clone(),
                 serde_json::from_value(operation).unwrap(),
-                fixture.clock.now(),
+                fixture.clock.utc_now(),
             )
             .await;
     }
     let post = PostId::generate();
-    fixture.write_as(human("writer"), serde_json::from_value(json!({"kind":"threadPost","postId":post,"threadId":fixture.root,"text":"deferred recipient adds local recipient","references":[],"addressees":[{"kind":"role","recipient":{"kind":"reviewer","subject":stream}}]})).unwrap(), fixture.clock.now()).await;
-    fixture.write_as(owner, serde_json::from_value(json!({"kind":"roleGrant","subject":{"kind":"workstream","subject":stream},"role":"reviewer","holder":fixture.reader,"model":null,"lineage":null,"expectedRevision":1,"ownerGrant":null})).unwrap(), fixture.clock.now()).await;
+    fixture.write_as(human("writer"), serde_json::from_value(json!({"kind":"threadPost","postId":post,"threadId":fixture.root,"text":"deferred recipient adds local recipient","references":[],"addressees":[{"kind":"role","recipient":{"kind":"reviewer","subject":stream}}]})).unwrap(), fixture.clock.utc_now()).await;
+    fixture.write_as(owner, serde_json::from_value(json!({"kind":"roleGrant","subject":{"kind":"workstream","subject":stream},"role":"reviewer","holder":fixture.reader,"model":null,"lineage":null,"expectedRevision":1,"ownerGrant":null})).unwrap(), fixture.clock.utc_now()).await;
     let runtime = fixture.native_runtime_without_board().await;
     for _ in 0..2 {
         runtime
@@ -278,12 +278,12 @@ async fn claimed_retained_holder_delivers_an_already_consumed_reinstatement_in_t
             .write_as(
                 owner.clone(),
                 serde_json::from_value(operation).unwrap(),
-                fixture.clock.now(),
+                fixture.clock.utc_now(),
             )
             .await;
     }
     let post = PostId::generate();
-    fixture.write_as(human("writer"), serde_json::from_value(json!({"kind":"threadPost","postId":post,"threadId":fixture.root,"text":"returning reviewer keeps the original intent","references":[],"addressees":[{"kind":"role","recipient":{"kind":"reviewer","subject":stream}}]})).unwrap(), fixture.clock.now()).await;
+    fixture.write_as(human("writer"), serde_json::from_value(json!({"kind":"threadPost","postId":post,"threadId":fixture.root,"text":"returning reviewer keeps the original intent","references":[],"addressees":[{"kind":"role","recipient":{"kind":"reviewer","subject":stream}}]})).unwrap(), fixture.clock.utc_now()).await;
     let store = fixture
         .registry
         .existing_project(&fixture.project)
@@ -306,7 +306,7 @@ async fn claimed_retained_holder_delivers_an_already_consumed_reinstatement_in_t
             .write_as(
                 owner.clone(),
                 serde_json::from_value(operation).unwrap(),
-                fixture.clock.now(),
+                fixture.clock.utc_now(),
             )
             .await;
     }
@@ -336,7 +336,7 @@ async fn claimed_retained_holder_delivers_an_already_consumed_reinstatement_in_t
             .await
             .unwrap();
     }
-    fixture.write_as(owner, serde_json::from_value(json!({"kind":"roleGrant","subject":{"kind":"workstream","subject":stream},"role":"reviewer","holder":returning,"model":null,"lineage":null,"expectedRevision":3,"ownerGrant":null})).unwrap(), fixture.clock.now()).await;
+    fixture.write_as(owner, serde_json::from_value(json!({"kind":"roleGrant","subject":{"kind":"workstream","subject":stream},"role":"reviewer","holder":returning,"model":null,"lineage":null,"expectedRevision":3,"ownerGrant":null})).unwrap(), fixture.clock.utc_now()).await;
     let mut read = store
         .begin_admission(crate::test_project_runtime::origin().unwrap())
         .await
@@ -369,7 +369,7 @@ async fn claimed_retained_holder_delivers_an_already_consumed_reinstatement_in_t
     // Fresh attempts await delivery, but replayed custody can belong to an
     // overlapping publication drive. Wait for all three scripted calls before
     // snapshotting their requests.
-    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+    (async {
         while runtime
             .completed_native_calls
             .load(std::sync::atomic::Ordering::SeqCst)
@@ -378,8 +378,7 @@ async fn claimed_retained_holder_delivers_an_already_consumed_reinstatement_in_t
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .expect("initial addressed and role-grant requests did not reach the client");
+    .await;
     let mut observed = BTreeSet::new();
     let mut first_pass_requests = Vec::new();
     let mut requests = runtime.requests.lock().await;

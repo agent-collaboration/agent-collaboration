@@ -1,12 +1,9 @@
-//! The wake-up worker and the push hand-off on Tokio's paused clock, with a real automation
+//! The wake-up worker and the push hand-off on the injected manual clock, with a real automation
 //! store, a real interaction store and a delivery route that records when it is called.
 use super::WakeTimingWorker;
 use crate::{
     AutomationConfigurationHandle, PushHandoffWorker, WorkerObservation,
-    paused_wall_clock::PausedWallClock,
-    paused_worker_test_support::{
-        NoAutoAdvance, TestResult, advance, settled, settled_holding, wait_until,
-    },
+    worker_test_support::{TestResult, advance, settled, settled_holding, wait_until},
 };
 use agent_automation::{ExpiryRule, OperationId, TimingRule, WakeState};
 use automation_storage::{AutomationStore, WakeAction, WakeCreate, WakeMutation};
@@ -15,6 +12,7 @@ use collaboration_contracts::{
     SessionMessageDelivery,
 };
 use collaboration_protocol::{DeliveryOutcome, DeliveryReceipt, SavedMessage, SessionReachability};
+use router_clock::ManualClock;
 use runtime_primitives::{Clock, SyncTime};
 use serde_json::json;
 use std::{
@@ -35,7 +33,7 @@ fn at(offset: Duration) -> SyncTime {
 
 /// Records each delivery's time; the first `retryable_rejections` are refused as retryable.
 struct RecordingDelivery {
-    clock: Arc<PausedWallClock>,
+    clock: Arc<ManualClock>,
     delivered: std::sync::Mutex<Vec<SyncTime>>,
     retryable_rejections: AtomicUsize,
 }
@@ -81,12 +79,11 @@ impl SessionMessageDelivery for RecordingDelivery {
 }
 
 struct WakeFixture {
-    _no_auto_advance: NoAutoAdvance,
     root: tempfile::TempDir,
     store: Arc<Mutex<AutomationStore>>,
     interactions: Arc<interaction_storage::InteractionStore>,
     delivery: Arc<RecordingDelivery>,
-    clock: Arc<PausedWallClock>,
+    clock: Arc<ManualClock>,
 }
 
 struct RunningWakes {
@@ -106,7 +103,6 @@ impl RunningWakes {
 
 impl WakeFixture {
     async fn new() -> TestResult<Self> {
-        let no_auto_advance = NoAutoAdvance::hold();
         let root = tempfile::tempdir()?;
         let store = Arc::new(Mutex::new(
             AutomationStore::open(&root.path().join("automation.sqlite")).await?,
@@ -115,14 +111,13 @@ impl WakeFixture {
             interaction_storage::InteractionStore::open(root.path().join("interaction.sqlite"))
                 .await?,
         );
-        let clock = Arc::new(PausedWallClock::starting_at(at(Duration::ZERO)));
+        let clock = Arc::new(ManualClock::starting_at(at(Duration::ZERO)).unwrap());
         let delivery = Arc::new(RecordingDelivery {
             clock: Arc::clone(&clock),
             delivered: std::sync::Mutex::default(),
             retryable_rejections: AtomicUsize::new(0),
         });
         Ok(Self {
-            _no_auto_advance: no_auto_advance,
             root,
             store,
             interactions,
@@ -167,7 +162,7 @@ impl WakeFixture {
         let handoff =
             PushHandoffWorker::new(Arc::clone(&self.store), Arc::clone(&self.interactions));
         wakes.tasks.push(tokio::spawn(handoff.run(
-            Arc::clone(&self.clock) as Arc<dyn Clock>,
+            Arc::clone(&self.clock) as Arc<dyn router_clock::RuntimeClock>,
             wakes.shutdown.clone(),
         )));
         Ok(wakes)
@@ -189,7 +184,7 @@ impl WakeFixture {
                 None,
             )?,
             Arc::clone(&self.interactions),
-            Arc::clone(&self.clock) as Arc<dyn Clock>,
+            Arc::clone(&self.clock) as Arc<dyn router_clock::RuntimeClock>,
         );
         let worker = configure(worker);
         let observation = worker.observation();
@@ -217,7 +212,7 @@ impl WakeFixture {
     }
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -228,7 +223,7 @@ async fn an_idle_wake_worker_holds_no_timer_and_reads_nothing_for_an_hour() -> T
     settled(&wakes.observation).await?;
     let asleep = wakes.observation.snapshot();
 
-    advance(Duration::from_secs(3_600)).await;
+    advance(&fixture.clock, Duration::from_secs(3_600)).await;
 
     assert_eq!(
         asleep.reads,
@@ -249,7 +244,7 @@ async fn an_idle_wake_worker_holds_no_timer_and_reads_nothing_for_an_hour() -> T
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -263,12 +258,12 @@ async fn a_wake_fires_at_its_time_on_one_timer_and_is_delivered_once() -> TestRe
     settled(&wakes.observation).await?;
     let armed = wakes.observation.snapshot().armed_deadline;
 
-    advance(Duration::from_secs(59)).await;
+    advance(&fixture.clock, Duration::from_secs(59)).await;
     settled(&wakes.observation).await?;
     let before_due = fixture.deliveries();
-    advance(Duration::from_secs(1)).await;
+    advance(&fixture.clock, Duration::from_secs(1)).await;
     fixture.delivered(&wakes, 1).await?;
-    advance(Duration::from_secs(3_600)).await;
+    advance(&fixture.clock, Duration::from_secs(3_600)).await;
 
     assert_eq!(armed, Some(at(Duration::from_secs(60))));
     assert!(before_due.is_empty(), "nothing fires before its time");
@@ -281,7 +276,7 @@ async fn a_wake_fires_at_its_time_on_one_timer_and_is_delivered_once() -> TestRe
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -306,7 +301,7 @@ async fn a_paused_wake_expires_at_its_time() -> TestResult {
     settled(&wakes.observation).await?;
     let armed = wakes.observation.snapshot().armed_deadline;
 
-    advance(Duration::from_secs(120)).await;
+    advance(&fixture.clock, Duration::from_secs(120)).await;
     settled(&wakes.observation).await?;
     let state = fixture
         .store
@@ -327,7 +322,7 @@ async fn a_paused_wake_expires_at_its_time() -> TestResult {
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -344,16 +339,19 @@ async fn a_retryable_delivery_is_dispatched_again_when_it_becomes_eligible() -> 
     let wakes = fixture.start()?;
     settled(&wakes.observation).await?;
 
-    advance(Duration::from_secs(60)).await;
+    advance(&fixture.clock, Duration::from_secs(60)).await;
     fixture.delivered(&wakes, 1).await?;
     let retry = wakes
         .observation
         .snapshot()
         .armed_deadline
         .ok_or("the retryable delivery arms the timer")?;
-    advance(Duration::from_millis(u64::try_from(
-        retry.unix_millis() - fixture.clock.now().unix_millis(),
-    )?))
+    advance(
+        &fixture.clock,
+        Duration::from_millis(u64::try_from(
+            retry.unix_millis() - fixture.clock.now().unix_millis(),
+        )?),
+    )
     .await;
     fixture.delivered(&wakes, 2).await?;
 
@@ -367,7 +365,7 @@ async fn a_retryable_delivery_is_dispatched_again_when_it_becomes_eligible() -> 
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -382,7 +380,7 @@ async fn more_than_a_batch_of_wakes_and_slots_is_drained_without_a_clock_advance
     let wakes = fixture.start()?;
     settled(&wakes.observation).await?;
 
-    advance(Duration::from_secs(60)).await;
+    advance(&fixture.clock, Duration::from_secs(60)).await;
     fixture.delivered(&wakes, 120).await?;
 
     assert_eq!(fixture.deliveries().len(), 120);
@@ -397,7 +395,7 @@ async fn more_than_a_batch_of_wakes_and_slots_is_drained_without_a_clock_advance
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -415,13 +413,13 @@ async fn a_failed_read_retries_on_the_backoff_and_recovers_when_the_fault_is_fix
     let wakes = fixture.start()?;
     settled(&wakes.observation).await?;
     let first_retry = wakes.observation.snapshot().armed_deadline;
-    advance(Duration::from_secs(1)).await;
+    advance(&fixture.clock, Duration::from_secs(1)).await;
     settled(&wakes.observation).await?;
     let second_retry = wakes.observation.snapshot().armed_deadline;
     sqlx::query("ALTER TABLE wakeup_definitions_hidden RENAME TO wakeup_definitions")
         .execute(&mut fault)
         .await?;
-    advance(Duration::from_secs(2)).await;
+    advance(&fixture.clock, Duration::from_secs(2)).await;
     settled(&wakes.observation).await?;
 
     assert_eq!(first_retry, Some(at(Duration::from_secs(1))));
@@ -435,7 +433,7 @@ async fn a_failed_read_retries_on_the_backoff_and_recovers_when_the_fault_is_fix
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -462,7 +460,7 @@ async fn a_wake_created_while_the_worker_sleeps_arms_its_timer_without_a_clock_a
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -483,7 +481,7 @@ async fn a_push_admitted_while_its_dispatch_is_in_flight_is_still_delivered() ->
     // At its time the wake's dispatch finds its push not yet admitted, writes nothing
     // and is held before it reports. The hand-off then admits the push; the commit wakes
     // a pass that skips the in-flight delivery.
-    advance(Duration::from_secs(60)).await;
+    advance(&fixture.clock, Duration::from_secs(60)).await;
     wait_until("the dispatch was held", || {
         arrivals.load(Ordering::SeqCst) > 0
     })
@@ -515,7 +513,7 @@ async fn a_push_admitted_while_its_dispatch_is_in_flight_is_still_delivered() ->
     Ok(())
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Test assertions must fail the test while fixture errors propagate."
@@ -540,7 +538,7 @@ async fn pushes_admitted_while_every_dispatch_slot_is_taken_are_all_delivered() 
     // At their time sixteen dispatches find their pushes not yet admitted, write nothing
     // and are held, so every slot is taken. The hand-off then admits all twenty: its
     // commit wakes a pass that can start nothing.
-    advance(Duration::from_secs(60)).await;
+    advance(&fixture.clock, Duration::from_secs(60)).await;
     wait_until("every dispatch slot was taken", || {
         arrivals.load(Ordering::SeqCst) >= DISPATCH_SLOTS
     })

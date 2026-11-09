@@ -1,8 +1,9 @@
-//! The retention worker on real stores, started on real time and observed through its loop.
+//! Retention on real stores, driven only by its injected manual clock.
 use super::AutomationRetentionWorker;
-use crate::{LoopSnapshot, WorkerObservation, paused_wall_clock::PausedWallClock};
+use crate::{LoopSnapshot, WorkerObservation};
 use automation_storage::AutomationStore;
 use chrono::{DateTime, Utc};
+use router_clock::{ManualClock, RuntimeClock};
 use runtime_primitives::SyncTime;
 use sqlx::Connection;
 use std::{
@@ -22,7 +23,7 @@ pub(super) fn at(text: &str) -> DateTime<Utc> {
 
 pub(super) struct RunningWorker {
     pub(super) observation: WorkerObservation,
-    pub(super) clock: Arc<PausedWallClock>,
+    pub(super) clock: Arc<ManualClock>,
     shutdown: CancellationToken,
     task: tokio::task::JoinHandle<()>,
 }
@@ -47,9 +48,9 @@ impl RunningWorker {
         broker: Option<Arc<crate::ServiceInteractionBroker>>,
         wall: DateTime<Utc>,
     ) -> Self {
-        let clock = Arc::new(PausedWallClock::starting_at(SyncTime::from_unix_millis(
-            wall.timestamp_millis(),
-        )));
+        let clock = Arc::new(
+            ManualClock::starting_at(SyncTime::from_unix_millis(wall.timestamp_millis())).unwrap(),
+        );
         let mut worker = AutomationRetentionWorker::new(Arc::clone(store), clock.clone());
         if let Some(interactions) = interactions {
             worker = worker.with_native_push_store(interactions);
@@ -65,6 +66,12 @@ impl RunningWorker {
             async move { worker_loop.run(&mut pass, shutdown).await }
         });
         observation.asleep_at_least(1).await;
+        if let Some(deadline) = observation.snapshot().armed_deadline {
+            assert!(
+                clock.has_not_due_check_now(clock.wall_deadline(deadline)),
+                "worker must register its injected sleep"
+            );
+        }
         Self {
             observation,
             clock,
@@ -146,12 +153,14 @@ pub(super) async fn event_ids(writer: &mut sqlx::SqliteConnection) -> Vec<String
         .unwrap()
 }
 
-/// Lets the paused clock reach the worker's timer and returns once that pass has slept.
+/// Advances the manual clock to the armed deadline and awaits the resulting pass.
 pub(super) async fn run_to_the_armed_time(worker: &RunningWorker) {
     let sleeps = worker.snapshot().sleeps;
-    tokio::time::pause();
+    worker
+        .clock
+        .advance_to(worker.snapshot().armed_deadline.unwrap())
+        .unwrap();
     worker.observation.asleep_at_least(sleeps + 1).await;
-    tokio::time::resume();
 }
 
 /// Counts each value a named structured field takes across log events.
@@ -192,8 +201,6 @@ impl<TSubscriber: tracing::Subscriber> Layer<TSubscriber> for RetentionLog {
     }
 }
 
-/// Bounds a wait the test expects a commit to end; it only stops a hang.
-pub(super) const COMMIT_WAKE_GUARD: std::time::Duration = std::time::Duration::from_secs(10);
 pub(super) fn aging_push(created_at: DateTime<Utc>) -> collaboration_protocol::PushRecordDraft {
     use collaboration_protocol::{
         EndpointId, EndpointRef, PushHeaderFacts, PushId, PushKind, PushOrigin, PushRecordDraft,

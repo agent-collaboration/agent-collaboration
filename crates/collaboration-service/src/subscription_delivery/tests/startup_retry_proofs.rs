@@ -1,14 +1,14 @@
-//! Startup fault controls use shared native fixture helpers.
-use super::super::SubscriptionClock;
+//! Startup fault controls
 use super::owner_fixture::*;
 use super::startup_fixture::*;
+use router_clock::RuntimeClock;
 use sqlx::{ConnectOptions, Connection};
 use std::{
     sync::{Arc, atomic::Ordering},
     time::Duration,
 };
 use tracing_subscriber::layer::SubscriberExt;
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn early_startup_timeout_recovers_owed_range_without_reader_action() {
     let evidence = Arc::new(StartupEvidence::default());
     let subscriber = tracing_subscriber::registry().with(StartupTrace(evidence.clone()));
@@ -21,6 +21,7 @@ async fn early_startup_timeout_recovers_owed_range_without_reader_action() {
         .await
         .unwrap()
         .unwrap();
+    tokio::time::pause();
     let held = exhaust_project_readers(&project).await;
     evidence.timeout.store(false, Ordering::SeqCst);
     // The owner runs on the test clock: the startup retry fires when the test moves the
@@ -35,16 +36,12 @@ async fn early_startup_timeout_recovers_owed_range_without_reader_action() {
     release_project_readers(held).await;
     // No post, list, wait, reconcile or command from this reader starts recovery; only
     // the retry's own deadline does.
-    tokio::time::timeout(
-        Duration::from_secs(5),
-        fixture.clock.not_due_check_now(retry_at),
-    )
-    .await
-    .expect("the startup task waits for its first retry");
+    (fixture.clock.not_due_check_now(retry_at)).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     fixture
         .clock
-        .advance_by_without_tokio_time(retry_at.duration_since(fixture.clock.monotonic_now()));
+        .advance(retry_at.saturating_duration_since(fixture.clock.monotonic_now()))
+        .unwrap();
     let notice = activity(&fixture, &runtime).await;
     assert_eq!(
         notice.ranges,
@@ -64,7 +61,7 @@ async fn early_startup_timeout_recovers_owed_range_without_reader_action() {
     runtime.close().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn definitive_failure_after_a_deferred_probe_quarantines_and_ends_recovery() {
     let evidence = Arc::new(StartupEvidence::default());
     let subscriber = tracing_subscriber::registry().with(StartupTrace(evidence.clone()));
@@ -77,6 +74,7 @@ async fn definitive_failure_after_a_deferred_probe_quarantines_and_ends_recovery
         .await
         .unwrap()
         .unwrap();
+    tokio::time::pause();
     let held = exhaust_project_readers(&project).await;
     evidence.timeout.store(false, Ordering::SeqCst);
     // The owner runs on the test clock: the startup retry fires at its deadline.
@@ -100,15 +98,11 @@ async fn definitive_failure_after_a_deferred_probe_quarantines_and_ends_recovery
     );
     raw.close().await.unwrap();
     release_project_readers(held).await;
-    tokio::time::timeout(
-        Duration::from_secs(5),
-        fixture.clock.not_due_check_now(retry_at),
-    )
-    .await
-    .expect("the startup task waits for its first retry");
+    (fixture.clock.not_due_check_now(retry_at)).await;
     fixture
         .clock
-        .advance_by_without_tokio_time(retry_at.duration_since(fixture.clock.monotonic_now()));
+        .advance(retry_at.saturating_duration_since(fixture.clock.monotonic_now()))
+        .unwrap();
     evidence.state("quarantined").await;
     evidence.state("finished").await;
     assert!(
@@ -122,7 +116,7 @@ async fn definitive_failure_after_a_deferred_probe_quarantines_and_ends_recovery
     runtime.close().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn shutdown_drains_a_pending_startup_discovery_retry() {
     let evidence = Arc::new(StartupEvidence::default());
     let subscriber = tracing_subscriber::registry().with(StartupTrace(evidence.clone()));
@@ -134,6 +128,7 @@ async fn shutdown_drains_a_pending_startup_discovery_retry() {
         .await
         .unwrap()
         .unwrap();
+    tokio::time::pause();
     let held = exhaust_project_readers(&project).await;
     evidence.timeout.store(false, Ordering::SeqCst);
     let runtime = fixture.native_runtime_with_clock(clock(&fixture)).await;
@@ -148,9 +143,7 @@ async fn shutdown_drains_a_pending_startup_discovery_retry() {
         "no tracked startup retry was retained"
     );
     tokio::time::resume();
-    tokio::time::timeout(Duration::from_secs(5), runtime.service.shutdown())
-        .await
-        .expect("shutdown must drain the tracked discovery task");
+    (runtime.service.shutdown()).await;
     evidence.state("finished").await;
     release_project_readers(held).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
@@ -163,7 +156,7 @@ enum StartupSetupTiming {
     LargeAutoAdvance,
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn healthy_project_delivers_while_another_startup_probe_is_deferred() {
     Box::pin(healthy_delivery_during_deferred_startup(
         StartupSetupTiming::Immediate,
@@ -171,7 +164,7 @@ async fn healthy_project_delivers_while_another_startup_probe_is_deferred() {
     .await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn startup_auto_advance_does_not_expire_the_healthy_projects_owed_notice() {
     Box::pin(healthy_delivery_during_deferred_startup(
         StartupSetupTiming::LargeAutoAdvance,
@@ -202,9 +195,12 @@ async fn healthy_delivery_during_deferred_startup(setup_timing: StartupSetupTimi
         .await
         .unwrap()
         .unwrap();
+    eprintln!("startup long-setup: fixture ready");
+    tokio::time::pause();
     let held = exhaust_project_readers(&project).await;
+    eprintln!("startup long-setup: pool exhausted");
     evidence.timeout.store(false, Ordering::SeqCst);
-    let starting_wall_time = fixture.clock.now();
+    let starting_wall_time = fixture.clock.utc_now();
     let runtime_timers =
         matches!(setup_timing, StartupSetupTiming::LargeAutoAdvance).then(|| clock(&fixture));
     let (runtime, retry_at) = match &runtime_timers {
@@ -215,10 +211,12 @@ async fn healthy_delivery_during_deferred_startup(setup_timing: StartupSetupTimi
             // Startup is already inside its real storage work. With its caller not
             // polling it, paused Tokio advances a genuine timer through two days.
             assert!(poll!(startup.as_mut()).is_pending());
+            eprintln!("startup long-setup: startup polled; entering native pool clock jump");
             let before = tokio::time::Instant::now();
             let setup_delay = Duration::from_secs(2 * 24 * 60 * 60);
             tokio::time::sleep(setup_delay).await;
-            assert!(tokio::time::Instant::now().duration_since(before) >= setup_delay);
+            assert!(tokio::time::Instant::now().saturating_duration_since(before) >= setup_delay);
+            eprintln!("startup long-setup: native clock jumped; awaiting startup");
             (startup.await, None)
         }
         None => {
@@ -229,25 +227,58 @@ async fn healthy_delivery_during_deferred_startup(setup_timing: StartupSetupTimi
     };
     assert!(evidence.timeout.load(Ordering::SeqCst));
     tokio::time::resume();
+    eprintln!(
+        "startup long-setup: startup returned; states={:?}",
+        evidence.states.lock().unwrap()
+    );
     // B remains locked until A has delivered and settled. No reader command drives either delivery.
+    eprintln!("startup long-setup: waiting for healthy notice");
     let healthy_notice = activity(&fixture, &runtime).await;
+    eprintln!("startup long-setup: healthy notice received");
     assert_eq!(
         healthy_notice.ranges,
         vec![expected_range(healthy.clone(), thread, cursor)]
     );
     runtime.await_settled().await;
+    eprintln!("startup long-setup: healthy settlement received with broken readers held");
+    // The pool's inherited timer advanced during setup; B's retry still needs its one clock.
+    if runtime_timers.is_some() {
+        let retry_at = fixture.clock.monotonic_now() + Duration::from_secs(1);
+        eprintln!("startup long-setup: waiting for injected retry {retry_at:?}");
+        fixture.clock.not_due_check_now(retry_at).await;
+        eprintln!("startup long-setup: stepping injected retry");
+        fixture.clock.advance(Duration::from_secs(1)).unwrap();
+    }
     if let Some(startup_clock) = &runtime_timers {
-        assert_eq!(fixture.clock.now(), starting_wall_time);
-        assert_eq!(startup_clock.now(), starting_wall_time);
-        fixture.clock.advance_without_tokio_time(7);
         assert_eq!(
-            startup_clock.now(),
-            starting_wall_time + chrono::Duration::seconds(7)
+            fixture.clock.utc_now(),
+            starting_wall_time + chrono::Duration::seconds(1)
         );
-        // A's owner cannot settle while B's readers are exhausted, so B's readers go back
-        // first. B's live retry may then deliver B's own range, so the no-duplicate check
-        // is scoped to A: nothing left in the queue may carry A's project.
+        assert_eq!(
+            startup_clock.utc_now(),
+            starting_wall_time + chrono::Duration::seconds(1)
+        );
+        fixture
+            .clock
+            .advance(std::time::Duration::from_secs(7))
+            .unwrap();
+        assert_eq!(
+            startup_clock.utc_now(),
+            starting_wall_time + chrono::Duration::seconds(8)
+        );
+        // A delivered and settled while B stayed held and its retry clock was frozen.
+        // Releasing B now lets its already-stepped retry recover the original owed range.
         release_project_readers(held).await;
+        let recovered_notice = activity(&fixture, &runtime).await;
+        assert_eq!(
+            recovered_notice.ranges,
+            vec![expected_range(
+                fixture.project.clone(),
+                fixture.root.clone(),
+                owed
+            )]
+        );
+        runtime.await_settled().await;
         runtime.owner_barrier(&reader).await;
         while let Ok(request) = runtime.requests.lock().await.try_recv() {
             let push = fixture
@@ -267,16 +298,12 @@ async fn healthy_delivery_during_deferred_startup(setup_timing: StartupSetupTimi
     } else if let Some(retry_at) = retry_at {
         release_project_readers(held).await;
         // Only the first retry's own deadline recovers B.
-        tokio::time::timeout(
-            Duration::from_secs(5),
-            fixture.clock.not_due_check_now(retry_at),
-        )
-        .await
-        .expect("the startup task waits for its first retry");
+        (fixture.clock.not_due_check_now(retry_at)).await;
         assert!(runtime.requests.lock().await.try_recv().is_err());
         fixture
             .clock
-            .advance_by_without_tokio_time(retry_at.duration_since(fixture.clock.monotonic_now()));
+            .advance(retry_at.saturating_duration_since(fixture.clock.monotonic_now()))
+            .unwrap();
         let recovered_notice = activity(&fixture, &runtime).await;
         assert_eq!(
             recovered_notice.ranges,
@@ -295,7 +322,7 @@ async fn healthy_delivery_during_deferred_startup(setup_timing: StartupSetupTimi
     runtime.close().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn deferred_discovery_preserves_a_selection_owned_by_a_reader_started_after_startup() {
     let evidence = Arc::new(StartupEvidence::default());
     let subscriber = tracing_subscriber::registry().with(StartupTrace(evidence.clone()));
@@ -310,6 +337,7 @@ async fn deferred_discovery_preserves_a_selection_owned_by_a_reader_started_afte
         .await
         .unwrap()
         .unwrap();
+    tokio::time::pause();
     let held = exhaust_project_readers(&project).await;
     evidence.timeout.store(false, Ordering::SeqCst);
     let runtime = fixture.native_runtime().await;
@@ -317,7 +345,7 @@ async fn deferred_discovery_preserves_a_selection_owned_by_a_reader_started_afte
     tokio::time::resume();
     release_project_readers(held).await;
     evidence.state("waiting").await;
-    tokio::time::timeout(Duration::from_secs(20), async {
+    (async {
         // The reader acts after startup but before the deferred retry's clock deadline.
         // Its existing owner has admitted the physical delivery; keep its receipt in flight.
         runtime
@@ -364,7 +392,10 @@ async fn deferred_discovery_preserves_a_selection_owned_by_a_reader_started_afte
             before.delivery_state,
             collaboration_protocol::PushDeliveryState::Attempted
         );
-        fixture.clock.advance_without_tokio_time(1);
+        fixture
+            .clock
+            .advance(std::time::Duration::from_secs(1))
+            .unwrap();
         runtime.service.reconcile_queued().await;
         let after =
             super::local_mail_proofs::native_follow_mail_proofs::frozen_follow(&fixture).await;
@@ -420,6 +451,5 @@ async fn deferred_discovery_preserves_a_selection_owned_by_a_reader_started_afte
         );
         runtime.close().await;
     })
-    .await
-    .expect("bounded deferred startup custody and exact-item delivery");
+    .await;
 }

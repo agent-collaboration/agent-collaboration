@@ -4,7 +4,6 @@ use super::{
     ProjectAdmission, ProjectAdmissionError,
     request_gate::{ReadyRequest, RequestGate, RequestGateInput},
 };
-use chrono::Utc;
 use message_board::{
     CanonicalHash, ChangeOutcome, FeedCursor, Identity, IntentClaim, IntentRecipient,
     IntentRefusal, IntentState, NotifyIntentId, ProjectId, ProtocolVersion, Record, RecordEnvelope,
@@ -139,7 +138,7 @@ impl ProjectAdmission {
                     },
                     request: Some(request.request_id.clone()),
                     position: write.record_placement(high_water),
-                    time: RecordTime::Router(Utc::now()),
+                    time: RecordTime::Router(self.clock.utc_now()),
                 };
                 let IntentTransition {
                     decision,

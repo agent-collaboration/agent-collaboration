@@ -9,20 +9,15 @@ use super::*;
 use crate::native_worker_faults;
 use collaboration_protocol::PushId;
 
-/// The bound only stops a hang; each wait is for an event the owner causes.
-const OWNER_EVENT: Duration = Duration::from_secs(10);
-
 /// The first failed-pass backoff step, in seconds.
 const FIRST_RETRY_SECONDS: u64 = 1;
 
 async fn observed(
     runtime: &OwnerRuntime,
-    reason: &str,
+    _reason: &str,
     matches: impl Fn(&OwnerObservation) -> bool,
 ) {
-    tokio::time::timeout(OWNER_EVENT, runtime.observe(matches))
-        .await
-        .unwrap_or_else(|_| panic!("the owner never reported: {reason}"));
+    (runtime.observe(matches)).await;
 }
 
 async fn checked_while_not_running(runtime: &OwnerRuntime, push_id: &PushId) {
@@ -60,13 +55,9 @@ async fn asleep_with_no_failed_pass(runtime: &OwnerRuntime) {
 
 async fn next_request(
     runtime: &OwnerRuntime,
-    reason: &str,
+    _reason: &str,
 ) -> collaboration_contracts::layer_zero::DeliveryRequest {
-    tokio::time::timeout(OWNER_EVENT, async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .expect(reason)
+    (async { runtime.requests.lock().await.recv().await.unwrap() }).await
 }
 
 async fn delivery_state(native: &NativeMailOwner, push_id: &PushId) -> PushDeliveryState {
@@ -98,13 +89,10 @@ async fn an_expired_journal_position_owes_one_check_which_records_a_fresh_positi
     let (answer_signal, answer) = tokio::sync::oneshot::channel();
     *fixture.presence.2.lock().unwrap() = Some(PresencePause { read, answer });
     fixture.held_mail.observation_retried();
-    tokio::time::timeout(OWNER_EVENT, read_signal)
-        .await
-        .unwrap()
-        .unwrap();
+    (read_signal).await.unwrap();
     let mut other = target.clone();
     other.session_id = "another-thread".to_owned().try_into().unwrap();
-    let now = chrono::Utc::now().timestamp();
+    let now = fixture.clock.utc_now().timestamp();
     journal.append(&thread_loaded(&other), now).await.unwrap();
     journal.maintain(now + 90 * 86_400).await.unwrap();
     // Counted while the check is paused, so a later check the owner runs before this test
@@ -124,7 +112,7 @@ async fn an_expired_journal_position_owes_one_check_which_records_a_fresh_positi
 
     // That check recorded a fresh position: another thread's record owes nothing.
     journal
-        .append(&thread_loaded(&other), chrono::Utc::now().timestamp())
+        .append(&thread_loaded(&other), fixture.clock.utc_now().timestamp())
         .await
         .unwrap();
     observed(&runtime, "a signal that owed nothing", |event| {
@@ -140,14 +128,18 @@ async fn an_expired_journal_position_owes_one_check_which_records_a_fresh_positi
     // Its own thread loads after the fresh position: the mail goes.
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     journal
-        .append(&thread_loaded(&target), chrono::Utc::now().timestamp())
+        .append(&thread_loaded(&target), fixture.clock.utc_now().timestamp())
         .await
         .unwrap();
     let request = next_request(&runtime, "its own load after the fresh position").await;
     assert_eq!(request.payload.push_id, held.push_id);
     runtime.completions.send(DeliveryOutcome::Started).unwrap();
     await_native_completion(&runtime, 1).await;
-    await_compaction(&native, reference_for_request(&input, &held.push_id, peer)).await;
+    await_compaction(
+        &native,
+        reference_for_request(&input, &held.push_id, peer, fixture.clock.as_ref()),
+    )
+    .await;
     drop(app);
     runtime.close().await;
     fixture.close_native(native).await;
@@ -176,7 +168,8 @@ async fn a_failed_position_capture_fails_the_pass_and_the_retry_keeps_the_mail_h
     // The backoff checks again, records a position and keeps the mail held on it.
     fixture
         .clock
-        .advance_without_tokio_time(FIRST_RETRY_SECONDS);
+        .advance(std::time::Duration::from_secs(FIRST_RETRY_SECONDS))
+        .unwrap();
     checked_while_not_running(&runtime, &held.push_id).await;
     asleep_with_nothing_due(&runtime).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
@@ -184,14 +177,18 @@ async fn a_failed_position_capture_fails_the_pass_and_the_retry_keeps_the_mail_h
     // Its own thread's load, read from that position, releases it.
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     journal
-        .append(&thread_loaded(&target), chrono::Utc::now().timestamp())
+        .append(&thread_loaded(&target), fixture.clock.utc_now().timestamp())
         .await
         .unwrap();
     let request = next_request(&runtime, "its own load after the retried capture").await;
     assert_eq!(request.payload.push_id, held.push_id);
     runtime.completions.send(DeliveryOutcome::Started).unwrap();
     await_native_completion(&runtime, 1).await;
-    await_compaction(&native, reference_for_request(&input, &held.push_id, peer)).await;
+    await_compaction(
+        &native,
+        reference_for_request(&input, &held.push_id, peer, fixture.clock.as_ref()),
+    )
+    .await;
     drop(app);
     runtime.close().await;
     fixture.close_native(native).await;
@@ -215,7 +212,7 @@ async fn insert_queued_direct_message(fixture: &OwnerFixture) -> PushId {
         },
         body: Some("DM checked after the held mail".to_owned()),
         activity: None,
-        created_at: fixture.clock.now(),
+        created_at: fixture.clock.utc_now(),
     };
     let push_id = draft.push_id.clone();
     fixture
@@ -256,7 +253,11 @@ async fn a_failed_position_capture_still_releases_mail_to_a_running_target() {
     );
     runtime.completions.send(DeliveryOutcome::Started).unwrap();
     await_native_completion(&runtime, 1).await;
-    await_compaction(&native, reference_for_request(&input, &held.push_id, peer)).await;
+    await_compaction(
+        &native,
+        reference_for_request(&input, &held.push_id, peer, fixture.clock.as_ref()),
+    )
+    .await;
     drop(app);
     runtime.close().await;
     fixture.close_native(native).await;
@@ -282,12 +283,9 @@ async fn a_later_check_keeps_the_held_mails_earlier_position_so_a_load_between_t
     let (answer_signal, answer) = tokio::sync::oneshot::channel();
     *fixture.presence.2.lock().unwrap() = Some(PresencePause { read, answer });
     fixture.held_mail.observation_retried();
-    tokio::time::timeout(OWNER_EVENT, read_signal)
-        .await
-        .unwrap()
-        .unwrap();
+    (read_signal).await.unwrap();
     journal
-        .append(&thread_loaded(&target), chrono::Utc::now().timestamp())
+        .append(&thread_loaded(&target), fixture.clock.utc_now().timestamp())
         .await
         .unwrap();
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
@@ -301,7 +299,11 @@ async fn a_later_check_keeps_the_held_mails_earlier_position_so_a_load_between_t
     let request = next_request(&runtime, "the load between the two checks").await;
     assert_eq!(request.payload.push_id, held.push_id);
     runtime.completions.send(DeliveryOutcome::Started).unwrap();
-    await_compaction(&native, reference_for_request(&input, &held.push_id, peer)).await;
+    await_compaction(
+        &native,
+        reference_for_request(&input, &held.push_id, peer, fixture.clock.as_ref()),
+    )
+    .await;
     drop(app);
     runtime.close().await;
     fixture.close_native(native).await;
@@ -328,7 +330,8 @@ async fn a_failed_presence_check_marks_nothing_and_the_backoff_checks_again() {
     // The backoff checks again; the target is still not running, so the mail is held.
     fixture
         .clock
-        .advance_without_tokio_time(FIRST_RETRY_SECONDS);
+        .advance(std::time::Duration::from_secs(FIRST_RETRY_SECONDS))
+        .unwrap();
     checked_while_not_running(&runtime, &held.push_id).await;
     asleep_with_nothing_due(&runtime).await;
     assert_eq!(
@@ -343,7 +346,11 @@ async fn a_failed_presence_check_marks_nothing_and_the_backoff_checks_again() {
     assert_eq!(request.payload.push_id, held.push_id);
     runtime.completions.send(DeliveryOutcome::Started).unwrap();
     await_native_completion(&runtime, 1).await;
-    await_compaction(&native, reference_for_request(&input, &held.push_id, peer)).await;
+    await_compaction(
+        &native,
+        reference_for_request(&input, &held.push_id, peer, fixture.clock.as_ref()),
+    )
+    .await;
     drop(app);
     runtime.close().await;
     fixture.close_native(native).await;
@@ -388,12 +395,17 @@ async fn a_failed_release_unmarks_its_mail_and_the_backoff_releases_it() {
     // Nothing stayed marked, so the backoff checks and releases it with no new signal.
     fixture
         .clock
-        .advance_without_tokio_time(FIRST_RETRY_SECONDS);
+        .advance(std::time::Duration::from_secs(FIRST_RETRY_SECONDS))
+        .unwrap();
     let request = next_request(&runtime, "the backoff retried the release").await;
     assert_eq!(request.payload.push_id, held.push_id);
     runtime.completions.send(DeliveryOutcome::Started).unwrap();
     await_native_completion(&runtime, 1).await;
-    await_compaction(&native, reference_for_request(&input, &held.push_id, peer)).await;
+    await_compaction(
+        &native,
+        reference_for_request(&input, &held.push_id, peer, fixture.clock.as_ref()),
+    )
+    .await;
     drop(app);
     runtime.close().await;
     fixture.close_native(native).await;

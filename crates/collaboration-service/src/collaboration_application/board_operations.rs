@@ -72,7 +72,7 @@ pub struct BoardOperations {
     pub(super) subscription_delivery: Option<crate::SubscriptionDeliveryService>,
     pub(super) subscription_presence:
         Option<std::sync::Arc<dyn collaboration_contracts::TargetPresenceProbe>>,
-    pub(super) subscription_clock: std::sync::Arc<dyn crate::SubscriptionClock>,
+    pub(super) subscription_clock: std::sync::Arc<dyn router_clock::RuntimeClock>,
     pub(super) interaction_store: Option<std::sync::Arc<interaction_storage::InteractionStore>>,
     pub(super) project_replication:
         std::sync::Arc<dyn collaboration_contracts::ProjectReplicationPosition>,
@@ -93,7 +93,7 @@ impl BoardOperations {
         subscription_presence: Option<
             std::sync::Arc<dyn collaboration_contracts::TargetPresenceProbe>,
         >,
-        subscription_clock: std::sync::Arc<dyn crate::SubscriptionClock>,
+        subscription_clock: std::sync::Arc<dyn router_clock::RuntimeClock>,
         interaction_store: Option<std::sync::Arc<interaction_storage::InteractionStore>>,
         project_replication: std::sync::Arc<
             dyn collaboration_contracts::ProjectReplicationPosition,

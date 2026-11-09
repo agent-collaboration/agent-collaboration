@@ -2,15 +2,37 @@ import assert from "node:assert/strict";
 import { readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
 import { createFixtureDirectory } from "../../test-support/fixture-directory.ts";
 import { readObservedJson } from "../shared/evidence-models.ts";
 import {
   requireWorkerSettlement,
+  runWorkerStartup,
   workerStartupPlanSchema,
   writeFixtureWrapper,
 } from "./worker-startup.ts";
 import { decode } from "../../exact-json.ts";
+import { runtimeClock } from "./runtime-plan.ts";
+
+test("worker allocation expiry reads the injected verification clock before any process starts", async (context: TestContext): Promise<void> => {
+  const wallNow = context.mock.method(runtimeClock, "wallNow", (): number =>
+    Date.parse("2100-01-01T00:00:00Z"),
+  );
+  const plan = workerStartupPlanSchema.parse({
+    repository: "/not-a-worker-repository",
+    source_head: "a".repeat(40),
+    qualification: "/qualification",
+    run_directory: "/private/tmp/run",
+    evidence: "/private/tmp/evidence",
+    router_port: 48121,
+    mcp_port: 48122,
+    expected_version: "fixture",
+    expected_workers: ["schedules"],
+    deadline: "2099-01-01T00:00:00Z",
+  });
+  await assert.rejects(runWorkerStartup(plan), /expired worker observation allocation/);
+  assert.equal(wallNow.mock.callCount(), 1);
+});
 
 test("the owned executable wrapper runs only the repository startup fixture and preserves quoted paths", (): void => {
   const root = createFixtureDirectory("worker-wrapper");

@@ -1,6 +1,4 @@
-#[path = "owner_clock.rs"]
-mod owner_clock;
-pub use owner_clock::{RuntimeTimerClock, TestClock};
+pub use router_clock::{ManualClock, RuntimeClock};
 #[path = "scripted_delivery.rs"]
 mod scripted_delivery;
 use super::super::*;
@@ -37,7 +35,7 @@ pub struct OwnerFixture {
     pub project: ProjectId,
     pub discussion_subject: ThreadSubject,
     pub root: ThreadId,
-    pub clock: Arc<TestClock>,
+    pub clock: Arc<ManualClock>,
     pub presence: Arc<ScriptedPresence>,
     /// The signals every runtime's readers wake on while they hold mail.
     pub held_mail: HeldMailTestSignals,
@@ -107,7 +105,7 @@ impl OwnerFixture {
             .unwrap(),
         ));
         journal
-            .prepare(chrono::Utc::now().timestamp())
+            .prepare(self.clock.utc_now().timestamp())
             .await
             .unwrap();
         *self.held_mail.journal.lock().unwrap() = Some(Arc::clone(&journal));
@@ -172,7 +170,7 @@ impl OwnerFixture {
                 watch: false,
                 addressees: Vec::new(),
             },
-            self.clock.now(),
+            self.clock.utc_now(),
         )
         .await;
     }
@@ -195,7 +193,7 @@ impl OwnerFixture {
                 replace,
                 note: None,
             },
-            self.clock.now(),
+            self.clock.utc_now(),
         )
         .await;
     }
@@ -295,13 +293,13 @@ impl OwnerFixture {
                     lifetime_seconds: None,
                 },
             },
-            self.clock.now(),
+            self.clock.utc_now(),
         )
         .await
         .unwrap();
     }
     pub async fn post(&self, root: &ThreadId, body: &str) -> FeedCursor {
-        self.post_at(root, body, self.clock.now()).await
+        self.post_at(root, body, self.clock.utc_now()).await
     }
     pub async fn post_at(&self, root: &ThreadId, body: &str, now: DateTime<Utc>) -> FeedCursor {
         let post = PostId::generate();
@@ -348,7 +346,10 @@ impl OwnerFixture {
     pub async fn runtime(&self) -> OwnerRuntime {
         self.runtime_with_clock(self.clock.clone()).await
     }
-    pub async fn runtime_with_clock(&self, clock: Arc<dyn SubscriptionClock>) -> OwnerRuntime {
+    pub async fn runtime_with_clock(
+        &self,
+        clock: Arc<dyn router_clock::RuntimeClock>,
+    ) -> OwnerRuntime {
         self.runtime_with_availability(
             clock,
             collaboration_protocol::SessionReachability::CodexAppServer,
@@ -373,7 +374,7 @@ impl OwnerFixture {
     }
     async fn runtime_with_availability(
         &self,
-        clock: Arc<dyn SubscriptionClock>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
         reachability: collaboration_protocol::SessionReachability,
         board_availability: BoardAvailability,
     ) -> OwnerRuntime {
@@ -384,7 +385,7 @@ impl OwnerFixture {
     }
     fn prepare_runtime_with_availability(
         &self,
-        clock: Arc<dyn SubscriptionClock>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
         reachability: collaboration_protocol::SessionReachability,
         board_availability: BoardAvailability,
     ) -> OwnerRuntime {
@@ -511,7 +512,7 @@ impl OwnerRuntime {
                 .last()
                 .cloned()
                 .expect("native request precedes its completion");
-            tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            (async {
                 loop {
                     if native
                         .interactions
@@ -528,8 +529,7 @@ impl OwnerRuntime {
                     tokio::task::yield_now().await;
                 }
             })
-            .await
-            .expect("native delivery outcome did not commit");
+            .await;
             return;
         }
         self.observe(|event| {

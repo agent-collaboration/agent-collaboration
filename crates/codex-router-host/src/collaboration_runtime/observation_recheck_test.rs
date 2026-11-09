@@ -1,83 +1,112 @@
 use super::{ObservationRechecks, recheck_while_journal_unavailable};
-use std::time::Duration;
+use router_clock::{ClockInstant, ManualClock, RuntimeClock};
+use std::{future::Future, sync::Arc, time::Duration};
 use tokio_util::sync::CancellationToken;
 
-/// Advances Tokio's paused clock and lets the re-check task run.
-async fn advance(by: Duration) {
-    tokio::time::advance(by).await;
+fn without_native_time(test: impl Future<Output = ()>) {
+    tokio::runtime::Builder::new_current_thread()
+        .build()
+        .unwrap()
+        .block_on(test);
+}
+
+fn clock() -> Arc<ManualClock> {
+    Arc::new(ManualClock::new("2001-01-01T00:00:00Z".parse().unwrap()))
+}
+
+async fn advance(clock: &ManualClock, by: Duration) {
+    clock.advance(by).unwrap();
     for _ in 0..4 {
         tokio::task::yield_now().await;
     }
 }
 
-#[tokio::test(start_paused = true)]
-async fn an_unavailable_journal_rechecks_at_one_two_four_seconds_up_to_thirty() {
-    let rechecks = ObservationRechecks::new();
-    let mut retries = rechecks.subscribe();
-    let shutdown = CancellationToken::new();
-    let task = tokio::spawn(recheck_while_journal_unavailable(
-        rechecks.clone(),
-        shutdown.clone(),
-    ));
-    // Let the task start and arm its first wait before the clock moves.
-    advance(Duration::ZERO).await;
-    let mut gaps = Vec::new();
+#[test]
+fn an_unavailable_journal_rechecks_at_one_two_four_seconds_up_to_thirty() {
+    without_native_time(async {
+        let clock = clock();
+        let rechecks = ObservationRechecks::new();
+        let mut retries = rechecks.subscribe();
+        let shutdown = CancellationToken::new();
+        let task = tokio::spawn(recheck_while_journal_unavailable(
+            rechecks.clone(),
+            clock.clone(),
+            shutdown.clone(),
+        ));
+        advance(&clock, Duration::ZERO).await;
+        assert!(clock.has_not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(1))));
+        let mut gaps = Vec::new();
 
-    for _ in 0..7 {
-        let mut waited = 0;
-        while !retries.has_changed().unwrap() {
-            advance(Duration::from_millis(500)).await;
-            waited += 500;
+        for _ in 0..7 {
+            let mut waited = 0;
+            while !retries.has_changed().unwrap() {
+                assert!(
+                    !task.is_finished(),
+                    "journal retry task stopped before its injected wait"
+                );
+                advance(&clock, Duration::from_millis(500)).await;
+                waited += 500;
+            }
+            retries.borrow_and_update();
+            gaps.push(waited);
         }
-        retries.borrow_and_update();
-        gaps.push(waited);
-    }
-    shutdown.cancel();
-    task.await.unwrap();
+        shutdown.cancel();
+        task.await.unwrap();
 
-    assert_eq!(gaps, [1_000, 2_000, 4_000, 8_000, 16_000, 30_000, 30_000]);
+        assert_eq!(gaps, [1_000, 2_000, 4_000, 8_000, 16_000, 30_000, 30_000]);
+    });
 }
 
-#[tokio::test(start_paused = true)]
-async fn shutdown_stops_the_rechecks() {
-    let rechecks = ObservationRechecks::new();
-    let retries = rechecks.subscribe();
-    let shutdown = CancellationToken::new();
-    let task = tokio::spawn(recheck_while_journal_unavailable(
-        rechecks.clone(),
-        shutdown.clone(),
-    ));
+#[test]
+fn shutdown_stops_the_rechecks() {
+    without_native_time(async {
+        let clock = clock();
+        let rechecks = ObservationRechecks::new();
+        let retries = rechecks.subscribe();
+        let shutdown = CancellationToken::new();
+        let task = tokio::spawn(recheck_while_journal_unavailable(
+            rechecks.clone(),
+            clock.clone(),
+            shutdown.clone(),
+        ));
 
-    shutdown.cancel();
-    task.await.unwrap();
-    advance(Duration::from_secs(60)).await;
+        shutdown.cancel();
+        task.await.unwrap();
+        advance(&clock, Duration::from_secs(60)).await;
 
-    assert!(!retries.has_changed().unwrap());
+        assert!(!retries.has_changed().unwrap());
+    });
 }
 
-/// Each attempt's start time, as seconds after the observer started, and what it was told.
-type AttemptLog = std::sync::Arc<std::sync::Mutex<Vec<(u64, super::ObserverRetry)>>>;
+/// Each attempt's start time, in injected elapsed seconds, and what it was told.
+type AttemptLog = Arc<std::sync::Mutex<Vec<(u64, super::ObserverRetry)>>>;
 
 async fn run_observer(
     outcomes: Vec<super::ObserverAttempt>,
     retire_after: Duration,
 ) -> Vec<(u64, super::ObserverRetry)> {
-    let started = tokio::time::Instant::now();
+    let clock = clock();
+    let started = clock.monotonic_now();
     let log = AttemptLog::default();
     let retired = CancellationToken::new();
-    let attempts = std::sync::Arc::new(std::sync::Mutex::new(outcomes.into_iter()));
+    let attempts = Arc::new(std::sync::Mutex::new(outcomes.into_iter()));
     let task = tokio::spawn({
         let (log, retired, attempts) = (log.clone(), retired.clone(), attempts.clone());
+        let clock = clock.clone();
         async move {
-            super::observe_with_restart(retired, move |retry| {
-                log.lock()
-                    .unwrap()
-                    .push((started.elapsed().as_secs(), retry));
+            let observation_clock = clock.clone();
+            super::observe_with_restart(retired, clock, move |retry| {
+                log.lock().unwrap().push((
+                    observation_clock
+                        .monotonic_now()
+                        .saturating_duration_since(started)
+                        .as_secs(),
+                    retry,
+                ));
                 let next = attempts.lock().unwrap().next();
                 async move {
                     match next {
                         Some(outcome) => outcome,
-                        // Out of script: stay connected until retired.
                         None => std::future::pending().await,
                     }
                 }
@@ -85,10 +114,10 @@ async fn run_observer(
             .await;
         }
     });
-    advance(Duration::ZERO).await;
+    advance(&clock, Duration::ZERO).await;
     let mut elapsed = Duration::ZERO;
     while elapsed < retire_after {
-        advance(Duration::from_millis(500)).await;
+        advance(&clock, Duration::from_millis(500)).await;
         elapsed += Duration::from_millis(500);
     }
     retired.cancel();
@@ -103,43 +132,43 @@ fn retry(is_retry: bool, failures_so_far: u32) -> super::ObserverRetry {
     }
 }
 
-#[tokio::test(start_paused = true)]
-async fn the_observer_restarts_on_the_backoff_and_a_run_resets_it() {
-    use super::ObserverAttempt::{ConnectFailed, Ran};
-
-    let attempts = run_observer(
-        vec![
-            ConnectFailed,
-            ConnectFailed,
-            ConnectFailed,
-            Ran,
-            ConnectFailed,
-        ],
-        Duration::from_secs(20),
-    )
-    .await;
-
-    assert_eq!(
-        attempts,
-        [
-            (0, retry(false, 0)),
-            (1, retry(true, 1)),
-            (3, retry(true, 2)),
-            (7, retry(true, 3)),
-            // The connection that ran resets the backoff.
-            (8, retry(true, 0)),
-            (9, retry(true, 1)),
-        ]
-    );
+#[test]
+fn the_observer_restarts_on_the_backoff_and_a_run_resets_it() {
+    without_native_time(async {
+        use super::ObserverAttempt::{ConnectFailed, Ran};
+        let attempts = run_observer(
+            vec![
+                ConnectFailed,
+                ConnectFailed,
+                ConnectFailed,
+                Ran,
+                ConnectFailed,
+            ],
+            Duration::from_secs(20),
+        )
+        .await;
+        assert_eq!(
+            attempts,
+            [
+                (0, retry(false, 0)),
+                (1, retry(true, 1)),
+                (3, retry(true, 2)),
+                (7, retry(true, 3)),
+                (8, retry(true, 0)),
+                (9, retry(true, 1)),
+            ]
+        );
+    });
 }
 
-#[tokio::test(start_paused = true)]
-async fn a_rejected_scope_stops_the_observer_for_good() {
-    let attempts = run_observer(
-        vec![super::ObserverAttempt::Rejected],
-        Duration::from_secs(60),
-    )
-    .await;
-
-    assert_eq!(attempts, [(0, retry(false, 0))]);
+#[test]
+fn a_rejected_scope_stops_the_observer_for_good() {
+    without_native_time(async {
+        let attempts = run_observer(
+            vec![super::ObserverAttempt::Rejected],
+            Duration::from_secs(60),
+        )
+        .await;
+        assert_eq!(attempts, [(0, retry(false, 0))]);
+    });
 }
