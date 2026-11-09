@@ -224,6 +224,17 @@ impl AppServerEventForwarding {
                     .retain(|(item_session, _), _| item_session != session);
                 render_turn_event(session, event).into_iter().collect()
             }
+            SessionEvent::ItemStarted { item } | SessionEvent::ItemUpdated { item }
+                if matches!(item.kind, session_event_model::SessionItemKind::Usage) =>
+            {
+                crate::app_server_token_usage::translate_usage_update(
+                    item,
+                    &thread_id,
+                    self.turn_ids.get(session).map(String::as_str),
+                )
+                .into_iter()
+                .collect()
+            }
             SessionEvent::ItemStarted { item } | SessionEvent::ItemUpdated { item } => {
                 let turn_id = self.turn_ids.get(session).map(String::as_str).unwrap_or("");
                 let Some(mut translated) = translate_session_item(item, &thread_id, turn_id) else {
