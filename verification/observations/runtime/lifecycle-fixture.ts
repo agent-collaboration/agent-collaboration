@@ -3,6 +3,7 @@ import { basename, join } from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
 import { once } from "node:events";
+import { DatabaseSync } from "node:sqlite";
 import { decode } from "../../exact-json.ts";
 import { binaryQualificationSchema, type IdentityRecord } from "../shared/evidence-models.ts";
 import { lookupProcessIdentity, sameIdentity } from "./process-ownership.ts";
@@ -68,6 +69,7 @@ export class LifecycleFixture {
   readonly ownerConfig = 'model = "owner-selected-model"\n';
   readonly phases: string[] = [];
   readonly launched: string[] = [];
+  readonly launchInputs: RuntimeLaunch[] = [];
   readonly children: { child: ChildProcess; identity: IdentityRecord }[] = [];
   private readonly globalBin: string;
   private readonly nowValue = Date.now();
@@ -117,10 +119,15 @@ export class LifecycleFixture {
       profile,
       codex_config: config,
       native_cwd: root,
-      claude_node: process.execPath,
-      claude_adapter: join(root, "unused-adapter"),
-      claude_executable: planned,
-      cursor_executable: process.execPath,
+      ...(scenario.startsWith("providers-disabled")
+        ? { provider_mode: "disabled" }
+        : {
+            provider_mode: "enabled",
+            claude_node: process.execPath,
+            claude_adapter: join(root, "unused-adapter"),
+            claude_executable: planned,
+            cursor_executable: process.execPath,
+          }),
       deadline: new Date(this.nowValue + 3_600_000).toISOString(),
     });
   }
@@ -143,14 +150,65 @@ export class LifecycleFixture {
     const kind = input.command[1];
     if (kind === undefined) throw new Error("fixture command kind missing");
     this.launched.push(kind);
+    this.launchInputs.push(input);
     if (kind === "host") {
       this.phases.push(this.phases.length === 0 ? "A" : "B");
       const publication = join(this.plan.router_root, "agent-communication");
       mkdirSync(publication, { recursive: true });
       writeFileSync(
         join(publication, "service.json"),
-        JSON.stringify({ serviceVersion: "fixture" }),
+        JSON.stringify({
+          serviceVersion: "fixture",
+          serviceId: "00000000-0000-7000-8000-000000000001",
+          serviceEpoch: "00000000-0000-7000-8000-000000000002",
+        }),
       );
+      if (this.plan.provider_mode === "disabled") {
+        const journal = new DatabaseSync(join(publication, "session-registry.sqlite"));
+        try {
+          journal.exec(
+            readFileSync(
+              new URL(
+                "../../../crates/lifecycle-observation/src/journal_schema.sql",
+                import.meta.url,
+              ),
+              "utf8",
+            ),
+          );
+          journal
+            .prepare("INSERT INTO journal_metadata VALUES (1,1,?,2,0,0)")
+            .run("00000000-0000-7000-8000-000000000003");
+          for (const [index, change] of [
+            { kind: "backendStatus", status: "ready" },
+            { kind: "coverageRestored" },
+          ]
+            .slice(0, this.scenario === "providers-disabled-no-coverage" ? 1 : 2)
+            .entries()) {
+            const observation = {
+              observedAt: "2026-11-08T20:00:00.000Z",
+              source: index === 0 ? "hostLifecycle" : "observerLifecycle",
+              scope: {
+                endpoint: {
+                  serviceId: "00000000-0000-7000-8000-000000000001",
+                  endpointId: "codex-local",
+                },
+                generation: { serviceEpoch: "00000000-0000-7000-8000-000000000002", generation: 1 },
+                observerId:
+                  index === 0
+                    ? "00000000-0000-7000-8000-000000000002"
+                    : "00000000-0000-7000-8000-000000000003",
+              },
+              subject: { kind: "backend" },
+              change,
+            };
+            journal
+              .prepare("INSERT INTO lifecycle_records VALUES (?,0,?)")
+              .run(index + 1, JSON.stringify(observation));
+          }
+        } finally {
+          journal.close();
+        }
+      }
     }
     const owned = await harmlessChild(true, this.scenario === "interrupt");
     this.children.push(owned);
@@ -198,6 +256,8 @@ export class LifecycleFixture {
     if (
       [
         "stop",
+        "providers-disabled",
+        "providers-disabled-no-coverage",
         "reopen",
         "reopen-expired",
         "profile-before-host",

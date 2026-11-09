@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
@@ -22,7 +22,100 @@ import {
 } from "./runtime-processes.ts";
 import { saveRecord, waitForProcess } from "./runtime-plan.ts";
 import { settleInventory } from "./process-inventory.ts";
+import { runtimePlanSchema } from "./runtime-plan.ts";
 import { LifecycleFixture, harmlessChild, releaseHarmlessChild } from "./lifecycle-fixture.ts";
+
+test("providers-disabled startup uses only a fresh root and omits every provider override", async (): Promise<void> => {
+  const root = createFixtureDirectory("providers-disabled");
+  try {
+    // A mismatched global Claude binding must be irrelevant in this mode.
+    const fixture = new LifecycleFixture(root, "providers-disabled", true);
+    assert.equal(await fixture.drive(), null);
+    const host = fixture.launchInputs.find((input) => input.command[1] === "host");
+    const router = fixture.launchInputs.find((input) => input.command[1] === "serve");
+    assert.ok(host);
+    assert.ok(router);
+    assert.equal(
+      host.command.some((argument) => /--(?:cursor|claude)-acp-/.test(argument)),
+      false,
+    );
+    assert.equal(router.command.includes("--allow-plaintext-file-secrets"), true);
+    assert.deepEqual(
+      readObservedJson(readFileSync(join(fixture.plan.router_root, "settings.jsonc"))),
+      {
+        providers: {
+          version: 1n,
+          providers: {
+            claude: { enabled: false, executable: null, arguments: [] },
+            cursor: { enabled: false, executable: null, arguments: [] },
+          },
+        },
+      },
+    );
+    const binding = readObservedJson(
+      readFileSync(join(fixture.plan.evidence, "driver-binding.json")),
+    );
+    assert.equal(binding.claudeGlobalExecutable, null);
+    const observer = readObservedJson(
+      readFileSync(join(fixture.plan.evidence, "host-A-observer-connected.json")),
+    );
+    assert.equal(observer.kind, "connected");
+    assert.equal(existsSync(join(fixture.plan.evidence, "lifecycle-settlement.json")), true);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("providers-disabled startup refuses pre-existing root contents before any child", async (): Promise<void> => {
+  const root = createFixtureDirectory("providers-disabled-existing");
+  try {
+    const fixture = new LifecycleFixture(root, "providers-disabled");
+    const marker = join(fixture.plan.router_root, "existing-state");
+    writeFileSync(marker, "pre-existing bytes");
+    assert.match((await fixture.drive())?.message ?? "", /fresh empty Router root/);
+    assert.deepEqual(fixture.launched, []);
+    assert.equal(readFileSync(marker, "utf8"), "pre-existing bytes");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("providers-disabled plans reject provider executable fields instead of ignoring them", (): void => {
+  const root = createFixtureDirectory("providers-disabled-plan");
+  try {
+    const fixture = new LifecycleFixture(root, "providers-disabled");
+    assert.equal(
+      runtimePlanSchema.safeParse({ ...fixture.plan, claude_executable: "/unexpected" }).success,
+      false,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("published Host readiness without observer coverage fails startup and cleans up its children", async (): Promise<void> => {
+  const root = createFixtureDirectory("providers-disabled-no-coverage");
+  try {
+    const fixture = new LifecycleFixture(root, "providers-disabled-no-coverage");
+    assert.match((await fixture.drive())?.message ?? "", /observer connection was not established/);
+    assert.equal(existsSync(join(fixture.plan.evidence, "host-A-ready.json")), true);
+    assert.equal(existsSync(join(fixture.plan.evidence, "host-A-observer-connected.json")), false);
+    const unavailable = readObservedJson(
+      readFileSync(join(fixture.plan.evidence, "host-A-observer-unavailable.json")),
+    );
+    assert.equal(unavailable.kind, "waiting");
+    const settlement = readObservedJson(
+      readFileSync(join(fixture.plan.evidence, "lifecycle-settlement.json")),
+    );
+    assert.notEqual(settlement.failure, null);
+    assert.equal(
+      fixture.children.every(({ child }) => child.exitCode !== null || child.signalCode !== null),
+      true,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 for (const scenario of [
   "stop",

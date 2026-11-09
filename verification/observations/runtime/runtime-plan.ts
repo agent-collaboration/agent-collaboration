@@ -9,7 +9,7 @@ import { prettyEvidenceJson } from "../../evidence-json.ts";
 import { ConfigurationChanged } from "./readonly-codex-home.ts";
 import { ProcessIdentityError } from "./process-ownership.ts";
 
-export const runtimePlanSchema = z.strictObject({
+const runtimePlanFields = {
   repository: z.string(),
   source_head: z.string(),
   qualification: z.string(),
@@ -20,12 +20,22 @@ export const runtimePlanSchema = z.strictObject({
   profile: z.string(),
   codex_config: z.string(),
   native_cwd: z.string(),
-  claude_node: z.string(),
-  claude_adapter: z.string(),
-  claude_executable: z.string(),
-  cursor_executable: z.string(),
   deadline: z.string(),
-});
+};
+export const runtimePlanSchema = z.union([
+  z.strictObject({
+    ...runtimePlanFields,
+    provider_mode: z.literal("enabled").default("enabled"),
+    claude_node: z.string(),
+    claude_adapter: z.string(),
+    claude_executable: z.string(),
+    cursor_executable: z.string(),
+  }),
+  z.strictObject({
+    ...runtimePlanFields,
+    provider_mode: z.literal("disabled"),
+  }),
+]);
 export type RuntimePlan = z.infer<typeof runtimePlanSchema>;
 
 export class AllocationTimeout extends Error {
