@@ -430,3 +430,7 @@ mod tests;
 #[cfg(test)]
 #[path = "sql_constraint_test.rs"]
 mod constraint_tests;
+
+#[cfg(test)]
+#[path = "sql_conversion_test.rs"]
+mod conversion_tests;

@@ -181,6 +181,24 @@ impl SqlStoreFixture {
         Ok(rows)
     }
 
+    /// One text column per row, from any query: for schema and history checks.
+    pub async fn select(&self, statement: String) -> Result<Vec<String>, TestError> {
+        let rows: Vec<(String,)> = self
+            .object
+            .transaction(move |scope| {
+                Box::pin(async move {
+                    sqlx_core::query_as::query_as::<sqlx_turso::Turso, (String,)>(
+                        sqlx_core::sql_str::AssertSqlSafe(statement),
+                    )
+                    .fetch_all(scope.executor())
+                    .await
+                    .map_err(StoreError::backend)
+                })
+            })
+            .await?;
+        Ok(rows.into_iter().map(|(row,)| row).collect())
+    }
+
     /// A new owning process's handle over the same persistence.
     pub async fn reopen(self) -> Result<Self, TestError> {
         let Self {
