@@ -1,0 +1,27 @@
+#!/usr/bin/env node
+// Test only: stands in for the cf CLI. It answers inventory commands from a
+// JSON state file (FAKE_CF_STATE): `before` until a real deploy runs, then
+// `after`. Every call is appended to the state's log, so a test can see exactly
+// what ran, and nothing is ever uploaded anywhere.
+import { readFileSync, writeFileSync } from "node:fs";
+
+const path = process.env.FAKE_CF_STATE;
+const state = JSON.parse(readFileSync(path, "utf8"));
+const args = process.argv.slice(2);
+state.log.push(args);
+const phase = state.deployed ? state.after : state.before;
+let answer = "";
+if (args[0] === "deploy") {
+  if (!args.includes("--dry-run")) state.deployed = true;
+  answer = "deployed";
+} else if (args.join(" ").startsWith("durable-objects namespaces list")) {
+  answer = JSON.stringify(Number(args[args.indexOf("--page") + 1]) === 1 ? phase.namespaces : []);
+} else if (args.join(" ").startsWith("workers scripts search")) {
+  answer = JSON.stringify({ success: true, result: phase.workers });
+} else if (args.join(" ").startsWith("workers domains list")) {
+  answer = JSON.stringify(phase.domains);
+} else {
+  process.exitCode = 2;
+}
+writeFileSync(path, JSON.stringify(state));
+process.stdout.write(answer);
