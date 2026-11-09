@@ -109,12 +109,25 @@ impl CollaborationRuntime {
                         },
                     ) {
                         Ok(observer) => {
-                            if observer.run(retired).await.is_err() {
-                                tracing::warn!(
-                                    "native lifecycle observation stopped; it restarts with backoff"
-                                );
+                            let restored = observer.coverage_restored();
+                            let ended = observer.run(retired).await;
+                            if *restored.borrow() {
+                                if ended.is_err() {
+                                    tracing::warn!(
+                                        "native lifecycle observation stopped; it restarts with backoff"
+                                    );
+                                }
+                                ObserverAttempt::Ran
+                            } else {
+                                // Connected but never observed: one warning per run of
+                                // failures, and the backoff keeps growing.
+                                if retry.failures_so_far == 0 {
+                                    tracing::warn!(
+                                        "native lifecycle observation failed before restoring coverage; it retries with backoff"
+                                    );
+                                }
+                                ObserverAttempt::StoppedBeforeCoverage
                             }
-                            ObserverAttempt::Ran
                         }
                         Err(_) => {
                             tracing::warn!("native lifecycle observer scope rejected");

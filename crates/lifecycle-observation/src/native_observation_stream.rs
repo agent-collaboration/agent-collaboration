@@ -13,6 +13,7 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     sync::Arc,
 };
+use tokio::sync::watch;
 use tokio_util::sync::CancellationToken;
 
 pub struct NativeObservationStream {
@@ -29,6 +30,8 @@ pub struct NativeObservationStream {
             ObservationOrdering,
         ),
     >,
+    /// Set once this run restored coverage: its inventory and reconciliation succeeded.
+    coverage_restored: watch::Sender<bool>,
 }
 pub struct NativeObservationInputs {
     pub connection: NativeProtocolConnection,
@@ -53,7 +56,14 @@ impl NativeObservationStream {
             reconciliation,
             pending_reads: BTreeSet::new(),
             last_status_observations: BTreeMap::new(),
+            coverage_restored: watch::channel(false).0,
         })
+    }
+    /// Whether this run restored coverage; still readable after `run` returns. A run that
+    /// ends before restoring coverage never recovered observation.
+    #[must_use]
+    pub fn coverage_restored(&self) -> watch::Receiver<bool> {
+        self.coverage_restored.subscribe()
     }
     /// Caller admits the native schema and supplies the generation retirement signal.
     pub async fn run(mut self, retired: CancellationToken) -> Result<(), JournalError> {
@@ -115,6 +125,7 @@ impl NativeObservationStream {
             ObservationSource::ObserverLifecycle,
         )
         .await?;
+        self.coverage_restored.send_replace(true);
         loop {
             let message = self
                 .connection

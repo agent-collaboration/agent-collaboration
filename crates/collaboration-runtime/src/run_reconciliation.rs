@@ -92,7 +92,7 @@ pub(crate) async fn persist_settlement(
     settlement: RunSettlement,
 ) -> Result<bool, StorageError> {
     let outcome = match settlement {
-        RunSettlement::Pending => return Ok(false),
+        RunSettlement::Pending | RunSettlement::NotObserved => return Ok(false),
         RunSettlement::Completed { .. } => WorkerOutcome::Completed { explanation: None },
         RunSettlement::Failed { reason } => WorkerOutcome::Failed {
             explanation: Some(reason),

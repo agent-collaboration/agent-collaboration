@@ -183,15 +183,47 @@ async fn reports_queued_before_the_scheduler_waits_for_a_slot_are_not_lost() -> 
     Ok(())
 }
 
-/// Per-Run script and record: the Runs whose turn a test completed one by one, and the
-/// Runs whose stop was requested.
+/// Per-Run script and record: the Runs whose turn a test completed one by one, the Runs
+/// whose turn is absent from history once stopping, and the Runs whose stop was requested.
 #[derive(Default)]
 pub(super) struct PerRunScript {
     completed: std::sync::Mutex<std::collections::HashSet<RunId>>,
+    absent_while_stopping: std::sync::Mutex<std::collections::HashSet<RunId>>,
     stopped: std::sync::Mutex<std::collections::HashSet<RunId>>,
 }
 
 impl PerRunScript {
+    /// What a read of `context`'s turn finds, as the native route answers it.
+    pub(super) fn settlement(
+        &self,
+        context: &collaboration_contracts::RunObservationContext,
+        turn_completed: bool,
+    ) -> collaboration_contracts::RunSettlement {
+        if context.phase == super::RunPhase::Stopping
+            && (self.absent_while_stopping.lock().unwrap()).contains(&context.run_id)
+        {
+            return collaboration_contracts::RunSettlement::NotObserved;
+        }
+        if turn_completed || self.completed(&context.run_id) {
+            collaboration_contracts::RunSettlement::Completed {
+                summary_source: None,
+            }
+        } else {
+            collaboration_contracts::RunSettlement::Pending
+        }
+    }
+
+    /// Once `run` is stopping, its turn is absent from the history a read sees.
+    fn absent_once_stopping(&self, run: RunId) {
+        self.absent_while_stopping.lock().unwrap().insert(run);
+    }
+
+    /// `run`'s stopped turn appears in its history, finished. Nothing announces it.
+    fn appear_finished(&self, run: RunId) {
+        self.absent_while_stopping.lock().unwrap().remove(&run);
+        self.complete(run);
+    }
+
     pub(super) fn completed(&self, run: &RunId) -> bool {
         self.completed.lock().unwrap().contains(run)
     }
@@ -433,6 +465,16 @@ impl SchedulerFixture {
         )
         .execute(&mut connection)
         .await?;
+        self.disable_schedule().await
+    }
+
+    /// Disables the schedule, so no later occurrence comes due.
+    async fn disable_schedule(&self) -> TestResult<()> {
+        let mut connection = <sqlx::SqliteConnection as sqlx::Connection>::connect(&format!(
+            "sqlite://{}",
+            self.root.path().join("automation.sqlite").display()
+        ))
+        .await?;
         sqlx::query("UPDATE schedule_definitions SET enabled = 0")
             .execute(&mut connection)
             .await?;
@@ -671,5 +713,60 @@ async fn a_deadline_that_passes_after_a_single_failed_next_due_is_acted_on_behin
     );
     cursor.scheduler.stop().await;
     drop(cursor.gate);
+    Ok(())
+}
+
+#[tokio::test(start_paused = true)]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
+async fn a_stopped_turn_absent_from_its_history_is_read_again_on_its_retry_and_settles()
+-> TestResult<()> {
+    let fixture = SchedulerFixture::with_one_schedule().await?;
+    fixture
+        .route
+        .stop_records_intent
+        .store(true, Ordering::Release);
+    let scheduler = fixture.start()?;
+    settled(&scheduler).await?;
+    let interval = Duration::from_secs(u64::from(INTERVAL_SECONDS));
+    let timeout = Duration::from_secs(u64::from(super::TIMEOUT_SECONDS));
+    advance(interval).await;
+    let run = fixture.executing_and_asleep(&scheduler).await?;
+    // No later occurrence: once the deadline has acted, nothing else is due.
+    fixture.disable_schedule().await?;
+    fixture.route.per_run.absent_once_stopping(run.clone());
+
+    // The deadline stores the stop and sends it; the read after it finds the stopped turn
+    // absent from its history. No deadline is left to step the Run again.
+    advance(timeout).await;
+    settled(&scheduler).await?;
+    let phase_while_absent = fixture.read_phase(&run).await?;
+    let retry_at = scheduler.observation.snapshot().armed_deadline;
+
+    // The stopped turn appears with no write and no announcement; only the Run's own retry
+    // reads it again.
+    fixture.route.per_run.appear_finished(run.clone());
+    let now = fixture.clock.now();
+    let wait = retry_at
+        .map(|due| due.unix_millis().saturating_sub(now.unix_millis()))
+        .and_then(|millis| u64::try_from(millis).ok())
+        .ok_or("no retry was armed for the absent stopped turn")?;
+    advance(Duration::from_millis(wait)).await;
+    settled(&scheduler).await?;
+
+    assert_eq!(phase_while_absent, super::RunPhase::Stopping);
+    assert_eq!(
+        fixture.read_phase(&run).await?,
+        super::RunPhase::Finished,
+        "the retry read the stopped turn and the Run settled"
+    );
+    assert_eq!(
+        *fixture.route.stop_requests.lock().unwrap(),
+        [super::at(interval + timeout)],
+        "the stop was sent once and never again"
+    );
+    scheduler.stop().await;
     Ok(())
 }

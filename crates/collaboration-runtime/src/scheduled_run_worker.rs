@@ -217,6 +217,14 @@ impl ScheduledRunWorker {
             }
             Err(_) => return Err(StorageError::InvalidRecord),
         };
+        if matches!(
+            settlement,
+            collaboration_contracts::RunSettlement::NotObserved
+        ) {
+            // A stopped turn absent from its history: nothing is written and the stop is
+            // not sent again; only a retry reads the history again.
+            return Ok(StepProgress::SettlementNotObserved);
+        }
         if crate::run_reconciliation::persist_settlement(&self.store, &record, settlement).await? {
             return Ok(StepProgress::Stepped);
         }

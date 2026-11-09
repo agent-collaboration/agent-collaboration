@@ -41,6 +41,7 @@ mod local_mail_cancellation;
 mod maintenance_authority;
 mod message_upgrade_startup;
 mod native_claude_catalogue;
+mod native_observer_restart;
 mod operator_transport_contract;
 mod process_lifecycle;
 mod production_enrollment;

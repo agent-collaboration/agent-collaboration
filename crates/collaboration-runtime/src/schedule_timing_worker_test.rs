@@ -157,21 +157,15 @@ impl ScheduledRunExecution for ControlledRoute {
         context: RunObservationContext,
     ) -> DeliveryFuture<'_, RunSettlement> {
         self.settlement_reads.fetch_add(1, Ordering::AcqRel);
-        let completed =
-            self.turn_completed.load(Ordering::Acquire) || self.per_run.completed(&context.run_id);
+        let settlement =
+            (self.per_run).settlement(&context, self.turn_completed.load(Ordering::Acquire));
         self.observed_runs.lock().unwrap().push(context.run_id);
         let unreachable = take_unreachable(&self.unreachable_settlements);
         Box::pin(async move {
             if unreachable {
                 return Err(DeliveryContractError::ClientOperation);
             }
-            Ok(if completed {
-                RunSettlement::Completed {
-                    summary_source: None,
-                }
-            } else {
-                RunSettlement::Pending
-            })
+            Ok(settlement)
         })
     }
 

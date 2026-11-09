@@ -169,8 +169,16 @@ impl CodexAppServerScheduledRuns {
         let observed_turn = match observed {
             Ok(Ok(Some(observed_turn))) => observed_turn,
             // The whole history was read and the recorded turn is not in it: an observed
-            // absence, not a failed read. The Run's deadline still acts on it.
-            Ok(Ok(None)) => return Ok(RunSettlement::Pending),
+            // absence, not a failed read. Before the stop the Run's deadline still acts on
+            // it; once stopping, no deadline remains, so the absence is said as such and the
+            // scheduler reads it again on the Run's backoff.
+            Ok(Ok(None)) => {
+                return Ok(if context.phase == agent_automation::RunPhase::Stopping {
+                    RunSettlement::NotObserved
+                } else {
+                    RunSettlement::Pending
+                });
+            }
             // A timed-out or failed read observed nothing. Reporting it as running would
             // leave the Run unchecked; the scheduler retries an unreachable client instead.
             Ok(Err(_)) | Err(_) => return Err(DeliveryContractError::ClientOperation),
@@ -652,11 +660,16 @@ impl ScheduledRunExecution for CodexAppServerScheduledRuns {
     ) -> DeliveryFuture<'_, RunReconciliation> {
         Box::pin(async move {
             let settlement = self.observe_native(&context).await?;
-            Ok(if matches!(settlement, RunSettlement::Pending) {
-                RunReconciliation::StillUnknown
-            } else {
-                RunReconciliation::Settled { settlement }
-            })
+            Ok(
+                if matches!(
+                    settlement,
+                    RunSettlement::Pending | RunSettlement::NotObserved
+                ) {
+                    RunReconciliation::StillUnknown
+                } else {
+                    RunReconciliation::Settled { settlement }
+                },
+            )
         })
     }
 }

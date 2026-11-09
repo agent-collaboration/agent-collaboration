@@ -166,6 +166,9 @@ pub enum RunSummarySource {
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum RunSettlement {
     Pending,
+    /// The whole history was read and the recorded turn is absent. Before a stop this is
+    /// still pending; after one it is a settlement not yet observed, read again later.
+    NotObserved,
     Completed {
         summary_source: Option<RunSummarySource>,
     },

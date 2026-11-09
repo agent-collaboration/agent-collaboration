@@ -174,3 +174,48 @@ async fn a_failed_read_is_an_unreachable_client_and_only_a_read_turn_is_running(
     );
     Ok(())
 }
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Test assertions must fail the test while fixture errors propagate."
+)]
+async fn a_stopped_turn_absent_from_its_history_is_not_observed_and_a_running_one_is_pending()
+-> TestResult {
+    let directory = tempfile::Builder::new().prefix("obs-").tempdir_in("/tmp")?;
+    let socket = directory.path().join("native.sock");
+    let listener = tokio::net::UnixListener::bind(&socket)?;
+    let server = tokio::spawn(serve(
+        listener,
+        vec![
+            Answer::NoSuchTurn,
+            Answer::Turn("inProgress"),
+            Answer::NoSuchTurn,
+        ],
+    ));
+    let (route, target) = route(socket)?;
+    let stopping = || -> TestResult<RunObservationContext> {
+        let mut context = running_context(&target)?;
+        context.phase = RunPhase::Stopping;
+        Ok(context)
+    };
+
+    let absent_while_stopping = route.observe_settlement(stopping()?).await;
+    let running_while_stopping = route.observe_settlement(stopping()?).await;
+    let absent_before_the_stop = route.observe_settlement(running_context(&target)?).await;
+    server.await??;
+
+    assert!(
+        matches!(absent_while_stopping, Ok(RunSettlement::NotObserved)),
+        "after the stop no deadline is left, so the absence is said as such: {absent_while_stopping:?}"
+    );
+    assert!(
+        matches!(running_while_stopping, Ok(RunSettlement::Pending)),
+        "a stopped turn still running stays quiet: {running_while_stopping:?}"
+    );
+    assert!(
+        matches!(absent_before_the_stop, Ok(RunSettlement::Pending)),
+        "before the stop the deadline still acts: {absent_before_the_stop:?}"
+    );
+    Ok(())
+}
