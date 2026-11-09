@@ -70,8 +70,7 @@ where
         decide: impl FnOnce(&EnrollmentFacts) -> Decided<T> + Send + 'static,
     ) -> Result<T, MachineEnrollmentFailure> {
         let organization = self.organization.clone();
-        let outcome = self
-            .store
+        self.store
             .transaction(move |scope| {
                 Box::pin(async move {
                     match read_facts(scope, &query, organization).await? {
@@ -87,8 +86,7 @@ where
                 })
             })
             .await
-            .map_err(store_failure)?;
-        outcome
+            .map_err(store_failure)?
     }
 }
 

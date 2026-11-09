@@ -1,11 +1,9 @@
 //! The shared scenario on the Tokio host's real store. workerd runs the same
 //! script on Durable Object SQLite and must produce the same report.
 use super::super::sql_store_fixture::{FixtureObject, TestError};
-use super::super::test_fixtures::{ORGANIZATION, uuid7};
 use super::{expected_scenario, run_scenario};
 use crate::CoreHost;
 use crate::fleet_storage_fixture::FixtureIo;
-use fleet_identity_protocol::OrganizationId;
 use fleet_sync_protocol::ReceiverId;
 use fleet_sync_tokio_runner::{ObjectKey, ObjectStore};
 
@@ -21,11 +19,7 @@ async fn the_tokio_store_produces_the_shared_scenario_report() -> Result<(), Tes
         .object(ObjectKey::new("fleet")?, Default::default(), host)
         .await?;
 
-    let report = run_scenario::<FixtureObject, sqlx_turso::Turso>(
-        object,
-        OrganizationId::try_from(uuid7(ORGANIZATION))?,
-    )
-    .await?;
+    let report = run_scenario::<FixtureObject, sqlx_turso::Turso>(object).await?;
 
     let expected = expected_scenario();
     for (observed, wanted) in report.iter().zip(&expected) {

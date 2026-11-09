@@ -491,7 +491,7 @@ jobs:
             TIMEFORMAT=$'WORKERD_TEST\t%3R\tcomposed_scope_workerd/'"$scenario"
             time cargo run --locked -p collaboration-central-tokio --features conformance --example composed_scope_workerd -- "$scenario" node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957
           done
-          for example in step_scope_workerd bootstrap_scope_workerd; do
+          for example in step_scope_workerd bootstrap_scope_workerd machine_login_scenario_workerd; do
             TIMEFORMAT=$'WORKERD_TEST\t%3R\t'"$example"
             time cargo run --locked -p collaboration-central-tokio --features conformance --example "$example" -- node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$example" 8957
           done

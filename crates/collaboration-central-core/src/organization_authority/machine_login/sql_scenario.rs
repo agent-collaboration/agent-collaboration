@@ -115,15 +115,13 @@ fn approved(answer: &DeviceLoginDecision) -> Result<EnrollmentId, String> {
     }
 }
 
-/// Runs the scenario on a fresh store, in the live initialization order.
+/// Runs the scenario on a fresh store, in the live initialization order, for
+/// one fixed organization so every host runs exactly the same inputs.
 #[expect(
     clippy::too_many_lines,
     reason = "one linear script, so both hosts run exactly the same steps in order"
 )]
-pub async fn run_scenario<Store, Driver>(
-    store: Arc<Store>,
-    organization: OrganizationId,
-) -> Result<Vec<ScenarioStep>, String>
+pub async fn run_scenario<Store, Driver>(store: Arc<Store>) -> Result<Vec<ScenarioStep>, String>
 where
     Store: AtomicStore,
     Driver: Database,
@@ -137,6 +135,7 @@ where
     for<'value> Option<String>: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
     for<'row> &'row str: ColumnIndex<Driver::Row>,
 {
+    let organization: OrganizationId = typed(id(0x01))?;
     let mut steps = Vec::new();
     let mut step = |name: &str, observed: Value| {
         steps.push(ScenarioStep {
@@ -427,8 +426,11 @@ pub fn expected_scenario() -> Vec<ScenarioStep> {
             "decidedAt": decided,
             "grantExpiresAt": decided + 900,
         });
-        if let Some(ended) = superseded {
-            answer["superseded"] = json!({"enrollmentId": id(ended), "clientId": id(ended)});
+        if let (Some(ended), Some(fields)) = (superseded, answer.as_object_mut()) {
+            fields.insert(
+                "superseded".to_owned(),
+                json!({"enrollmentId": id(ended), "clientId": id(ended)}),
+            );
         }
         answer
     };

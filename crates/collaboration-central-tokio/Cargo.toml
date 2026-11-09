@@ -80,6 +80,10 @@ name = "bootstrap_scope_workerd"
 required-features = ["conformance"]
 
 [[example]]
+name = "machine_login_scenario_workerd"
+required-features = ["conformance"]
+
+[[example]]
 name = "fleet_effects_workerd"
 required-features = ["conformance"]
 

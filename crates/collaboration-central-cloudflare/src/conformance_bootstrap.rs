@@ -37,6 +37,8 @@ enum Fixture {
     Uncertain,
     Enrollment,
     ImportedUnheld,
+    /// B3's machine-login scenario on a fresh object: see `run_scenario`.
+    MachineLogin,
 }
 impl Fixture {
     fn name(&self) -> &'static str {
@@ -53,6 +55,7 @@ impl Fixture {
             Self::Uncertain => "uncertain",
             Self::Enrollment => "enrollment",
             Self::ImportedUnheld => "importedUnheld",
+            Self::MachineLogin => "machineLogin",
         }
     }
 }
@@ -76,6 +79,7 @@ enum Command {
         access_client_id: AccessClientId,
         credential_hash: String,
     },
+    MachineLogin {},
 }
 fn registry(
     host: Arc<ReceiptStoreHost>,
@@ -157,10 +161,14 @@ pub(crate) async fn forward(env: &Env, mut request: Request) -> Result<Response>
         .await;
     }
 
-    let stub = env
-        .durable_object("SCHEMA_PROBES")?
-        .id_from_name(body.fixture.name())?
-        .get_stub()?;
+    let namespace = env.durable_object("SCHEMA_PROBES")?;
+    // The scenario starts from an empty store, so each run gets its own object.
+    let id = if matches!(body.fixture, Fixture::MachineLogin) {
+        namespace.unique_id()?
+    } else {
+        namespace.id_from_name(body.fixture.name())?
+    };
+    let stub = id.get_stub()?;
     let mut init = RequestInit::new();
     init.with_method(Method::Post).with_body(Some(text.into()));
     stub.fetch_with_request(Request::new_with_init(
@@ -254,6 +262,17 @@ impl DurableObject for BootstrapObject {
             .and_then(|reply| {
                 serde_json::to_value(reply).map_err(durable_steps::StoreError::backend)
             }),
+            Command::MachineLogin {} => {
+                collaboration_central_core::organization_authority::run_scenario::<
+                    _,
+                    sqlx_durable_object::Do,
+                >(host.store().clone())
+                .await
+                .map_err(durable_steps::StoreError::backend)
+                .and_then(|report| {
+                    serde_json::to_value(report).map_err(durable_steps::StoreError::backend)
+                })
+            }
         };
         #[cfg(feature = "conformance-faults")]
         let observed = host.store().inner().reply_loss_observed();
