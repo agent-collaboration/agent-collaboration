@@ -10,7 +10,10 @@ const name =
     : scenario === "started"
       ? "started-steer-fixture"
       : "prompt-required-fixture";
-await agent.initialize(name, { _meta: { steering: { supported: true } } });
+await agent.initialize(name, {
+  agentCapabilities: { promptCapabilities: { image: true } },
+  _meta: { steering: { supported: true } },
+});
 await agent.newSession();
 const prompt = scenario === "injected" ? await agent.read("session/prompt") : undefined;
 const steer = await agent.read("_session/steering");

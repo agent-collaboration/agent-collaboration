@@ -11,6 +11,15 @@ pub(super) async fn handle_app_server_rpc(
     context: Arc<RouterSessionAppServerContext>,
     request: Value,
 ) -> Result<HandledAppServerRequest, AppServerConnectionError> {
+    handle_app_server_rpc_with_input(context, request, session_event_model::InputId::generate())
+        .await
+}
+
+pub(super) async fn handle_app_server_rpc_with_input(
+    context: Arc<RouterSessionAppServerContext>,
+    request: Value,
+    input_id: session_event_model::InputId,
+) -> Result<HandledAppServerRequest, AppServerConnectionError> {
     let id = request.get("id").cloned().unwrap_or(Value::Null);
     let method = request
         .get("method")
@@ -48,6 +57,7 @@ pub(super) async fn handle_app_server_rpc(
                     );
                     return Ok(HandledAppServerRequest {
                         binding_attempt: None,
+                        input_id: None,
                         method,
                         response,
                         post_response_frames: Vec::new(),
@@ -98,6 +108,7 @@ pub(super) async fn handle_app_server_rpc(
         } else {
             handle_app_server_turn_request(
                 &method,
+                input_id,
                 params,
                 Arc::clone(&context.commands),
                 Arc::clone(&context.events),
@@ -177,6 +188,7 @@ pub(super) async fn handle_app_server_rpc(
             if let Err(error) = result {
                 return Ok(HandledAppServerRequest {
                     binding_attempt: None,
+                    input_id: None,
                     method,
                     response: native_error_response(id, &error),
                     post_response_frames,
@@ -242,6 +254,7 @@ pub(super) async fn handle_app_server_rpc(
     );
     Ok(HandledAppServerRequest {
         binding_attempt: None,
+        input_id: None,
         method,
         response,
         post_response_frames,
@@ -280,6 +293,7 @@ fn native_error_response(id: Value, error: &ThreadMethodError) -> Value {
         ThreadMethodError::NotFound => -32002,
         ThreadMethodError::Unavailable
         | ThreadMethodError::Unsupported
+        | ThreadMethodError::UnavailableThreadOrdering { .. }
         | ThreadMethodError::SettingsUnresolved
         | ThreadMethodError::CreatedWithoutSettings { .. } => -32000,
         ThreadMethodError::Busy => -32600,
