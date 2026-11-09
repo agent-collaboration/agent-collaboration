@@ -3,7 +3,9 @@
 // format) so nothing else about the Worker changes:
 //
 // - Step 2, the migration Worker: the same name, account, domains, settings,
-//   bindings and five SQLite classes. Only the entrypoint changes.
+//   bindings and five SQLite classes. The entrypoint changes, and one text
+//   binding names the Worker to itself (MIGRATION_WORKER_NAME), which its S1
+//   staging interruption hook checks (src/fault_plan.ts).
 // - Step 5, main's central: Fleet and ProjectCopy stay live. The three retired
 //   classes get Cloudflare's `deleted` tombstone and lose their bindings, since
 //   keeping them would need their code in central (`config_export_not_in_code`,
@@ -64,7 +66,14 @@ export function checkLiveTarget(live: WorkerConfig): void {
 /** Step 2: the migration Worker, inside the existing objects. */
 export function migrationWorkerConfig(live: WorkerConfig, entrypoint: string): WorkerConfig {
   checkLiveTarget(live);
-  return { ...live, worker: { ...live.worker, entrypoint } };
+  return {
+    ...live,
+    worker: {
+      ...live.worker,
+      entrypoint,
+      env: { ...live.worker.env, MIGRATION_WORKER_NAME: { type: "text", value: live.worker.name } },
+    },
+  };
 }
 
 /** Step 5: main's central, with the retired classes deleted. */

@@ -21,8 +21,16 @@ export interface MigrationRun {
   readonly signer: TestSigner;
   readonly path: string;
   readonly production: ProductionSeed;
-  /** One owner call; migrate carries the fixture's Mac-file facts unless `body` is given. */
-  call(path: string, method?: string, body?: unknown): Promise<CallReply>;
+  /**
+   * One owner call; migrate carries the fixture's Mac-file facts unless `body`
+   * is given. `bindings` adds deploy bindings (the S1 interruption hook's).
+   */
+  call(
+    path: string,
+    method?: string,
+    body?: unknown,
+    bindings?: Readonly<Record<string, string>>,
+  ): Promise<CallReply>;
   /** The real inventory, migrate or revert at a fixed run time; writes stop after `afterWrites` object writes. */
   interrupted(
     call: "inventory" | "migrate" | "revert",
@@ -69,8 +77,13 @@ export async function withProduction(
             }
           : {}),
       });
-    const ownerCall = async (path: string, method: string, text: string | undefined) => {
-      const worker = await startWorker("migration", storage.path, signer.jwks);
+    const ownerCall = async (
+      path: string,
+      method: string,
+      text: string | undefined,
+      bindings: Readonly<Record<string, string>> = {},
+    ) => {
+      const worker = await startWorker("migration", storage.path, signer.jwks, bindings);
       try {
         const assertion = await signer.sign(ownerClaims(Math.floor(Date.now() / 1000)));
         const response = await worker.dispatchFetch(
@@ -90,14 +103,14 @@ export async function withProduction(
       signer,
       path: storage.path,
       production,
-      async call(path, method = "GET", requestBody) {
+      async call(path, method = "GET", requestBody, bindings = {}) {
         // A migrate without an explicit body runs as PD7 does: inventory first, then
         // migrate bound to that inventory's candidate.
         if (path === "migrate" && requestBody === undefined) {
-          const inventory = await ownerCall("inventory", "POST", macFilesBody());
-          return await ownerCall("migrate", method, migrateBody(inventory));
+          const inventory = await ownerCall("inventory", "POST", macFilesBody(), bindings);
+          return await ownerCall("migrate", method, migrateBody(inventory), bindings);
         }
-        const worker = await startWorker("migration", storage.path, signer.jwks);
+        const worker = await startWorker("migration", storage.path, signer.jwks, bindings);
         try {
           const assertion = await signer.sign(ownerClaims(Math.floor(Date.now() / 1000)));
           const text = requestBody !== undefined ? stringifyExact(requestBody) : undefined;

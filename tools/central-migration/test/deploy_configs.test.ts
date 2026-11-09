@@ -45,8 +45,19 @@ test("the migration Worker deploys with the target's name, bindings and five cla
   // Act
   const config = migrationWorkerConfig(LIVE, "build/worker.js");
 
-  // Assert: only the entrypoint differs.
-  assert.deepEqual(config, { ...LIVE, worker: { ...LIVE.worker, entrypoint: "build/worker.js" } });
+  // Assert: the entrypoint differs, and one text binding names the Worker to
+  // itself for its staging interruption hook (src/fault_plan.ts); nothing else.
+  assert.deepEqual(config, {
+    ...LIVE,
+    worker: {
+      ...LIVE.worker,
+      entrypoint: "build/worker.js",
+      env: {
+        ...LIVE.worker.env,
+        MIGRATION_WORKER_NAME: { type: "text", value: LIVE.worker.name },
+      },
+    },
+  });
 });
 
 test("main's central keeps Fleet and ProjectCopy and deletes the three retired classes", () => {

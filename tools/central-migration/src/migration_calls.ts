@@ -332,22 +332,34 @@ export async function migrate(
       `the candidate is ${candidate.digest}, not the ${request.passed.candidateDigest} the gate passed`,
     );
   }
-  const copies: Record<string, ApplyReply["kind"]> = {};
+  // Each object's own result and the rows it actually wrote, so a resume shows
+  // which objects it applied and which it found already migrated.
+  const copies: Record<string, ObjectResult> = {};
   for (const [project, statements] of Object.entries(plan.copies)) {
-    copies[project] = (await objects.applyCopy(project, statements)).kind;
+    copies[project] = objectResult(await objects.applyCopy(project, statements));
   }
-  const fleet = await objects.applyFleet(plan.fleet);
+  const fleet = objectResult(await objects.applyFleet(plan.fleet));
   return {
     status: 200,
     body: {
       kind: "migrated",
       ...report(plan),
-      fleet: fleet.kind,
+      fleet,
       copies,
       rowsWritten: objects.rowsWritten,
     },
   };
 }
+
+/** One object's write in a migrate or revert answer. */
+export interface ObjectResult {
+  readonly kind: ApplyReply["kind"] | RevertReply["kind"];
+  readonly rowsWritten: number;
+}
+const objectResult = (reply: ApplyReply | RevertReply): ObjectResult => ({
+  kind: reply.kind,
+  rowsWritten: reply.rowsWritten,
+});
 
 export async function verify(objects: StorageObjects, context: CallContext): Promise<CallAnswer> {
   const registry = await objects.registry(REGISTRY_READ);
@@ -373,13 +385,13 @@ export async function revert(objects: StorageObjects): Promise<CallAnswer> {
   if (!anyMigrated(state)) {
     return { status: 409, body: { kind: "notMigrated", rowsWritten: objects.rowsWritten } };
   }
-  const copies: Record<string, RevertReply["kind"]> = {};
+  const copies: Record<string, ObjectResult> = {};
   for (const project of Object.keys(state.copies)) {
-    copies[project] = (await objects.revertCopy(project)).kind;
+    copies[project] = objectResult(await objects.revertCopy(project));
   }
-  const fleet = await objects.revertFleet();
+  const fleet = objectResult(await objects.revertFleet());
   return {
     status: 200,
-    body: { kind: "reverted", fleet: fleet.kind, copies, rowsWritten: objects.rowsWritten },
+    body: { kind: "reverted", fleet, copies, rowsWritten: objects.rowsWritten },
   };
 }

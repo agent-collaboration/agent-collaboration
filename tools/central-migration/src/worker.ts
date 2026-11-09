@@ -17,6 +17,7 @@ import {
   type StorageNamespaces,
 } from "./migration_calls.ts";
 import { accessPolicy, checkOwner, type AccessSettings } from "./owner_access.ts";
+import { Interrupted, storageObjectsFor, type FaultEnv } from "./fault_plan.ts";
 
 export {
   ConnectionObject,
@@ -27,7 +28,7 @@ export {
 } from "./storage_objects.ts";
 
 /** Deployed with the live central's own bindings (PD7 step 2), its registry configuration included. */
-export interface MigrationEnv extends AccessSettings, StorageNamespaces {
+export interface MigrationEnv extends AccessSettings, StorageNamespaces, FaultEnv {
   readonly CENTRAL_REGISTRY_CONFIG?: string;
 }
 
@@ -89,28 +90,44 @@ export default {
     );
     if (owner.kind === "refused") return json({ refused: owner.refusal }, 403);
     if (!route.methods.includes(request.method)) return json({ refused: "method" }, 405);
-    const objects = new StorageObjects(env);
+    // The S1 staging interruption hook applies only to a deployment naming itself.
+    const objects = storageObjectsFor(env);
     const context: CallContext = {
       now: () => Date.now(),
       registryConfig: env.CENTRAL_REGISTRY_CONFIG,
     };
-    switch (route.call) {
-      case "inventory": {
-        if (request.method === "GET") return answer(await inventory(objects, context, null));
-        const macFiles = await macFilesOf(request);
-        if ("refused" in macFiles)
-          return json({ refused: "macFiles", reason: macFiles.refused }, 400);
-        return answer(await inventory(objects, context, macFiles.files));
-      }
-      case "migrate": {
-        const parsed = await migrateRequestOf(request);
-        if ("refused" in parsed) return json({ refused: "body", reason: parsed.refused }, 400);
-        return answer(await migrate(objects, context, parsed.request));
-      }
-      case "verify":
-        return answer(await verify(objects, context));
-      default:
-        return answer(await revert(objects));
+    try {
+      return await call(route.call, request, objects, context);
+    } catch (error) {
+      if (error instanceof Interrupted)
+        return json({ interrupted: error.message, committed: error.committed }, 500);
+      throw error;
     }
   },
 };
+
+async function call(
+  name: string,
+  request: Request,
+  objects: StorageObjects,
+  context: CallContext,
+): Promise<Response> {
+  switch (name) {
+    case "inventory": {
+      if (request.method === "GET") return answer(await inventory(objects, context, null));
+      const macFiles = await macFilesOf(request);
+      if ("refused" in macFiles)
+        return json({ refused: "macFiles", reason: macFiles.refused }, 400);
+      return answer(await inventory(objects, context, macFiles.files));
+    }
+    case "migrate": {
+      const parsed = await migrateRequestOf(request);
+      if ("refused" in parsed) return json({ refused: "body", reason: parsed.refused }, 400);
+      return answer(await migrate(objects, context, parsed.request));
+    }
+    case "verify":
+      return answer(await verify(objects, context));
+    default:
+      return answer(await revert(objects));
+  }
+}

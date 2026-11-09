@@ -25,6 +25,8 @@ import type { WorkerConfig } from "./deploy_configs.ts";
 import {
   BUILD_RULES,
   DeployRefused,
+  refuseFaultHook,
+  refuseProduction,
   ENTRYPOINTS,
   SEED_ENTRY_MODULE,
   deployWorker,
@@ -148,6 +150,8 @@ export async function guardedRun(options: GuardedRun): Promise<DeployOutcome> {
     if (process.env[name] !== undefined)
       throw new Error(`${name} is set; cf must use the owner's login`);
   }
+  // Whatever rendered it, production's identity and the staging-only hook stop here.
+  refuseFaultHook(refuseProduction(options.config));
   const scratch = resolve(options.scratch);
   await stageScratch(options.kind, options.config, options.artifact, scratch);
   const built = await buildWithPinnedCf(scratch);

@@ -1,7 +1,10 @@
 // The guarded deploy of a central Worker under the settings' name:
 //
 //   node scripts/deploy_worker.ts <old-central|migration|main-central> --settings <private settings.json>
-//     --artifact <build dir> --scratch <new private dir> [--dry-run]
+//     --artifact <build dir> --scratch <new private dir> [--dry-run] [--fault-after-writes <n>]
+//
+// --fault-after-writes renders the S1 staging interruption hook (migration
+// only; refused for any other allocation). Resume by redeploying without it.
 //
 // old-central and main-central take worker-build's build/ (index.js, index_bg.wasm);
 // migration takes this package's build/. cf is always this package's pinned
@@ -19,7 +22,7 @@ const option = (name: string): string | undefined => {
 };
 if (kind !== "old-central" && kind !== "migration" && kind !== "main-central") {
   throw new Error(
-    "usage: deploy_worker.ts <old-central|migration|main-central> --settings <file> --artifact <dir> --scratch <dir> [--dry-run]",
+    "usage: deploy_worker.ts <old-central|migration|main-central> --settings <file> --artifact <dir> --scratch <dir> [--dry-run] [--fault-after-writes <n>]",
   );
 }
 const settingsPath = option("settings");
@@ -33,7 +36,13 @@ try {
   const outcome = await guardedRun({
     kind,
     settings,
-    config: renderConfig(kind, settings),
+    config: renderConfig(
+      kind,
+      settings,
+      option("fault-after-writes") === undefined
+        ? {}
+        : { faultAfterWrites: Number(option("fault-after-writes")) },
+    ),
     artifact,
     scratch,
     cf: PINNED_CF,

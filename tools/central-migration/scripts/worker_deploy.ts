@@ -142,6 +142,15 @@ export function liveConfig(settings: DeploySettings, includeDomain: boolean): Wo
   };
 }
 
+/** The one allocation whose migration Worker may carry the S1 interruption hook. */
+export const S1_STAGING_WORKER = "collaboration-central-s1-migration";
+const FAULT_ONLY_BINDINGS = ["MIGRATION_FAULT_AFTER_WRITES", "MIGRATION_FAULT_TARGET"] as const;
+
+export interface RenderOptions {
+  /** S1 staging only: object writes migrate or revert commit before stopping (src/fault_plan.ts). */
+  readonly faultAfterWrites?: number;
+}
+
 /**
  * The config one central kind deploys, rendered from the same live shape. The
  * staging seed renders its own (verification/central-seed-worker), from
@@ -150,15 +159,50 @@ export function liveConfig(settings: DeploySettings, includeDomain: boolean): Wo
 export function renderConfig(
   kind: Exclude<WorkerKind, "seed">,
   settings: DeploySettings,
+  options: RenderOptions = {},
 ): WorkerConfig {
   const live = liveConfig(settings, true);
-  const config =
+  let config =
     kind === "migration"
       ? migrationWorkerConfig(live, ENTRYPOINTS.migration)
       : kind === "main-central"
         ? mainCentralConfig(live, ENTRYPOINTS["main-central"])
         : live;
-  return refuseProduction(config);
+  const count = options.faultAfterWrites;
+  if (count !== undefined) {
+    if (kind !== "migration") refuse("only the migration Worker takes the interruption hook");
+    if (!sameName(settings.workerName, S1_STAGING_WORKER))
+      refuse(`the interruption hook renders only for ${S1_STAGING_WORKER}`);
+    if (!Number.isSafeInteger(count) || count < 0)
+      refuse("the interruption hook needs a whole number of object writes");
+    const text = (value: string) => ({ type: "text", value });
+    config = {
+      ...config,
+      worker: {
+        ...config.worker,
+        env: {
+          ...config.worker.env,
+          MIGRATION_FAULT_AFTER_WRITES: text(String(count)),
+          MIGRATION_FAULT_TARGET: text(settings.workerName),
+        },
+      },
+    };
+  }
+  return refuseFaultHook(refuseProduction(config));
+}
+
+/** Refuses a config carrying the interruption hook anywhere but the S1 staging allocation. */
+export function refuseFaultHook(config: WorkerConfig): WorkerConfig {
+  const carried = FAULT_ONLY_BINDINGS.filter((name) => name in config.worker.env);
+  if (carried.length === 0) return config;
+  if (
+    carried.length !== FAULT_ONLY_BINDINGS.length ||
+    !sameName(config.worker.name, S1_STAGING_WORKER) ||
+    JSON.stringify(config).toLowerCase().includes(PRODUCTION.domain)
+  ) {
+    refuse(`the interruption hook is S1 staging only; ${config.worker.name} can't carry it`);
+  }
+  return config;
 }
 
 /** Refuses a config that names production central's Worker or domain. */

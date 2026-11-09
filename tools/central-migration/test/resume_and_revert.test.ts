@@ -43,10 +43,10 @@ test("a migrate interrupted after the first copy finishes on a later run, and ve
       // Assert: completed without redoing the first copy, which keeps its first stamp.
       assert.equal(resumed.status, 200, JSON.stringify(resumed.body));
       assert.equal(
-        (resumed.body.copies as Record<string, string>)[[...PROJECTS].sort()[0]!],
+        (resumed.body.copies as Record<string, { kind: string }>)[[...PROJECTS].sort()[0]!]?.kind,
         "alreadyMigrated",
       );
-      assert.equal(resumed.body.fleet, "applied");
+      assert.equal((resumed.body.fleet as { kind: string }).kind, "applied");
       assert.deepEqual((await run.oldStorage())[firstCopy], committed);
       const stamp = (committed as { rows: Record<string, { installed_on: string }[]> }).rows
         ._sqlx_migrations_fleet_sync_receiver?.[0]?.installed_on;
@@ -103,7 +103,7 @@ for (let reverted = 0; reverted <= PROJECTS.length; reverted += 1) {
 
         // Assert
         assert.equal(finished.status, 200, JSON.stringify(finished.body));
-        assert.equal(finished.body.fleet, "reverted");
+        assert.equal((finished.body.fleet as { kind: string }).kind, "reverted");
         await assertRestored(run, baseline);
       },
     );
@@ -125,7 +125,7 @@ test("a migrate that stopped after some copies, before the Fleet, reverts to pro
 
       // Assert
       assert.equal(reverted.status, 200, JSON.stringify(reverted.body));
-      assert.equal(reverted.body.fleet, "notMigrated");
+      assert.equal((reverted.body.fleet as { kind: string }).kind, "notMigrated");
       await assertRestored(run, baseline);
       assert.equal(again.status, 409);
       assert.equal(again.body.rowsWritten, 0);
