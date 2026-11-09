@@ -274,3 +274,107 @@ async fn an_idle_event_reads_no_machine_notice_progress() -> TestResult {
     assert_eq!(progress_reads, 0, "an idle event read a notice stream");
     fixture.close().await
 }
+
+/// The imported-unheld setup, as the shells now send it: an owner call event.
+async fn imported_unheld_call(
+    fixture: &Fixture,
+    database: fleet_protocol::DatabaseId,
+) -> TestResult<collaboration_central_core::EventReply> {
+    use collaboration_central_core::conformance_setup_calls::{
+        ConformanceImportedUnheld, ImportedUnheldRequest, encode_conformance_setup,
+    };
+    let (_, body) = encode_conformance_setup(
+        owner()?,
+        ConformanceImportedUnheld,
+        ImportedUnheldRequest {
+            database,
+            board_state: collaboration_central_core::ConformanceBoardState::Open,
+        },
+        durable_steps::CallId {
+            operation: durable_steps::OperationId::new(durable_steps::Uuid::now_v7())?,
+            step: durable_steps::StepName::new("conformance_setup")?,
+        },
+    )
+    .map_err(|failure| format!("setup encoding: {failure:?}"))?
+    .into_parts();
+    Ok(
+        collaboration_central_core::ObjectKernel::new(&fixture.runtime)
+            .on_event(collaboration_central_core::ObjectEvent::Call {
+                body,
+                storage_bytes: None,
+            })
+            .await,
+    )
+}
+
+fn owner() -> TestResult<collaboration_central_core::OwnerIdentity> {
+    Ok(collaboration_central_core::OwnerIdentity::from_access(
+        collaboration_central_core::AccessCaller::Owner {
+            email: "fixture@example.test".into(),
+        },
+    )?)
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Each assertion names the import setup's owed notice before and after it runs as an event."
+)]
+#[tokio::test]
+async fn an_import_setup_sends_what_it_owes_only_as_an_event_and_a_direct_call_is_refused()
+-> TestResult {
+    // Arrange: machine A reads the feed and is attached, so it is owed a notice
+    // when the feed grows.
+    let root = tempfile::tempdir()?;
+    let fixture = Fixture::open(root.path(), NOW).await?;
+    feed(&fixture, 0).await?;
+    let mut machine = super::fleet_mail_dispatch::Socket::open(&fixture, A, SERVICE_A).await?;
+    // The fixture routes Copy calls only for its one project.
+    let database = fleet_protocol::DatabaseId::try_from(PROJECT.to_owned())?;
+
+    // Act 1: the setup called on the face directly, outside any event.
+    let direct = fixture
+        .runtime
+        .conformance_imported_unheld(
+            database,
+            owner()?,
+            collaboration_central_core::ConformanceBoardState::Open,
+        )
+        .await;
+
+    // Assert 1: refused loudly, and the transaction that owed the notice rolled back.
+    assert!(
+        direct.is_err(),
+        "owed work was named outside an event and kept"
+    );
+    assert!(
+        notices(&fixture).await?.is_empty(),
+        "a refused setup left a notice"
+    );
+
+    // Act 2: the same setup as an owner call event.
+    let reply = imported_unheld_call(&fixture, database).await?;
+
+    // Assert 2: it answered, the notice committed, and it was pushed to A in that event.
+    assert!(
+        matches!(reply, collaboration_central_core::EventReply::CallAnswer(_)),
+        "{reply:?}"
+    );
+    assert!(
+        !notices(&fixture).await?.is_empty(),
+        "the import owed no notice"
+    );
+    let mut pushed = false;
+    while machine.queued_commands() > 0 {
+        if matches!(
+            machine.next().await?,
+            fleet_protocol::ServerFrame::Notice { .. }
+        ) {
+            pushed = true;
+        }
+    }
+    assert!(
+        pushed,
+        "the import's owed notice was not pushed after its event"
+    );
+    fixture.close().await
+}

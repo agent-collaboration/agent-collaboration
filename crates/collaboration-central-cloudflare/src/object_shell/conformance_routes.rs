@@ -354,16 +354,40 @@ impl ShellActor {
             let RuntimeFace::Fleet(fleet_kernel) = runtime else {
                 return Err(error("import fixture requires Registry"));
             };
-            let runtime = fleet_kernel.face();
             let (database, owner, board_state): (
                 fleet_protocol::DatabaseId,
                 collaboration_central_core::OwnerIdentity,
                 collaboration_central_core::ConformanceBoardState,
             ) = request.json().await?;
-            let position = runtime
-                .conformance_imported_unheld(database, owner, board_state)
+            // An owner call event, so what the import owes is sent after it.
+            let identity = durable_steps::CallId {
+                operation: durable_steps::OperationId::new(durable_steps::Uuid::now_v7())
+                    .map_err(error)?,
+                step: durable_steps::StepName::new("conformance_setup").map_err(error)?,
+            };
+            let (_, body) =
+                collaboration_central_core::conformance_setup_calls::encode_conformance_setup(
+                    owner,
+                    collaboration_central_core::conformance_setup_calls::ConformanceImportedUnheld,
+                    collaboration_central_core::conformance_setup_calls::ImportedUnheldRequest {
+                        database,
+                        board_state,
+                    },
+                    identity,
+                )
+                .map_err(|failure| error(format!("{failure:?}")))?
+                .into_parts();
+            let collaboration_central_core::EventReply::CallAnswer(answer) = fleet_kernel
+                .on_event(collaboration_central_core::ObjectEvent::Call {
+                    body,
+                    storage_bytes: None,
+                })
                 .await
-                .map_err(error)?;
+            else {
+                return Err(error("imported-unheld setup did not answer"));
+            };
+            let position: fleet_protocol::ReplicationPosition =
+                serde_json::from_slice(&answer).map_err(error)?;
             return Response::from_json(&position).map(Some);
         }
         #[cfg(feature = "conformance-faults")]

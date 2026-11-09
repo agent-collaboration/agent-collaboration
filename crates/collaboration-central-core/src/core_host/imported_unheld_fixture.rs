@@ -69,10 +69,11 @@ where
             )
             .await
             .map_err(StoreError::backend)?;
-        let OperationState::Completed { result } = engine.status(&operation).await?.state else {
-            return Err(StoreError::backend(
-                "import fixture did not complete its real ImportTask",
-            ));
+        let state = engine.status(&operation).await?.state;
+        let OperationState::Completed { result } = state else {
+            return Err(StoreError::backend(format!(
+                "import fixture did not complete its real ImportTask: {state:?}"
+            )));
         };
         if serde_json::from_slice::<ImportAnswer>(&result).map_err(StoreError::backend)?
             != ImportAnswer::Imported

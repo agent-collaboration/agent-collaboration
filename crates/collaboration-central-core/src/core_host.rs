@@ -483,6 +483,8 @@ fn no_route() -> CallFailure {
 }
 
 #[cfg(feature = "conformance")]
+pub mod conformance_setup_calls;
+#[cfg(feature = "conformance")]
 mod imported_unheld_fixture;
 #[cfg(feature = "conformance")]
 pub use imported_unheld_fixture::ConformanceBoardState;

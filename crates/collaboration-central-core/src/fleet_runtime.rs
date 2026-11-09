@@ -528,6 +528,10 @@ where
         if call.kind == crate::mail_submit_calls::FleetMailSubmit::KIND {
             return self.mail_submit_call(call).await;
         }
+        #[cfg(feature = "conformance")]
+        if crate::conformance_setup_calls::is_setup(&call.kind) {
+            return self.conformance_setup_call(call).await;
+        }
         if call.kind == crate::mail_sender_calls::SenderFleetMail::KIND {
             return self.sender_mail_call(call).await;
         }
