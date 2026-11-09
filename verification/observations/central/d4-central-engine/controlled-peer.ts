@@ -5,6 +5,8 @@ import { WebSocket } from "ws";
 import { z } from "zod";
 import { decode, encode, field } from "../../../exact-json.ts";
 
+const capabilitiesSchema = z.object({ batches: z.boolean(), noticesApplied: z.boolean() }).strict();
+
 export class ControlledPeer {
   readonly socket: WebSocket;
   readonly session: string;
@@ -44,6 +46,7 @@ export class ControlledPeer {
     assertion: string;
     credential: string;
     session?: string;
+    capabilities?: z.infer<typeof capabilitiesSchema>;
   }): Promise<ControlledPeer> {
     const endpoint = new URL(input.endpoint);
     if (
@@ -60,6 +63,8 @@ export class ControlledPeer {
       throw new Error("controlled peer requires an allocated loopback Session endpoint");
     endpoint.protocol = "ws:";
     const session = z.uuidv7().parse(input.session ?? randomUUIDv7());
+    const capabilities =
+      input.capabilities === undefined ? undefined : capabilitiesSchema.parse(input.capabilities);
     const socket = new WebSocket(endpoint, {
       perMessageDeflate: false,
       handshakeTimeout: 10_000,
@@ -70,11 +75,24 @@ export class ControlledPeer {
       await once(socket, "open");
       peer.send({
         kind: "hello",
-        value: { sessionId: session, schemaSupport: { maxVersion: 1n } },
+        value: {
+          sessionId: session,
+          schemaSupport: { maxVersion: 1n },
+          ...(capabilities === undefined ? {} : { capabilities }),
+        },
       });
       const welcome = await peer.receive((frame) => field(frame, "kind") === "welcome");
       if (field(welcome, "value", "sessionId") !== session)
         throw new Error("Welcome names a different session");
+      if (capabilities !== undefined) {
+        const negotiated = capabilitiesSchema.safeParse(field(welcome, "value", "capabilities"));
+        if (
+          !negotiated.success ||
+          negotiated.data.batches !== capabilities.batches ||
+          negotiated.data.noticesApplied !== capabilities.noticesApplied
+        )
+          throw new Error("Welcome capabilities differ from the declared offer");
+      }
       return peer;
     } catch (error: unknown) {
       socket.terminate();

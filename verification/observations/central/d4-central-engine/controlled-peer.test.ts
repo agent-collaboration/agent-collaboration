@@ -6,7 +6,7 @@ import { WebSocketServer } from "ws";
 import { ControlledPeer } from "./controlled-peer.ts";
 import { decode, encode, field } from "../../../exact-json.ts";
 
-async function fixture(wrongWelcome = false) {
+async function fixture(wrongWelcome = false, honorCapabilities = true) {
   const server = new WebSocketServer({ host: "127.0.0.1", port: 0 });
   await once(server, "listening");
   const address = server.address();
@@ -24,6 +24,9 @@ async function fixture(wrongWelcome = false) {
             value: {
               sessionId: wrongWelcome ? randomUUIDv7() : field(message, "value", "sessionId"),
               databases: [],
+              ...(honorCapabilities && field(message, "value", "capabilities") !== undefined
+                ? { capabilities: field(message, "value", "capabilities") }
+                : {}),
             },
           }),
         );
@@ -91,6 +94,42 @@ test("controlled peer refuses a foreign Welcome before any request", async () =>
     await assert.rejects(
       ControlledPeer.open({ ...target, assertion: "synthetic", credential: "Bearer synthetic" }),
       /different session/,
+    );
+  } finally {
+    await target.close();
+  }
+});
+
+test("controlled peer offers notice acknowledgment and checks its negotiated Welcome", async () => {
+  const target = await fixture();
+  const capabilities = { batches: false, noticesApplied: true };
+  const peer = await ControlledPeer.open({
+    ...target,
+    assertion: "synthetic",
+    credential: "Bearer synthetic",
+    capabilities,
+  });
+  try {
+    const hello = peer.transcript().find((row) => row.direction === "client");
+    assert.ok(hello);
+    assert.deepEqual(field(decode(hello.payload), "value", "capabilities"), capabilities);
+  } finally {
+    await peer.close();
+    await target.close();
+  }
+});
+
+test("controlled peer refuses an unnegotiated capability offer before any request", async () => {
+  const target = await fixture(false, false);
+  try {
+    await assert.rejects(
+      ControlledPeer.open({
+        ...target,
+        assertion: "synthetic",
+        credential: "Bearer synthetic",
+        capabilities: { batches: false, noticesApplied: true },
+      }),
+      /capabilities/,
     );
   } finally {
     await target.close();
