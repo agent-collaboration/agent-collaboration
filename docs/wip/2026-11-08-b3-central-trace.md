@@ -133,9 +133,13 @@ doesn't state them.
 - **The switch:** v3 runs a Rust step around its SQL inside the migration transaction: it
   refuses while a legacy revocation or readmission is unfinished in the journal, converts
   every row, then inserts them after the DDL.
-- **Both hosts:** `run_scenario` is one script both hosts run on a fresh store. Tokio
-  asserts it in core's tests; workerd runs it in `BootstrapObject` (fixture
-  `machineLogin`), and `machine_login_scenario_workerd` compares the report.
+- **Both hosts (Lead ruling: production runs on a Durable Object, so DO is never the
+  thinner side):** `sql_cases` holds every SQL case, 24, each on a fresh store and
+  generic over one small `CaseHost` seam. Each step checks the store's full readback
+  (installations, enrollments, allowances, change records, every column) against exactly
+  the rows it may write; refusals check that nothing changed. Tokio runs each case as its
+  own test; workerd runs them in `BootstrapObject` (fixture `machineLogin`, one named
+  object per case) through `machine_login_cases_workerd`. No case is native-only.
 
 ## Stand-ins
 
@@ -167,7 +171,8 @@ a slice.
 
 - No production host calls these decisions or reads the new tables; the corpus is staged.
 - Running the switch on any real database is the owner's step-2 action.
-- `SqlStoreFixture::reopen` is a new owning store handle in the same process, not a new
-  process.
+- Persistence on Tokio is an owning-store reopen in the same process, not a new
+  process. On workerd it is a later request to the same named object in one workerd
+  run; a workerd process restart is not observed.
 - Disabling the client on the sign-in side, removing sessions at revocation, and the real
   close.
