@@ -99,6 +99,13 @@ test("main's central opens every migrated object: the Fleet, each live Copy and 
           };
         };
         await read("directory", "/admin/v1/copies");
+        // Main's owner Copy migration, the deploy's last step: each listed Copy
+        // applies its pending receiver migrations (none at 0b27429; receiver v4,
+        // which adopts the old hook ledger, at agent-fleet-sync f052831).
+        await read("copyMigration", "/admin/v1/copies/migrate?limit=25", "POST");
+        // A retired project has no directory entry, so the page above skips its
+        // Copy; the owner's repair brings it to the same receiver version.
+        await read("retiredRepair", `/admin/v1/copies/${IDS.projectRetired}/repair`, "POST");
         for (const project of PROJECTS) await read(project, `/admin/v1/copies/${project}/health`);
         await read("preview", `/admin/v1/projects/${IDS.projectHeld3}/takeover/preview`, "POST");
       } finally {
@@ -110,6 +117,16 @@ test("main's central opens every migrated object: the Fleet, each live Copy and 
       assert.ok(directory !== undefined && directory.status === 200, JSON.stringify(directory));
       const listed = (directory.body as { projects: unknown[] }).projects;
       assert.equal(listed.length, 2, JSON.stringify(reads.directory));
+      const copyMigration = reads.copyMigration;
+      assert.ok(
+        copyMigration !== undefined && copyMigration.status === 200,
+        JSON.stringify(copyMigration),
+      );
+      for (const item of (copyMigration.body as { results: { result: { kind: string } }[] })
+        .results) {
+        assert.ok(["migrated", "current"].includes(item.result.kind), JSON.stringify(item));
+      }
+      assert.deepEqual(reads.retiredRepair, { status: 410, body: { kind: "retired" } });
       // Each held Copy opened Following, with main's receiver records and no failure.
       for (const [project, holder, fence] of [
         [IDS.projectHeld3, IDS.machineB, 3],
@@ -124,10 +141,16 @@ test("main's central opens every migrated object: the Fleet, each live Copy and 
         assert.equal(live.kind, "live", JSON.stringify(health));
         assert.deepEqual(live.value.stage, { kind: "known", value: "following" });
         assert.deepEqual(live.value.migrationFailures, { kind: "known", value: [] });
-        assert.deepEqual(live.value.bookkeeping, {
-          kind: "known",
-          value: [{ corpus: "fleet-sync-receiver", stored: 3, supported: 3 }],
-        });
+        // Every receiver migration this main supports is applied (3 at 0b27429, 4 at f052831).
+        assert.equal(live.value.bookkeeping?.kind, "known", JSON.stringify(live.value.bookkeeping));
+        const [bookkeeping] = (live.value.bookkeeping as { value: unknown }).value as {
+          corpus: string;
+          stored: number;
+          supported: number;
+        }[];
+        assert.equal(bookkeeping?.corpus, "fleet-sync-receiver");
+        assert.ok(bookkeeping.supported >= 3, JSON.stringify(bookkeeping));
+        assert.equal(bookkeeping.stored, bookkeeping.supported, JSON.stringify(bookkeeping));
         const copy = live.value.copy?.value as { holder: string; fence: number };
         assert.equal(copy.holder, holder);
         assert.equal(copy.fence, fence);

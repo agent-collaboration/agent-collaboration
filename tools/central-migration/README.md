@@ -40,6 +40,10 @@ The owner check mirrors central's rules (`src/owner_access.ts`, with file:line r
 - **The journal, Fleet and each copy:** when main's pinned library records journal receipts in `_fleet_sync_migrations`, production's `_fleet_sync_schema` journal (marker 1) is converted in the object's own transaction. The original tables are copied to `legacy_journal_*` for revert. Main's later journal SQL runs for real, and every corpus migration gets the library's receipt. With a library that still keeps the marker, the journal is left alone (main adopts it). The hook ledger is never touched: receiver v4 and the library's `initialize_hook` adopt it on main's first open, so only production's receiver versions (1–3) are recorded.
 - **Run time:** one recorded instant, in whole seconds, is used for every `created_at`, `updated_at` and `installed_on`.
 
+## After main's deploy (PD7 step 5)
+
+Main reads a Copy's health without migrating it. When main's receiver corpus is newer than production's (agent-fleet-sync's ledger fix adds receiver v4), each Copy reads `unreadable` until it applies the pending migration. Run main's owner Copy migration, `POST /admin/v1/copies/migrate?limit=25`, paging with `after` until `nextAfter` is null. That covers every Copy in the Fleet directory. A retired project has no directory entry, so run `POST /admin/v1/copies/{id}/repair` for each retired Copy; it answers 410 `retired` once current. `test/main_central` does both.
+
 ## Commands
 
 From this folder:
