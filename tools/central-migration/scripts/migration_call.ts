@@ -3,7 +3,8 @@
 //
 // - inventory: POST with the Mac-file body; success is no stop and nothing
 //   written. Its answer holds the only copy of the retiring classes.
-// - migrate: POST with the same body; success is `migrated`, or
+// - migrate: POST with the facts plus the run time and candidate digest the
+//   Rust decode gate passed (migrateBody); success is `migrated`, or
 //   `alreadyMigrated` on a rerun. A `stopped` answer wrote nothing.
 // - verify: GET; success is `ok: true`.
 // - revert: POST; success is `reverted`.
@@ -67,18 +68,48 @@ export function judge(
 }
 
 /** One call: the step's route and body, and the judged answer. Answers parse exactly (big integers kept). */
+/** The Rust decode gate's report, as migrate needs it. */
+export interface GateReport {
+  readonly outcome: string;
+  readonly candidateDigest?: string;
+  readonly runTimeMillis?: number;
+}
+
+/** Migrate's body: refuses anything but the gate's pass, which names the digest and run time. */
+export function migrateBody(
+  macFilesBody: string,
+  gate: GateReport,
+  stringify: (value: unknown) => string,
+): string {
+  if (
+    gate.outcome !== "pass" ||
+    typeof gate.candidateDigest !== "string" ||
+    typeof gate.runTimeMillis !== "number"
+  ) {
+    throw new Error(
+      "migrate runs only after the decode gate's pass, which names the candidate digest and run time",
+    );
+  }
+  const { macFiles } = JSON.parse(macFilesBody) as { macFiles: unknown };
+  return stringify({
+    macFiles,
+    runTime: gate.runTimeMillis,
+    candidateDigest: gate.candidateDigest,
+  });
+}
+
 export async function callStep(
   step: MigrationStep,
   transport: MigrationTransport,
-  macFilesBody: string | undefined,
+  body: string | undefined,
   parse: (text: string) => unknown,
 ): Promise<StepResult> {
   const route = ROUTES[step];
-  if (route.body && macFilesBody === undefined) throw new Error(`${step} needs the Mac-file body`);
+  if (route.body && body === undefined) throw new Error(`${step} needs its body`);
   const response = await transport(
     route.method,
     `/admin/v1/migration/${step}`,
-    route.body ? macFilesBody : undefined,
+    route.body ? body : undefined,
   );
   let answer: unknown;
   try {

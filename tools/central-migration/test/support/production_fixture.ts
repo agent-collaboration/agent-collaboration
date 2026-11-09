@@ -279,6 +279,8 @@ export function productionSeed(): ProductionSeed {
     `INSERT INTO _fleet_sync_copy VALUES (1,${quote(JSON.stringify({ state: "following", copy: { database, role: "authoritative", fence: epoch, holder, start: { epoch: 1, sequence: 0 }, acked: { epoch, sequence: 17 }, schema: { version: 1, fingerprint: "schema-fingerprint" } } }))})`,
     "CREATE TABLE project_tasks(id TEXT PRIMARY KEY, title TEXT NOT NULL)",
     `INSERT INTO project_tasks VALUES ('task-1','keep me')`,
+    // Real copies register each replicated member table here (spec §5).
+    "INSERT INTO _fleet_sync_copy_tables(name) VALUES ('project_tasks')",
   ];
   const connection = (service: string) => [
     ...history,

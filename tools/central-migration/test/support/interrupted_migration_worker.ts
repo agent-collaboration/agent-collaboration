@@ -6,12 +6,13 @@
 
 import {
   StorageObjects,
+  inventory,
   migrate,
   revert,
   type StorageNamespaces,
 } from "../../src/migration_calls.ts";
 import { parseExact, stringifyExact } from "../../src/exact_json.ts";
-import { parseMacFiles } from "../../src/mac_file_evidence.ts";
+import { parseMacFiles, parseMigrateRequest } from "../../src/mac_file_evidence.ts";
 import type { ApplyReply, RevertReply, Statement } from "../../src/storage_objects.ts";
 
 export {
@@ -69,9 +70,11 @@ export default {
     try {
       const path = new URL(request.url).pathname;
       const answer =
-        path === "/migrate"
-          ? await migrate(objects, context, parseMacFiles(parseExact(await request.text())).files)
-          : await revert(objects);
+        path === "/inventory"
+          ? await inventory(objects, context, parseMacFiles(parseExact(await request.text())).files)
+          : path === "/migrate"
+            ? await migrate(objects, context, parseMigrateRequest(parseExact(await request.text())))
+            : await revert(objects);
       return new Response(stringifyExact(answer.body), { status: answer.status });
     } catch (error) {
       return new Response(stringifyExact({ interrupted: String(error) }), { status: 500 });

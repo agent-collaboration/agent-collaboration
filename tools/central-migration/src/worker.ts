@@ -5,7 +5,7 @@
 // while it is deployed. Deleted after production (R11).
 
 import { parseExact, stringifyExact } from "./exact_json.ts";
-import { parseMacFiles } from "./mac_file_evidence.ts";
+import { parseMacFiles, parseMigrateRequest } from "./mac_file_evidence.ts";
 import {
   StorageObjects,
   inventory,
@@ -49,10 +49,19 @@ const json = (value: unknown, status = 200): Response =>
   });
 const answer = ({ status, body }: CallAnswer): Response => json(body, status);
 
-/** Migrate's body: the S2 facts read from each holder Mac's retained project file. */
+/** Inventory's body: the S2 facts read from each holder Mac's retained project file. */
 async function macFilesOf(request: Request) {
   try {
     return parseMacFiles(parseExact(await request.text()));
+  } catch (error) {
+    return { refused: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/** Migrate's body: the same facts, plus the run time and candidate digest the decode gate passed. */
+async function migrateRequestOf(request: Request) {
+  try {
+    return { request: parseMigrateRequest(parseExact(await request.text())) };
   } catch (error) {
     return { refused: error instanceof Error ? error.message : String(error) };
   }
@@ -94,10 +103,9 @@ export default {
         return answer(await inventory(objects, context, macFiles.files));
       }
       case "migrate": {
-        const macFiles = await macFilesOf(request);
-        if ("refused" in macFiles)
-          return json({ refused: "macFiles", reason: macFiles.refused }, 400);
-        return answer(await migrate(objects, context, macFiles.files));
+        const parsed = await migrateRequestOf(request);
+        if ("refused" in parsed) return json({ refused: "body", reason: parsed.refused }, 400);
+        return answer(await migrate(objects, context, parsed.request));
       }
       case "verify":
         return answer(await verify(objects));

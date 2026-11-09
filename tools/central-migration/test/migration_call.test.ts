@@ -4,7 +4,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseExact, stringifyExact } from "../src/exact_json.ts";
-import { callStep, judge, type MigrationTransport } from "../scripts/migration_call.ts";
+import {
+  callStep,
+  judge,
+  migrateBody,
+  type MigrationTransport,
+} from "../scripts/migration_call.ts";
 import { withProduction, type MigrationRun } from "./support/migration_run.ts";
 
 /** The caller's transport over the harness's owner call. */
@@ -25,10 +30,20 @@ test("PD7's sequence through the caller: inventory, migrate, verify, a rerun, th
       const transport = through(run);
 
       // Act
+      // The Rust gate's pass is stood in for by its fields from inventory's own answer.
       const inventory = await callStep("inventory", transport, body, parseExact);
-      const migrate = await callStep("migrate", transport, body, parseExact);
+      const { candidateDigest, runTimeMillis } = inventory.answer as {
+        candidateDigest: string;
+        runTimeMillis: number;
+      };
+      const passed = migrateBody(
+        body,
+        { outcome: "pass", candidateDigest, runTimeMillis },
+        stringifyExact,
+      );
+      const migrate = await callStep("migrate", transport, passed, parseExact);
       const verify = await callStep("verify", transport, undefined, parseExact);
-      const rerun = await callStep("migrate", transport, body, parseExact);
+      const rerun = await callStep("migrate", transport, passed, parseExact);
       const revert = await callStep("revert", transport, undefined, parseExact);
 
       // Assert
@@ -76,9 +91,13 @@ test("each step's success rule", () => {
   assert.equal(judge("migrate", 200, { kind: "alreadyMigrated" }).success, true);
 });
 
-test("a step that needs the Mac-file body refuses to call without it", async () => {
+test("a step that needs a body refuses to call without it, and migrate's body needs the gate's pass", async () => {
   await assert.rejects(
     callStep("migrate", async () => ({ status: 200, text: "{}" }), undefined, parseExact),
-    /needs the Mac-file body/,
+    /needs its body/,
+  );
+  assert.throws(
+    () => migrateBody('{"macFiles":[]}', { outcome: "refused" }, stringifyExact),
+    /only after the decode gate's pass/,
   );
 });

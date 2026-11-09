@@ -1,7 +1,7 @@
 // PD7's migration calls against a deployed migration Worker (T2):
 //
 //   CENTRAL_OWNER_ACCESS_TOKEN=… node scripts/call_migration.ts inventory <origin> <mac-files.json> --out <inventory.json>
-//   CENTRAL_OWNER_ACCESS_TOKEN=… node scripts/call_migration.ts migrate   <origin> <mac-files.json> --out <migrate.json>
+//   CENTRAL_OWNER_ACCESS_TOKEN=… node scripts/call_migration.ts migrate   <origin> <mac-files.json> --gate <gate-report.json> --out <migrate.json>
 //   CENTRAL_OWNER_ACCESS_TOKEN=… node scripts/call_migration.ts verify    <origin> --out <verify.json>
 //   CENTRAL_OWNER_ACCESS_TOKEN=… node scripts/call_migration.ts revert    <origin> --out <revert.json>
 //
@@ -11,7 +11,7 @@
 
 import { readFile, writeFile } from "node:fs/promises";
 import { parseExact, stringifyExact } from "../src/exact_json.ts";
-import { callStep, type MigrationStep } from "./migration_call.ts";
+import { callStep, migrateBody, type GateReport, type MigrationStep } from "./migration_call.ts";
 import { PRODUCTION } from "./worker_deploy.ts";
 
 const [step, origin, ...rest] = process.argv.slice(2);
@@ -24,8 +24,13 @@ if (step === undefined || !steps.includes(step) || origin === undefined) {
 const outIndex = rest.indexOf("--out");
 const out = outIndex < 0 ? undefined : rest[outIndex + 1];
 if (out === undefined) throw new Error("--out <file> is required");
+const flagValue = (flag: string): string | undefined => {
+  const index = rest.indexOf(flag);
+  return index < 0 ? undefined : rest[index + 1];
+};
 const macFilesPath = rest.find(
-  (argument, index) => !argument.startsWith("--") && rest[index - 1] !== "--out",
+  (argument, index) =>
+    !argument.startsWith("--") && rest[index - 1] !== "--out" && rest[index - 1] !== "--gate",
 );
 const token = process.env.CENTRAL_OWNER_ACCESS_TOKEN;
 if (token === undefined || token === "") throw new Error("CENTRAL_OWNER_ACCESS_TOKEN is not set");
@@ -35,6 +40,18 @@ if (url.hostname === PRODUCTION.domain && !rest.includes("--production")) {
   throw new Error(`${url.hostname} is production; pass --production to call it`);
 }
 const macFiles = macFilesPath === undefined ? undefined : await readFile(macFilesPath, "utf8");
+const gatePath = flagValue("--gate");
+if (step === "migrate" && (gatePath === undefined || macFiles === undefined)) {
+  throw new Error("migrate needs <mac-files.json> and --gate <the decode gate's pass report>");
+}
+const body =
+  step === "migrate" && macFiles !== undefined && gatePath !== undefined
+    ? migrateBody(
+        macFiles,
+        JSON.parse(await readFile(gatePath, "utf8")) as GateReport,
+        stringifyExact,
+      )
+    : macFiles;
 
 const result = await callStep(
   step as MigrationStep,
@@ -46,7 +63,7 @@ const result = await callStep(
     });
     return { status: response.status, text: await response.text() };
   },
-  macFiles,
+  body,
   parseExact,
 );
 await writeFile(out, stringifyExact(result.answer), { mode: 0o600, flag: "wx" });

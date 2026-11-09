@@ -15,6 +15,8 @@ import {
   type OldStorage,
 } from "./migration_plan.ts";
 import { JOURNAL_REVERT } from "./journal_conversion.ts";
+import type { MigrateRequest } from "./mac_file_evidence.ts";
+import { rehearseCandidate, type CandidateSource } from "./migration_candidate.ts";
 import { COPY_VERIFY_READ, FLEET_VERIFY_READ, verifyMigration } from "./migration_verify.ts";
 import type { DurableObjectNamespace } from "./platform.ts";
 import {
@@ -29,10 +31,12 @@ import {
   OBJECT_DUMP_URL,
   OBJECT_READ_URL,
   OBJECT_REGISTRY_PROJECTS_URL,
+  OBJECT_REHEARSE_URL,
   OBJECT_REVERT_URL,
   type ApplyReply,
   type ObjectDump,
   type ReadReply,
+  type RehearseReply,
   type RevertReply,
   type Statement,
 } from "./storage_objects.ts";
@@ -116,6 +120,18 @@ export class StorageObjects {
       renameBack: FLEET_RENAMED.map((table) => [legacyName(table), table]),
       journal: JOURNAL_REVERT,
     });
+  }
+  rehearseFleet(statements: readonly Statement[]) {
+    return this.call<RehearseReply>(this.namespaces.FLEET, "fleet", OBJECT_REHEARSE_URL, {
+      statements,
+      exclude: [],
+    }).then((reply) => reply.image);
+  }
+  rehearseCopy(project: string, statements: readonly Statement[], exclude: readonly string[]) {
+    return this.call<RehearseReply>(this.namespaces.PROJECT_COPIES, project, OBJECT_REHEARSE_URL, {
+      statements,
+      exclude,
+    }).then((reply) => reply.image);
   }
   revertCopy(project: string) {
     return this.call<RevertReply>(this.namespaces.PROJECT_COPIES, project, OBJECT_REVERT_URL, {
@@ -221,14 +237,35 @@ export async function inventory(
       body: { kind: "alreadyMigrated", retiring, rowsWritten: objects.rowsWritten },
     };
   }
-  const plan = await planMigration(await readOld(objects), {
-    runTime: wholeSeconds(context.now()),
+  const old = await readOld(objects);
+  const runTime = wholeSeconds(context.now());
+  const plan = await planMigration(old, {
+    runTime,
     registryConfig: context.registryConfig,
     macFiles,
   });
+  // With S2's facts and no stop, the candidate the Rust gate decodes and migrate must reproduce.
+  const candidate =
+    macFiles !== null && plan.stops.length === 0
+      ? await rehearseCandidate(
+          objects as CandidateSource,
+          plan,
+          old,
+          await migratedObjects(objects),
+        )
+      : null;
   return {
     status: 200,
-    body: { kind: "inventory", ...report(plan), retiring, rowsWritten: objects.rowsWritten },
+    body: {
+      kind: "inventory",
+      ...report(plan),
+      runTimeMillis: runTime,
+      ...(candidate === null
+        ? {}
+        : { candidateDigest: candidate.digest, candidateText: candidate.text }),
+      retiring,
+      rowsWritten: objects.rowsWritten,
+    },
   };
 }
 
@@ -240,7 +277,7 @@ export async function inventory(
 export async function migrate(
   objects: StorageObjects,
   context: CallContext,
-  macFiles: readonly MacFileEvidence[],
+  request: MigrateRequest,
 ): Promise<CallAnswer> {
   const state = await migratedObjects(objects);
   if (everyMigrated(state)) {
@@ -263,16 +300,37 @@ export async function migrate(
       },
     };
   }
-  const plan = await planMigration(await readOld(objects), {
-    runTime: wholeSeconds(context.now()),
+  const old = await readOld(objects);
+  const plan = await planMigration(old, {
+    runTime: request.passed?.runTime ?? wholeSeconds(context.now()),
     registryConfig: context.registryConfig,
-    macFiles,
+    macFiles: request.files,
   });
   if (plan.stops.length > 0) {
     return {
       status: 409,
       body: { kind: "stopped", ...report(plan), rowsWritten: objects.rowsWritten },
     };
+  }
+  // Only the candidate the Rust gate passed may be written: rebuild it at the
+  // gate's run time and refuse, before any write, unless it is byte-identical.
+  const refusal = (reason: string): CallAnswer => ({
+    status: 409,
+    body: {
+      kind: "stopped",
+      ...report(plan),
+      stops: [{ object: "candidate", subject: "decode gate", reason }],
+      rowsWritten: objects.rowsWritten,
+    },
+  });
+  if (request.passed === null) {
+    return refusal("migrate needs the run time and candidate digest the Rust decode gate passed");
+  }
+  const candidate = await rehearseCandidate(objects as CandidateSource, plan, old, state);
+  if (candidate.digest !== request.passed.candidateDigest) {
+    return refusal(
+      `the candidate is ${candidate.digest}, not the ${request.passed.candidateDigest} the gate passed`,
+    );
   }
   const copies: Record<string, ApplyReply["kind"]> = {};
   for (const [project, statements] of Object.entries(plan.copies)) {

@@ -56,3 +56,31 @@ export function parseMacFiles(body: unknown): { readonly files: readonly MacFile
     throw error;
   }
 }
+
+/** Migrate's request: S2's facts, and the run time and candidate digest the Rust gate passed. */
+export interface MigrateRequest {
+  readonly files: readonly MacFileEvidence[];
+  /** Absent only when the run is expected to stop on R7 before any candidate exists. */
+  readonly passed: { readonly runTime: number; readonly candidateDigest: string } | null;
+}
+
+export function parseMigrateRequest(body: unknown): MigrateRequest {
+  if (typeof body !== "object" || body === null || Array.isArray(body))
+    throw new Error("body: expected an object");
+  const { macFiles, runTime, candidateDigest, ...rest } = body as Record<string, unknown>;
+  if (Object.keys(rest).length > 0) throw new Error(`body: unknown field ${Object.keys(rest)[0]}`);
+  const { files } = parseMacFiles({ macFiles });
+  if (runTime === undefined && candidateDigest === undefined) return { files, passed: null };
+  if (
+    typeof runTime !== "number" ||
+    !Number.isSafeInteger(runTime) ||
+    runTime < 0 ||
+    runTime % 1000 !== 0
+  ) {
+    throw new Error("body.runTime: expected the inventory's whole-second run time in milliseconds");
+  }
+  if (typeof candidateDigest !== "string" || !/^[0-9a-f]{64}$/.test(candidateDigest)) {
+    throw new Error("body.candidateDigest: expected the gate's 64-hex SHA-256");
+  }
+  return { files, passed: { runTime, candidateDigest } };
+}

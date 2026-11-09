@@ -58,20 +58,49 @@ export async function withProduction(
       await standIn.dispose();
     }
     const macFilesBody = () => stringifyExact({ macFiles: production.macFiles });
+    /** PD7's migrate body: the facts plus the run time and digest of the inventory just taken. */
+    const migrateBody = (inventory: CallReply) =>
+      stringifyExact({
+        macFiles: production.macFiles,
+        ...(typeof inventory.body.candidateDigest === "string"
+          ? {
+              runTime: inventory.body.runTimeMillis,
+              candidateDigest: inventory.body.candidateDigest,
+            }
+          : {}),
+      });
+    const ownerCall = async (path: string, method: string, text: string | undefined) => {
+      const worker = await startWorker("migration", storage.path, signer.jwks);
+      try {
+        const assertion = await signer.sign(ownerClaims(Math.floor(Date.now() / 1000)));
+        const response = await worker.dispatchFetch(
+          `https://central.test/admin/v1/migration/${path}`,
+          {
+            method,
+            headers: { "Cf-Access-Jwt-Assertion": assertion },
+            ...(text === undefined ? {} : { body: text }),
+          },
+        );
+        return await reply(response);
+      } finally {
+        await worker.dispose();
+      }
+    };
     await body({
       signer,
       path: storage.path,
       production,
       async call(path, method = "GET", requestBody) {
+        // A migrate without an explicit body runs as PD7 does: inventory first, then
+        // migrate bound to that inventory's candidate.
+        if (path === "migrate" && requestBody === undefined) {
+          const inventory = await ownerCall("inventory", "POST", macFilesBody());
+          return await ownerCall("migrate", method, migrateBody(inventory));
+        }
         const worker = await startWorker("migration", storage.path, signer.jwks);
         try {
           const assertion = await signer.sign(ownerClaims(Math.floor(Date.now() / 1000)));
-          const text =
-            requestBody !== undefined
-              ? stringifyExact(requestBody)
-              : path === "migrate"
-                ? macFilesBody()
-                : undefined;
+          const text = requestBody !== undefined ? stringifyExact(requestBody) : undefined;
           const response = await worker.dispatchFetch(
             `https://central.test/admin/v1/migration/${path}`,
             {
@@ -91,11 +120,18 @@ export async function withProduction(
           RUN_TIME_MS: String(runTime),
         });
         try {
-          const response = await worker.dispatchFetch(`https://central.test/${call}`, {
-            method: "POST",
-            body: macFilesBody(),
-          });
-          return await reply(response);
+          const post = async (path: string, text: string) =>
+            reply(
+              await worker.dispatchFetch(`https://central.test/${path}`, {
+                method: "POST",
+                body: text,
+              }),
+            );
+          if (call === "migrate") {
+            // The inventory at this clock, then migrate bound to its candidate.
+            return await post("migrate", migrateBody(await post("inventory", macFilesBody())));
+          }
+          return await post(call, macFilesBody());
         } finally {
           await worker.dispose();
         }

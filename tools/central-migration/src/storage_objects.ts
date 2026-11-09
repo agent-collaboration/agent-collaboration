@@ -18,6 +18,7 @@ export const OBJECT_READ_URL = `${INTERNAL}/read`;
 export const OBJECT_APPLY_URL = `${INTERNAL}/apply`;
 export const OBJECT_REVERT_URL = `${INTERNAL}/revert`;
 export const OBJECT_DUMP_URL = `${INTERNAL}/dump`;
+export const OBJECT_REHEARSE_URL = `${INTERNAL}/rehearse`;
 
 /** Everything an object stores, read-only: the copy kept of a retiring class. */
 export interface ObjectDump {
@@ -48,6 +49,44 @@ export interface ReadReply {
   /** Rows of each requested table that exists, ordered by rowid. */
   readonly rows: Readonly<Record<string, readonly ReadRow[]>>;
   readonly rowsWritten: number;
+}
+
+/** A value with its SQLite storage class, exactly: integers as decimal text, BLOBs as hex. */
+export type TypedValue =
+  | { readonly kind: "null" }
+  | { readonly kind: "integer"; readonly value: string }
+  | { readonly kind: "real"; readonly value: number }
+  | { readonly kind: "text"; readonly value: string }
+  | { readonly kind: "blob"; readonly value: string };
+
+/**
+ * An object as its storage would hold it: schema statements in creation order,
+ * then every listed table's rows with each value's exact storage class. This
+ * is the candidate the Rust decode gate rebuilds and decodes.
+ */
+export interface ObjectImage {
+  readonly schema: readonly {
+    readonly type: string;
+    readonly name: string;
+    readonly sql: string;
+  }[];
+  readonly tables: Readonly<
+    Record<
+      string,
+      { readonly columns: readonly string[]; readonly rows: readonly (readonly TypedValue[])[] }
+    >
+  >;
+}
+
+export interface RehearseRequest {
+  readonly statements: readonly Statement[];
+  /** Tables left out of the image (a Copy's own project tables). */
+  readonly exclude: readonly string[];
+}
+export interface RehearseReply {
+  readonly image: ObjectImage;
+  /** Always 0: the rehearsal's writes are rolled back. */
+  readonly rowsWritten: 0;
 }
 
 export interface ApplyRequest {
@@ -128,6 +167,56 @@ function exactRows(sql: SqlStorage, table: string): { rows: ReadRow[]; rowsWritt
   return { rows, rowsWritten: (cursor as unknown as { rowsWritten: number }).rowsWritten };
 }
 
+class RolledBack extends Error {}
+
+/** Schema in creation order and every table's rows with exact storage classes. */
+function typedImage(sql: SqlStorage, exclude: readonly string[]): ObjectImage {
+  const schema = sql
+    .exec<{ type: string; name: string; tbl_name: string; sql: string }>(
+      "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE '_cf_%' AND name NOT LIKE 'sqlite_%' ORDER BY rowid",
+    )
+    .toArray()
+    .filter((entry) => !exclude.includes(entry.tbl_name))
+    .map(({ type, name, sql: text }) => ({ type, name, sql: text }));
+  const tables: Record<string, { columns: string[]; rows: TypedValue[][] }> = {};
+  for (const entry of schema) {
+    if (entry.type !== "table") continue;
+    const columns = sql
+      .exec<{ name: string }>("SELECT name FROM pragma_table_info(?) ORDER BY cid", entry.name)
+      .toArray()
+      .map((column) => column.name);
+    const select = columns
+      .map((column, index) => {
+        const name = quoted(column);
+        return `typeof(${name}) AS "t${index}", CASE typeof(${name}) WHEN 'integer' THEN CAST(${name} AS TEXT) WHEN 'blob' THEN lower(hex(${name})) ELSE ${name} END AS "v${index}"`;
+      })
+      .join(", ");
+    const rows = sql
+      .exec(`SELECT ${select} FROM ${quoted(entry.name)} ORDER BY rowid`)
+      .toArray()
+      .map((stored) =>
+        columns.map((_column, index): TypedValue => {
+          const kind = String(stored[`t${index}`]);
+          const value = stored[`v${index}`];
+          switch (kind) {
+            case "integer":
+              return { kind, value: String(value) };
+            case "real":
+              return { kind, value: Number(value) };
+            case "text":
+              return { kind, value: String(value) };
+            case "blob":
+              return { kind, value: String(value) };
+            default:
+              return { kind: "null" };
+          }
+        }),
+      );
+    tables[entry.name] = { columns, rows };
+  }
+  return { schema, tables };
+}
+
 function run(sql: SqlStorage, statement: Statement): number {
   const cursor = sql.exec(statement.sql, ...(statement.bindings as SqlValue[]));
   cursor.toArray();
@@ -154,6 +243,8 @@ abstract class MigrationStorageObject {
         return json(this.apply(sql, (await request.json()) as ApplyRequest));
       case `GET ${OBJECT_DUMP_URL}`:
         return json(this.dump(sql));
+      case `POST ${OBJECT_REHEARSE_URL}`:
+        return json(this.rehearse(sql, (await request.json()) as RehearseRequest));
       case `POST ${OBJECT_REVERT_URL}`:
         return json(this.revert(sql, (await request.json()) as RevertRequest));
       default:
@@ -199,6 +290,26 @@ abstract class MigrationStorageObject {
       for (const statement of request.statements) rowsWritten += run(sql, statement);
       return { kind: "applied", rowsWritten, statements: request.statements.length };
     });
+  }
+
+  /**
+   * The object as migrate would leave it, with nothing kept: the statements run
+   * inside one storage transaction, the result is read, and throwing out of the
+   * transaction rolls every write back.
+   */
+  private rehearse(sql: SqlStorage, request: RehearseRequest): RehearseReply {
+    let image: ObjectImage | undefined;
+    try {
+      this.state.storage.transactionSync(() => {
+        for (const statement of request.statements) run(sql, statement);
+        image = typedImage(sql, request.exclude);
+        throw new RolledBack();
+      });
+    } catch (error) {
+      if (!(error instanceof RolledBack)) throw error;
+    }
+    if (image === undefined) throw new Error("the rehearsal produced no image");
+    return { image, rowsWritten: 0 };
   }
 
   private revert(sql: SqlStorage, request: RevertRequest): RevertReply {

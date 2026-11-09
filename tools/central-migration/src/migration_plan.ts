@@ -99,6 +99,7 @@ export const FLEET_READ = [
 ];
 export const COPY_READ = [
   "_fleet_sync_copy",
+  "_fleet_sync_copy_tables",
   "central_schema_migrations",
   "central_schema_migration_failures",
   ...JOURNAL_READ,
@@ -116,9 +117,28 @@ function json(value: unknown): Record<string, unknown> | null {
   }
 }
 
-/** UUIDv7 ids, fresh per child row (data tables follow the UUIDv7 rule). */
-export function uuidV7(nowMillis: number): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(16));
+/**
+ * The UUIDv7 ids a run mints for child rows, deterministic in the run time and
+ * the order rows are converted: the time field is the run time, the rest the
+ * sequence number. Rebuilding the plan at the same run time over the same old
+ * storage gives byte-identical rows, which the gate's candidate digest relies on.
+ */
+export function runIds(runTime: number): () => string {
+  let sequence = 0n;
+  return () => {
+    sequence += 1n;
+    return uuidV7(runTime, sequence);
+  };
+}
+
+/** A UUIDv7 with the given millisecond time and 74 bits taken from `sequence`. */
+export function uuidV7(nowMillis: number, sequence: bigint): string {
+  const bytes = new Uint8Array(16);
+  let rest = sequence;
+  for (let index = 15; index >= 6; index -= 1) {
+    bytes[index] = Number(rest & 0xffn);
+    rest >>= 8n;
+  }
   let time = BigInt(nowMillis);
   for (let index = 5; index >= 0; index -= 1) {
     bytes[index] = Number(time & 0xffn);
@@ -168,6 +188,7 @@ export interface PlanOptions {
 /** The whole decision: every R7 stop, or each object's single transaction. */
 export async function planMigration(old: OldStorage, options: PlanOptions): Promise<MigrationPlan> {
   const { runTime } = options;
+  const nextId = runIds(runTime);
   const stops: Stop[] = [];
   const runTimeText = new Date(runTime).toISOString();
   const installedOn = runTimeText.replace("T", " ").slice(0, 19);
@@ -411,7 +432,7 @@ export async function planMigration(old: OldStorage, options: PlanOptions): Prom
         repository_attachments: rows(fleet, "repository_attachments"),
       },
       runTime,
-      () => uuidV7(runTime),
+      nextId,
     );
   } catch (error) {
     if (!(error instanceof Rejected)) throw error;
@@ -492,7 +513,7 @@ export async function planMigration(old: OldStorage, options: PlanOptions): Prom
   if (incarnations.length > 0) {
     statements.push(
       insertStatement("lease_incarnation", {
-        row_id: uuidV7(runTime),
+        row_id: nextId(),
         name: "fleet",
         incarnation: incarnations.reduce((larger, counter) =>
           counter > larger ? counter : larger,
