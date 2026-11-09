@@ -257,6 +257,9 @@ export function productionSeed(): ProductionSeed {
     `INSERT INTO repository_attachments(attachment_id,workspace_id,repository_reference,router_time,time_basis,origin_installation,origin_machine,import_digest) VALUES (${quote(IDS.attachment)},${quote(IDS.workspace)},'{"kind":"local","serviceId":"${IDS.serviceA}","commonDirectory":"/code/repo"}','2026-11-01T12:00:00Z','router',${quote(IDS.serviceA)},'Sunbook',NULL)`,
     `INSERT INTO fleet_feed_state VALUES (${quote(IDS.feedState)},'fleet',42,0)`,
     `INSERT INTO lease_incarnation_fence VALUES ('01a1c070-0000-7000-8000-0000000000f3','registry','9')`,
+    // A finished journal operation with one step, as production's durable-steps 0001 stores it.
+    `INSERT INTO _fleet_sync_operations(operation_id,kind,kind_version,request_key,input,input_digest,state,result,failure,finished_at,next_attempt_at,attempt) VALUES ('01a1c070-0000-7000-8000-0000000000f4','fleet.decision',1,'decision-1',x'7b7d',x'0102','completed',x'7b7d',NULL,1794000005000,NULL,1)`,
+    `INSERT INTO _fleet_sync_steps(operation_id,position,step_name,kind,intent,output,first_attempt_at,may_have_reached) VALUES ('01a1c070-0000-7000-8000-0000000000f4',0,'write','effect','{}',x'7b7d',1794000004000,1)`,
   ];
 
   const receiver = SCHEMA_SOURCES.production.receiver;

@@ -64,6 +64,12 @@ export interface RevertRequest {
   readonly requirePresent: string;
   readonly drop: readonly string[];
   readonly renameBack: readonly (readonly [string, string])[];
+  /** Run only where `snapshot` exists: drop these tables if present, then run `restore`. */
+  readonly journal?: {
+    readonly snapshot: string;
+    readonly drop: readonly string[];
+    readonly restore: readonly Statement[];
+  };
 }
 export type RevertReply =
   | { readonly kind: "reverted"; readonly rowsWritten: number }
@@ -210,6 +216,15 @@ abstract class MigrationStorageObject {
           sql: `ALTER TABLE ${quoted(legacy)} RENAME TO ${quoted(original)}`,
           bindings: [],
         });
+      }
+      const journal = request.journal;
+      if (journal !== undefined && tables.includes(journal.snapshot)) {
+        for (const table of journal.drop) {
+          if (tableNames(sql).includes(table)) {
+            rowsWritten += run(sql, { sql: `DROP TABLE ${quoted(table)}`, bindings: [] });
+          }
+        }
+        for (const statement of journal.restore) rowsWritten += run(sql, statement);
       }
       return { kind: "reverted", rowsWritten };
     });

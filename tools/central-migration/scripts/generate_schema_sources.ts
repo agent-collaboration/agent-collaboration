@@ -8,10 +8,13 @@
 //   the library checkout) is what the Worker recognises, renames and copies.
 //
 // Run from tools/central-migration: `node scripts/generate_schema_sources.ts`.
+// CENTRAL_MIGRATION_LIBRARY_MAIN_DIR=<agent-fleet-sync checkout> reads main's
+// library sets from that checkout instead, for a local proof against a library
+// revision not pinned yet; never commit a file generated that way.
 // `test/schema_sources.test.ts` fails when the generated file is stale.
 
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -27,8 +30,12 @@ const productionFile = (path: string): string =>
   execFileSync("git", ["-C", REPOSITORY, "show", `${PRODUCTION}:${CORE}/${path}`], {
     encoding: "utf8",
   });
+const LIBRARY_MAIN_DIR =
+  process.env.CENTRAL_MIGRATION_LIBRARY_MAIN_DIR ?? join(LIBRARY_CHECKOUTS, LIBRARY_MAIN);
+const libraryDirectory = (revision: string): string =>
+  revision === LIBRARY_MAIN ? LIBRARY_MAIN_DIR : join(LIBRARY_CHECKOUTS, revision);
 const libraryFile = (revision: string, path: string): string =>
-  readFileSync(join(LIBRARY_CHECKOUTS, revision, "crates", path), "utf8");
+  readFileSync(join(libraryDirectory(revision), "crates", path), "utf8");
 
 interface MigrationSource {
   readonly version: number;
@@ -147,6 +154,21 @@ const deliveryProduction = [
   "0002_mailbox_deadlines.sql",
   "0003_inbox_accounting.sql",
 ].map((file) => libraryFile(LIBRARY_PRODUCTION, `fleet-sync-delivery/migrations/${file}`));
+// Main's journal corpus: every file sqlx::migrate! embeds from the folder, and
+// the receipts table its Durable Object runner creates once the corpus records
+// SQLx receipts (absent at libraries whose runner keeps _fleet_sync_schema).
+const journalMain = libraryMigrations(
+  LIBRARY_MAIN,
+  "durable-steps/migrations",
+  readdirSync(join(LIBRARY_MAIN_DIR, "crates/durable-steps/migrations"))
+    .filter((file) => file.endsWith(".sql"))
+    .sort(),
+);
+const receiptsPath = join(
+  LIBRARY_MAIN_DIR,
+  "crates/durable-steps/query-schema/99990000_journal_receipts.sql",
+);
+const journalReceiptsMain = existsSync(receiptsPath) ? readFileSync(receiptsPath, "utf8") : null;
 const durableSteps = libraryFile(
   LIBRARY_PRODUCTION,
   "durable-steps/migrations/0001_durable_steps.sql",
@@ -159,6 +181,8 @@ const sources = {
     fleetSyncLease: leaseMain,
     fleetSyncReceiver: receiverMain,
     migrationFailures: mainFile("core_migrations/0009_migration_failures.sql"),
+    journal: journalMain,
+    journalReceipts: journalReceiptsMain,
   },
   production: {
     fleet: productionFleet,

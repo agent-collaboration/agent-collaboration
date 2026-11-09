@@ -3,6 +3,7 @@
 // object's single transaction of statements. Nothing here touches storage.
 
 import { enrollmentRow } from "./enrollment_record.ts";
+import { JOURNAL_READ, checkProductionJournal, journalConversion } from "./journal_conversion.ts";
 import { I64_MAX, exactUnsigned, parseExact } from "./exact_json.ts";
 import { Rejected, convertFleetGraph, insertStatement } from "./fleet_conversion.ts";
 import { Invalid } from "./serde_shapes.ts";
@@ -94,11 +95,13 @@ export const FLEET_READ = [
   "central_schema_migrations",
   "central_schema_migration_failures",
   "_fleet_sync_operations",
+  ...JOURNAL_READ,
 ];
 export const COPY_READ = [
   "_fleet_sync_copy",
   "central_schema_migrations",
   "central_schema_migration_failures",
+  ...JOURNAL_READ,
 ];
 
 function json(value: unknown): Record<string, unknown> | null {
@@ -184,6 +187,7 @@ export async function planMigration(old: OldStorage, options: PlanOptions): Prom
   checkHistory("fleet", fleet, PRODUCTION_SETS.fleet, stops);
   checkJournal("registry", registry, stops);
   checkJournal("fleet", fleet, stops);
+  checkProductionJournal("fleet", fleet, stops);
   // Every carried lease-table row, as main's first open decodes it (R7, I1).
   for (const stop of checkLeaseTables(registry)) {
     stops.push({ object: "registry", subject: `${stop.table} ${stop.row}`, reason: stop.reason });
@@ -267,6 +271,10 @@ export async function planMigration(old: OldStorage, options: PlanOptions): Prom
     } else {
       checkShape(`copy ${project}`, copyReply, PRODUCTION_TABLES.copyRequired, false, stops);
       checkHistory(`copy ${project}`, copyReply, PRODUCTION_SETS.copy, stops);
+      // A copy an interrupted run already migrated refuses its own write; its journal is main's now.
+      if (!copyReply.tables.includes(ledgerTable("fleet-sync-receiver"))) {
+        checkProductionJournal(`copy ${project}`, copyReply, stops);
+      }
       if (!(await receiverChecksumsMatch(copyReply))) {
         stops.push({
           object: `copy ${project}`,
@@ -501,6 +509,8 @@ export async function planMigration(old: OldStorage, options: PlanOptions): Prom
   for (const set of ["central-fleet", "central-registry", "fleet-sync-lease"] as const) {
     statements.push(...(await setRecords(set, installedOn)));
   }
+  const journal = await journalConversion(installedOn);
+  statements.push(...journal);
 
   // Each copy: its failure table to main's shape, its receiver records to the
   // standard table. Project tables and the library's hook ledger stay as they are.
@@ -514,6 +524,7 @@ export async function planMigration(old: OldStorage, options: PlanOptions): Prom
       })),
       { sql: SCHEMA_SOURCES.main.migrationFailures, bindings: [] },
       ...receiverRecords,
+      ...journal,
     ];
   }
   return { runTime, configuredReceiver, stops, projects, counts, fleet: statements, copies };

@@ -37,6 +37,7 @@ The owner check mirrors central's rules (`src/owner_access.ts`, with file:line r
   - copies every library lease table byte-exact at production's shape. Main's own `validate_legacy_rows` plus 0005/0006 convert them on first open;
   - records each set in its sqlx-standard table (`_sqlx_migrations_<set>`, PD1).
 - **Each copy:** its failure table to main's shape, and its receiver records into `_sqlx_migrations_fleet_sync_receiver`. Project tables and the library's hook ledger are untouched.
+- **The journal, Fleet and each copy:** when main's pinned library records journal receipts in `_fleet_sync_migrations`, production's `_fleet_sync_schema` journal (marker 1) is converted in the object's own transaction. The original tables are copied to `legacy_journal_*` for revert. Main's later journal SQL runs for real, and every corpus migration gets the library's receipt. With a library that still keeps the marker, the journal is left alone (main adopts it). The hook ledger is never touched: receiver v4 and the library's `initialize_hook` adopt it on main's first open, so only production's receiver versions (1–3) are recorded.
 - **Run time:** one recorded instant, in whole seconds, is used for every `created_at`, `updated_at` and `installed_on`.
 
 ## Commands
@@ -51,6 +52,8 @@ pnpm test   # builds, then runs the tests in real workerd through Miniflare
 worker-build ../../crates/collaboration-central-cloudflare --profile worker-release --no-opt -- --locked --no-default-features
 MAIN_CENTRAL_BUILD="$PWD/../../crates/collaboration-central-cloudflare/build" pnpm run test:main-central
 node scripts/generate_schema_sources.ts   # after a schema source changes
+# A local proof against an unpinned library (never commit what this generates):
+CENTRAL_MIGRATION_LIBRARY_MAIN_DIR=<agent-fleet-sync checkout> node scripts/generate_schema_sources.ts
 ```
 
 - **Embedded SQL:** `src/generated/schema_sources.ts` holds production's DDL (git `2636806a5`, fleet-sync `b9da4b5`) and main's migration sets, byte-for-byte. A test fails when the file is stale.

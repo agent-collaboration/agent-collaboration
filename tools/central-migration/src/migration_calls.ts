@@ -14,6 +14,7 @@ import {
   type MigrationPlan,
   type OldStorage,
 } from "./migration_plan.ts";
+import { JOURNAL_REVERT } from "./journal_conversion.ts";
 import { COPY_VERIFY_READ, FLEET_VERIFY_READ, verifyMigration } from "./migration_verify.ts";
 import type { DurableObjectNamespace } from "./platform.ts";
 import {
@@ -113,6 +114,7 @@ export class StorageObjects {
         ...[...MAIN_FLEET_CREATION_ORDER].reverse(),
       ],
       renameBack: FLEET_RENAMED.map((table) => [legacyName(table), table]),
+      journal: JOURNAL_REVERT,
     });
   }
   revertCopy(project: string) {
@@ -120,6 +122,7 @@ export class StorageObjects {
       requirePresent: ledgerTable("fleet-sync-receiver"),
       drop: [ledgerTable("fleet-sync-receiver"), ...COPY_RENAMED],
       renameBack: COPY_RENAMED.map((table) => [legacyName(table), table]),
+      journal: JOURNAL_REVERT,
     });
   }
 }

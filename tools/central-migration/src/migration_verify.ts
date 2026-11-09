@@ -5,6 +5,7 @@
 
 import { exactUnsigned, parseExact, stringifyExact } from "./exact_json.ts";
 import { convertFleetGraph, isUuidV7 } from "./fleet_conversion.ts";
+import { JOURNAL_CONVERTS, JOURNAL_VERIFY_READ, expectedReceipts } from "./journal_conversion.ts";
 import type { NewRow } from "./fleet_conversion.ts";
 import {
   MAIN_SETS,
@@ -52,8 +53,30 @@ export const FLEET_VERIFY_READ = [
   "lease_incarnation",
   ...LEASE_TABLES,
   ...FLEET_SETS.map(ledgerTable),
+  ...JOURNAL_VERIFY_READ,
 ];
-export const COPY_VERIFY_READ = ["_fleet_sync_copy", ledgerTable("fleet-sync-receiver")];
+export const COPY_VERIFY_READ = [
+  "_fleet_sync_copy",
+  ledgerTable("fleet-sync-receiver"),
+  ...JOURNAL_VERIFY_READ,
+];
+
+/** A converted journal: main's receipts at the object's own stamp, and no production marker. */
+async function journalChecks(name: string, object: ReadReply, stamp: string): Promise<Check[]> {
+  if (!JOURNAL_CONVERTS) return [];
+  return [
+    sameRows(
+      `${name} journal receipts`,
+      rows(object, "_fleet_sync_migrations"),
+      await expectedReceipts(stamp),
+    ),
+    {
+      name: `${name} journal marker`,
+      ok: !object.tables.includes("_fleet_sync_schema"),
+      detail: "production's _fleet_sync_schema marker must be gone",
+    },
+  ];
+}
 
 const rows = (reply: ReadReply, table: string): readonly ReadRow[] => reply.rows[table] ?? [];
 const canonical = (value: unknown): string => stringifyExact(value);
@@ -101,6 +124,8 @@ export async function verifyMigration(
     };
   }
   const runTimeText = new Date(runTime).toISOString();
+
+  checks.push(...(await journalChecks("fleet", fleet, installedOn)));
 
   // Migration records: main's versions and checksums, per set.
   for (const set of FLEET_SETS) {
@@ -257,6 +282,7 @@ export async function verifyMigration(
         await expectedLedger("fleet-sync-receiver", copyStamp),
       ),
     );
+    checks.push(...(await journalChecks(`copy ${project}`, copy, copyStamp)));
     const lease = leases.get(project);
     if (lease?.holder !== undefined) {
       const record = parseExact(String(rows(copy, "_fleet_sync_copy")[0]?.record ?? "null")) as {
