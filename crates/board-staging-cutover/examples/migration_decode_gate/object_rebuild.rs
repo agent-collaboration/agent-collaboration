@@ -106,6 +106,10 @@ pub async fn rebuild(image: &ObjectImage) -> Result<TursoConnection, RebuildFail
             }
             let mut insert = query::<Turso>(AssertSqlSafe(statement.clone()));
             for value in row {
+                let value = match value {
+                    TypedValue::Generated(stand_in) => stand_in.as_ref(),
+                    stored => stored,
+                };
                 insert = match value {
                     TypedValue::Null => insert.bind(None::<String>),
                     TypedValue::Integer(text) => insert.bind(
@@ -115,6 +119,11 @@ pub async fn rebuild(image: &ObjectImage) -> Result<TursoConnection, RebuildFail
                     TypedValue::Real(number) => insert.bind(*number),
                     TypedValue::Text(text) => insert.bind(text.clone()),
                     TypedValue::Blob(hex) => insert.bind(blob(hex).map_err(&failure)?),
+                    TypedValue::Generated(_) => {
+                        return Err(failure(
+                            "a generated cell's stand-in is itself generated".into(),
+                        ));
+                    }
                 };
             }
             insert

@@ -108,7 +108,7 @@ export default {
         return answer(await migrate(objects, context, parsed.request));
       }
       case "verify":
-        return answer(await verify(objects));
+        return answer(await verify(objects, context));
       default:
         return answer(await revert(objects));
     }

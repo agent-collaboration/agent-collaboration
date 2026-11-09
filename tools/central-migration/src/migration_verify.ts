@@ -6,6 +6,7 @@
 import { exactUnsigned, parseExact, stringifyExact } from "./exact_json.ts";
 import { convertFleetGraph, isUuidV7 } from "./fleet_conversion.ts";
 import { JOURNAL_CONVERTS, JOURNAL_VERIFY_READ, expectedReceipts } from "./journal_conversion.ts";
+import { generatedJournalChecks } from "./journal_generated_cells.ts";
 import type { NewRow } from "./fleet_conversion.ts";
 import {
   MAIN_SETS,
@@ -61,10 +62,21 @@ export const COPY_VERIFY_READ = [
   ...JOURNAL_VERIFY_READ,
 ];
 
-/** A converted journal: main's receipts at the object's own stamp, and no production marker. */
-async function journalChecks(name: string, object: ReadReply, stamp: string): Promise<Check[]> {
+/**
+ * A converted journal: main's receipts at the object's own stamp, no production
+ * marker, and the cells 0002 generated shaped for a write between that stamp
+ * and verify.
+ */
+async function journalChecks(
+  name: string,
+  object: ReadReply,
+  stamp: string,
+  verifiedAt: number,
+): Promise<Check[]> {
   if (!JOURNAL_CONVERTS) return [];
+  const from = Date.parse(`${stamp.replace(" ", "T")}Z`);
   return [
+    ...generatedJournalChecks(name, object, { from, to: verifiedAt }),
     sameRows(
       `${name} journal receipts`,
       rows(object, "_fleet_sync_migrations"),
@@ -112,6 +124,8 @@ export async function verifyMigration(
   registry: ReadReply,
   fleet: ReadReply,
   copies: Readonly<Record<string, ReadReply>>,
+  /** Verify's own time: the run window's end for the cells main's SQL generates. */
+  verifiedAt: number,
 ): Promise<{ readonly ok: boolean; readonly checks: readonly Check[] }> {
   const checks: Check[] = [];
   const ledger = rows(fleet, ledgerTable("central-fleet"));
@@ -125,7 +139,7 @@ export async function verifyMigration(
   }
   const runTimeText = new Date(runTime).toISOString();
 
-  checks.push(...(await journalChecks("fleet", fleet, installedOn)));
+  checks.push(...(await journalChecks("fleet", fleet, installedOn, verifiedAt)));
 
   // Migration records: main's versions and checksums, per set.
   for (const set of FLEET_SETS) {
@@ -282,7 +296,7 @@ export async function verifyMigration(
         await expectedLedger("fleet-sync-receiver", copyStamp),
       ),
     );
-    checks.push(...(await journalChecks(`copy ${project}`, copy, copyStamp)));
+    checks.push(...(await journalChecks(`copy ${project}`, copy, copyStamp, verifiedAt)));
     const lease = leases.get(project);
     if (lease?.holder !== undefined) {
       const record = parseExact(String(rows(copy, "_fleet_sync_copy")[0]?.record ?? "null")) as {

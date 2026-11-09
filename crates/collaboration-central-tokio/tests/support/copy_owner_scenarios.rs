@@ -50,8 +50,17 @@ impl OwnerClient {
         Ok(body)
     }
 }
+/// The receiver bookkeeping version the pinned library supports: its last
+/// receiver migration. Health reports it, and a fully migrated Copy stores it.
+pub(super) fn receiver_current() -> u64 {
+    fleet_sync_receiver::RECEIVER_MIGRATOR
+        .iter()
+        .last()
+        .and_then(|migration| u64::try_from(migration.version).ok())
+        .unwrap_or_default()
+}
 pub(super) fn bookkeeping(health: &Value, stored: Option<u64>) -> ConformanceResult<()> {
-    let expected = json!({"kind":"known","value":[{"corpus":"fleet-sync-receiver","stored":stored,"supported":3}]});
+    let expected = json!({"kind":"known","value":[{"corpus":"fleet-sync-receiver","stored":stored,"supported":receiver_current()}]});
     if health.pointer("/value/bookkeeping") != Some(&expected) {
         return Err(format!("Health did not report the actual receiver corpus: {health}").into());
     }
@@ -106,7 +115,7 @@ pub async fn run(base: &str) -> ConformanceResult<()> {
         .into());
     }
     let repaired = client.health(fresh).await?;
-    bookkeeping(&repaired, Some(3))?;
+    bookkeeping(&repaired, Some(receiver_current()))?;
     no_failures(&repaired)?;
     if repaired.pointer("/value/copy") != Some(&json!({"kind":"known","value":null})) {
         return Err("Repair invented an initialized replicated Copy".into());

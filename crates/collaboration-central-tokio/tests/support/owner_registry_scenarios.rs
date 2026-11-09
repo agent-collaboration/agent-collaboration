@@ -58,7 +58,7 @@ pub(super) async fn run(base: &str) -> ConformanceResult<()> {
         let page=http.get(format!("{base}/admin/v1/copies?limit=1")).header("Cf-Access-Jwt-Assertion",owner_assertion()?).send().await?.error_for_status()?.json::<Value>().await?;
         if page.pointer("/projects/0/project")!=Some(&json!(database)) || page.get("nextAfter")!=Some(&json!(database)) {return Err(format!("normal registered project missing from owner Page: {page}").into());}
         let migrate=post(&http,&format!("{base}/admin/v1/copies/migrate?limit=1"),&Value::Null).await?;
-        if migrate != json!({"results":[{"project":database,"result":{"kind":"current","corpus":"fleet-sync-receiver","version":3}}],"nextAfter":database}) {return Err(format!("Migrate lost its normal registered Copy: {migrate}").into());}
+        if migrate != json!({"results":[{"project":database,"result":{"kind":"current","corpus":"fleet-sync-receiver","version":fleet_sync_receiver::RECEIVER_MIGRATOR.iter().last().map(|migration| migration.version)}}],"nextAfter":database}) {return Err(format!("Migrate lost its normal registered Copy: {migrate}").into());}
         println!("OWNER_REGISTRY_CASE normal_fleet_creation_page_and_migrate passed");
         let route=format!("{base}/admin/v1/projects/{database}");
         let moving=json!({"transferId":Uuid::now_v7(),"toInstallation":NEW_SERVICE,"reason":"normal owner move"});

@@ -82,7 +82,7 @@ fn check_live_health(body: &Value, expected_bytes: u64) -> ConformanceResult<()>
     }
     if value.get("bookkeeping")
         != Some(
-            &json!({"kind":"known","value":[{"corpus":"fleet-sync-receiver","stored":null,"supported":3}]}),
+            &json!({"kind":"known","value":[{"corpus":"fleet-sync-receiver","stored":null,"supported":copy_owner_scenarios::receiver_current()}]}),
         )
     {
         return Err("Health ran Copy bookkeeping migrations before the tolerant read".into());

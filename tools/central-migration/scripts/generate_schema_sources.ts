@@ -22,7 +22,7 @@ const REPOSITORY = resolve(import.meta.dirname, "../../..");
 const PRODUCTION = "2636806a5";
 const LIBRARY_CHECKOUTS = join(homedir(), ".cargo/git/checkouts/agent-fleet-sync-cc91c80fb7295419");
 const LIBRARY_PRODUCTION = "b9da4b5";
-const LIBRARY_MAIN = "0b27429";
+const LIBRARY_MAIN = "f052831";
 const CORE = "crates/collaboration-central-core";
 
 const mainFile = (path: string): string => readFileSync(join(REPOSITORY, CORE, path), "utf8");

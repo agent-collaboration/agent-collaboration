@@ -349,13 +349,13 @@ export async function migrate(
   };
 }
 
-export async function verify(objects: StorageObjects): Promise<CallAnswer> {
+export async function verify(objects: StorageObjects, context: CallContext): Promise<CallAnswer> {
   const registry = await objects.registry(REGISTRY_READ);
   const fleet = await objects.fleet(FLEET_VERIFY_READ);
   const copies: Record<string, ReadReply> = {};
   for (const project of await objects.projects())
     copies[project] = await objects.copy(project, COPY_VERIFY_READ);
-  const result = await verifyMigration(registry, fleet, copies);
+  const result = await verifyMigration(registry, fleet, copies, context.now());
   return {
     status: result.ok ? 200 : 409,
     body: { kind: "verified", ...result, rowsWritten: objects.rowsWritten },

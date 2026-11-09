@@ -104,7 +104,11 @@ async fn exported_engine_corpora_initialize_once_and_reopen_without_reapplying_t
 -> Result<(), TestError> {
     for (schema, expected) in [
         (EngineSchema::Registry, 8),
-        (EngineSchema::Copy, 3),
+        // Every receiver migration the pinned library declares.
+        (
+            EngineSchema::Copy,
+            fleet_sync_receiver::RECEIVER_MIGRATOR.iter().count(),
+        ),
         (EngineSchema::Session, 5),
         (EngineSchema::Delivery, 11),
         (EngineSchema::Fleet, 10),

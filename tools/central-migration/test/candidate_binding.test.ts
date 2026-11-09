@@ -110,3 +110,73 @@ test("the unchanged candidate migrates, at the gate's run time", async () => {
     },
   );
 });
+
+// Decision A: main's journal SQL (durable-steps 0002) fills some cells from the
+// clock and random(); those, and only those, are masked in the candidate.
+test("two inventories at one run time hash alike, and a carried journal column still changes the digest", async () => {
+  await withProduction(
+    () => {},
+    async (run) => {
+      // Act: the same storage, the same run time, twice; then a carried column changes.
+      const runTime = 1_794_312_000_000;
+      const first = await run.interrupted("inventory", { afterWrites: 0, runTime });
+      const second = await run.interrupted("inventory", { afterWrites: 0, runTime });
+      await run.standInRun("FLEET", "fleet", [
+        `UPDATE _fleet_sync_operations SET request_key = 'decision-1b' WHERE request_key = 'decision-1'`,
+      ]);
+      const changed = await run.interrupted("inventory", { afterWrites: 0, runTime });
+
+      // Assert
+      assert.equal(first.status, 200, JSON.stringify(first.body));
+      assert.equal(second.body.candidateDigest, first.body.candidateDigest);
+      assert.notEqual(changed.body.candidateDigest, first.body.candidateDigest);
+    },
+  );
+});
+
+test("the candidate masks exactly GENERATED_JOURNAL_CELLS in every converted object", async () => {
+  const { GENERATED_JOURNAL_CELLS } = await import("../src/journal_generated_cells.ts");
+  const { JOURNAL_CONVERTS } = await import("../src/journal_conversion.ts");
+  await withProduction(
+    () => {},
+    async (run) => {
+      // Act
+      const inventory = await run.call("inventory", "POST", { macFiles: run.production.macFiles });
+
+      // Assert: the masked cells, read from the candidate itself, are exactly the named list.
+      const candidate = parseExact(inventory.body.candidateText as string) as {
+        fleet: { tables: Record<string, { columns: string[]; rows: { kind: string }[][] }> };
+        copies: Record<
+          string,
+          { tables: Record<string, { columns: string[]; rows: { kind: string }[][] }> }
+        >;
+      };
+      const expected = JOURNAL_CONVERTS
+        ? Object.entries(GENERATED_JOURNAL_CELLS)
+            .flatMap(([table, columns]) => columns.map((column) => `${table}.${column}`))
+            .sort()
+        : [];
+      for (const [object, image] of [
+        ["fleet", candidate.fleet],
+        ...Object.entries(candidate.copies),
+      ] as const) {
+        const masked = new Set<string>();
+        for (const [table, contents] of Object.entries(image.tables)) {
+          for (const row of contents.rows) {
+            row.forEach((value, index) => {
+              if (value.kind === "generated") masked.add(`${table}.${contents.columns[index]}`);
+            });
+          }
+        }
+        const present = expected.filter((cell) => {
+          const [table, column] = cell.split(".");
+          return (
+            (image.tables[table ?? ""]?.rows.length ?? 0) > 0 &&
+            image.tables[table ?? ""]?.columns.includes(column ?? "")
+          );
+        });
+        assert.deepEqual([...masked].sort(), present, String(object));
+      }
+    },
+  );
+});

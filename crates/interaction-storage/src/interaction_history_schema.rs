@@ -181,12 +181,13 @@ pub(super) async fn inspect_schema(
         "local_cancel_deliveries",
     ];
     // Reserved names at the pinned library revision. The library's public
-    // migration owners validate their lineages in this file's transaction.
+    // migration owners validate their lineages in this file's transaction; the
+    // journal's own tables are admitted in exactly one released or pinned shape
+    // (library_journal_shape.rs), with the released marker only where it remains.
     let library_tables = [
         "_fleet_sync_migrations",
         "_fleet_sync_operations",
         "_fleet_sync_steps",
-        "_fleet_sync_schema",
         "_fleet_sync_delivery_migrations",
         "_fleet_sync_mail_items",
         "_fleet_sync_mail_controls",
@@ -233,9 +234,13 @@ pub(super) async fn inspect_schema(
     if has_pending_poll && !has_retirement_progress {
         return Err(StorageError::InvalidSchema);
     }
+    let journal = super::library_journal_shape::journal_shape(connection, &tables).await?;
     let mut composed_tables = history_tables.clone();
     composed_tables.extend(message_tables);
     composed_tables.extend(library_tables);
+    if journal.has_marker() {
+        composed_tables.insert("_fleet_sync_schema");
+    }
     if has_library_backfills {
         composed_tables.insert("_fleet_sync_delivery_backfills");
     }

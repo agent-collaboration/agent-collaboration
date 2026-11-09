@@ -31,6 +31,10 @@ pub enum TypedValue {
     Real(f64),
     Text(String),
     Blob(String),
+    /// A journal cell main's own SQL fills from the clock or random(), masked
+    /// in the candidate (tools/central-migration journal_generated_cells.ts);
+    /// the rebuild stores its deterministic stand-in.
+    Generated(Box<TypedValue>),
 }
 
 #[derive(Debug, Deserialize)]

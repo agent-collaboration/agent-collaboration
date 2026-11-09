@@ -1,7 +1,7 @@
 //! Tolerant owner Health rejects a receiver migration record outside sqlx's
 //! shape without repairing it (PD1).
 use super::{ConformanceResult, JwksFixtureServer, TokioServer, settings};
-use crate::copy_owner_health::copy_owner_scenarios::{OwnerClient, bookkeeping};
+use crate::copy_owner_health::copy_owner_scenarios::{OwnerClient, bookkeeping, receiver_current};
 use serde_json::Value;
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
@@ -101,7 +101,7 @@ async fn read_health_with_record(corruption: Option<RecordCorruption>) -> Confor
                     );
                 }
             } else {
-                bookkeeping(&health, Some(3))?;
+                bookkeeping(&health, Some(receiver_current()))?;
             }
             Ok(())
         }

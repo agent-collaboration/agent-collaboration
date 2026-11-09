@@ -3,16 +3,19 @@
 // text is what the Rust decode gate decodes; its SHA-256 is what the gate's
 // pass names and what migrate must reproduce, from the same run time and the
 // same old storage, before its first write (PD7 between inventory and migrate).
+// The journal cells main's own SQL fills from the clock or random() are masked
+// (journal_generated_cells.ts); every other cell is bound.
 
 import { stringifyExact } from "./exact_json.ts";
 import type { MigrationPlan, OldStorage } from "./migration_plan.ts";
 import { hex } from "./schema_sets.ts";
+import { maskGenerated, type CandidateImage } from "./journal_generated_cells.ts";
 import type { ObjectImage } from "./storage_objects.ts";
 
 export interface Candidate {
-  readonly fleet: ObjectImage;
+  readonly fleet: CandidateImage;
   /** Each Copy without its project tables, keyed by project, in sorted order. */
-  readonly copies: Readonly<Record<string, ObjectImage>>;
+  readonly copies: Readonly<Record<string, CandidateImage>>;
 }
 
 export interface CandidateSource {
@@ -36,16 +39,18 @@ export async function rehearseCandidate(
   old: OldStorage,
   state: MigratedState,
 ): Promise<{ readonly text: string; readonly digest: string }> {
-  const fleet = await source.rehearseFleet(state.fleet ? [] : plan.fleet);
-  const copies: Record<string, ObjectImage> = {};
+  const fleet = maskGenerated(await source.rehearseFleet(state.fleet ? [] : plan.fleet));
+  const copies: Record<string, CandidateImage> = {};
   for (const project of Object.keys(old.copies).sort()) {
     const projectTables = (old.copies[project]?.rows._fleet_sync_copy_tables ?? []).map((row) =>
       String(row.name),
     );
-    copies[project] = await source.rehearseCopy(
-      project,
-      state.copies[project] === true ? [] : (plan.copies[project] ?? []),
-      projectTables,
+    copies[project] = maskGenerated(
+      await source.rehearseCopy(
+        project,
+        state.copies[project] === true ? [] : (plan.copies[project] ?? []),
+        projectTables,
+      ),
     );
   }
   const text = stringifyExact({ fleet, copies } satisfies Candidate);

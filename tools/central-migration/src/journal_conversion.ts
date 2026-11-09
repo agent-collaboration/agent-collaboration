@@ -34,7 +34,12 @@ export const JOURNAL_SNAPSHOT = snapshotName("_fleet_sync_operations");
 
 /** Tables an object's read returns for the journal check. */
 export const JOURNAL_READ = ["_fleet_sync_schema"] as const;
-export const JOURNAL_VERIFY_READ = ["_fleet_sync_migrations", "_fleet_sync_schema"] as const;
+export const JOURNAL_VERIFY_READ = [
+  "_fleet_sync_migrations",
+  "_fleet_sync_schema",
+  "_fleet_sync_operations",
+  "_fleet_sync_steps",
+] as const;
 
 /** R7: an object whose journal isn't production's version stops the run. */
 export function checkProductionJournal(object: string, reply: ReadReply, stops: Stop[]): void {
