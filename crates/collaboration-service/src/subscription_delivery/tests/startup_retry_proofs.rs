@@ -233,11 +233,39 @@ async fn healthy_delivery_during_deferred_startup(setup_timing: StartupSetupTimi
     let healthy_notice = activity(&fixture, &runtime).await;
     assert_eq!(
         healthy_notice.ranges,
-        vec![expected_range(healthy, thread, cursor)]
+        vec![expected_range(healthy.clone(), thread, cursor)]
     );
     runtime.await_settled().await;
-    release_project_readers(held).await;
-    if let Some(retry_at) = retry_at {
+    if let Some(startup_clock) = &runtime_timers {
+        assert_eq!(fixture.clock.now(), starting_wall_time);
+        assert_eq!(startup_clock.now(), starting_wall_time);
+        fixture.clock.advance_without_tokio_time(7);
+        assert_eq!(
+            startup_clock.now(),
+            starting_wall_time + chrono::Duration::seconds(7)
+        );
+        // A's owner cannot settle while B's readers are exhausted, so B's readers go back
+        // first. B's live retry may then deliver B's own range, so the no-duplicate check
+        // is scoped to A: nothing left in the queue may carry A's project.
+        release_project_readers(held).await;
+        runtime.owner_barrier(&reader).await;
+        while let Ok(request) = runtime.requests.lock().await.try_recv() {
+            let push = fixture
+                .interactions
+                .get_push_record(&request.payload.push_id)
+                .await
+                .unwrap()
+                .unwrap();
+            assert!(
+                push.activity
+                    .iter()
+                    .flat_map(|activity| &activity.ranges)
+                    .all(|range| range.project_id != healthy),
+                "A was delivered a second time"
+            );
+        }
+    } else if let Some(retry_at) = retry_at {
+        release_project_readers(held).await;
         // Only the first retry's own deadline recovers B.
         tokio::time::timeout(
             Duration::from_secs(5),
@@ -261,17 +289,8 @@ async fn healthy_delivery_during_deferred_startup(setup_timing: StartupSetupTimi
         runtime.await_settled().await;
         evidence.state("finished").await;
         runtime.owner_barrier(&fixture.reader).await;
-    }
-    runtime.owner_barrier(&reader).await;
-    assert!(runtime.requests.lock().await.try_recv().is_err());
-    if let Some(startup_clock) = &runtime_timers {
-        assert_eq!(fixture.clock.now(), starting_wall_time);
-        assert_eq!(startup_clock.now(), starting_wall_time);
-        fixture.clock.advance_without_tokio_time(7);
-        assert_eq!(
-            startup_clock.now(),
-            starting_wall_time + chrono::Duration::seconds(7)
-        );
+        runtime.owner_barrier(&reader).await;
+        assert!(runtime.requests.lock().await.try_recv().is_err());
     }
     runtime.close().await;
 }
