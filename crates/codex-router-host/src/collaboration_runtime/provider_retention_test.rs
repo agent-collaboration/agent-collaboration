@@ -462,3 +462,61 @@ async fn a_failed_prune_retries_at_one_two_four_seconds_and_recovers_with_no_new
     assert_eq!(worker.armed(), None);
     worker.stop().await;
 }
+
+#[tokio::test]
+async fn live_operations_ahead_of_a_settled_one_never_use_up_its_prune() {
+    let operations = Operations::open().await;
+    for _ in 0..1_000 {
+        let live = operations.dispatched().await;
+        operations.supervisor.hold_live_operation(live.clone());
+        operations
+            .settle(&live, at("2026-01-01T00:00:00.000Z"))
+            .await;
+    }
+    let eligible = operations.settled(at("2026-01-15T10:00:00.000Z")).await;
+    let worker = RunningRetention::start(&operations, None, at("2026-02-01T00:00:00.000Z")).await;
+    assert_eq!(worker.armed(), Some(at("2026-03-15T10:00:00.001Z")));
+
+    worker.run_to_the_armed_time().await;
+
+    worker.assert_last_prune_entered_at(at("2026-03-15T10:00:00.001Z"));
+    assert!(
+        !operations.holds(&eligible).await,
+        "the prune reached past the live operations"
+    );
+    assert_eq!(worker.armed(), None, "only live operations are left");
+    worker.stop().await;
+}
+
+#[tokio::test]
+async fn a_published_result_a_reader_holds_still_arms_its_expiry() {
+    let operations = Operations::open().await;
+    let operation = operations.dispatched().await;
+    operations.supervisor.hold_live_operation(operation.clone());
+    let worker = RunningRetention::start(&operations, None, at("2026-02-01T00:00:00.000Z")).await;
+    let sleeps = worker.snapshot().sleeps;
+    operations
+        .settle(&operation, at("2026-01-15T10:00:00.000Z"))
+        .await;
+    worker.asleep_after(sleeps, "the settlement").await;
+    assert_eq!(worker.armed(), None, "a live operation arms no timer");
+    let result = operations
+        .supervisor
+        .held_result_for_test(&operation)
+        .unwrap();
+
+    let sleeps = worker.snapshot().sleeps;
+    assert!(operations.supervisor.publish_held_result(&operation).await);
+    // A reader takes the result lock before the pass the publication woke can run.
+    let reader = result.try_hold().expect("the published result is unlocked");
+    worker.asleep_after(sleeps, "publishing the result").await;
+    drop(reader);
+
+    // Releasing the lock writes and signals nothing, so the pass that ran must have armed it.
+    assert_eq!(worker.armed(), Some(at("2026-03-15T10:00:00.001Z")));
+    worker.run_to_the_armed_time().await;
+
+    worker.assert_last_prune_entered_at(at("2026-03-15T10:00:00.001Z"));
+    assert!(!operations.holds(&operation).await);
+    worker.stop().await;
+}

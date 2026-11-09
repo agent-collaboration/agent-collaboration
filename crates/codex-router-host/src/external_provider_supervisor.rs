@@ -44,7 +44,10 @@ use collaboration_service::conversation_operation_snapshot as snapshot_from_reco
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     path::PathBuf,
-    sync::{Arc, Mutex as StdMutex},
+    sync::{
+        Arc, Mutex as StdMutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::Duration,
 };
 use tokio::sync::{Mutex, Notify, mpsc};
@@ -97,13 +100,29 @@ struct LiveOperations {
 
 struct LiveOperation {
     result: Mutex<Option<Result<ConversationOperationSettlement, ConversationOperationFailure>>>,
+    /// Set once the result is published. Retention reads it without the result lock, which
+    /// a reader of the result may be holding.
+    published: AtomicBool,
     changed: Notify,
+}
+
+/// A held operation's result, for a test that locks it as a reader would.
+#[cfg(test)]
+pub(crate) struct HeldResult(Arc<LiveOperation>);
+
+#[cfg(test)]
+impl HeldResult {
+    /// Takes the result lock now, without waiting, or `None` when it is taken.
+    pub(crate) fn try_hold(&self) -> Option<impl Sized + '_> {
+        self.0.result.try_lock().ok()
+    }
 }
 
 impl LiveOperation {
     fn pending() -> Self {
         Self {
             result: Mutex::new(None),
+            published: AtomicBool::new(false),
             changed: Notify::new(),
         }
     }
@@ -143,6 +162,20 @@ impl ExternalProviderSupervisor {
             .insert(operation_id, Arc::new(LiveOperation::pending()));
     }
 
+    /// The result lock of a held operation, which a test holds as a reader of the result
+    /// would.
+    #[cfg(test)]
+    pub(crate) fn held_result_for_test(&self, operation_id: &OperationId) -> Option<HeldResult> {
+        self.inner
+            .live_operations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .operations
+            .get(operation_id)
+            .cloned()
+            .map(HeldResult)
+    }
+
     /// Publishes a held operation's result through the path a finished operation takes,
     /// with no store write. Returns whether the operation was held.
     #[cfg(test)]
@@ -180,12 +213,8 @@ impl ExternalProviderSupervisor {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .operations
             .iter()
-            .filter_map(|(operation_id, operation)| {
-                operation.result.try_lock().map_or_else(
-                    |_| Some(operation_id.clone()),
-                    |result| result.is_none().then(|| operation_id.clone()),
-                )
-            })
+            .filter(|(_, operation)| !operation.published.load(Ordering::Acquire))
+            .map(|(operation_id, _)| operation_id.clone())
             .collect()
     }
     pub fn new(
@@ -625,6 +654,7 @@ impl SupervisorInner {
         result: Result<ConversationOperationSettlement, ConversationOperationFailure>,
     ) {
         *live.result.lock().await = Some(result);
+        live.published.store(true, Ordering::Release);
         live.changed.notify_waiters();
         self.completions
             .send_modify(|revision| *revision = revision.wrapping_add(1));

@@ -542,15 +542,23 @@ impl ProviderOperationStore {
         cutoff_ms: i64,
         protected_operation_ids: &HashSet<OperationId>,
     ) -> Result<u64, ProviderOperationStoreError> {
-        let candidates = self
-            .retention_candidates(cutoff_ms, RETENTION_BATCH_LIMIT)
-            .await?;
+        // Protected operations are read past, so they can never use up the batch: the
+        // operation the due read found is always among the candidates. A batch still
+        // removes at most RETENTION_BATCH_LIMIT operations.
+        let limit = i64::try_from(protected_operation_ids.len())
+            .ok()
+            .and_then(|protected| protected.checked_add(RETENTION_BATCH_LIMIT))
+            .ok_or(ProviderOperationStoreError::InvalidRecord)?;
+        let batch = usize::try_from(RETENTION_BATCH_LIMIT)
+            .map_err(|_| ProviderOperationStoreError::InvalidRecord)?;
+        let candidates = self.retention_candidates(cutoff_ms, limit).await?;
         let mut transaction = self.transaction(TransactionStart::Deferred).await?;
         let mut removed = 0_u64;
-        for (typed_id, _) in candidates {
-            if protected_operation_ids.contains(&typed_id) {
-                continue;
-            }
+        for (typed_id, _) in candidates
+            .into_iter()
+            .filter(|(operation_id, _)| !protected_operation_ids.contains(operation_id))
+            .take(batch)
+        {
             let operation_id = typed_id.as_str();
             removed = removed.saturating_add(
                 sqlx::query!(
