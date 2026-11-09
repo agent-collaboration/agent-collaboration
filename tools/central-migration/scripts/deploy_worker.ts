@@ -1,14 +1,15 @@
 // The guarded deploy of a central Worker under the settings' name:
 //
 //   node scripts/deploy_worker.ts <old-central|migration|main-central> --settings <private settings.json>
-//     --artifact <build dir> --scratch <new private dir> [--cf <cf path>] [--dry-run]
+//     --artifact <build dir> --scratch <new private dir> [--dry-run]
 //
 // old-central and main-central take worker-build's build/ (index.js, index_bg.wasm);
-// migration takes this package's build/. The staging seed deploys through
-// verification/central-seed-worker/scripts/deploy_seed_worker.ts.
+// migration takes this package's build/. cf is always this package's pinned
+// devDependency (deploy_run.ts), never one from PATH. The staging seed
+// deploys through verification/central-seed-worker/scripts/deploy_seed_worker.ts.
 
 import { readFile } from "node:fs/promises";
-import { guardedRun } from "./deploy_run.ts";
+import { PINNED_CF, guardedRun } from "./deploy_run.ts";
 import { DeployRefused, renderConfig, type DeploySettings } from "./worker_deploy.ts";
 
 const [kind, ...flags] = process.argv.slice(2);
@@ -18,7 +19,7 @@ const option = (name: string): string | undefined => {
 };
 if (kind !== "old-central" && kind !== "migration" && kind !== "main-central") {
   throw new Error(
-    "usage: deploy_worker.ts <old-central|migration|main-central> --settings <file> --artifact <dir> --scratch <dir> [--cf <path>] [--dry-run]",
+    "usage: deploy_worker.ts <old-central|migration|main-central> --settings <file> --artifact <dir> --scratch <dir> [--dry-run]",
   );
 }
 const settingsPath = option("settings");
@@ -35,7 +36,7 @@ try {
     config: renderConfig(kind, settings),
     artifact,
     scratch,
-    cf: option("cf") ?? "cf",
+    cf: PINNED_CF,
     dryRun: flags.includes("--dry-run"),
   });
   console.log(

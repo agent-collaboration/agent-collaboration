@@ -4,10 +4,10 @@
 // nothing else in the account changes.
 //
 //   node scripts/deploy_seed_worker.ts --settings <private settings.json>
-//     --artifact <this package's build/> --scratch <new private dir> [--cf <cf path>] [--dry-run]
+//     --artifact <this package's build/> --scratch <new private dir> [--dry-run]
 
 import { readFile } from "node:fs/promises";
-import { guardedRun } from "../../../tools/central-migration/scripts/deploy_run.ts";
+import { PINNED_CF, guardedRun } from "../../../tools/central-migration/scripts/deploy_run.ts";
 import {
   DeployRefused,
   ENTRYPOINTS,
@@ -27,7 +27,7 @@ const artifact = option("artifact");
 const scratch = option("scratch");
 if (settingsPath === undefined || artifact === undefined || scratch === undefined) {
   throw new Error(
-    "usage: deploy_seed_worker.ts --settings <file> --artifact <dir> --scratch <dir> [--cf <path>] [--dry-run]",
+    "usage: deploy_seed_worker.ts --settings <file> --artifact <dir> --scratch <dir> [--dry-run]",
   );
 }
 const settings = JSON.parse(await readFile(settingsPath, "utf8")) as DeploySettings;
@@ -39,7 +39,7 @@ try {
     config: refuseProduction(seedWorkerConfig(liveConfig(settings, true), ENTRYPOINTS.seed)),
     artifact,
     scratch,
-    cf: option("cf") ?? "cf",
+    cf: PINNED_CF,
     dryRun: flags.includes("--dry-run"),
   });
   console.log(

@@ -8,8 +8,9 @@
 // inventory before and after: Durable Object namespaces, the Worker and the
 // hostname. It refuses production's name or domain, an existing hostname at
 // first upload, and any namespace change other than the one the step plans.
-// A dry run renders, runs cf's own `deploy --dry-run` (builds and checks, no
-// upload) and prints the planned change without uploading.
+// A dry run renders, runs cf's own `deploy --dry-run` over the build the pinned
+// cf already checked (deploy_run.ts), and prints the planned change without
+// uploading.
 
 import { mainCentralConfig, migrationWorkerConfig, type WorkerConfig } from "./deploy_configs.ts";
 
@@ -20,6 +21,16 @@ export const PRODUCTION = {
   worker: "collaboration-central",
   domain: "central.agent-collaboration.com",
 } as const;
+
+/**
+ * A hostname or Worker name as Cloudflare matches it: DNS names are
+ * case-insensitive and may carry a trailing dot, and Worker names are stored
+ * lowercase. Every production refusal and inventory match compares these.
+ */
+export const canonicalName = (value: string): string =>
+  value.trim().toLowerCase().replace(/\.$/, "");
+const sameName = (a: string | undefined, b: string): boolean =>
+  a !== undefined && canonicalName(a) === canonicalName(b);
 
 export const CENTRAL_CLASSES = [
   "ProjectCopyObject",
@@ -141,8 +152,8 @@ export function renderConfig(
 /** Refuses a config that names production central's Worker or domain. */
 export function refuseProduction(config: WorkerConfig): WorkerConfig {
   if (
-    config.worker.name === PRODUCTION.worker ||
-    JSON.stringify(config).includes(PRODUCTION.domain)
+    sameName(config.worker.name, PRODUCTION.worker) ||
+    JSON.stringify(config).toLowerCase().includes(PRODUCTION.domain)
   ) {
     refuse("the rendered config names production central");
   }
@@ -167,35 +178,38 @@ export interface Inventory {
 }
 
 const ownNamespaces = (inventory: Inventory, worker: string) =>
-  inventory.namespaces.filter((namespace) => namespace.script === worker);
+  inventory.namespaces.filter((namespace) => sameName(namespace.script, worker));
 const others = (inventory: Inventory, worker: string) =>
   inventory.namespaces
-    .filter((namespace) => namespace.script !== worker)
+    .filter((namespace) => !sameName(namespace.script, worker))
     .map((namespace) => JSON.stringify(namespace))
     .sort();
 const workerNames = (inventory: Inventory) =>
-  inventory.workers.map((row) => row.script_name ?? row.id ?? row.name);
+  inventory.workers.map((row) => canonicalName(row.script_name ?? row.id ?? row.name ?? ""));
+const boundTo = (inventory: Inventory, hostname: string) =>
+  inventory.domains.filter((domain) => sameName(domain.hostname, hostname));
 
 /** Before uploading: the kind's preconditions on the current inventory. */
 export function checkBefore(kind: WorkerKind, settings: DeploySettings, before: Inventory): void {
   const worker = settings.workerName;
-  if (worker === PRODUCTION.worker || settings.hostname === PRODUCTION.domain)
+  if (sameName(worker, PRODUCTION.worker) || sameName(settings.hostname, PRODUCTION.domain))
     refuse("the target is production central");
   const own = ownNamespaces(before, worker);
-  const host = before.domains.filter((domain) => domain.hostname === settings.hostname);
+  const host = boundTo(before, settings.hostname);
   if (kind === "seed") {
-    if (workerNames(before).includes(worker))
+    if (workerNames(before).includes(canonicalName(worker)))
       refuse(`Worker ${worker} already exists; the seed is the first upload`);
     if (own.length > 0) refuse(`${own.length} namespaces already belong to ${worker}`);
     if (host.length > 0) refuse(`hostname ${settings.hostname} already exists`);
     return;
   }
-  if (!workerNames(before).includes(worker)) refuse(`Worker ${worker} doesn't exist yet`);
+  if (!workerNames(before).includes(canonicalName(worker)))
+    refuse(`Worker ${worker} doesn't exist yet`);
   const classes = own.map((namespace) => namespace.class).sort();
   if (classes.join(",") !== [...CENTRAL_CLASSES].sort().join(",")) {
     refuse(`${worker} holds namespaces [${classes.join(", ")}], not the five central classes`);
   }
-  if (host.length !== 1 || host[0]?.service !== worker)
+  if (host.length !== 1 || !sameName(host[0]?.service, worker))
     refuse(`hostname ${settings.hostname} isn't bound to ${worker} alone`);
 }
 
@@ -230,8 +244,8 @@ export function checkAfter(
       if (byClass.get(name) !== previous.get(name)) refuse(`namespace for ${name} changed id`);
     }
   }
-  const host = after.domains.filter((domain) => domain.hostname === settings.hostname);
-  if (host.length !== 1 || host[0]?.service !== worker)
+  const host = boundTo(after, settings.hostname);
+  if (host.length !== 1 || !sameName(host[0]?.service, worker))
     refuse(`hostname ${settings.hostname} isn't bound to ${worker} after deploy`);
 }
 
@@ -287,7 +301,9 @@ export async function takeInventory(
     ).map(namespaceOf),
     workers: rows(
       await cf(["workers", "scripts", "search", "--name", settings.workerName], `${phase}-workers`),
-    ).filter((row) => (row.script_name ?? row.id ?? row.name) === settings.workerName),
+    ).filter((row) =>
+      sameName(optionalText(row.script_name ?? row.id ?? row.name), settings.workerName),
+    ),
     domains: rows(
       await cf(["workers", "domains", "list", "--hostname", settings.hostname], `${phase}-domains`),
     ),
@@ -349,10 +365,10 @@ export async function deployWorker(
   checkBefore(kind, settings, before);
   const namespaces = planNamespaces(kind, settings, before);
   if (options.dryRun) {
-    await cf(["deploy", "--dry-run"], "deploy-dry-run");
+    await cf(["deploy", "--dry-run", "--prebuilt"], "deploy-dry-run");
     return { kind, dryRun: true, before, after: null, planned: plannedChange(kind), namespaces };
   }
-  await cf(["deploy", "--tag", options.tag, "--message", options.message], "deploy");
+  await cf(["deploy", "--prebuilt", "--tag", options.tag, "--message", options.message], "deploy");
   const after = await takeInventory(cf, settings, "after");
   checkAfter(kind, settings, before, after);
   return { kind, dryRun: false, before, after, planned: plannedChange(kind), namespaces };

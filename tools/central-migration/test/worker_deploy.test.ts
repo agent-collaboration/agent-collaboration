@@ -17,29 +17,11 @@ import {
   refuseProduction,
   renderConfig,
   type CfRunner,
-  type DeploySettings,
   type Inventory,
   type WorkerKind,
 } from "../scripts/worker_deploy.ts";
+import { SETTINGS } from "./support/deploy_settings.ts";
 
-const SETTINGS: DeploySettings = {
-  accountId: "0123456789abcdef0123456789abcdef",
-  workerName: "collaboration-central-s1-migration",
-  hostname: "s1-migration.staging.example",
-  compatibilityDate: "2026-08-21",
-  access: {
-    teamDomain: "team.example",
-    ownerIdentity: "owner@example.test",
-    sessionAudience: "session-aud",
-    adminAudience: "admin-aud",
-  },
-  central: {
-    registryConfig: { authoritativeReceiver: "01a16eaa-ae36-7eec-9698-e8c34d10238b" },
-    deliveryConfig: { relayPeer: "01a1c140-0000-7000-8000-000000000001" },
-    holderAnswerTimeout: '{"secs":20,"nanos":0}',
-    copyAckWait: '{"secs":20,"nanos":0}',
-  },
-};
 const W = SETTINGS.workerName;
 const ns = (id: string, cls: string, script = W) => ({
   id,
@@ -93,6 +75,54 @@ test("production's name or domain is refused", () => {
         liveConfig({ ...SETTINGS, hostname: "central.agent-collaboration.com" }, true),
       ),
     refusedWith(/production/),
+  );
+});
+
+// T1-F2: Cloudflare matches hostnames case-insensitively (and with a trailing
+// dot) and stores Worker names lowercase, so every refusal compares that way.
+for (const [name, settings] of [
+  ["an upper-case production domain", { ...SETTINGS, hostname: "CENTRAL.AGENT-COLLABORATION.COM" }],
+  [
+    "a production domain with a trailing dot",
+    { ...SETTINGS, hostname: "central.agent-collaboration.com." },
+  ],
+  ["a mixed-case production Worker name", { ...SETTINGS, workerName: "Collaboration-Central" }],
+] as const) {
+  test(`${name} is refused by the render and by the inventory check`, () => {
+    assert.throws(() => refuseProduction(liveConfig(settings, true)), refusedWith(/production/));
+    assert.throws(
+      () => checkBefore("seed", settings, inventory(OTHER, false, [])),
+      refusedWith(/production/),
+    );
+  });
+}
+
+test("the first upload refuses a case-equivalent hostname or Worker that already exists", () => {
+  assert.throws(
+    () =>
+      checkBefore(
+        "seed",
+        SETTINGS,
+        inventory(OTHER, false, [{ hostname: SETTINGS.hostname.toUpperCase(), service: "x" }]),
+      ),
+    refusedWith(/hostname .* already exists/),
+  );
+  assert.throws(
+    () =>
+      checkBefore("seed", SETTINGS, {
+        ...inventory(OTHER, false, []),
+        workers: [{ id: W.toUpperCase() }],
+      }),
+    refusedWith(/already exists/),
+  );
+  assert.throws(
+    () =>
+      checkBefore(
+        "seed",
+        SETTINGS,
+        inventory([...OTHER, ns("x", "FleetObject", W.toUpperCase())], false, []),
+      ),
+    refusedWith(/already belong/),
   );
 });
 
@@ -234,7 +264,7 @@ test("a dry run checks the inventory and runs cf's own dry run, and never upload
   });
   assert.deepEqual(
     calls.filter((call) => call.startsWith("deploy")),
-    ["deploy --dry-run"],
+    ["deploy --dry-run --prebuilt"],
   );
 });
 
@@ -287,8 +317,10 @@ test("the real runner renders private files, uploads through cf once, and checks
     );
     assert.equal(outcome.after?.namespaces.length, 6);
     assert.equal((await stat(scratch)).mode & 0o777, 0o700);
+    // Every file the runner writes is private; the directories are the copied
+    // artifact, cf's build output and the link to the pinned tool.
     for (const file of await readdir(scratch)) {
-      if (file === "artifact") continue;
+      if (["artifact", "node_modules", ".cloudflare", ".wrangler"].includes(file)) continue;
       assert.equal((await stat(join(scratch, file))).mode & 0o777, 0o600, file);
     }
     assert.match(

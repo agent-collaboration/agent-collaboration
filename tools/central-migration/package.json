@@ -14,11 +14,13 @@
   },
   "devDependencies": {
     "@types/node": "26.6.5",
+    "cf": "1.0.0-beta.17",
     "miniflare": "5.20261012.0-beta",
     "oxfmt": "0.74.0",
     "oxlint": "1.89.0",
     "typescript": "7.0.2",
-    "workerd": "1.20261012.1"
+    "workerd": "1.20261012.1",
+    "wrangler": "4.151.0"
   },
   "engines": {
     "node": "26.11.1"

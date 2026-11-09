@@ -18,6 +18,8 @@
 import { readFile } from "node:fs/promises";
 import type { RegistryRequest } from "../src/seed_contract.ts";
 import { PRODUCTION } from "./deploy_config.ts";
+import { canonicalName } from "../../../tools/central-migration/scripts/worker_deploy.ts";
+import { ownerFetch } from "../../../tools/central-migration/scripts/owner_transport.ts";
 
 const [phase, origin, ...files] = process.argv.slice(2);
 if (
@@ -36,14 +38,16 @@ const url = new URL(
   origin,
 );
 if (url.protocol !== "https:") throw new Error("the staging origin must be https");
-if (url.hostname === PRODUCTION.domain || url.hostname.includes("collaboration-central.")) {
+const host = canonicalName(url.hostname);
+if (host === PRODUCTION.domain || host.includes("collaboration-central.")) {
   throw new Error(`refusing production central ${url.hostname}`);
 }
 
 async function send(body: string): Promise<unknown> {
-  const response = await fetch(url, {
+  // Never follows a redirect: the token and body must not reach another host.
+  const response = await ownerFetch(url, token ?? "", {
     method: "POST",
-    headers: { "content-type": "application/json", "cf-access-token": token ?? "" },
+    headers: { "content-type": "application/json" },
     body,
   });
   const answer: unknown = await response.json().catch(() => ({ status: response.status }));

@@ -12,14 +12,20 @@ import {
   checkLiveTarget,
   type WorkerConfig,
 } from "../../../tools/central-migration/scripts/deploy_configs.ts";
-import { PRODUCTION } from "../../../tools/central-migration/scripts/worker_deploy.ts";
+import {
+  PRODUCTION,
+  canonicalName,
+} from "../../../tools/central-migration/scripts/worker_deploy.ts";
 
 export { PRODUCTION };
 
 export function seedWorkerConfig(staging: WorkerConfig, entrypoint: string): WorkerConfig {
   checkLiveTarget(staging);
   const domains = (staging.worker.domains as readonly string[] | undefined) ?? [];
-  if (staging.worker.name === PRODUCTION.worker || domains.includes(PRODUCTION.domain)) {
+  if (
+    canonicalName(staging.worker.name) === PRODUCTION.worker ||
+    domains.some((domain) => canonicalName(domain) === PRODUCTION.domain)
+  ) {
     throw new Error("refusing to configure the staging seed Worker for production's central");
   }
   return {

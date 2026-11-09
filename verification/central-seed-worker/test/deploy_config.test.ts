@@ -51,6 +51,14 @@ test("production's central is refused, and the allocated S1 name is accepted", (
       ),
     /production/,
   );
+  // T1-F2: case and a trailing dot don't hide production.
+  assert.throws(() => seedWorkerConfig(target("Collaboration-Central"), "w.js"), /production/);
+  for (const domain of ["CENTRAL.AGENT-COLLABORATION.COM", "central.agent-collaboration.com."]) {
+    assert.throws(
+      () => seedWorkerConfig(target("collaboration-central-staging", [domain]), "w.js"),
+      /production/,
+    );
+  }
   // The S1 staging Worker's allocated name; first-upload-only is the deploy's guard, not the name.
   assert.equal(
     seedWorkerConfig(target("collaboration-central-s1-migration"), "w.js").worker.env

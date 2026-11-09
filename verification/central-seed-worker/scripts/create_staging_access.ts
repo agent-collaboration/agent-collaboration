@@ -20,6 +20,10 @@ import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import {
+  PRODUCTION,
+  canonicalName,
+} from "../../../tools/central-migration/scripts/worker_deploy.ts";
 
 const run = promisify(execFile);
 const [settingsPath, secretsDir, step, ...flags] = process.argv.slice(2);
@@ -46,8 +50,8 @@ interface S1Settings {
 }
 const settings = JSON.parse(await readFile(settingsFile, "utf8")) as S1Settings;
 if (
-  settings.hostname === "central.agent-collaboration.com" ||
-  settings.workerName === "collaboration-central"
+  canonicalName(settings.hostname) === PRODUCTION.domain ||
+  canonicalName(settings.workerName) === PRODUCTION.worker
 ) {
   throw new Error("refusing production's central");
 }

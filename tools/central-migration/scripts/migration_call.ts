@@ -67,7 +67,6 @@ export function judge(
   }
 }
 
-/** One call: the step's route and body, and the judged answer. Answers parse exactly (big integers kept). */
 /** The Rust decode gate's report, as migrate needs it. */
 export interface GateReport {
   readonly outcome: string;
@@ -98,6 +97,7 @@ export function migrateBody(
   });
 }
 
+/** One call: the step's route and body, and the judged answer. Answers parse exactly (big integers kept). */
 export async function callStep(
   step: MigrationStep,
   transport: MigrationTransport,
