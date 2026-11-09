@@ -167,6 +167,7 @@ async fn deferred_human_claim_delivers_a_new_local_coholder_in_the_same_consumer
         .await
         .unwrap();
     let mut matched = Vec::new();
+    let mut first_pass_requests = Vec::new();
     let mut requests = runtime.requests.lock().await;
     while let Ok(request) = requests.try_recv() {
         let push = fixture
@@ -175,6 +176,19 @@ async fn deferred_human_claim_delivers_a_new_local_coholder_in_the_same_consumer
             .await
             .unwrap()
             .unwrap();
+        let (intent, cause) = match &push.header_facts {
+            collaboration_protocol::PushHeaderFacts::BoardNotification {
+                intent, cause, ..
+            } => (Some(intent.clone()), Some(cause.clone())),
+            _ => (None, None),
+        };
+        first_pass_requests.push((
+            request.payload.push_id.clone(),
+            request.attempt.clone(),
+            request.target.clone(),
+            intent,
+            cause,
+        ));
         if let collaboration_protocol::PushHeaderFacts::BoardNotification { intent, cause, .. } =
             push.header_facts
             && cause == post.clone().into()
@@ -220,9 +234,26 @@ async fn deferred_human_claim_delivers_a_new_local_coholder_in_the_same_consumer
         .consume_project_intents(&fixture.project)
         .await
         .unwrap();
+    let unexpected = runtime.requests.lock().await.try_recv();
+    let unexpected_context = match &unexpected {
+        Ok(request) => Some((
+            request.payload.push_id.clone(),
+            request.attempt.clone(),
+            request.target.clone(),
+            fixture
+                .interactions
+                .get_push_record(&request.payload.push_id)
+                .await
+                .map(|record| record.map(|record| record.header_facts)),
+        )),
+        Err(_) => None,
+    };
     assert!(
-        runtime.requests.lock().await.try_recv().is_err(),
-        "same local coholder received twice"
+        unexpected.is_err(),
+        "same local coholder received twice: unexpected={unexpected_context:?}; first_pass={first_pass_requests:?}; completed_native_calls={}",
+        runtime
+            .completed_native_calls
+            .load(std::sync::atomic::Ordering::SeqCst)
     );
     runtime.close().await;
 }
@@ -335,8 +366,9 @@ async fn claimed_retained_holder_delivers_an_already_consumed_reinstatement_in_t
         .await
         .unwrap();
     // The initial pass submits two addressed posts and the current role grant.
-    // Completing those scripted calls proves all three requests reached the
-    // queue before its snapshot; a publisher pass only commits their custody.
+    // Fresh attempts await delivery, but replayed custody can belong to an
+    // overlapping publication drive. Wait for all three scripted calls before
+    // snapshotting their requests.
     tokio::time::timeout(std::time::Duration::from_secs(10), async {
         while runtime
             .completed_native_calls
