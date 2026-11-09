@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { createServer } from "node:net";
@@ -9,7 +9,6 @@ import { canonicalPath } from "../../filesystem-paths.ts";
 import { evidenceJson } from "../../evidence-json.ts";
 import {
   readObservedJson,
-  hostManifestSchema,
   type JsonObject,
   type ProcessIdentity,
   type QualifiedBinary,
@@ -39,7 +38,6 @@ import {
   type CleanupResult,
 } from "./runtime-processes.ts";
 import { qualifyGlobalClaude, qualifyNormalBinaries, sha256 } from "./runtime-qualification.ts";
-import { readObserverJournal } from "./startup-observation.ts";
 import {
   AllocationTimeout,
   deadlineEpoch,
@@ -118,41 +116,16 @@ async function prepareRuntime(
   operations.process.table();
   if (canonicalPath(plan.router_root) === join(homedir(), ".codex-router"))
     throw new Error("production Router root is outside verification scope");
-  if (
-    plan.provider_mode === "disabled" &&
-    existsSync(plan.router_root) &&
-    readdirSync(plan.router_root).length > 0
-  )
-    throw new Error("providers-disabled startup requires a fresh empty Router root");
-  const binaries = operations.qualifyBinaries(
-    plan.qualification,
-    undefined,
-    plan.provider_mode === "disabled" ? ["codex-router"] : undefined,
-  );
+  const binaries = operations.qualifyBinaries(plan.qualification);
   const binary = binaries.get("codex-router");
   if (binary === undefined) throw new Error("qualified Router binary missing");
   requireTrustedNativeCwd(plan.codex_config, plan.native_cwd);
   const hostEnvironment = operations.hostEnvironment();
   delete hostEnvironment.CLAUDE_CODE_EXECUTABLE;
   delete hostEnvironment.CODEX_ROUTER_HOST_INHERITED_LOCK;
-  const claudeBinding =
-    plan.provider_mode === "enabled"
-      ? operations.qualifyClaude(plan.claude_executable, hostEnvironment.PATH)
-      : null;
+  const claudeBinding = operations.qualifyClaude(plan.claude_executable, hostEnvironment.PATH);
   operations.checkConsumers(plan.router_root);
   await operations.assertPortAvailable(plan.port);
-  if (plan.provider_mode === "disabled") {
-    mkdirSync(plan.router_root, { mode: 0o700, recursive: true });
-    operations.save(join(plan.router_root, "settings.jsonc"), {
-      providers: {
-        version: 1,
-        providers: {
-          claude: { enabled: false, executable: null, arguments: [] },
-          cursor: { enabled: false, executable: null, arguments: [] },
-        },
-      },
-    });
-  }
   mkdirSync(plan.evidence, { mode: 0o700, recursive: true });
   operations.save(join(plan.evidence, "driver-binding.json"), {
     driverSHA256: sha256(import.meta.filename),
@@ -244,9 +217,9 @@ function hostCommand(plan: RuntimePlan, prepared: PreparedRuntime): string[] {
     "--mcp-bind",
     "127.0.0.1:0",
     "--require-debug-isolation",
+    "--cursor-acp-executable",
+    plan.cursor_executable,
   ];
-  if (plan.provider_mode === "disabled") return command;
-  command.push("--cursor-acp-executable", plan.cursor_executable);
   for (const argument of [
     "--disable-auto-update",
     "--disable-project-configs",
@@ -318,43 +291,6 @@ async function awaitHostDirective(input: HostContext): Promise<"stop" | "reopen"
   }
 }
 
-async function awaitObserverReceipt(input: HostContext): Promise<void> {
-  const { plan, operations, host, known, phase } = input;
-  const manifest = hostManifestSchema
-    .pick({ serviceId: true, serviceEpoch: true })
-    .parse(
-      readObservedJson(readFileSync(join(plan.router_root, "agent-communication/service.json"))),
-    );
-  const until = operations.monotonicNow() + 120_000;
-  let observation: ReturnType<typeof readObserverJournal> | undefined;
-  try {
-    for (;;) {
-      input.requireContinuing();
-      observeChild(host, known, operations.process);
-      observation = readObserverJournal({
-        routerRoot: plan.router_root,
-        serviceId: manifest.serviceId,
-        serviceEpoch: manifest.serviceEpoch,
-      });
-      if (observation.kind === "connected") {
-        operations.save(join(plan.evidence, `host-${phase}-observer-connected.json`), observation);
-        return;
-      }
-      if (
-        processExit(host) !== null ||
-        operations.monotonicNow() >= until ||
-        operations.wallNow() >= deadlineEpoch(plan) ||
-        existsSync(join(plan.evidence, "stop.json"))
-      )
-        throw new Error("current-generation observer connection was not established");
-      await operations.delay(200);
-    }
-  } finally {
-    if (observation?.kind === "waiting")
-      operations.save(join(plan.evidence, `host-${phase}-observer-unavailable.json`), observation);
-  }
-}
-
 async function settleHost(
   input: HostContext & { readonly settlements: JsonObject[] },
 ): Promise<void> {
@@ -391,8 +327,7 @@ async function runHostPhase(
       NODE_COMPILE_CACHE: join(plan.evidence, "node-cache"),
       DIRENV_DISABLE: "1",
       CURSOR_AGENT_DISABLE_DEBUG_LOG: "1",
-      RUST_LOG:
-        plan.provider_mode === "disabled" ? "worker_loop=debug,codex_router_host=off" : "off",
+      RUST_LOG: "off",
     };
     const command = hostCommand(plan, prepared);
     if (operations.wallNow() >= deadlineEpoch(plan))
@@ -414,7 +349,6 @@ async function runHostPhase(
     });
     const context: HostContext = { ...input, host, known };
     await awaitHostReadiness(context);
-    if (plan.provider_mode === "disabled") await awaitObserverReceipt(context);
     directive = await awaitHostDirective(context);
   } finally {
     if (host !== undefined) await settleHost({ ...input, host, known });
@@ -493,7 +427,6 @@ async function runOwnedLifecycle(
         join(plan.router_root, "secrets"),
         "--require-debug-isolation",
         "--disable-background-quota-refresh",
-        ...(plan.provider_mode === "disabled" ? ["--allow-plaintext-file-secrets"] : []),
       ],
       stdout: join(plan.evidence, "router.stdout"),
       stderr: join(plan.evidence, "router.stderr"),

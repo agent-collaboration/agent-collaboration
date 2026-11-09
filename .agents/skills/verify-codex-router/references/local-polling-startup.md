@@ -54,8 +54,6 @@ After the window, the driver settles only its recorded Host, fixture descendants
 
 `startup-observation.ts` opens only the selected root's `agent-communication/session-registry.sqlite` read-only. It selects backend facts, preserves exact sequence integers, and requires the latest backend-ready and coverage-restored facts to match the published service epoch and native generation. Backend and observer IDs differ legitimately. Stale epochs/generations, later coverage loss, missing journals and invalid stored facts cannot establish connection. It never reads thread rows into evidence.
 
-The generic `owned-runtime.ts` now has `provider_mode: "disabled"`: it omits provider launch arguments and path qualification, writes disabled settings only into a fresh task-owned root, selects the explicit plaintext-debug credential store, and records `host-A-observer-connected.json` (or unavailable evidence). These guards and the journal reader have controlled apparatus tests only. That normal Host still starts native Codex and uses the saved profile/normal-config read guards; it must not be run under a no-native/no-main-auth commission.
-
 The [normal Host startup](../../../../crates/codex-router-host/src/lifecycle_owner.rs) awaits native app-server readiness before constructing collaboration workers. An unusable managed executable fails earlier. Native startup can load persistent account credentials eagerly; the [debug profile projection](../../../../crates/codex-native-integration/src/debug_profile_projection.rs) currently cannot project an ephemeral auth-store override. The caller owns that access decision. Do not redirect Codex home, modify its saved files, or infer that selecting a debug model provider excludes native auth.
 
 ## Apparatus checks
