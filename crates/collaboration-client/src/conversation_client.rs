@@ -1,5 +1,5 @@
 //! One conversation connection selected from the endpoint's advertised channel.
-use crate::conversation_create_actor::{ConversationCreateActor, codex_create_actors};
+use crate::conversation_actor::{ConversationActor, codex_create_actors};
 use crate::provider_conversations::{
     CompositeAnswer, LocalProviderOperations, ProviderConversations, composite_arguments,
     composite_call,
@@ -30,9 +30,9 @@ pub struct ConversationCreateInput {
     pub endpoint: EndpointRef,
     pub working_directory: PathBuf,
     pub access: RouterAccess,
-    pub created_by: ConversationCreateActor,
+    pub created_by: ConversationActor,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub approver: Option<ConversationCreateActor>,
+    pub approver: Option<ConversationActor>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub generation: Option<CodexGeneration>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -77,7 +77,7 @@ pub struct ConversationPromptInput {
     pub target: SessionRef,
     #[serde(default)]
     pub working_directory: Option<PathBuf>,
-    pub requested_by: SessionRef,
+    pub requested_by: ConversationActor,
     #[serde(default)]
     pub approver: Option<ProviderIdentity>,
     pub message: PublicPromptContent,
@@ -93,7 +93,7 @@ pub struct ConversationCancelInput {
     pub operation_id: OperationId,
     pub target_operation_id: OperationId,
     pub target: SessionRef,
-    pub requested_by: SessionRef,
+    pub requested_by: ConversationActor,
     #[serde(default)]
     pub approver: Option<ProviderIdentity>,
     #[serde(default)]
@@ -123,7 +123,7 @@ pub enum ConversationClientError {
         field: &'static str,
         fix: String,
     },
-    #[error("invalid conversation create input: {0}")]
+    #[error("invalid conversation input: {0}")]
     InvalidInput(&'static str),
     #[error("conversation endpoint {endpoint:?} is unavailable: {reason}; {fix}")]
     UnavailableEndpoint {
@@ -206,27 +206,14 @@ impl ConversationClient {
         Self::validate_create_input(&input.create, timeout)?;
         let create_operation_id = input.create.operation_id.clone();
         let endpoint = input.create.endpoint.clone();
-        let requested_by = input.create.created_by.session()?.ok_or_else(|| {
-            unsupported(
-                &endpoint,
-                "createdBy",
-                "use conversation_create, then message_send for a Human creator",
-            )
-        })?;
+        let requested_by = input.create.created_by.clone();
         let approver = input
             .create
             .approver
             .as_ref()
-            .map(|actor| {
-                actor.session()?.ok_or_else(|| {
-                    unsupported(
-                        &endpoint,
-                        "approver",
-                        "use conversation_create, then message_send for a Human Approver",
-                    )
-                })
-            })
+            .map(ConversationActor::provider_identity)
             .transpose()?;
+        let generation = input.create.generation.clone();
         let working_directory = input.create.working_directory.clone();
         let create_client = Self::connect(access, &endpoint).await?;
         create_client.validate_operation_id(
@@ -272,10 +259,10 @@ impl ConversationClient {
             target: target.clone(),
             working_directory: native.then_some(working_directory),
             requested_by,
-            approver: approver.map(ProviderIdentity::from),
+            approver,
             message: input.message,
             effort: input.prompt_effort,
-            generation: None,
+            generation,
         };
         let prompt_operation_id = prompt_input.operation_id.clone();
         let prompt = if native {
@@ -316,7 +303,7 @@ impl ConversationClient {
             || input
                 .approver
                 .as_ref()
-                .map(ConversationCreateActor::session)
+                .map(ConversationActor::session)
                 .transpose()?
                 .flatten()
                 .is_some_and(|approver| approver.endpoint.service_id != input.endpoint.service_id)
@@ -667,5 +654,5 @@ fn advertised_conversation_transport(
 }
 
 #[cfg(test)]
-#[path = "conversation_client_tests.rs"]
+#[path = "conversation_client_test.rs"]
 mod tests;

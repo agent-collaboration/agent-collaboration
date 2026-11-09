@@ -15,10 +15,6 @@ use serde::Deserialize;
     },
     {
         "if": {"properties": {"endpoint": {"properties": {"endpointId": {"enum": ["claude-local", "cursor-local"]}}}}},
-        "then": {"not": {"anyOf": [{"required": ["model"]}, {"required": ["effort"]}]}}
-    },
-    {
-        "if": {"properties": {"endpoint": {"properties": {"endpointId": {"enum": ["claude-local", "cursor-local"]}}}}},
         "then": {"not": {"anyOf": [{"required": ["fork"]}, {"required": ["rootMessageId"]}]}}
     }
 ]))]
@@ -53,10 +49,6 @@ pub(super) struct ConversationPromptToolRequest {
     {
         "if": {"properties": {"create": {"properties": {"endpoint": {"properties": {"endpointId": {"const": "codex-local"}}}}}}},
         "then": {"properties": {"create": {"required": ["model", "effort"]}}}
-    },
-    {
-        "if": {"properties": {"create": {"properties": {"endpoint": {"properties": {"endpointId": {"enum": ["claude-local", "cursor-local"]}}}}}}},
-        "then": {"properties": {"create": {"not": {"anyOf": [{"required": ["model"]}, {"required": ["effort"]}]}}}}
     },
     {
         "if": {"properties": {"create": {"properties": {"endpoint": {"properties": {"endpointId": {"enum": ["claude-local", "cursor-local"]}}}}}}},

@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "typeRoots": ["./node_modules/@types"]
+  },
+  "include": [
+    "../crates/acp-client-runtime/tests/support/behavior-agent.ts",
+    "../crates/acp-client-runtime/tests/support/behavior-agent.test.ts"
+  ]
+}

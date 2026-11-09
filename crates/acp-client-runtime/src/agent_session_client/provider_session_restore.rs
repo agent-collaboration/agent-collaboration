@@ -55,7 +55,7 @@ pub(super) async fn run_restore_admission<P: InteractionPort>(inputs: RestoreAdm
         tokio::select! {
             () = shutdown.cancelled() => Err(ExternalProviderRuntimeError::TransportFailure),
             result = event_sink.begin_history_replay(&provider_session_id) =>
-                result.map_err(|_| ExternalProviderRuntimeError::HistoryReplayUnavailable),
+                result.map_err(|_| ExternalProviderRuntimeError::HistoryReplayAdmissionFailed),
         }
     } else {
         Ok(())
@@ -226,3 +226,7 @@ fn replay_projection_error(error: ItemProjectionError) -> ExternalProviderRuntim
         ItemProjectionError::SinkClosed => ExternalProviderRuntimeError::SinkClosed,
     }
 }
+
+#[cfg(test)]
+#[path = "provider_session_restore_test.rs"]
+mod tests;
