@@ -31,6 +31,8 @@ allow-git = [
     "https://github.com/agent-collaboration/agent-fleet-sync",
     # The renderer repair is pinned to an exact version and revision in Cargo.toml.
     "https://github.com/agent-collaboration/iocraft",
+    # SQLx is pinned to an exact revision for RUSTSEC-2026-0459; see docs/upstream-workarounds/2026-11-09-sqlx-git-pin-libsqlite3-0-39.md.
+    "https://github.com/launchbadge/sqlx",
 ]
 unknown-registry = "deny"
 unknown-git = "deny"
