@@ -11,12 +11,9 @@ use fleet_protocol::{CloseReason, ConnectionId};
 use fleet_session::Bytes;
 use fleet_tokio_objects::TokioObject;
 use sqlx_core::{query::query, row::Row};
-use std::{
-    future::Future,
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, Ordering},
 };
 
 type Native = TokioObject<CoreHost<Io>>;
@@ -91,7 +88,7 @@ impl ObjectPlatform for FaultHost {
     }
     async fn with_local_section<Output: Send + 'static>(
         &self,
-        run: impl Future<Output = Output> + Send + 'static,
+        run: collaboration_central_core::LocalSection<Output>,
     ) -> Result<Output, LocalSectionFailure> {
         self.native.with_local_section(run).await
     }

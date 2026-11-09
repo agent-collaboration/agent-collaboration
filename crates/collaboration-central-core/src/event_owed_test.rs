@@ -1,4 +1,4 @@
-use super::{owed_notice, owed_request, scoped, take};
+use super::{NoEventScope, owed_notice, owed_request, scoped, take};
 use fleet_protocol::PeerId;
 use std::collections::BTreeSet;
 
@@ -13,16 +13,16 @@ async fn an_event_takes_only_its_own_appends_and_a_nested_event_keeps_its_own() 
     let outer = PeerId::new(durable_steps::Uuid::now_v7())?;
     let inner = PeerId::new(durable_steps::Uuid::now_v7())?;
     let (outer_seen, inner_seen) = scoped(async move {
-        owed_notice(outer);
+        owed_notice(outer)?;
         let inner_seen = scoped(async move {
-            owed_notice(inner);
-            take().notices
+            owed_notice(inner)?;
+            Ok::<_, NoEventScope>(take().notices)
         })
-        .await;
+        .await?;
         // The nested event's scope ended; this event's own set is back.
-        (take().notices, inner_seen)
+        Ok::<_, NoEventScope>((take().notices, inner_seen))
     })
-    .await;
+    .await?;
     assert_eq!(outer_seen, BTreeSet::from([outer]));
     assert_eq!(inner_seen, BTreeSet::from([inner]));
     Ok(())
@@ -30,11 +30,14 @@ async fn an_event_takes_only_its_own_appends_and_a_nested_event_keeps_its_own() 
 
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "The assertion checks the outside-event case while id errors propagate."
+    reason = "The assertions check the outside-event case while id errors propagate."
 )]
 #[test]
-fn an_append_outside_any_event_names_nothing() -> TestResult {
-    owed_notice(PeerId::new(durable_steps::Uuid::now_v7())?);
+fn owed_work_named_outside_any_event_is_refused_not_dropped() -> TestResult {
+    // Nothing would send it after commit, so the caller must fail instead.
+    let peer = PeerId::new(durable_steps::Uuid::now_v7())?;
+    assert_eq!(owed_notice(peer), Err(NoEventScope));
+    assert_eq!(owed_request(peer), Err(NoEventScope));
     assert_eq!(take(), super::EventOwed::default());
     Ok(())
 }
@@ -50,11 +53,11 @@ async fn notices_and_requests_are_owed_separately() -> TestResult {
         PeerId::new(durable_steps::Uuid::now_v7())?,
     );
     let owed = scoped(async move {
-        owed_notice(notice);
-        owed_request(request);
-        take()
+        owed_notice(notice)?;
+        owed_request(request)?;
+        Ok::<_, NoEventScope>(take())
     })
-    .await;
+    .await?;
     assert_eq!(owed.notices, BTreeSet::from([notice]));
     assert_eq!(owed.requests, BTreeSet::from([request]));
     Ok(())

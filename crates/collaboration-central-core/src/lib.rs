@@ -48,8 +48,8 @@ pub use object_event::{EventReply, ObjectEvent};
 mod object_platform;
 mod platform_capabilities;
 pub use object_platform::{
-    LocalSectionFailure, ObjectCallFailure, ObjectIo, ObjectPlatform, RegistrationEdits,
-    RegistrationSnapshot, SocketFailure,
+    LocalSection, LocalSectionFailure, ObjectCallFailure, ObjectIo, ObjectPlatform,
+    RegistrationEdits, RegistrationSnapshot, SocketFailure,
 };
 pub use platform_capabilities::{
     CallOutcome, CentralPlatform, KeyFetchFailure, RawJwks, UpgradeFailure, VerifyFailure,

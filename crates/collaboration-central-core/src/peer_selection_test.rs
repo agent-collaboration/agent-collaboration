@@ -40,7 +40,7 @@ impl ObjectPlatform for SelectionHost {
     }
     async fn with_local_section<T: Send + 'static>(
         &self,
-        run: impl std::future::Future<Output = T> + Send + 'static,
+        run: crate::LocalSection<T>,
     ) -> Result<T, LocalSectionFailure> {
         Ok(run.await)
     }

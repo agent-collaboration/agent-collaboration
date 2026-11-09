@@ -415,7 +415,7 @@ impl ObjectPlatform for HeldHost {
     }
     async fn with_local_section<Output: Send + 'static>(
         &self,
-        run: impl std::future::Future<Output = Output> + Send + 'static,
+        run: collaboration_central_core::LocalSection<Output>,
     ) -> Result<Output, collaboration_central_core::LocalSectionFailure> {
         self.native.with_local_section(run).await
     }

@@ -260,7 +260,7 @@ where
         let effects = self.effects.clone();
         let local = self
             .host
-            .with_local_section(async move {
+            .with_local_section(crate::LocalSection::new(async move {
                 let registrations = host.registrations().await.map_err(StoreError::backend)?;
                 #[cfg(feature = "conformance")]
                 let finalize_fault = host.session_finalize_fault()?;
@@ -287,7 +287,7 @@ where
                 let (output, committed) = result?;
                 let published = effects.publish_registrations(committed).await;
                 Ok::<_, StoreError>((output, published))
-            })
+            }))
             .await
             .map_err(StoreError::backend)??;
         let (output, published) = local;

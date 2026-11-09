@@ -450,11 +450,9 @@ async fn local_section_excludes_a_second_snapshot_until_committed_publication()
     // publication is causally held by the capability wrapper.
     assert_eq!(fixture.attached_receipts().await?, "1");
     let host = fixture.host.clone();
-    let mut snapshot = Box::pin(
-        fixture
-            .host
-            .with_local_section(async move { host.registrations().await }),
-    );
+    let mut snapshot = Box::pin(fixture.host.with_local_section(
+        collaboration_central_core::LocalSection::new(async move { host.registrations().await }),
+    ));
 
     let blocked = std::future::poll_fn(|context| {
         Poll::Ready(matches!(snapshot.as_mut().poll(context), Poll::Pending))
@@ -534,7 +532,9 @@ async fn welcome_transport_releases_local_exclusion_before_the_socket_send() -> 
         Duration::from_secs(5),
         fixture
             .host
-            .with_local_section(async move { host.registrations().await }),
+            .with_local_section(collaboration_central_core::LocalSection::new(async move {
+                host.registrations().await
+            })),
     )
     .await???;
 

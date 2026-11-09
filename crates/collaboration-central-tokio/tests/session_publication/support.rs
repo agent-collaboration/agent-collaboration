@@ -16,12 +16,9 @@ use fleet_session::{Bytes, ConnectionBinding, ConnectionRegistration, VerifiedPe
 use fleet_tokio_objects::{ObjectKey, ObjectStore, TokioObject};
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use sqlx_core::{query::query, row::Row};
-use std::{
-    future::Future,
-    sync::{
-        Arc, Mutex,
-        atomic::{AtomicBool, AtomicI64, AtomicU8, Ordering},
-    },
+use std::sync::{
+    Arc, Mutex,
+    atomic::{AtomicBool, AtomicI64, AtomicU8, Ordering},
 };
 use tokio::sync::{Semaphore, mpsc};
 
@@ -247,7 +244,7 @@ impl ObjectPlatform for TestHost {
     }
     async fn with_local_section<Output: Send + 'static>(
         &self,
-        run: impl Future<Output = Output> + Send + 'static,
+        run: collaboration_central_core::LocalSection<Output>,
     ) -> Result<Output, collaboration_central_core::LocalSectionFailure> {
         self.native.with_local_section(run).await
     }

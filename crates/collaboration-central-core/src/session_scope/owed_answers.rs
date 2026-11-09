@@ -88,7 +88,7 @@ where
                 return Ok(true);
             }
         }
-        crate::event_owed::owed_request(session.peer);
+        crate::event_owed::owed_request(session.peer).map_err(StoreError::backend)?;
         Ok(true)
     }
 

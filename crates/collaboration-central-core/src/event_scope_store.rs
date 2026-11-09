@@ -9,6 +9,9 @@
 //! every poll of the callback, so attribution doesn't depend on how the store
 //! polls. A store that runs the callback inline is unaffected. Conformance
 //! builds carry the event's trace the same way, for its send bindings.
+//!
+//! The same carry wraps every local section ([`carried`]): workerd's
+//! `blockConcurrencyWhile` also polls its future as its own promise.
 
 use durable_steps::{AtomicStore, BoxFuture, ReborrowScope, StoreError};
 use std::sync::Arc;
@@ -40,19 +43,49 @@ impl<Store: AtomicStore> AtomicStore for EventScopeStore<Store> {
             + Send
             + 'static,
     {
-        let scope = crate::event_owed::current();
-        #[cfg(feature = "conformance")]
-        let trace = crate::event_trace::current_trace();
+        let carried = CarriedScope::capture();
         self.inner
-            .transaction(move |transaction| {
-                let carried = crate::event_owed::within(scope, callback(transaction));
-                // Conformance records (S1 send bindings) name the event too.
-                #[cfg(feature = "conformance")]
-                let carried = crate::event_trace::within_trace(trace, carried);
-                Box::pin(carried)
-            })
+            .transaction(move |transaction| Box::pin(carried.within(callback(transaction))))
             .await
     }
+}
+
+/// The running event's scopes, captured inside its poll: what it owes and, in
+/// conformance builds, its trace (S1 send bindings).
+pub(crate) struct CarriedScope {
+    owed: Option<crate::event_owed::Shared>,
+    #[cfg(feature = "conformance")]
+    trace: Option<Arc<crate::event_trace::EventTrace>>,
+}
+
+impl CarriedScope {
+    /// Capture the scopes of the event being polled now.
+    pub(crate) fn capture() -> Self {
+        Self {
+            owed: crate::event_owed::current(),
+            #[cfg(feature = "conformance")]
+            trace: crate::event_trace::current_trace(),
+        }
+    }
+
+    /// Run `inner` inside the captured scopes on every poll, wherever it is polled.
+    pub(crate) fn within<F: std::future::Future + Send>(
+        self,
+        inner: F,
+    ) -> impl std::future::Future<Output = F::Output> + Send {
+        let carried = crate::event_owed::within(self.owed, inner);
+        #[cfg(feature = "conformance")]
+        let carried = crate::event_trace::within_trace(self.trace, carried);
+        carried
+    }
+}
+
+/// `inner` carrying the scopes of the event that creates it, for a platform
+/// local section that may poll it as its own task.
+pub(crate) fn carried<F: std::future::Future + Send>(
+    inner: F,
+) -> impl std::future::Future<Output = F::Output> + Send {
+    CarriedScope::capture().within(inner)
 }
 
 impl<Store: ReborrowScope> ReborrowScope for EventScopeStore<Store> {

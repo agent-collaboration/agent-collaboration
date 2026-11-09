@@ -317,7 +317,7 @@ where
     )
     .await
     .map_err(StoreError::backend)?;
-    crate::event_owed::owed_notice(peer);
+    crate::event_owed::owed_notice(peer).map_err(StoreError::backend)?;
     Ok((
         PositionedBoardNotice {
             position: NoticePosition::new(next),

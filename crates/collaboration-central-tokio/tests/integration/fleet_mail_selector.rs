@@ -32,6 +32,23 @@ fn submission(
     )?)
 }
 
+/// A frame as the shells deliver it: a kernel event, so what it owes is sent.
+async fn frame_event(
+    fixture: &Fixture,
+    binding: fleet_session::ConnectionBinding,
+    frame: Vec<u8>,
+) -> TestResult {
+    match collaboration_central_core::ObjectKernel::new(&fixture.runtime)
+        .on_event(collaboration_central_core::ObjectEvent::Frame { binding, frame })
+        .await
+    {
+        collaboration_central_core::EventReply::SocketFailed => {
+            Err("the frame's event failed".into())
+        }
+        _ => Ok(()),
+    }
+}
+
 #[expect(
     clippy::panic_in_result_fn,
     reason = "Real session calls must preserve their exact peer, item and reply identity at the existing local interception."
@@ -60,7 +77,7 @@ async fn fleet_selector_holds_the_produced_session_call_while_another_item_answe
     let binding = sender.binding;
     let selected_bytes = submission(item, selected_frame)?;
     let held = async {
-        fixture.runtime.on_frame(binding, selected_bytes).await?;
+        frame_event(&fixture, binding, selected_bytes).await?;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     };
     let controller = async {
@@ -102,7 +119,8 @@ async fn fleet_selector_holds_the_produced_session_call_while_another_item_answe
         let other_frame = FrameId::new(durable_steps::Uuid::now_v7())?;
         tokio::time::timeout(
             CAP,
-            fixture.runtime.on_frame(
+            frame_event(
+                &fixture,
                 sender.binding,
                 submission(envelope(B, SERVICE_B)?, other_frame)?,
             ),

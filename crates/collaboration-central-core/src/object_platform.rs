@@ -13,7 +13,7 @@ use fleet_session::{Bytes, ConnectionRegistration};
 use runtime_primitives::{Clock, IdSource, WakeScheduler};
 use sqlx_core::database::Database;
 use std::collections::BTreeMap;
-use std::{future::Future, sync::Arc, time::Duration};
+use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 
 pub trait ObjectIo: Clock + IdSource + WakeScheduler + Send + Sync + 'static {
     fn event_deadline(&self, remaining: Duration) -> impl Future<Output = ()> + Send;
@@ -89,9 +89,12 @@ pub trait ObjectPlatform: Send + Sync + 'static {
         })
     }
     fn alarm(&self) -> &Self::Alarm;
+    /// Run `section` exclusively. A platform may poll it as its own task
+    /// (workerd's `blockConcurrencyWhile` does); the section carries the event
+    /// that built it, so that is safe.
     fn with_local_section<Output: Send + 'static>(
         &self,
-        run: impl Future<Output = Output> + Send + 'static,
+        section: LocalSection<Output>,
     ) -> impl Future<Output = Result<Output, LocalSectionFailure>> + Send;
     fn quarantine_connections(
         &self,
@@ -133,6 +136,29 @@ pub enum SocketFailure {
     NotConnected,
     #[error("connection is closed")]
     Closed,
+}
+
+/// Work for a platform's local section, carrying the event that built it.
+///
+/// The only way to build one ([`LocalSection::new`]) captures the running
+/// event's scopes (what it owes, and in conformance builds its trace),
+/// restored around every poll. So no caller can hand a platform a section that
+/// would lose its event when the platform polls it as its own task.
+pub struct LocalSection<Output>(Pin<Box<dyn Future<Output = Output> + Send>>);
+
+impl<Output> LocalSection<Output> {
+    /// Capture the running event's scopes for `work`.
+    pub fn new(work: impl Future<Output = Output> + Send + 'static) -> Self {
+        Self(Box::pin(crate::event_scope_store::carried(work)))
+    }
+}
+
+impl<Output> Future for LocalSection<Output> {
+    type Output = Output;
+
+    fn poll(self: Pin<&mut Self>, context: &mut std::task::Context<'_>) -> std::task::Poll<Output> {
+        self.get_mut().0.as_mut().poll(context)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]

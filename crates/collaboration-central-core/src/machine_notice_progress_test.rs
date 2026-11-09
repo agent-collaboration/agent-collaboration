@@ -23,28 +23,26 @@ async fn acknowledgments_only_move_forward_and_never_past_the_issued_head() -> R
     let (two, one, beyond) = (at(2), at(1), at(99));
 
     // Act
-    let observed = fixture
-        .object
-        .transaction(move |scope| {
-            Box::pin(async move {
-                for _ in 0..3 {
-                    crate::machine_notice_store::append(
-                        scope,
-                        peer,
-                        durable_steps::Uuid::now_v7().to_string(),
-                        BoardNotice::ProjectListChanged {},
-                        NOW,
-                    )
-                    .await?;
-                }
-                let fresh = progress(scope, peer).await?;
-                let after_two = record_applied(scope, peer, two, NOW).await?;
-                let after_one = record_applied(scope, peer, one, NOW).await?;
-                let after_beyond = record_applied(scope, peer, beyond, NOW).await?;
-                Ok((fresh, after_two, after_one, after_beyond))
-            })
+    let observed = crate::event_owed::scoped(fixture.object.transaction(move |scope| {
+        Box::pin(async move {
+            for _ in 0..3 {
+                crate::machine_notice_store::append(
+                    scope,
+                    peer,
+                    durable_steps::Uuid::now_v7().to_string(),
+                    BoardNotice::ProjectListChanged {},
+                    NOW,
+                )
+                .await?;
+            }
+            let fresh = progress(scope, peer).await?;
+            let after_two = record_applied(scope, peer, two, NOW).await?;
+            let after_one = record_applied(scope, peer, one, NOW).await?;
+            let after_beyond = record_applied(scope, peer, beyond, NOW).await?;
+            Ok((fresh, after_two, after_one, after_beyond))
         })
-        .await?;
+    }))
+    .await?;
 
     // Assert: none at first; 2 sticks; 1 is ignored; 99 stops at the head (3).
     let (fresh, after_two, after_one, after_beyond) = observed;

@@ -348,11 +348,11 @@ impl<Host: ObjectPlatform> EffectDriver<Host> {
                     let host = self.host.clone();
                     let current =
                         self.host
-                            .with_local_section(async move {
+                            .with_local_section(crate::LocalSection::new(async move {
                                 host.registrations().await.ok().and_then(|registrations| {
                                     registrations.get(&connection).copied()
                                 })
-                            })
+                            }))
                             .await;
                     let Ok(Some(fleet_session::ConnectionRegistration::Attached {
                         session_id: attached,
@@ -387,16 +387,18 @@ impl<Host: ObjectPlatform> EffectDriver<Host> {
         session: fleet_protocol::SessionId,
     ) -> bool {
         let host = self.host.clone();
-        matches!(self.host.with_local_section(async move {
+        matches!(self.host.with_local_section(crate::LocalSection::new(async move {
             host.registrations().await.ok().and_then(|registrations| registrations.get(&connection).copied())
-        }).await, Ok(Some(fleet_session::ConnectionRegistration::Attached { session_id, .. })) if session_id == session)
+        })).await, Ok(Some(fleet_session::ConnectionRegistration::Attached { session_id, .. })) if session_id == session)
     }
     async fn fail_connection(&self, connection: ConnectionId) {
         self.replies.fail_connection(connection);
         let host = self.host.clone();
         let _ = self
             .host
-            .with_local_section(async move { host.quarantine_connections(vec![connection]).await })
+            .with_local_section(crate::LocalSection::new(async move {
+                host.quarantine_connections(vec![connection]).await
+            }))
             .await;
         let _ = self
             .host

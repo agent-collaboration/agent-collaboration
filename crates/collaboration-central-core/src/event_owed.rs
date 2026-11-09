@@ -57,26 +57,34 @@ pub(crate) fn within<F: Future>(owed: Option<Shared>, inner: F) -> Scoped<F> {
     }
 }
 
-fn note(record: impl FnOnce(&mut EventOwed)) {
-    CURRENT.with(|current| {
-        if let Some(owed) = current.borrow().as_ref() {
+/// Owed work was named with no running event: nothing would send it after
+/// commit, so the work that owed it must fail rather than lose its send.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+#[error("owed work was named outside an event; its post-event send would be lost")]
+pub(crate) struct NoEventScope;
+
+fn note(record: impl FnOnce(&mut EventOwed)) -> Result<(), NoEventScope> {
+    CURRENT.with(|current| match current.borrow().as_ref() {
+        Some(owed) => {
             record(&mut owed.lock().unwrap_or_else(PoisonError::into_inner));
+            Ok(())
         }
-    });
+        None => Err(NoEventScope),
+    })
 }
 
 /// Name the machine whose notice stream just got an append.
-pub(crate) fn owed_notice(peer: PeerId) {
+pub(crate) fn owed_notice(peer: PeerId) -> Result<(), NoEventScope> {
     note(|owed| {
         owed.notices.insert(peer);
-    });
+    })
 }
 
 /// Name the machine that was just owed a socket request.
-pub(crate) fn owed_request(peer: PeerId) {
+pub(crate) fn owed_request(peer: PeerId) -> Result<(), NoEventScope> {
     note(|owed| {
         owed.requests.insert(peer);
-    });
+    })
 }
 
 /// Take what the running event owes so far.

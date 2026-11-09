@@ -49,7 +49,7 @@ where
     let selection_host = host.clone();
     let selection_time = time.clone();
     let (connection, waiter, deadline) = host
-        .with_local_section(async move {
+        .with_local_section(crate::LocalSection::new(async move {
             let selection_store = selection_host.store().clone();
             selection_store
                 .transaction(move |scope| {
@@ -98,7 +98,7 @@ where
                 })
                 .await
                 .map_err(|_: StoreError| CallFailure::AnswerLost)?
-        })
+        }))
         .await
         .map_err(|_| unsent())??;
     let remaining = Duration::from_millis(

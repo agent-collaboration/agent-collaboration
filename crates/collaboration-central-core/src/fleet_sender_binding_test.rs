@@ -73,9 +73,8 @@ async fn submit(
     submitter: Submitter,
     item: DeliveryEnvelope<BoardDeliveryTypes>,
 ) -> TestResult<Value> {
-    Ok(fixture
-        .object
-        .transaction(move |scope| {
+    Ok(
+        crate::event_owed::scoped(fixture.object.transaction(move |scope| {
             Box::pin(async move {
                 let answer = Outbox::<_, BoardDeliveryTypes, _>::new(
                     scope,
@@ -99,8 +98,9 @@ async fn submit(
                 .map_err(fleet_mail_delivery::delivery_rollback)?;
                 serde_json::to_value(answer).map_err(StoreError::backend)
             })
-        })
-        .await?)
+        }))
+        .await?,
+    )
 }
 
 async fn counts(fixture: &FleetStorageFixture) -> TestResult<(i64, i64)> {

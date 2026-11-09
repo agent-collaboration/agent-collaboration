@@ -291,7 +291,7 @@ impl<Io: ObjectIo> ObjectPlatform for CloudflareStorageHost<Io> {
     }
     fn with_local_section<Output: Send + 'static>(
         &self,
-        run: impl Future<Output = Output> + Send + 'static,
+        run: collaboration_central_core::LocalSection<Output>,
     ) -> impl Future<Output = Result<Output, LocalSectionFailure>> + Send {
         SendFuture::new(async move {
             // Store and per-socket errors remain values. Only platform failure

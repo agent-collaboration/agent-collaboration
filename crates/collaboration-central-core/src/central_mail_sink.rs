@@ -55,7 +55,8 @@ where
             )
             .await
             .map_err(storage)?;
-            crate::event_owed::owed_request(input.recipient);
+            crate::event_owed::owed_request(input.recipient)
+                .map_err(|error| DeliveryError::Storage(error.to_string()))?;
             Ok(())
         }
     }
@@ -121,7 +122,8 @@ where
                 Some(AttemptState::Waiting { .. } | AttemptState::InFlight { .. }) => {}
             }
             if let Some(destination) = destination(scope, &reference.target, now).await? {
-                crate::event_owed::owed_request(destination);
+                crate::event_owed::owed_request(destination)
+                    .map_err(|error| DeliveryError::Storage(error.to_string()))?;
             }
             Ok(())
         }

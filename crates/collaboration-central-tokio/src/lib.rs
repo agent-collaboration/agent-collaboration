@@ -160,7 +160,7 @@ impl<Io: ObjectIo, SharedHost: Host, Alarm: ObjectAlarm> ObjectPlatform
     }
     async fn with_local_section<Output: Send + 'static>(
         &self,
-        run: impl std::future::Future<Output = Output> + Send + 'static,
+        run: collaboration_central_core::LocalSection<Output>,
     ) -> Result<Output, collaboration_central_core::LocalSectionFailure> {
         let exclusion = self.object.engine_lock();
         let _guard = exclusion.lock().await;
