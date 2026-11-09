@@ -62,6 +62,11 @@ pub struct ObjectImage {
 }
 
 impl ObjectImage {
+    /// How many rows a table holds; zero when the table is absent.
+    pub fn row_count(&self, table: &str) -> usize {
+        self.tables.get(table).map_or(0, |image| image.rows.len())
+    }
+
     /// The text values of one column, in row order; empty when the table is absent.
     pub fn text_column(&self, table: &str, column: &str) -> Vec<String> {
         let Some(image) = self.tables.get(table) else {

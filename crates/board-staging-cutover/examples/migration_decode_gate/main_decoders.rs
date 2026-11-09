@@ -6,6 +6,10 @@
 //!   record decoder for every workspace, board, ADR and directory entry; and,
 //!   per directory entry, the Copy summary and lease projection decoders.
 //! - Copy: fleet-sync-receiver's `copy_status`, which validates the Copy record.
+//!
+//! The Fleet also gets: repository attachments per workspace (orphans
+//! included), the lease incarnation, the feed state and retained range, and
+//! each request ledger record. table_coverage.rs lists what covers every table.
 
 use crate::candidate_image::ObjectImage;
 use durable_steps::storage::TransactionScope;
@@ -90,6 +94,68 @@ pub async fn decode_fleet(
                 Ok(None) => refuse(row, "main's read finds no record".into()),
                 Err(error) => refuse(row, error.to_string()),
             }
+        }
+    }
+    // Repository attachments: every workspace that has a record or an attachment.
+    let mut workspaces = image.text_column("fleet_workspaces", "workspace_id");
+    workspaces.extend(image.text_column("fleet_repository_attachments", "workspace_id"));
+    workspaces.sort();
+    workspaces.dedup();
+    let mut attachments = 0;
+    let mut attachment_refused = false;
+    for workspace in &workspaces {
+        match collaboration_central_core::read_fleet_repository_attachments_in_scope(
+            &mut scope, workspace,
+        )
+        .await
+        {
+            Ok(decoded) => attachments += decoded,
+            Err(error) => {
+                attachment_refused = true;
+                refuse(
+                    format!("fleet_repository_attachments {workspace}"),
+                    error.to_string(),
+                );
+            }
+        }
+    }
+    let stored = image.row_count("fleet_repository_attachments");
+    if attachments != stored && !attachment_refused {
+        refuse(
+            "fleet_repository_attachments".into(),
+            format!("main's reads decode {attachments} of {stored} attachments"),
+        );
+    }
+    // The lease incarnation, when the Fleet holds one.
+    match collaboration_central_core::read_fleet_lease_incarnation_in_scope(&mut scope).await {
+        Ok(None) if image.row_count("lease_incarnation") > 0 => refuse(
+            "lease_incarnation".into(),
+            "main's read finds no Fleet incarnation".into(),
+        ),
+        Ok(_) => {}
+        Err(error) => refuse("lease_incarnation".into(), error.to_string()),
+    }
+    // The feed: its state and every retained entry.
+    if let Err(error) = collaboration_central_core::read_fleet_feed_in_scope(&mut scope).await {
+        refuse("fleet_feed_state".into(), error.to_string());
+    }
+    // Each request ledger record, with its reasons, evidence and receipts.
+    for request in image.text_column("fleet_request_decisions", "request_id") {
+        let row = format!("fleet_request_decisions {request}");
+        let reference = match RecordId::try_from(request.clone()) {
+            Ok(id) => RecordRef {
+                kind: RecordKind::Request,
+                id,
+            },
+            Err(error) => {
+                refuse(row, error.to_string());
+                continue;
+            }
+        };
+        match collaboration_central_core::read_fleet_record_in_scope(&mut scope, &reference).await {
+            Ok(Some(_)) => {}
+            Ok(None) => refuse(row, "main's read finds no request".into()),
+            Err(error) => refuse(row, error.to_string()),
         }
     }
     for project in image.text_column("fleet_project_directory", "project_id") {

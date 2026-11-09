@@ -5,6 +5,7 @@
 use crate::candidate_image::{Candidate, InventoryAnswer};
 use crate::main_decoders::{Refusal, decode_copy, decode_fleet};
 use crate::object_rebuild::rebuild;
+use crate::table_coverage::{COPY, Coverage, FLEET, coverage};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
@@ -71,7 +72,10 @@ pub async fn run_gate(inventory_text: &str) -> GateReport {
         Ok(candidate) => candidate,
         Err(error) => return refused(Some(digest), run_time, "candidate", error.to_string()),
     };
-    let mut refusals = Vec::new();
+    let mut refusals = covered("fleet", &candidate.fleet, FLEET);
+    for (project, image) in &candidate.copies {
+        refusals.extend(covered(&format!("copy {project}"), image, COPY));
+    }
     match rebuild(&candidate.fleet).await {
         Ok(mut connection) => match decode_fleet(&candidate.fleet, &mut connection).await {
             Ok(found) => refusals.extend(found),
@@ -99,6 +103,33 @@ pub async fn run_gate(inventory_text: &str) -> GateReport {
         run_time_millis: run_time,
         refusals,
     }
+}
+
+/// A table no coverage entry names, or a must-be-empty table with rows, is refused.
+fn covered(
+    object: &str,
+    image: &crate::candidate_image::ObjectImage,
+    map: &[(&str, Coverage)],
+) -> Vec<Refusal> {
+    image
+        .tables
+        .iter()
+        .filter_map(|(table, rows)| {
+            match coverage(map, table) {
+                None => Some(format!("{table} has no gate coverage")),
+                Some(Coverage::MustBeEmpty(what)) if !rows.rows.is_empty() => Some(format!(
+                    "{table} holds {} {what} rows; main decodes them and the gate doesn't",
+                    rows.rows.len()
+                )),
+                Some(_) => None,
+            }
+            .map(|reason| Refusal {
+                object: object.into(),
+                row: table.clone(),
+                reason,
+            })
+        })
+        .collect()
 }
 
 fn storage_refusal(object: &str, error: &dyn std::fmt::Display) -> Refusal {

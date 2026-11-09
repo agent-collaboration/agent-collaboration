@@ -86,6 +86,21 @@ where
     }
     Ok(result)
 }
+/// The stored lease incarnation: its row id and canonical counter.
+pub(crate) fn decode_incarnation(
+    row: crate::generated_registry_lease::StoredRegistryIncarnation,
+) -> Result<(String, u64), StoreError> {
+    let row_id = checked_row_id(row.row_id, "lease_incarnation.id")?;
+    let value = required(row.incarnation, "lease_incarnation.value")?;
+    let counter = value
+        .parse::<u64>()
+        .map_err(|error| corrupt("lease_incarnation.value", error))?;
+    if counter.to_string() != value {
+        return Err(corrupt("lease_incarnation.value", "noncanonical counter"));
+    }
+    Ok((row_id, counter))
+}
+
 pub(crate) fn checked_row_id(
     value: Option<String>,
     field: &'static str,
@@ -140,17 +155,7 @@ where
                 .map_err(StoreError::backend)?;
             let (row_id, current) = match previous {
                 None => (row_ids.next()?.to_string(), 0_u64),
-                Some(row) => {
-                    let row_id = checked_row_id(row.row_id, "lease_incarnation.id")?;
-                    let value = required(row.incarnation, "lease_incarnation.value")?;
-                    let counter = value
-                        .parse::<u64>()
-                        .map_err(|error| corrupt("lease_incarnation.value", error))?;
-                    if counter.to_string() != value {
-                        return Err(corrupt("lease_incarnation.value", "noncanonical counter"));
-                    }
-                    (row_id, counter)
-                }
+                Some(row) => decode_incarnation(row)?,
             };
             let next = current
                 .checked_add(1)

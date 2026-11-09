@@ -11,7 +11,7 @@
 // Exit 0 only when the step's answer is the success migration_call.ts defines.
 
 import { readFile } from "node:fs/promises";
-import { stringifyExact } from "../src/exact_json.ts";
+import { parseExact } from "../src/exact_json.ts";
 import { migrateBody, type GateReport, type MigrationStep } from "./migration_call.ts";
 import { callIntoFile, ownerTransport } from "./owner_transport.ts";
 import { PRODUCTION, canonicalName } from "./worker_deploy.ts";
@@ -48,11 +48,7 @@ if (step === "migrate" && (gatePath === undefined || macFiles === undefined)) {
 }
 const body =
   step === "migrate" && macFiles !== undefined && gatePath !== undefined
-    ? migrateBody(
-        macFiles,
-        JSON.parse(await readFile(gatePath, "utf8")) as GateReport,
-        stringifyExact,
-      )
+    ? migrateBody(macFiles, parseExact(await readFile(gatePath, "utf8")) as GateReport)
     : macFiles;
 
 const result = await callIntoFile(out, step as MigrationStep, ownerTransport(origin, token), body);

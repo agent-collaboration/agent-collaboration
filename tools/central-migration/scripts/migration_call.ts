@@ -9,6 +9,8 @@
 // - verify: GET; success is `ok: true`.
 // - revert: POST; success is `reverted`.
 
+import { parseExact, stringifyExact } from "../src/exact_json.ts";
+
 export type MigrationStep = "inventory" | "migrate" | "verify" | "revert";
 export type MigrationTransport = (
   method: "GET" | "POST",
@@ -74,12 +76,12 @@ export interface GateReport {
   readonly runTimeMillis?: number;
 }
 
-/** Migrate's body: refuses anything but the gate's pass, which names the digest and run time. */
-export function migrateBody(
-  macFilesBody: string,
-  gate: GateReport,
-  stringify: (value: unknown) => string,
-): string {
+/**
+ * Migrate's body: refuses anything but the gate's pass, which names the digest
+ * and run time. The Mac-file facts pass through the exact codec, so leases and
+ * positions beyond 2^53 reach the Worker unchanged.
+ */
+export function migrateBody(macFilesBody: string, gate: GateReport): string {
   if (
     gate.outcome !== "pass" ||
     typeof gate.candidateDigest !== "string" ||
@@ -89,8 +91,8 @@ export function migrateBody(
       "migrate runs only after the decode gate's pass, which names the candidate digest and run time",
     );
   }
-  const { macFiles } = JSON.parse(macFilesBody) as { macFiles: unknown };
-  return stringify({
+  const { macFiles } = parseExact(macFilesBody) as { macFiles: unknown };
+  return stringifyExact({
     macFiles,
     runTime: gate.runTimeMillis,
     candidateDigest: gate.candidateDigest,

@@ -11,6 +11,7 @@ import {
   type MigrationTransport,
 } from "../scripts/migration_call.ts";
 import { withProduction, type MigrationRun } from "./support/migration_run.ts";
+import { IDS } from "./support/production_fixture.ts";
 
 /** The caller's transport over the harness's owner call. */
 const through =
@@ -36,11 +37,7 @@ test("PD7's sequence through the caller: inventory, migrate, verify, a rerun, th
         candidateDigest: string;
         runTimeMillis: number;
       };
-      const passed = migrateBody(
-        body,
-        { outcome: "pass", candidateDigest, runTimeMillis },
-        stringifyExact,
-      );
+      const passed = migrateBody(body, { outcome: "pass", candidateDigest, runTimeMillis });
       const migrate = await callStep("migrate", transport, passed, parseExact);
       const verify = await callStep("verify", transport, undefined, parseExact);
       const rerun = await callStep("migrate", transport, passed, parseExact);
@@ -97,7 +94,66 @@ test("a step that needs a body refuses to call without it, and migrate's body ne
     /needs its body/,
   );
   assert.throws(
-    () => migrateBody('{"macFiles":[]}', { outcome: "refused" }, stringifyExact),
+    () => migrateBody('{"macFiles":[]}', { outcome: "refused" }),
     /only after the decode gate's pass/,
+  );
+});
+
+test("migrate's body keeps a lease and retained counters beyond 2^53 exact through the caller and the Worker's parser", async () => {
+  const { parseMigrateRequest } = await import("../src/mac_file_evidence.ts");
+  // Arrange: Mac-file facts whose numbers JSON.parse would round.
+  const facts =
+    '{"macFiles":[{"database":"01a1c070-0000-7000-8000-000000000001","holder":"01a1c070-0000-7000-8000-00000000b001","lease":9007199254740993,"senderReceiver":"01a1c070-0000-7000-8000-0000000000c1","retained":{"floor":{"epoch":9007199254740993,"sequence":18446744073709551614},"head":{"epoch":9007199254740993,"sequence":18446744073709551615}}}]}';
+
+  // Act
+  const body = migrateBody(facts, {
+    outcome: "pass",
+    candidateDigest: "a".repeat(64),
+    runTimeMillis: 1_794_312_000_000,
+  });
+  const request = parseMigrateRequest(parseExact(body));
+
+  // Assert: the bytes and the parsed values are exact.
+  assert.match(body, /"lease":9007199254740993/);
+  assert.match(body, /"sequence":18446744073709551615/);
+  const [file] = request.files;
+  assert.equal(file?.lease, 9007199254740993n);
+  assert.equal(file?.retained.floor.sequence, 18446744073709551614n);
+  assert.equal(file?.retained.head.sequence, 18446744073709551615n);
+  assert.deepEqual(request.passed, { runTime: 1_794_312_000_000, candidateDigest: "a".repeat(64) });
+});
+
+test("through the caller, a Mac file at another lease is refused with nothing written, and the valid body migrates", async () => {
+  await withProduction(
+    () => {},
+    async (run) => {
+      // Arrange: the gate's fields from inventory, and a Mac-files body whose
+      // held-at-three file claims lease 4.
+      const transport = through(run);
+      const valid = stringifyExact({ macFiles: run.production.macFiles });
+      const inventory = await callStep("inventory", transport, valid, parseExact);
+      const gate = inventory.answer as { candidateDigest: string; runTimeMillis: number };
+      const pass = { outcome: "pass", ...gate };
+      const mismatched = stringifyExact({
+        macFiles: run.production.macFiles.map((file) =>
+          file.database === IDS.projectHeld3 ? { ...file, lease: 4 } : file,
+        ),
+      });
+
+      // Act
+      const refused = await callStep(
+        "migrate",
+        transport,
+        migrateBody(mismatched, pass),
+        parseExact,
+      );
+      const migrated = await callStep("migrate", transport, migrateBody(valid, pass), parseExact);
+
+      // Assert
+      assert.equal(refused.success, false, refused.reason);
+      assert.match(JSON.stringify(refused.answer), /another lease number|lease/);
+      assert.equal((refused.answer as { rowsWritten: number }).rowsWritten, 0);
+      assert.equal(migrated.success, true, migrated.reason);
+    },
   );
 });

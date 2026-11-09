@@ -261,3 +261,141 @@ async fn an_inventory_with_stops_is_refused() {
     assert_eq!(report.outcome, Outcome::Refused);
     assert_eq!(report.refusals[0].object, "inventory");
 }
+
+/// Sets one cell of the first row of a table to a typed value.
+fn set_cell(object: &mut Value, table: &str, column: &str, value: Value) {
+    let image = &mut object["tables"][table];
+    let index = image["columns"]
+        .as_array()
+        .expect("columns")
+        .iter()
+        .position(|name| name == column)
+        .unwrap_or_else(|| panic!("{table} has no column {column}"));
+    image["rows"][0][index] = value;
+}
+
+#[tokio::test]
+async fn a_legacy_unknown_repository_attachment_without_its_import_is_refused_and_a_valid_one_passes()
+ {
+    // Arrange: the Reviewer's G1 row — legacy time without a router time or import digest.
+    let legacy = edited(|candidate| {
+        let fleet = &mut candidate["fleet"];
+        set_cell(
+            fleet,
+            "fleet_repository_attachments",
+            "time_basis",
+            serde_json::json!({ "kind": "text", "value": "legacy_unknown" }),
+        );
+        set_cell(
+            fleet,
+            "fleet_repository_attachments",
+            "router_time",
+            serde_json::json!({ "kind": "null" }),
+        );
+        set_cell(
+            fleet,
+            "fleet_repository_attachments",
+            "import_digest",
+            serde_json::json!({ "kind": "null" }),
+        );
+    });
+
+    // Act
+    let refused = run_gate(&legacy).await;
+    let control = run_gate(&edited(|_| {})).await;
+
+    // Assert: refused at the attachment's workspace by main's repository decoder; the unedited row passes.
+    assert_eq!(refused.outcome, Outcome::Refused, "{refused:?}");
+    assert!(
+        refused
+            .refusals
+            .iter()
+            .any(|refusal| refusal.object == "fleet"
+                && refusal.row.starts_with("fleet_repository_attachments ")),
+        "{:?}",
+        refused.refusals
+    );
+    assert_eq!(control.outcome, Outcome::Pass, "{control:?}");
+}
+
+#[tokio::test]
+async fn a_table_without_gate_coverage_or_a_row_in_a_must_be_empty_table_is_refused() {
+    // Arrange: an unknown table, and a row where the migration carries none.
+    let unknown = edited(|candidate| {
+        candidate["fleet"]["tables"]["fleet_unseen_family"] =
+            serde_json::json!({ "columns": ["value"], "rows": [] });
+        candidate["fleet"]["schema"]
+            .as_array_mut()
+            .expect("schema")
+            .push(serde_json::json!({
+                "type": "table",
+                "name": "fleet_unseen_family",
+                "sql": "CREATE TABLE fleet_unseen_family(value TEXT)"
+            }));
+    });
+    let carried = edited(|candidate| {
+        let table = &mut candidate["fleet"]["tables"]["fleet_feed_readers"];
+        let width = table["columns"].as_array().expect("columns").len();
+        table["rows"] = serde_json::json!([vec![serde_json::json!({ "kind": "null" }); width]]);
+    });
+
+    // Act
+    let unknown = run_gate(&unknown).await;
+    let carried = run_gate(&carried).await;
+
+    // Assert
+    assert!(
+        unknown
+            .refusals
+            .iter()
+            .any(|refusal| refusal.row == "fleet_unseen_family"
+                && refusal.reason.contains("no gate coverage")),
+        "{:?}",
+        unknown.refusals
+    );
+    assert!(
+        carried
+            .refusals
+            .iter()
+            .any(|refusal| refusal.row == "fleet_feed_readers"
+                && refusal.reason.contains("main decodes them")),
+        "{:?}",
+        carried.refusals
+    );
+}
+
+#[test]
+fn every_table_mains_fleet_migrations_create_is_decoded_or_must_be_empty() {
+    use crate::table_coverage::{Coverage, FLEET, coverage};
+    // Main's own Fleet migration sets: central-fleet, admin imports and the registry set.
+    let core =
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../collaboration-central-core");
+    let mut missing = Vec::new();
+    for directory in [
+        "core_migrations",
+        "admin_import_migrations",
+        "registry_migrations",
+    ] {
+        for entry in std::fs::read_dir(core.join(directory)).expect("main's migrations") {
+            let path = entry.expect("entry").path();
+            if path.extension().and_then(|extension| extension.to_str()) != Some("sql") {
+                continue;
+            }
+            let sql = std::fs::read_to_string(&path).expect("migration SQL");
+            for statement in sql.split("CREATE TABLE ").skip(1) {
+                let table: String = statement
+                    .trim_start_matches("IF NOT EXISTS ")
+                    .chars()
+                    .take_while(|character| character.is_ascii_alphanumeric() || *character == '_')
+                    .collect();
+                match coverage(FLEET, &table) {
+                    Some(
+                        Coverage::Decoded(_) | Coverage::DecodedWith(_) | Coverage::MustBeEmpty(_),
+                    ) => {}
+                    other => missing.push(format!("{table}: {other:?}")),
+                }
+            }
+        }
+    }
+    assert_eq!(missing, Vec::<String>::new());
+}

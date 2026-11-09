@@ -14,6 +14,7 @@ mod candidate_image;
 mod gate;
 mod main_decoders;
 mod object_rebuild;
+mod table_coverage;
 
 #[cfg(test)]
 mod gate_test;
