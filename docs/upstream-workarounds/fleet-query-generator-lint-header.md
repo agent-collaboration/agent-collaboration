@@ -4,7 +4,7 @@
 `#![allow(clippy::manual_async_fn)]` in every generated query module. The
 workspace's `clippy::allow_attributes_without_reason` deny rejects that header.
 
-The 16 generated-module declarations in
+The 26 generated-module declarations in
 `crates/collaboration-central-core/src/lib.rs` expect only
 `clippy::allow_attributes_without_reason`, with a reason identifying the
 upstream generator. Generated Rust, query manifests, metadata, and `build.rs`

@@ -1,8 +1,8 @@
 # B3 central: machine login decisions — trace
 
-This slice holds the parts of B3 machine login that don't depend on storage, built in
-`collaboration-central-core` with no runtime. The hosts inject the clock, ID source and
-enrollment store. SQL, migrations, D1/SQLite adapters, the enrollment's stamp pin,
+B3 machine login in `collaboration-central-core`: the decisions, then (B3 central storage)
+their staged tables, the switch for today's machines and one SQL adapter both hosts run.
+The hosts inject the clock, ID source and store. The enrollment's stamp pin,
 `SetTokenLifetime`, `machine_environment` values and anything Router-side are out of scope.
 
 ## Contract alignment with the issuer mirror
@@ -66,61 +66,84 @@ transaction, and IDs come from the injected source; a non-UUIDv7 ID is refused.
 
 ## Assumptions for the owner page
 
-Each of these was added by an agent or ruled by the Lead; the PD doesn't state them.
+Each was added by an agent or ruled by the Lead unless it names an owner decision; the PD
+doesn't state them.
 
 - **`formerServiceLinkedElsewhere {}`** is a new bounded device-login refusal. It answers a
   re-key whose former service id is already linked to a different installation, or that
   would merge into an installation that already has rows here. It says nothing beyond
-  "not linkable here": no organization, enrollment or installation. The switchboard B3a
-  Implementer has the variant.
-- **`allowedWorkspaces` holds at most 100 workspaces.** The PD (PD:881) states no bound.
-  The issuer and central both enforce 100.
-- **A repeat request ID with a different body** is refused `notPermitted`, with nothing
-  written.
+  "not linkable here". The switchboard B3a Implementer has the variant.
+- **`allowedWorkspaces` holds at most 100 workspaces.** PD:881 states no bound. The issuer
+  and central both enforce 100.
+- **A repeated device-login request** keeps the full-request contract: the same body
+  answers as before; a different body is refused `notPermitted`, nothing written. The
+  in-memory stand-in proves it. **On the SQL store it is pending the owner**: no stored
+  form of the prior request exists yet, so a repeat answers `RepeatPendingOwner` and writes
+  nothing. That proof is placeholder only.
 - **SD8** is measured from the host's receipt to the clock read in the applying
   transaction. Exactly 5 s is within.
-- **"The organization's first machine"** (PD:882) means the organization has no
-  enrollment in any state, ever.
-- **Idle expiry withdraws the machine's allowances.** It doesn't move the generation and
-  writes no record.
-  - Owner question: idle expiry has no change kind of its own.
+- **"The organization's first machine"** (PD:882) means no enrollment in any state, ever.
+- **The peer is the installation.** `DecideDeviceLogin` refuses `notPermitted` when they
+  differ, and admission compares the presented peer with the installation.
+- **An approval lapses at the code's own deadline (owner N10):** `now ≥ codeExpiresAt`,
+  carried by `DecideDeviceLogin.codeExpiresAt`. It's stored as 'lapsed' with `ended_at`.
+  The column `code_expires_at INTEGER NOT NULL` is agent-proposed, pending the owner's
+  confirmation, so its real-store tests are proposed-schema evidence.
+- **Idle expiry is recorded (owner N07):** a `machineExpired` record with origin
+  `automatic` (no person, no permission), plus `allowanceChanged` per withdrawn allowance,
+  written in the transaction that first observes the expiry. It doesn't move the
+  generation.
 - **Records:**
   - `machineEnrolled` is written at the first Grant, never at approval.
   - Supersession writes `machineRevoked` (reason superseded) in the same transaction.
-  - Records from approvals and first Grants carry the approver as origin, with
-    `machine:enroll`. Revocation's carry the revoker, with `machine:revoke`.
-  - No new origin variant. Switchboard's `changeRecordSchema` (fleet-admin-client.ts) parses kinds strictly. The B3a Implementer adds the three kinds from central's exact records, which are in `OrganizationAdminResult.fixtures.json`.
-- **A former service id that names no installation here** links nothing.
-- **An approval lapses** once `now ≥ approved_at + device-code lifetime`. `approved_at` is
-  central's own clock in the approving transaction; the lifetime is one setting,
-  10 minutes (PD:1292).
-- **The renewal answer's mapping:**
-  - a fresh token for another installation → `wrongInstallation`;
-  - one for another enrollment of the same machine → `enrollmentNotActive`;
-  - admission's `unknownMachine` → `wrongInstallation`;
-  - superseded, another organization or inactive → `enrollmentNotActive`;
-  - a token refused for time → `tokenExpired`;
-  - any other check refusal → `tokenInvalid`.
+  - Approvals and first Grants carry the approver with `machine:enroll`; revocation carries
+    the revoker with `machine:revoke`; idle expiry is `automatic`.
+- **Change-record key convention (Lead):** each record's `request_id` is
+  `<originating id>:<kind>:<target id>`, built at the B3 decision boundary, so a retried
+  decision writes the same keys and no two records of one decision share one. B2's keys
+  are unchanged. Every part is a UUID, so a key fits B2's 128-character bound.
+- **`RevocationBy.operation` is an `AdminOperationId` (UUIDv7)** (Lead, ratified): it's
+  internal, has no wire field or production caller, and keeps every revocation's keys
+  within 128 characters.
+- **A former service id that names no installation here** links nothing; once set it is
+  never replaced.
+- **The renewal answer's mapping (owner N11 adds `unavailable`):**
+  - a key-set fetch failure, a malformed published key set, or a store that is
+    unavailable or whose outcome is unknown → `unavailable`;
+  - an unknown kid, a forged or malformed token, or a crypto or claim failure →
+    `tokenInvalid`; a token refused for time → `tokenExpired`;
+  - another installation → `wrongInstallation`; another enrollment of the same machine,
+    superseded, another organization or inactive → `enrollmentNotActive`.
+- **B3's switch converts today's machines exactly (Lead, ratified):** each RFC 3339 time
+  becomes exact milliseconds; an unparseable or finer-than-millisecond time refuses the
+  whole switch, which rolls back with nothing changed. The refusal names every refused
+  row by id (or position in id order when the id is invalid) and its offending columns,
+  with no stored values. `approved_at` is `created_at`.
+
+## B3 central storage (this slice)
+
+- **Schema:** the two migrations are staged, not registered
+  (`staged_registry_migrations/0003`, `0004`), because registering v3 would break today's
+  readers. Only fixtures initialize them, until the B3 reader slice moves them into
+  `registry_migrations/` and registers them. Production bootstrap is unchanged.
+- **Adapter:** `SqlEnrollmentPort`, one generic adapter over `AtomicStore` and
+  `TransactionScope`, with checked queries (`b3-registry-queries.json`,
+  `b3-legacy-queries.json`) verified fresh in `build.rs`. It runs on sqlx-turso (Tokio)
+  and Durable Object SQLite (workerd).
+- **The switch:** v3 runs a Rust step around its SQL inside the migration transaction: it
+  refuses while a legacy revocation or readmission is unfinished in the journal, converts
+  every row, then inserts them after the DDL.
+- **Both hosts:** `run_scenario` is one script both hosts run on a fresh store. Tokio
+  asserts it in core's tests; workerd runs it in `BootstrapObject` (fixture
+  `machineLogin`), and `machine_login_scenario_workerd` compares the report.
 
 ## Stand-ins
 
-### The Fleet store behind `MachineEnrollmentPort`
+### The repeat's prior request on the SQL store
 
-- **Seam:** `MachineEnrollmentPort::transact(query, decide)`: one transaction reads the
-  facts a query names and applies the decision's changes, in order, all or none.
-- **Stand-in:** `InMemoryEnrollments` (test-only). It applies the changes to a copy. It
-  checks the port contract against the state before: at most one enrolled enrollment per
-  installation, which is the installation's active one, and a generation that moves by
-  one, only beside a first-Grant activation or an owner revocation. It swaps the copy in
-  only if those hold.
-- **Assumptions it encodes:**
-  - Workspaces, other organizations' claims and former-id links are readable in the same
-    transaction.
-  - Re-keying moves the installation row, its enrollments and its allowances.
-  - Sessions and board relationships aren't modelled.
-- **What closes it:** the reviewed SQL for `machine_enrollments` (reshaped),
-  `machine_allowances`, the generation and former-id home, and the D1/SQLite adapters
-  passing these same decision tests.
+- **Seam:** `EnrollmentFacts.prior_approval`.
+- **Stand-in:** none on SQL; a repeat answers `RepeatPendingOwner`.
+- **What closes it:** the owner's decision on how the prior request is stored.
 
 ### The grant lifetime
 
@@ -136,14 +159,15 @@ Each of these was added by an agent or ruled by the Lead; the PD doesn't state t
 
 ### Clock sampling and the host entry
 
-The decisions read the injected clock inside `transact`, and the stand-in's
-`before_next_decision` hook proves a wait counts. Proving the real host's
+The decisions read the injected clock inside `transact`. Proving the real host's
 post-wait sampling barrier belongs to the core/host callback entry, when that entry is in
 a slice.
 
 ## Not established here
 
-- No SQL, persistence, restart or host run: no Tokio or workerd code calls these
-  decisions yet.
+- No production host calls these decisions or reads the new tables; the corpus is staged.
+- Running the switch on any real database is the owner's step-2 action.
+- `SqlStoreFixture::reopen` is a new owning store handle in the same process, not a new
+  process.
 - Disabling the client on the sign-in side, removing sessions at revocation, and the real
   close.
