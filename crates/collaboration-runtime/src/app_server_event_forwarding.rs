@@ -22,7 +22,7 @@ use session_event_model::{
     ApprovalRequest, PendingInteraction, QuestionRequest, SessionEvent, SessionItem, StopReason,
     TurnLostReason, TurnOutcome,
 };
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 fn render_turn_event(session: &SessionRef, event: &HubEvent) -> Option<Value> {
     let thread_id = thread_alias(session);
@@ -170,6 +170,7 @@ pub(crate) struct AppServerEventForwarding {
     turn_ids: HashMap<SessionRef, String>,
     items: HashMap<(SessionRef, String), Value>,
     pending: HashMap<String, PendingAppServerInteraction>,
+    working_directories: HashMap<SessionRef, PathBuf>,
 }
 
 impl AppServerEventForwarding {
@@ -181,7 +182,12 @@ impl AppServerEventForwarding {
             turn_ids: HashMap::new(),
             items: HashMap::new(),
             pending: HashMap::new(),
+            working_directories: HashMap::new(),
         }
+    }
+
+    pub(crate) fn register_working_directory(&mut self, session: SessionRef, cwd: PathBuf) {
+        self.working_directories.insert(session, cwd);
     }
 
     pub(crate) fn reset_session(&mut self, session: &SessionRef) -> Vec<Value> {
@@ -213,6 +219,22 @@ impl AppServerEventForwarding {
     pub(crate) fn project(&mut self, session: &SessionRef, event: &HubEvent) -> Vec<Value> {
         let thread_id = thread_alias(session);
         match &event.event {
+            SessionEvent::SettingsChanged { settings } => self
+                .working_directories
+                .get(session)
+                .map(|cwd| {
+                    crate::native_session_notifications::settings_notification(
+                        &thread_id,
+                        session.endpoint.endpoint_id.as_str(),
+                        settings,
+                        cwd,
+                    )
+                })
+                .into_iter()
+                .collect(),
+            SessionEvent::StateChanged { state } => {
+                crate::native_session_notifications::state_notifications(&thread_id, state)
+            }
             SessionEvent::TurnStarted { turn_id, input_id } => {
                 self.user_receipts.accept(&thread_id, input_id);
                 self.turn_ids.insert(session.clone(), turn_id.clone());

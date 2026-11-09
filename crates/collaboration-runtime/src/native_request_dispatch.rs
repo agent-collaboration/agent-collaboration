@@ -293,6 +293,7 @@ fn native_error_response(id: Value, error: &ThreadMethodError) -> Value {
         ThreadMethodError::NotFound => -32002,
         ThreadMethodError::Unavailable
         | ThreadMethodError::Unsupported
+        | ThreadMethodError::UnavailableThreadOrdering { .. }
         | ThreadMethodError::SettingsUnresolved
         | ThreadMethodError::CreatedWithoutSettings { .. } => -32000,
         ThreadMethodError::Busy => -32600,

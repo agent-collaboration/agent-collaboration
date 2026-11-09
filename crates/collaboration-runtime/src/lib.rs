@@ -47,6 +47,7 @@ mod app_server_item_metadata;
 mod app_server_item_translation;
 mod app_server_model_catalog;
 mod app_server_token_usage;
+mod native_session_notifications;
 mod native_user_receipts;
 pub use app_server_item_translation::{
     ApprovalPresentation, ApprovalReply, HistoricalTurn, InteractionDisplayContext,

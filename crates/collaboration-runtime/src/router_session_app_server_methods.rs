@@ -14,6 +14,11 @@ pub(super) fn handle_app_server_request(
     catalog: &[ProviderModelEntry],
     project_trust: Option<&dyn codex_native_integration::CodexProjectTrustLookup>,
 ) -> Value {
+    if let Some(reason) = unsupported_methods::router_unavailable_reason(method) {
+        return json!({"id":id,"error":{"code":-32000,"message":format!(
+            "{method} is not available through the Router: {reason}"
+        )}});
+    }
     let result = match method {
         "initialize" => Some(json!({})),
         "account/read" => Some(json!({"account":null,"requiresOpenaiAuth":false})),
@@ -120,6 +125,12 @@ pub(super) fn handle_app_server_request(
 #[path = "native_model_defaults.rs"]
 mod model_defaults;
 
+#[path = "native_unsupported_methods.rs"]
+mod unsupported_methods;
+
+#[path = "native_thread_list.rs"]
+mod thread_list;
+
 fn is_project_trust_edit(edit: &Value) -> bool {
     let Some(project_key) = edit
         .get("keyPath")
@@ -198,11 +209,17 @@ pub(super) async fn handle_app_server_thread_request(
         }
         "thread/list" => {
             let cwd_filters = thread_list_cwd_filters(&params)?;
+            let options =
+                thread_list::NativeThreadListOptions::parse(&params).map_err(thread_list_error)?;
+            if options.archived() {
+                // Router provider Sessions have no archived state.
+                return Ok(json!({"data":[],"nextCursor":null,"backwardsCursor":null}));
+            }
             let summaries = events
                 .sessions(endpoint)
                 .await
                 .map_err(|_| ThreadMethodError::Unavailable)?;
-            let data = if let Some(filters) = cwd_filters {
+            let summaries = if let Some(filters) = cwd_filters {
                 // Canonicalization and server-cwd lookup must not block the native I/O task.
                 tokio::task::spawn_blocking(move || {
                     let filters = filters
@@ -211,24 +228,25 @@ pub(super) async fn handle_app_server_thread_request(
                         .collect::<Result<Vec<_>, _>>()?;
                     Ok::<_, ThreadMethodError>(
                         summaries
-                            .iter()
+                            .into_iter()
                             .filter(|summary| {
                                 filters.iter().any(|filter| {
                                     thread_list_paths_match(&summary.working_directory, filter)
                                 })
                             })
-                            .map(render_thread)
                             .collect::<Vec<_>>(),
                     )
                 })
                 .await
                 .map_err(|_| ThreadMethodError::Unavailable)??
             } else {
-                summaries.iter().map(render_thread).collect()
+                summaries
             };
+            let page = options.page(summaries).map_err(thread_list_error)?;
+            let data = page.summaries.iter().map(render_thread).collect::<Vec<_>>();
             Ok(json!({
                 "data": data,
-                "nextCursor": null, "backwardsCursor": null
+                "nextCursor":page.next_cursor,"backwardsCursor":page.backwards_cursor
             }))
         }
         "thread/read" | "thread/resume" => {
@@ -311,6 +329,16 @@ pub(super) async fn handle_app_server_thread_request(
     }
 }
 
+fn thread_list_error(error: thread_list::NativeThreadListError) -> ThreadMethodError {
+    match error {
+        thread_list::NativeThreadListError::InvalidParams => ThreadMethodError::InvalidParams,
+        thread_list::NativeThreadListError::UnsupportedOrdering(reason) => {
+            ThreadMethodError::UnavailableThreadOrdering { reason }
+        }
+        thread_list::NativeThreadListError::Unavailable => ThreadMethodError::Unavailable,
+    }
+}
+
 fn thread_list_cwd_filters(params: &Value) -> Result<Option<Vec<PathBuf>>, ThreadMethodError> {
     let paths = match params.get("cwd") {
         None | Some(Value::Null) => return Ok(None),
@@ -382,25 +410,7 @@ pub(crate) fn thread_alias(session: &message_board::SessionRef) -> String {
 }
 
 fn render_thread(summary: &HubSessionSummary) -> Value {
-    let status = match &summary.state {
-        session_event_model::SessionState::Unloaded | session_event_model::SessionState::Closed => {
-            json!({"type":"notLoaded"})
-        }
-        session_event_model::SessionState::Idle => json!({"type":"idle"}),
-        session_event_model::SessionState::Running => {
-            json!({"type":"active","activeFlags":[]})
-        }
-        session_event_model::SessionState::RequiresAction { pending } => {
-            let flag = match pending.first().kind() {
-                session_event_model::InteractionKind::Approval => "waitingOnApproval",
-                session_event_model::InteractionKind::Question => "waitingOnUserInput",
-            };
-            json!({"type":"active","activeFlags":[flag]})
-        }
-        session_event_model::SessionState::AuthenticationRequired => {
-            json!({"type":"systemError"})
-        }
-    };
+    let status = crate::native_session_notifications::render_thread_status(&summary.state);
     let alias = thread_alias(&summary.session);
     json!({
         "id":alias,"sessionId":alias,

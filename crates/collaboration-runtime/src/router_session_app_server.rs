@@ -138,6 +138,8 @@ enum ThreadMethodError {
     InvalidSelection,
     #[error("provider operation is unsupported")]
     Unsupported,
+    #[error("thread/list is not available through the Router: {reason}")]
+    UnavailableThreadOrdering { reason: &'static str },
     #[error("provider session is busy")]
     Busy,
     #[error("invalid thread parameters")]
@@ -291,6 +293,9 @@ pub async fn serve_router_session_app_server_connection(
                     if let Some(session) = session
                         && attached_sessions.insert(session.clone())
                     {
+                        if let Some(cwd) = handled.response.pointer("/result/thread/cwd").and_then(Value::as_str) {
+                            forwarding.register_working_directory(session.clone(), PathBuf::from(cwd));
+                        }
                         let attachment = if let Some((_, attachment)) = handled.session_attachment.take() {
                             attachment
                         } else {
@@ -500,6 +505,7 @@ async fn attach_session_events(
     let pending_requests = pending_snapshot_requests(&attachment.snapshot);
     let epoch = attachment.epoch;
     let mut latest_sequence = 0;
+    let mut initial_settings = None;
     for event in attachment.snapshot {
         latest_sequence = latest_sequence.max(event.sequence);
         let request_still_pending = matches!(
@@ -508,6 +514,13 @@ async fn attach_session_events(
                 if pending_requests.contains(interaction.request_id())
         );
         for notification in forwarding.project(&session, &event) {
+            if replay_after.is_none() && matches!(event.event, SessionEvent::SettingsChanged { .. })
+            {
+                // The new window needs current effort/model, including settings
+                // omitted from the thread summary. Do not replay obsolete values.
+                initial_settings = Some(notification);
+                continue;
+            }
             let missed_event = replay_after.is_some_and(|(previous_epoch, sequence)| {
                 previous_epoch != epoch || event.sequence > sequence
             });
@@ -520,6 +533,11 @@ async fn attach_session_events(
                 forwarding.user_receipts.delivered(&notification);
             }
         }
+    }
+    if let Some(notification) = initial_settings {
+        websocket
+            .send(Message::Text(notification.to_string().into()))
+            .await?;
     }
     let mut receiver = attachment.receiver;
     let sender = event_sender.clone();
@@ -594,3 +612,11 @@ mod tui_tests;
 #[cfg(test)]
 #[path = "native_user_receipt_test.rs"]
 mod user_receipt_tests;
+
+#[cfg(test)]
+#[path = "router_session_app_server_unsupported_test.rs"]
+mod unsupported_tests;
+
+#[cfg(test)]
+#[path = "router_session_app_server_sync_test.rs"]
+mod sync_tests;
