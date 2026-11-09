@@ -86,6 +86,9 @@ pub enum MachineEnrollmentFailure {
     /// compare it with: pending the owner's decision on a request fingerprint.
     #[error("a repeated device-login request cannot be compared on this store yet")]
     RepeatPendingOwner,
+    /// A stored row failed its check; nothing was coerced or written.
+    #[error("the enrollment store holds a row that fails its check")]
+    CorruptStore,
     /// The changes would break a port invariant; nothing was applied.
     #[error("the decision's changes break the enrollment contract: {rule}")]
     ContractViolated { rule: &'static str },

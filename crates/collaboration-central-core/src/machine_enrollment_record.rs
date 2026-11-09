@@ -144,3 +144,8 @@ pub(crate) fn identity_from_stored_enrollment(
         last_seen: machine.last_seen,
     })
 }
+
+/// The journal kinds of today's revocation and readmission operations. B3's
+/// switch refuses while any is unfinished, so they are named once, here.
+pub(crate) const REVOKE_TASK_KIND: &str = "central.revoke-machine";
+pub(crate) const READMISSION_TASK_KIND: &str = "central.readmit-machine";

@@ -9,7 +9,7 @@ use std::marker::PhantomData;
 #[cfg(feature = "conformance")]
 use std::sync::Arc;
 
-pub(super) const READMISSION_TASK_KIND: &str = "central.readmit-machine";
+pub(super) use crate::machine_enrollment_record::READMISSION_TASK_KIND;
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

@@ -8,13 +8,13 @@ use super::{
     StoreError, StoredMachine, SyncTime, TransactionScope, Type, corrupt, operation_pending,
     queries, readmission, wrong_face,
 };
+use crate::machine_enrollment_record::REVOKE_TASK_KIND;
 use durable_steps::{
     CallTarget, JournalScope, OperationContext, OperationFailure, OperationId, RequestKey, Task,
     storage::JournalStorage,
 };
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
-const REVOKE_TASK_KIND: &str = "central.revoke-machine";
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

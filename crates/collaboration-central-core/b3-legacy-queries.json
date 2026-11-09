@@ -1,0 +1,16 @@
+{
+  "migrations": [
+    "registry_migrations"
+  ],
+  "output": "src/generated_b3_legacy.rs",
+  "metadata": "b3-legacy-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_legacy_machines",
+      "sql": "b3_legacy_sql/read_legacy_machines.sql",
+      "row": "StoredLegacyMachine",
+      "result": "many",
+      "parameters": []
+    }
+  ]
+}

@@ -1,0 +1,399 @@
+{
+  "migrations": [
+    "registry_migrations",
+    "staged_registry_migrations"
+  ],
+  "output": "src/generated_b3_registry.rs",
+  "metadata": "b3-registry-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_installation",
+      "sql": "b3_registry_sql/read_installation.sql",
+      "row": "StoredB3Installation",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_installation_by_former",
+      "sql": "b3_registry_sql/read_installation_by_former.sql",
+      "row": "StoredB3Installation",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "former_service_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_enrollment",
+      "sql": "b3_registry_sql/read_enrollment.sql",
+      "row": "StoredB3Enrollment",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_enrolled_enrollment",
+      "sql": "b3_registry_sql/read_enrolled_enrollment.sql",
+      "row": "StoredB3Enrollment",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "installation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "request_seen",
+      "sql": "b3_registry_sql/request_seen.sql",
+      "row": null,
+      "result": "exists",
+      "parameters": [
+        {
+          "name": "request_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "any_enrollment",
+      "sql": "b3_registry_sql/any_enrollment.sql",
+      "row": null,
+      "result": "exists",
+      "parameters": []
+    },
+    {
+      "name": "read_allowances",
+      "sql": "b3_registry_sql/read_allowances.sql",
+      "row": "StoredB3Allowance",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "installation_id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_installation",
+      "sql": "b3_registry_sql/insert_installation.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "label",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "enrollment_generation",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "updated_at",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "update_installation",
+      "sql": "b3_registry_sql/update_installation.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "label",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "enrollment_generation",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "updated_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "link_former_service",
+      "sql": "b3_registry_sql/link_former_service.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "former_service_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "updated_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_enrollment",
+      "sql": "b3_registry_sql/insert_enrollment.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "installation_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "request_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "state",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "end_reason",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "approved_by_person_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "permission_checked",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "base_generation",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "code_expires_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "machine_client_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "last_grant_at",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "ended_at",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "updated_at",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "update_enrollment",
+      "sql": "b3_registry_sql/update_enrollment.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "state",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "end_reason",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "machine_client_id",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "last_grant_at",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "ended_at",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "updated_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_allowance",
+      "sql": "b3_registry_sql/insert_allowance.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "installation_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "workspace_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "state",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "created_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "updated_at",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "update_allowance",
+      "sql": "b3_registry_sql/update_allowance.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "state",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "updated_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "insert_converted_installation",
+      "sql": "b3_registry_sql/insert_converted_installation.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "former_service_id",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "label",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "last_seen_at",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "created_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "updated_at",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

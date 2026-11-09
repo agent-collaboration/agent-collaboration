@@ -377,6 +377,137 @@ static REGISTRY_MIGRATIONS: std::sync::LazyLock<Vec<sqlx_core::migrate::Migratio
         .collect()
     });
 
+/// Today's registry corpus plus B3's staged v3 and v4 (b3-sql rev .4). Not
+/// registered: only fixtures initialize it, until the B3 reader slice moves
+/// the files into `registry_migrations/` and registers them.
+#[cfg(any(test, feature = "conformance"))]
+static STAGED_B3_REGISTRY_MIGRATIONS: std::sync::LazyLock<Vec<sqlx_core::migrate::Migration>> =
+    std::sync::LazyLock::new(|| {
+        use sqlx_core::{
+            migrate::{Migration, MigrationType},
+            sql_str::SqlSafeStr,
+        };
+        let staged = [
+            (
+                3,
+                "machine installations",
+                include_str!("../staged_registry_migrations/0003_machine_installations.sql"),
+            ),
+            (
+                4,
+                "machine enrollments and allowances",
+                include_str!("../staged_registry_migrations/0004_machine_enrollments.sql"),
+            ),
+        ]
+        .into_iter()
+        .map(|(version, description, sql)| {
+            Migration::new(
+                version,
+                description.into(),
+                MigrationType::Simple,
+                sql.into_sql_str(),
+                false,
+            )
+        });
+        REGISTRY_MIGRATIONS.iter().cloned().chain(staged).collect()
+    });
+
+/// A fixture organization store as it stands before B3: the central-fleet
+/// corpus, then today's central-registry corpus (v1, v2), in the live order.
+#[cfg(any(test, feature = "conformance"))]
+pub async fn initialize_pre_b3_fleet<Scope>(
+    scope: &mut Scope,
+    now: runtime_primitives::SyncTime,
+    clock: &dyn Clock,
+) -> Result<(), StoreError>
+where
+    Scope: TransactionScope + durable_steps::JournalScope,
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'blob> Vec<u8>: sqlx_core::types::Type<Scope::Database>
+        + sqlx_core::encode::Encode<'blob, Scope::Database>
+        + sqlx_core::decode::Decode<'blob, Scope::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Scope::Database>
+        + sqlx_core::encode::Encode<'scalar, Scope::Database>
+        + sqlx_core::decode::Decode<'scalar, Scope::Database>,
+    for<'blob> Option<Vec<u8>>:
+        sqlx_core::types::Type<Scope::Database> + sqlx_core::decode::Decode<'blob, Scope::Database>,
+    for<'scalar> Option<i64>: sqlx_core::types::Type<Scope::Database>
+        + sqlx_core::decode::Decode<'scalar, Scope::Database>,
+    for<'value> String:
+        Type<Scope::Database> + Encode<'value, Scope::Database> + Decode<'value, Scope::Database>,
+    for<'value> Option<String>:
+        Type<Scope::Database> + Encode<'value, Scope::Database> + Decode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    generated_bootstrap::initialize_migration_history(scope)
+        .await
+        .map_err(bootstrap_sql_error)?;
+    generated_bootstrap::initialize_migration_failures(scope)
+        .await
+        .map_err(bootstrap_sql_error)?;
+    apply_corpus(
+        scope,
+        "central-fleet",
+        FLEET_MIGRATIONS.iter().collect(),
+        now,
+        clock,
+    )
+    .await?;
+    apply_corpus(
+        scope,
+        "central-registry",
+        REGISTRY_MIGRATIONS.iter().collect(),
+        now,
+        clock,
+    )
+    .await?;
+    Ok(())
+}
+
+/// Initialize the registry corpus with B3's staged migrations, in the caller's
+/// transaction: a fixture's stand-in for B3's deploy. Returns how many
+/// migrations it applied.
+#[cfg(any(test, feature = "conformance"))]
+pub async fn initialize_staged_b3_registry<Scope>(
+    scope: &mut Scope,
+    now: runtime_primitives::SyncTime,
+    clock: &dyn Clock,
+) -> Result<usize, StoreError>
+where
+    Scope: TransactionScope + durable_steps::JournalScope,
+    <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
+    for<'blob> Vec<u8>: sqlx_core::types::Type<Scope::Database>
+        + sqlx_core::encode::Encode<'blob, Scope::Database>
+        + sqlx_core::decode::Decode<'blob, Scope::Database>,
+    for<'scalar> i64: sqlx_core::types::Type<Scope::Database>
+        + sqlx_core::encode::Encode<'scalar, Scope::Database>
+        + sqlx_core::decode::Decode<'scalar, Scope::Database>,
+    for<'blob> Option<Vec<u8>>:
+        sqlx_core::types::Type<Scope::Database> + sqlx_core::decode::Decode<'blob, Scope::Database>,
+    for<'scalar> Option<i64>: sqlx_core::types::Type<Scope::Database>
+        + sqlx_core::decode::Decode<'scalar, Scope::Database>,
+    for<'value> String:
+        Type<Scope::Database> + Encode<'value, Scope::Database> + Decode<'value, Scope::Database>,
+    for<'value> Option<String>:
+        Type<Scope::Database> + Encode<'value, Scope::Database> + Decode<'value, Scope::Database>,
+    for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
+{
+    generated_bootstrap::initialize_migration_history(scope)
+        .await
+        .map_err(bootstrap_sql_error)?;
+    generated_bootstrap::initialize_migration_failures(scope)
+        .await
+        .map_err(bootstrap_sql_error)?;
+    Ok(apply_corpus(
+        scope,
+        "central-registry",
+        STAGED_B3_REGISTRY_MIGRATIONS.iter().collect(),
+        now,
+        clock,
+    )
+    .await?
+    .count)
+}
 static FLEET_MIGRATIONS: std::sync::LazyLock<Vec<sqlx_core::migrate::Migration>> =
     std::sync::LazyLock::new(|| {
         use sqlx_core::{
@@ -487,7 +618,7 @@ async fn apply_corpus<Scope>(
     clock: &dyn Clock,
 ) -> Result<CorpusProgress, StoreError>
 where
-    Scope: TransactionScope,
+    Scope: TransactionScope + durable_steps::JournalScope,
     <Scope::Database as Database>::Arguments: IntoArguments<Scope::Database>,
     for<'blob> Vec<u8>: sqlx_core::types::Type<Scope::Database>
         + sqlx_core::encode::Encode<'blob, Scope::Database>
@@ -560,6 +691,22 @@ where
                 .map_err(|error| error.to_string()),
             _ => Ok(()),
         };
+        // B3's switch converts today's machine rows around its v3 SQL.
+        let conversion = match (corpus, migration.version) {
+            ("central-registry", 3) => Some(
+                crate::b3_registry_conversion::prepare(scope)
+                    .await
+                    .map_err(|error| {
+                        crate::migration_failure::MigrationFailure::rollback(
+                            corpus,
+                            migration.version,
+                            now,
+                            error,
+                        )
+                    })?,
+            ),
+            _ => None,
+        };
         validated.map_err(|message| {
             crate::migration_failure::MigrationFailure::rollback(
                 corpus,
@@ -584,6 +731,18 @@ where
                     bootstrap_sql_error(error),
                 )
             })?;
+        if let Some(conversion) = conversion {
+            crate::b3_registry_conversion::apply(scope, conversion, now.unix_millis())
+                .await
+                .map_err(|error| {
+                    crate::migration_failure::MigrationFailure::rollback(
+                        corpus,
+                        migration.version,
+                        now,
+                        error,
+                    )
+                })?;
+        }
         let installed_on = clock.now().unix_millis();
         let execution_time = installed_on.saturating_sub(started).max(0);
         generated_bootstrap::insert_migration_history(

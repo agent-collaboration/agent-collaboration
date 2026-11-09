@@ -7,6 +7,7 @@ CREATE TABLE machine_enrollments (
     approved_by_person_id TEXT NOT NULL,
     permission_checked TEXT NOT NULL,
     base_generation INTEGER NOT NULL,
+    code_expires_at INTEGER NOT NULL,
     machine_client_id TEXT UNIQUE,
     last_grant_at INTEGER,
     ended_at INTEGER,
