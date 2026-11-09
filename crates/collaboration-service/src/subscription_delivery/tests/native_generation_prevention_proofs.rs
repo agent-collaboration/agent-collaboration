@@ -1,5 +1,6 @@
 //! SDK prevention leaves the frozen range owed under the reader's new generation.
 use super::native_follow_mail_proofs::{follow_application, frozen_follow};
+use super::native_held_mail_proofs::checked_while_wakeable_then_loaded;
 use super::*;
 use board_sync_protocol::BoardDeliveryBody;
 use collaboration_mail_protocol::NotificationSource;
@@ -201,8 +202,11 @@ async fn a_generation_prevented_range_is_replaced_once_and_reaches_the_native_cl
     })
     .await;
     let mut received = None;
-    if replacements.is_ok() {
-        *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
+    if let Ok(items) = &replacements {
+        // The target loads after the reader checked the held replacement.
+        let replacement: collaboration_protocol::PushId =
+            items[1].id().as_uuid().to_string().try_into().unwrap();
+        checked_while_wakeable_then_loaded(&fixture, &runtime, &replacement).await;
         let request = tokio::time::timeout(Duration::from_secs(6), async {
             runtime.requests.lock().await.recv().await.unwrap()
         })
