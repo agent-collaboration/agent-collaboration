@@ -209,6 +209,14 @@ pub struct SubmitInput {
     pub mailbox: PeerId,
 }
 
+/// A push still owed whose item's validity has passed: the item, and the
+/// machine its push goes to.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ExpiredPush {
+    pub item: ItemId,
+    pub recipient: PeerId,
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PushInput {

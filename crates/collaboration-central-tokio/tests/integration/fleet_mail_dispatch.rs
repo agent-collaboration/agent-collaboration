@@ -168,6 +168,14 @@ pub(super) fn envelope(
     peer: &str,
     service: &str,
 ) -> TestResult<DeliveryEnvelope<BoardDeliveryTypes>> {
+    envelope_valid_until(peer, service, None)
+}
+/// An envelope whose item is valid until `valid_until`.
+pub(super) fn envelope_valid_until(
+    peer: &str,
+    service: &str,
+    valid_until: Option<SyncTime>,
+) -> TestResult<DeliveryEnvelope<BoardDeliveryTypes>> {
     Ok(DeliveryEnvelope::Item(DeliveryItem::new(
         ItemId::new(durable_steps::Uuid::now_v7())?,
         serde_json::from_value(json!({"kind":"humanUser","installation":SERVICE_A}))?,
@@ -177,7 +185,7 @@ pub(super) fn envelope(
                 "endpoint":{"serviceId":service,"endpointId":"codex-local"},"sessionId":"019f0000-0000-7000-8000-000000008121"
             }))?,
         },
-        None,
+        valid_until,
         serde_json::from_value(
             json!({"kind":"message","text":"Fleet custody proof","delivery":"queue","guard":null,"senderDisplayName":null,"replyTo":null}),
         )?,

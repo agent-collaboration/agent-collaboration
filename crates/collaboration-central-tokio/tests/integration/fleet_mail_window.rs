@@ -1,12 +1,15 @@
 //! A retryable refusal keeps its window slot (owed-work design, "How an answer
 //! finds its row": Retry stays in flight on the 30 s backoff).
-use super::composed_fleet_fixture::{B, Fixture, NOW, SERVICE_B, TestResult};
-use super::fleet_mail_dispatch::{Socket, custody, envelope, submit};
+use super::composed_fleet_fixture::{A, B, Fixture, NOW, SERVICE_A, SERVICE_B, TestResult};
+use super::fleet_mail_dispatch::{Socket, custody, envelope, envelope_valid_until, submit};
+use board_sync_protocol::BoardConsumerProtocol;
 use durable_steps::{AtomicStore, CallId, StoreError, storage::TransactionScope};
 use fleet_protocol::{
-    DeliveryRefusal, FrameId, ItemId, PushResult, ServerCall, ServerFrame, ServerRequest,
+    ClientFrame, DeliveryAnswer, DeliveryRefusal, DeliveryRequest, DeliveryStatus, FrameId, ItemId,
+    OperationAnswer, OperationRequest, PushResult, ServerCall, ServerFrame, ServerRequest,
+    StatusCursor,
 };
-use runtime_primitives::Clock;
+use runtime_primitives::{Clock, SyncTime};
 use sqlx_core::{query::query, row::Row};
 
 /// The next push frame on `socket`: its frame id, call identity and item.
@@ -243,5 +246,257 @@ async fn a_refusal_followed_by_silence_keeps_doubling_the_backoff() -> TestResul
         assert_eq!(custody(&fixture, item.id()).await?, ("sent".into(), true));
         previous = frame;
     }
+    fixture.close().await
+}
+
+/// Every push frame already queued on `socket`: the items, in order.
+async fn queued_pushes(socket: &mut Socket) -> TestResult<Vec<ItemId>> {
+    let mut items = Vec::new();
+    while socket.queued_commands() > 0 {
+        if let ServerFrame::Request {
+            body: ServerRequest::Crate(ServerCall::Push { item, .. }),
+            ..
+        } = socket.next().await?
+        {
+            items.push(item.id());
+        }
+    }
+    Ok(items)
+}
+
+/// Every status publication already queued on `socket`: (item, status).
+async fn queued_publications(
+    socket: &mut Socket,
+) -> TestResult<Vec<(ItemId, DeliveryStatus<Acceptance>)>> {
+    let mut publications = Vec::new();
+    while socket.queued_commands() > 0 {
+        if let ServerFrame::Request {
+            body: ServerRequest::Crate(ServerCall::PublishStatus { publication, .. }),
+            ..
+        } = socket.next().await?
+        {
+            publications.push((publication.item, publication.status));
+        }
+    }
+    Ok(publications)
+}
+
+type Acceptance =
+    <board_sync_protocol::BoardDeliveryTypes as fleet_protocol::DeliveryTypes>::Acceptance;
+
+/// Send `body` as a request frame on `socket`, as a kernel event; answers its
+/// answer, read past any other frames.
+async fn request(
+    fixture: &Fixture,
+    socket: &mut Socket,
+    body: OperationRequest<BoardConsumerProtocol>,
+) -> TestResult<OperationAnswer<BoardConsumerProtocol>> {
+    let frame = FrameId::new(durable_steps::Uuid::now_v7())?;
+    collaboration_central_core::ObjectKernel::new(&fixture.runtime)
+        .on_event(collaboration_central_core::ObjectEvent::Frame {
+            binding: socket.binding,
+            frame: serde_json::to_vec(&ClientFrame::<BoardConsumerProtocol>::Request {
+                frame,
+                body,
+            })?,
+        })
+        .await;
+    loop {
+        match socket.next().await? {
+            ServerFrame::Answer {
+                frame: answered,
+                body,
+            } if answered == frame => return Ok(body),
+            _ => {}
+        }
+    }
+}
+
+fn call_id(step: &str) -> TestResult<CallId> {
+    Ok(serde_json::from_value(
+        serde_json::json!({"operation": durable_steps::Uuid::now_v7(), "step": step}),
+    )?)
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Each assertion names which request the freed slot went to, in the event that freed it."
+)]
+#[tokio::test]
+async fn a_request_given_up_after_24_hours_frees_its_slot_for_the_next_in_the_same_event()
+-> TestResult {
+    // Arrange: 33 pushes owed to B; its window holds 32, and the first is refused.
+    let root = tempfile::tempdir()?;
+    let fixture = Fixture::open(root.path(), NOW).await?;
+    let mut recipient = Socket::open(&fixture, B, SERVICE_B).await?;
+    let mut items = Vec::new();
+    for _ in 0..33 {
+        let item = envelope(B, SERVICE_B)?;
+        submit(&fixture, &item).await?;
+        items.push(item.id());
+    }
+    let mut sent = Vec::new();
+    for _ in 0..32 {
+        sent.push(next_push(&mut recipient).await?);
+    }
+    let (refused_frame, _, refused_item) = sent[0].clone();
+    recipient
+        .answer(
+            &fixture,
+            refused_frame,
+            PushResult::Refused {
+                reason: DeliveryRefusal::MailboxFull,
+            },
+        )
+        .await?;
+    let last = *items.last().ok_or("no items")?;
+
+    // Act: 24 h after its refusal the refused push is given up.
+    fixture.io.advance(24 * 60 * 60 * 1_000 + 1);
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
+
+    // Assert: in that same event, the 33rd push takes the freed slot.
+    let pushed = queued_pushes(&mut recipient).await?;
+    assert!(
+        pushed.contains(&last),
+        "the given-up slot was not refilled in its own event: {pushed:?}"
+    );
+    assert!(
+        !pushed.contains(&refused_item),
+        "a given-up push was resent"
+    );
+    assert_eq!(in_flight(&fixture, &recipient).await?, 32);
+    fixture.close().await
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Each assertion names which request the freed slot went to, in the event that freed it."
+)]
+#[tokio::test]
+async fn an_expired_push_frees_its_slot_for_the_next_in_the_same_event() -> TestResult {
+    // Arrange: 33 pushes owed to B, the first valid for 10 s; its window holds 32.
+    let root = tempfile::tempdir()?;
+    let fixture = Fixture::open(root.path(), NOW).await?;
+    let mut recipient = Socket::open(&fixture, B, SERVICE_B).await?;
+    let expiring = envelope_valid_until(
+        B,
+        SERVICE_B,
+        Some(SyncTime::from_unix_millis(
+            fixture.io.now().unix_millis() + 10_000,
+        )),
+    )?;
+    submit(&fixture, &expiring).await?;
+    let mut items = vec![expiring.id()];
+    for _ in 0..32 {
+        let item = envelope(B, SERVICE_B)?;
+        submit(&fixture, &item).await?;
+        items.push(item.id());
+    }
+    for _ in 0..32 {
+        next_push(&mut recipient).await?;
+    }
+    assert_eq!(in_flight(&fixture, &recipient).await?, 32);
+    let last = *items.last().ok_or("no items")?;
+
+    // Act: the first item's validity passes before its push is answered (and
+    // before any push's 30 s retry).
+    fixture.io.advance(10_001);
+    crate::kernel_alarm::deliver_alarm(&fixture.runtime).await?;
+
+    // Assert: its push is closed, and the 33rd push takes the slot in that event.
+    assert_eq!(
+        queued_pushes(&mut recipient).await?,
+        vec![last],
+        "the expired push's slot was not refilled in its own event"
+    );
+    assert_eq!(in_flight(&fixture, &recipient).await?, 32);
+    fixture.close().await
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Each assertion names the publication window before and after the acknowledgment."
+)]
+#[tokio::test]
+async fn a_status_acknowledgment_that_closes_publications_refills_their_slots_in_the_same_event()
+-> TestResult {
+    // Arrange: B accepts 33 pushes from A, so A is owed 33 publications; A's
+    // window holds 32 and A answers none.
+    let root = tempfile::tempdir()?;
+    let fixture = Fixture::open(root.path(), NOW).await?;
+    let mut sender = Socket::open(&fixture, A, SERVICE_A).await?;
+    let mut recipient = Socket::open(&fixture, B, SERVICE_B).await?;
+    for _ in 0..33 {
+        submit(&fixture, &envelope(B, SERVICE_B)?).await?;
+    }
+    for _ in 0..33 {
+        let (frame, _, _) = next_push(&mut recipient).await?;
+        recipient
+            .answer(
+                &fixture,
+                frame,
+                PushResult::Accepted {
+                    accepted_at: fixture.io.now(),
+                },
+            )
+            .await?;
+    }
+    let published = queued_publications(&mut sender).await?;
+    assert_eq!(
+        published.len(),
+        32,
+        "A's window did not hold 32: {published:?}"
+    );
+    let (first_item, first_status) = published[0].clone();
+    let OperationAnswer::Delivery(DeliveryAnswer::StatusFetch(page)) = request(
+        &fixture,
+        &mut sender,
+        OperationRequest::Delivery(DeliveryRequest::StatusFetch {
+            call: call_id("status_fetch")?,
+            after: StatusCursor::new(0),
+            limit: 100,
+        }),
+    )
+    .await?
+    else {
+        return Err("StatusFetch did not answer a page".into());
+    };
+    let through = page
+        .events
+        .iter()
+        .find(|event| event.item == first_item && event.status == first_status)
+        .ok_or("the first publication has no stream event")?
+        .cursor;
+
+    // Act: A acknowledges its stream through the first publication's event.
+    let OperationAnswer::Delivery(DeliveryAnswer::StatusAck(acknowledged)) = request(
+        &fixture,
+        &mut sender,
+        OperationRequest::Delivery(DeliveryRequest::StatusAck {
+            call: call_id("status_ack")?,
+            through,
+        }),
+    )
+    .await?
+    else {
+        return Err("StatusAck did not answer".into());
+    };
+    assert!(
+        matches!(
+            acknowledged,
+            fleet_protocol::StatusAckResult::Acknowledged { .. }
+        ),
+        "{acknowledged:?}"
+    );
+
+    // Assert: the closed publications' slots are refilled in that same event.
+    let refilled = queued_publications(&mut sender).await?;
+    assert!(
+        refilled
+            .iter()
+            .any(|publication| !published.contains(publication)),
+        "the acknowledged slots were not refilled in their own event: {refilled:?}"
+    );
     fixture.close().await
 }

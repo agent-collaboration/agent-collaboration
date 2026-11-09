@@ -413,23 +413,29 @@ where
         }
     }
 
-    /// Items whose push is still owed but whose `valid_until` has passed,
-    /// earliest first, at most `limit`.
+    /// Pushes still owed whose item's `valid_until` has passed, with the
+    /// machine each goes to, earliest first, at most `limit`.
     pub async fn expired_pushes(
         &mut self,
         now: SyncTime,
         limit: u32,
-    ) -> Result<Vec<ItemId>, DeliveryError> {
+    ) -> Result<Vec<crate::ExpiredPush>, DeliveryError> {
         queries::read_expired_pushes(self.scope, now.unix_millis().to_string(), limit.to_string())
             .await
             .map_err(sql_error)?
             .into_iter()
             .map(|row| {
-                row.item_id
+                let item = row
+                    .item_id
                     .and_then(|value| ItemId::try_from(value).ok())
                     .ok_or(DeliveryError::Corrupt {
                         field: "expired push item id",
-                    })
+                    })?;
+                let recipient = crate::stored_outcome::stored_enum(
+                    row.recipient_machine_id,
+                    "expired push recipient",
+                )?;
+                Ok(crate::ExpiredPush { item, recipient })
             })
             .collect()
     }

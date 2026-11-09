@@ -92,7 +92,7 @@ mod outbox_relay;
 mod record_retention;
 mod relay_schema;
 mod relay_sender_authority;
-pub use outbox_record::PushInput;
+pub use outbox_record::{ExpiredPush, PushInput};
 pub use record_retention::{
     DELIVERY_RETENTION_MILLIS, RemoveDeliveryRecord, admit_existing_record_removals,
     admit_record_removal, item_is_too_old, next_relay_record_removal, removal_deadline,

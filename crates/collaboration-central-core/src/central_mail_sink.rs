@@ -199,13 +199,13 @@ where
             .expired_pushes(now, 100)
             .await
             .map_err(fleet_mail_delivery::delivery_rollback)?;
-    for item in expired {
+    for fleet_mail_delivery::ExpiredPush { item, recipient } in expired {
         let subject = item.as_uuid();
-        let sent = crate::work_attempts::attempt(scope, subject, AttemptKind::Push)
-            .await?
-            .is_some_and(|row| {
-                row.attempts > 0 || matches!(row.state, AttemptState::InFlight { .. })
-            });
+        let row = crate::work_attempts::attempt(scope, subject, AttemptKind::Push).await?;
+        let held_slot = row
+            .as_ref()
+            .is_some_and(|row| matches!(row.state, AttemptState::InFlight { .. }));
+        let sent = held_slot || row.is_some_and(|row| row.attempts > 0);
         let reach = if sent {
             durable_steps::storage::CallReach::MayHaveReached
         } else {
@@ -216,6 +216,11 @@ where
             .await
             .map_err(fleet_mail_delivery::delivery_rollback)?;
         crate::work_attempts::succeeded(scope, subject, AttemptKind::Push).await?;
+        // Its window slot is free: the recipient's next owed request goes in
+        // this event.
+        if held_slot {
+            crate::event_owed::owed_request(recipient).map_err(StoreError::backend)?;
+        }
     }
     Ok(())
 }

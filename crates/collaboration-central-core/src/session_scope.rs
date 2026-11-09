@@ -214,8 +214,13 @@ where
                         .acknowledge(through, now)
                         .await
                         .map_err(StoreError::backend)?;
-                    if matches!(result, fleet_protocol::StatusAckResult::Acknowledged { .. }) {
+                    if matches!(result, fleet_protocol::StatusAckResult::Acknowledged { .. })
+                        && !applied.is_empty()
+                    {
                         self.close_applied_statuses(applied).await?;
+                        // Closed rows free their window slots: refill them this event.
+                        crate::event_owed::owed_request(session.peer)
+                            .map_err(StoreError::backend)?;
                     }
                     let bytes = serde_json::to_vec(&ServerFrame::<BoardConsumerProtocol>::Answer {
                         frame,

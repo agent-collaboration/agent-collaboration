@@ -171,6 +171,7 @@ where
 #[derive(Debug)]
 pub(crate) struct StoredExpiredPush {
     pub item_id: Option<String>,
+    pub recipient_machine_id: Option<String>,
 }
 pub(crate) fn read_expired_pushes<S>(
     scope: &mut S,
@@ -196,6 +197,7 @@ where
             .map(|row| {
                 Ok(StoredExpiredPush {
                     item_id: row.try_get("item_id")?,
+                    recipient_machine_id: row.try_get("recipient_machine_id")?,
                 })
             })
             .collect()

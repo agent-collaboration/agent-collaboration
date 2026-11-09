@@ -97,7 +97,9 @@ where
     /// An in-flight request went unanswered past its retry time: count the
     /// failure, then resend it with a new send id on its machine's current
     /// connection, or put it back to waiting (sent on the next Welcome) when the
-    /// machine has none. After 24 h of failures the row is given up.
+    /// machine has none. After 24 h of failures the row is given up. The
+    /// machine whose window slot the row held is named, so a slot it no longer
+    /// holds (given up, no longer owed, back to waiting) is refilled this event.
     pub(crate) async fn resend_due_request(
         &mut self,
         subject: Uuid,
@@ -108,6 +110,24 @@ where
         let Some(row) = crate::work_attempts::attempt(self, subject, kind).await? else {
             return Ok(());
         };
+        let holder = slot_holder(&row.state, attached);
+        self.retry_or_release(row, subject, kind, attached, now)
+            .await?;
+        if let Some(peer) = holder {
+            crate::event_owed::owed_request(peer).map_err(StoreError::backend)?;
+        }
+        Ok(())
+    }
+
+    /// Resend a due row, or release it: [`Self::resend_due_request`]'s work.
+    async fn retry_or_release(
+        &mut self,
+        row: crate::work_attempts::AttemptRow,
+        subject: Uuid,
+        kind: AttemptKind,
+        attached: &[RequestDestination],
+        now: SyncTime,
+    ) -> Result<(), StoreError> {
         // Each failure is counted once, when it becomes known. A refused
         // in-flight row and a waiting row whose sender binding was unavailable
         // at send were counted then; an in-flight row still holding its send
@@ -414,6 +434,25 @@ where
         });
         Ok(())
     }
+}
+
+/// The attached machine whose window counts this row's slot: the machine on
+/// the connection an in-flight row is held on, if that connection is attached.
+fn slot_holder(
+    state: &crate::work_attempts::AttemptState,
+    attached: &[RequestDestination],
+) -> Option<PeerId> {
+    let crate::work_attempts::AttemptState::InFlight { flight, .. } = state else {
+        return None;
+    };
+    let connection = match flight {
+        crate::work_attempts::InFlight::Sent(send) => send.connection,
+        crate::work_attempts::InFlight::Refused { connection, .. } => *connection,
+    };
+    attached
+        .iter()
+        .find(|destination| destination.connection.as_uuid() == connection)
+        .map(|destination| destination.peer)
 }
 
 /// One owed request about to be sent: its row and the call it carries.
