@@ -16,15 +16,38 @@ const MAX_FLEET_OUTBOX_PRUNE_BATCH: u32 = 500;
 /// Retains completed fleet requests for two months; accepted creation inputs stay until local commit.
 pub(crate) const FLEET_OUTBOX_RETENTION_MONTHS: u32 = 2;
 
-fn fleet_outbox_retention_cutoff_ms(now_ms: i64) -> Result<i64, RouterLocalStorageError> {
-    if now_ms < 0 {
+fn retention_moment(millis: i64) -> Result<chrono::DateTime<chrono::Utc>, RouterLocalStorageError> {
+    if millis < 0 {
         return Err(RouterLocalStorageError::InvalidRecord);
     }
-    let now = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(now_ms)
-        .ok_or(RouterLocalStorageError::InvalidRecord)?;
-    now.checked_sub_months(chrono::Months::new(FLEET_OUTBOX_RETENTION_MONTHS))
-        .map(|cutoff| cutoff.timestamp_millis())
+    chrono::DateTime::<chrono::Utc>::from_timestamp_millis(millis)
         .ok_or(RouterLocalStorageError::InvalidRecord)
+}
+
+fn fleet_outbox_retention_cutoff_ms(now_ms: i64) -> Result<i64, RouterLocalStorageError> {
+    sqlite_storage_maintenance::months_before(
+        retention_moment(now_ms)?,
+        FLEET_OUTBOX_RETENTION_MONTHS,
+    )
+    .map(|cutoff| cutoff.timestamp_millis())
+    .ok_or(RouterLocalStorageError::InvalidRecord)
+}
+
+// The decided requests retention may ever delete: a rejected request, or one whose
+// accepted creation input has already been committed locally. The candidate SELECT and
+// the due read share it, so the worker wakes when the DELETE first takes a row.
+macro_rules! outbox_retention_eligible {
+    () => {
+        "FROM fleet_outbox_requests AS outbox WHERE json_extract(outbox.state,'$.kind')='decided' AND (json_extract(outbox.state,'$.decision.kind')='rejected' OR NOT EXISTS (SELECT 1 FROM fleet_project_creation_inputs AS creation WHERE creation.request_id=outbox.request_id))"
+    };
+}
+
+// A decided request missing its settlement time is invalid; it counts as settled at the
+// epoch, so it is due at once and the prune rejects it.
+macro_rules! outbox_retention_stamp {
+    () => {
+        "COALESCE(outbox.settled_at_ms,0)"
+    };
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -217,6 +240,37 @@ impl FleetOutbox {
         }
     }
 
+    /// The first moment at or after `now_ms` the retention rule allows deleting a request
+    /// the outbox holds now, or `None` when none could ever go. Only the oldest eligible
+    /// settlement matters: whenever any request is past the cutoff, the oldest is too. A
+    /// request kept by its accepted creation input is not counted; completing that input
+    /// commits, and the next read counts it.
+    pub async fn retention_due_ms(
+        &self,
+        now_ms: i64,
+    ) -> Result<Option<i64>, RouterLocalStorageError> {
+        let now = retention_moment(now_ms)?;
+        let oldest: Option<i64> = sqlx::query_scalar::<sqlx_turso::Turso, Option<i64>>(concat!(
+            "SELECT MIN(",
+            outbox_retention_stamp!(),
+            ") ",
+            outbox_retention_eligible!()
+        ))
+        .fetch_one(&self.database.pool)
+        .await?;
+        oldest
+            .map(|stamped_ms| {
+                sqlite_storage_maintenance::first_deletable_at(
+                    retention_moment(stamped_ms)?,
+                    FLEET_OUTBOX_RETENTION_MONTHS,
+                    now,
+                )
+                .map(|due| due.timestamp_millis())
+                .ok_or(RouterLocalStorageError::InvalidRecord)
+            })
+            .transpose()
+    }
+
     /// Deletes one bounded batch of old settled requests with their creation inputs.
     pub async fn prune_expired(
         &self,
@@ -242,9 +296,15 @@ impl FleetOutbox {
             transaction.rollback().await?;
             return Err(error);
         }
-        let candidates = sqlx::query::<sqlx_turso::Turso>(
-            "SELECT request_id,canonical_hash,request,state,settled_at_ms FROM fleet_outbox_requests AS outbox WHERE json_extract(state,'$.kind')='decided' AND (settled_at_ms IS NULL OR settled_at_ms<?) AND (json_extract(state,'$.decision.kind')='rejected' OR NOT EXISTS (SELECT 1 FROM fleet_project_creation_inputs AS creation WHERE creation.request_id=outbox.request_id)) ORDER BY COALESCE(settled_at_ms,0),request_id LIMIT ?",
-        )
+        let candidates = sqlx::query::<sqlx_turso::Turso>(concat!(
+            "SELECT outbox.request_id,outbox.canonical_hash,outbox.request,outbox.state,outbox.settled_at_ms ",
+            outbox_retention_eligible!(),
+            " AND ",
+            outbox_retention_stamp!(),
+            "<? ORDER BY ",
+            outbox_retention_stamp!(),
+            ",outbox.request_id LIMIT ?"
+        ))
         .bind(cutoff_ms)
         .bind(i64::from(batch_size))
         .fetch_all(&mut *transaction)

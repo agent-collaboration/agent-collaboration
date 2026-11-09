@@ -2194,6 +2194,7 @@ dependencies = [
  "serde_json",
  "session-event-model",
  "sha2 0.10.9",
+ "sqlite-storage-maintenance",
  "sqlx",
  "sqlx-turso",
  "tempfile",
@@ -4276,6 +4277,7 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -6141,6 +6143,7 @@ version = "0.1.134"
 dependencies = [
  "chrono",
  "fs2",
+ "runtime-primitives",
  "sqlx",
  "tempfile",
  "thiserror 2.0.18",

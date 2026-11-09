@@ -124,13 +124,11 @@ pub(crate) use interaction_storage_failure::map_interaction_storage_error;
 #[cfg(test)]
 mod captured_warnings_test_support;
 mod commit_or_timer_wait;
-mod failed_pass_backoff;
 mod keyed_worker_tasks;
 #[cfg(test)]
 mod paused_worker_test_support;
 mod push_handoff_worker;
 pub use commit_or_timer_wait::{CommitWaitEnd, wait_for_commit_or_timer};
-pub use failed_pass_backoff::{FAILED_PASS_BACKOFF, FailedPassBackoff, FailureRetry};
 mod wake_driven_worker_loop;
 mod wake_driven_worker_observation;
 pub use wake_driven_worker_loop::{BatchOutcome, WakeDrivenWorkerLoop, WakeSource, WorkerPass};

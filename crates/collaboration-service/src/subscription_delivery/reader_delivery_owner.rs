@@ -162,14 +162,14 @@ pub(super) struct ReaderDeliveryOwner {
     pending_ended_push_cleanup: Option<String>,
     /// When a failed clean-up of ended subscriptions is next retried, on its own backoff.
     held_cleanup_retry_at: Option<Instant>,
-    held_cleanup_backoff: collaboration_runtime::FailedPassBackoff,
+    held_cleanup_backoff: sqlite_storage_maintenance::FailedPassBackoff,
     rescan: bool,
     reconcile_replies: Vec<ReconcileReply>,
     /// Held DMs whose target was checked since the last signal it may have loaded.
     dm_checked: std::collections::HashSet<PushId>,
     dm_replies: HashMap<PushId, Vec<DirectMessageReply>>,
     /// A failed pass retries on this backoff; the next pass that completes clears it.
-    failed_pass_backoff: collaboration_runtime::FailedPassBackoff,
+    failed_pass_backoff: sqlite_storage_maintenance::FailedPassBackoff,
     #[cfg(test)]
     barriers: Vec<oneshot::Sender<()>>,
     #[cfg(test)]
@@ -221,12 +221,12 @@ impl ReaderDeliveryOwner {
             pending_waiters: VecDeque::new(),
             pending_ended_push_cleanup: None,
             held_cleanup_retry_at: None,
-            held_cleanup_backoff: collaboration_runtime::FailedPassBackoff::default(),
+            held_cleanup_backoff: sqlite_storage_maintenance::FailedPassBackoff::default(),
             rescan: true,
             reconcile_replies: Vec::new(),
             dm_checked: std::collections::HashSet::new(),
             dm_replies: HashMap::new(),
-            failed_pass_backoff: collaboration_runtime::FailedPassBackoff::default(),
+            failed_pass_backoff: sqlite_storage_maintenance::FailedPassBackoff::default(),
             #[cfg(test)]
             barriers: Vec::new(),
             #[cfg(test)]
