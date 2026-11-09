@@ -49,6 +49,8 @@ pub struct HeldMailTestSignals {
     pub observation_rechecks: tokio::sync::watch::Sender<u64>,
     /// A real lifecycle journal, for tests that record a Codex thread load.
     pub journal: StdMutex<Option<Arc<lifecycle_observation::LifecycleStore>>>,
+    /// How many of the readers' next journal position captures fail.
+    pub failed_captures: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 impl Default for HeldMailTestSignals {
@@ -57,6 +59,7 @@ impl Default for HeldMailTestSignals {
             provider_completions: tokio::sync::watch::channel(0).0,
             observation_rechecks: tokio::sync::watch::channel(0).0,
             journal: StdMutex::new(None),
+            failed_captures: Arc::default(),
         }
     }
 }
@@ -74,11 +77,18 @@ impl HeldMailTestSignals {
             .send_modify(|revision| *revision = revision.wrapping_add(1));
     }
 
+    /// The next journal position capture fails, as an unreadable journal would.
+    pub fn fail_next_capture(&self) {
+        self.failed_captures
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+
     fn signals(&self) -> crate::HeldMailSignals {
         crate::HeldMailSignals {
             journal: self.journal.lock().unwrap().clone(),
             provider_completions: Some(self.provider_completions.subscribe()),
             observation_rechecks: Some(self.observation_rechecks.subscribe()),
+            failed_captures: Arc::clone(&self.failed_captures),
         }
     }
 }
@@ -537,12 +547,14 @@ impl OwnerRuntime {
     }
 }
 
-/// The presence a test sets, how many checks read it, and an optional pause: the next
-/// check tells the test it read, then waits for the test to let it answer.
+/// The presence a test sets, how many checks read it, an optional pause (the next check
+/// tells the test it read, then waits for the test to let it answer), and how many of
+/// the next checks fail.
 pub struct ScriptedPresence(
     pub StdMutex<TargetPresence>,
     pub std::sync::atomic::AtomicUsize,
     pub StdMutex<Option<PresencePause>>,
+    pub std::sync::atomic::AtomicUsize,
 );
 
 pub struct PresencePause {
@@ -556,7 +568,13 @@ impl ScriptedPresence {
             StdMutex::new(presence),
             std::sync::atomic::AtomicUsize::new(0),
             StdMutex::new(None),
+            std::sync::atomic::AtomicUsize::new(0),
         )
+    }
+
+    /// The next check fails, as a probe that cannot reach its route would.
+    pub fn fail_next_check(&self) {
+        self.3.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     }
 
     pub fn checks(&self) -> usize {
@@ -569,10 +587,21 @@ impl TargetPresenceProbe for ScriptedPresence {
         self.1.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let presence = self.0.lock().unwrap().clone();
         let pause = self.2.lock().unwrap().take();
+        let fails = self
+            .3
+            .fetch_update(
+                std::sync::atomic::Ordering::SeqCst,
+                std::sync::atomic::Ordering::SeqCst,
+                |remaining| remaining.checked_sub(1),
+            )
+            .is_ok();
         Box::pin(async move {
             if let Some(pause) = pause {
                 let _ = pause.read.send(());
                 let _ = pause.answer.await;
+            }
+            if fails {
+                return Err(collaboration_contracts::DeliveryContractError::ClientOperation);
             }
             Ok(presence)
         })

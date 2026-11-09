@@ -76,6 +76,8 @@ pub(super) enum OwnerObservation {
     HeldMailSignalTaken {
         owed: bool,
     },
+    /// A pass failed at this stage and armed its backoff retry.
+    PassFailed(&'static str),
     DirectMessageHeld,
     DirectMessageSettled,
     HeldSubscriptionPushesSettled(u64),

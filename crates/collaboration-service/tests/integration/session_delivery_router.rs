@@ -330,6 +330,76 @@ async fn presence_aggregation_uses_running_then_live_elsewhere_then_wakeable()
     Ok(())
 }
 
+/// A Claude Code peer's route that serves the session and finds its terminal closed.
+fn closed_peer() -> Arc<dyn SessionDeliveryRoute> {
+    fake_with_claim_and_presence(
+        RouteClaim::NotMine,
+        RoutePresence::NotRunning,
+        SessionReachability::ClaudeCodePeer,
+        DeliveryOutcome::Queued,
+    )
+    .0
+}
+
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
+)]
+async fn a_closed_peer_ranks_below_running_wakeable_and_live_elsewhere_and_above_unreachable()
+-> Result<(), Box<dyn std::error::Error>> {
+    let running = fake(RouteClaim::Holds, SessionReachability::CodexAppServer).0;
+    let wakeable = fake(RouteClaim::CanLoad, SessionReachability::ProviderAcp).0;
+    let live_elsewhere = fake(
+        RouteClaim::LiveElsewhere {
+            writable: false,
+            detail: Some("thread is live in another app".into()),
+        },
+        SessionReachability::CodexAppServer,
+    )
+    .0;
+    let unreachable = fake(
+        RouteClaim::Unavailable {
+            reason: RouteUnavailableReason {
+                reason: "Codex backend is down".into(),
+                fix: "retry after it starts".into(),
+            },
+            retryable: true,
+        },
+        SessionReachability::CodexAppServer,
+    )
+    .0;
+    let presence = |routes: Vec<Arc<dyn SessionDeliveryRoute>>| async move {
+        SessionDeliveryRouter::new(routes)
+            .presence(&target()?)
+            .await
+            .map_err(Box::<dyn std::error::Error>::from)
+    };
+
+    // The closed peer comes first in each list, so order never decides the answer.
+    assert_eq!(
+        presence(vec![closed_peer(), running]).await?,
+        TargetPresence::Running
+    );
+    assert_eq!(
+        presence(vec![closed_peer(), wakeable]).await?,
+        TargetPresence::Wakeable,
+        "a provider that can load the session wins over the closed peer"
+    );
+    let vetoed = presence(vec![closed_peer(), live_elsewhere]).await?;
+    assert!(
+        matches!(&vetoed, TargetPresence::Unreachable { reason }
+            if reason.starts_with("live elsewhere") && reason.contains("thread is live in another app")),
+        "live elsewhere still vetoes: {vetoed:?}"
+    );
+    assert_eq!(
+        presence(vec![closed_peer(), unreachable]).await?,
+        TargetPresence::NotRunning,
+        "a route that knows the session is not running outranks one that cannot be reached"
+    );
+    Ok(())
+}
+
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,

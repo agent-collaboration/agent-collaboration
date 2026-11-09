@@ -9,6 +9,7 @@
 use collaboration_protocol::{
     JournalPosition, LifecycleChange, LifecycleSubject, NativeThreadStatus, SessionRef,
 };
+use message_board::BoardError;
 use std::sync::Arc;
 use tokio::sync::watch;
 
@@ -22,6 +23,10 @@ pub struct HeldMailSignals {
     pub provider_completions: Option<watch::Receiver<u64>>,
     /// Bumped on each lifecycle observation retry while observation is unavailable.
     pub observation_rechecks: Option<watch::Receiver<u64>>,
+    /// How many of the next journal position captures fail, as an unreadable journal
+    /// would; a read of the journal's bounds has no storage fault a test can arrange.
+    #[cfg(test)]
+    pub(crate) failed_captures: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 /// One reader's view of the signals.
@@ -32,11 +37,14 @@ pub(super) struct HeldMailWatch {
     )>,
     provider_completions: Option<watch::Receiver<u64>>,
     observation_rechecks: Option<watch::Receiver<u64>>,
-    /// The journal position recorded before the reader's last presence check.
+    /// The journal position recorded before the reader's last presence check; none when
+    /// it could not be recorded or read, which owes a check at the next journal signal.
     position: Option<JournalPosition>,
     /// The signal that woke the last wait. Waiting for a change marks it seen, so the
     /// wake itself is the record that it happened.
     woken_by: Option<Signal>,
+    #[cfg(test)]
+    failed_captures: Arc<std::sync::atomic::AtomicUsize>,
 }
 
 /// Which signal woke a wait.
@@ -68,19 +76,46 @@ impl HeldMailWatch {
             }),
             position: None,
             woken_by: None,
+            #[cfg(test)]
+            failed_captures: Arc::clone(&signals.failed_captures),
         }
     }
 
     /// Records where the journal is, just before a presence check reads: a load the
     /// journal records after this point, even during the check, owes another check.
-    pub(super) async fn record_position(&mut self) {
+    ///
+    /// While the reader already holds mail it keeps that mail's earlier position, since a
+    /// later one would hide a load between the two. On an error no position is kept: the
+    /// caller may still deliver what the check allows, but must not keep mail held on it.
+    pub(super) async fn record_position(&mut self, holding: bool) -> Result<(), BoardError> {
+        if holding && self.position.is_some() {
+            return Ok(());
+        }
+        self.position = None;
         let Some((journal, _)) = &self.journal else {
-            return;
+            return Ok(());
         };
-        self.position = journal.bounds().await.ok().map(|bounds| JournalPosition {
+        #[cfg(test)]
+        if self
+            .failed_captures
+            .fetch_update(
+                std::sync::atomic::Ordering::SeqCst,
+                std::sync::atomic::Ordering::SeqCst,
+                |remaining| remaining.checked_sub(1),
+            )
+            .is_ok()
+        {
+            return Err(BoardError::board_unavailable());
+        }
+        let bounds = journal.bounds().await.map_err(|error| {
+            tracing::warn!(%error, "held-mail journal position could not be recorded");
+            BoardError::board_unavailable()
+        })?;
+        self.position = Some(JournalPosition {
             journal_id: bounds.journal_id,
             sequence: bounds.last_sequence,
         });
+        Ok(())
     }
 
     /// Resolves at the next signal and records which one; never when the reader has no
@@ -159,19 +194,28 @@ impl HeldMailWatch {
 
     /// Reads the journal after the recorded position for a status of `target`'s thread
     /// that left "not loaded", and moves the position past what it read.
+    ///
+    /// Without a position to read after (none was recorded, or the journal cannot be read
+    /// from it, such as history expired past it) the reader cannot tell whether its target
+    /// loaded, so it owes one check, and that check records a fresh position.
     async fn target_loaded_since_position(&mut self, target: &SessionRef) -> bool {
-        let (Some((journal, _)), Some(position)) = (&self.journal, self.position.clone()) else {
+        let Some((journal, _)) = &self.journal else {
             return false;
         };
-        let mut after = position;
+        let Some(mut after) = self.position.take() else {
+            return true;
+        };
         let mut loaded = false;
         loop {
-            let Ok(page) = journal
+            let page = match journal
                 .read_wait(&target.endpoint, after.clone(), JOURNAL_PAGE, 0)
                 .await
-            else {
-                // An unreadable journal is unavailable observation: its retry is a signal.
-                return loaded;
+            {
+                Ok(page) => page,
+                Err(error) => {
+                    tracing::debug!(%error, "held-mail journal unreadable from its position");
+                    return true;
+                }
             };
             loaded |= page.records.iter().any(|record| {
                 matches!(

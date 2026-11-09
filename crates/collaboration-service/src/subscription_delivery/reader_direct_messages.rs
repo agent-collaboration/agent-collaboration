@@ -17,12 +17,12 @@ impl ReaderDeliveryOwner {
             .retain(|push_id| records.iter().any(|record| &record.push_id == push_id));
         for record in &records {
             // A held DM is checked once, then again only after a signal that its target
-            // may have loaded.
+            // may have loaded. It is marked checked only once its write succeeds, so a
+            // failed pass checks and writes it again on the backoff.
             if self.dm_checked.contains(&record.push_id) {
                 continue;
             }
-            self.dm_checked.insert(record.push_id.clone());
-            self.held_mail.record_position().await;
+            let recorded = self.held_mail.record_position(self.holds_mail()).await;
             // Wakeable establishes unloaded presence. Unreachable is ambiguous:
             // Layer 0 must still classify live-elsewhere and permanent route failures.
             let known_unloaded = matches!(
@@ -47,10 +47,12 @@ impl ReaderDeliveryOwner {
             } else {
                 OwnerObservation::DirectMessageSettled
             });
-            if settled.delivery_state != PushDeliveryState::Held {
-                self.dm_checked.remove(&record.push_id);
-            }
             self.answer_direct_message(&settled);
+            if settled.delivery_state == PushDeliveryState::Held {
+                // A DM stays held only where a journal position says when to check again.
+                recorded?;
+                self.dm_checked.insert(record.push_id.clone());
+            }
         }
         // An accepted command may name work settled on an earlier scan. Read back its
         // durable result rather than replaying the effect to satisfy the response.

@@ -384,6 +384,53 @@ async fn dm_settlement_failure_retries_the_write_without_duplicate_delivery() {
 }
 
 #[tokio::test]
+async fn a_failed_hold_write_leaves_the_dm_unmarked_and_the_backoff_holds_it() {
+    let fixture = Box::pin(OwnerFixture::new()).await;
+    *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
+    native_worker_faults::execute(fixture.interactions.clone(), "CREATE TRIGGER fail_dm_hold BEFORE UPDATE OF delivery_state ON router_pushes WHEN NEW.delivery_state='held' BEGIN SELECT RAISE(FAIL, 'injected hold failure'); END", None).await.unwrap();
+    let push_id = insert(&fixture, MessageDelivery::Queue, None).await;
+    let runtime = fixture.runtime_without_board().await;
+    // The target is not running and the hold write fails: the pass fails, and the DM is
+    // not marked checked.
+    bounded_observe(&runtime, |event| {
+        matches!(event, OwnerObservation::PassFailed("direct_messages"))
+    })
+    .await;
+    assert_eq!(
+        record(&fixture, &push_id).await.delivery_state,
+        PushDeliveryState::Pending
+    );
+    native_worker_faults::execute(
+        fixture.interactions.clone(),
+        "DROP TRIGGER fail_dm_hold",
+        None,
+    )
+    .await
+    .unwrap();
+    // The backoff checks and writes it again, and now it is held.
+    fixture.clock.advance_without_tokio_time(1);
+    bounded_observe(&runtime, |event| {
+        matches!(event, OwnerObservation::DirectMessageHeld)
+    })
+    .await;
+    assert_eq!(
+        record(&fixture, &push_id).await.delivery_state,
+        PushDeliveryState::Held
+    );
+    assert!(runtime.requests.lock().await.try_recv().is_err());
+    // A later load signal delivers it.
+    *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
+    fixture.held_mail.observation_retried();
+    assert_eq!(request(&runtime).await.payload.push_id, push_id);
+    runtime.completions.send(DeliveryOutcome::Started).unwrap();
+    bounded_observe(&runtime, |event| {
+        matches!(event, OwnerObservation::DirectMessageSettled)
+    })
+    .await;
+    runtime.close().await;
+}
+
+#[tokio::test]
 async fn restored_guarded_generation_mismatch_is_terminal_without_any_broadened_attempt() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     let pinned = guard();

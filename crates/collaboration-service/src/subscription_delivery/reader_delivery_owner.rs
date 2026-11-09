@@ -494,7 +494,7 @@ impl ReaderDeliveryOwner {
         #[cfg(test)]
         self.observe(OwnerObservation::Sleeping(deadline));
         // Only a reader holding mail wakes on the signals that its target may have loaded.
-        let holding = !self.dm_checked.is_empty() || !self.native_checked.is_empty();
+        let holding = self.holds_mail();
         let clock = self.clock.clone();
         let timer = async {
             match deadline {
@@ -660,9 +660,16 @@ impl ReaderDeliveryOwner {
         self.board_availability.require_store()
     }
 
+    /// Whether mail this reader checked is still held, waiting for a load signal.
+    pub(super) fn holds_mail(&self) -> bool {
+        !self.dm_checked.is_empty() || !self.native_checked.is_empty()
+    }
+
     /// Arms the failed pass's retry on the backoff, logging only the failure that starts a run.
     fn failed_pass_retry(&mut self, stage: FailedPassStage, error: &BoardError) -> Instant {
         let retry = self.failed_pass_backoff.record_failure();
+        #[cfg(test)]
+        self.observe(OwnerObservation::PassFailed(stage.as_str()));
         if retry.starts_run {
             tracing::warn!(
                 %error,

@@ -1,7 +1,9 @@
 //! The existing reader cadence prompts the native custody owner; it never delivers a second copy.
 //!
 //! A held item's target is checked once when the reader first sees the item, and again
-//! only after a signal that it may have loaded; there is no presence timer.
+//! only after a signal that it may have loaded; there is no presence timer. Items are
+//! marked checked only when a check succeeds and leaves them held; a failed check, journal
+//! capture or release fails the pass, and its backoff checks again.
 use super::{BoardError, ReaderDeliveryOwner, TargetPresence};
 #[cfg(test)]
 use crate::subscription_delivery::subscription_service::OwnerObservation;
@@ -30,12 +32,15 @@ impl ReaderDeliveryOwner {
         else {
             return Ok(!items.is_empty());
         };
-        // Presence belongs to this reader: one check answers for all its held items.
-        self.held_mail.record_position().await;
-        let running = matches!(
-            self.presence.presence(target).await,
-            Ok(TargetPresence::Running)
-        );
+        // Presence belongs to this reader: one check answers for all its held items, so
+        // none stays marked unless the whole check succeeds.
+        self.native_checked.clear();
+        let recorded = self.held_mail.record_position(self.holds_mail()).await;
+        let presence = self.presence.presence(target).await.map_err(|error| {
+            tracing::warn!(%error, "native held-mail presence check failed");
+            BoardError::board_unavailable()
+        })?;
+        let running = matches!(presence, TargetPresence::Running);
         #[cfg(test)]
         self.observe(OwnerObservation::NativeHeldChecked {
             item: item.clone(),
@@ -43,7 +48,6 @@ impl ReaderDeliveryOwner {
         });
         #[cfg(not(test))]
         let _ = item;
-        self.native_checked.extend(items.iter().cloned());
         if running {
             runtime
                 .release_held_mail(items.clone())
@@ -52,6 +56,10 @@ impl ReaderDeliveryOwner {
                     tracing::warn!(%error, "native held-mail release failed");
                     BoardError::board_unavailable()
                 })?;
+        } else {
+            // Mail stays held only where a journal position says when to check again.
+            recorded?;
+            self.native_checked.extend(items.iter().cloned());
         }
         Ok(!items.is_empty())
     }

@@ -35,6 +35,8 @@ mod native_generation_isolation_proofs;
 mod native_generation_prevention_proofs;
 #[path = "native_handoff_recovery_proofs.rs"]
 mod native_handoff_recovery_proofs;
+#[path = "native_held_mail_fault_proofs.rs"]
+mod native_held_mail_fault_proofs;
 #[path = "native_held_mail_proofs.rs"]
 mod native_held_mail_proofs;
 #[path = "native_intent_publisher_proofs.rs"]
