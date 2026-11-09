@@ -15,9 +15,7 @@ mod machine_connection;
 mod machine_token_check;
 mod machine_token_decision;
 #[cfg(any(test, feature = "conformance"))]
-mod sql_scenario;
-#[cfg(test)]
-mod sql_store_fixture;
+mod sql_cases;
 #[cfg(test)]
 mod test_fixtures;
 
@@ -41,4 +39,4 @@ pub use machine_token_check::{
 };
 pub use machine_token_decision::decide_machine_token;
 #[cfg(feature = "conformance")]
-pub use sql_scenario::{ScenarioStep, expected_scenario, run_scenario};
+pub use sql_cases::{CasePhase, SQL_CASES, run_sql_case};

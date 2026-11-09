@@ -36,7 +36,7 @@ pub use machine_login::{
     revoke_machine_enrollment,
 };
 #[cfg(feature = "conformance")]
-pub use machine_login::{ScenarioStep, expected_scenario, run_scenario};
+pub use machine_login::{CasePhase, SQL_CASES, run_sql_case};
 pub(crate) use organization_stamp_store::read as read_stored_stamp;
 #[cfg(feature = "conformance")]
 pub(crate) use organization_stamp_store::tamper as tamper_stored_statement;

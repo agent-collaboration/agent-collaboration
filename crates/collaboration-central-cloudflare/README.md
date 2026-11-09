@@ -69,9 +69,11 @@ retained examples. Supply a fresh persistence directory for each scenario.
 `composed-transactions`, `composed-numeric`, `runtime-controls` or
 `composed-fleet-conflict`, followed by Node, Miniflare, persistence and port.
 `step_scope_workerd`, `bootstrap_scope_workerd` and
-`machine_login_scenario_workerd` accept those four arguments without a mode.
-The last runs B3's machine-login scenario on a fresh object and compares its
-report with the one the Tokio store produces. Their fixtures use owner-verified
+`machine_login_cases_workerd` accept those four arguments without a mode.
+The last runs every B3 machine-login SQL case (`SQL_CASES`) on its own named
+object, the same cases core runs on the Tokio store; `persistence` writes in one
+request and reads back in a later one on the same object. A workerd process
+restart is not part of it. Their fixtures use owner-verified
 `/admin/v1/conformance/fleet-receipt` and `/admin/v1/conformance/bootstrap`.
 
 Normal session cases use a mode after the four runtime arguments, for example:

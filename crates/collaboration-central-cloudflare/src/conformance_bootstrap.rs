@@ -37,7 +37,8 @@ enum Fixture {
     Uncertain,
     Enrollment,
     ImportedUnheld,
-    /// B3's machine-login scenario on a fresh object: see `run_scenario`.
+    /// One of B3's machine-login SQL cases (`SQL_CASES`) on the object the
+    /// command names.
     MachineLogin,
 }
 impl Fixture {
@@ -79,7 +80,13 @@ enum Command {
         access_client_id: AccessClientId,
         credential_hash: String,
     },
-    MachineLogin {},
+    MachineLogin {
+        case: String,
+        phase: collaboration_central_core::organization_authority::CasePhase,
+        /// Each case runs on its own fresh object; `persistence` reads back from
+        /// the object its write used.
+        object: String,
+    },
 }
 fn registry(
     host: Arc<ReceiptStoreHost>,
@@ -162,11 +169,11 @@ pub(crate) async fn forward(env: &Env, mut request: Request) -> Result<Response>
     }
 
     let namespace = env.durable_object("SCHEMA_PROBES")?;
-    // The scenario starts from an empty store, so each run gets its own object.
-    let id = if matches!(body.fixture, Fixture::MachineLogin) {
-        namespace.unique_id()?
-    } else {
-        namespace.id_from_name(body.fixture.name())?
+    let id = match &body.command {
+        Command::MachineLogin { object, .. } => {
+            namespace.id_from_name(&format!("machineLogin/{object}"))?
+        }
+        _ => namespace.id_from_name(body.fixture.name())?,
     };
     let stub = id.get_stub()?;
     let mut init = RequestInit::new();
@@ -262,16 +269,14 @@ impl DurableObject for BootstrapObject {
             .and_then(|reply| {
                 serde_json::to_value(reply).map_err(durable_steps::StoreError::backend)
             }),
-            Command::MachineLogin {} => {
-                collaboration_central_core::organization_authority::run_scenario::<
+            Command::MachineLogin { case, phase, .. } => {
+                collaboration_central_core::organization_authority::run_sql_case::<
                     _,
                     sqlx_durable_object::Do,
-                >(host.store().clone())
+                >(&case, phase, host.store().clone())
                 .await
+                .map(|()| serde_json::Value::Null)
                 .map_err(durable_steps::StoreError::backend)
-                .and_then(|report| {
-                    serde_json::to_value(report).map_err(durable_steps::StoreError::backend)
-                })
             }
         };
         #[cfg(feature = "conformance-faults")]

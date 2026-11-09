@@ -420,19 +420,3 @@ where
         .map_err(sql)
     }
 }
-
-#[cfg(test)]
-#[path = "enrollment_sql_store_test.rs"]
-mod tests;
-
-#[cfg(test)]
-#[path = "sql_constraint_test.rs"]
-mod constraint_tests;
-
-#[cfg(test)]
-#[path = "sql_conversion_test.rs"]
-mod conversion_tests;
-
-#[cfg(test)]
-#[path = "sql_connection_test.rs"]
-mod connection_tests;

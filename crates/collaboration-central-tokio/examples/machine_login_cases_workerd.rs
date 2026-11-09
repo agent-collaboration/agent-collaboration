@@ -1,13 +1,14 @@
-//! B3's machine-login scenario on real Durable Object SQLite. The Worker runs
-//! core's shared script (`run_scenario`) on a fresh object: a Fleet built by
-//! 0001/0002 code, the staged switch, then the machine-login decisions through
-//! their public entries. Its report must equal `expected_scenario`, the same
-//! report the Tokio store produces in core's own test.
+//! Every B3 machine-login SQL case on real Durable Object SQLite: the same
+//! cases core runs on the Tokio store (`SQL_CASES`), each on its own named
+//! object. Each case checks the store's own rows itself and answers only
+//! whether it passed. `persistence` writes in one request and reads back in a
+//! later request to the same named object. A workerd process restart is not
+//! part of this run.
 #![forbid(unsafe_code)]
 
 use collaboration_central_conformance::workerd_process::{WorkerdProcess, WorkerdSettings};
 use collaboration_central_conformance::{ConformanceResult, JwksFixtureServer, owner_assertion};
-use collaboration_central_core::organization_authority::{ScenarioStep, expected_scenario};
+use collaboration_central_core::organization_authority::{CasePhase, SQL_CASES};
 use durable_steps::StoreError;
 use serde::Deserialize;
 use serde_json::json;
@@ -16,47 +17,46 @@ use std::time::Duration;
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Reply {
-    result: Result<Vec<ScenarioStep>, StoreError>,
+    result: Result<(), StoreError>,
     reply_loss_observed: bool,
 }
 
-async fn scenario(http: &reqwest::Client, url: &str) -> ConformanceResult<Vec<ScenarioStep>> {
+async fn run_case(
+    http: &reqwest::Client,
+    url: &str,
+    case: &str,
+    phase: CasePhase,
+) -> ConformanceResult<()> {
     let reply: Reply = http
         .post(url)
         .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
-        .json(&json!({"fixture":"machineLogin","command":{"kind":"machineLogin","value":{}},"fault":null}))
+        .json(&json!({
+            "fixture": "machineLogin",
+            "command": {"kind": "machineLogin", "value": {"case": case, "phase": phase, "object": case}},
+            "fault": null,
+        }))
         .send()
         .await?
         .error_for_status()?
         .json()
         .await?;
     if reply.reply_loss_observed {
-        return Err("the scenario observed a lost reply it never asked for".into());
+        return Err(format!("{case} observed a lost reply it never asked for").into());
     }
     Ok(reply.result?)
 }
 
-fn compare(report: &[ScenarioStep]) -> ConformanceResult<()> {
-    let expected = expected_scenario();
-    for (observed, wanted) in report.iter().zip(&expected) {
-        if observed != wanted {
-            return Err(format!(
-                "step {:?} differs from Tokio's expectation:\n observed {}\n expected {}",
-                wanted.name, observed.observed, wanted.observed
-            )
-            .into());
+async fn run_all(http: &reqwest::Client, url: &str) -> ConformanceResult<usize> {
+    for case in SQL_CASES {
+        if *case == "persistence" {
+            run_case(http, url, case, CasePhase::Write).await?;
+            run_case(http, url, case, CasePhase::Read).await?;
+        } else {
+            run_case(http, url, case, CasePhase::Run).await?;
         }
-        println!("MACHINE_LOGIN_STEP {} matched", wanted.name);
+        println!("MACHINE_LOGIN_CASE {case} passed");
     }
-    if report.len() != expected.len() {
-        return Err(format!(
-            "the report has {} steps; the expectation has {}",
-            report.len(),
-            expected.len()
-        )
-        .into());
-    }
-    Ok(())
+    Ok(SQL_CASES.len())
 }
 
 #[tokio::main]
@@ -91,16 +91,14 @@ async fn main() -> ConformanceResult<()> {
         copy_ack_wait: Duration::from_secs(2),
     };
     let server = WorkerdProcess::start(&settings).await?;
-    let result = scenario(&http, &url).await;
+    let result = run_all(&http, &url).await;
     let stopped = server.stop().await;
     let fixture = jwks.shutdown().await;
     stopped?;
     fixture?;
-    let report = result?;
-    compare(&report)?;
+    let passed = result?;
     println!(
-        "MACHINE_LOGIN_RESULT {} steps matched (real DO SQLite; the staged, unregistered B3 corpus; fixture initialization only)",
-        report.len()
+        "MACHINE_LOGIN_RESULT {passed} cases passed (real DO SQLite; the staged, unregistered B3 corpus; persistence within one workerd run, no process restart)"
     );
     Ok(())
 }
