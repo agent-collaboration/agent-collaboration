@@ -59,11 +59,12 @@ async function publication(peer: ControlledPeer, item: string, status: string) {
   return field(frame, "value", "body", "value", "value", "publication");
 }
 
-async function submit(
+export async function submitControlledMail(
   a: ControlledMailActor,
   recipient: ControlledMailActor,
   text: string,
   receipt: Receipt,
+  validUntil: bigint | null = null,
 ) {
   const id = randomUUIDv7();
   const content = {
@@ -76,7 +77,7 @@ async function submit(
         sessionId: "controlled-recipient",
       },
     },
-    validUntil: null,
+    validUntil,
     body: {
       kind: "message",
       text,
@@ -178,7 +179,8 @@ export async function driveControlledMail(input: {
     return response;
   }
   const items: string[] = [];
-  for (let i = 0; i < 33; i++) items.push(await submit(a, b, "D4 target3b " + i, receipt));
+  for (let i = 0; i < 33; i++)
+    items.push(await submitControlledMail(a, b, "D4 target3b " + i, receipt));
   const pushes: unknown[] = [];
   for (let i = 0; i < 32; i++) pushes.push(await b.connection.receive(push));
   const filled = await snapshot("filled");
@@ -224,7 +226,7 @@ export async function driveControlledMail(input: {
     ),
     "MailboxFull lost its Refused connection/session slot",
   );
-  const cItem = await submit(a, c, "C continues during full B window", receipt);
+  const cItem = await submitControlledMail(a, c, "C continues during full B window", receipt);
   const cPush = await c.connection.receive(push);
   answerPush(c.connection, cPush, accepted());
   await publication(a.connection, cItem, "atRecipient");
@@ -423,7 +425,7 @@ export async function driveRefusalSilenceBackoff(input: RefusalBackoffInput): Pr
   const admitted = await input.completeClientFrame({
     peer: input.sender.connection,
     action: (): Promise<string> =>
-      submit(input.sender, input.recipient, "O3 refusal then silence", input.receipt),
+      submitControlledMail(input.sender, input.recipient, "O3 refusal then silence", input.receipt),
   });
   const item = admitted.outcome;
   const original = await input.recipient.connection.receive(push);
