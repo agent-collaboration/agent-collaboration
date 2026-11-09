@@ -1,5 +1,6 @@
 //! Expiry comes from the existing reader cadence and a locked project transition.
 use super::native_follow_mail_proofs::{follow_application, frozen_follow};
+use super::native_held_mail_proofs::checked_while_wakeable_then_loaded;
 use super::*;
 use board_sync_protocol::BoardDeliveryBody;
 use collaboration_mail_protocol::NotificationSource;
@@ -181,7 +182,8 @@ async fn a_renewed_held_follow_delivers_past_its_original_membership_expiry() {
         )
         .await;
     fixture.clock.advance_without_tokio_time(2);
-    *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
+    // The target loads after the reader checked the renewed held follow.
+    checked_while_wakeable_then_loaded(&fixture, &runtime, &held.push_id).await;
     let request = tokio::time::timeout(Duration::from_secs(6), async {
         runtime.requests.lock().await.recv().await.unwrap()
     })
