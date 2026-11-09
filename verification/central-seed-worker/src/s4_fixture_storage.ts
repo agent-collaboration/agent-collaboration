@@ -128,12 +128,18 @@ export function snapshotPage(sql: SqlStorage, cursor: SnapshotCursor | null): Sn
   const rowid = hasRowid(sql, table);
   const after = cursor?.after ?? null;
   const rows = rowid
-    ? sql
-        .exec(
-          `SELECT CAST(rowid AS TEXT) AS "rowid", ${select} FROM ${quoted(table)} WHERE rowid > CAST(? AS INTEGER) ORDER BY rowid LIMIT ${SNAPSHOT_PAGE_ROWS}`,
-          after ?? "-9223372036854775808",
-        )
-        .toArray()
+    ? // A table's first page has no lower bound, so a row at the minimum rowid is
+      // read too; each later page starts strictly after the previous page's last.
+      // The text copy is aliased row_id: ORDER BY rowid must sort the integer.
+      (after === null
+        ? sql.exec(
+            `SELECT CAST(rowid AS TEXT) AS "row_id", ${select} FROM ${quoted(table)} ORDER BY rowid LIMIT ${SNAPSHOT_PAGE_ROWS}`,
+          )
+        : sql.exec(
+            `SELECT CAST(rowid AS TEXT) AS "row_id", ${select} FROM ${quoted(table)} WHERE rowid > CAST(? AS INTEGER) ORDER BY rowid LIMIT ${SNAPSHOT_PAGE_ROWS}`,
+            after,
+          )
+      ).toArray()
     : sql
         .exec(
           `SELECT ${select} FROM ${quoted(table)} ORDER BY ${columns.map((_, index) => index + 1).join(", ")} LIMIT ${SNAPSHOT_PAGE_ROWS} OFFSET ?`,
@@ -141,7 +147,7 @@ export function snapshotPage(sql: SqlStorage, cursor: SnapshotCursor | null): Sn
         )
         .toArray();
   const page: SnapshotRow[] = rows.map((row) => ({
-    ...(rowid ? { rowid: String(row.rowid) } : {}),
+    ...(rowid ? { rowid: String(row.row_id) } : {}),
     cells: columns.map((_, index) => cellOf(row[`t${index}`], row[`v${index}`])),
   }));
   const tableIndex = names.indexOf(table);

@@ -146,3 +146,45 @@ test("the S4 routes refuse outside the S4 allocation", async () => {
     await storage.remove();
   }
 });
+
+test("the snapshot reads rows at both rowid extremes, across a page boundary, and the restore puts them back", async () => {
+  const signer = await testSigner();
+  const storage = await persistenceRoot();
+  try {
+    await withSeed(storage.path, signer, S4_ALLOCATION, async (call) => {
+      // Arrange: an object whose table holds the minimum and maximum signed
+      // 64-bit rowids around a full page of ordinary rows.
+      const object = { binding: "FLEET", name: "rowid-extremes" } as const;
+      const ordinary = Array.from(
+        { length: 500 },
+        (_, index) => `(${index + 1}, 'row ${index + 1}')`,
+      );
+      await writeStatements(call, [
+        {
+          ...object,
+          statements: [
+            "CREATE TABLE extremes(value TEXT)",
+            "INSERT INTO extremes(rowid, value) VALUES (-9223372036854775808, 'minimum')",
+            `INSERT INTO extremes(rowid, value) VALUES ${ordinary.join(", ")}`,
+            "INSERT INTO extremes(rowid, value) VALUES (9223372036854775807, 'maximum')",
+          ],
+        },
+      ]);
+
+      // Act
+      const image = (await snapshotCohort(call, [object]))[cohortKey(object)];
+      await writeStatements(call, [{ ...object, statements: ["DELETE FROM extremes"] }]);
+      await restoreObjects(call, [object], { [cohortKey(object)]: image! });
+      const restored = (await snapshotCohort(call, [object]))[cohortKey(object)];
+
+      // Assert: every row read, both extremes included, and restored exactly.
+      const rows = image?.tables.extremes?.rows ?? [];
+      assert.equal(rows.length, 502);
+      assert.equal(rows[0]?.rowid, "-9223372036854775808");
+      assert.equal(rows.at(-1)?.rowid, "9223372036854775807");
+      assert.deepEqual(restored, image);
+    });
+  } finally {
+    await storage.remove();
+  }
+});
