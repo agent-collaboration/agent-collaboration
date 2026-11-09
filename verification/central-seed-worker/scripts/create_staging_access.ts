@@ -32,6 +32,8 @@ if (
     "usage: create_staging_access.ts <settings.json> <secrets dir> <tokens|apps|readback> [--dry-run]",
   );
 }
+const settingsFile: string = settingsPath;
+const secrets: string = secretsDir;
 const dryRun = flags.includes("--dry-run");
 const TOKEN_NAMES = ["s1-sunbook-debug-router", "s1-sunclaw-debug-router"] as const;
 const TOKEN_DURATION = "720h";
@@ -42,7 +44,7 @@ interface S1Settings {
   hostname: string;
   access: Record<string, unknown> & { ownerIdentity: string };
 }
-const settings = JSON.parse(await readFile(settingsPath, "utf8")) as S1Settings;
+const settings = JSON.parse(await readFile(settingsFile, "utf8")) as S1Settings;
 if (
   settings.hostname === "central.agent-collaboration.com" ||
   settings.workerName === "collaboration-central"
@@ -69,7 +71,7 @@ const listOf = (answer: unknown): Record<string, unknown>[] => {
   return Array.isArray(result) ? (result as Record<string, unknown>[]) : [];
 };
 const saveSettings = () =>
-  writeFile(settingsPath, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
+  writeFile(settingsFile, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
 
 async function tokens() {
   const existing = listOf(await cf(["zero-trust", "access", "service-tokens", "list"]));
@@ -102,11 +104,11 @@ async function tokens() {
     const { stdout } = await run("cf", args, {
       env: { ...process.env, CLOUDFLARE_ACCOUNT_ID: settings.accountId },
     });
-    await mkdir(secretsDir, { recursive: true, mode: 0o700 });
-    await writeFile(join(secretsDir, `${name}.json`), stdout, { mode: 0o600, flag: "wx" });
+    await mkdir(secrets, { recursive: true, mode: 0o700 });
+    await writeFile(join(secrets, `${name}.json`), stdout, { mode: 0o600, flag: "wx" });
     const token = resultOf(JSON.parse(stdout)) as { id?: string; expires_at?: unknown };
     if (typeof token.id !== "string")
-      throw new Error(`token ${name}: the response has no id; its raw answer is in ${secretsDir}`);
+      throw new Error(`token ${name}: the response has no id; its raw answer is in ${secrets}`);
     recorded.push({ name, id: token.id, expiresAt: token.expires_at });
   }
   if (!dryRun) {
