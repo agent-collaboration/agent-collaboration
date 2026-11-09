@@ -60,6 +60,8 @@ pub(crate) struct InMemoryEnrollments {
     /// Runs inside the next transaction before its decision: a wait the
     /// decision must sample its clock after.
     before_decision: Mutex<Option<BeforeDecision>>,
+    /// Fails the next transaction before it reads anything: an outage.
+    fail_next: Mutex<Option<MachineEnrollmentFailure>>,
 }
 
 impl InMemoryEnrollments {
@@ -67,6 +69,7 @@ impl InMemoryEnrollments {
         Self {
             store: Mutex::new(store),
             before_decision: Mutex::new(None),
+            fail_next: Mutex::new(None),
         }
     }
 
@@ -75,6 +78,13 @@ impl InMemoryEnrollments {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .clone()
+    }
+
+    pub(crate) fn fail_next_transaction(&self, failure: MachineEnrollmentFailure) {
+        *self
+            .fail_next
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(failure);
     }
 
     pub(crate) fn before_next_decision(&self, hook: impl FnOnce() + Send + 'static) {
@@ -91,6 +101,14 @@ impl MachineEnrollmentPort for InMemoryEnrollments {
         query: EnrollmentQuery,
         decide: impl FnOnce(&EnrollmentFacts) -> Decided<T> + Send + 'static,
     ) -> Result<T, MachineEnrollmentFailure> {
+        if let Some(failure) = self
+            .fail_next
+            .lock()
+            .map_err(|_| MachineEnrollmentFailure::Unavailable)?
+            .take()
+        {
+            return Err(failure);
+        }
         let mut store = self
             .store
             .lock()

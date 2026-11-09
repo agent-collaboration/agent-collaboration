@@ -6,7 +6,7 @@ use super::super::enrollment_records::{
 use super::super::in_memory_enrollments::{EnrollmentStore, InMemoryEnrollments};
 use super::super::test_fixtures::{
     APPROVER, CountingIds, MACHINE, NOW_MS, NOW_S, TestClock, WORKSPACE_A, WORKSPACE_B, approval,
-    empty_store, enrollment, installation, uuid7, with_enrolled, workspace,
+    approver, empty_store, enrollment, installation, label, uuid7, with_enrolled, workspace,
 };
 use super::{SD8_MILLIS, decide_device_login};
 use crate::identity_contract::{
@@ -15,6 +15,7 @@ use crate::identity_contract::{
 use crate::organization_authority::{OrganizationChangeKind, OrganizationChangeOrigin};
 use fleet_identity_protocol::UnixSeconds;
 use std::num::NonZeroU32;
+use std::sync::Arc;
 
 const REQUEST: u64 = 0x30;
 const OTHER_MACHINE: u64 = 0x11;
@@ -31,10 +32,10 @@ async fn decide(
         .unwrap_or(0);
     decide_device_login(
         port,
-        request,
+        request.clone(),
         received_at_ms,
-        clock.as_ref(),
-        &CountingIds::from(0xa000 + 0x100 * minted),
+        clock,
+        Arc::new(CountingIds::from(0xa000 + 0x100 * minted)),
     )
     .await
     .unwrap()
@@ -75,16 +76,20 @@ async fn an_approval_writes_an_approved_enrollment_its_allowances_and_their_reco
         Some(&StoredEnrollment {
             id: enrollment_id.clone(),
             installation: installation(MACHINE),
-            approval: request.clone(),
+            request_id: request.request_id.clone(),
+            approved_by: approver(),
             base_generation: EnrollmentGeneration(0),
             approved_at_ms: NOW_MS,
+            code_expires_at: request.code_expires_at,
             state: StoredEnrollmentState::Approved,
+            ended_at_ms: None,
         })
     );
     assert_eq!(
         after.installations.get(&installation(MACHINE)),
         Some(&InstallationRow {
             installation: installation(MACHINE),
+            label: label(),
             generation: EnrollmentGeneration(0),
             active: None,
         })
@@ -206,6 +211,24 @@ async fn sd8_accepts_exactly_five_seconds_after_receipt_and_refuses_one_millisec
     .await;
 }
 
+/// A B3 machine is its peer (B3:126): a login naming another peer is refused,
+/// and nothing is written.
+#[tokio::test]
+async fn a_device_login_whose_peer_is_not_its_installation_is_not_permitted() {
+    let request = DecideDeviceLogin {
+        peer: fleet_sync_protocol::PeerId::try_from(uuid7(0x11)).unwrap(),
+        ..approval(REQUEST, MACHINE, &[WORKSPACE_A])
+    };
+
+    assert_refused_unchanged(
+        empty_store(),
+        &request,
+        NOW_MS,
+        DeviceLoginRefusal::NotPermitted {},
+    )
+    .await;
+}
+
 /// The applying clock is read inside the transaction: a wait before the
 /// decision runs counts against SD8.
 #[tokio::test]
@@ -217,10 +240,10 @@ async fn sd8_is_measured_on_the_clock_read_after_waiting_for_the_transaction() {
 
     let answer = decide_device_login(
         &port,
-        &approval(REQUEST, MACHINE, &[WORKSPACE_A]),
+        approval(REQUEST, MACHINE, &[WORKSPACE_A]),
         NOW_MS,
-        clock.as_ref(),
-        &CountingIds::new(),
+        clock,
+        Arc::new(CountingIds::new()),
     )
     .await
     .unwrap();

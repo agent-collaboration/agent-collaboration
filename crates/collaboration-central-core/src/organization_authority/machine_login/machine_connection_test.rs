@@ -17,11 +17,11 @@ use crate::identity_contract::{
     MachineConnectionRefusal, MachineTokenDecision, MachineTokenRefusal, PersonId,
     PresentedMachine, RevokeMachineEnrollment, RevokeMachineEnrollmentResult,
 };
-use crate::organization_authority::{
-    ChangeRequestId, OrganizationChangeKind, OrganizationChangeOrigin,
-};
+use crate::organization_authority::{OrganizationChangeKind, OrganizationChangeOrigin};
+use crate::person_request::AdminOperationId;
 use fleet_identity_protocol::{OrganizationId, UnixSeconds};
 use fleet_sync_protocol::PeerId;
+use std::sync::Arc;
 
 const WORKING: u64 = 0x40;
 const A: u64 = 0x41;
@@ -60,9 +60,16 @@ async fn admit(
     request: &AdmitMachineConnection,
 ) -> MachineConnectionAdmission {
     let clock = TestClock::at(NOW_MS);
-    admit_machine_connection(port, request, clock.as_ref(), settings())
-        .await
-        .unwrap()
+    let minted = u64::try_from(port.snapshot().records.len()).unwrap_or(0);
+    admit_machine_connection(
+        port,
+        request.clone(),
+        clock,
+        Arc::new(CountingIds::from(0xd800 + 0x100 * minted)),
+        settings(),
+    )
+    .await
+    .unwrap()
 }
 
 async fn assert_admission_refused(
@@ -174,13 +181,13 @@ async fn a_superseded_enrollment_is_refused_after_the_newer_first_grant() {
     let clock = TestClock::at(NOW_MS);
     decide_machine_token(
         &port,
-        &DecideMachineToken {
+        DecideMachineToken {
             organization_id: organization(0x01),
             enrollment_id: enrollment(A),
             client_id: client(A),
         },
-        clock.as_ref(),
-        &CountingIds::new(),
+        clock,
+        Arc::new(CountingIds::new()),
         settings(),
     )
     .await
@@ -205,11 +212,13 @@ async fn an_idle_enrollment_expires_at_admission_with_the_exact_expiry() {
             reason: MachineConnectionRefusal::EnrollmentNotActive {},
         }
     );
+    let after = port.snapshot();
     let mut expected = store;
     if let Some(row) = expected.enrollments.get_mut(&enrollment(WORKING)) {
         row.state = StoredEnrollmentState::Expired {
             machine_client_id: client(WORKING),
         };
+        row.ended_at_ms = Some(NOW_MS);
     }
     if let Some(row) = expected.installations.get_mut(&installation(MACHINE)) {
         row.active = None;
@@ -217,13 +226,33 @@ async fn an_idle_enrollment_expires_at_admission_with_the_exact_expiry() {
     for allowance in &mut expected.allowances {
         allowance.state = AllowanceState::Withdrawn;
     }
-    assert_eq!(port.snapshot(), expected);
+    expected.records.clone_from(&after.records);
+    assert_eq!(after, expected);
+    // The admission that first observes the expiry records it, automatically (N07).
+    let kinds = after
+        .records
+        .iter()
+        .map(|record| (record.kind, record.origin.clone()))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        kinds,
+        vec![
+            (
+                OrganizationChangeKind::MachineExpired,
+                OrganizationChangeOrigin::Automatic {}
+            ),
+            (
+                OrganizationChangeKind::AllowanceChanged,
+                OrganizationChangeOrigin::Automatic {}
+            ),
+        ]
+    );
 }
 
 fn by_owner() -> RevocationBy {
     RevocationBy {
         person: PersonId::try_from(uuid7(OWNER)).unwrap(),
-        operation: ChangeRequestId::try_from(uuid7(0x50)).unwrap(),
+        operation: AdminOperationId::try_from(uuid7(0x50)).unwrap(),
     }
 }
 
@@ -239,9 +268,9 @@ async fn revoke(port: &InMemoryEnrollments, now_ms: i64) -> super::MachineRevoca
     revoke_machine_enrollment(
         port,
         &revoke_request(),
-        &by_owner(),
-        clock.as_ref(),
-        &CountingIds::from(0xc000),
+        by_owner(),
+        clock,
+        Arc::new(CountingIds::from(0xc000)),
     )
     .await
     .unwrap()
@@ -277,6 +306,7 @@ async fn revocation_ends_the_enrollment_bumps_the_generation_and_withdraws_its_a
             machine_client_id: client(WORKING),
             reason: EnrollmentRevocationReason::Owner {},
         };
+        row.ended_at_ms = Some(NOW_MS);
     }
     if let Some(row) = expected.installations.get_mut(&installation(MACHINE)) {
         row.generation = EnrollmentGeneration(2);
@@ -310,13 +340,17 @@ async fn revocation_ends_the_enrollment_bumps_the_generation_and_withdraws_its_a
             (
                 OrganizationChangeKind::MachineRevoked,
                 uuid7(WORKING),
-                uuid7(0x50),
+                format!("{}:machineRevoked:{}", uuid7(0x50), uuid7(WORKING)),
                 revoker.clone()
             ),
             (
                 OrganizationChangeKind::AllowanceChanged,
                 after.allowances[0].id.to_string(),
-                uuid7(0x50),
+                format!(
+                    "{}:allowanceChanged:{}",
+                    uuid7(0x50),
+                    after.allowances[0].id
+                ),
                 revoker
             ),
         ]
@@ -325,13 +359,13 @@ async fn revocation_ends_the_enrollment_bumps_the_generation_and_withdraws_its_a
     let clock = TestClock::at(NOW_MS + 1000);
     let token = decide_machine_token(
         &port,
-        &DecideMachineToken {
+        DecideMachineToken {
             organization_id: organization(0x01),
             enrollment_id: enrollment(WORKING),
             client_id: client(WORKING),
         },
-        clock.as_ref(),
-        &CountingIds::from(0xd000),
+        clock,
+        Arc::new(CountingIds::from(0xd000)),
         settings(),
     )
     .await
@@ -381,9 +415,9 @@ async fn token(port: &InMemoryEnrollments, id: u64, now_ms: i64, ids: u64) -> Ma
     let clock = TestClock::at(now_ms);
     decide_machine_token(
         port,
-        &ask(id),
-        clock.as_ref(),
-        &CountingIds::from(ids),
+        ask(id),
+        clock,
+        Arc::new(CountingIds::from(ids)),
         settings(),
     )
     .await

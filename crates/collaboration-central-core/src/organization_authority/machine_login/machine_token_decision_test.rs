@@ -7,8 +7,8 @@ use super::super::enrollment_records::{
 };
 use super::super::in_memory_enrollments::{EnrollmentStore, InMemoryEnrollments};
 use super::super::test_fixtures::{
-    APPROVER, CountingIds, MACHINE, NOW_MS, NOW_S, TestClock, client, empty_store, enrollment,
-    installation, settings, uuid7, with_approved, with_enrolled,
+    APPROVER, CODE_LIFETIME_S, CountingIds, MACHINE, NOW_MS, NOW_S, TestClock, client, empty_store,
+    enrollment, installation, label, settings, uuid7, with_approved, with_enrolled,
 };
 use super::decide_machine_token;
 use crate::identity_contract::{
@@ -17,6 +17,7 @@ use crate::identity_contract::{
 };
 use crate::organization_authority::{OrganizationChangeKind, OrganizationChangeOrigin};
 use fleet_identity_protocol::{OrganizationId, UnixSeconds};
+use std::sync::Arc;
 
 const WORKING: u64 = 0x40;
 const A: u64 = 0x41;
@@ -46,9 +47,9 @@ async fn decide_with(
     let minted = u64::try_from(port.snapshot().records.len()).unwrap_or(0);
     decide_machine_token(
         port,
-        request,
-        clock.as_ref(),
-        &CountingIds::from(0xb000 + 0x100 * minted),
+        request.clone(),
+        clock,
+        Arc::new(CountingIds::from(0xb000 + 0x100 * minted)),
         settings,
     )
     .await
@@ -136,6 +137,7 @@ async fn a_first_grant_activates_supersedes_the_working_enrollment_and_bumps_the
         row(&after),
         InstallationRow {
             installation: installation(MACHINE),
+            label: label(),
             generation: EnrollmentGeneration(2),
             active: Some(enrollment(A)),
         }
@@ -322,12 +324,14 @@ async fn thirty_days_without_a_grant_expires_the_enrollment_and_withdraws_its_al
 
     assert_eq!(answer, refused(MachineTokenRefusal::IdleExpired {}));
     // Exactly the expiry: expired, no active enrollment, allowances withdrawn,
-    // the generation unchanged, and no record.
+    // the generation unchanged, and its automatic records (N07).
+    let after = port.snapshot();
     let mut expected = store;
     if let Some(enrollment) = expected.enrollments.get_mut(&enrollment(WORKING)) {
         enrollment.state = StoredEnrollmentState::Expired {
             machine_client_id: client(WORKING),
         };
+        enrollment.ended_at_ms = Some(NOW_MS);
     }
     if let Some(row) = expected.installations.get_mut(&installation(MACHINE)) {
         row.active = None;
@@ -335,7 +339,39 @@ async fn thirty_days_without_a_grant_expires_the_enrollment_and_withdraws_its_al
     for allowance in &mut expected.allowances {
         allowance.state = AllowanceState::Withdrawn;
     }
-    assert_eq!(port.snapshot(), expected);
+    expected.records.clone_from(&after.records);
+    assert_eq!(after, expected);
+    let automatic = OrganizationChangeOrigin::Automatic {};
+    let records = after
+        .records
+        .iter()
+        .map(|record| {
+            (
+                record.kind,
+                record.target_id.clone(),
+                record.request_id.as_str().to_owned(),
+                record.origin.clone(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let withdrawn = after.allowances[0].id.to_string();
+    assert_eq!(
+        records,
+        vec![
+            (
+                OrganizationChangeKind::MachineExpired,
+                uuid7(WORKING),
+                format!("{}:machineExpired:{}", uuid7(WORKING), uuid7(WORKING)),
+                automatic.clone()
+            ),
+            (
+                OrganizationChangeKind::AllowanceChanged,
+                withdrawn.clone(),
+                format!("{}:allowanceChanged:{withdrawn}", uuid7(WORKING)),
+                automatic
+            ),
+        ]
+    );
     assert_refused_unchanged(
         &port,
         &ask(WORKING, WORKING),
@@ -383,7 +419,8 @@ async fn the_grant_expires_after_the_configured_lifetime() {
 /// late first Grant then displaces nothing.
 #[tokio::test]
 async fn a_first_grant_at_the_device_code_lifetime_finds_the_approval_lapsed() {
-    let approved_at = NOW_MS - MachineLoginSettings::DEVICE_CODE_LIFETIME_MS;
+    // The fixture's code expires CODE_LIFETIME_S after approval: at NOW_S here.
+    let approved_at = NOW_MS - CODE_LIFETIME_S * 1000;
     let store = with_approved(
         with_enrolled(empty_store(), MACHINE, WORKING, 1, NOW_S - 60),
         MACHINE,
@@ -404,6 +441,7 @@ async fn a_first_grant_at_the_device_code_lifetime_finds_the_approval_lapsed() {
     let mut expected = store;
     if let Some(enrollment) = expected.enrollments.get_mut(&enrollment(A)) {
         enrollment.state = StoredEnrollmentState::Lapsed;
+        enrollment.ended_at_ms = Some(NOW_MS);
     }
     assert_eq!(port.snapshot(), expected);
 }

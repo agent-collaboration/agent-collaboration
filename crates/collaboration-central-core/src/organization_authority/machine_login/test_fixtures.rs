@@ -61,12 +61,12 @@ pub(super) const WORKSPACE_B: u64 = 0x21;
 pub(super) fn approval(request: u64, machine: u64, workspaces: &[u64]) -> DecideDeviceLogin {
     DecideDeviceLogin {
         organization_id: OrganizationId::try_from(uuid7(ORGANIZATION)).unwrap(),
-        approver: PersonId::try_from(uuid7(APPROVER)).unwrap(),
+        approver: approver(),
         permission_checked: EnrollPermission::MachineEnroll,
-        request_id: DeviceLoginRequestId::try_from(uuid7(request)).unwrap(),
+        request_id: self::request(request),
         installation: installation(machine),
         peer: PeerId::try_from(uuid7(machine)).unwrap(),
-        label: MachineLabel::try_from("fixture machine".to_owned()).unwrap(),
+        label: label(),
         allowed_workspaces: AllowedWorkspaces::try_from(
             workspaces
                 .iter()
@@ -76,6 +76,7 @@ pub(super) fn approval(request: u64, machine: u64, workspaces: &[u64]) -> Decide
         .unwrap(),
         approver_second_factor_at: Some(UnixSeconds(NOW_S)),
         former_service_id: None,
+        code_expires_at: UnixSeconds(NOW_S + CODE_LIFETIME_S),
     }
 }
 
@@ -101,19 +102,23 @@ pub(super) fn with_enrolled(
         StoredEnrollment {
             id: enrollment(id),
             installation: installation(machine),
-            approval: approval(id + 0x100, machine, &[WORKSPACE_A]),
+            request_id: request(id + 0x100),
+            approved_by: approver(),
             base_generation: EnrollmentGeneration(generation.saturating_sub(1)),
             approved_at_ms: last_grant_s * 1000,
+            code_expires_at: UnixSeconds(last_grant_s + CODE_LIFETIME_S),
             state: StoredEnrollmentState::Enrolled {
                 machine_client_id: client(id),
                 last_grant_at: UnixSeconds(last_grant_s),
             },
+            ended_at_ms: None,
         },
     );
     store.installations.insert(
         installation(machine),
         InstallationRow {
             installation: installation(machine),
+            label: label(),
             generation: EnrollmentGeneration(generation),
             active: Some(enrollment(id)),
         },
@@ -158,10 +163,13 @@ pub(super) fn with_approved(
         StoredEnrollment {
             id: enrollment(id),
             installation: installation(machine),
-            approval: approval(id + 0x100, machine, &[WORKSPACE_A]),
+            request_id: request(id + 0x100),
+            approved_by: approver(),
             base_generation: EnrollmentGeneration(base),
             approved_at_ms,
+            code_expires_at: UnixSeconds(approved_at_ms / 1000 + CODE_LIFETIME_S),
             state: StoredEnrollmentState::Approved,
+            ended_at_ms: None,
         },
     );
     store
@@ -169,6 +177,7 @@ pub(super) fn with_approved(
         .entry(installation(machine))
         .or_insert_with(|| InstallationRow {
             installation: installation(machine),
+            label: label(),
             generation: EnrollmentGeneration(base),
             active: None,
         });
@@ -179,4 +188,17 @@ pub(super) fn settings() -> super::decision_support::MachineLoginSettings {
     super::decision_support::MachineLoginSettings::new(
         crate::identity_contract::TokenLifetimeSeconds::try_from(900).unwrap(),
     )
+}
+
+/// The ten-minute device code the fixtures approve with.
+pub(super) const CODE_LIFETIME_S: i64 = 600;
+
+pub(super) fn approver() -> PersonId {
+    PersonId::try_from(uuid7(APPROVER)).unwrap()
+}
+pub(super) fn request(suffix: u64) -> DeviceLoginRequestId {
+    DeviceLoginRequestId::try_from(uuid7(suffix)).unwrap()
+}
+pub(super) fn label() -> MachineLabel {
+    MachineLabel::try_from("fixture machine".to_owned()).unwrap()
 }

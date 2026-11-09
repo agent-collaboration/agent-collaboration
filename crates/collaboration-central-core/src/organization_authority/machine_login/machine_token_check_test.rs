@@ -4,8 +4,8 @@
 use super::super::super::fleet_statement_test_support::RealEd25519;
 use super::super::in_memory_enrollments::{EnrollmentStore, InMemoryEnrollments};
 use super::super::test_fixtures::{
-    MACHINE, NOW_MS, NOW_S, TestClock, client, empty_store, enrollment, installation, settings,
-    uuid7, with_enrolled,
+    CountingIds, MACHINE, NOW_MS, NOW_S, TestClock, client, empty_store, enrollment, installation,
+    settings, uuid7, with_enrolled,
 };
 use super::{
     ISSUER_CLOCK_SKEW_SECONDS, MachineTokenAdmission, MachineTokenCheckRefusal, MachineTokenPolicy,
@@ -39,6 +39,8 @@ struct TestKeys {
     published: Mutex<Vec<(&'static str, u8)>>,
     fetches: AtomicUsize,
     unreachable: bool,
+    /// Publishes a body that is not a key set.
+    malformed: bool,
     during_fetch: Mutex<Option<Box<dyn FnOnce() + Send>>>,
 }
 impl TestKeys {
@@ -47,6 +49,7 @@ impl TestKeys {
             published: Mutex::new(published),
             fetches: AtomicUsize::new(0),
             unreachable: false,
+            malformed: false,
             during_fetch: Mutex::new(None),
         })
     }
@@ -62,6 +65,12 @@ impl IssuerKeySource for Arc<TestKeys> {
         }
         if self.unreachable {
             return Err(KeyFetchFailure::Unreachable);
+        }
+        if self.malformed {
+            return Ok(RawJwks {
+                body: b"{\"keys\":\"not a list\"}".to_vec(),
+                cache_control: None,
+            });
         }
         let keys = self
             .published
@@ -84,10 +93,32 @@ fn verifier(
     keys: &Arc<TestKeys>,
     clock: &Arc<TestClock>,
 ) -> MachineTokenVerifier<RealEd25519, Arc<TestKeys>> {
+    verifier_on(RealEd25519, keys, clock)
+}
+
+/// The host's signature capability is out of service.
+#[derive(Clone)]
+struct BrokenEd25519;
+impl crate::Ed25519Verification for BrokenEd25519 {
+    async fn verify_ed25519(
+        &self,
+        _: &[u8],
+        _: &[u8],
+        _: &[u8],
+    ) -> Result<crate::SignatureValidity, crate::VerifyFailure> {
+        Err(crate::VerifyFailure::Crypto)
+    }
+}
+
+fn verifier_on<Ed: crate::Ed25519Verification>(
+    platform: Ed,
+    keys: &Arc<TestKeys>,
+    clock: &Arc<TestClock>,
+) -> MachineTokenVerifier<Ed, Arc<TestKeys>> {
     let clock: Arc<dyn runtime_primitives::Clock> = clock.clone();
     MachineTokenVerifier::new(
         IssuerSignatureVerifier::new(
-            RealEd25519,
+            platform,
             keys.clone(),
             Arc::new(IssuerKeyCache::default()),
             clock.clone(),
@@ -168,6 +199,7 @@ async fn a_valid_machine_token_with_unread_registered_claims_is_admitted() {
         &port,
         &token_with(|_| {}),
         presented(),
+        Arc::new(CountingIds::new()),
         settings(),
     )
     .await
@@ -235,6 +267,7 @@ async fn a_bad_signature_and_an_unreachable_key_source_are_different_refusals() 
         published: Mutex::new(vec![(KID, 7)]),
         fetches: AtomicUsize::new(0),
         unreachable: true,
+        malformed: false,
         during_fetch: Mutex::new(None),
     });
     let clock = TestClock::at(NOW_MS);
@@ -242,7 +275,7 @@ async fn a_bad_signature_and_an_unreachable_key_source_are_different_refusals() 
         verifier(&unreachable, &clock)
             .verify(&token_with(|_| {}))
             .await,
-        Err(MachineTokenCheckRefusal::VerificationUnavailable)
+        Err(MachineTokenCheckRefusal::KeySetUnavailable)
     );
 }
 
@@ -354,6 +387,7 @@ async fn a_valid_token_for_a_client_the_enrollment_never_recorded_is_refused_at_
         &port,
         &token,
         presented(),
+        Arc::new(CountingIds::new()),
         settings(),
     )
     .await
@@ -386,6 +420,7 @@ async fn renew(store: EnrollmentStore, token: &str) -> MachineTokenRenewal {
         &port,
         token,
         &open_connection(),
+        Arc::new(CountingIds::new()),
         settings(),
     )
     .await
@@ -472,6 +507,7 @@ async fn admit_after_wait(token: &str, release_ms: i64) -> (MachineTokenAdmissio
         &port,
         token,
         presented(),
+        Arc::new(CountingIds::new()),
         settings(),
     )
     .await
@@ -499,6 +535,7 @@ async fn renew_after_wait(token: &str, release_ms: i64) -> (MachineTokenRenewal,
         &port,
         token,
         &long_lived_connection(),
+        Arc::new(CountingIds::new()),
         settings(),
     )
     .await
@@ -633,4 +670,94 @@ async fn the_admitted_timer_is_the_earlier_of_exp_plus_skew_and_the_grant() {
             "exp {exp}, grant {grant}"
         );
     }
+}
+
+/// Owner decision N11: a renewal central can't check right now, because the
+/// issuer's keys or its own store are out of reach, is retryable.
+#[tokio::test]
+async fn renewal_is_unavailable_only_when_keys_or_store_are_out_of_reach() {
+    let fresh = token_with(|_| {});
+    let clock = TestClock::at(NOW_MS);
+    let unavailable = renewal_refused(MachineTokenRenewalRefusal::Unavailable {});
+    let renew_with = |keys: Arc<TestKeys>, port: InMemoryEnrollments| {
+        let clock = clock.clone();
+        let token = fresh.clone();
+        async move {
+            renew_machine_token(
+                &verifier(&keys, &clock),
+                &port,
+                &token,
+                &open_connection(),
+                Arc::new(CountingIds::new()),
+                settings(),
+            )
+            .await
+            .unwrap()
+        }
+    };
+    let unreachable = Arc::new(TestKeys {
+        published: Mutex::new(vec![(KID, 7)]),
+        fetches: AtomicUsize::new(0),
+        unreachable: true,
+        malformed: false,
+        during_fetch: Mutex::new(None),
+    });
+    assert_eq!(
+        renew_with(unreachable, InMemoryEnrollments::with(working())).await,
+        unavailable
+    );
+    let malformed = Arc::new(TestKeys {
+        published: Mutex::new(vec![(KID, 7)]),
+        fetches: AtomicUsize::new(0),
+        unreachable: false,
+        malformed: true,
+        during_fetch: Mutex::new(None),
+    });
+    assert_eq!(
+        renew_with(malformed, InMemoryEnrollments::with(working())).await,
+        unavailable
+    );
+    for outage in [
+        super::MachineEnrollmentFailure::Unavailable,
+        super::MachineEnrollmentFailure::OutcomeUnknown,
+    ] {
+        let port = InMemoryEnrollments::with(working());
+        port.fail_next_transaction(outage);
+        assert_eq!(
+            renew_with(TestKeys::publishing(vec![(KID, 7)]), port).await,
+            unavailable,
+            "{outage:?}"
+        );
+    }
+}
+
+/// The negative controls: these stay invalid, never retryable.
+#[tokio::test]
+async fn renewal_answers_an_unknown_key_a_forgery_or_a_crypto_failure_as_invalid() {
+    let invalid = renewal_refused(MachineTokenRenewalRefusal::TokenInvalid {});
+    let unknown_kid = sign(
+        &json!({"alg":"EdDSA","kid":"never-published"}),
+        &claims(),
+        7,
+    );
+    assert_eq!(renew(working(), &unknown_kid).await, invalid);
+    assert_eq!(
+        renew(working(), &sign(&header(), &claims(), 9)).await,
+        invalid
+    );
+    assert_eq!(renew(working(), "not.a-token").await, invalid);
+    let keys = TestKeys::publishing(vec![(KID, 7)]);
+    let clock = TestClock::at(NOW_MS);
+    let port = InMemoryEnrollments::with(working());
+    let broken = renew_machine_token(
+        &verifier_on(BrokenEd25519, &keys, &clock),
+        &port,
+        &token_with(|_| {}),
+        &open_connection(),
+        Arc::new(CountingIds::new()),
+        settings(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(broken, invalid);
 }
