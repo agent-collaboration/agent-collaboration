@@ -129,6 +129,9 @@ mod keyed_worker_tasks;
 mod paused_worker_test_support;
 mod push_handoff_worker;
 pub use commit_or_timer_wait::{CommitWaitEnd, wait_for_commit_or_timer};
+/// The failed-pass retry lives with SQLite store maintenance; the layers above this crate
+/// reach it here.
+pub use sqlite_storage_maintenance::{FAILED_PASS_BACKOFF, FailedPassBackoff, FailureRetry};
 mod wake_driven_worker_loop;
 mod wake_driven_worker_observation;
 pub use wake_driven_worker_loop::{BatchOutcome, WakeDrivenWorkerLoop, WakeSource, WorkerPass};
