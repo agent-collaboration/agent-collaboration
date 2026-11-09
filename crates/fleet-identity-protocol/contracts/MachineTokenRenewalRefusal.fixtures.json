@@ -3,5 +3,6 @@
 {"kind":"tokenExpired"},
 {"kind":"wrongClient"},
 {"kind":"wrongInstallation"},
-{"kind":"enrollmentNotActive"}
+{"kind":"enrollmentNotActive"},
+{"kind":"unavailable"}
 ]

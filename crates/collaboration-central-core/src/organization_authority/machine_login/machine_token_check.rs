@@ -17,7 +17,7 @@ use fleet_identity_protocol::{
     EnrollmentId, InstallationId, MachineTokenRenewal, MachineTokenRenewalRefusal, OrganizationId,
     UnixSeconds,
 };
-use runtime_primitives::Clock;
+use runtime_primitives::{Clock, IdSource};
 use serde::Deserialize;
 use std::sync::Arc;
 
@@ -80,10 +80,15 @@ pub enum MachineTokenCheckRefusal {
     Issuer,
     #[error("the token's signature does not verify")]
     Signature,
-    #[error("the issuer's keys are unusable")]
+    /// The issuer published a key set central can't decode.
+    #[error("the issuer's published key set is malformed")]
     IssuerKey,
+    /// The issuer's key set couldn't be fetched, or the cache clock was unusable.
+    #[error("the issuer's key set is unavailable")]
+    KeySetUnavailable,
+    /// The host's signature capability failed.
     #[error("signature verification is unavailable")]
-    VerificationUnavailable,
+    CryptoUnavailable,
     #[error("the token does not name central's machine address")]
     Audience,
     #[error("the token expired")]
@@ -97,16 +102,17 @@ pub enum MachineTokenCheckRefusal {
 }
 
 impl MachineTokenCheckRefusal {
-    /// The renewal answer: time refusals are expiries, the rest invalid tokens.
+    /// The renewal answer (owner decision N11): the issuer's keys being out of
+    /// reach is retryable; time refusals are expiries; the rest are invalid tokens.
     const fn renewal(self) -> MachineTokenRenewalRefusal {
         match self {
+            Self::IssuerKey | Self::KeySetUnavailable => MachineTokenRenewalRefusal::Unavailable {},
             Self::Expired | Self::GrantExpired => MachineTokenRenewalRefusal::TokenExpired {},
             Self::Malformed
             | Self::UnsupportedHeader
             | Self::Issuer
             | Self::Signature
-            | Self::IssuerKey
-            | Self::VerificationUnavailable
+            | Self::CryptoUnavailable
             | Self::Audience
             | Self::IssuedInFuture
             | Self::Claims => MachineTokenRenewalRefusal::TokenInvalid {},
@@ -189,7 +195,13 @@ impl<Ed: Ed25519Verification, Keys: IssuerKeySource> MachineTokenVerifier<Ed, Ke
             Err(crate::IssuerSignatureRefusal::Keys(
                 crate::IssuerKeyResolutionRefusal::KeySet(_),
             )) => return Err(Refusal::IssuerKey),
-            Err(_) => return Err(Refusal::VerificationUnavailable),
+            Err(crate::IssuerSignatureRefusal::Keys(
+                crate::IssuerKeyResolutionRefusal::Fetch { .. }
+                | crate::IssuerKeyResolutionRefusal::InvalidClock,
+            )) => return Err(Refusal::KeySetUnavailable),
+            Err(crate::IssuerSignatureRefusal::Crypto { .. }) => {
+                return Err(Refusal::CryptoUnavailable);
+            }
         }
         let body: MachineTokenBody = from_json(
             &parsed.claims,
@@ -240,6 +252,7 @@ pub async fn admit_machine_token<Ed, Keys, P>(
     port: &P,
     token: &str,
     presented: PresentedMachine,
+    ids: Arc<dyn IdSource>,
     settings: MachineLoginSettings,
 ) -> Result<MachineTokenAdmission, MachineEnrollmentFailure>
 where
@@ -249,17 +262,26 @@ where
 {
     match verifier.verify(token).await {
         Ok(verified) => {
-            admit_verified(verifier.clock.as_ref(), port, verified, presented, settings).await
+            admit_verified(
+                verifier.clock.clone(),
+                port,
+                verified,
+                presented,
+                ids,
+                settings,
+            )
+            .await
         }
         Err(refusal) => Ok(MachineTokenAdmission::TokenRefused(refusal)),
     }
 }
 
 async fn admit_verified<P: MachineEnrollmentPort>(
-    clock: &dyn Clock,
+    clock: Arc<dyn Clock>,
     port: &P,
     verified: VerifiedMachineToken,
     presented: PresentedMachine,
+    ids: Arc<dyn IdSource>,
     settings: MachineLoginSettings,
 ) -> Result<MachineTokenAdmission, MachineEnrollmentFailure> {
     let bounds = verified.bounds();
@@ -274,7 +296,7 @@ async fn admit_verified<P: MachineEnrollmentPort>(
     // The bounds were checked at verification; checking them again on the
     // transaction's clock covers any wait for the port.
     Ok(
-        match admit_within_token_bounds(port, &request, bounds, clock, settings).await? {
+        match admit_within_token_bounds(port, request, bounds, clock, ids, settings).await? {
             Ok(admission) => MachineTokenAdmission::Admission(admission),
             Err(TokenLapse::Expired) => {
                 MachineTokenAdmission::TokenRefused(MachineTokenCheckRefusal::Expired)
@@ -294,6 +316,7 @@ pub async fn renew_machine_token<Ed, Keys, P>(
     port: &P,
     token: &str,
     connection: &AdmittedMachine,
+    ids: Arc<dyn IdSource>,
     settings: MachineLoginSettings,
 ) -> Result<MachineTokenRenewal, MachineEnrollmentFailure>
 where
@@ -318,7 +341,24 @@ where
         installation: connection.installation.clone(),
         peer: connection.peer,
     };
-    match admit_verified(verifier.clock.as_ref(), port, verified, presented, settings).await? {
+    let admission = match admit_verified(
+        verifier.clock.clone(),
+        port,
+        verified,
+        presented,
+        ids,
+        settings,
+    )
+    .await
+    {
+        Ok(admission) => admission,
+        // The store was out of reach, or its commit unconfirmed: retryable (N11).
+        Err(MachineEnrollmentFailure::Unavailable | MachineEnrollmentFailure::OutcomeUnknown) => {
+            return refused(MachineTokenRenewalRefusal::Unavailable {});
+        }
+        Err(failure) => return Err(failure),
+    };
+    match admission {
         MachineTokenAdmission::TokenRefused(refusal) => refused(refusal.renewal()),
         MachineTokenAdmission::Admission(MachineConnectionAdmission::Admitted { .. }) => {
             Ok(MachineTokenRenewal::Renewed {})

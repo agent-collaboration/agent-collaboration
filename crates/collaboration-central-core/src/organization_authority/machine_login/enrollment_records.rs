@@ -1,13 +1,13 @@
 //! What an organization's Fleet store holds for machine login, as the decisions
 //! see it, and the closed set of changes a decision may make to it.
 use crate::identity_contract::{
-    AllowanceState, ClientId, DecideDeviceLogin, EndedMachineClient, EnrollmentRevocationReason,
-    FormerServiceId,
+    AllowanceState, ClientId, DecideDeviceLogin, DeviceLoginRequestId, EndedMachineClient,
+    EnrollmentRevocationReason, FormerServiceId, PersonId,
 };
 use crate::organization_authority::OrganizationChangeRecord;
 use durable_steps::Uuid;
 use fleet_identity_protocol::{EnrollmentId, InstallationId, UnixSeconds};
-use message_board::WorkspaceId;
+use message_board::{MachineLabel, WorkspaceId};
 
 /// Bumped by every first Grant that activates an enrollment and by every
 /// owner revocation, and by nothing else (BA1).
@@ -45,15 +45,20 @@ pub enum StoredEnrollmentState {
 pub struct StoredEnrollment {
     pub id: EnrollmentId,
     pub installation: InstallationId,
-    /// The approval as the sign-in service sent it: a repeat of its request ID
-    /// must carry the same body.
-    pub approval: DecideDeviceLogin,
+    /// The device-code record that approved it: the idempotency key.
+    pub request_id: DeviceLoginRequestId,
+    /// The person whose approval the sign-in service vouched for.
+    pub approved_by: PersonId,
     /// The installation's generation when this enrollment was approved.
     pub base_generation: EnrollmentGeneration,
     /// Central's own clock in the approving transaction; an approval lapses
     /// a device-code lifetime after it.
     pub approved_at_ms: i64,
+    /// The device code's own deadline: an approval not granted by then lapses.
+    pub code_expires_at: UnixSeconds,
     pub state: StoredEnrollmentState,
+    /// When it was revoked, expired or lapsed.
+    pub ended_at_ms: Option<i64>,
 }
 
 impl StoredEnrollment {
@@ -80,6 +85,8 @@ impl StoredEnrollment {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct InstallationRow {
     pub installation: InstallationId,
+    /// The name shown on the approval page; the latest approval sets it.
+    pub label: MachineLabel,
     pub generation: EnrollmentGeneration,
     pub active: Option<EnrollmentId>,
 }
@@ -136,4 +143,16 @@ pub enum EnrollmentChange {
         installation: InstallationId,
     },
     Record(OrganizationChangeRecord),
+    /// Keep the full request an approval answered, so a repeat can be compared
+    /// with it. A store without a request fingerprint can't keep it yet
+    /// (pending the owner), and refuses a repeat instead.
+    RecordApprovalRequest(PriorApproval),
+}
+
+/// An earlier approval under the same request ID, with the full request it
+/// answered, so a repeat is recognised only when its body is the same.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PriorApproval {
+    pub enrollment_id: EnrollmentId,
+    pub request: DecideDeviceLogin,
 }

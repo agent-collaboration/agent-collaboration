@@ -36,4 +36,7 @@ pub enum MachineTokenRenewalRefusal {
     WrongInstallation {},
     /// Revoked, expired or superseded.
     EnrollmentNotActive {},
+    /// Central couldn't check the token right now: the issuer's keys were out of
+    /// reach, or its own store was. Retrying is safe (owner decision N11).
+    Unavailable {},
 }

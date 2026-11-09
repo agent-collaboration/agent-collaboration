@@ -44,7 +44,8 @@
         "workspaceCreated",
         "machineEnrolled",
         "machineRevoked",
-        "allowanceChanged"
+        "allowanceChanged",
+        "machineExpired"
       ],
       "type": "string"
     },
@@ -83,6 +84,20 @@
             "kind",
             "personId",
             "permissionChecked"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "A change central made by its own rule, such as idle expiry. It names\nno person, because no person acted.",
+          "properties": {
+            "kind": {
+              "const": "automatic",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
           ],
           "type": "object"
         }

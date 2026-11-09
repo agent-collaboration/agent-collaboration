@@ -3,10 +3,10 @@
 //! transaction, so no decision acts on facts another one has since changed.
 use super::enrollment_records::{
     AllowanceRow, EnrollmentChange, FormerServiceFacts, InstallationRow, MachineClaim,
-    StoredEnrollment,
+    PriorApproval, StoredEnrollment,
 };
 use crate::identity_contract::{DeviceLoginRequestId, FormerServiceId};
-use fleet_identity_protocol::{EnrollmentId, InstallationId};
+use fleet_identity_protocol::{EnrollmentId, InstallationId, OrganizationId};
 use fleet_sync_protocol::PeerId;
 use message_board::WorkspaceId;
 use std::future::Future;
@@ -25,10 +25,13 @@ pub struct EnrollmentQuery {
 /// One organization's observable machine-login state for one query.
 #[derive(Clone, Debug)]
 pub struct EnrollmentFacts {
+    /// The organization whose Fleet store this is.
+    pub organization: OrganizationId,
     /// Any enrollment, in any state, ever: the first machine skips the
     /// second-factor check.
     pub organization_has_enrollment: bool,
-    pub by_request: Option<StoredEnrollment>,
+    /// An earlier approval under the queried request ID.
+    pub prior_approval: Option<PriorApproval>,
     pub enrollment: Option<StoredEnrollment>,
     /// The queried installation's row, or the queried enrollment's.
     pub installation: Option<InstallationRow>,
@@ -47,6 +50,8 @@ pub struct EnrollmentFacts {
 pub struct Decided<T> {
     pub answer: T,
     pub changes: Vec<EnrollmentChange>,
+    /// The decision's clock, for the rows' `updated_at`.
+    pub written_at_ms: i64,
 }
 
 impl<T> Decided<T> {
@@ -54,6 +59,15 @@ impl<T> Decided<T> {
         Self {
             answer,
             changes: Vec::new(),
+            written_at_ms: 0,
+        }
+    }
+
+    pub fn writing(answer: T, changes: Vec<EnrollmentChange>, written_at_ms: i64) -> Self {
+        Self {
+            answer,
+            changes,
+            written_at_ms,
         }
     }
 }
@@ -68,6 +82,10 @@ pub enum MachineEnrollmentFailure {
     InvalidIdSource,
     #[error("the request's identity cannot key a change record")]
     UnrecordableRequest,
+    /// A request ID seen before, on a store that keeps no request body to
+    /// compare it with: pending the owner's decision on a request fingerprint.
+    #[error("a repeated device-login request cannot be compared on this store yet")]
+    RepeatPendingOwner,
     /// The changes would break a port invariant; nothing was applied.
     #[error("the decision's changes break the enrollment contract: {rule}")]
     ContractViolated { rule: &'static str },
@@ -81,9 +99,9 @@ pub enum MachineEnrollmentFailure {
 ///   owner;
 /// - the changes apply in order, all or none.
 pub trait MachineEnrollmentPort: Send + Sync {
-    fn transact<T: Send>(
+    fn transact<T: Send + 'static>(
         &self,
         query: EnrollmentQuery,
-        decide: impl FnOnce(&EnrollmentFacts) -> Decided<T> + Send,
+        decide: impl FnOnce(&EnrollmentFacts) -> Decided<T> + Send + 'static,
     ) -> impl Future<Output = Result<T, MachineEnrollmentFailure>> + Send;
 }

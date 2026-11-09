@@ -4,5 +4,6 @@
 {"reason":{"kind":"tokenExpired"},"result":"refused"},
 {"reason":{"kind":"wrongClient"},"result":"refused"},
 {"reason":{"kind":"wrongInstallation"},"result":"refused"},
-{"reason":{"kind":"enrollmentNotActive"},"result":"refused"}
+{"reason":{"kind":"enrollmentNotActive"},"result":"refused"},
+{"reason":{"kind":"unavailable"},"result":"refused"}
 ]

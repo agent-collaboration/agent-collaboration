@@ -7,7 +7,7 @@ use super::enrollment_port::{
 };
 use super::enrollment_records::{
     AllowanceRow, EnrollmentChange, EnrollmentGeneration, FormerServiceFacts, InstallationRow,
-    MachineClaim, StoredEnrollment, StoredEnrollmentState,
+    MachineClaim, PriorApproval, StoredEnrollment, StoredEnrollmentState,
 };
 use crate::identity_contract::{
     AllowanceState, DecideDeviceLogin, DeviceLoginDecision, DeviceLoginRefusal,
@@ -17,6 +17,7 @@ use crate::person_request::SECOND_FACTOR_WINDOW_SECONDS;
 use fleet_identity_protocol::EnrollmentId;
 use runtime_primitives::{Clock, IdSource};
 use std::num::NonZeroU32;
+use std::sync::Arc;
 
 /// SD8 (PD:2290): central applies a sign-in decision within five seconds of
 /// receiving it, on its own clock. Exactly five seconds is still within.
@@ -24,10 +25,10 @@ pub const SD8_MILLIS: i64 = 5_000;
 
 pub async fn decide_device_login<P: MachineEnrollmentPort>(
     port: &P,
-    request: &DecideDeviceLogin,
+    request: DecideDeviceLogin,
     received_at_ms: i64,
-    clock: &dyn Clock,
-    ids: &dyn IdSource,
+    clock: Arc<dyn Clock>,
+    ids: Arc<dyn IdSource>,
 ) -> Result<DeviceLoginDecision, MachineEnrollmentFailure> {
     let query = EnrollmentQuery {
         installation: Some(request.installation.clone()),
@@ -37,11 +38,17 @@ pub async fn decide_device_login<P: MachineEnrollmentPort>(
         workspaces: request.allowed_workspaces.as_slice().to_vec(),
         enrollment: None,
     };
-    port.transact(query, |facts| {
+    port.transact(query, move |facts| {
         // The applying clock is read inside the transaction, after any wait.
-        let applying = DecisionTime::sample(clock);
-        decide(request, facts, received_at_ms, applying, &DecisionIds(ids))
-            .unwrap_or_else(|failure| Decided::unchanged(Err(failure)))
+        let applying = DecisionTime::sample(clock.as_ref());
+        decide(
+            &request,
+            facts,
+            received_at_ms,
+            applying,
+            &DecisionIds(ids.as_ref()),
+        )
+        .unwrap_or_else(|failure| Decided::unchanged(Err(failure)))
     })
     .await?
 }
@@ -65,12 +72,17 @@ fn decide(
     if now_ms.saturating_sub(received_at_ms) > SD8_MILLIS {
         return refused(DeviceLoginRefusal::NotPermitted {});
     }
+    // A machine logging in with B3 is its peer (B3:126): the installation
+    // and the peer are the one UUIDv7.
+    if request.peer.to_string() != request.installation.as_str() {
+        return refused(DeviceLoginRefusal::NotPermitted {});
+    }
     // Every step is idempotent on the request ID: the same body gets the
     // same answer, and a different body under it reveals nothing.
-    if let Some(earlier) = &facts.by_request {
-        if &earlier.approval == request {
+    if let Some(earlier) = &facts.prior_approval {
+        if &earlier.request == request {
             return Ok(Decided::unchanged(Ok(DeviceLoginDecision::Approved {
-                enrollment_id: earlier.id.clone(),
+                enrollment_id: earlier.enrollment_id.clone(),
             })));
         }
         return refused(DeviceLoginRefusal::NotPermitted {});
@@ -139,22 +151,38 @@ fn decide(
     let base_generation = installation
         .as_ref()
         .map_or_else(EnrollmentGeneration::default, |row| row.generation);
-    if installation.is_none() {
-        changes.push(EnrollmentChange::PutInstallation(InstallationRow {
+    // The latest approval names the machine.
+    match &installation {
+        None => changes.push(EnrollmentChange::PutInstallation(InstallationRow {
             installation: request.installation.clone(),
+            label: request.label.clone(),
             generation: base_generation,
             active: None,
-        }));
+        })),
+        Some(row) if row.label != request.label => {
+            changes.push(EnrollmentChange::PutInstallation(InstallationRow {
+                label: request.label.clone(),
+                ..row.clone()
+            }));
+        }
+        Some(_) => {}
     }
     let enrollment_id = EnrollmentId::try_from(ids.next()?.to_string())
         .map_err(|_| MachineEnrollmentFailure::InvalidIdSource)?;
+    changes.push(EnrollmentChange::RecordApprovalRequest(PriorApproval {
+        enrollment_id: enrollment_id.clone(),
+        request: request.clone(),
+    }));
     changes.push(EnrollmentChange::InsertEnrollment(StoredEnrollment {
         id: enrollment_id.clone(),
         installation: request.installation.clone(),
-        approval: request.clone(),
+        request_id: request.request_id.clone(),
+        approved_by: request.approver.clone(),
         base_generation,
         approved_at_ms: now_ms,
+        code_expires_at: request.code_expires_at,
         state: StoredEnrollmentState::Approved,
+        ended_at_ms: None,
     }));
     let origin = OrganizationChangeOrigin::Person {
         person_id: request.approver.as_str().to_owned(),
@@ -187,10 +215,11 @@ fn decide(
         allowances.push(allowance.clone());
         changes.push(EnrollmentChange::PutAllowance(allowance));
     }
-    Ok(Decided {
-        answer: Ok(DeviceLoginDecision::Approved { enrollment_id }),
+    Ok(Decided::writing(
+        Ok(DeviceLoginDecision::Approved { enrollment_id }),
         changes,
-    })
+        now_ms,
+    ))
 }
 
 /// A second factor counts for `SECOND_FACTOR_WINDOW_SECONDS` after it was

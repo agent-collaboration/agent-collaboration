@@ -17,10 +17,11 @@ pub enum OrganizationChangeKind {
     MachineEnrolled,
     MachineRevoked,
     AllowanceChanged,
+    MachineExpired,
 }
 
 impl OrganizationChangeKind {
-    const fn as_str(self) -> &'static str {
+    pub(crate) const fn as_str(self) -> &'static str {
         match self {
             Self::OrganizationProvisioned => "organizationProvisioned",
             Self::StampRenewed => "stampRenewed",
@@ -28,6 +29,7 @@ impl OrganizationChangeKind {
             Self::MachineEnrolled => "machineEnrolled",
             Self::MachineRevoked => "machineRevoked",
             Self::AllowanceChanged => "allowanceChanged",
+            Self::MachineExpired => "machineExpired",
         }
     }
     fn parse(value: &str) -> Result<Self, StoreError> {
@@ -38,6 +40,7 @@ impl OrganizationChangeKind {
             "machineEnrolled" => Ok(Self::MachineEnrolled),
             "machineRevoked" => Ok(Self::MachineRevoked),
             "allowanceChanged" => Ok(Self::AllowanceChanged),
+            "machineExpired" => Ok(Self::MachineExpired),
             _ => Err(corrupt("kind", "unknown change kind")),
         }
     }
@@ -58,6 +61,9 @@ pub enum OrganizationChangeOrigin {
         person_id: String,
         permission_checked: String,
     },
+    /// A change central made by its own rule, such as idle expiry. It names
+    /// no person, because no person acted.
+    Automatic {},
 }
 
 /// The operation's own identity; a repeat of that operation finds this row.
@@ -122,6 +128,7 @@ where
     fleet_row_codec::check_private_id(&record.id.to_string(), "organization_change_records.id")?;
     let (origin, person, permission) = match &record.origin {
         OrganizationChangeOrigin::SignInProvisioning {} => ("signInProvisioning", None, None),
+        OrganizationChangeOrigin::Automatic {} => ("automatic", None, None),
         OrganizationChangeOrigin::Person {
             person_id,
             permission_checked,
@@ -232,6 +239,7 @@ fn decode(columns: StoredColumns) -> Result<OrganizationChangeRecord, StoreError
     let permission = optional_text(columns.permission_checked, "permission_checked")?;
     let origin = match (text(columns.origin, "origin")?.as_str(), person, permission) {
         ("signInProvisioning", None, None) => OrganizationChangeOrigin::SignInProvisioning {},
+        ("automatic", None, None) => OrganizationChangeOrigin::Automatic {},
         ("person", Some(person_id), Some(permission_checked))
             if !person_id.is_empty() && !permission_checked.is_empty() =>
         {

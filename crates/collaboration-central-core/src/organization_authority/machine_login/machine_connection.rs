@@ -15,26 +15,31 @@ use crate::identity_contract::{
     EnrollmentRevocationReason, MachineConnectionAdmission, MachineConnectionRefusal, PersonId,
     RevokeMachineEnrollment, RevokeMachineEnrollmentResult,
 };
-use crate::organization_authority::{
-    ChangeRequestId, OrganizationChangeKind, OrganizationChangeOrigin,
-};
+use crate::organization_authority::{OrganizationChangeKind, OrganizationChangeOrigin};
+use crate::person_request::AdminOperationId;
 use fleet_identity_protocol::{EnrollmentId, InstallationId};
 use runtime_primitives::{Clock, IdSource};
+use std::sync::Arc;
 
 pub async fn admit_machine_connection<P: MachineEnrollmentPort>(
     port: &P,
-    request: &AdmitMachineConnection,
-    clock: &dyn Clock,
+    request: AdmitMachineConnection,
+    clock: Arc<dyn Clock>,
+    ids: Arc<dyn IdSource>,
     settings: MachineLoginSettings,
 ) -> Result<MachineConnectionAdmission, MachineEnrollmentFailure> {
     let query = EnrollmentQuery {
         enrollment: Some(request.enrollment_id.clone()),
         ..EnrollmentQuery::default()
     };
-    port.transact(query, |facts| {
-        admit(request, facts, DecisionTime::sample(clock), &settings)
+    port.transact(query, move |facts| {
+        let time = DecisionTime::sample(clock.as_ref());
+        admit(&request, facts, time, &settings, &DecisionIds(ids.as_ref())).map_or_else(
+            |failure| Decided::unchanged(Err(failure)),
+            |decided| Decided::writing(Ok(decided.answer), decided.changes, decided.written_at_ms),
+        )
     })
-    .await
+    .await?
 }
 
 /// A verified token's two upper bounds (PD:578): `now < exp + D`, and
@@ -57,30 +62,36 @@ pub(super) enum TokenLapse {
 /// port can't carry a token past them.
 pub(super) async fn admit_within_token_bounds<P: MachineEnrollmentPort>(
     port: &P,
-    request: &AdmitMachineConnection,
+    request: AdmitMachineConnection,
     bounds: TokenTimeBounds,
-    clock: &dyn Clock,
+    clock: Arc<dyn Clock>,
+    ids: Arc<dyn IdSource>,
     settings: MachineLoginSettings,
 ) -> Result<Result<MachineConnectionAdmission, TokenLapse>, MachineEnrollmentFailure> {
     let query = EnrollmentQuery {
         enrollment: Some(request.enrollment_id.clone()),
         ..EnrollmentQuery::default()
     };
-    port.transact(query, |facts| {
-        let time = DecisionTime::sample(clock);
+    port.transact(query, move |facts| {
+        let time = DecisionTime::sample(clock.as_ref());
         if time.now_ms >= bounds.exp_with_skew_ms {
-            return Decided::unchanged(Err(TokenLapse::Expired));
+            return Decided::unchanged(Ok(Err(TokenLapse::Expired)));
         }
         if time.now_ms >= bounds.grant_expires_at_ms {
-            return Decided::unchanged(Err(TokenLapse::GrantExpired));
+            return Decided::unchanged(Ok(Err(TokenLapse::GrantExpired)));
         }
-        let decided = admit(request, facts, time, &settings);
-        Decided {
-            answer: Ok(decided.answer),
-            changes: decided.changes,
-        }
+        admit(&request, facts, time, &settings, &DecisionIds(ids.as_ref())).map_or_else(
+            |failure| Decided::unchanged(Err(failure)),
+            |decided| {
+                Decided::writing(
+                    Ok(Ok(decided.answer)),
+                    decided.changes,
+                    decided.written_at_ms,
+                )
+            },
+        )
     })
-    .await
+    .await?
 }
 
 fn refused(reason: MachineConnectionRefusal) -> Decided<MachineConnectionAdmission> {
@@ -92,21 +103,24 @@ fn admit(
     facts: &EnrollmentFacts,
     time: DecisionTime,
     settings: &MachineLoginSettings,
-) -> Decided<MachineConnectionAdmission> {
+    ids: &DecisionIds<'_>,
+) -> Result<Decided<MachineConnectionAdmission>, MachineEnrollmentFailure> {
     let Some(enrollment) = &facts.enrollment else {
-        return refused(MachineConnectionRefusal::UnknownMachine {});
+        return Ok(refused(MachineConnectionRefusal::UnknownMachine {}));
     };
-    if enrollment.approval.organization_id != request.organization_id {
-        return refused(MachineConnectionRefusal::MachineInAnotherOrganization {});
+    if facts.organization != request.organization_id {
+        return Ok(refused(
+            MachineConnectionRefusal::MachineInAnotherOrganization {},
+        ));
     }
     // The token, the enrollment and the connection must name one machine.
     if request.installation != enrollment.installation
         || request.presented.installation != enrollment.installation
-        || request.presented.peer != enrollment.approval.peer
+        || request.presented.peer.to_string() != enrollment.installation.as_str()
     {
-        return refused(MachineConnectionRefusal::UnknownMachine {});
+        return Ok(refused(MachineConnectionRefusal::UnknownMachine {}));
     }
-    match &enrollment.state {
+    Ok(match &enrollment.state {
         StoredEnrollmentState::Enrolled {
             machine_client_id, ..
         } => {
@@ -118,18 +132,19 @@ fn admit(
                 refused(MachineConnectionRefusal::Superseded {})
             } else if machine_client_id != &request.client_id {
                 refused(MachineConnectionRefusal::WrongClient {})
-            } else if let Some(expiry) = idle_expiry(enrollment, facts, time, settings) {
-                Decided {
-                    answer: MachineConnectionAdmission::Refused {
+            } else if let Some(expiry) = idle_expiry(enrollment, facts, time, settings, ids)? {
+                Decided::writing(
+                    MachineConnectionAdmission::Refused {
                         reason: MachineConnectionRefusal::EnrollmentNotActive {},
                     },
-                    changes: expiry,
-                }
+                    expiry,
+                    time.now_ms,
+                )
             } else {
                 Decided::unchanged(MachineConnectionAdmission::Admitted {
                     machine: AdmittedMachine {
                         installation: enrollment.installation.clone(),
-                        peer: enrollment.approval.peer,
+                        peer: request.presented.peer,
                         organization_id: request.organization_id.clone(),
                         enrollment_id: enrollment.id.clone(),
                         token_expires_at: request.token_expires_at,
@@ -147,7 +162,7 @@ fn admit(
         | StoredEnrollmentState::Expired { .. } => {
             refused(MachineConnectionRefusal::EnrollmentNotActive {})
         }
-    }
+    })
 }
 
 /// The host closes this machine's open connection once the revocation commits.
@@ -163,27 +178,33 @@ pub struct MachineRevocation {
     pub close: Option<CloseMachineConnection>,
 }
 
-/// Who revoked, and the admin operation's own identity for its records.
+/// Who revoked, and the admin operation's own UUIDv7 identity, from which
+/// its records' keys are built.
 #[derive(Clone, Debug)]
 pub struct RevocationBy {
     pub person: PersonId,
-    pub operation: ChangeRequestId,
+    pub operation: AdminOperationId,
 }
 
 pub async fn revoke_machine_enrollment<P: MachineEnrollmentPort>(
     port: &P,
     request: &RevokeMachineEnrollment,
-    by: &RevocationBy,
-    clock: &dyn Clock,
-    ids: &dyn IdSource,
+    by: RevocationBy,
+    clock: Arc<dyn Clock>,
+    ids: Arc<dyn IdSource>,
 ) -> Result<MachineRevocation, MachineEnrollmentFailure> {
     let query = EnrollmentQuery {
         installation: Some(request.installation.clone()),
         ..EnrollmentQuery::default()
     };
-    port.transact(query, |facts| {
-        revoke(facts, by, DecisionTime::sample(clock), &DecisionIds(ids))
-            .unwrap_or_else(|failure| Decided::unchanged(Err(failure)))
+    port.transact(query, move |facts| {
+        revoke(
+            facts,
+            &by,
+            DecisionTime::sample(clock.as_ref()),
+            &DecisionIds(ids.as_ref()),
+        )
+        .unwrap_or_else(|failure| Decided::unchanged(Err(failure)))
     })
     .await?
 }
@@ -220,12 +241,13 @@ fn revoke(
                 machine_client_id: machine_client_id.clone(),
                 reason: EnrollmentRevocationReason::Owner {},
             },
+            ended_at_ms: Some(time.now_ms),
             ..active.clone()
         }),
         EnrollmentChange::PutInstallation(InstallationRow {
-            installation: row.installation.clone(),
             generation: row.generation.next(),
             active: None,
+            ..row.clone()
         }),
         EnrollmentChange::Record(ids.record(
             by.operation.as_str(),
@@ -252,8 +274,8 @@ fn revoke(
             time,
         )?));
     }
-    Ok(Decided {
-        answer: Ok(MachineRevocation {
+    Ok(Decided::writing(
+        Ok(MachineRevocation {
             answer: RevokeMachineEnrollmentResult::Applied { ended },
             close: Some(CloseMachineConnection {
                 installation: row.installation.clone(),
@@ -261,7 +283,8 @@ fn revoke(
             }),
         }),
         changes,
-    })
+        time.now_ms,
+    ))
 }
 
 fn not_found() -> Decided<Result<MachineRevocation, MachineEnrollmentFailure>> {

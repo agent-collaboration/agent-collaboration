@@ -67,6 +67,20 @@
             "kind"
           ],
           "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "description": "Central couldn't check the token right now: the issuer's keys were out of\nreach, or its own store was. Retrying is safe (owner decision N11).",
+          "properties": {
+            "kind": {
+              "const": "unavailable",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
         }
       ]
     }

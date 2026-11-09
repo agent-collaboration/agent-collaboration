@@ -104,6 +104,7 @@ fn machine_token_renewal_wire_contract() {
             json!({"result":"refused","reason":{"kind":"wrongClient"}}),
             json!({"result":"refused","reason":{"kind":"wrongInstallation"}}),
             json!({"result":"refused","reason":{"kind":"enrollmentNotActive"}}),
+            json!({"result":"refused","reason":{"kind":"unavailable"}}),
         ],
         false,
     );
@@ -119,6 +120,7 @@ fn machine_token_renewal_refusal_wire_contract() {
             json!({"kind":"wrongClient"}),
             json!({"kind":"wrongInstallation"}),
             json!({"kind":"enrollmentNotActive"}),
+            json!({"kind":"unavailable"}),
         ],
         false,
     );

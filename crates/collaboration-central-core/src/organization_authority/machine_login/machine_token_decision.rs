@@ -16,21 +16,22 @@ use crate::identity_contract::{
 use crate::organization_authority::{OrganizationChangeKind, OrganizationChangeOrigin};
 use fleet_identity_protocol::UnixSeconds;
 use runtime_primitives::{Clock, IdSource};
+use std::sync::Arc;
 
 pub async fn decide_machine_token<P: MachineEnrollmentPort>(
     port: &P,
-    request: &DecideMachineToken,
-    clock: &dyn Clock,
-    ids: &dyn IdSource,
+    request: DecideMachineToken,
+    clock: Arc<dyn Clock>,
+    ids: Arc<dyn IdSource>,
     settings: MachineLoginSettings,
 ) -> Result<MachineTokenDecision, MachineEnrollmentFailure> {
     let query = EnrollmentQuery {
         enrollment: Some(request.enrollment_id.clone()),
         ..EnrollmentQuery::default()
     };
-    port.transact(query, |facts| {
-        let time = DecisionTime::sample(clock);
-        decide(request, facts, time, &DecisionIds(ids), &settings)
+    port.transact(query, move |facts| {
+        let time = DecisionTime::sample(clock.as_ref());
+        decide(&request, facts, time, &DecisionIds(ids.as_ref()), &settings)
             .unwrap_or_else(|failure| Decided::unchanged(Err(failure)))
     })
     .await?
@@ -39,14 +40,19 @@ pub async fn decide_machine_token<P: MachineEnrollmentPort>(
 type Answer = Result<MachineTokenDecision, MachineEnrollmentFailure>;
 
 fn refuse(reason: MachineTokenRefusal) -> Decided<Answer> {
-    refuse_with(reason, Vec::new())
+    Decided::unchanged(Ok(MachineTokenDecision::Refuse { reason }))
 }
 
-fn refuse_with(reason: MachineTokenRefusal, changes: Vec<EnrollmentChange>) -> Decided<Answer> {
-    Decided {
-        answer: Ok(MachineTokenDecision::Refuse { reason }),
+fn refuse_with(
+    reason: MachineTokenRefusal,
+    changes: Vec<EnrollmentChange>,
+    time: DecisionTime,
+) -> Decided<Answer> {
+    Decided::writing(
+        Ok(MachineTokenDecision::Refuse { reason }),
         changes,
-    }
+        time.now_ms,
+    )
 }
 
 fn decide(
@@ -74,19 +80,20 @@ fn decide(
                 refuse(MachineTokenRefusal::Superseded {})
             } else if machine_client_id != &request.client_id {
                 refuse(MachineTokenRefusal::WrongClient {})
-            } else if let Some(expiry) = idle_expiry(enrollment, facts, time, settings) {
-                refuse_with(MachineTokenRefusal::IdleExpired {}, expiry)
+            } else if let Some(expiry) = idle_expiry(enrollment, facts, time, settings, ids)? {
+                refuse_with(MachineTokenRefusal::IdleExpired {}, expiry, time)
             } else {
-                Decided {
-                    answer: Ok(grant(enrollment, time, settings, None)),
-                    changes: vec![EnrollmentChange::ReplaceEnrollment(StoredEnrollment {
+                Decided::writing(
+                    Ok(grant(enrollment, time, settings, None)),
+                    vec![EnrollmentChange::ReplaceEnrollment(StoredEnrollment {
                         state: StoredEnrollmentState::Enrolled {
                             machine_client_id: machine_client_id.clone(),
                             last_grant_at: time.seconds(),
                         },
                         ..enrollment.clone()
                     })],
-                }
+                    time.now_ms,
+                )
             }
         }
         StoredEnrollmentState::Revoked {
@@ -112,10 +119,11 @@ fn first_grant(
     ids: &DecisionIds<'_>,
     settings: &MachineLoginSettings,
 ) -> Result<Decided<Answer>, MachineEnrollmentFailure> {
-    if let Some(lapse) = approval_lapse(enrollment, time, settings) {
+    if let Some(lapse) = approval_lapse(enrollment, time) {
         return Ok(refuse_with(
             MachineTokenRefusal::EnrollmentNotActive {},
             vec![lapse],
+            time,
         ));
     }
     // The enrollment's own machine client has the enrollment's ID (PD:956).
@@ -131,10 +139,10 @@ fn first_grant(
         return Ok(refuse(MachineTokenRefusal::Superseded {}));
     }
     let origin = OrganizationChangeOrigin::Person {
-        person_id: enrollment.approval.approver.as_str().to_owned(),
+        person_id: enrollment.approved_by.as_str().to_owned(),
         permission_checked: "machine:enroll".to_owned(),
     };
-    let request_id = enrollment.approval.request_id.as_str();
+    let request_id = enrollment.request_id.as_str();
     let mut changes = Vec::new();
     let superseded = facts.active.as_ref().and_then(|previous| {
         let StoredEnrollmentState::Enrolled {
@@ -151,6 +159,7 @@ fn first_grant(
                 machine_client_id: machine_client_id.clone(),
                 reason: EnrollmentRevocationReason::Superseded {},
             },
+            ended_at_ms: Some(time.now_ms),
             ..(*previous).clone()
         }));
         changes.push(EnrollmentChange::Record(ids.record(
@@ -169,9 +178,9 @@ fn first_grant(
         ..enrollment.clone()
     }));
     changes.push(EnrollmentChange::PutInstallation(InstallationRow {
-        installation: installation.installation.clone(),
         generation: installation.generation.next(),
         active: Some(enrollment.id.clone()),
+        ..installation.clone()
     }));
     changes.push(EnrollmentChange::Record(ids.record(
         request_id,
@@ -181,10 +190,11 @@ fn first_grant(
         time,
     )?));
     let ended = superseded.and_then(|(previous, _)| previous.ended_client());
-    Ok(Decided {
-        answer: Ok(grant(enrollment, time, settings, ended)),
+    Ok(Decided::writing(
+        Ok(grant(enrollment, time, settings, ended)),
         changes,
-    })
+        time.now_ms,
+    ))
 }
 
 fn grant(

@@ -87,6 +87,10 @@
         }
       ]
     },
+    "codeExpiresAt": {
+      "$ref": "#/$defs/UnixSeconds",
+      "description": "The device code's own deadline, from the stored code (owner decision\nN10): an approval not granted by then lapses."
+    },
     "formerServiceId": {
       "anyOf": [
         {
@@ -125,7 +129,8 @@
     "installation",
     "peer",
     "label",
-    "allowedWorkspaces"
+    "allowedWorkspaces",
+    "codeExpiresAt"
   ],
   "title": "DecideDeviceLogin",
   "type": "object"

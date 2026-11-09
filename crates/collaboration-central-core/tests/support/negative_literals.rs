@@ -104,9 +104,14 @@ fn machine_login_mirror_negatives(name: &str, literals: &[Value]) -> Vec<Value> 
     match name {
         "DecideDeviceLogin" => {
             let Some(first) = literals.first() else { return invalid };
-            let mut no_permission = first.clone();
-            if let Some(fields) = no_permission.as_object_mut() { fields.remove("permissionChecked"); }
-            invalid.push(no_permission);
+            for required in ["permissionChecked", "codeExpiresAt"] {
+                let mut without = first.clone();
+                if let Some(fields) = without.as_object_mut() { fields.remove(required); }
+                invalid.push(without);
+            }
+            let mut text_deadline = first.clone();
+            text_deadline["codeExpiresAt"] = json!("1793448600");
+            invalid.push(text_deadline);
             let cases: [(&str, Value); 11] = [
                 ("permissionChecked", json!("machine:view")),
                 // 86 three-byte characters: 258 UTF-8 bytes in 86 characters.

@@ -13,11 +13,12 @@ fn every_change_kind_is_stored_parsed_and_sent_under_one_name() {
         (OrganizationChangeKind::MachineEnrolled, "machineEnrolled"),
         (OrganizationChangeKind::MachineRevoked, "machineRevoked"),
         (OrganizationChangeKind::AllowanceChanged, "allowanceChanged"),
+        (OrganizationChangeKind::MachineExpired, "machineExpired"),
     ];
     for (kind, name) in kinds {
         assert_eq!(kind.as_str(), name);
         assert_eq!(OrganizationChangeKind::parse(name).ok(), Some(kind));
         assert_eq!(serde_json::to_value(kind).unwrap(), serde_json::json!(name));
     }
-    assert!(OrganizationChangeKind::parse("machineExpired").is_err());
+    assert!(OrganizationChangeKind::parse("machineUnknown").is_err());
 }

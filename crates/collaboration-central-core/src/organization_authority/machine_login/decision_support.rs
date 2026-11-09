@@ -42,17 +42,23 @@ impl DecisionIds<'_> {
         }
     }
 
+    /// One decision writes several records, and the store keeps one record per
+    /// request key. So each record's key is `<originating id>:<kind>:<target>`:
+    /// a retried decision writes the same keys, and no two records of one
+    /// decision share one. Every originating id and target here is a UUID, so a
+    /// key is at most 90 characters.
     pub fn record(
         &self,
-        request: &str,
+        originating: &str,
         kind: OrganizationChangeKind,
         origin: &OrganizationChangeOrigin,
         target: String,
         time: DecisionTime,
     ) -> Result<OrganizationChangeRecord, MachineEnrollmentFailure> {
+        let request_key = format!("{originating}:{}:{target}", kind.as_str());
         Ok(OrganizationChangeRecord {
             id: self.next()?,
-            request_id: ChangeRequestId::try_from(request.to_owned())
+            request_id: ChangeRequestId::try_from(request_key)
                 .map_err(|_| MachineEnrollmentFailure::UnrecordableRequest)?,
             kind,
             origin: origin.clone(),
@@ -67,21 +73,17 @@ impl DecisionIds<'_> {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct MachineLoginSettings {
     pub grant_lifetime: TokenLifetimeSeconds,
-    /// An approval lapses this long after central approved it (PD:1292's ten-minute code).
-    pub device_code_lifetime_ms: i64,
     /// An enrollment expires this long after its last Grant (R40).
     pub idle_expiry_seconds: i64,
 }
 
 impl MachineLoginSettings {
-    pub const DEVICE_CODE_LIFETIME_MS: i64 = 10 * 60 * 1000;
     pub const IDLE_EXPIRY_SECONDS: i64 = 30 * 24 * 60 * 60;
 
     #[must_use]
     pub const fn new(grant_lifetime: TokenLifetimeSeconds) -> Self {
         Self {
             grant_lifetime,
-            device_code_lifetime_ms: Self::DEVICE_CODE_LIFETIME_MS,
             idle_expiry_seconds: Self::IDLE_EXPIRY_SECONDS,
         }
     }

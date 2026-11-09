@@ -31,6 +31,9 @@ pub struct DecideDeviceLogin {
     pub approver_second_factor_at: Option<UnixSeconds>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub former_service_id: Option<FormerServiceId>,
+    /// The device code's own deadline, from the stored code (owner decision
+    /// N10): an approval not granted by then lapses.
+    pub code_expires_at: UnixSeconds,
 }
 fn uuid_v7_installation<'de, D: Deserializer<'de>>(
     deserializer: D,

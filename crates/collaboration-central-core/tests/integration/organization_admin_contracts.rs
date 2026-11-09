@@ -61,40 +61,51 @@ fn organization_admin_result_wire_contract() {
                 "workspaceId":"019a3dce-2000-7000-8000-0000000000a1","name":"research",
                 "description":"","state":"active"}}),
             json!({"result":"found","workspace":null}),
-            // B3's machine records. Approvals and first Grants carry the approver
-            // with machine:enroll; an owner revocation carries the revoker with
-            // machine:revoke. No new origin variant.
+            // B3's machine records, each keyed <originating id>:<kind>:<target>.
+            // Approvals and first Grants carry the approver with machine:enroll; an
+            // owner revocation carries the revoker with machine:revoke; idle expiry
+            // is automatic and names no person.
             json!({"result":"records","records":[
                 {"id":"019a3dce-2000-7000-8000-0000000000d1",
-                    "requestId":"019a3dce-2000-7000-8000-0000000000e1","kind":"allowanceChanged",
+                    "requestId":"019a3dce-2000-7000-8000-0000000000e1:allowanceChanged:019a3dce-2000-7000-8000-0000000000f1","kind":"allowanceChanged",
                     "origin":{"kind":"person","personId":"019a3dce-2000-7000-8000-000000000002",
                         "permissionChecked":"machine:enroll"},
                     "targetId":"019a3dce-2000-7000-8000-0000000000f1",
                     "createdAtMillis":1_800_000_000_002_i64},
                 {"id":"019a3dce-2000-7000-8000-0000000000d2",
-                    "requestId":"019a3dce-2000-7000-8000-0000000000e1","kind":"machineRevoked",
+                    "requestId":"019a3dce-2000-7000-8000-0000000000e1:machineRevoked:019a3dce-2000-7000-8000-0000000000f2","kind":"machineRevoked",
                     "origin":{"kind":"person","personId":"019a3dce-2000-7000-8000-000000000002",
                         "permissionChecked":"machine:enroll"},
                     "targetId":"019a3dce-2000-7000-8000-0000000000f2",
                     "createdAtMillis":1_800_000_000_003_i64},
                 {"id":"019a3dce-2000-7000-8000-0000000000d3",
-                    "requestId":"019a3dce-2000-7000-8000-0000000000e1","kind":"machineEnrolled",
+                    "requestId":"019a3dce-2000-7000-8000-0000000000e1:machineEnrolled:019a3dce-2000-7000-8000-0000000000f3","kind":"machineEnrolled",
                     "origin":{"kind":"person","personId":"019a3dce-2000-7000-8000-000000000002",
                         "permissionChecked":"machine:enroll"},
                     "targetId":"019a3dce-2000-7000-8000-0000000000f3",
                     "createdAtMillis":1_800_000_000_003_i64},
                 {"id":"019a3dce-2000-7000-8000-0000000000d4",
-                    "requestId":"019a3dce-2000-7000-8000-0000000000e2","kind":"machineRevoked",
+                    "requestId":"019a3dce-2000-7000-8000-0000000000e2:machineRevoked:019a3dce-2000-7000-8000-0000000000f3","kind":"machineRevoked",
                     "origin":{"kind":"person","personId":"019a3dce-2000-7000-8000-000000000003",
                         "permissionChecked":"machine:revoke"},
                     "targetId":"019a3dce-2000-7000-8000-0000000000f3",
                     "createdAtMillis":1_800_000_000_004_i64},
                 {"id":"019a3dce-2000-7000-8000-0000000000d5",
-                    "requestId":"019a3dce-2000-7000-8000-0000000000e2","kind":"allowanceChanged",
+                    "requestId":"019a3dce-2000-7000-8000-0000000000e2:allowanceChanged:019a3dce-2000-7000-8000-0000000000f1","kind":"allowanceChanged",
                     "origin":{"kind":"person","personId":"019a3dce-2000-7000-8000-000000000003",
                         "permissionChecked":"machine:revoke"},
                     "targetId":"019a3dce-2000-7000-8000-0000000000f1",
-                    "createdAtMillis":1_800_000_000_004_i64}
+                    "createdAtMillis":1_800_000_000_004_i64},
+                {"id":"019a3dce-2000-7000-8000-0000000000d6",
+                    "requestId":"019a3dce-2000-7000-8000-0000000000f3:machineExpired:019a3dce-2000-7000-8000-0000000000f3","kind":"machineExpired",
+                    "origin":{"kind":"automatic"},
+                    "targetId":"019a3dce-2000-7000-8000-0000000000f3",
+                    "createdAtMillis":1_800_000_000_005_i64},
+                {"id":"019a3dce-2000-7000-8000-0000000000d7",
+                    "requestId":"019a3dce-2000-7000-8000-0000000000f3:allowanceChanged:019a3dce-2000-7000-8000-0000000000f1","kind":"allowanceChanged",
+                    "origin":{"kind":"automatic"},
+                    "targetId":"019a3dce-2000-7000-8000-0000000000f1",
+                    "createdAtMillis":1_800_000_000_005_i64}
             ]}),
             json!({"result":"records","records":[
                 {"id":"019a3dce-2000-7000-8000-0000000000c1",

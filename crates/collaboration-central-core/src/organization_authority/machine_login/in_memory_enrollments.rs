@@ -7,18 +7,21 @@ use super::enrollment_port::{
 };
 use super::enrollment_records::{
     AllowanceRow, EnrollmentChange, EnrollmentGeneration, FormerServiceFacts, InstallationRow,
-    MachineClaim, StoredEnrollment, StoredEnrollmentState,
+    MachineClaim, PriorApproval, StoredEnrollment, StoredEnrollmentState,
 };
 use crate::identity_contract::{EnrollmentRevocationReason, FormerServiceId};
 use crate::organization_authority::OrganizationChangeRecord;
-use fleet_identity_protocol::{EnrollmentId, InstallationId};
+use fleet_identity_protocol::{EnrollmentId, InstallationId, OrganizationId};
 use message_board::WorkspaceId;
 use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Mutex;
 
 /// Everything the stand-in holds; tests compare it before and after.
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct EnrollmentStore {
+    pub organization: OrganizationId,
+    /// The full request each approval answered, by request ID.
+    pub approval_requests: BTreeMap<String, PriorApproval>,
     pub enrollments: BTreeMap<EnrollmentId, StoredEnrollment>,
     pub installations: BTreeMap<InstallationId, InstallationRow>,
     pub allowances: Vec<AllowanceRow>,
@@ -27,6 +30,26 @@ pub(crate) struct EnrollmentStore {
     pub workspaces: BTreeSet<WorkspaceId>,
     /// Installation and peer IDs another organization holds.
     pub claimed_elsewhere: BTreeSet<String>,
+}
+
+impl Default for EnrollmentStore {
+    /// An empty store of the test fixtures' organization.
+    fn default() -> Self {
+        Self {
+            organization: OrganizationId::try_from(super::test_fixtures::uuid7(
+                super::test_fixtures::ORGANIZATION,
+            ))
+            .unwrap_or_else(|_| unreachable!("the fixture organization is a UUIDv7")),
+            approval_requests: BTreeMap::new(),
+            enrollments: BTreeMap::new(),
+            installations: BTreeMap::new(),
+            allowances: Vec::new(),
+            links: Vec::new(),
+            records: Vec::new(),
+            workspaces: BTreeSet::new(),
+            claimed_elsewhere: BTreeSet::new(),
+        }
+    }
 }
 
 type BeforeDecision = Box<dyn FnOnce() + Send>;
@@ -63,10 +86,10 @@ impl InMemoryEnrollments {
 }
 
 impl MachineEnrollmentPort for InMemoryEnrollments {
-    async fn transact<T: Send>(
+    async fn transact<T: Send + 'static>(
         &self,
         query: EnrollmentQuery,
-        decide: impl FnOnce(&EnrollmentFacts) -> Decided<T> + Send,
+        decide: impl FnOnce(&EnrollmentFacts) -> Decided<T> + Send + 'static,
     ) -> Result<T, MachineEnrollmentFailure> {
         let mut store = self
             .store
@@ -92,13 +115,10 @@ impl MachineEnrollmentPort for InMemoryEnrollments {
 }
 
 fn facts(store: &EnrollmentStore, query: &EnrollmentQuery) -> EnrollmentFacts {
-    let by_request = query.request.as_ref().and_then(|request| {
-        store
-            .enrollments
-            .values()
-            .find(|enrollment| &enrollment.approval.request_id == request)
-            .cloned()
-    });
+    let prior_approval = query
+        .request
+        .as_ref()
+        .and_then(|request| store.approval_requests.get(request.as_str()).cloned());
     let enrollment = query
         .enrollment
         .as_ref()
@@ -144,8 +164,9 @@ fn facts(store: &EnrollmentStore, query: &EnrollmentQuery) -> EnrollmentFacts {
             former_facts(store, former)
         });
     EnrollmentFacts {
+        organization: store.organization.clone(),
         organization_has_enrollment: !store.enrollments.is_empty(),
-        by_request,
+        prior_approval,
         enrollment,
         installation,
         active,
@@ -230,6 +251,15 @@ fn apply(
             store.links.push((former.clone(), installation.clone()));
         }
         EnrollmentChange::Record(record) => store.records.push(record.clone()),
+        EnrollmentChange::RecordApprovalRequest(prior) => {
+            if store
+                .approval_requests
+                .insert(prior.request.request_id.as_str().to_owned(), prior.clone())
+                .is_some()
+            {
+                return Err(violated("a request ID approves at most once"));
+            }
+        }
     }
     Ok(())
 }
