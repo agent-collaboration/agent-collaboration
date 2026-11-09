@@ -57,6 +57,24 @@ pub async fn provider_worker_fixture_at(
     RunId,
     Arc<std::sync::Mutex<Vec<PushId>>>,
 )> {
+    let (root, store, worker, run_id, observed_push_ids, _) =
+        provider_worker_fixture_counting_submits(submission_plan, settlement_plan, timing).await?;
+    Ok((root, store, worker, run_id, observed_push_ids))
+}
+
+/// The provider worker fixture, also returning every call to the route's `submit_run`.
+pub async fn provider_worker_fixture_counting_submits(
+    submission_plan: FakeSubmissionPlan,
+    settlement_plan: FakeSettlementPlan,
+    timing: FixtureTiming,
+) -> TestResult<(
+    std::path::PathBuf,
+    Arc<Mutex<AutomationStore>>,
+    ScheduledRunWorker,
+    RunId,
+    Arc<std::sync::Mutex<Vec<PushId>>>,
+    Arc<AtomicUsize>,
+)> {
     let root = std::env::temp_dir().join(format!(
         "provider-worker-{}",
         OperationId::generate().as_str()
@@ -76,11 +94,13 @@ pub async fn provider_worker_fixture_at(
     let generation: CodexGeneration =
         serde_json::from_value(json!({"serviceEpoch":service,"generation":1}))?;
     let observed_push_ids = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let submit_calls = Arc::new(AtomicUsize::new(0));
     let fake: Arc<dyn ScheduledRunExecution> = Arc::new(FakeScheduledExecution {
         kind: FakeRouteKind::Provider,
         target: target.clone(),
         interactions: Arc::clone(&interactions),
         observed_push_ids: Arc::clone(&observed_push_ids),
+        submit_calls: Arc::clone(&submit_calls),
         generation,
         attempt_id: AttemptId::generate(),
         submissions: AtomicUsize::new(0),
@@ -142,5 +162,5 @@ pub async fn provider_worker_fixture_at(
             Some("Schedule Fixture"),
         )?,
     };
-    Ok((root, store, worker, run_id, observed_push_ids))
+    Ok((root, store, worker, run_id, observed_push_ids, submit_calls))
 }

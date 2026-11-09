@@ -263,8 +263,16 @@ fn is_busy_database(error: &automation_storage::StorageError) -> bool {
 #[tokio::test]
 async fn a_locked_interaction_writer_fails_the_schedule_push_admission_before_any_native_attempt()
 -> TestResult<()> {
-    let (root, automation, worker, run_id, attempts) =
-        provider_worker_fixture(FakeSubmissionPlan::Accept, FakeSettlementPlan::Pending).await?;
+    let (root, automation, worker, run_id, validated_calls, submit_calls) =
+        crate::scheduled_route_fixture::provider_worker_fixture_counting_submits(
+            FakeSubmissionPlan::Accept,
+            FakeSettlementPlan::Pending,
+            crate::scheduled_route_fixture::FixtureTiming {
+                anchor_ms: 0,
+                interval_seconds: 60,
+            },
+        )
+        .await?;
     let mut lock_holder = TursoConnection::connect_with(
         &TursoConnectOptions::new().filename(root.join("interaction.sqlite")),
     )
@@ -275,7 +283,7 @@ async fn a_locked_interaction_writer_fails_the_schedule_push_admission_before_an
     // The Run steps toward submission; the step that admits its push meets the lock. The
     // insert retries a busy database only within its 5 s window; this bound outlasts that
     // window and only stops a hang.
-    let mut admission_failed = false;
+    let mut locked_error = None;
     for _ in 0..4 {
         let locked_step = tokio::time::timeout(
             std::time::Duration::from_secs(6),
@@ -284,23 +292,31 @@ async fn a_locked_interaction_writer_fails_the_schedule_push_admission_before_an
         .await
         .map_err(|_| "the push admission did not fail within its bound")?;
         if let Err(error) = locked_step {
-            // The step stops on the busy database, not on anything the route said.
-            if !is_busy_database(&error) {
-                return Err(format!("the locked step failed for another reason: {error:?}").into());
-            }
-            admission_failed = true;
+            locked_error = Some(error);
             break;
         }
     }
-    if !admission_failed {
-        return Err("no step met the locked interaction writer".into());
+    // The native witness first: calls to the route, counted before the fake checks
+    // anything, whatever the step's error turns out to be.
+    let calls = submit_calls.load(std::sync::atomic::Ordering::SeqCst);
+    if calls != 0 {
+        return Err(
+            format!("{calls} route call(s) while the interaction writer was locked").into(),
+        );
     }
-    let attempted = attempts
+    let Some(error) = locked_error else {
+        return Err("no step met the locked interaction writer".into());
+    };
+    // The step stopped on the busy database, not on anything the route said.
+    if !is_busy_database(&error) {
+        return Err(format!("the locked step failed for another reason: {error:?}").into());
+    }
+    let validated = validated_calls
         .lock()
-        .map_err(|_| "attempt witness poisoned")?
+        .map_err(|_| "validated-call witness poisoned")?
         .len();
-    if attempted != 0 {
-        return Err(format!("{attempted} native attempt(s) before the push was stored").into());
+    if validated != 0 {
+        return Err(format!("{validated} validated route call(s) under the lock").into());
     }
     let origin = super::schedule_run_origin_reference(
         &worker
@@ -324,12 +340,18 @@ async fn a_locked_interaction_writer_fails_the_schedule_push_admission_before_an
     sqlx::query("ROLLBACK").execute(&mut lock_holder).await?;
     lock_holder.close().await?;
     Box::pin(worker.step(run_id.clone())).await?;
-    let attempted = attempts
+    let calls = submit_calls.load(std::sync::atomic::Ordering::SeqCst);
+    if calls != 1 {
+        return Err(format!("expected one route call after the lock, got {calls}").into());
+    }
+    // The fake records the call it validated; its first answer is NotStartedBusy, so this
+    // is one call seen with its stored push, not an accepted provider effect.
+    let validated = validated_calls
         .lock()
-        .map_err(|_| "attempt witness poisoned")?
+        .map_err(|_| "validated-call witness poisoned")?
         .len();
-    if attempted != 1 {
-        return Err(format!("expected one native attempt after the lock, got {attempted}").into());
+    if validated != 1 {
+        return Err(format!("expected one validated route call, got {validated}").into());
     }
     if worker
         .interactions

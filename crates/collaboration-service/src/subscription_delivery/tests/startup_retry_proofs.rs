@@ -179,6 +179,14 @@ async fn startup_auto_advance_does_not_expire_the_healthy_projects_owed_notice()
     .await;
 }
 
+/// A healthy project delivers while another project's startup probe is deferred.
+///
+/// `Immediate` runs the owner on the test clock: the deferred project recovers only when the
+/// test moves the clock to its first retry's deadline. `LargeAutoAdvance` keeps runtime
+/// timers, because it proves a two-day paused Tokio advance during setup expires nothing;
+/// it ends once the healthy project has settled. The deferred project's recovery beside a
+/// healthy owner is proven here and in
+/// `deferred_project_restores_an_abandoned_selection_despite_the_same_readers_healthy_owner`.
 async fn healthy_delivery_during_deferred_startup(setup_timing: StartupSetupTiming) {
     let evidence = Arc::new(StartupEvidence::default());
     let subscriber = tracing_subscriber::registry().with(StartupTrace(evidence.clone()));
@@ -196,21 +204,29 @@ async fn healthy_delivery_during_deferred_startup(setup_timing: StartupSetupTimi
         .unwrap();
     let held = exhaust_project_readers(&project).await;
     evidence.timeout.store(false, Ordering::SeqCst);
-    let startup_clock = clock(&fixture);
     let starting_wall_time = fixture.clock.now();
-    let startup = fixture.native_runtime_with_clock(startup_clock.clone());
-    tokio::pin!(startup);
-    if matches!(setup_timing, StartupSetupTiming::LargeAutoAdvance) {
-        use futures_util::poll;
-        // Startup is already inside its real storage work. With its caller not
-        // polling it, paused Tokio advances a genuine timer through two days.
-        assert!(poll!(startup.as_mut()).is_pending());
-        let before = tokio::time::Instant::now();
-        let setup_delay = Duration::from_secs(2 * 24 * 60 * 60);
-        tokio::time::sleep(setup_delay).await;
-        assert!(tokio::time::Instant::now().duration_since(before) >= setup_delay);
-    }
-    let runtime = startup.await;
+    let runtime_timers =
+        matches!(setup_timing, StartupSetupTiming::LargeAutoAdvance).then(|| clock(&fixture));
+    let (runtime, retry_at) = match &runtime_timers {
+        Some(startup_clock) => {
+            let startup = fixture.native_runtime_with_clock(startup_clock.clone());
+            tokio::pin!(startup);
+            use futures_util::poll;
+            // Startup is already inside its real storage work. With its caller not
+            // polling it, paused Tokio advances a genuine timer through two days.
+            assert!(poll!(startup.as_mut()).is_pending());
+            let before = tokio::time::Instant::now();
+            let setup_delay = Duration::from_secs(2 * 24 * 60 * 60);
+            tokio::time::sleep(setup_delay).await;
+            assert!(tokio::time::Instant::now().duration_since(before) >= setup_delay);
+            (startup.await, None)
+        }
+        None => {
+            let runtime = fixture.native_runtime().await;
+            let retry_at = fixture.clock.monotonic_now() + Duration::from_secs(1);
+            (runtime, Some(retry_at))
+        }
+    };
     assert!(evidence.timeout.load(Ordering::SeqCst));
     tokio::time::resume();
     // B remains locked until A has delivered and settled. No reader command drives either delivery.
@@ -221,21 +237,34 @@ async fn healthy_delivery_during_deferred_startup(setup_timing: StartupSetupTimi
     );
     runtime.await_settled().await;
     release_project_readers(held).await;
-    let recovered_notice = activity(&fixture, &runtime).await;
-    assert_eq!(
-        recovered_notice.ranges,
-        vec![expected_range(
-            fixture.project.clone(),
-            fixture.root.clone(),
-            owed
-        )]
-    );
-    runtime.await_settled().await;
-    evidence.state("finished").await;
+    if let Some(retry_at) = retry_at {
+        // Only the first retry's own deadline recovers B.
+        tokio::time::timeout(
+            Duration::from_secs(5),
+            fixture.clock.not_due_check_now(retry_at),
+        )
+        .await
+        .expect("the startup task waits for its first retry");
+        assert!(runtime.requests.lock().await.try_recv().is_err());
+        fixture
+            .clock
+            .advance_by_without_tokio_time(retry_at.duration_since(fixture.clock.monotonic_now()));
+        let recovered_notice = activity(&fixture, &runtime).await;
+        assert_eq!(
+            recovered_notice.ranges,
+            vec![expected_range(
+                fixture.project.clone(),
+                fixture.root.clone(),
+                owed
+            )]
+        );
+        runtime.await_settled().await;
+        evidence.state("finished").await;
+        runtime.owner_barrier(&fixture.reader).await;
+    }
     runtime.owner_barrier(&reader).await;
-    runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
-    if matches!(setup_timing, StartupSetupTiming::LargeAutoAdvance) {
+    if let Some(startup_clock) = &runtime_timers {
         assert_eq!(fixture.clock.now(), starting_wall_time);
         assert_eq!(startup_clock.now(), starting_wall_time);
         fixture.clock.advance_without_tokio_time(7);

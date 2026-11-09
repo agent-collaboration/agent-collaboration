@@ -69,6 +69,36 @@ impl SubscriptionClock for ManualWakeClock {
     }
 }
 
+/// Waits until the wake worker is asleep with no task running and its one timer armed
+/// for `due_ms`: nothing else is pending, so only that timer can fire the next delivery.
+/// The bound only stops a hang.
+#[expect(
+    clippy::expect_used,
+    reason = "A worker that never sleeps with its due time armed fails the journey here."
+)]
+async fn asleep_with_timer_armed_for(
+    observation: &collaboration_runtime::WorkerObservation,
+    due_ms: i64,
+) {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let snapshot = observation.snapshot();
+            if snapshot.asleep
+                && snapshot.tasks_running == 0
+                && snapshot
+                    .armed_deadline
+                    .map(runtime_primitives::SyncTime::unix_millis)
+                    == Some(due_ms)
+            {
+                return;
+            }
+            observation.asleep_at_least(snapshot.sleeps + 1).await;
+        }
+    })
+    .await
+    .expect("the wake worker sleeps with its next due time armed");
+}
+
 /// Moves the wall clock and Tokio time together to `now_ms`, so the worker timer armed
 /// for that due time fires because it is due.
 async fn advance_wake_clock(clock: &ManualWakeClock, now_ms: i64) {
@@ -238,6 +268,7 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         .wake_timing_worker()
         .expect("wake timing worker is available");
     let mut completions = wake_worker.observe_accepted_deliveries();
+    let wake_observation = wake_worker.observation();
     let handoff_worker = tokio::spawn(
         identity
             .push_handoff_worker()
@@ -251,6 +282,7 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
     drop(identity);
 
     let first_due_ms = anchor.timestamp_millis() + i64::from(REPEAT_INTERVAL_SECONDS) * 1000;
+    asleep_with_timer_armed_for(&wake_observation, first_due_ms).await;
     advance_wake_clock(&clock, first_due_ms).await;
     let first_delivery = next_native_queue_delivery(&mut observation_receiver)
         .await
@@ -271,6 +303,7 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         Some(first_due_ms + MINIMUM_REPEAT_GAP_MILLIS),
         "the stored next wake must be scheduled exactly 300 logical seconds after the first"
     );
+    asleep_with_timer_armed_for(&wake_observation, first_due_ms + 300_000).await;
     advance_wake_clock(&clock, first_due_ms + 300_000).await;
     let second_delivery = next_native_queue_delivery(&mut observation_receiver)
         .await

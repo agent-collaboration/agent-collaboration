@@ -269,6 +269,7 @@ impl SchedulerFixture {
                 target,
                 interactions: Arc::clone(&interactions),
                 observed_push_ids: Arc::default(),
+                submit_calls: Arc::default(),
                 generation: serde_json::from_value(json!({"serviceEpoch":service,"generation":1}))?,
                 attempt_id: AttemptId::generate(),
                 submissions: AtomicUsize::new(0),
