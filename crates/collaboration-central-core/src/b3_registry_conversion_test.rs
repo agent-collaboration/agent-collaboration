@@ -4,15 +4,15 @@ use super::exact_millis;
 #[test]
 fn rfc3339_times_convert_to_exact_milliseconds_with_any_offset() {
     assert_eq!(
-        exact_millis("2026-11-08T12:00:00.123Z", "t").ok(),
+        exact_millis("2026-11-08T12:00:00.123Z").ok(),
         Some(1_794_139_200_123)
     );
     assert_eq!(
-        exact_millis("2026-11-08T13:00:00.123+01:00", "t").ok(),
+        exact_millis("2026-11-08T13:00:00.123+01:00").ok(),
         Some(1_794_139_200_123)
     );
     assert_eq!(
-        exact_millis("2026-11-08T12:00:00Z", "t").ok(),
+        exact_millis("2026-11-08T12:00:00Z").ok(),
         Some(1_794_139_200_000)
     );
 }
@@ -25,6 +25,6 @@ fn a_finer_than_millisecond_or_unparseable_time_is_refused_not_rounded() {
         "yesterday",
         "",
     ] {
-        assert!(exact_millis(invalid, "t").is_err(), "{invalid}");
+        assert!(exact_millis(invalid).is_err(), "{invalid}");
     }
 }

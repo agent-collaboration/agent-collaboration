@@ -35,6 +35,8 @@ pub use machine_login::{
     admit_machine_token, decide_device_login, decide_machine_token, renew_machine_token,
     revoke_machine_enrollment,
 };
+#[cfg(feature = "conformance")]
+pub use machine_login::{ScenarioStep, expected_scenario, run_scenario};
 pub(crate) use organization_stamp_store::read as read_stored_stamp;
 #[cfg(feature = "conformance")]
 pub(crate) use organization_stamp_store::tamper as tamper_stored_statement;

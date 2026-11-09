@@ -14,6 +14,8 @@ mod in_memory_enrollments;
 mod machine_connection;
 mod machine_token_check;
 mod machine_token_decision;
+#[cfg(any(test, feature = "conformance"))]
+mod sql_scenario;
 #[cfg(test)]
 mod sql_store_fixture;
 #[cfg(test)]
@@ -38,3 +40,5 @@ pub use machine_token_check::{
     MachineTokenVerifier, VerifiedMachineToken, admit_machine_token, renew_machine_token,
 };
 pub use machine_token_decision::decide_machine_token;
+#[cfg(feature = "conformance")]
+pub use sql_scenario::{ScenarioStep, expected_scenario, run_scenario};

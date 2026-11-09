@@ -120,11 +120,12 @@ async fn an_empty_fleet_converts_and_reinitializes() -> Result<(), TestError> {
 }
 
 /// A failed conversion leaves today's schema, rows and history as they were.
+/// Returns the rollback's reason for the caller's own assertions.
 async fn assert_conversion_refused(
     fixture: &SqlStoreFixture,
     version: u64,
     cause: &str,
-) -> Result<(), TestError> {
+) -> Result<String, TestError> {
     let rows = legacy_rows(fixture).await?;
     let old_history = history(fixture).await?;
 
@@ -148,19 +149,60 @@ async fn assert_conversion_refused(
             .await
             .is_err()
     );
-    Ok(())
+    Ok(failure.reason)
 }
 
+/// The refusal names every row that can't convert, by its id and offending
+/// columns, so the owner's switch can be fixed from the error alone. It shows
+/// no stored value, and the whole switch rolls back.
 #[tokio::test]
-async fn an_invalid_or_finer_than_millisecond_time_fails_the_switch_and_changes_nothing()
+async fn an_invalid_or_finer_than_millisecond_time_names_every_refused_row_and_changes_nothing()
 -> Result<(), TestError> {
-    for created_at in ["yesterday", "2026-11-08T12:00:00.1234Z"] {
-        let fixture = SqlStoreFixture::pre_b3(vec![
-            machine(0x10, V4_SERVICE, None, "2026-11-08T12:00:00Z"),
-            machine(0x11, &uuid7(0x911), None, created_at),
-        ])
-        .await?;
-        assert_conversion_refused(&fixture, 3, "machine_enrollments.created_at").await?;
+    let unparseable = "yesterday";
+    let sub_millisecond = "2026-11-08T12:00:00.1234Z";
+    let bad_last_seen = "2026-11-08T13:30:00.5009+01:00";
+    let invalid_id = "machine-id-that-is-not-a-uuid";
+    let fixture = SqlStoreFixture::pre_b3(vec![
+        machine(0x10, V4_SERVICE, None, "2026-11-08T12:00:00Z"),
+        machine(0x11, &uuid7(0x911), None, unparseable),
+        machine(0x12, &uuid7(0x912), Some(bad_last_seen), sub_millisecond),
+        LegacyMachine {
+            peer: invalid_id.to_owned(),
+            ..machine(0x13, &uuid7(0x913), None, "2026-11-08T12:00:00Z")
+        },
+    ])
+    .await?;
+
+    let reason = assert_conversion_refused(&fixture, 3, "refuses 3 legacy machine row(s)").await?;
+
+    for named in [
+        format!(
+            "machine {}: machine_enrollments.created_at (is not an RFC 3339 time)",
+            uuid7(0x11)
+        ),
+        format!(
+            "machine {}: machine_enrollments.last_seen_at (is finer than a millisecond), \
+             machine_enrollments.created_at (is finer than a millisecond)",
+            uuid7(0x12)
+        ),
+        "row 4 in machine_id order: machine_enrollments.machine_id (is not a canonical UUIDv7)"
+            .to_owned(),
+    ] {
+        assert!(reason.contains(&named), "{named} missing from: {reason}");
+    }
+    // The valid row isn't named, and no stored value appears.
+    assert!(!reason.contains(&uuid7(0x10)), "{reason}");
+    for value in [
+        unparseable,
+        sub_millisecond,
+        bad_last_seen,
+        invalid_id,
+        "legacy-hash",
+        "legacy-client",
+        V4_SERVICE,
+        "machine 17",
+    ] {
+        assert!(!reason.contains(value), "{value} shown in: {reason}");
     }
     Ok(())
 }
@@ -245,5 +287,7 @@ async fn a_failure_after_the_destructive_step_rolls_the_whole_switch_back() -> R
         .execute("CREATE TABLE machine_allowances (id TEXT)".to_owned())
         .await?;
 
-    assert_conversion_refused(&fixture, 4, "machine_allowances").await
+    assert_conversion_refused(&fixture, 4, "machine_allowances")
+        .await
+        .map(drop)
 }
