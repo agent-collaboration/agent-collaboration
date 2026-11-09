@@ -77,6 +77,7 @@ async fn drive(slot: &ObjectSlot, redelivery: &mut Redelivery, delivered: u32) {
             #[cfg(feature = "conformance")]
             collaboration_central_core::event_trace::EventContext {
                 redelivery: Some(delivered),
+                delivery: collaboration_central_core::event_trace::AlarmDelivery::Platform,
             },
         )
         .await;

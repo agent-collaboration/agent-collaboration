@@ -14,6 +14,7 @@ fn record(sequence: u64) -> EventRecord {
         event_id: Uuid::now_v7(),
         event: EventKindRecord::Alarm {
             redelivery: Some(0),
+            delivery: collaboration_central_core::event_trace::AlarmDelivery::Platform,
         },
         entered_at: 0,
         exited_at: 0,

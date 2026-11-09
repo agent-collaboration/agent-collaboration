@@ -137,15 +137,18 @@ where
     Ok(())
 }
 
-pub(super) async fn deadline<Control, ControlFuture>(
+pub(super) async fn deadline<Control, ControlFuture, Settle, SettleFuture>(
     sender: &mut WebSocket,
     holder: &mut WebSocket,
     database: DatabaseId,
     mut control: Control,
+    mut settle: Settle,
 ) -> ConformanceResult<()>
 where
     Control: FnMut(RuntimeControl) -> ControlFuture,
     ControlFuture: Future<Output = ConformanceResult<RuntimeFaultObservation>>,
+    Settle: FnMut(RegistryTime) -> SettleFuture,
+    SettleFuture: Future<Output = ConformanceResult<u64>>,
 {
     let started = std::time::SystemTime::now();
     control(RuntimeControl::SetTime {
@@ -154,9 +157,9 @@ where
     .await?;
     let original = post(sender, database).await?;
     let old_holder_frame = holder_frame(holder).await?;
-    control(RuntimeControl::SetTime {
-        now: RegistryTime((started + std::time::Duration::from_secs(30)).into()),
-    })
+    settle(RegistryTime(
+        (started + std::time::Duration::from_secs(30)).into(),
+    ))
     .await?;
     if outcome(sender, original).await? != ForwardOutcome::Unanswered {
         return Err("original forward deadline lost its exact Unanswered outcome".into());

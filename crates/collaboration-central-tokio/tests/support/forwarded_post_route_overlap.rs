@@ -21,16 +21,26 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-pub(super) async fn late_route<Control, ControlFuture, Observe, ObserveFuture>(
+pub(super) async fn late_route<
+    Control,
+    ControlFuture,
+    Settle,
+    SettleFuture,
+    Observe,
+    ObserveFuture,
+>(
     sender: &mut WebSocket,
     holder: &mut WebSocket,
     database: DatabaseId,
     mut control: Control,
+    mut settle: Settle,
     mut observe: Observe,
 ) -> ConformanceResult<()>
 where
     Control: FnMut(RuntimeControl) -> ControlFuture,
     ControlFuture: Future<Output = ConformanceResult<RuntimeFaultObservation>>,
+    Settle: FnMut(RegistryTime) -> SettleFuture,
+    SettleFuture: Future<Output = ConformanceResult<u64>>,
     Observe: FnMut(bool) -> ObserveFuture,
     ObserveFuture: Future<Output = ConformanceResult<Value>>,
 {
@@ -49,6 +59,7 @@ where
         database,
         started,
         &mut control,
+        &mut settle,
         &mut observe,
     )
     .await;
@@ -83,17 +94,20 @@ where
     }
 }
 
-async fn overlap_sequence<Control, ControlFuture, Observe, ObserveFuture>(
+async fn overlap_sequence<Control, ControlFuture, Settle, SettleFuture, Observe, ObserveFuture>(
     sender: &mut WebSocket,
     holder: &mut WebSocket,
     database: DatabaseId,
     started: SystemTime,
     control: &mut Control,
+    settle: &mut Settle,
     observe: &mut Observe,
 ) -> ConformanceResult<()>
 where
     Control: FnMut(RuntimeControl) -> ControlFuture,
     ControlFuture: Future<Output = ConformanceResult<RuntimeFaultObservation>>,
+    Settle: FnMut(RegistryTime) -> SettleFuture,
+    SettleFuture: Future<Output = ConformanceResult<u64>>,
     Observe: FnMut(bool) -> ObserveFuture,
     ObserveFuture: Future<Output = ConformanceResult<Value>>,
 {
@@ -116,10 +130,7 @@ where
     )?;
     let old_frame: FrameId =
         serde_json::from_value(pending.get("id").ok_or("forward identity absent")?.clone())?;
-    control(RuntimeControl::SetTime {
-        now: RegistryTime((started + Duration::from_secs(30)).into()),
-    })
-    .await?;
+    settle(RegistryTime((started + Duration::from_secs(30)).into())).await?;
     if outcome(sender, original).await? != ForwardOutcome::Unanswered {
         return Err("held original route did not expire at its original deadline".into());
     }

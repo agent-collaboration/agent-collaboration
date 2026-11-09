@@ -14,15 +14,18 @@ use std::{
     time::{Duration, SystemTime},
 };
 
-pub(super) async fn exact_boundary<Control, ControlFuture>(
+pub(super) async fn exact_boundary<Control, ControlFuture, Settle, SettleFuture>(
     sender: &mut WebSocket,
     holder: &mut WebSocket,
     database: DatabaseId,
     mut control: Control,
+    mut settle: Settle,
 ) -> ConformanceResult<()>
 where
     Control: FnMut(RuntimeControl) -> ControlFuture,
     ControlFuture: Future<Output = ConformanceResult<RuntimeFaultObservation>>,
+    Settle: FnMut(RegistryTime) -> SettleFuture,
+    SettleFuture: Future<Output = ConformanceResult<u64>>,
 {
     let started = SystemTime::now();
     control(RuntimeControl::SetTime {
@@ -59,10 +62,7 @@ where
     {
         return Err("fresh forward reused an outstanding holder correlation identity".into());
     }
-    control(RuntimeControl::SetTime {
-        now: RegistryTime((started + Duration::from_secs(30)).into()),
-    })
-    .await?;
+    settle(RegistryTime((started + Duration::from_secs(30)).into())).await?;
     let old_holder_frame = outstanding
         .first()
         .ok_or("original pending group absent")?

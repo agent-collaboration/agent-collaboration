@@ -57,7 +57,19 @@ pub enum EventKindRecord {
     /// `redelivery` is null where the platform doesn't report it (Cloudflare).
     Alarm {
         redelivery: Option<u32>,
+        delivery: AlarmDelivery,
     },
+}
+
+/// Who delivered an Alarm event (seam contract v3.8).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum AlarmDelivery {
+    /// The platform's own alarm entry, woken by time. Tokio's alarm loop counts as platform.
+    #[default]
+    Platform,
+    /// A conformance `settleClock` on workerd, through the same entry the platform calls.
+    Injected,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

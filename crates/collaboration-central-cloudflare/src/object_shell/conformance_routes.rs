@@ -44,7 +44,6 @@ impl ShellActor {
             ObjectSeamControl::ArmFault { .. }
             | ObjectSeamControl::ReadFault { .. }
             | ObjectSeamControl::DuplicateAlarm
-            | ObjectSeamControl::SettleClock { .. }
             | ObjectSeamControl::ReadEvents { .. }
             | ObjectSeamControl::RebuildAtQuiescence { .. }
             | ObjectSeamControl::ReadPending
@@ -52,11 +51,79 @@ impl ShellActor {
             | ObjectSeamControl::AwaitBarrier { .. }
             | ObjectSeamControl::ReleaseBarrier { .. } => Err(RuntimeControlFailure::Unsupported),
             ObjectSeamControl::Snapshot => self.snapshot(host, runtime).await,
+            ObjectSeamControl::SettleClock { now } => self.settle_clock(host, runtime, now).await,
         };
         match answer {
             Ok(answer) => Response::from_json(&answer),
             Err(failure) => Ok(Response::from_json(&failure)?.with_status(409)),
         }
+    }
+
+    /// `settleClock` (v3.8): move the business clock exactly as `setTime` does,
+    /// then deliver every alarm the move made due through the object's alarm
+    /// entry, labelled injected, before answering. It never moves the stored
+    /// deadline to force a delivery. A drop (`alarmDelivery` off) is counted and
+    /// consumes the alarm, as a platform delivery does, then ends the settle.
+    async fn settle_clock(
+        &self,
+        host: &StoreHost,
+        runtime: &RuntimeFace,
+        now: collaboration_central_core::RegistryTime,
+    ) -> std::result::Result<
+        collaboration_central_conformance::RuntimeControlAnswer,
+        collaboration_central_conformance::RuntimeControlFailure,
+    > {
+        use collaboration_central_conformance::{RuntimeControlAnswer, RuntimeControlFailure};
+        use collaboration_central_core::ObjectAlarm;
+        /// More due alarms than this in one settle means the alarm never moves on.
+        const SETTLE_BOUND: u64 = 64;
+        let storage_failed = |_| RuntimeControlFailure::StorageFailed;
+        self.state
+            .storage()
+            .put(crate::composed_control::CLOCK_KEY, now)
+            .await
+            .map_err(storage_failed)?;
+        self.faults
+            .restore_clock(Some(now))
+            .map_err(|_| RuntimeControlFailure::Poisoned)?;
+        let address = self.address(None).await.map_err(storage_failed)?;
+        let until = now.0.timestamp_millis();
+        let mut alarm_events = 0;
+        while let Some(at) = host
+            .alarm()
+            .stored()
+            .await
+            .map_err(|_| RuntimeControlFailure::StorageFailed)?
+        {
+            if at.unix_millis() > until {
+                break;
+            }
+            if alarm_events == SETTLE_BOUND {
+                return Err(RuntimeControlFailure::WaitBoundExceeded);
+            }
+            alarm_events += 1;
+            match self
+                .deliver_alarm(
+                    &address,
+                    runtime,
+                    collaboration_central_core::event_trace::AlarmDelivery::Injected,
+                )
+                .await
+                .map_err(|_| RuntimeControlFailure::StorageFailed)?
+            {
+                // A dropped delivery is still consumed, as the platform consumes an
+                // alarm whose handler returns (and as Tokio's loop does).
+                super::AlarmOutcome::Dropped => {
+                    host.alarm()
+                        .set_exact(None)
+                        .await
+                        .map_err(|_| RuntimeControlFailure::StorageFailed)?;
+                    break;
+                }
+                super::AlarmOutcome::Applied => {}
+            }
+        }
+        Ok(RuntimeControlAnswer::ClockSettled { alarm_events })
     }
 
     /// S8: the durable read, fenced by the socket attachments read before and

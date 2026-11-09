@@ -36,7 +36,10 @@ impl KernelObserver for CollectingObserver {
 fn finish(trace: &EventTrace) {
     trace.finish(EventBounds {
         sequence: 0,
-        event: EventKindRecord::Alarm { redelivery: None },
+        event: EventKindRecord::Alarm {
+            redelivery: None,
+            delivery: crate::event_trace::AlarmDelivery::Platform,
+        },
         entered_at: SyncTime::from_unix_millis(1),
         exited_at: SyncTime::from_unix_millis(2),
         alarm_before: None,

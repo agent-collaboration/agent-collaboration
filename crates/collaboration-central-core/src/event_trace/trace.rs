@@ -46,6 +46,8 @@ pub enum EventClass {
 pub struct EventContext {
     /// How many times the platform already delivered this alarm; null if it can't say.
     pub redelivery: Option<u32>,
+    /// Who delivered this alarm: the platform, or a conformance `settleClock`.
+    pub delivery: super::AlarmDelivery,
 }
 
 pub(crate) struct EventTrace {

@@ -67,9 +67,13 @@ async fn the_original_deadline_times_out_once_and_a_late_holder_reply_cannot_ans
     let proof = async {
         let mut sender = connect(&server, SENDER_CREDENTIAL).await?;
         let mut holder = connect(&server, HOLDER_CREDENTIAL).await?;
-        lifecycle_oracle::deadline(&mut sender, &mut holder, database, |command| {
-            control(&server, command)
-        })
+        lifecycle_oracle::deadline(
+            &mut sender,
+            &mut holder,
+            database,
+            |command| control(&server, command),
+            |now| crate::forwarded_post_scenarios::settle(server.base_url(), now),
+        )
         .await?;
         close(sender).await?;
         close(holder).await?;

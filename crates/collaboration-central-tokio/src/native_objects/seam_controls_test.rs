@@ -195,7 +195,8 @@ async fn settle_clock_answers_after_the_alarm_it_made_due_has_completed() -> Tes
     assert_eq!(
         last.event,
         EventKindRecord::Alarm {
-            redelivery: Some(0)
+            redelivery: Some(0),
+            delivery: collaboration_central_core::event_trace::AlarmDelivery::Platform,
         }
     );
     assert_eq!(last.reply, ReplyRecord::AlarmDone);
@@ -256,7 +257,8 @@ async fn a_duplicate_alarm_completes_before_its_answer_and_reports_its_redeliver
     assert_eq!(
         last.event,
         EventKindRecord::Alarm {
-            redelivery: Some(1)
+            redelivery: Some(1),
+            delivery: collaboration_central_core::event_trace::AlarmDelivery::Platform,
         }
     );
     objects.shutdown().await?;

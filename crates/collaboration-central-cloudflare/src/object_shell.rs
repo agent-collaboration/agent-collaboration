@@ -136,6 +136,18 @@ impl RuntimeFace {
             Self::Copy(kernel) => kernel.on_event(event).await,
         }
     }
+    /// `on_event` with what only the shell knows, recorded in S1.
+    #[cfg(feature = "conformance")]
+    async fn on_event_with(
+        &self,
+        event: ObjectEvent,
+        context: collaboration_central_core::event_trace::EventContext,
+    ) -> EventReply {
+        match self {
+            Self::Fleet(kernel) => kernel.on_event_with(event, context).await,
+            Self::Copy(kernel) => kernel.on_event_with(event, context).await,
+        }
+    }
 }
 fn call_response(reply: EventReply) -> Result<Response> {
     match reply {
@@ -511,17 +523,61 @@ impl ShellActor {
     }
     async fn alarm(&self) -> Result<Response> {
         let address = self.address(None).await?;
-        #[cfg(feature = "conformance")]
-        if !self.alarm_delivery(&address).await? {
-            return Response::ok("alarm dropped");
-        }
-        let (_, runtime) = self.runtime(address).await?;
-        match runtime.on_event(ObjectEvent::Alarm).await {
-            // Cloudflare redelivers a failed alarm event up to 6 times from 2 s.
-            EventReply::AlarmRetry => Err(error("alarm recompute failed")),
-            _ => Response::ok("alarm applied"),
+        let (_, runtime) = self.runtime(address.clone()).await?;
+        match self
+            .deliver_alarm(
+                &address,
+                &runtime,
+                #[cfg(feature = "conformance")]
+                collaboration_central_core::event_trace::AlarmDelivery::Platform,
+            )
+            .await?
+        {
+            #[cfg(feature = "conformance")]
+            AlarmOutcome::Dropped => Response::ok("alarm dropped"),
+            AlarmOutcome::Applied => Response::ok("alarm applied"),
         }
     }
+    /// The object's alarm entry: what the platform calls, and what a
+    /// conformance `settleClock` injects through (labelled in S1).
+    async fn deliver_alarm(
+        &self,
+        address: &collaboration_central_core::ObjectAddress,
+        runtime: &RuntimeFace,
+        #[cfg(feature = "conformance")]
+        delivery: collaboration_central_core::event_trace::AlarmDelivery,
+    ) -> Result<AlarmOutcome> {
+        #[cfg(feature = "conformance")]
+        if !self.alarm_delivery(address).await? {
+            return Ok(AlarmOutcome::Dropped);
+        }
+        #[cfg(not(feature = "conformance"))]
+        let _ = address;
+        #[cfg(feature = "conformance")]
+        let reply = runtime
+            .on_event_with(
+                ObjectEvent::Alarm,
+                collaboration_central_core::event_trace::EventContext {
+                    redelivery: None,
+                    delivery,
+                },
+            )
+            .await;
+        #[cfg(not(feature = "conformance"))]
+        let reply = runtime.on_event(ObjectEvent::Alarm).await;
+        match reply {
+            // Cloudflare redelivers a failed alarm event up to 6 times from 2 s.
+            EventReply::AlarmRetry => Err(error("alarm recompute failed")),
+            _ => Ok(AlarmOutcome::Applied),
+        }
+    }
+}
+/// What the object's alarm entry did with one delivery.
+enum AlarmOutcome {
+    /// `alarmDelivery` is off: dropped, with its `centralAlarmDropped` line.
+    #[cfg(feature = "conformance")]
+    Dropped,
+    Applied,
 }
 /// A failed socket event errors the handler, which closes that connection, as before.
 fn socket_outcome(reply: EventReply) -> Result<()> {

@@ -323,7 +323,13 @@ mod observed {
         let sequences: Vec<_> = records.iter().map(|record| record.sequence).collect();
         assert_eq!(sequences, [0, 1, 2]);
         let first = &records[0];
-        assert_eq!(first.event, EventKindRecord::Alarm { redelivery: None });
+        assert_eq!(
+            first.event,
+            EventKindRecord::Alarm {
+                redelivery: None,
+                delivery: crate::event_trace::AlarmDelivery::Platform,
+            }
+        );
         assert_eq!(first.reply, ReplyRecord::AlarmDone);
         assert_eq!(first.entered_at, 100_000);
         let batch = first

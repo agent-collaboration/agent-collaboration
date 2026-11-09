@@ -310,6 +310,7 @@ fn event_kind_record(
         },
         ObjectEvent::Alarm => EventKindRecord::Alarm {
             redelivery: context.redelivery,
+            delivery: context.delivery,
         },
     }
 }
