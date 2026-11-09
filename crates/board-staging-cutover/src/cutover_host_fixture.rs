@@ -1,7 +1,7 @@
 //! Private Host roots and existing identities shared by cutover component proofs.
 use crate::{OfflineHost, OfflineHostError};
 use collaboration_protocol::UuidIdentity;
-use fleet_sync_protocol::PeerId;
+use fleet_protocol::PeerId;
 use std::{os::unix::fs::PermissionsExt, path::PathBuf};
 
 pub(crate) struct CutoverHostFixture {

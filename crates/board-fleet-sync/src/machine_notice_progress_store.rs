@@ -1,7 +1,7 @@
 //! Consumer progress remains independent of the library's transport acknowledgement.
 use crate::machine_session_store::cache_error;
-use fleet_sync_protocol::NoticePosition;
-use fleet_sync_session::StoreError;
+use fleet_protocol::NoticePosition;
+use fleet_session::StoreError;
 use message_board_storage::FleetCache;
 use std::path::Path;
 

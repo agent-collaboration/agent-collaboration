@@ -64,7 +64,7 @@ async fn forged_prevention_references_are_refused_before_the_locked_replacement_
     assert_eq!(facts.len(), 1);
     let fact = &facts[0];
     let mut other_cancel = fact.cancel().clone();
-    other_cancel.item = fleet_sync_protocol::ItemId::new(uuid::Uuid::now_v7()).unwrap();
+    other_cancel.item = fleet_protocol::ItemId::new(uuid::Uuid::now_v7()).unwrap();
     let mut changed_target = fact.target().clone();
     changed_target.digest = fact.cancel().digest.clone();
     let forged = [
@@ -113,7 +113,7 @@ async fn forged_prevention_references_are_refused_before_the_locked_replacement_
         )
         .await
         .unwrap();
-    correct.item = fleet_sync_protocol::ItemId::new(uuid::Uuid::now_v7()).unwrap();
+    correct.item = fleet_protocol::ItemId::new(uuid::Uuid::now_v7()).unwrap();
     assert!(
         fixture
             .admission
@@ -180,7 +180,7 @@ async fn a_generation_prevented_range_is_replaced_once_and_reaches_the_native_cl
                     .local_outcome_for_test(original[0].id())
                     .await
                     .unwrap(),
-                Some(fleet_sync_protocol::RecipientOutcome::Prevented { .. })
+                Some(fleet_protocol::RecipientOutcome::Prevented { .. })
             ) {
                 break;
             }

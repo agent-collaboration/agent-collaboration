@@ -3,7 +3,7 @@ use crate::offline_run_plan::PlannedProject;
 use crate::{
     NativeProjectSnapshot, NativeSourcePreflight, OfflineHost, OfflineRunPlan, SelectedWriterFile,
 };
-use fleet_sync_protocol::Epoch;
+use fleet_protocol::Epoch;
 use message_board::ProjectId;
 use serde::Serialize;
 use std::path::Path;

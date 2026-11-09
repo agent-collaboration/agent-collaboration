@@ -8,8 +8,8 @@ use collaboration_protocol::{
     MessageShowResult, RemoteDeliveryRefusal, RemoteDeliveryStatus, RemoteMessageStatus,
     RemoteProcessingFailure, RemoteSizeField,
 };
-use fleet_sync_delivery::OutboxStatusState;
-use fleet_sync_protocol::{
+use fleet_mail_delivery::OutboxStatusState;
+use fleet_protocol::{
     DeliveryFailureKind, DeliveryRefusal, DeliverySizeField, DeliveryStatus, ItemId,
 };
 use interaction_storage::DirectMessageHistoryQuery;

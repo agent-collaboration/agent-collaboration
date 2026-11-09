@@ -9,7 +9,7 @@ use crate::{
     step_driver::{StepCallback, StepDriver, StepResult},
 };
 use durable_steps::{AtomicStore, BoxFuture, CallFailure, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{GateAnswer, GateReason, GateReasonCode, RetirementAdmission};
+use fleet_protocol::{GateAnswer, GateReason, GateReasonCode, RetirementAdmission};
 use message_board::{BoardState, ProjectId, Record};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
@@ -41,7 +41,7 @@ where
         {
             return Err(CallFailure::AnswerLost);
         }
-        let _: fleet_sync_lease::RetirementAdmission =
+        let _: fleet_project_lease::RetirementAdmission =
             serde_json::from_value(call.target).map_err(encode_refusal)?;
         let request: RetirementAdmission =
             serde_json::from_value(call.request).map_err(encode_refusal)?;

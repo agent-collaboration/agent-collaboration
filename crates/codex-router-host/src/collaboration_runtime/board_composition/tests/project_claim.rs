@@ -1,8 +1,8 @@
 //! Real library admin import and native board snapshot, then the actual Host claim/install path.
 use super::*;
 use board_sync_protocol::{ProjectClaimReply, ProjectClaimRequest};
-use fleet_sync_protocol::*;
-use fleet_sync_writer::{ReplicatedDatabase, WriterOptions};
+use fleet_project_writer::{ReplicatedDatabase, WriterOptions};
+use fleet_protocol::*;
 
 pub(in crate::collaboration_runtime::board_composition) async fn imported_snapshot(
     central: &board_central_test_support::TestCentral,
@@ -31,7 +31,7 @@ pub(in crate::collaboration_runtime::board_composition) async fn captured_board_
             path,
             database,
             board_fleet_sync::BoardProjectSchema::new()?,
-            fleet_sync_lease::LeaseHolder::provisional(
+            fleet_project_lease::LeaseHolder::provisional(
                 database,
                 central.session_inputs()?.peer,
                 board_fleet_sync::BOARD_LEASE_POLICY,

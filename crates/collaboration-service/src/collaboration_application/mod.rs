@@ -115,7 +115,7 @@ impl CollaborationApplication {
         self.identity.service_epoch()
     }
     #[must_use]
-    pub fn installation_peer(&self) -> Option<fleet_sync_protocol::PeerId> {
+    pub fn installation_peer(&self) -> Option<fleet_protocol::PeerId> {
         self.identity.installation_peer()
     }
     #[must_use]

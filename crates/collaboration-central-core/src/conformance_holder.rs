@@ -20,8 +20,8 @@ use durable_steps::{
     OperationFailure, OperationId, OperationState, RequestKey, StoreError, Task,
     storage::{JournalStorage, StepRecord, TransactionScope},
 };
-use fleet_sync_lease::{HolderRelease, HolderWithdrawal};
-use fleet_sync_protocol::{
+use fleet_project_lease::{HolderRelease, HolderWithdrawal};
+use fleet_protocol::{
     PeerId, ReleaseAnswer, ReleaseRequest, RequestId, WithdrawAnswer, WithdrawRelease,
 };
 use runtime_primitives::{Clock, SyncTime};

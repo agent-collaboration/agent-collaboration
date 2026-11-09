@@ -17,7 +17,7 @@ async fn normal_status_fetch_and_future_cursor_refusal_keep_the_session_usable()
     let jwks = JwksFixtureServer::start().await?;
     let server = TokioServer::start(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
+            relay_peer: fleet_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },

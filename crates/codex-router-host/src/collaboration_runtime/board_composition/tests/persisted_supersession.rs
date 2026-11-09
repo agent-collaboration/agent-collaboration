@@ -1,6 +1,6 @@
 //! Cold recovery skips persisted terminal P before opening its retained writer.
 use super::*;
-use fleet_sync_protocol::{CommitSequence, LeaseRefusal, RenewAnswer, ReplicationPosition};
+use fleet_protocol::{CommitSequence, LeaseRefusal, RenewAnswer, ReplicationPosition};
 use runtime_primitives::{Clock, SystemClock};
 
 #[tokio::test]

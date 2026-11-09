@@ -31,10 +31,10 @@ collaboration-application-test-support = { path = "../collaboration-application-
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
 fleet-admission = { path = "../fleet-admission", version = "0.1.96" }
-fleet-sync-writer.workspace = true
+fleet-project-writer.workspace = true
 board-fleet-sync = { path = "../board-fleet-sync", version = "0.1.96" }
 board-central-test-support = { version = "0.1.96", path = "../board-central-test-support" }
-fleet-sync-protocol.workspace = true
+fleet-protocol.workspace = true
 runtime-primitives.workspace = true
 automation-storage = { path = "../automation-storage", version = "0.1.16" }
 message-board-storage = { path = "../message-board-storage", version = "0.1.20" }

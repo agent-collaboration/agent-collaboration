@@ -10,7 +10,7 @@ enum SubmissionAttempt {
 
 async fn first_submit_attempt(
     harness: &MailHarness,
-    item: fleet_sync_protocol::ItemId,
+    item: fleet_protocol::ItemId,
     operation: runtime_primitives::OperationId,
 ) -> Result<SubmissionAttempt, TestError> {
     tokio::time::timeout(BOUND, async {
@@ -112,8 +112,8 @@ async fn session_and_human_submissions_carry_no_project_epoch() -> Result<(), Te
     let directory = tempfile::tempdir()?;
     let mut harness = MailHarness::open_manual(directory.path(), None).await?;
     let human = relay_items::ordinary_message(harness.peer());
-    let session = fleet_sync_protocol::DeliveryItem::new(
-        fleet_sync_protocol::ItemId::new(uuid::Uuid::now_v7())?,
+    let session = fleet_protocol::DeliveryItem::new(
+        fleet_protocol::ItemId::new(uuid::Uuid::now_v7())?,
         collaboration_mail_protocol::MailSender::Session(human.recipient().address.clone()),
         human.recipient().clone(),
         None,

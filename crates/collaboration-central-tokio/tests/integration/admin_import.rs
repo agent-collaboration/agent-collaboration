@@ -77,7 +77,7 @@ async fn owner_fleet_import_is_atomic_and_replays_without_rewriting() -> Conform
     let directory = tempfile::tempdir()?;
     let server = TokioServer::start(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
+            relay_peer: fleet_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },

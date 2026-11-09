@@ -11,15 +11,17 @@ use durable_steps::{
     AtomicStore, CallFailure, CallTarget, Engine, NotSentReason, StoreError,
     storage::TransactionScope,
 };
-use fleet_sync_protocol::{
+use fleet_native_writer::{
+    InstallCoordinator, InstallFile, InstallFileRequest, InstallFileResult, InstallRefusal,
+    InstallRequest, InstallSnapshot, InstallSource, InstallStatus, StagingError, StagingStore,
+};
+use fleet_protocol::{
     CopyStatus, CopyStatusAnswer, DatabaseId, InstallAttemptId, OperationAnswer, OperationRequest,
     ReceiverId, ReplicationAnswer, ReplicationRequest,
 };
-use fleet_sync_tokio_runner::{
-    CallEnvelope, CallRouter, InstallCoordinator, InstallFile, InstallFileRequest,
-    InstallFileResult, InstallRefusal, InstallRequest, InstallSnapshot, InstallSource,
-    InstallStatus, ObjectKey, ObjectOptions, ObjectStore, SessionRequests, StagingError,
-    StagingStore, TokioHost, TokioObject,
+use fleet_session_client::SessionRequests;
+use fleet_tokio_objects::{
+    CallEnvelope, CallRouter, ObjectKey, ObjectOptions, ObjectStore, TokioHost, TokioObject,
 };
 use message_board::ProjectId;
 use runtime_primitives::SystemClock;
@@ -221,7 +223,7 @@ impl CentralReadCopies {
                 .transaction(|scope| {
                     Box::pin(async move {
                         let mut migrator = sqlx::migrate::Migrator::with_migrations(
-                            fleet_sync_receiver::RECEIVER_MIGRATOR
+                            fleet_project_copy::RECEIVER_MIGRATOR
                                 .iter()
                                 .cloned()
                                 .collect::<Vec<_>>(),
@@ -365,7 +367,7 @@ impl ReadCopyCalls {
             .await?
         {
             OperationAnswer::Replication(ReplicationAnswer::CopyUnavailable { reason }) => {
-                Err(fleet_sync_receiver::retryable_copy(reason))
+                Err(fleet_project_copy::retryable_copy(reason))
             }
             OperationAnswer::Replication(ReplicationAnswer::OutcomeUnknown { .. }) => {
                 Err(CallFailure::AnswerLost)
@@ -454,13 +456,13 @@ impl CallRouter for ReadCopyCalls {
                         if let Some(gate) = &self.page_gate {
                             match &answer {
                                 Ok(InstallFileResult::Page(
-                                    fleet_sync_tokio_runner::StagedPage::Receipt(receipt),
+                                    fleet_native_writer::StagedPage::Receipt(receipt),
                                 )) => {
                                     gate.after_page(receipt.clone(), parts.target.path().to_owned())
                                         .await?
                                 }
                                 Ok(InstallFileResult::Page(
-                                    fleet_sync_tokio_runner::StagedPage::Moved { position },
+                                    fleet_native_writer::StagedPage::Moved { position },
                                 )) => gate.moved(*position),
                                 _ => {}
                             }
@@ -511,11 +513,11 @@ impl CallRouter for ReadCopyCalls {
                     Err(
                         StagingError::Storage(_)
                         | StagingError::Io { .. }
-                        | StagingError::Rules(fleet_sync_receiver::SnapshotInstallError::Storage(_))
+                        | StagingError::Rules(fleet_project_copy::SnapshotInstallError::Storage(_))
                         | StagingError::Publish(
-                            fleet_sync_tokio_runner::PublishError::Storage(_)
-                            | fleet_sync_tokio_runner::PublishError::Io { .. }
-                            | fleet_sync_tokio_runner::PublishError::CheckpointBusy { .. },
+                            fleet_tokio_objects::PublishError::Storage(_)
+                            | fleet_tokio_objects::PublishError::Io { .. }
+                            | fleet_tokio_objects::PublishError::CheckpointBusy { .. },
                         ),
                     ) => Err(CallFailure::AnswerLost),
                     Err(error) => encode(Err::<InstallFileResult, _>(InstallRefusal {

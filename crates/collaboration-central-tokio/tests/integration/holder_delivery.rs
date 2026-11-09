@@ -5,8 +5,8 @@ use crate::session_publication_fixture as support;
 use collaboration_central_core::ObjectHost;
 use collaboration_central_tokio::SocketCommand;
 use durable_steps::{CallFailure, CallId, OperationId, StepName, Uuid};
-use fleet_sync_protocol::{FrameId, PeerId, ReleaseAnswer, ReleaseRequest, SessionId};
-use fleet_sync_session::{ConnectionBinding, ConnectionRegistration};
+use fleet_protocol::{FrameId, PeerId, ReleaseAnswer, ReleaseRequest, SessionId};
+use fleet_session::{ConnectionBinding, ConnectionRegistration};
 use serde_json::{Value, json};
 use std::{sync::atomic::Ordering, time::Duration};
 use support::{Fixture, TestError};
@@ -99,8 +99,8 @@ async fn selection_skips_opening_attaching_closed_and_expired_sockets_then_uses_
         ConnectionRegistration::Opening,
         ConnectionRegistration::Attaching {
             session_id: session,
-            schema_support: fleet_sync_protocol::SchemaSupport { max_version: 7 },
-            attach_seq: fleet_sync_protocol::AttachSequence::new(1)?,
+            schema_support: fleet_protocol::SchemaSupport { max_version: 7 },
+            attach_seq: fleet_protocol::AttachSequence::new(1)?,
         },
     ] {
         assert_eq!(
@@ -158,7 +158,7 @@ async fn selection_skips_opening_attaching_closed_and_expired_sockets_then_uses_
     assert!(matches!(
         socket.try_recv(),
         Ok(SocketCommand::Close(
-            fleet_sync_protocol::CloseReason::SessionEnded
+            fleet_protocol::CloseReason::SessionEnded
         ))
     ));
     let pending = start(&fixture, binding.peer, identity()?)?;
@@ -315,7 +315,7 @@ async fn replacing_the_holder_during_schema_publication_loses_the_old_attempt_an
     assert!(matches!(
         old_socket.try_recv(),
         Ok(SocketCommand::Close(
-            fleet_sync_protocol::CloseReason::ConnectionReplaced
+            fleet_protocol::CloseReason::ConnectionReplaced
         ))
     ));
     assert!(matches!(

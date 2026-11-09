@@ -9,10 +9,10 @@ use crate::collaboration_runtime::board_composition::{
 };
 use board_central_test_support::TestCentral;
 use board_sync_protocol::{ProjectClaimReply, ProjectClaimRequest};
-use fleet_sync_protocol::*;
-use fleet_sync_session::SessionClientStore;
-use fleet_sync_tokio_runner::{InstallRecord, InstallStatus};
-use fleet_sync_writer::BootstrapGrant;
+use fleet_native_writer::{InstallRecord, InstallStatus};
+use fleet_project_writer::BootstrapGrant;
+use fleet_protocol::*;
+use fleet_session::SessionClientStore;
 use message_board::{ProjectId, ProtocolVersion};
 use runtime_primitives::{Clock, SystemClock};
 use std::{
@@ -184,7 +184,7 @@ async fn claim_and_received_notice_join_one_record_and_publication_while_seed_is
         let session_store = board_fleet_sync::MachineSessionStore::open(&root).await?;
         timeout(BOUND, async {
             loop {
-                if session_store.load().await?.is_some_and(|state| state.notice_cursor >= position) { return Ok::<_, fleet_sync_session::StoreError>(()); }
+                if session_store.load().await?.is_some_and(|state| state.notice_cursor >= position) { return Ok::<_, fleet_session::StoreError>(()); }
                 tokio::task::yield_now().await;
             }
         }).await??;
@@ -239,7 +239,7 @@ async fn claim_and_received_notice_join_one_record_and_publication_while_seed_is
         later_notice.release()?;
         timeout(BOUND, async {
             loop {
-                if session_store.load().await?.is_some_and(|state| state.notice_cursor >= later_position) { return Ok::<_, fleet_sync_session::StoreError>(()); }
+                if session_store.load().await?.is_some_and(|state| state.notice_cursor >= later_position) { return Ok::<_, fleet_session::StoreError>(()); }
                 tokio::task::yield_now().await;
             }
         }).await??;
@@ -251,7 +251,7 @@ async fn claim_and_received_notice_join_one_record_and_publication_while_seed_is
         timeout(BOUND, async {
             loop {
                 if let Ok(Some(store)) = second_registry.existing_project(&later_project).await
-                    && matches!(store.writer_state().await?, fleet_sync_lease::WriterState::Writing { epoch } if epoch.value() == 2)
+                    && matches!(store.writer_state().await?, fleet_project_lease::WriterState::Writing { epoch } if epoch.value() == 2)
                 { return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(()); }
                 tokio::task::yield_now().await;
             }

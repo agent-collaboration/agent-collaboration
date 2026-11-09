@@ -14,8 +14,8 @@ use durable_steps::{
     AtomicStore, BoxFuture, CallFailure, CallTarget, NotSentReason, StoreError,
     storage::TransactionScope,
 };
-use fleet_sync_protocol::{LeaseStatus, PeerId, ReportSchemaSupport};
-use fleet_sync_session::SchemaSupportRegistry;
+use fleet_protocol::{LeaseStatus, PeerId, ReportSchemaSupport};
+use fleet_session::SchemaSupportRegistry;
 use message_board::ServiceId;
 use runtime_primitives::{Clock, SyncTime};
 use sqlx_core::{
@@ -29,7 +29,7 @@ enum SessionRegistryRequest {
     Welcome(PeerId),
 }
 enum SessionRegistryReply {
-    Report(fleet_sync_protocol::SchemaSupportRecorded),
+    Report(fleet_protocol::SchemaSupportRecorded),
     Welcome(Vec<LeaseStatus>),
     Refused,
 }
@@ -140,7 +140,7 @@ where
         scope: &'scope mut Store::Scope<'transaction>,
     ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
         Box::pin(async move {
-            let report = fleet_sync_lease::accepted_schema_support(scope, self.peer)
+            let report = fleet_project_lease::accepted_schema_support(scope, self.peer)
                 .await
                 .map_err(StoreError::backend)?;
             Ok((report, Vec::new()))
@@ -177,15 +177,16 @@ where
             }
             let reply = match self.request {
                 SessionRegistryRequest::Report(report) => {
-                    let previous = fleet_sync_lease::accepted_schema_support(scope, peer)
+                    let previous = fleet_project_lease::accepted_schema_support(scope, peer)
                         .await
                         .map_err(StoreError::backend)?;
                     let newly_admitted = previous
                         .as_ref()
                         .is_none_or(|previous| previous.attach_seq < report.attach_seq);
-                    let answer = fleet_sync_lease::report_schema_support(scope, &report, self.now)
-                        .await
-                        .map_err(StoreError::backend)?;
+                    let answer =
+                        fleet_project_lease::report_schema_support(scope, &report, self.now)
+                            .await
+                            .map_err(StoreError::backend)?;
                     if newly_admitted {
                         let at = chrono::DateTime::from_timestamp_millis(self.now.unix_millis())
                             .ok_or_else(|| StoreError::Corrupt {
@@ -204,13 +205,13 @@ where
                 }
                 SessionRegistryRequest::Welcome(peer) => {
                     let mut leases = Vec::new();
-                    for database in fleet_sync_lease::database_ids(scope)
+                    for database in fleet_project_lease::database_ids(scope)
                         .await
                         .map_err(StoreError::backend)?
                     {
-                        match fleet_sync_lease::lease_status(scope, database, self.now).await {
+                        match fleet_project_lease::lease_status(scope, database, self.now).await {
                             Ok(Some(lease)) if lease.holder == peer => leases.push(lease),
-                            Ok(_) | Err(fleet_sync_lease::LeaseError::Retired) => {}
+                            Ok(_) | Err(fleet_project_lease::LeaseError::Retired) => {}
                             Err(error) => return Err(StoreError::backend(error)),
                         }
                     }

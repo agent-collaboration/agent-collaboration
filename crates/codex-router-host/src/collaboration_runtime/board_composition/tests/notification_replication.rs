@@ -4,7 +4,7 @@ use super::notification_owner::ProjectNotificationFixture;
 use crate::collaboration_runtime::board_composition::tests::notification_publisher::project_fixture::NotificationSeed;
 use board_fleet_sync::{BoardCaptureBookkeeping, BoardPieceAnnotation};
 use collaboration_contracts::ProjectReplicationPosition;
-use fleet_sync_writer::{ReplicationEvents, ReplicationSender, SenderOptions};
+use fleet_project_writer::{ReplicationEvents, ReplicationSender, SenderOptions};
 use std::num::NonZeroUsize;
 use super::split_transport::SplitTransport;
 
@@ -164,10 +164,7 @@ async fn staged_handoff_parts_wait_for_the_final_acknowledgement_and_reopen_keep
         published.is_ok(),
         "reopened acknowledged handoff did not publish"
     );
-    assert_eq!(
-        published?,
-        Some(fleet_sync_protocol::Epoch::new(epoch.get())?)
-    );
+    assert_eq!(published?, Some(fleet_protocol::Epoch::new(epoch.get())?));
     assert_eq!(
         restored_epoch
             .ok_or("reopened outgoing epoch missing")?

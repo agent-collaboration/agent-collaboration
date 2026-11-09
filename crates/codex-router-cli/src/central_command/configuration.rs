@@ -17,8 +17,8 @@ use std::{
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct CentralConfiguration {
     pub policy: AccessPolicy,
-    pub receiver: fleet_sync_protocol::ReceiverId,
-    pub relay: fleet_sync_protocol::PeerId,
+    pub receiver: fleet_protocol::ReceiverId,
+    pub relay: fleet_protocol::PeerId,
 }
 
 pub(super) fn lock_root(root: &Path) -> Result<std::fs::File, CentralCommandError> {
@@ -110,10 +110,10 @@ pub(super) fn initialize(
                     .clone()
                     .unwrap_or_else(|| "local-owner".into()),
             },
-            receiver: fleet_sync_protocol::ReceiverId::new(uuid::Uuid::now_v7()).map_err(|_| {
+            receiver: fleet_protocol::ReceiverId::new(uuid::Uuid::now_v7()).map_err(|_| {
                 CentralCommandError::InvalidInput("central receiver identity generation failed")
             })?,
-            relay: fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).map_err(|_| {
+            relay: fleet_protocol::PeerId::new(uuid::Uuid::now_v7()).map_err(|_| {
                 CentralCommandError::InvalidInput("central relay identity generation failed")
             })?,
         };

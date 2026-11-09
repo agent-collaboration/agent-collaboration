@@ -3,7 +3,7 @@ use super::*;
 #[tokio::test]
 async fn missing_mail_owner_preserves_the_available_central_link_record() {
     let record = board_sync_protocol::FleetLinkRecord {
-        peer: fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).unwrap(),
+        peer: fleet_protocol::PeerId::new(uuid::Uuid::now_v7()).unwrap(),
         endpoint: "wss://central.example/session".to_owned(),
 
         instance: 0,

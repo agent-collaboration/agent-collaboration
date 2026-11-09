@@ -408,15 +408,15 @@ async fn a_recorded_push_refusal_is_settled_after_a_transient_lease_failure() {
             collaboration_protocol::PushDeliveryState::Rejected,
         )
         .await;
-    let item = fleet_sync_protocol::ItemId::new(
+    let item = fleet_protocol::ItemId::new(
         uuid::Uuid::parse_str(request.payload.push_id.as_str()).unwrap(),
     )
     .unwrap();
     let terminal = runtime.local_mail_outcome(item).await;
     assert!(matches!(
         &terminal,
-        Some(fleet_sync_protocol::RecipientOutcome::Refused {
-            reason: fleet_sync_protocol::DeliveryRefusal::RecipientRefused { code }
+        Some(fleet_protocol::RecipientOutcome::Refused {
+            reason: fleet_protocol::DeliveryRefusal::RecipientRefused { code }
         }) if code.as_str() == "permissionDenied"
     ));
     assert!(matches!(

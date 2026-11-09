@@ -1,7 +1,7 @@
 //! Literal claim names preserve native replication identities and reject loose inputs.
 
 use board_sync_protocol::{ProjectClaimRefusal, ProjectClaimReply, ProjectClaimRequest};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CommitSequence, Epoch, PeerId, ReplicationPosition, SchemaIdentity, SyncTime, TransferId,
 };
 use serde_json::json;

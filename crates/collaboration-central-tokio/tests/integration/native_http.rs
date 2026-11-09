@@ -17,7 +17,7 @@ async fn a_missing_committed_holder_mapping_never_dispatches_to_an_object() -> C
     let directory = tempfile::tempdir()?;
     let server = TokioServer::start(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
+            relay_peer: fleet_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },
@@ -48,7 +48,7 @@ async fn sequential_release_and_copy_wait_keep_live_drive_replay_pending() -> Co
     let directory = tempfile::tempdir()?;
     let server = TokioServer::start(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
+            relay_peer: fleet_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },
@@ -82,7 +82,7 @@ async fn full_holder_attempt_finishes_inside_the_original_drive_lease_without_wa
     let directory = tempfile::tempdir()?;
     let server = TokioServer::start(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
+            relay_peer: fleet_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },
@@ -119,7 +119,7 @@ async fn lost_holder_answers_preserve_the_call_and_real_writer_receipts_across_r
     tokio::fs::create_dir_all(&central).await?;
     let server = TokioServer::start(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
+            relay_peer: fleet_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },
@@ -147,7 +147,7 @@ async fn registry_holder_calls_reach_the_other_enrollment_and_accept_separate_so
     let directory = tempfile::tempdir()?;
     let server = TokioServer::start(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
+            relay_peer: fleet_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },
@@ -175,7 +175,7 @@ async fn renewal_is_correlated_through_the_real_registry_and_keeps_the_session_u
     let directory = tempfile::tempdir()?;
     let server = TokioServer::start(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
+            relay_peer: fleet_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },
@@ -202,7 +202,7 @@ async fn enrollment_returns_a_stable_peer_and_expiry_over_native_http() -> Confo
     let directory = tempfile::tempdir()?;
     let server = TokioServer::start(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
+            relay_peer: fleet_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },
@@ -230,7 +230,7 @@ async fn admitted_v4_service_completes_the_real_schema_publication_before_welcom
     let directory = tempfile::tempdir()?;
     let server = TokioServer::start(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
+            relay_peer: fleet_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },
@@ -280,7 +280,7 @@ async fn observe_admission(
     }
     let report = server
         .conformance_platform()
-        .conformance_schema_report(fleet_sync_protocol::PeerId::new(peer)?)
+        .conformance_schema_report(fleet_protocol::PeerId::new(peer)?)
         .await?;
     if serde_json::to_value(report)?
         != serde_json::json!({"peer":peer,"sessionId":"019f0000-0000-7000-8000-000000000450","attachSeq":1,"support":{"maxVersion":1}})

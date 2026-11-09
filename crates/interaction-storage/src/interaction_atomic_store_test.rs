@@ -8,11 +8,11 @@ use durable_steps::{
     AtomicStore, CallFailure, CallId, CallTarget, Host, NotSentReason, StoreError,
     storage::TransactionScope,
 };
-use fleet_sync_delivery::{
+use fleet_mail_delivery::{
     DeliveryConsumer, DeliveryError, DeliveryLimits, GateDecision, LocalOutcome, Outbox,
     OutboxAdmission, SubmitItem, minimum_settlement_allowance,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DeliveryFailureKind, DeliveryHeader, DeliveryItem, DeliveryRefusal, PeerId, Recipient,
 };
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
@@ -62,8 +62,8 @@ impl<TScope: TransactionScope> DeliveryConsumer<TScope> for NoDeliveryConsumer {
         &self,
         _: &DeliveryItem<BoardDeliveryTypes>,
         _: CallId,
-    ) -> fleet_sync_delivery::LocalDelivery<BoardDeliveryTypes> {
-        fleet_sync_delivery::LocalDelivery {
+    ) -> fleet_mail_delivery::LocalDelivery<BoardDeliveryTypes> {
+        fleet_mail_delivery::LocalDelivery {
             observation: (),
             outcome: LocalOutcome::Refused {
                 reason: DeliveryRefusal::ProcessingFailed {
@@ -74,33 +74,33 @@ impl<TScope: TransactionScope> DeliveryConsumer<TScope> for NoDeliveryConsumer {
     }
     fn may_cancel(
         &self,
-        requester: &<BoardDeliveryTypes as fleet_sync_protocol::DeliveryTypes>::Sender,
+        requester: &<BoardDeliveryTypes as fleet_protocol::DeliveryTypes>::Sender,
         item: &DeliveryHeader<BoardDeliveryTypes>,
     ) -> bool {
         requester == item.sender()
     }
 }
 
-impl<TScope: TransactionScope> fleet_sync_delivery::SenderBinding<TScope, BoardDeliveryTypes>
+impl<TScope: TransactionScope> fleet_mail_delivery::SenderBinding<TScope, BoardDeliveryTypes>
     for NoDeliveryConsumer
 {
     async fn resolve_submitter(
         &self,
         _: &mut TScope,
         sender: &collaboration_mail_protocol::MailSender,
-    ) -> Result<fleet_sync_protocol::Submitter, fleet_sync_delivery::SenderBindingFailure> {
+    ) -> Result<fleet_protocol::Submitter, fleet_mail_delivery::SenderBindingFailure> {
         use collaboration_mail_protocol::MailSender;
-        use fleet_sync_protocol::{DatabaseId, Submitter};
+        use fleet_protocol::{DatabaseId, Submitter};
         match sender {
             MailSender::Project { project } => DatabaseId::try_from(project.as_str().to_owned())
                 .map(Submitter::Project)
-                .map_err(|_| fleet_sync_delivery::SenderBindingFailure::Conflict),
+                .map_err(|_| fleet_mail_delivery::SenderBindingFailure::Conflict),
             MailSender::HumanUser { installation }
                 if installation.as_str() == "00000000-0000-4000-8000-000000000002" =>
             {
                 Ok(Submitter::Machine(native_sender_peer()))
             }
-            _ => Err(fleet_sync_delivery::SenderBindingFailure::Unknown),
+            _ => Err(fleet_mail_delivery::SenderBindingFailure::Unknown),
         }
     }
 }
@@ -109,7 +109,7 @@ fn native_sender_peer() -> PeerId {
 }
 
 type NativeStore = InteractionAtomicStore<NoDispatchHost>;
-type NativeRetention = fleet_sync_delivery::RemoveDeliveryRecord<NativeStore, sqlx_turso::Turso>;
+type NativeRetention = fleet_mail_delivery::RemoveDeliveryRecord<NativeStore, sqlx_turso::Turso>;
 #[path = "carrier_push_storage_tests.rs"]
 mod carrier_recovery;
 #[path = "held_mail_readiness_tests.rs"]
@@ -148,7 +148,7 @@ fn native_item_and_push() -> (DeliveryItem<BoardDeliveryTypes>, PushRecordDraft)
         "sessionId":"atomic-recipient"
     });
     let item = DeliveryItem::<BoardDeliveryTypes>::new(
-        fleet_sync_protocol::ItemId::new(id).expect("native item ID"),
+        fleet_protocol::ItemId::new(id).expect("native item ID"),
         serde_json::from_value(
             json!({"kind":"humanUser","installation":"00000000-0000-4000-8000-000000000002"}),
         )
@@ -211,7 +211,7 @@ async fn enqueue_and_project(
                         .enqueue_and_admit::<NativeSubmit, NativeRetention>(
                             item,
                             PeerId::new(uuid::Uuid::now_v7()).expect("relay"),
-                            fleet_sync_protocol::Submitter::Machine(native_sender_peer()),
+                            fleet_protocol::Submitter::Machine(native_sender_peer()),
                             NoDispatchHost.now(),
                         )
                         .await

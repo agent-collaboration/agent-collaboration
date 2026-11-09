@@ -12,7 +12,7 @@ use super::{
 use board_sync_protocol::{BoardConsumerAnswer, BoardServerRequest, ForwardOutcome};
 use collaboration_central_conformance::{ConformanceResult, RuntimeControl};
 use collaboration_central_core::RegistryTime;
-use fleet_sync_protocol::{DatabaseId, FrameId, OperationAnswer, ServerFrame, ServerRequest};
+use fleet_protocol::{DatabaseId, FrameId, OperationAnswer, ServerFrame, ServerRequest};
 use reqwest_websocket::WebSocket;
 use std::{
     path::Path,

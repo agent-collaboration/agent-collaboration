@@ -1,0 +1,378 @@
+{
+  "migrations": [
+    "migrations"
+  ],
+  "output": "src/checked_copy_queries.rs",
+  "metadata": "checked-copy-query-metadata.json",
+  "queries": [
+    {
+      "name": "read_copy",
+      "sql": "sql/read_copy.sql",
+      "row": "StoredCopyRow",
+      "result": "optional",
+      "parameters": []
+    },
+    {
+      "name": "write_copy",
+      "sql": "sql/write_copy.sql",
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "record",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_receipt",
+      "sql": "sql/read_receipt.sql",
+      "row": "StoredReceiptRow",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "identity",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "write_receipt",
+      "sql": "sql/write_receipt.sql",
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "identity",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "digest",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_parts",
+      "sql": "sql/read_parts.sql",
+      "row": "StoredPartRow",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "transaction_key",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "write_part",
+      "sql": "sql/write_part.sql",
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "transaction_key",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "part_index",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "staged_at",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "payload",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "drop_parts",
+      "sql": "sql/drop_parts.sql",
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "transaction_key",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "write_schema_step",
+      "sql": "sql/write_schema_step.sql",
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "version",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "record",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_fence_receipt",
+      "sql": "sql/read_fence_receipt.sql",
+      "row": "StoredFenceReceiptRow",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "transfer",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "write_fence_receipt",
+      "sql": "sql/write_fence_receipt.sql",
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "transfer",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "request",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "old_epoch",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "old_holder",
+          "kind": "text",
+          "nullable": true
+        },
+        {
+          "name": "result",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_epoch_fence",
+      "sql": "sql/read_epoch_fence.sql",
+      "row": "StoredEpochFenceRow",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "old_epoch",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_table_columns",
+      "sql": "sql/read_table_columns.sql",
+      "row": "StoredTableColumnRow",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "table",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_schema_entries",
+      "sql": "sql/read_schema_entries.sql",
+      "row": "StoredSchemaEntryRow",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "read_creation",
+      "sql": "sql/read_creation.sql",
+      "row": "StoredCreationRow",
+      "result": "optional",
+      "parameters": []
+    },
+    {
+      "name": "write_creation",
+      "sql": "sql/write_creation.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "request",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_copy_tables",
+      "sql": "sql/read_copy_tables.sql",
+      "row": "StoredCopyTableRow",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "write_copy_table",
+      "sql": "sql/write_copy_table.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "name",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "drop_copy_table",
+      "sql": "sql/drop_copy_table.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "name",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_hook_migrations",
+      "sql": "sql/read_hook_migrations.sql",
+      "row": "StoredHookMigrationRow",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "write_hook_migration",
+      "sql": "sql/write_hook_migration.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "version",
+          "kind": "text",
+          "nullable": false
+        },
+        {
+          "name": "checksum",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "schema_object_exists",
+      "sql": "sql/schema_object_exists.sql",
+      "row": null,
+      "result": "exists",
+      "parameters": [
+        {
+          "name": "name",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "erase_receipts",
+      "sql": "sql/erase_receipts.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": []
+    },
+    {
+      "name": "erase_staged_parts",
+      "sql": "sql/erase_staged_parts.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": []
+    },
+    {
+      "name": "erase_fence_receipts",
+      "sql": "sql/erase_fence_receipts.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": []
+    },
+    {
+      "name": "erase_schema_steps",
+      "sql": "sql/erase_schema_steps.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": []
+    },
+    {
+      "name": "erase_creation",
+      "sql": "sql/erase_creation.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": []
+    },
+    {
+      "name": "erase_copy_tables",
+      "sql": "sql/erase_copy_tables.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": []
+    },
+    {
+      "name": "read_schema_owner",
+      "sql": "sql/read_schema_owner.sql",
+      "row": "StoredSchemaOwnerRow",
+      "result": "optional",
+      "parameters": [
+        {
+          "name": "name",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "read_inspection_corpus",
+      "sql": "sql/read_inspection_corpus.sql",
+      "row": "InspectionSchemaRow",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "read_inspection_parts",
+      "sql": "sql/read_inspection_parts.sql",
+      "row": "InspectionPartRow",
+      "result": "many",
+      "parameters": []
+    },
+    {
+      "name": "read_foreign_keys",
+      "sql": "sql/read_foreign_keys.sql",
+      "row": "StoredForeignKeyRow",
+      "result": "many",
+      "parameters": [
+        {
+          "name": "table",
+          "kind": "text",
+          "nullable": false
+        }
+      ]
+    }
+  ]
+}

@@ -1,9 +1,10 @@
 //! One owned native install runner remains retryable while the project is unpublished.
 use board_fleet_sync::BoardProjectSchema;
 use board_sync_protocol::BoardConsumerProtocol;
-use fleet_sync_protocol::{Epoch, InstallAttemptId, ReceiverId, ReplicationPosition};
-use fleet_sync_tokio_runner::{InstallStatus, NativeWriterRuntime, SessionRequests};
-use fleet_sync_writer::ReplicatedDatabase;
+use fleet_native_writer::{InstallStatus, NativeWriterRuntime};
+use fleet_project_writer::ReplicatedDatabase;
+use fleet_protocol::{Epoch, InstallAttemptId, ReceiverId, ReplicationPosition};
+use fleet_session_client::SessionRequests;
 use std::{io, path::Path, sync::Arc};
 use tokio::{
     sync::{Mutex, watch},

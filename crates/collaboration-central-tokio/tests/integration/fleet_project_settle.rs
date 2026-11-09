@@ -8,8 +8,8 @@ use super::{
 };
 use board_sync_protocol::BoardDeliveryTypes;
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_delivery::Outbox;
-use fleet_sync_protocol::{
+use fleet_mail_delivery::Outbox;
+use fleet_protocol::{
     DatabaseId, DeliveryAnswer, DeliveryEnvelope, DeliveryFailureKind, DeliveryItem,
     DeliveryRefusal, DeliveryStatus, ItemId, ItemStatusState, SettleResult, StatusVersion,
     Submitter,
@@ -47,7 +47,7 @@ async fn owner(fixture: &Fixture, item: ItemId) -> TestResult<Option<Submitter>>
                 )
                 .relay_submitter(item)
                 .await
-                .map_err(fleet_sync_delivery::delivery_rollback)
+                .map_err(fleet_mail_delivery::delivery_rollback)
             })
         })
         .await?)

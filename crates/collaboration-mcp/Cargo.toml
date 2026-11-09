@@ -40,10 +40,10 @@ collaboration-service = { path = "../collaboration-service", version = "0.1.30",
 durable-steps.workspace = true
 interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
 fleet-admission = { path = "../fleet-admission", version = "0.1.96" }
-fleet-sync-writer.workspace = true
+fleet-project-writer.workspace = true
 board-fleet-sync = { path = "../board-fleet-sync", version = "0.1.96" }
 board-central-test-support = { version = "0.1.96", path = "../board-central-test-support" }
-fleet-sync-protocol.workspace = true
+fleet-protocol.workspace = true
 runtime-primitives.workspace = true
 uuid.workspace = true
 agent-collaboration = { path = "../agent-collaboration", version = "0.1.30" }

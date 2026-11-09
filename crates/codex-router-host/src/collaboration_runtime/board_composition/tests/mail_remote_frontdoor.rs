@@ -17,7 +17,7 @@ use collaboration_protocol::{
 };
 use collaboration_service::ApplicationFixture;
 
-use fleet_sync_protocol::DeliveryStatus;
+use fleet_protocol::DeliveryStatus;
 use runtime_primitives::SystemClock;
 use serde_json::json;
 use std::{os::unix::fs::PermissionsExt, sync::OnceLock};
@@ -290,7 +290,7 @@ async fn public_remote_send_and_pushed_recipient_report_canonical_status_across_
         "{queued}"
     );
     assert!(!*source.welcomed.borrow());
-    let sdk = fleet_sync_protocol::ItemId::new(uuid::Uuid::parse_str(item.as_str())?)?;
+    let sdk = fleet_protocol::ItemId::new(uuid::Uuid::parse_str(item.as_str())?)?;
     assert!(
         !source
             .transport

@@ -8,8 +8,8 @@ use collaboration_protocol::{
     RouterLink,
 };
 use durable_steps::{Host, turso_store::TursoScope};
-use fleet_sync_delivery::DeliveryError;
-use fleet_sync_protocol::{DeliveryItem, ItemId, RecipientOutcome};
+use fleet_mail_delivery::DeliveryError;
+use fleet_protocol::{DeliveryItem, ItemId, RecipientOutcome};
 use interaction_storage::{
     MailPushUpdate, apply_mail_push_outcome_in_scope, clear_local_delivery_retry_in_scope,
     insert_mail_push_in_scope, read_mail_push_in_scope, read_message_send_answer_in_scope,
@@ -217,7 +217,7 @@ pub async fn project_cancelled_after_delivery<THost: Host>(
     scope: &mut TursoScope<'_, THost>,
     cancel: ItemId,
     target: ItemId,
-    too_late_at: fleet_sync_protocol::TooLateAt,
+    too_late_at: fleet_protocol::TooLateAt,
     recorded_at: DateTime<Utc>,
 ) -> Result<(), DeliveryError> {
     let cancel = cancel
@@ -231,12 +231,8 @@ pub async fn project_cancelled_after_delivery<THost: Host>(
         .try_into()
         .map_err(|_| invalid_projection())?;
     let too_late_at = match too_late_at {
-        fleet_sync_protocol::TooLateAt::Delivered => {
-            collaboration_mail_protocol::TooLateAt::Delivered
-        }
-        fleet_sync_protocol::TooLateAt::Uncertain => {
-            collaboration_mail_protocol::TooLateAt::Uncertain
-        }
+        fleet_protocol::TooLateAt::Delivered => collaboration_mail_protocol::TooLateAt::Delivered,
+        fleet_protocol::TooLateAt::Uncertain => collaboration_mail_protocol::TooLateAt::Uncertain,
     };
     let mark = collaboration_protocol::CancelledAfterDelivery {
         cancel,

@@ -521,10 +521,10 @@ async fn delivery_schema_lineage(
         "SELECT version, CAST(success AS INTEGER) AS success, checksum, typeof(version) AS version_storage, typeof(success) AS success_storage, typeof(checksum) AS checksum_storage FROM _fleet_sync_delivery_migrations ORDER BY version"
     ).fetch_all(connection).await.map_err(|_| StorageError::InvalidSchema)?;
     if applied.is_empty()
-        || applied.len() > fleet_sync_delivery::DELIVERY_MIGRATOR.iter().count()
+        || applied.len() > fleet_mail_delivery::DELIVERY_MIGRATOR.iter().count()
         || applied
             .iter()
-            .zip(fleet_sync_delivery::DELIVERY_MIGRATOR.iter())
+            .zip(fleet_mail_delivery::DELIVERY_MIGRATOR.iter())
             .any(|(actual, expected)| {
                 actual.version != expected.version
                     || actual.success != 1
@@ -537,7 +537,7 @@ async fn delivery_schema_lineage(
         return Err(StorageError::InvalidSchema);
     }
     let mut indexes = BTreeMap::new();
-    for migration in fleet_sync_delivery::DELIVERY_MIGRATOR
+    for migration in fleet_mail_delivery::DELIVERY_MIGRATOR
         .iter()
         .take(applied.len())
     {

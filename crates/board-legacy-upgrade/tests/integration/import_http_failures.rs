@@ -10,7 +10,7 @@ use collaboration_central_core::{
     AdminImportHeader, AdminProjectImportAnswer, AdminProjectImportRequest, ObjectAddress,
 };
 use collaboration_central_tokio::TokioServer;
-use fleet_sync_protocol::{PageDigest, RequestId, SeedId};
+use fleet_protocol::{PageDigest, RequestId, SeedId};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 use std::{num::NonZeroU64, time::Duration};
@@ -224,7 +224,7 @@ async fn pending_copy_import_keeps_the_owner_reason_across_reopen() -> TestResul
         assert_eq!(status,StatusCode::SERVICE_UNAVAILABLE,"{body}");
         assert_eq!(body,json!({"kind":"copyUnavailable","reason":{"kind":"migrationPending","value":{"version":3}}}));
         let error=UpgradePublisher::new(server.base_url().parse()?,central_fixture::owner_client()?).publish(&prepared).await.unwrap_err();
-        assert!(matches!(error,UpgradeUploadError::OwnerFailure {failure:OwnerOperationFailure::CopyUnavailable {reason:fleet_sync_protocol::CopyUnavailableReason::MigrationPending {version:3}}}));
+        assert!(matches!(error,UpgradeUploadError::OwnerFailure {failure:OwnerOperationFailure::CopyUnavailable {reason:fleet_protocol::CopyUnavailableReason::MigrationPending {version:3}}}));
         Ok(())
     }.await;
     server.shutdown().await?;

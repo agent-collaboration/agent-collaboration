@@ -4,7 +4,7 @@ use collaboration_central_core::{
     AdminImportHeader, AdminImportPhase, AdminImportRecord, AdminProjectImportAnswer,
     AdminProjectImportRequest,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CommitSequence, DatabaseId, Epoch, ImportDigest, PageDigest, ReplicationPosition, RequestId,
     SchemaEntry, SchemaIdentity, SchemaObjectKind, SnapshotManifest, SnapshotPage, SqlValue,
     TableDigestBuilder, TableManifest, TableName, schema_fingerprint,

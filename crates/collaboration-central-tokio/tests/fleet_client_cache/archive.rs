@@ -1,7 +1,7 @@
 //! Real FleetClient, pump, native session and owning store retain archive outcomes.
 use super::*;
 use fleet_admission::{ArchiveReport, ArchiveReportOutcome, ArchiveReportRefusal};
-use fleet_sync_protocol::{CommitSequence, Epoch, ReplicationPosition};
+use fleet_protocol::{CommitSequence, Epoch, ReplicationPosition};
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
     query::query,

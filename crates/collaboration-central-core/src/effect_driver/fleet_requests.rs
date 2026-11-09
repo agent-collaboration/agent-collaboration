@@ -8,8 +8,8 @@ use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerProtocol, BoardPayload, FleetRequestEnvelope,
 };
 use durable_steps::Host as _;
-use fleet_sync_protocol::{ConnectionId, FrameId, OperationAnswer, ServerFrame};
-use fleet_sync_session::SessionKey;
+use fleet_protocol::{ConnectionId, FrameId, OperationAnswer, ServerFrame};
+use fleet_session::SessionKey;
 
 impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
     pub(super) async fn answer_fleet_request(

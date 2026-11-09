@@ -1,7 +1,7 @@
 //! Abandon the actual SDK drive after native receipt, then physically reopen its owner.
 use super::*;
 use durable_steps::OperationFailure;
-use fleet_sync_protocol::RecipientOutcome;
+use fleet_protocol::RecipientOutcome;
 use std::sync::atomic::Ordering;
 
 #[tokio::test]

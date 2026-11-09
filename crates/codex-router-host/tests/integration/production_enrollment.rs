@@ -514,7 +514,7 @@ async fn production_enrollment_native_child() -> TestResult {
 async fn require_shared_link_status(
     client: &CollaborationClient,
     host: &OwnedHost,
-    peer: fleet_sync_protocol::PeerId,
+    peer: fleet_protocol::PeerId,
 ) -> TestResult {
     let before = client
         .installation_show()

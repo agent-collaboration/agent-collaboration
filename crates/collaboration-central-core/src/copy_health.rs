@@ -51,8 +51,8 @@ where
         scope: &'scope mut Store::Scope<'transaction>,
     ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
         Box::pin(async move {
-            use fleet_sync_receiver::CopyInspection;
-            let inspection = fleet_sync_receiver::inspect_copy(scope).await;
+            use fleet_project_copy::CopyInspection;
+            let inspection = fleet_project_copy::inspect_copy(scope).await;
             if let CopyInspection::Retired { retired_at } = inspection {
                 return Ok((
                     CopyHealth::Retired {
@@ -68,8 +68,7 @@ where
                     CopyHealthRead::Known(None),
                     CopyHealthRead::Known(None),
                     CopyHealthRead::Known(
-                        fleet_sync_protocol::schema_fingerprint(&[])
-                            .map_err(StoreError::backend)?,
+                        fleet_protocol::schema_fingerprint(&[]).map_err(StoreError::backend)?,
                     ),
                     CopyHealthRead::Known(Vec::new()),
                 ),
@@ -91,9 +90,9 @@ where
                     }
                     (
                         CopyHealthRead::Known(Some(match stage {
-                            fleet_sync_receiver::CopyStage::Starting => CopyStage::Starting,
-                            fleet_sync_receiver::CopyStage::Seeding => CopyStage::Seeding,
-                            fleet_sync_receiver::CopyStage::Following => CopyStage::Following,
+                            fleet_project_copy::CopyStage::Starting => CopyStage::Starting,
+                            fleet_project_copy::CopyStage::Seeding => CopyStage::Seeding,
+                            fleet_project_copy::CopyStage::Following => CopyStage::Following,
                         })),
                         CopyHealthRead::Known(Some(status)),
                         CopyHealthRead::Known(fingerprint),
@@ -182,7 +181,7 @@ where
     for<'value> Option<String>: Type<Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
-    let supported = fleet_sync_receiver::RECEIVER_MIGRATOR
+    let supported = fleet_project_copy::RECEIVER_MIGRATOR
         .iter()
         .filter(|migration| migration.migration_type.is_up_migration())
         .map(|migration| u64::try_from(migration.version).map_err(StoreError::backend))

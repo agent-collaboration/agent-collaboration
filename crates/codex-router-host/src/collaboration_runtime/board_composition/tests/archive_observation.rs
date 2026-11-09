@@ -77,7 +77,7 @@ async fn archive_with_held_copy(fixture: &claim_fixture::ClaimFixture) -> TestRe
     })
     .await??;
     let connection = ObjectAddress::Fleet;
-    let copy = ObjectAddress::Copy(fleet_sync_protocol::DatabaseId::try_from(
+    let copy = ObjectAddress::Copy(fleet_protocol::DatabaseId::try_from(
         project.as_str().to_owned(),
     )?);
     fixture

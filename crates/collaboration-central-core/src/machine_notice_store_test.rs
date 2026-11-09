@@ -137,13 +137,13 @@ async fn machines_keep_independent_notice_positions_and_retention_floors() -> Re
         project: "019f0000-0000-7000-8000-000000008199"
             .to_owned()
             .try_into()?,
-        epoch: fleet_sync_protocol::Epoch::new(12)?,
+        epoch: fleet_protocol::Epoch::new(12)?,
     };
     let second_notice = BoardNotice::LeaseSuperseded {
         project: "019f0000-0000-7000-8000-000000008199"
             .to_owned()
             .try_into()?,
-        epoch: fleet_sync_protocol::Epoch::new(20)?,
+        epoch: fleet_protocol::Epoch::new(20)?,
     };
     let expected_first = first_notice.clone();
     let expected_second = second_notice.clone();

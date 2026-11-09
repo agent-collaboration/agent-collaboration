@@ -5,7 +5,7 @@ use crate::{
     RuntimeFaultObservation,
 };
 use board_sync_protocol::BoardConsumerProtocol;
-use fleet_sync_protocol::{ClientFrame, FrameId, OperationAnswer, OperationRequest, ServerFrame};
+use fleet_protocol::{ClientFrame, FrameId, OperationAnswer, OperationRequest, ServerFrame};
 use futures_util::{SinkExt, StreamExt};
 use reqwest_websocket::{Message, WebSocket};
 use serde_json::Value;

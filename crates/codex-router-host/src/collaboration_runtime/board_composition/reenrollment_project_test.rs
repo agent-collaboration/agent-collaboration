@@ -265,7 +265,7 @@ async fn reenrollment_with_an_existing_writer_renews_and_writes_against_unchange
         loop {
             if matches!(
                 writer.store.writer_state().await?,
-                fleet_sync_lease::WriterState::Writing { .. }
+                fleet_project_lease::WriterState::Writing { .. }
             ) {
                 return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(());
             }
@@ -345,9 +345,9 @@ async fn wiped_central_leaves_only_the_unknown_project_read_only_while_new_creat
             if matches!(
                 writer.store.writer_state().await,
                 Err(message_board_storage::ProjectStorageError::Writer(
-                    fleet_sync_writer::OpenError::Holder {
-                        error: fleet_sync_lease::HolderError::Refused(
-                            fleet_sync_protocol::LeaseRefusal::NotRegistered
+                    fleet_project_writer::OpenError::Holder {
+                        error: fleet_project_lease::HolderError::Refused(
+                            fleet_protocol::LeaseRefusal::NotRegistered
                         )
                     }
                 ))

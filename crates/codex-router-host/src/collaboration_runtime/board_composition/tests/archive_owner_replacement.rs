@@ -6,7 +6,7 @@ use board_central_test_support::{EnrolledTestMachine, ObjectAddress, RuntimeCont
 use collaboration_contracts::ProjectClaim;
 use collaboration_runtime::NativeProjectStore;
 use collaboration_service::ProjectArchiveObservation;
-use fleet_sync_protocol::{DatabaseId, Epoch, PeerId, TransferId};
+use fleet_protocol::{DatabaseId, Epoch, PeerId, TransferId};
 
 struct ArchiveOwner {
     projects: Arc<project_writers::ProjectWriters>,

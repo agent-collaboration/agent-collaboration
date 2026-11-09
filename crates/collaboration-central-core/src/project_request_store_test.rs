@@ -22,7 +22,7 @@ async fn one_row_per_request_survives_routing_holder_delivery_and_independent_re
             connection: ConnectionId::new(durable_steps::Uuid::now_v7())?,
             session: SessionKey {
                 peer,
-                session_id: fleet_sync_protocol::SessionId::new(durable_steps::Uuid::now_v7())?,
+                session_id: fleet_protocol::SessionId::new(durable_steps::Uuid::now_v7())?,
             },
             project: "019f0000-0000-7000-8000-000000008199"
                 .to_owned()
@@ -124,7 +124,7 @@ async fn a_stored_unknown_request_phase_is_refused() -> Result<(), TestError> {
     let fixture = FleetStorageFixture::open().await?;
     let frame = FrameId::new(durable_steps::Uuid::now_v7())?;
     let origin = PeerId::new(durable_steps::Uuid::now_v7())?;
-    let session = fleet_sync_protocol::SessionId::new(durable_steps::Uuid::now_v7())?;
+    let session = fleet_protocol::SessionId::new(durable_steps::Uuid::now_v7())?;
     let connection = ConnectionId::new(durable_steps::Uuid::now_v7())?;
     fixture.object.transaction(move |scope| Box::pin(async move {
         // Arrange: SQLite accepts the tag; the domain decoder must reject its meaning.

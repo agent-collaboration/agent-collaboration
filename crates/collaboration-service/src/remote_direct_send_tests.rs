@@ -99,11 +99,11 @@ async fn configured_application_send_queues_offline_replays_and_rejects_conflict
         matches!(shown, collaboration_protocol::MessageShowResult::Remote { mail } if mail.item == id && mail.status == collaboration_protocol::RemoteDeliveryStatus::Queued)
     );
     let sdk_item =
-        fleet_sync_protocol::ItemId::new(uuid::Uuid::parse_str(id.as_str()).unwrap()).unwrap();
-    mail.publish_status(fleet_sync_protocol::StatusPublication {
+        fleet_protocol::ItemId::new(uuid::Uuid::parse_str(id.as_str()).unwrap()).unwrap();
+    mail.publish_status(fleet_protocol::StatusPublication {
         item: sdk_item,
-        status: fleet_sync_protocol::DeliveryStatus::Sent,
-        version: fleet_sync_protocol::StatusVersion::new(1),
+        status: fleet_protocol::DeliveryStatus::Sent,
+        version: fleet_protocol::StatusVersion::new(1),
         cancel: None,
     })
     .await
@@ -162,13 +162,13 @@ async fn configured_application_send_queues_offline_replays_and_rejects_conflict
         .store
         .transaction(move |scope| {
             Box::pin(async move {
-                fleet_sync_delivery::test_support::snapshot::<
+                fleet_mail_delivery::test_support::snapshot::<
                     _,
                     collaboration_contracts::RouterDeliveryTypes,
                     _,
                 >(
                     scope,
-                    fleet_sync_delivery::DeliveryHostRole::Machine,
+                    fleet_mail_delivery::DeliveryHostRole::Machine,
                     binding.as_ref(),
                 )
                 .await
@@ -226,13 +226,13 @@ async fn unconfigured_remote_application_send_has_no_custody_answer_or_epoch() {
         .store
         .transaction(move |scope| {
             Box::pin(async move {
-                fleet_sync_delivery::test_support::snapshot::<
+                fleet_mail_delivery::test_support::snapshot::<
                     _,
                     collaboration_contracts::RouterDeliveryTypes,
                     _,
                 >(
                     scope,
-                    fleet_sync_delivery::DeliveryHostRole::Machine,
+                    fleet_mail_delivery::DeliveryHostRole::Machine,
                     binding.as_ref(),
                 )
                 .await

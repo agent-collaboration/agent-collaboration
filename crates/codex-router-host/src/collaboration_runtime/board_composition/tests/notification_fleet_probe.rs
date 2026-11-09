@@ -2,7 +2,7 @@
 use board_sync_protocol::{
     BoardPayload, BoardReadCursor, BoardReadPage, BoardReadScope, FleetFeedRead,
 };
-use fleet_sync_service::ServiceError;
+use fleet_native_services::ServiceError;
 use message_board::FleetPosition;
 use message_board_storage::FleetRecordSnapshot;
 use tokio::sync::{Mutex, oneshot};

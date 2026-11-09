@@ -340,7 +340,7 @@ async fn exercise_message(
 
     let (identity, native_mail) = native_mail_owner::start(
         identity,
-        fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7())?,
+        fleet_protocol::PeerId::new(uuid::Uuid::now_v7())?,
         collaboration_service::MailPushDeliveryProps {
             interactions,
             actors: owner.clone(),

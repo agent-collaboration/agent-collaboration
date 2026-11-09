@@ -42,9 +42,9 @@ impl TokioCentralPlatform {
         &self,
         owner: collaboration_central_core::OwnerIdentity,
         state: collaboration_central_core::ConformanceBoardState,
-        pages: Vec<fleet_sync_protocol::SnapshotPage>,
-        manifest: fleet_sync_protocol::SnapshotManifest,
-    ) -> Result<fleet_sync_protocol::ReplicationPosition, durable_steps::StoreError> {
+        pages: Vec<fleet_protocol::SnapshotPage>,
+        manifest: fleet_protocol::SnapshotManifest,
+    ) -> Result<fleet_protocol::ReplicationPosition, durable_steps::StoreError> {
         self.objects
             .import_board_snapshot(owner, state, pages, manifest)
             .await
@@ -67,7 +67,7 @@ impl TokioCentralPlatform {
         clock: Arc<dyn Clock>,
         observe: impl Fn(CentralObservation) + Send + Sync + 'static,
         root: &std::path::Path,
-        registry: fleet_sync_lease::RegistryConfig,
+        registry: fleet_project_lease::RegistryConfig,
         delivery: crate::DeliveryConfig,
         holder_answer_timeout: Duration,
         copy_ack_wait: Duration,
@@ -97,7 +97,7 @@ impl TokioCentralPlatform {
         clock: Arc<dyn Clock>,
         observe: impl Fn(CentralObservation) + Send + Sync + 'static,
         root: &std::path::Path,
-        registry: fleet_sync_lease::RegistryConfig,
+        registry: fleet_project_lease::RegistryConfig,
         delivery: crate::DeliveryConfig,
         holder_answer_timeout: Duration,
         copy_ack_wait: Duration,
@@ -126,7 +126,7 @@ impl TokioCentralPlatform {
         clock: Arc<dyn Clock>,
         observe: impl Fn(CentralObservation) + Send + Sync + 'static,
         root: &std::path::Path,
-        registry: fleet_sync_lease::RegistryConfig,
+        registry: fleet_project_lease::RegistryConfig,
         delivery: crate::DeliveryConfig,
         holder_answer_timeout: Duration,
         copy_ack_wait: Duration,
@@ -188,7 +188,7 @@ impl TokioCentralPlatform {
     #[cfg(feature = "conformance")]
     pub async fn conformance_health_sample(
         &self,
-        database: fleet_sync_protocol::DatabaseId,
+        database: fleet_protocol::DatabaseId,
     ) -> Option<Vec<crate::HealthFileSample>> {
         self.objects.health_sample(database).await
     }
@@ -207,7 +207,7 @@ impl TokioCentralPlatform {
     #[cfg(feature = "conformance")]
     pub async fn conformance_mail_custody(
         &self,
-        item: fleet_sync_protocol::ItemId,
+        item: fleet_protocol::ItemId,
     ) -> Result<collaboration_central_core::FleetMailCustodyObservation, durable_steps::StoreError>
     {
         self.objects.mail_custody(item).await
@@ -218,7 +218,7 @@ impl TokioCentralPlatform {
     pub async fn conformance_holder_frames(
         &self,
         service: &message_board::ServiceId,
-    ) -> Result<Vec<fleet_sync_protocol::FrameId>, durable_steps::StoreError> {
+    ) -> Result<Vec<fleet_protocol::FrameId>, durable_steps::StoreError> {
         self.objects.holder_frames(service).await
     }
 
@@ -252,8 +252,8 @@ impl TokioCentralPlatform {
     #[cfg(feature = "conformance")]
     pub async fn conformance_schema_report(
         &self,
-        peer: fleet_sync_protocol::PeerId,
-    ) -> Result<Option<fleet_sync_protocol::ReportSchemaSupport>, durable_steps::StoreError> {
+        peer: fleet_protocol::PeerId,
+    ) -> Result<Option<fleet_protocol::ReportSchemaSupport>, durable_steps::StoreError> {
         self.objects.schema_report(peer).await
     }
 
@@ -286,7 +286,7 @@ impl CentralPlatform for TokioCentralPlatform {
     async fn upgrade_session(
         &self,
         mut request: axum::http::request::Parts,
-        binding: fleet_sync_session::ConnectionBinding,
+        binding: fleet_session::ConnectionBinding,
         admission_origin: AdmissionOrigin,
     ) -> Result<axum::http::Response<axum::body::Body>, UpgradeFailure> {
         if self.objects.stop.is_cancelled() {

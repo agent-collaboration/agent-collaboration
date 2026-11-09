@@ -3,7 +3,7 @@ use crate::intent_recovery_rows::{
     RecoveryDelta, RecoveryError, RecoveryResult, integer, json, require, text,
 };
 use crate::recovery_custody::RecoveryCustody;
-use fleet_sync_protocol::{DeliveryEnvelope, PeerId};
+use fleet_protocol::{DeliveryEnvelope, PeerId};
 use message_board::ServiceId;
 use message_board_storage::MailHandoffItem;
 use std::path::Path;

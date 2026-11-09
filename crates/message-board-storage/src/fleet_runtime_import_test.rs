@@ -1,5 +1,5 @@
 use super::*;
-use fleet_sync_protocol::{Epoch, InstallAttemptId, NoticePosition, SessionId};
+use fleet_protocol::{Epoch, InstallAttemptId, NoticePosition, SessionId};
 use std::sync::{Arc, Mutex};
 use tracing::instrument::WithSubscriber;
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;

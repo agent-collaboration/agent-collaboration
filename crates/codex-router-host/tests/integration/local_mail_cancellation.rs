@@ -6,7 +6,7 @@ use collaboration_protocol::{
     DeliveryOutcome, MessageDelivery, MessageSendResult, PushDeliveryState, PushRecordShowParams,
 };
 use fixture::{PendingLocalCancelFixture, TestResult};
-use fleet_sync_protocol::RecipientOutcome;
+use fleet_protocol::RecipientOutcome;
 
 #[tokio::test]
 async fn cancel_before_original_is_settled_by_the_host_without_native_input_or_central()

@@ -1,5 +1,5 @@
 use fleet_admission::FleetImportBundle;
-use fleet_sync_protocol::{ImportDigest, SnapshotManifest};
+use fleet_protocol::{ImportDigest, SnapshotManifest};
 use message_board::{
     BoardId, Description, FeedCursor, HumanId, ProjectId, RecordId, ResourceName, WorkspaceId,
 };

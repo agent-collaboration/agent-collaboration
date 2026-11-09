@@ -2,7 +2,7 @@
 
 use super::*;
 use board_sync_protocol::BoardDeliveryTypes;
-use fleet_sync_protocol::{DatabaseId, DeliveryEnvelope, DeliveryItem, Epoch, ItemId};
+use fleet_protocol::{DatabaseId, DeliveryEnvelope, DeliveryItem, Epoch, ItemId};
 use serde_json::json;
 
 #[expect(
@@ -50,7 +50,7 @@ async fn corrupt_epoch_history_cannot_be_reported_as_not_writer() -> TestResult 
         .object
         .transaction(move |scope| {
             Box::pin(async move {
-                Ok(fleet_sync_lease::epoch_holder(
+                Ok(fleet_project_lease::epoch_holder(
                     scope,
                     database,
                     Epoch::new(1).map_err(StoreError::backend)?,
@@ -62,7 +62,7 @@ async fn corrupt_epoch_history_cannot_be_reported_as_not_writer() -> TestResult 
     assert!(
         matches!(
             corruption,
-            Err(fleet_sync_lease::LeaseError::Corrupt { .. })
+            Err(fleet_project_lease::LeaseError::Corrupt { .. })
         ),
         "fixture must reach the real history decoder: {corruption:?}"
     );

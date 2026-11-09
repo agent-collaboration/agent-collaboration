@@ -5,8 +5,8 @@ use collaboration_central_conformance::{JwksFixtureServer, fixture_policy, owner
 use collaboration_central_tokio::{TokioServer, TokioSettings};
 use collaboration_contracts::ProjectRegistration;
 use collaboration_runtime::FleetClient;
-use fleet_sync_lease::{LeasePolicy, RegistryConfig};
-use fleet_sync_protocol::{PeerId, ReceiverId};
+use fleet_project_lease::{LeasePolicy, RegistryConfig};
+use fleet_protocol::{PeerId, ReceiverId};
 use message_board::ActorOrigin;
 use std::{future::Future, path::Path, pin::Pin, sync::Arc, time::Duration};
 
@@ -57,14 +57,14 @@ pub struct TestCentral {
 impl TestCentral {
     pub fn hold_registration_answer(
         &self,
-        database: fleet_sync_protocol::DatabaseId,
+        database: fleet_protocol::DatabaseId,
     ) -> FixtureResult<RegistrationAnswerObservation> {
         self.machine.edge.hold_registration_answer(database)
     }
 
     pub fn observe_mail_wire(
         &self,
-        drop_terminal: Option<fleet_sync_protocol::ItemId>,
+        drop_terminal: Option<fleet_protocol::ItemId>,
     ) -> FixtureResult<MailWireObservation> {
         self.machine.observe_mail_wire(drop_terminal)
     }
@@ -79,29 +79,29 @@ impl TestCentral {
     pub fn hold_granted_notice(
         &self,
         project: message_board::ProjectId,
-        epoch: fleet_sync_protocol::Epoch,
+        epoch: fleet_protocol::Epoch,
     ) -> FixtureResult<LeaseNoticeObservation> {
         self.machine.hold_granted_notice(project, epoch)
     }
     pub fn hold_superseded_notice(
         &self,
         project: message_board::ProjectId,
-        epoch: fleet_sync_protocol::Epoch,
+        epoch: fleet_protocol::Epoch,
     ) -> FixtureResult<LeaseNoticeObservation> {
         self.machine.edge.hold_superseded_notice(project, epoch)
     }
     pub fn drop_claim_grant_once(
         &self,
-        attempt: fleet_sync_protocol::RequestId,
+        attempt: fleet_protocol::RequestId,
     ) -> FixtureResult<ClaimGrantDropObservation> {
         self.machine.edge.drop_claim_grant_once(attempt)
     }
     #[cfg(feature = "conformance")]
     pub fn refuse_piece_integrity(
         &self,
-        database: fleet_sync_protocol::DatabaseId,
-        table: fleet_sync_protocol::TableName,
-        references: fleet_sync_protocol::TableName,
+        database: fleet_protocol::DatabaseId,
+        table: fleet_protocol::TableName,
+        references: fleet_protocol::TableName,
     ) -> FixtureResult<PieceIntegrityObservation> {
         self.machine
             .edge
@@ -135,9 +135,9 @@ impl TestCentral {
     /// The real owning ImportTask and admin seed consume captured board pages.
     pub async fn import_board_snapshot(
         &self,
-        pages: Vec<fleet_sync_protocol::SnapshotPage>,
-        manifest: fleet_sync_protocol::SnapshotManifest,
-    ) -> FixtureResult<fleet_sync_protocol::ReplicationPosition> {
+        pages: Vec<fleet_protocol::SnapshotPage>,
+        manifest: fleet_protocol::SnapshotManifest,
+    ) -> FixtureResult<fleet_protocol::ReplicationPosition> {
         self.import_board_snapshot_in_state(ConformanceBoardState::Open, pages, manifest)
             .await
     }
@@ -145,9 +145,9 @@ impl TestCentral {
     pub async fn import_board_snapshot_in_state(
         &self,
         state: ConformanceBoardState,
-        pages: Vec<fleet_sync_protocol::SnapshotPage>,
-        manifest: fleet_sync_protocol::SnapshotManifest,
-    ) -> FixtureResult<fleet_sync_protocol::ReplicationPosition> {
+        pages: Vec<fleet_protocol::SnapshotPage>,
+        manifest: fleet_protocol::SnapshotManifest,
+    ) -> FixtureResult<fleet_protocol::ReplicationPosition> {
         let owner = collaboration_central_core::OwnerIdentity::from_access(
             collaboration_central_core::AccessCaller::Owner {
                 email: "owner@example.test".into(),
@@ -163,10 +163,10 @@ impl TestCentral {
     /// Exercise the normal owner-authenticated retirement endpoint.
     pub async fn retire_project(
         &self,
-        database: fleet_sync_protocol::DatabaseId,
-        request: fleet_sync_protocol::RequestId,
-        fence: fleet_sync_protocol::Epoch,
-        acked: fleet_sync_protocol::ReplicationPosition,
+        database: fleet_protocol::DatabaseId,
+        request: fleet_protocol::RequestId,
+        fence: fleet_protocol::Epoch,
+        acked: fleet_protocol::ReplicationPosition,
     ) -> FixtureResult<serde_json::Value> {
         Ok(reqwest::Client::builder()
             .no_proxy()
@@ -374,7 +374,7 @@ pub async fn machine_session(
     directory: &Path,
     origin: &ActorOrigin,
 ) -> FixtureResult<(
-    fleet_sync_tokio_runner::SessionRequests<board_sync_protocol::BoardConsumerProtocol>,
+    fleet_session_client::SessionRequests<board_sync_protocol::BoardConsumerProtocol>,
     FleetTestRuntime,
 )> {
     let central = TestCentral::start(&directory.join("test-central"), origin).await?;

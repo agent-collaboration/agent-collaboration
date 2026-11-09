@@ -4,9 +4,9 @@ use board_sync_protocol::{
     FleetLinkFailure, FleetLinkFailureReason, FleetLinkRecord, FleetLinkState,
 };
 use chrono::Utc;
-use fleet_sync_protocol::PeerId;
-use fleet_sync_session::{ClientError, ConnectFailure, StoreError};
-use fleet_sync_tokio_runner::{SessionDrop, SessionLinkEvent, SessionLinkState, SessionLinkStatus};
+use fleet_protocol::PeerId;
+use fleet_session::{ClientError, ConnectFailure, StoreError};
+use fleet_session_client::{SessionDrop, SessionLinkEvent, SessionLinkState, SessionLinkStatus};
 use message_board_storage::FleetCache;
 use std::{sync::Arc, time::Duration};
 use tokio::sync::{broadcast, mpsc, oneshot, watch};

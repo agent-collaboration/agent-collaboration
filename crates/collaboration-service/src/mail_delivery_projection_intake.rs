@@ -37,7 +37,7 @@ impl Fixture {
                     let mut answers = Vec::with_capacity(items.len());
                     for item in items {
                         let submitter =
-                            <crate::MachineSenderBinding as fleet_sync_delivery::SenderBinding<
+                            <crate::MachineSenderBinding as fleet_mail_delivery::SenderBinding<
                                 _,
                                 RouterDeliveryTypes,
                             >>::resolve_submitter(
@@ -78,12 +78,12 @@ impl Fixture {
     pub async fn receive_cancel(&self, draft: &PushRecordDraft) -> ItemId {
         let original = self.item(draft);
         let control = ItemId::new(uuid::Uuid::now_v7()).unwrap();
-        let cancel = fleet_sync_protocol::DeliveryCancel::<RouterDeliveryTypes>::new(
+        let cancel = fleet_protocol::DeliveryCancel::<RouterDeliveryTypes>::new(
             control,
             original.sender().clone(),
             original.recipient().clone(),
             None,
-            fleet_sync_protocol::CancelBody {
+            fleet_protocol::CancelBody {
                 target: original.id(),
             },
         )

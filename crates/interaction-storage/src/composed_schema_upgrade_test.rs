@@ -63,7 +63,7 @@ async fn twelve_migration_composed_file_preserves_history_and_sdk_custody_throug
         uuid::Uuid::now_v7().to_string().try_into().unwrap();
     let pending_cancel: collaboration_mail_protocol::MailItemId =
         uuid::Uuid::now_v7().to_string().try_into().unwrap();
-    let reference = fleet_sync_protocol::DeliveryItemRef {
+    let reference = fleet_protocol::DeliveryItemRef {
         item: item.id(),
         digest: item.digest().clone(),
     };
@@ -81,11 +81,11 @@ async fn twelve_migration_composed_file_preserves_history_and_sdk_custody_throug
                 target_identity: "🤖 frozen recipient".to_owned(),
             },
         };
-    let completed_cancel_outcome = fleet_sync_protocol::RecipientOutcome::<
+    let completed_cancel_outcome = fleet_protocol::RecipientOutcome::<
         collaboration_mail_protocol::CarrierAcceptance,
     >::Refused {
-        reason: fleet_sync_protocol::DeliveryRefusal::ProcessingFailed {
-            kind: fleet_sync_protocol::DeliveryFailureKind::ExecutionFailed,
+        reason: fleet_protocol::DeliveryRefusal::ProcessingFailed {
+            kind: fleet_protocol::DeliveryFailureKind::ExecutionFailed,
         },
     };
     let before_migration_ms = chrono::Utc::now().timestamp_millis();
@@ -257,12 +257,12 @@ async fn twelve_migration_composed_file_preserves_history_and_sdk_custody_throug
                     let status = outbox
                         .status(reference.item)
                         .await
-                        .map_err(fleet_sync_delivery::delivery_rollback)?
+                        .map_err(fleet_mail_delivery::delivery_rollback)?
                         .state;
                     let envelope = outbox
                         .resolve_submit(&reference)
                         .await
-                        .map_err(fleet_sync_delivery::delivery_rollback)?
+                        .map_err(fleet_mail_delivery::delivery_rollback)?
                         .item;
                     Ok((status, envelope))
                 })
@@ -271,12 +271,12 @@ async fn twelve_migration_composed_file_preserves_history_and_sdk_custody_throug
             .unwrap();
         assert!(matches!(
             status,
-            fleet_sync_delivery::OutboxStatusState::Known {
-                status: fleet_sync_protocol::DeliveryStatus::Queued,
+            fleet_mail_delivery::OutboxStatusState::Known {
+                status: fleet_protocol::DeliveryStatus::Queued,
                 ..
             }
         ));
-        let fleet_sync_protocol::DeliveryEnvelope::Item(retained) = envelope else {
+        let fleet_protocol::DeliveryEnvelope::Item(retained) = envelope else {
             panic!("original custody changed to a control");
         };
         assert_eq!(

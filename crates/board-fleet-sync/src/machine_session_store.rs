@@ -1,5 +1,5 @@
 //! The library's resume state is retained by the Router's existing FleetCache.
-use fleet_sync_session::{ClientSessionState, SessionClientStore, StoreError};
+use fleet_session::{ClientSessionState, SessionClientStore, StoreError};
 use message_board_storage::{FleetCache, RouterLocalStorageError};
 use std::{path::Path, sync::Arc};
 

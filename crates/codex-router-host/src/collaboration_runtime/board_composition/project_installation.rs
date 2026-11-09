@@ -5,11 +5,11 @@ use super::{
     snapshot_installation::{SnapshotInstallIdentity, SnapshotInstallation},
 };
 use collaboration_runtime::ProjectStoreRegistry;
-use fleet_sync_protocol::{
+use fleet_project_writer::BootstrapGrant;
+use fleet_protocol::{
     Epoch, LeaseAnswer, LeaseRefusal, LeaseRequest, LeaseState, OperationAnswer, OperationRequest,
     RenewAnswer, RenewRequest, ReplicationPosition,
 };
-use fleet_sync_writer::BootstrapGrant;
 use message_board::ProjectId;
 use runtime_primitives::{Clock, IdSource, SystemClock, UuidV7Ids};
 use std::{io, sync::Arc, time::Duration};
@@ -45,7 +45,7 @@ impl ProjectWriters {
     ) -> io::Result<()> {
         // A process can die after native publication but before cache cleanup.
         // Reopened native Ready + Writing facts prove this attempt completed.
-        let fleet_sync_lease::WriterState::Writing { epoch } = writer
+        let fleet_project_lease::WriterState::Writing { epoch } = writer
             .store
             .writer_state()
             .await
@@ -101,11 +101,11 @@ impl ProjectWriters {
                     .await
                     .map_err(io::Error::other)?;
                 if matches!(state,
-                    fleet_sync_lease::WriterState::Writing { epoch: actual }
-                    | fleet_sync_lease::WriterState::Paused { epoch: actual, .. }
-                    | fleet_sync_lease::WriterState::Seeding { epoch: actual }
-                    | fleet_sync_lease::WriterState::Draining { epoch: actual, .. }
-                    | fleet_sync_lease::WriterState::Released { epoch: actual, .. }
+                    fleet_project_lease::WriterState::Writing { epoch: actual }
+                    | fleet_project_lease::WriterState::Paused { epoch: actual, .. }
+                    | fleet_project_lease::WriterState::Seeding { epoch: actual }
+                    | fleet_project_lease::WriterState::Draining { epoch: actual, .. }
+                    | fleet_project_lease::WriterState::Released { epoch: actual, .. }
                     if actual == epoch)
                 {
                     // A same-epoch rejection must not stop the live owner.
@@ -209,7 +209,7 @@ impl ProjectWriters {
             let owner = slot.lock().await;
             match &*owner {
                 ProjectWriterSlot::Ready(writer) => {
-                    if !matches!(writer.store.writer_state().await.map_err(io::Error::other)?, fleet_sync_lease::WriterState::Writing { epoch: actual } if actual == epoch)
+                    if !matches!(writer.store.writer_state().await.map_err(io::Error::other)?, fleet_project_lease::WriterState::Writing { epoch: actual } if actual == epoch)
                     {
                         return Ok(SnapshotAdmission::NoLongerOwned);
                     }
@@ -241,7 +241,7 @@ impl ProjectWriters {
             let mut owner = slot.lock().await;
             match &*owner {
                 ProjectWriterSlot::Ready(writer) => {
-                    if !matches!(writer.store.writer_state().await.map_err(io::Error::other)?, fleet_sync_lease::WriterState::Writing { epoch: actual } if actual == epoch) {
+                    if !matches!(writer.store.writer_state().await.map_err(io::Error::other)?, fleet_project_lease::WriterState::Writing { epoch: actual } if actual == epoch) {
                         return Ok(SnapshotAdmission::NoLongerOwned);
                     }
                     require_published_grant(&registry, project, writer, epoch, start).await?;
@@ -276,13 +276,13 @@ impl ProjectWriters {
         &self,
         registry: &ProjectStoreRegistry,
         project: &ProjectId,
-        database: &fleet_sync_writer::ReplicatedDatabase<board_fleet_sync::BoardProjectSchema>,
-        state: fleet_sync_lease::WriterState,
+        database: &fleet_project_writer::ReplicatedDatabase<board_fleet_sync::BoardProjectSchema>,
+        state: fleet_project_lease::WriterState,
         new_epoch: Epoch,
     ) -> io::Result<()> {
         // The previous runner is drained. Persist an actual newer-epoch refusal
         // before closing it; no synthetic supersession can confer authority.
-        if !matches!(state, fleet_sync_lease::WriterState::Superseded { .. }) {
+        if !matches!(state, fleet_project_lease::WriterState::Superseded { .. }) {
             let previous = known_epoch_bound(&state)
                 .filter(|previous| *previous < new_epoch)
                 .ok_or_else(|| {
@@ -311,7 +311,7 @@ impl ProjectWriters {
 
     async fn renew_stopped_writer(
         &self,
-        database: &fleet_sync_writer::ReplicatedDatabase<board_fleet_sync::BoardProjectSchema>,
+        database: &fleet_project_writer::ReplicatedDatabase<board_fleet_sync::BoardProjectSchema>,
         epoch: Epoch,
     ) -> io::Result<StoppedWriterRenewal> {
         // No installer task remains and the live writer has not started.
@@ -321,7 +321,7 @@ impl ProjectWriters {
             ));
         }
         let request = RenewRequest {
-            attempt: fleet_sync_protocol::RequestId::new(UuidV7Ids.new_id())
+            attempt: fleet_protocol::RequestId::new(UuidV7Ids.new_id())
                 .map_err(io::Error::other)?,
             database: database.database(),
             epoch,
@@ -361,7 +361,7 @@ impl ProjectWriters {
             return Ok(StoppedWriterRenewal::Fenced);
         }
         match database.writer_state().await.map_err(io::Error::other)? {
-            fleet_sync_lease::WriterState::Writing { epoch: actual } if actual == epoch => {
+            fleet_project_lease::WriterState::Writing { epoch: actual } if actual == epoch => {
                 Ok(StoppedWriterRenewal::Authorized)
             }
             state => Err(io::Error::other(format!(
@@ -392,7 +392,7 @@ async fn require_published_grant(
         .map_err(io::Error::other)?;
     if receipt.as_ref().is_some_and(|receipt| {
         receipt.verified && receipt.ready && receipt.install.position == start
-    }) && matches!(state, fleet_sync_lease::WriterState::Writing { epoch: actual } if actual == epoch)
+    }) && matches!(state, fleet_project_lease::WriterState::Writing { epoch: actual } if actual == epoch)
     {
         Ok(())
     } else {
@@ -402,8 +402,8 @@ async fn require_published_grant(
     }
 }
 
-fn known_epoch_bound(state: &fleet_sync_lease::WriterState) -> Option<Epoch> {
-    use fleet_sync_lease::WriterState;
+fn known_epoch_bound(state: &fleet_project_lease::WriterState) -> Option<Epoch> {
+    use fleet_project_lease::WriterState;
     match state {
         WriterState::Provisional => None,
         WriterState::Seeding { epoch }

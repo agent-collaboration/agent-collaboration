@@ -11,10 +11,10 @@ use durable_steps::{
     AtomicStore, CallFailure, CallTarget, NotSentReason, ReborrowScope, StoreError,
     storage::TransactionScope,
 };
-use fleet_sync_lease::{HolderRelease, HolderWithdrawal};
+use fleet_project_lease::{HolderRelease, HolderWithdrawal};
 #[cfg(feature = "conformance")]
-use fleet_sync_protocol::FrameId;
-use fleet_sync_protocol::{ClientAnswer, PeerId, ServerCall, ServerCallAnswer};
+use fleet_protocol::FrameId;
+use fleet_protocol::{ClientAnswer, PeerId, ServerCall, ServerCallAnswer};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
@@ -71,9 +71,9 @@ where
     pub async fn conformance_holder_release(
         &self,
         holder: PeerId,
-        request: fleet_sync_protocol::ReleaseRequest,
+        request: fleet_protocol::ReleaseRequest,
         identity: durable_steps::CallId,
-    ) -> Result<fleet_sync_protocol::ReleaseAnswer, CallFailure> {
+    ) -> Result<fleet_protocol::ReleaseAnswer, CallFailure> {
         let call = crate::object_call_envelope::encode_shared_call::<
             crate::RegistryKind,
             DeliveryKind,
@@ -156,11 +156,11 @@ where
 enum HolderRequest {
     Release {
         holder: PeerId,
-        request: fleet_sync_protocol::ReleaseRequest,
+        request: fleet_protocol::ReleaseRequest,
     },
     Withdrawal {
         holder: PeerId,
-        request: fleet_sync_protocol::WithdrawRelease,
+        request: fleet_protocol::WithdrawRelease,
     },
 }
 
@@ -219,7 +219,7 @@ where
             HolderRelease::KIND => {
                 let target: HolderRelease =
                     serde_json::from_value(invocation.target).map_err(encode_refusal)?;
-                let request: fleet_sync_protocol::ReleaseRequest =
+                let request: fleet_protocol::ReleaseRequest =
                     serde_json::from_value(invocation.request).map_err(encode_refusal)?;
                 if target.database != request.database {
                     return Err(unsent());

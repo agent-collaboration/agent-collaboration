@@ -10,7 +10,7 @@ use collaboration_central_conformance::{
     ConformanceClient, JwksFixtureServer, enroll_admitted_peer, fixture_policy,
 };
 use collaboration_central_tokio::{TokioServer, TokioSettings};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientAnswer, ClientFrame, DeliveryAnswer, DeliveryRequest, DeliveryStatus, FrameId,
     OperationAnswer, OperationRequest, PushResult, RecipientOutcome, RecipientReport, ReportResult,
     ReportSeq, ServerCall, ServerCallAnswer, ServerFrame, ServerRequest, StatusCursor,
@@ -20,7 +20,7 @@ use futures_util::{SinkExt, StreamExt};
 use reqwest_websocket::{Message, WebSocket};
 use std::time::Duration;
 
-type Acceptance = <BoardDeliveryTypes as fleet_sync_protocol::DeliveryTypes>::Acceptance;
+type Acceptance = <BoardDeliveryTypes as fleet_protocol::DeliveryTypes>::Acceptance;
 
 const CAP: Duration = Duration::from_secs(5);
 pub(super) use crate::configuration;
@@ -55,7 +55,7 @@ fn new_call_id(step: &str) -> TestResult<durable_steps::CallId> {
 }
 pub(super) async fn receive_and_ack_publication(
     socket: &mut WebSocket,
-) -> TestResult<fleet_sync_protocol::StatusPublication<Acceptance>> {
+) -> TestResult<fleet_protocol::StatusPublication<Acceptance>> {
     loop {
         match read_server_frame(socket).await? {
             ServerFrame::Request {

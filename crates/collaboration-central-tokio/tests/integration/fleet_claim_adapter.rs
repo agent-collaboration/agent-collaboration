@@ -157,8 +157,8 @@ async fn a_newer_real_publication_overtakes_the_claim_call_and_older_still_compl
             "request":{"kind":"renew","value":{"attempt":durable_steps::Uuid::now_v7(),"database":PROJECT,"epoch":1}}
         })).await?;
         assert!(matches!(
-            serde_json::from_value::<fleet_sync_protocol::LeaseAnswer>(renewed)?,
-            fleet_sync_protocol::LeaseAnswer::Renew(fleet_sync_protocol::RenewAnswer::Renewed {
+            serde_json::from_value::<fleet_protocol::LeaseAnswer>(renewed)?,
+            fleet_protocol::LeaseAnswer::Renew(fleet_protocol::RenewAnswer::Renewed {
                 replayed: false,
                 ..
             })

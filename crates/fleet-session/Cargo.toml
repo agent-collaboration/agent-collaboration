@@ -1,0 +1,54 @@
+[package]
+autotests = false
+name = "fleet-session"
+version = "0.4.0"
+edition.workspace = true
+rust-version = "1.98.1"
+license.workspace = true
+publish.workspace = true
+description = "Runtime-independent session rules and transport-neutral client"
+
+[dependencies]
+bytes = "1.11.1"
+fleet-protocol = { workspace = true }
+runtime-primitives = { workspace = true }
+durable-steps = { workspace = true }
+sqlx-core = { workspace = true, features = ["migrate"] }
+sqlx = { version = "=0.9.0", default-features = false, features = ["migrate", "macros"] }
+serde.workspace = true
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+thiserror.workspace = true
+url.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true
+uuid = { version = "1.26.0", default-features = false, features = ["serde"] }
+sqlx-turso.workspace = true
+
+[build-dependencies]
+fleet-sync-query-gen = { workspace = true }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+await_holding_invalid_type = "deny"
+await_holding_lock = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+manual_ok_or = "deny"
+manual_unwrap_or = "deny"
+needless_collect = "deny"
+panic = "deny"
+panic_in_result_fn = "deny"
+redundant_clone = "deny"
+string_slice = "deny"
+todo = "deny"
+uninlined_format_args = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+unwrap_used = "deny"
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"

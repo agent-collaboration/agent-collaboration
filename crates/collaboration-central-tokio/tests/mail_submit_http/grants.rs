@@ -6,11 +6,11 @@ use collaboration_central_conformance::{
 };
 use collaboration_central_core::CoreHost;
 use durable_steps::{AtomicStore, StoreError, Uuid, storage::TransactionScope};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientFrame, DatabaseId, DeliveryEnvelope, Epoch, FrameId, ItemId, OperationAnswer,
     OperationRequest, PeerId, ServerCall, ServerFrame, ServerRequest,
 };
-use fleet_sync_tokio_runner::{ObjectKey, ObjectStore};
+use fleet_tokio_objects::{ObjectKey, ObjectStore};
 use futures_util::SinkExt;
 use message_board::ServiceId;
 use reqwest_websocket::{Message, RequestBuilderExt, WebSocket};
@@ -26,7 +26,7 @@ const RECIPIENT: &str = "550e8400-e29b-41d4-a716-4466554400c2";
 pub(super) async fn start(root: &Path, jwks: &JwksFixtureServer) -> ConformanceResult<TokioServer> {
     Ok(TokioServer::start(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
+            relay_peer: fleet_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },
@@ -64,9 +64,7 @@ pub(super) async fn connect(
         ))
         .await?;
     ConformanceClient::new(base)?
-        .wake_due_after_hello(fleet_sync_protocol::SessionId::new(Uuid::parse_str(
-            session,
-        )?)?)
+        .wake_due_after_hello(fleet_protocol::SessionId::new(Uuid::parse_str(session)?)?)
         .await?;
     let welcome = scenarios::receive(&mut socket).await?;
     if welcome.get("kind").and_then(Value::as_str) != Some("welcome")

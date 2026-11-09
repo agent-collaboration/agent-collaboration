@@ -40,11 +40,11 @@ async fn exercise_wait_renewals() -> Result<(), TestError> {
         {"requestId":second_id,"scope":{"kind":"project","projectId":second}}
     ]});
     let expires = initial.after(board_fleet_sync::BOARD_LEASE_POLICY.lease_duration);
-    let expired = fleet_sync_protocol::LeaseStatus {
-        database: fleet_sync_protocol::DatabaseId::new(uuid::Uuid::parse_str(second.as_str())?)?,
-        epoch: fleet_sync_protocol::Epoch::new(1)?,
+    let expired = fleet_protocol::LeaseStatus {
+        database: fleet_protocol::DatabaseId::new(uuid::Uuid::parse_str(second.as_str())?)?,
+        epoch: fleet_protocol::Epoch::new(1)?,
         holder: fixture_peer()?,
-        state: fleet_sync_protocol::LeaseState::Held,
+        state: fleet_protocol::LeaseState::Held,
         expires_at: expires,
         remaining_ms: 14_400_000,
     };

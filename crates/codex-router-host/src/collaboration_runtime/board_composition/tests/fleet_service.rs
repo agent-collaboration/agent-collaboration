@@ -5,19 +5,19 @@ use board_sync_protocol::{
     BoardReadCursor, BoardReadPage, BoardReadScope, MailSubmitAnswer, NoticeRead,
 };
 use durable_steps::CallId;
-use fleet_sync_lease::{GateFailure, HolderChangeGate, LifecycleGate, RegistryConfig};
-use fleet_sync_protocol::{
+use fleet_native_services::{
+    ConsumerHandler, FleetService, ServiceConsumer, ServiceError, ServiceOptions, ServiceScope,
+};
+use fleet_project_copy::{
+    AppliedPiece, FollowUpDone, FollowUpFailure, FollowUpHandler, HookError, ReceiverRules,
+};
+use fleet_project_lease::{GateFailure, HolderChangeGate, LifecycleGate, RegistryConfig};
+use fleet_protocol::{
     AuthRefusal, DatabaseId, DeliveryAnswer, DeliveryRequest, GateAnswer, HolderChangeRequest,
     OperationAnswer, OperationRequest, PeerId, ReceiverId, SettleOutcome,
 };
-use fleet_sync_receiver::{
-    AppliedPiece, FollowUpDone, FollowUpFailure, FollowUpHandler, HookError, ReceiverRules,
-};
-use fleet_sync_service::{
-    ConsumerHandler, FleetService, ServiceConsumer, ServiceError, ServiceOptions, ServiceScope,
-};
-use fleet_sync_session::{Endpoint, PeerAuthenticator, PeerCredential, VerifiedPeer};
-use fleet_sync_tokio_runner::SessionRequests;
+use fleet_session::{Endpoint, PeerAuthenticator, PeerCredential, VerifiedPeer};
+use fleet_session_client::SessionRequests;
 use runtime_primitives::{Clock, SystemClock};
 use std::{
     collections::VecDeque,
@@ -74,7 +74,7 @@ struct Consumer {
 #[derive(Default)]
 struct NoticeScriptState {
     answers: VecDeque<NoticeRead>,
-    after: Vec<Option<fleet_sync_protocol::NoticePosition>>,
+    after: Vec<Option<fleet_protocol::NoticePosition>>,
 }
 #[derive(Default)]
 struct NoticeScripts {
@@ -359,7 +359,7 @@ pub(super) struct TestFleet {
     notices: Arc<NoticeScripts>,
     fleet_reads: Arc<FleetReadProbe>,
     delivery_requests: Arc<Mutex<Option<SessionRequests<BoardConsumerProtocol>>>>,
-    handle: fleet_sync_service::ServiceHandle<BoardConsumerProtocol, Consumer, Authenticator>,
+    handle: fleet_native_services::ServiceHandle<BoardConsumerProtocol, Consumer, Authenticator>,
 }
 impl TestFleet {
     pub async fn start(
@@ -379,7 +379,7 @@ impl TestFleet {
         peer: Option<PeerId>,
         receiver: Option<ReceiverId>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
-        use fleet_sync_delivery::{DeliveryLimits, minimum_settlement_allowance};
+        use fleet_mail_delivery::{DeliveryLimits, minimum_settlement_allowance};
         let limits = DeliveryLimits::new::<board_sync_protocol::BoardDeliveryTypes>(
             64 * 1024 * 1024,
             10_000,
@@ -398,7 +398,7 @@ impl TestFleet {
     async fn start_configured(
         directory: &Path,
         registration: GateAnswer,
-        delivery: Option<fleet_sync_delivery::DeliveryLimits>,
+        delivery: Option<fleet_mail_delivery::DeliveryLimits>,
         peer: Option<PeerId>,
         receiver: Option<ReceiverId>,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
@@ -435,7 +435,7 @@ impl TestFleet {
                 directory: directory.to_owned(),
                 clock: Arc::new(SystemClock),
                 delivery: delivery
-                    .map(|limits| fleet_sync_service::RelayDeliveryConfig { relay, limits }),
+                    .map(|limits| fleet_native_services::RelayDeliveryConfig { relay, limits }),
                 receiver,
                 registry: RegistryConfig {
                     lease: BOARD_LEASE_POLICY,
@@ -521,7 +521,7 @@ impl TestFleet {
         state.answers = answers.into();
         state.after.clear();
     }
-    pub async fn notice_reads(&self) -> Vec<Option<fleet_sync_protocol::NoticePosition>> {
+    pub async fn notice_reads(&self) -> Vec<Option<fleet_protocol::NoticePosition>> {
         self.notices.state.lock().await.after.clone()
     }
     pub async fn wait_notice_reads(

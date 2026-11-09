@@ -5,7 +5,7 @@ use super::{
     mailbox_rule_fixture::{MailboxPair, ORIGIN},
 };
 use collaboration_central_conformance::ConformanceResult;
-use fleet_sync_protocol::{PeerId, PushResult, ServerCall, Submitter};
+use fleet_protocol::{PeerId, PushResult, ServerCall, Submitter};
 use serde_json::{Value, json};
 fn require(actual: Value, expected: Value) -> ConformanceResult<()> {
     if actual != expected {
@@ -35,7 +35,7 @@ pub(super) async fn run(base: &str) -> ConformanceResult<()> {
         require(pair.submit(&conflict).await?,json!({"kind":"consumer","value":{"kind":"mailSubmit","value":{"kind":"submitted","value":{"kind":"refused","value":{"reason":{"kind":"itemConflict","value":{"existing":original.digest()}}}}}}}))?;
         let (_,ServerCall::Push {submitter,item:offered,..})=next_push(&mut pair.recipient.socket).await? else {return Err("identity did not deliver its original Push".into());};
         if submitter!=Submitter::Machine(PeerId::new(pair.sender.peer)?)||serde_json::to_vec(&offered)?!=serde_json::to_vec(&original)? {return Err("replay/conflict changed the verified sender or original body".into());}
-        let reference=fleet_sync_protocol::DeliveryItemRef {item:original.id(),digest:original.digest().clone()};
+        let reference=fleet_protocol::DeliveryItemRef {item:original.id(),digest:original.digest().clone()};
         let receipt=inbox.accept(submitter,offered).await?;
         if !matches!(receipt,PushResult::Accepted {..}) {return Err("original did not establish real Inbox custody".into());}
         let saved=inbox.payload(reference).await?;

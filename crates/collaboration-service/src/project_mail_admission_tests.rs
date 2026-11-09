@@ -4,8 +4,8 @@ use board_sync_protocol::BoardDeliveryBody;
 use collaboration_mail_protocol::{
     MailItemId, MailSender, NotificationBody, NotificationSource, RecordPointer,
 };
-use fleet_sync_delivery::{DeliveryTransactionFailure, OutboxAdmission};
-use fleet_sync_protocol::{DeliveryItem, ItemId};
+use fleet_mail_delivery::{DeliveryTransactionFailure, OutboxAdmission};
+use fleet_protocol::{DeliveryItem, ItemId};
 use message_board::{FeedCursor, NotifyIntentId, ProjectId, RecordId, RecordKind, RecordRef};
 
 #[path = "project_mail_cancel_admission_tests.rs"]
@@ -119,7 +119,7 @@ async fn project_admission_keeps_the_original_epoch_on_reholding_and_sdk_conflic
         mail.enqueue_project_item(changed, 5.try_into().unwrap())
             .await,
         Err(DeliveryTransactionFailure::Refused(
-            fleet_sync_protocol::DeliveryRefusal::ItemConflict { .. }
+            fleet_protocol::DeliveryRefusal::ItemConflict { .. }
         ))
     ));
     assert_eq!(
@@ -203,7 +203,7 @@ async fn outbox_is_unknown(runtime: &Runtime, item: ItemId) -> bool {
         .store
         .transaction(move |scope| {
             Box::pin(async move {
-                fleet_sync_delivery::Outbox::<_, collaboration_contracts::RouterDeliveryTypes, _>::new(
+                fleet_mail_delivery::Outbox::<_, collaboration_contracts::RouterDeliveryTypes, _>::new(
                     scope, limits, binding.as_ref(),
                 )
                 .status(item)
@@ -215,7 +215,7 @@ async fn outbox_is_unknown(runtime: &Runtime, item: ItemId) -> bool {
         .unwrap();
     matches!(
         status.state,
-        fleet_sync_delivery::OutboxStatusState::Unknown
+        fleet_mail_delivery::OutboxStatusState::Unknown
     )
 }
 

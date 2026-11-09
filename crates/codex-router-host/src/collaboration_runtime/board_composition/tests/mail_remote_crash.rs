@@ -1,8 +1,8 @@
 //! Kill the process with the native owner held; inspect before separately exercising recovery.
 use super::*;
 use durable_steps::{AtomicStore, CallFailure, StoreError};
-use fleet_sync_protocol::{DeliveryEnvelope, ItemId, PeerId, ServerCall, ServerRequest};
-use fleet_sync_tokio_runner::{
+use fleet_protocol::{DeliveryEnvelope, ItemId, PeerId, ServerCall, ServerRequest};
+use fleet_tokio_objects::{
     CallEnvelope, CallRouter, ObjectKey, ObjectOptions, ObjectStore, TokioHost,
 };
 use interaction_storage::{InteractionAtomicStore, InteractionStore};
@@ -50,7 +50,7 @@ fn readback_host() -> Arc<ReadbackHost> {
 async fn native_rows(
     root: &Path,
     peer: PeerId,
-) -> Result<Vec<fleet_sync_delivery::test_support::DeliveryObservation>, TestError> {
+) -> Result<Vec<fleet_mail_delivery::test_support::DeliveryObservation>, TestError> {
     let owner = Arc::new(
         InteractionStore::open(root.join("interaction.sqlite"))
             .await
@@ -66,13 +66,13 @@ async fn native_rows(
     let rows = store
         .transaction(move |scope| {
             Box::pin(async move {
-                fleet_sync_delivery::test_support::snapshot::<
+                fleet_mail_delivery::test_support::snapshot::<
                     _,
                     collaboration_contracts::RouterDeliveryTypes,
                     _,
                 >(
                     scope,
-                    fleet_sync_delivery::DeliveryHostRole::Machine,
+                    fleet_mail_delivery::DeliveryHostRole::Machine,
                     &binding,
                 )
                 .await
@@ -91,7 +91,7 @@ async fn native_rows(
 async fn origin_rows(
     base: &Path,
     peer: PeerId,
-) -> Result<Vec<fleet_sync_delivery::test_support::DeliveryObservation>, TestError> {
+) -> Result<Vec<fleet_mail_delivery::test_support::DeliveryObservation>, TestError> {
     // Only after SIGKILL and wait: this is the owning reopen, never a parallel connection.
     let owners = ObjectStore::open(base.join("central")).await?;
     let object = owners
@@ -110,13 +110,13 @@ async fn origin_rows(
     let rows = object
         .transaction(move |scope| {
             Box::pin(async move {
-                fleet_sync_delivery::test_support::snapshot::<
+                fleet_mail_delivery::test_support::snapshot::<
                     _,
                     board_sync_protocol::BoardDeliveryTypes,
                     _,
                 >(
                     scope,
-                    fleet_sync_delivery::DeliveryHostRole::Relay,
+                    fleet_mail_delivery::DeliveryHostRole::Relay,
                     &binding,
                 )
                 .await
@@ -129,7 +129,7 @@ async fn origin_rows(
 }
 
 fn header(
-    rows: &[fleet_sync_delivery::test_support::DeliveryObservation],
+    rows: &[fleet_mail_delivery::test_support::DeliveryObservation],
     item: ItemId,
 ) -> Result<serde_json::Value, TestError> {
     let row = rows
@@ -203,7 +203,7 @@ async fn canonical_publication_stays_owed_until_native_commit_at_sigkill_then_ca
     assert_eq!(header(&rows, item)?["value"]["status"]["kind"], "queued");
     let origin = origin_rows(directory.path(), state.peer).await?;
     let owed_at_kill = origin.iter().any(|row| row.category == "publication" && row.identity == item.as_uuid().to_string()
-        && row.metadata.as_deref().and_then(|target| serde_json::from_str::<fleet_sync_delivery::PublicationTarget<message_board::ServiceId>>(target).ok()).is_some_and(|target| matches!(target, fleet_sync_delivery::PublicationTarget::Peer { peer, .. } if peer == state.peer)));
+        && row.metadata.as_deref().and_then(|target| serde_json::from_str::<fleet_mail_delivery::PublicationTarget<message_board::ServiceId>>(target).ok()).is_some_and(|target| matches!(target, fleet_mail_delivery::PublicationTarget::Peer { peer, .. } if peer == state.peer)));
     // The held native writer prevents both the original live application and
     // its cursor from committing. After owning readback, exercise repair alone.
     let mut harness = MailHarness::open_manual(directory.path(), Some(state.peer)).await?;
@@ -255,7 +255,7 @@ async fn missing_native_publication_owner_never_answers_applied_or_retires_the_o
         harness
             .submit_generic(DeliveryEnvelope::Item(envelope))
             .await?,
-        fleet_sync_protocol::SubmitResult::Accepted { .. }
+        fleet_protocol::SubmitResult::Accepted { .. }
     ));
     harness.report_held(item_id).await?;
     harness.release_welcome()?;
@@ -342,7 +342,7 @@ async fn remote_mail_crash_child_entry() -> Result<(), TestError> {
             harness
                 .submit_generic(DeliveryEnvelope::Item(envelope))
                 .await?,
-            fleet_sync_protocol::SubmitResult::Accepted { .. }
+            fleet_protocol::SubmitResult::Accepted { .. }
         ));
         harness
             .report_held(state.item.ok_or("publication item missing")?)

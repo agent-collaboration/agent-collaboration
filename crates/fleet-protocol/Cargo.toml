@@ -1,0 +1,43 @@
+[package]
+autotests = false
+name = "fleet-protocol"
+version = "0.4.0"
+edition.workspace = true
+rust-version = "1.98.1"
+license.workspace = true
+publish.workspace = true
+description = "Transport-independent fleet replication and session frames"
+
+[dependencies]
+runtime-primitives = { workspace = true }
+serde.workspace = true
+serde_json = { workspace = true, features = ["float_roundtrip"] }
+sha2 = "0.10.9"
+thiserror.workspace = true
+turso_parser.workspace = true
+uuid = { version = "1.26.0", default-features = false, features = ["serde"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+await_holding_invalid_type = "deny"
+await_holding_lock = "deny"
+expect_used = "deny"
+indexing_slicing = "deny"
+manual_ok_or = "deny"
+manual_unwrap_or = "deny"
+needless_collect = "deny"
+panic = "deny"
+panic_in_result_fn = "deny"
+redundant_clone = "deny"
+string_slice = "deny"
+todo = "deny"
+uninlined_format_args = "deny"
+unimplemented = "deny"
+unreachable = "deny"
+unwrap_used = "deny"
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"

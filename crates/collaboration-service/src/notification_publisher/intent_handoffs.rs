@@ -157,7 +157,7 @@ impl PublisherInner {
             .zip(session.as_ref())
             .map(|(peer, session)| -> Result<_, BoardError> {
                 Ok(IntentHandoffInput {
-                    item: fleet_sync_protocol::ItemId::new(uuid::Uuid::now_v7())
+                    item: fleet_protocol::ItemId::new(uuid::Uuid::now_v7())
                         .map_err(|_| BoardError::board_unavailable())?,
                     enrollment: IntentRecipientEnrollment {
                         service: session.endpoint.service_id.clone(),
@@ -190,7 +190,7 @@ impl PublisherInner {
                     project,
                     &intent.intent_id,
                     Some(IntentHandoffInput {
-                        item: fleet_sync_protocol::ItemId::new(uuid::Uuid::now_v7())
+                        item: fleet_protocol::ItemId::new(uuid::Uuid::now_v7())
                             .map_err(|_| BoardError::board_unavailable())?,
                         enrollment: IntentRecipientEnrollment {
                             service: session.endpoint.service_id,

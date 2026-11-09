@@ -5,7 +5,7 @@ use board_fixture::{BoardFixture, TestError, accepted};
 use collaboration_contracts::ProjectReplicationPosition;
 use collaboration_contracts::ReplicatedPositionFuture;
 use collaboration_runtime::NativeProjectStore;
-use fleet_sync_protocol::ReplicationPosition;
+use fleet_protocol::ReplicationPosition;
 use message_board::*;
 use serde_json::{Value, json};
 use std::sync::{

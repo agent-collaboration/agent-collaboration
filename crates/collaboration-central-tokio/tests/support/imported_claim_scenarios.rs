@@ -14,7 +14,7 @@ use durable_steps::Uuid;
 use fleet_admission::{
     DirectoryEntry, DirectoryLease, DirectoryQuery, DirectorySide, LeaseMetadata,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CommitSequence, CopyStatusAnswer, DatabaseId, Epoch, GateReason, GateReasonCode,
     HolderChangeAnswer, HolderChangeRefusal, LeaseAnswer, LeaseRequest, OperationAnswer,
     OperationRequest, PeerId, ReplicationAnswer, ReplicationPosition, ReplicationRequest,

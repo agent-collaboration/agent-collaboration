@@ -9,11 +9,11 @@ use fleet_admission::{
     DirectoryEntry, DirectoryLease, DirectoryLeaseState, DirectoryQuery, DirectorySide,
     LeaseMetadata,
 };
-use fleet_sync_protocol::{OperationAnswer, OperationRequest};
+use fleet_protocol::{OperationAnswer, OperationRequest};
 use std::os::unix::fs::DirBuilderExt;
 
 async fn directory_lease(
-    requests: &fleet_sync_tokio_runner::SessionRequests<board_sync_protocol::BoardConsumerProtocol>,
+    requests: &fleet_session_client::SessionRequests<board_sync_protocol::BoardConsumerProtocol>,
     project: &ProjectId,
 ) -> Result<LeaseMetadata, Box<dyn std::error::Error + Send + Sync>> {
     timeout(BOUND, async {

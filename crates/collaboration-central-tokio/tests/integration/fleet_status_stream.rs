@@ -8,12 +8,12 @@ use durable_steps::{
     AtomicStore, CallFailure, CallId, OperationId, StepName, StoreError, Uuid,
     storage::TransactionScope,
 };
-use fleet_sync_delivery::{PublishStatus, StatusStream};
-use fleet_sync_protocol::{
+use fleet_mail_delivery::{PublishStatus, StatusStream};
+use fleet_protocol::{
     DeliveryStatus, ItemId, PeerId, ReceiverId, StatusCursor, StatusFetchResult, StatusPublication,
     StatusVersion,
 };
-use fleet_sync_tokio_runner::{ObjectKey, ObjectStore, TokioObject};
+use fleet_tokio_objects::{ObjectKey, ObjectStore, TokioObject};
 use message_board::ServiceId;
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use sqlx_core::query::query;
@@ -27,7 +27,7 @@ use std::{
 };
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
-type Acceptance = <BoardDeliveryTypes as fleet_sync_protocol::DeliveryTypes>::Acceptance;
+type Acceptance = <BoardDeliveryTypes as fleet_protocol::DeliveryTypes>::Acceptance;
 type Runtime = ObjectRuntime<
     collaboration_central_core::FleetKind,
     TokioStorageHost<CoreHost<NoObjectCalls>>,
@@ -89,9 +89,9 @@ impl Fixture {
         let runtime = ObjectRuntime::fleet(
             Arc::new(TokioStorageHost::new(object.clone())),
             io.clone(),
-            fleet_sync_lease::RegistryConfig {
+            fleet_project_lease::RegistryConfig {
                 authoritative_receiver: receiver,
-                lease: fleet_sync_lease::LeasePolicy {
+                lease: fleet_project_lease::LeasePolicy {
                     lease_duration: std::time::Duration::from_secs(60),
                     renew_interval: std::time::Duration::from_secs(20),
                 },
@@ -123,11 +123,11 @@ impl Fixture {
             query::<sqlx_turso::Turso>("INSERT INTO machine_enrollments(machine_id,service_id,machine_label,access_client_id,credential_hash,state,expires_at,created_at,updated_at) VALUES(?,?,'status fixture',?,?,'enrolled','2033-05-18T03:33:20+00:00','2026-10-18T00:00:00+00:00','2026-10-18T00:00:00+00:00') ON CONFLICT(machine_id) DO NOTHING")
                 .bind(peer.to_string()).bind(installation.as_str()).bind(format!("status-client-{peer}")).bind(format!("status-credential-{peer}"))
                 .execute(scope.executor()).await.map_err(StoreError::backend)?;
-            StatusStream::<_, BoardDeliveryTypes>::new(scope, fleet_sync_protocol::Submitter::Machine(peer), route)
+            StatusStream::<_, BoardDeliveryTypes>::new(scope, fleet_protocol::Submitter::Machine(peer), route)
                 .append_and_admit::<PublishStatus<TokioObject<CoreHost<NoObjectCalls>>, sqlx_turso::Turso, BoardDeliveryTypes>>(
                     &StatusPublication { item, status: DeliveryStatus::Sent, version: StatusVersion::new(1), cancel: None },
                     now,
-                ).await.map_err(fleet_sync_delivery::delivery_rollback)?;
+                ).await.map_err(fleet_mail_delivery::delivery_rollback)?;
             Ok(())
         })).await?;
         Ok(())
@@ -141,11 +141,11 @@ impl Fixture {
                 Box::pin(async move {
                     StatusStream::<_, BoardDeliveryTypes>::new(
                         scope,
-                        fleet_sync_protocol::Submitter::Machine(peer),
+                        fleet_protocol::Submitter::Machine(peer),
                         route,
                     )
                     .fetch(
-                        fleet_sync_protocol::Submitter::Machine(peer),
+                        fleet_protocol::Submitter::Machine(peer),
                         StatusCursor::new(0),
                         100,
                     )
@@ -233,9 +233,9 @@ async fn a_status_route_for_another_installation_is_refused_without_forwarding()
     let store_error = error
         .downcast_ref::<StoreError>()
         .ok_or("wrong-route failure was not the owning store's rollback")?;
-    let classified = fleet_sync_delivery::classify_delivery_store_error(store_error.clone());
+    let classified = fleet_mail_delivery::classify_delivery_store_error(store_error.clone());
     assert!(
-        matches!(&classified, fleet_sync_delivery::DeliveryTransactionFailure::Corrupt { field }
+        matches!(&classified, fleet_mail_delivery::DeliveryTransactionFailure::Corrupt { field }
         if field == "status stream owner or cursor"),
         "{classified:?}"
     );
@@ -283,7 +283,7 @@ async fn a_live_status_attempt_never_waits_for_the_router_and_session_fetch_keep
 -> TestResult {
     use board_sync_protocol::BoardConsumerProtocol;
     use collaboration_central_tokio::SocketCommand;
-    use fleet_sync_protocol::{
+    use fleet_protocol::{
         ClientFrame, DeliveryAnswer, DeliveryRequest, FrameId, OperationAnswer, OperationRequest,
         ServerCall, ServerFrame, ServerRequest,
     };
@@ -312,9 +312,9 @@ async fn a_live_status_attempt_never_waits_for_the_router_and_session_fetch_keep
     let publication_for_store = publication.clone();
     let now = fixture.io.now();
     fixture.host.store().transaction(move |scope| Box::pin(async move {
-        StatusStream::<_, BoardDeliveryTypes>::new(scope, fleet_sync_protocol::Submitter::Machine(binding.peer), route)
+        StatusStream::<_, BoardDeliveryTypes>::new(scope, fleet_protocol::Submitter::Machine(binding.peer), route)
             .append_and_admit::<PublishStatus<session_fixture::TestStore, sqlx_turso::Turso, BoardDeliveryTypes>>(&publication_for_store, now)
-            .await.map_err(fleet_sync_delivery::delivery_rollback)?;
+            .await.map_err(fleet_mail_delivery::delivery_rollback)?;
         Ok(())
     })).await?;
     // The configured answer deadline is two seconds. This drive must finish

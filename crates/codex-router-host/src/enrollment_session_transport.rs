@@ -1,6 +1,6 @@
 //! Reconnects read the enrollment journal before opening the machine socket.
 use board_fleet_sync::ReqwestSessionTransport;
-use fleet_sync_session::{ConnectFailure, Endpoint, PeerCredential, SessionTransport};
+use fleet_session::{ConnectFailure, Endpoint, PeerCredential, SessionTransport};
 use std::path::{Path, PathBuf};
 
 pub(crate) struct EnrollmentSessionTransport {

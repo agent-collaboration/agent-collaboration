@@ -1,5 +1,5 @@
 use super::*;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CallId, CancelBody, ClientAnswer, DeliveryCancel, DeliveryEnvelope, DeliveryRefusal, Recipient,
     ServerCallAnswer,
 };
@@ -41,7 +41,7 @@ fn push_wire_observation_keeps_item_frame_and_capacity_refusal() -> FixtureResul
         frame,
         body: ServerRequest::Crate(ServerCall::Push {
             call,
-            submitter: fleet_sync_protocol::Submitter::Machine(peer),
+            submitter: fleet_protocol::Submitter::Machine(peer),
             item: DeliveryEnvelope::Cancel(cancel),
         }),
     };

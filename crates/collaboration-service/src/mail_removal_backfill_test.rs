@@ -1,7 +1,7 @@
 //! Existing, non-journaled custody receives the real SDK removal task once.
 use super::*;
 use durable_steps::storage::TransactionScope;
-use fleet_sync_delivery::delivery_rollback;
+use fleet_mail_delivery::delivery_rollback;
 use runtime_primitives::SyncTime;
 use std::{
     os::unix::{fs::PermissionsExt, process::ExitStatusExt},
@@ -10,7 +10,7 @@ use std::{
 };
 use tokio::io::AsyncReadExt;
 
-pub(super) async fn seed_legacy_item(runtime: &Runtime) -> fleet_sync_protocol::ItemId {
+pub(super) async fn seed_legacy_item(runtime: &Runtime) -> fleet_protocol::ItemId {
     let item = runtime.fixture.item(&runtime.fixture.draft());
     let id = item.id();
     let config = runtime.fixture.host.config.local;
@@ -235,11 +235,11 @@ async fn sigkill_before_backfill_commit_retries_both_marker_and_admissions() {
     }));
     let database = std::fs::read_to_string(root.path().join("database-path")).unwrap();
     assert!(Path::new(&database).starts_with(&child_temp));
-    let peer = fleet_sync_protocol::PeerId::try_from(
+    let peer = fleet_protocol::PeerId::try_from(
         std::fs::read_to_string(root.path().join("peer")).unwrap(),
     )
     .unwrap();
-    let item = fleet_sync_protocol::ItemId::try_from(
+    let item = fleet_protocol::ItemId::try_from(
         std::fs::read_to_string(root.path().join("item")).unwrap(),
     )
     .unwrap();

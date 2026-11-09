@@ -8,7 +8,7 @@ use crate::{
 use durable_steps::{
     AtomicStore, BoxFuture, CallFailure, NotSentReason, StoreError, storage::TransactionScope,
 };
-use fleet_sync_protocol::PeerId;
+use fleet_protocol::PeerId;
 use message_board::ServiceId;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,

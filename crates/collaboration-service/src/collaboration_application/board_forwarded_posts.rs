@@ -29,8 +29,8 @@ impl BoardOperations {
             if let Some(store) = store
                 && !matches!(
                     store.writer_state().await,
-                    Ok(fleet_sync_lease::WriterState::Released { .. }
-                        | fleet_sync_lease::WriterState::Superseded { .. })
+                    Ok(fleet_project_lease::WriterState::Released { .. }
+                        | fleet_project_lease::WriterState::Superseded { .. })
                 )
             {
                 return Ok(None);

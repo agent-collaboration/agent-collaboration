@@ -24,9 +24,9 @@ pub enum UpgradeError {
     #[error("project import failed: {0}")]
     Storage(#[from] message_board_storage::ProjectStorageError),
     #[error("project writer failed: {0}")]
-    Writer(#[from] fleet_sync_writer::OpenError),
+    Writer(#[from] fleet_project_writer::OpenError),
     #[error("project import write refused: {0}")]
-    Write(#[from] fleet_sync_writer::WriteRefusal),
+    Write(#[from] fleet_project_writer::WriteRefusal),
     #[error("fleet import is invalid: {0}")]
     Fleet(#[from] fleet_admission::FleetAdmissionError),
     #[error("project schema is unavailable: {0}")]

@@ -1,6 +1,6 @@
 //! The registry lookup carries distinct service and peer identities through real frames.
 use board_sync_protocol::BoardConsumerProtocol;
-use fleet_sync_protocol as wire;
+use fleet_protocol as wire;
 use serde_json::{Value, json};
 
 const FRAME: &str = "019a1234-5678-7000-8000-000000000002";

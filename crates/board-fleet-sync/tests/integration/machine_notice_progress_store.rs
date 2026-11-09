@@ -1,6 +1,6 @@
 use board_fleet_sync::{MachineNoticeProgressStore, MachineSessionStore};
-use fleet_sync_protocol::{NoticePosition, SessionId};
-use fleet_sync_session::{ClientSessionState, SessionClientStore, StoreError};
+use fleet_protocol::{NoticePosition, SessionId};
+use fleet_session::{ClientSessionState, SessionClientStore, StoreError};
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
 #[tokio::test]

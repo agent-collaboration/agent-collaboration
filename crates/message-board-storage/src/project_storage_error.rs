@@ -5,9 +5,9 @@ pub enum ProjectStorageError {
     #[error("project storage is unavailable: {0}")]
     Database(sqlx::Error),
     #[error("project write was refused: {0}")]
-    WriteRefused(#[from] fleet_sync_writer::WriteRefusal),
+    WriteRefused(#[from] fleet_project_writer::WriteRefusal),
     #[error("project writer is unavailable: {0}")]
-    Writer(#[from] fleet_sync_writer::OpenError),
+    Writer(#[from] fleet_project_writer::OpenError),
     #[error("import row key for {kind:?} is not a canonical UUIDv7")]
     InvalidImportRowKey { kind: crate::ImportRowKind },
     #[error("stored actor is invalid in {field}")]
@@ -44,7 +44,7 @@ pub enum ProjectStorageError {
 impl From<sqlx::Error> for ProjectStorageError {
     fn from(error: sqlx::Error) -> Self {
         if let sqlx::Error::Configuration(source) = &error
-            && let Some(refusal) = source.downcast_ref::<fleet_sync_writer::WriteRefusal>()
+            && let Some(refusal) = source.downcast_ref::<fleet_project_writer::WriteRefusal>()
         {
             return Self::WriteRefused(refusal.clone());
         }

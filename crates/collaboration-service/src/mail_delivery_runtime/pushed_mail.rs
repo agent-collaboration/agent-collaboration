@@ -5,15 +5,15 @@ use super::{
 };
 use board_sync_protocol::BoardDeliveryTypes;
 use collaboration_mail_protocol::CarrierAcceptance;
-use fleet_sync_protocol::{DeliveryEnvelope, PushResult};
+use fleet_protocol::{DeliveryEnvelope, PushResult};
 use runtime_primitives::{Clock, WakeScheduler};
 
 impl MailDeliveryRuntime {
     #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
     pub async fn runtime_test_pushed_item(
         &self,
-        reference: fleet_sync_protocol::DeliveryItemRef,
-    ) -> Result<fleet_sync_protocol::DeliveryItem<BoardDeliveryTypes>, StoreError> {
+        reference: fleet_protocol::DeliveryItemRef,
+    ) -> Result<fleet_protocol::DeliveryItem<BoardDeliveryTypes>, StoreError> {
         let config = self.config;
         let item = self
             .store
@@ -40,7 +40,7 @@ impl MailDeliveryRuntime {
 
     pub async fn accept_pushed_mail(
         &self,
-        submitter: fleet_sync_protocol::Submitter,
+        submitter: fleet_protocol::Submitter,
         item: DeliveryEnvelope<BoardDeliveryTypes>,
     ) -> Result<PushResult<CarrierAcceptance>, StoreError> {
         let session = self.session.as_ref().ok_or_else(|| {
@@ -82,14 +82,14 @@ impl MailDeliveryRuntime {
                             now,
                         )
                         .await
-                        .map_err(fleet_sync_delivery::delivery_rollback)
+                        .map_err(fleet_mail_delivery::delivery_rollback)
                     })
                 })
                 .await?;
             if matches!(
                 answer,
                 PushResult::BindingUnavailable {
-                    reason: fleet_sync_protocol::SenderBindingFailure::Unknown
+                    reason: fleet_protocol::SenderBindingFailure::Unknown
                 }
             ) && let Some(service) = &sender_service
                 && self.resolve_installation_peer(service).await.is_ok()

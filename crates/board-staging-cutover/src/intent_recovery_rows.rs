@@ -1,6 +1,6 @@
 //! Stream exact old rows; retain only the small workset of named recovery changes.
 use crate::{NativeProjectSnapshot, PreparedProjectBundle};
-use fleet_sync_protocol::{SnapshotManifest, SnapshotPage, SqlValue};
+use fleet_protocol::{SnapshotManifest, SnapshotPage, SqlValue};
 use message_board::IntentState;
 use std::{cmp::Ordering, collections::BTreeMap};
 

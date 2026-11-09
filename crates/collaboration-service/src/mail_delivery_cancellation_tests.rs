@@ -6,8 +6,8 @@ use collaboration_protocol::{
     DeliveryOutcome, DeliveryReceipt, PushRecordDraft, SessionReachability,
 };
 use durable_steps::{AtomicStore, JournalScope, StoreError};
-use fleet_sync_delivery::{Inbox, LocalCancelAdmission, LocalOutcome, delivery_rollback};
-use fleet_sync_protocol::{CancelBody, DeliveryCancel, ItemId};
+use fleet_mail_delivery::{Inbox, LocalCancelAdmission, LocalOutcome, delivery_rollback};
+use fleet_protocol::{CancelBody, DeliveryCancel, ItemId};
 use runtime_primitives::SyncTime;
 use serde_json::json;
 use std::sync::atomic::Ordering;
@@ -424,7 +424,7 @@ async fn admit_cancel(
                 .map_err(delivery_rollback)?;
                 for attempt in &admitted.effects.attempts {
                     let key =
-                        fleet_sync_delivery::delivery_request_key(&(attempt.item, attempt.attempt))
+                        fleet_mail_delivery::delivery_request_key(&(attempt.item, attempt.attempt))
                             .map_err(delivery_rollback)?;
                     scope
                         .admit::<ProjectionTask>(&key, attempt)

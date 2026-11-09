@@ -1,5 +1,5 @@
 //! Project feed and handoff mappings use the library's capture-off scope.
-use fleet_sync_writer::{
+use fleet_project_writer::{
     BookkeepingError, CaptureBookkeeping, CapturedTransaction, MaintenanceTransaction,
 };
 

@@ -10,7 +10,7 @@ use board_central_test_support::{
 };
 use board_sync_protocol::BoardDeliveryTypes;
 use codex_router_test_support::FixtureResult;
-use fleet_sync_protocol::{DeliveryItem, ReplicationPosition};
+use fleet_protocol::{DeliveryItem, ReplicationPosition};
 use owned_process_test_support::scenario_finalization::run_scenario;
 use serde_json::{Value, json};
 use std::ops::AsyncFnOnce;
@@ -26,12 +26,12 @@ pub enum EndPrefix {
 
 pub async fn assert_prevented_push_replayed(
     wire: &mut board_central_test_support::MailWireObservation,
-    item: fleet_sync_protocol::ItemId,
-    cancel: fleet_sync_protocol::ItemId,
-    report_seq: fleet_sync_protocol::ReportSeq,
+    item: fleet_protocol::ItemId,
+    cancel: fleet_protocol::ItemId,
+    report_seq: fleet_protocol::ReportSeq,
 ) -> FixtureResult {
     use board_central_test_support::MailWireEvent;
-    use fleet_sync_protocol::{
+    use fleet_protocol::{
         DeliveryFailureKind, DeliveryRefusal, DeliveryStatus, PushResult, RecipientOutcome,
         ReportResult,
     };
@@ -95,7 +95,7 @@ pub async fn assert_prevented_push_replayed(
 
 fn report_sends(
     events: &[board_central_test_support::MailWireEvent],
-    item: fleet_sync_protocol::ItemId,
+    item: fleet_protocol::ItemId,
 ) -> usize {
     events.iter().filter(|event| matches!(event,
         board_central_test_support::MailWireEvent::ReportSent { item: actual, .. } if *actual == item
@@ -104,7 +104,7 @@ fn report_sends(
 
 pub fn report_count(
     wire: &board_central_test_support::MailWireObservation,
-    item: fleet_sync_protocol::ItemId,
+    item: fleet_protocol::ItemId,
 ) -> usize {
     report_sends(&wire.events(), item)
 }
@@ -112,7 +112,7 @@ pub fn report_count(
 pub async fn assert_single_promoted_report(
     report_wire: &board_central_test_support::MailWireObservation,
     status_wire: &mut board_central_test_support::MailWireObservation,
-    item: fleet_sync_protocol::ItemId,
+    item: fleet_protocol::ItemId,
 ) -> FixtureResult {
     let barrier = status_wire.events().len();
     let quiet = status_wire
@@ -154,7 +154,7 @@ pub async fn assert_single_promoted_report(
 pub async fn assert_end_cut(
     fixture: &BoardFixture,
     stopped: &super::owned_host::StoppedHost,
-    original: fleet_sync_protocol::ItemId,
+    original: fleet_protocol::ItemId,
     end: message_board::FeedCursor,
     prefix: EndPrefix,
     expansions: &[Value],
@@ -361,7 +361,7 @@ pub async fn confirm_prefix(
 
 pub async fn copy_ack(
     fixture: &BoardFixture,
-) -> FixtureResult<fleet_sync_protocol::ReplicationPosition> {
+) -> FixtureResult<fleet_protocol::ReplicationPosition> {
     let status = central(fixture)?
         .copy_status(&fixture.project.clone().try_into()?)
         .await?;
@@ -420,8 +420,8 @@ pub async fn replicate_local_handoff(
 
 pub async fn confirm_copy_ack(
     fixture: &BoardFixture,
-    minimum: fleet_sync_protocol::ReplicationPosition,
-) -> FixtureResult<fleet_sync_protocol::ReplicationPosition> {
+    minimum: fleet_protocol::ReplicationPosition,
+) -> FixtureResult<fleet_protocol::ReplicationPosition> {
     tokio::time::timeout(BOUND, async {
         loop {
             let actual = copy_ack(fixture).await?;

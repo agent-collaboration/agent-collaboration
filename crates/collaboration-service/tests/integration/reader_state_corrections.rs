@@ -170,9 +170,9 @@ async fn a_persisted_not_writer_refusal_hides_reads_without_inventing_a_successo
         .database(&project)
         .await?
         .observe_renewal(
-            fleet_sync_protocol::RenewAnswer::Refused(
-                fleet_sync_protocol::LeaseRefusal::NotWriter { current: None },
-            ),
+            fleet_protocol::RenewAnswer::Refused(fleet_protocol::LeaseRefusal::NotWriter {
+                current: None,
+            }),
             runtime_primitives::SystemClock.now(),
         )
         .await?;
@@ -181,7 +181,7 @@ async fn a_persisted_not_writer_refusal_hides_reads_without_inventing_a_successo
     assert!(matches!(
         store.begin_admission(fixture.record_origin()?).await,
         Err(message_board_storage::ProjectStorageError::WriteRefused(
-            fleet_sync_writer::WriteRefusal::NotWriter
+            fleet_project_writer::WriteRefusal::NotWriter
         ))
     ));
     let write = fixture.api.call("work_trail_add", fixture.request(&project, json!({

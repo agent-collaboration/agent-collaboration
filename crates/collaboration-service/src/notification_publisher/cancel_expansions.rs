@@ -1,7 +1,7 @@
 //! One project transaction freezes each group-target association and its SDK envelope.
 use super::{BoardError, ProjectId, PublisherInner};
 use board_sync_protocol::BoardDeliveryTypes;
-use fleet_sync_protocol::{CancelBody, DeliveryCancel, DeliveryEnvelope, ItemId};
+use fleet_protocol::{CancelBody, DeliveryCancel, DeliveryEnvelope, ItemId};
 use message_board::{EpochNumber, MailItemRef};
 use message_board_storage::{MailCancelExpansion, MailHandoffItem, SequencedMailCancelExpansion};
 

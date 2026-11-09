@@ -5,8 +5,8 @@ use super::{
 };
 use crate::fleet_read_calls::FleetReadRequest;
 use board_sync_protocol::{BoardConsumerProtocol, BoardReadCursor, BoardReadScope};
-use fleet_sync_protocol::{FrameId, OperationAnswer, ServerFrame};
-use fleet_sync_session::{SessionEffect, SessionKey};
+use fleet_protocol::{FrameId, OperationAnswer, ServerFrame};
+use fleet_session::{SessionEffect, SessionKey};
 impl<Host: ObjectHost, Io: PlatformIo> CoreSessionScope<'_, Host, Io>
 where
     Host::Store: ReborrowScope,

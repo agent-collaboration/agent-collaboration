@@ -3,7 +3,7 @@ use super::{
     composed_fleet_fixture::*, fleet_mail_dispatch::*, fleet_mail_inbox_fixture::RecipientInbox,
 };
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem, PushResult};
+use fleet_protocol::{DeliveryEnvelope, DeliveryItem, PushResult};
 use serde_json::json;
 use sqlx_core::{query::query, row::Row};
 

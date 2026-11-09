@@ -8,7 +8,7 @@ use collaboration_central_conformance::{
 };
 use collaboration_central_core::{FleetDecisionFault, StepControl, StepControlReply};
 use durable_steps::StoreError;
-use fleet_sync_protocol::{ClientFrame, FrameId, OperationAnswer, OperationRequest, ServerFrame};
+use fleet_protocol::{ClientFrame, FrameId, OperationAnswer, OperationRequest, ServerFrame};
 use futures_util::{SinkExt, StreamExt};
 use message_board::{
     BoardId, ChangeOutcome, DecisionEffect, DecisionEffectsPage, FeedPosition, FleetFeedEntry,

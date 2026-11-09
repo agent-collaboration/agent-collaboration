@@ -1,7 +1,7 @@
 //! Clearing a learned prefix preserves actual SDK custody and terminal knowledge.
 use super::*;
-use fleet_sync_delivery::Inbox;
-use fleet_sync_protocol::{DeliveryStatus, StatusPublication, StatusVersion};
+use fleet_mail_delivery::Inbox;
+use fleet_protocol::{DeliveryStatus, StatusPublication, StatusVersion};
 
 #[derive(Debug, Eq, PartialEq, sqlx::FromRow)]
 struct CustodySnapshot {
@@ -35,13 +35,13 @@ async fn clearing_central_status_cursor_is_repeatable_and_preserves_pending_inbo
             minimum_settlement_allowance::<BoardDeliveryTypes>().unwrap(),
         ).unwrap();
         Inbox::<_, BoardDeliveryTypes, _>::new(scope, incoming.recipient().peer, limits, &NoDeliveryConsumer)
-            .enqueue_local(incoming, &NoDeliveryConsumer, NoDispatchHost.now()).await.map_err(fleet_sync_delivery::delivery_rollback)?;
+            .enqueue_local(incoming, &NoDeliveryConsumer, NoDispatchHost.now()).await.map_err(fleet_mail_delivery::delivery_rollback)?;
         Outbox::<_, BoardDeliveryTypes, _>::new(scope, limits, &NoDeliveryConsumer)
             .publish_status(StatusPublication {
                 item: delivered_id,
                 status: DeliveryStatus::Delivered { acceptance: collaboration_mail_protocol::CarrierAcceptance::Started },
                 version: StatusVersion::new(1), cancel: None,
-            }, NoDispatchHost.now()).await.map_err(fleet_sync_delivery::delivery_rollback)?;
+            }, NoDispatchHost.now()).await.map_err(fleet_mail_delivery::delivery_rollback)?;
         sqlx::query("INSERT INTO _fleet_sync_outbox_status(singleton,cursor,created_at,updated_at) VALUES(1,100,1,1)")
             .execute(scope.executor()).await?;
         Ok(())

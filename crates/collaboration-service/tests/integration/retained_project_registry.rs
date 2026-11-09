@@ -5,7 +5,7 @@ use board_fixture::{BoardFixture, TestError};
 use collaboration_runtime::ProjectReadHandle;
 use collaboration_runtime::ProjectRegistryError;
 use collaboration_runtime::ProjectStoreRegistry;
-use fleet_sync_protocol::{CommitSequence, Epoch, LeaseRefusal, RenewAnswer, ReplicationPosition};
+use fleet_protocol::{CommitSequence, Epoch, LeaseRefusal, RenewAnswer, ReplicationPosition};
 use message_board::*;
 use runtime_primitives::{Clock, SystemClock};
 use std::{

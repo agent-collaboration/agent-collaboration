@@ -1,7 +1,7 @@
 //! Final bookkeeping shape and injected write times through actual bootstrap transactions.
 use super::*;
 use crate::fleet_storage_fixture::{FixtureIo, FleetStorageFixture, NOW, TestError};
-use fleet_sync_tokio_runner::TokioObject;
+use fleet_tokio_objects::TokioObject;
 use sqlx_core::{query::query, row::Row};
 
 type Store = TokioObject<crate::CoreHost<FixtureIo>>;

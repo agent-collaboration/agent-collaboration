@@ -3,7 +3,7 @@ use collaboration_central_conformance::{
 };
 use collaboration_central_tokio::{TokioServer, TokioSettings};
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_lease::{LeasePolicy, RegistryConfig};
+use fleet_project_lease::{LeasePolicy, RegistryConfig};
 use sqlx_core::{query::query, row::Row};
 use std::{collections::BTreeSet, time::Duration};
 

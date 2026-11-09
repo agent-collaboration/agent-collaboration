@@ -75,7 +75,7 @@ async fn a_terminal_follow_stays_above_frontier_until_its_generation_child_is_fr
         runtime.completions.send(DeliveryOutcome::Started).unwrap();
         fixture.await_push_state(&request.payload.push_id, PushDeliveryState::Delivered).await;
         assert_eq!(native.runtime().local_outcome_for_test(item).await.unwrap(),
-            Some(fleet_sync_protocol::RecipientOutcome::Delivered {
+            Some(fleet_protocol::RecipientOutcome::Delivered {
                 acceptance: collaboration_mail_protocol::CarrierAcceptance::Started,
             }));
         publisher.shutdown().await;
@@ -279,9 +279,9 @@ async fn two_prevented_generations_keep_a_resolved_drain_above_frontier_until_fi
     assert!(matches!(
         outcomes.as_slice(),
         [
-            Some(fleet_sync_protocol::RecipientOutcome::Prevented { .. }),
-            Some(fleet_sync_protocol::RecipientOutcome::Prevented { .. }),
-            Some(fleet_sync_protocol::RecipientOutcome::Delivered { .. })
+            Some(fleet_protocol::RecipientOutcome::Prevented { .. }),
+            Some(fleet_protocol::RecipientOutcome::Prevented { .. }),
+            Some(fleet_protocol::RecipientOutcome::Delivered { .. })
         ]
     ));
     assert_eq!(received.as_str(), items[2].id().as_uuid().to_string());
@@ -444,14 +444,14 @@ async fn quiet_local_delivery_releases_acknowledged_frontier_without_erasing_ret
     );
     assert!(matches!(
         retained_before_ack,
-        Some(fleet_sync_protocol::RecipientOutcome::Delivered { .. })
+        Some(fleet_protocol::RecipientOutcome::Delivered { .. })
     ));
     assert_eq!(progress_before_ack, HandoffSeq::ZERO);
     assert!(
         retired
             && matches!(
                 retained_after_ack,
-                Some(fleet_sync_protocol::RecipientOutcome::Delivered { .. })
+                Some(fleet_protocol::RecipientOutcome::Delivered { .. })
             ),
         "acknowledged frontier must release progress while retaining Delivered custody"
     );

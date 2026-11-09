@@ -1,7 +1,7 @@
 //! Decode board metadata from the captured row image, never from the live head.
 use crate::{ProjectStorageError, project_record_codec::decode_record_time};
-use fleet_sync_protocol::{ReplicatedTransaction, RowChange, SqlValue};
-use fleet_sync_writer::CapturedTransaction;
+use fleet_project_writer::CapturedTransaction;
+use fleet_protocol::{ReplicatedTransaction, RowChange, SqlValue};
 use message_board::{EpochNumber, FeedCursor, FeedPosition, RecordId, RecordRef, RecordTime};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -106,16 +106,16 @@ impl CapturedProjectChanges {
                         return Err(ProjectStorageError::InvalidFeed);
                     };
                     let sequence = counter(sequence)?;
-                    let envelope: fleet_sync_protocol::DeliveryEnvelope<
+                    let envelope: fleet_protocol::DeliveryEnvelope<
                         board_sync_protocol::BoardDeliveryTypes,
                     > = serde_json::from_str(text(envelope)?)
                         .map_err(|_| ProjectStorageError::InvalidFeed)?;
-                    let fleet_sync_protocol::DeliveryEnvelope::Cancel(cancel) = envelope else {
+                    let fleet_protocol::DeliveryEnvelope::Cancel(cancel) = envelope else {
                         return Err(ProjectStorageError::InvalidFeed);
                     };
                     if sequence == 0
-                        || !fleet_sync_protocol::canonical_uuid_v7(text(group)?)
-                        || !fleet_sync_protocol::canonical_uuid_v7(text(target)?)
+                        || !fleet_protocol::canonical_uuid_v7(text(group)?)
+                        || !fleet_protocol::canonical_uuid_v7(text(target)?)
                         || cancel.id().as_uuid().to_string() != text(id)?
                         || cancel.target().as_uuid().to_string() != text(target)?
                     {
@@ -154,7 +154,7 @@ fn validate_row(
     if values.len() != columns
         || key.first() != values.first()
         || key.len() != 1
-        || !fleet_sync_protocol::canonical_uuid_v7(text(
+        || !fleet_protocol::canonical_uuid_v7(text(
             values.first().ok_or(ProjectStorageError::InvalidFeed)?,
         )?)
     {

@@ -38,7 +38,7 @@ async fn migrate(fixture: &Fixture) -> Result<Value, TestError> {
 
 async fn version_one(fixture: &Fixture) -> Result<(), TestError> {
     fixture.object.transaction(|scope| Box::pin(async move {
-        let migration = fleet_sync_receiver::RECEIVER_MIGRATOR.iter()
+        let migration = fleet_project_copy::RECEIVER_MIGRATOR.iter()
             .find(|migration| migration.version == 1)
             .ok_or_else(|| StoreError::backend("public receiver version1 absent"))?;
         scope.executor().execute(migration.sql.as_ref()).await.map_err(StoreError::backend)?;
@@ -198,20 +198,20 @@ async fn migrate_retired_receipt_never_recreates_metadata_or_changes_its_timesta
         let CopyStatusAnswer::Status(status) = runtime(&fixture)?.read_copy_status().await.map_err(|error|format!("retirement setup: {error:?}"))? else {
             return Err("retirement setup has no actual Copy".into());
         };
-        let request = fleet_sync_protocol::RetireCopy { database: status.database, expect_fence: status.fence, expect_acked: status.acked };
+        let request = fleet_protocol::RetireCopy { database: status.database, expect_fence: status.fence, expect_acked: status.acked };
         fixture.object.transaction(|scope| Box::pin(async move {
-            if fleet_sync_receiver::retire_copy(scope, &request, ProbeIo.now()).await.map_err(fleet_sync_receiver::receiver_rollback)?
-                != fleet_sync_protocol::RetireCopyAnswer::Retired { return Err(StoreError::backend("real receiver retirement refused")); }
+            if fleet_project_copy::retire_copy(scope, &request, ProbeIo.now()).await.map_err(fleet_project_copy::receiver_rollback)?
+                != fleet_protocol::RetireCopyAnswer::Retired { return Err(StoreError::backend("real receiver retirement refused")); }
             scope.executor().execute("DROP TABLE central_schema_migrations; DROP TABLE central_schema_migration_failures")
                 .await.map_err(StoreError::backend)?;
             Ok(())
         })).await?;
-        let before = fixture.object.transaction(|scope| Box::pin(async move { Ok::<_, StoreError>(fleet_sync_receiver::inspect_copy(scope).await) })).await?;
+        let before = fixture.object.transaction(|scope| Box::pin(async move { Ok::<_, StoreError>(fleet_project_copy::inspect_copy(scope).await) })).await?;
         let tables = fixture.tables().await?;
         for _ in 0..2 {
             if migrate(&fixture).await? != json!({"kind":"retired"}) { return Err("Migrate did not return the closed Retired item".into()); }
         }
-        let after = fixture.object.transaction(|scope| Box::pin(async move { Ok::<_, StoreError>(fleet_sync_receiver::inspect_copy(scope).await) })).await?;
+        let after = fixture.object.transaction(|scope| Box::pin(async move { Ok::<_, StoreError>(fleet_project_copy::inspect_copy(scope).await) })).await?;
         if after != before || fixture.tables().await? != tables { return Err("Migrate rewrote retirement or recreated its metadata".into()); }
         Ok::<_, TestError>(())
     }.await;

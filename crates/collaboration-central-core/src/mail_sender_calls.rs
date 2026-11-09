@@ -5,8 +5,8 @@ use crate::{
 };
 use board_sync_protocol::BoardDeliveryTypes;
 use durable_steps::{AtomicStore, BoxFuture, CallTarget, storage::TransactionScope};
-use fleet_sync_protocol::{DeliveryAnswer, DeliveryRequest};
-use fleet_sync_session::SessionKey;
+use fleet_protocol::{DeliveryAnswer, DeliveryRequest};
+use fleet_session::SessionKey;
 use message_board::ServiceId;
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
@@ -39,7 +39,7 @@ pub(crate) enum SenderRoute {
 pub(crate) struct AdmitSenderMail {
     pub source: ServiceId,
     pub input: SenderMailRequest,
-    pub limits: fleet_sync_delivery::DeliveryLimits,
+    pub limits: fleet_mail_delivery::DeliveryLimits,
     pub now: runtime_primitives::SyncTime,
 }
 impl<Store: AtomicStore, Driver: Database> StepCallback<Store, Driver> for AdmitSenderMail
@@ -78,12 +78,12 @@ where
                     else {
                         return Ok((
                             SenderRoute::Answered(DeliveryAnswer::DeliveryUnavailable {
-                                reason: fleet_sync_protocol::DeliveryRefusal::NotSubmitter,
+                                reason: fleet_protocol::DeliveryRefusal::NotSubmitter,
                             }),
                             Vec::new(),
                         ));
                     };
-                    match fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes, _>::new(
+                    match fleet_mail_delivery::Outbox::<_, BoardDeliveryTypes, _>::new(
                         scope,
                         self.limits,
                         &crate::fleet_sender_binding::FleetSenderBinding,
@@ -92,7 +92,7 @@ where
                     .await
                     {
                         Ok(status) => statuses.push(status),
-                        Err(fleet_sync_delivery::DeliveryError::Refused { reason }) => {
+                        Err(fleet_mail_delivery::DeliveryError::Refused { reason }) => {
                             return Ok((
                                 SenderRoute::Answered(DeliveryAnswer::DeliveryUnavailable {
                                     reason,
@@ -100,13 +100,13 @@ where
                                 Vec::new(),
                             ));
                         }
-                        Err(error) => return Err(fleet_sync_delivery::delivery_rollback(error)),
+                        Err(error) => return Err(fleet_mail_delivery::delivery_rollback(error)),
                     }
                 }
                 return Ok((
-                    SenderRoute::Answered(DeliveryAnswer::Query(
-                        fleet_sync_protocol::QueryResult { statuses },
-                    )),
+                    SenderRoute::Answered(DeliveryAnswer::Query(fleet_protocol::QueryResult {
+                        statuses,
+                    })),
                     Vec::new(),
                 ));
             }
@@ -127,12 +127,12 @@ where
                 {
                     return Ok((
                         SenderRoute::Answered(DeliveryAnswer::DeliveryUnavailable {
-                            reason: fleet_sync_protocol::DeliveryRefusal::NotSubmitter,
+                            reason: fleet_protocol::DeliveryRefusal::NotSubmitter,
                         }),
                         Vec::new(),
                     ));
                 };
-                let answer = fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes, _>::new(
+                let answer = fleet_mail_delivery::Outbox::<_, BoardDeliveryTypes, _>::new(
                     scope,
                     self.limits,
                     &crate::fleet_sender_binding::FleetSenderBinding,
@@ -146,10 +146,10 @@ where
                 .await;
                 let answer = match answer {
                     Ok(result) => DeliveryAnswer::Settle(result),
-                    Err(fleet_sync_delivery::DeliveryError::Refused { reason }) => {
+                    Err(fleet_mail_delivery::DeliveryError::Refused { reason }) => {
                         DeliveryAnswer::DeliveryUnavailable { reason }
                     }
-                    Err(error) => return Err(fleet_sync_delivery::delivery_rollback(error)),
+                    Err(error) => return Err(fleet_mail_delivery::delivery_rollback(error)),
                 };
                 return Ok((SenderRoute::Answered(answer), Vec::new()));
             }

@@ -5,7 +5,7 @@ use crate::configuration;
 mod delivery_config_scenarios;
 use collaboration_central_conformance::{ConformanceResult, JwksFixtureServer, fixture_policy};
 use collaboration_central_tokio::{DeliveryConfig, TokioServer, TokioSettings};
-use fleet_sync_protocol::PeerId;
+use fleet_protocol::PeerId;
 use std::time::Duration;
 
 #[tokio::test]

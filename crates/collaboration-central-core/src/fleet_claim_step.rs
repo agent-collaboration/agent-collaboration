@@ -7,7 +7,7 @@ use crate::{
     step_driver::{StepCallback, StepResult},
 };
 use durable_steps::{AtomicStore, BoxFuture, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{DatabaseId, GateAnswer, GateReason, GateReasonCode, TransferId};
+use fleet_protocol::{DatabaseId, GateAnswer, GateReason, GateReasonCode, TransferId};
 use message_board::{BoardState, ProjectId, Record};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,

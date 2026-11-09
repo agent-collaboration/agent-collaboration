@@ -4,11 +4,11 @@ use board_fleet_sync::BOARD_LEASE_POLICY;
 use collaboration_runtime::ProjectRegistryError;
 use collaboration_runtime::ProjectStoreRegistry;
 use controlled_clock::ControlledClock;
-use fleet_sync_lease::WriterState;
-use fleet_sync_protocol::{
+use fleet_project_lease::WriterState;
+use fleet_project_writer::WriteRefusal;
+use fleet_protocol::{
     DatabaseId, Epoch, LeaseState, LeaseStatus, PeerId, RenewAnswer, RenewResult,
 };
-use fleet_sync_writer::WriteRefusal;
 use message_board::*;
 use message_board_storage::ProjectStorageError;
 use runtime_primitives::{Clock, SyncTime};

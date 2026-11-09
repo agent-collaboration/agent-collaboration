@@ -80,7 +80,7 @@ pub(super) struct Surfaces {
     pub(super) delivery: SubscriptionDeliveryService,
     pub(super) interactions: Arc<interaction_storage::InteractionStore>,
     native: native_mail_owner::NativeMailOwner,
-    pub(super) peer: fleet_sync_protocol::PeerId,
+    pub(super) peer: fleet_protocol::PeerId,
     pub(super) carrier: Arc<CarrierStandIn>,
 }
 impl Surfaces {
@@ -94,7 +94,7 @@ impl Surfaces {
     pub(super) async fn delivery_reference(
         &self,
         item: &collaboration_protocol::MailItemId,
-    ) -> TestResult<fleet_sync_protocol::DeliveryItemRef> {
+    ) -> TestResult<fleet_protocol::DeliveryItemRef> {
         let push = item.as_str().to_owned().try_into()?;
         let record = self
             .interactions
@@ -106,7 +106,7 @@ impl Surfaces {
             &SERVICE.to_owned().try_into()?,
             self.peer,
         )?;
-        Ok(fleet_sync_protocol::DeliveryItemRef {
+        Ok(fleet_protocol::DeliveryItemRef {
             item: item.id(),
             digest: item.digest().clone(),
         })
@@ -151,7 +151,7 @@ impl Surfaces {
         }
         let peer = match &session {
             Some(session) => session.peer,
-            None => fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7())?,
+            None => fleet_protocol::PeerId::new(uuid::Uuid::now_v7())?,
         };
         let (identity, native) = native_mail_owner::start_with_session(
             identity,

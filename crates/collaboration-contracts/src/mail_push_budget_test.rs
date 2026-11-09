@@ -5,7 +5,7 @@ use collaboration_mail_protocol::{
     FollowDeliveryPolicy, GenerationGuard, MailDeliveryMode, MailSender, MessageBody,
     NotificationBody, NotificationSource, RecordPointer, RootRange,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DeliveryEnvelope, DeliveryItem, DeliveryTypes, FrameId, ItemId, PeerId, Recipient, ServerCall,
     ServerFrame, ServerRequest, Submitter, unit_budget::TARGET_UNIT_BYTES,
 };

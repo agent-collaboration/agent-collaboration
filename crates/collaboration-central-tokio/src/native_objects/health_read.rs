@@ -64,7 +64,7 @@ impl NativeObjects {
     #[cfg(feature = "conformance")]
     pub(crate) async fn health_sample(
         &self,
-        database: fleet_sync_protocol::DatabaseId,
+        database: fleet_protocol::DatabaseId,
     ) -> Option<Vec<HealthFileSample>> {
         self.health_samples.lock().await.get(&database).cloned()
     }

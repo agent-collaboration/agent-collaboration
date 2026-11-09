@@ -1,7 +1,7 @@
 //! Owner HTTP operations remain live while Router sessions serve their calls.
 use crate::{BOUND, FixtureResult, TestCentral};
 use collaboration_central_conformance::owner_assertion;
-use fleet_sync_protocol::{DatabaseId, TransferId};
+use fleet_protocol::{DatabaseId, TransferId};
 use message_board::ServiceId;
 use serde_json::{Value, json};
 
@@ -24,7 +24,7 @@ impl TestCentral {
         let response = self
             .owner_transfer_post(database, "takeover/preview", &Value::Null)
             .await?;
-        let preview: fleet_sync_protocol::TakeoverPreview = serde_json::from_value(
+        let preview: fleet_protocol::TakeoverPreview = serde_json::from_value(
             response
                 .get("preview")
                 .cloned()

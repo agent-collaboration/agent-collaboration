@@ -4,7 +4,7 @@
 use crate::copy_receiver_fixture as support;
 
 use board_sync_protocol::BoardAnnotation;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CopyStatusAnswer, CopyUnavailableReason, Piece, PieceContents, ReplicatedTransaction,
     ReplicationAnswer, RowChange, SnapshotRead, SqlValue,
 };

@@ -147,7 +147,7 @@ impl ProjectAdmission {
         };
         if !matches!(
             store.registration_outcome().await?,
-            fleet_sync_writer::WriterRegistrationOutcome::Ready { .. }
+            fleet_project_writer::WriterRegistrationOutcome::Ready { .. }
         ) {
             return Ok(pending_creation_reply(&request.project_id));
         }
@@ -271,7 +271,7 @@ impl ProjectAdmission {
         };
         Ok(matches!(
             store.registration_outcome().await?,
-            fleet_sync_writer::WriterRegistrationOutcome::Ready { .. }
+            fleet_project_writer::WriterRegistrationOutcome::Ready { .. }
         ))
     }
 

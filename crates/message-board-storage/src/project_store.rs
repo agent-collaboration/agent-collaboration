@@ -1,7 +1,9 @@
 //! Typed project access over the library-owned database and its guarded scopes.
 
 use crate::{ProjectStorageError, StoreSchemaState, project_import_keys::RecordAdmission};
-use fleet_sync_writer::{ReadTransaction, ReplicatedDatabase, ReplicatedSchema, WriteTransaction};
+use fleet_project_writer::{
+    ReadTransaction, ReplicatedDatabase, ReplicatedSchema, WriteTransaction,
+};
 use message_board::{ActorOrigin, EpochNumber, FeedCursor, ProjectId};
 use std::{path::Path, sync::Arc};
 
@@ -65,13 +67,15 @@ impl<TSchema: ReplicatedSchema> ProjectStore<TSchema> {
         ProjectWriteTransaction::live(self.project_id.clone(), transaction, origin).await
     }
 
-    pub async fn writer_state(&self) -> Result<fleet_sync_lease::WriterState, ProjectStorageError> {
+    pub async fn writer_state(
+        &self,
+    ) -> Result<fleet_project_lease::WriterState, ProjectStorageError> {
         Ok(self.database.writer_state().await?)
     }
 
     pub async fn registration_outcome(
         &self,
-    ) -> Result<fleet_sync_writer::WriterRegistrationOutcome, ProjectStorageError> {
+    ) -> Result<fleet_project_writer::WriterRegistrationOutcome, ProjectStorageError> {
         Ok(self.database.registration_outcome().await?)
     }
 

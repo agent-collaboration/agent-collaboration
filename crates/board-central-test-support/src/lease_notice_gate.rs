@@ -1,7 +1,7 @@
 //! Delay one selected real lease notice while operation answers continue.
 use crate::FixtureResult;
 use board_sync_protocol::{BoardConsumerProtocol, BoardNotice, PositionedBoardNotice};
-use fleet_sync_protocol::{Epoch, Notice, NoticePosition, ServerFrame};
+use fleet_protocol::{Epoch, Notice, NoticePosition, ServerFrame};
 use message_board::ProjectId;
 use std::sync::{Arc, Mutex};
 use tokio::sync::watch;

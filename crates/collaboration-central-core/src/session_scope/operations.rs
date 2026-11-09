@@ -8,8 +8,8 @@ use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerProtocol, BoardConsumerRequest, BoardReadCursor,
     BoardReadPage, BoardReadScope,
 };
-use fleet_sync_protocol::{FrameId, OperationAnswer, OperationRequest, ServerFrame};
-use fleet_sync_session::SessionKey;
+use fleet_protocol::{FrameId, OperationAnswer, OperationRequest, ServerFrame};
+use fleet_session::SessionKey;
 
 impl<Host: ObjectHost, Io: PlatformIo> CoreSessionScope<'_, Host, Io>
 where
@@ -38,8 +38,8 @@ where
             return self.stage_operation_answer(
                 connection,
                 frame,
-                OperationAnswer::Lease(fleet_sync_protocol::LeaseAnswer::Register(
-                    fleet_sync_protocol::RegistrationAnswer::Refused(reason),
+                OperationAnswer::Lease(fleet_protocol::LeaseAnswer::Register(
+                    fleet_protocol::RegistrationAnswer::Refused(reason),
                 )),
             );
         }
@@ -57,7 +57,7 @@ where
                 })
             }
             OperationRequest::Delivery(request) => {
-                use fleet_sync_protocol::DeliveryRequest;
+                use fleet_protocol::DeliveryRequest;
                 match request {
                     request @ (DeliveryRequest::Query { .. } | DeliveryRequest::Settle { .. }) => {
                         self.transport
@@ -88,7 +88,7 @@ where
             }
             OperationRequest::Replication(request) => {
                 use crate::copy_read_calls::CopyReadRequest;
-                use fleet_sync_protocol::ReplicationRequest;
+                use fleet_protocol::ReplicationRequest;
                 let (database, request) = match request {
                     ReplicationRequest::CopyStatus { database } => {
                         (database, CopyReadRequest::Status)

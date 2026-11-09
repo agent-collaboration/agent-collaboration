@@ -1,9 +1,9 @@
 //! Shared real-library fixtures for the separate storage and cursor integration targets.
 
 use board_fleet_sync::BoardProjectSchema;
-use fleet_sync_lease::{LeaseHolder, LeasePolicy};
-use fleet_sync_protocol::{DatabaseId, PeerId};
-use fleet_sync_writer::{ReplicatedDatabase, WriterOptions};
+use fleet_project_lease::{LeaseHolder, LeasePolicy};
+use fleet_project_writer::{ReplicatedDatabase, WriterOptions};
+use fleet_protocol::{DatabaseId, PeerId};
 use message_board::*;
 use message_board_storage::{ImportRowKeys, ImportRowKind, ProjectStore, StoreSchemaState};
 use std::{path::Path, sync::Arc, time::Duration};
@@ -203,11 +203,11 @@ pub async fn open_granted_project(
     // A typed grant is the fixture input. Registry, transfer and receiver behavior are separate proofs.
     holder
         .observe_registration(
-            fleet_sync_protocol::LeaseStatus {
+            fleet_protocol::LeaseStatus {
                 database: database_id,
-                epoch: fleet_sync_protocol::Epoch::new(epoch).unwrap(),
+                epoch: fleet_protocol::Epoch::new(epoch).unwrap(),
                 holder: peer,
-                state: fleet_sync_protocol::LeaseState::Held,
+                state: fleet_protocol::LeaseState::Held,
                 expires_at: started.after(duration),
                 remaining_ms: 14_400_000,
             },

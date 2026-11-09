@@ -1,12 +1,12 @@
 //! Establish real registry grants and schema support for the epoch replay proof.
 use super::*;
 use board_fleet_sync::{MachineSessionStore, ReqwestSessionTransport};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ActorRef, Epoch, HolderChangeAnswer, Origin, Registration, RegistrationAnswer, RequestId,
     SchemaSupport, TransferId,
 };
-use fleet_sync_session::{PeerCredential, SessionClient};
-use fleet_sync_tokio_runner::SessionPump;
+use fleet_session::{PeerCredential, SessionClient};
+use fleet_session_client::SessionPump;
 use runtime_primitives::{Backoff, UuidV7Ids};
 
 type ProofResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -54,7 +54,7 @@ impl TestFleet {
         let task = tokio::spawn(async move { pump.run(stopped).await.map_err(io::Error::other) });
         timeout(BOUND, async {
             while let Some(event) = events.recv().await {
-                if matches!(event, fleet_sync_session::ClientEvent::Welcome { .. }) {
+                if matches!(event, fleet_session::ClientEvent::Welcome { .. }) {
                     return Ok::<_, io::Error>(());
                 }
             }
@@ -109,9 +109,7 @@ impl TestFleet {
             database,
             preview,
             to,
-            reason: fleet_sync_protocol::HolderChangeReason::new(
-                "native mail historical-epoch proof",
-            )?,
+            reason: fleet_protocol::HolderChangeReason::new("native mail historical-epoch proof")?,
         };
         timeout(BOUND, async {
             loop {

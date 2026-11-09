@@ -4,7 +4,7 @@ use super::{
     recovery_rows::require,
 };
 use board_staging_cutover::{NativeProjectSnapshot, SelectedWriterFile};
-use fleet_sync_protocol::SqlValue;
+use fleet_protocol::SqlValue;
 use message_board::ProjectId;
 use sqlx::Connection;
 use sqlx_turso::{TursoConnectOptions, TursoConnection};
@@ -22,7 +22,7 @@ pub(super) async fn corrupt(
         SelectedWriterFile {
             project: project.clone(),
             peer: fixture.peer,
-            file_epoch: fleet_sync_protocol::Epoch::new(2)?,
+            file_epoch: fleet_protocol::Epoch::new(2)?,
         },
     )
     .await?;

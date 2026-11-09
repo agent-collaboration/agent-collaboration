@@ -13,8 +13,8 @@ use durable_steps::{
     AtomicStore, CallFailure, CallTarget, JournalScope, NotSentReason, ReborrowScope, StoreError,
     storage::TransactionScope,
 };
-use fleet_sync_protocol::{ServerFrame, ServerRequest};
-use fleet_sync_session::{ConnectionRegistration, SessionKey};
+use fleet_protocol::{ServerFrame, ServerRequest};
+use fleet_session::{ConnectionRegistration, SessionKey};
 use runtime_primitives::Clock;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,

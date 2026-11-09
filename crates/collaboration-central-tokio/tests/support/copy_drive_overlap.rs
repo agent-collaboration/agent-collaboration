@@ -8,7 +8,7 @@ use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, enroll_admitted_peer, owner_assertion,
 };
 use durable_steps::OperationId;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     AwaitAckedAnswer, Epoch, FrameId, ReleaseAnswer, ServerCall, ServerCallAnswer,
 };
 use serde_json::{Value, json};

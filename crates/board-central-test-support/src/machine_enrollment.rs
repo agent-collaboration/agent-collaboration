@@ -2,8 +2,8 @@
 use crate::{BOUND, FixtureResult, access_edge::SignedAccessEdge};
 use board_fleet_sync::{AccessServiceToken, BoardSessionInputs};
 use collaboration_central_conformance::{access_client_id, owner_assertion};
-use fleet_sync_protocol::{PeerId, ReceiverId};
-use fleet_sync_session::{Endpoint, PeerCredential};
+use fleet_protocol::{PeerId, ReceiverId};
+use fleet_session::{Endpoint, PeerCredential};
 use message_board::{ActorOrigin, ServiceId};
 use sha2::{Digest, Sha256};
 
@@ -19,7 +19,7 @@ pub struct EnrolledTestMachine {
 impl EnrolledTestMachine {
     pub fn observe_mail_wire(
         &self,
-        drop_terminal: Option<fleet_sync_protocol::ItemId>,
+        drop_terminal: Option<fleet_protocol::ItemId>,
     ) -> FixtureResult<crate::MailWireObservation> {
         self.edge.observe_mail_wire(drop_terminal)
     }
@@ -30,14 +30,14 @@ impl EnrolledTestMachine {
     pub fn hold_granted_notice(
         &self,
         project: message_board::ProjectId,
-        epoch: fleet_sync_protocol::Epoch,
+        epoch: fleet_protocol::Epoch,
     ) -> FixtureResult<crate::LeaseNoticeObservation> {
         self.edge.hold_granted_notice(project, epoch)
     }
     pub fn hold_superseded_notice(
         &self,
         project: message_board::ProjectId,
-        epoch: fleet_sync_protocol::Epoch,
+        epoch: fleet_protocol::Epoch,
     ) -> FixtureResult<crate::LeaseNoticeObservation> {
         self.edge.hold_superseded_notice(project, epoch)
     }

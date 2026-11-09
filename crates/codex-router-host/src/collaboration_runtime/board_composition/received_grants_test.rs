@@ -5,8 +5,8 @@ use crate::collaboration_runtime::board_composition::{
     tests::{identity, origin, wait_welcome},
 };
 use board_central_test_support::TestCentral;
-use fleet_sync_protocol::{DatabaseId, Epoch};
-use fleet_sync_writer::WriterRegistrationOutcome;
+use fleet_project_writer::WriterRegistrationOutcome;
+use fleet_protocol::{DatabaseId, Epoch};
 use message_board::{
     BoardId, HumanId, Identity, ProjectCreateRequest, ProjectId, ProtocolVersion, Record,
     RequestDecision, RequestId, RequestResult, ResourceName,

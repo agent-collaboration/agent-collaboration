@@ -3,7 +3,7 @@ use super::{
     composed_fleet_fixture::*, fleet_mail_dispatch::*, fleet_mail_inbox_fixture::RecipientInbox,
 };
 use durable_steps::StoreError;
-use fleet_sync_protocol::{DeliveryStatus, PushResult};
+use fleet_protocol::{DeliveryStatus, PushResult};
 
 #[expect(
     clippy::panic_in_result_fn,

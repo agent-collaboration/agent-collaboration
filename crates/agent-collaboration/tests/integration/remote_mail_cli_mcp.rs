@@ -7,9 +7,9 @@ use board_sync_protocol::BoardConsumerProtocol;
 use collaboration_protocol::{MailItemId, SessionRef};
 use collaboration_runtime::MailDeliverySession;
 use durable_steps::AtomicStore;
-use fleet_sync_protocol::{PeerId, SchemaSupport};
-use fleet_sync_session::{Endpoint, PeerCredential, SessionClient};
-use fleet_sync_tokio_runner::SessionPump;
+use fleet_protocol::{PeerId, SchemaSupport};
+use fleet_session::{Endpoint, PeerCredential, SessionClient};
+use fleet_session_client::SessionPump;
 use local_mail_surfaces::{SERVICE, Surfaces, TestResult};
 use runtime_primitives::{Backoff, UuidV7Ids};
 use serde_json::{Value, json};
@@ -380,7 +380,7 @@ async fn cli_reply_to_a_remote_origin_keeps_the_original_link_in_native_outbox_a
             .await?
             .is_none()
     );
-    let sdk = fleet_sync_protocol::ItemId::new(uuid::Uuid::parse_str(id.as_str())?)?;
+    let sdk = fleet_protocol::ItemId::new(uuid::Uuid::parse_str(id.as_str())?)?;
     let binding = surfaces.sender_binding()?;
     let item = interaction_storage::InteractionAtomicStore::new(
         surfaces.interactions.clone(),
@@ -388,13 +388,13 @@ async fn cli_reply_to_a_remote_origin_keeps_the_original_link_in_native_outbox_a
     )
     .transaction(move |scope| {
         Box::pin(async move {
-            let limits = fleet_sync_delivery::DeliveryLimits::new::<
+            let limits = fleet_mail_delivery::DeliveryLimits::new::<
                 collaboration_contracts::RouterDeliveryTypes,
             >(
                 64 * 1024 * 1024,
                 10_000,
                 64 * 1024 * 1024,
-                fleet_sync_delivery::minimum_settlement_allowance::<
+                fleet_mail_delivery::minimum_settlement_allowance::<
                     collaboration_contracts::RouterDeliveryTypes,
                 >()
                 .map_err(durable_steps::StoreError::backend)?,
@@ -403,17 +403,17 @@ async fn cli_reply_to_a_remote_origin_keeps_the_original_link_in_native_outbox_a
             // The SDK's supported read-only inspection exposes the persisted
             // header reference. Resolve the body through its public Outbox API;
             // no query reaches into the SDK's private tables.
-            let rows = fleet_sync_delivery::test_support::snapshot::<
+            let rows = fleet_mail_delivery::test_support::snapshot::<
                 _,
                 collaboration_contracts::RouterDeliveryTypes,
                 _,
             >(
                 scope,
-                fleet_sync_delivery::DeliveryHostRole::Machine,
+                fleet_mail_delivery::DeliveryHostRole::Machine,
                 &binding,
             )
             .await
-            .map_err(fleet_sync_delivery::delivery_rollback)?;
+            .map_err(fleet_mail_delivery::delivery_rollback)?;
             let content = rows
                 .iter()
                 .find(|row| row.category == "outbox" && row.identity == sdk.as_uuid().to_string())
@@ -428,20 +428,20 @@ async fn cli_reply_to_a_remote_origin_keeps_the_original_link_in_native_outbox_a
                 .to_owned()
                 .try_into()
                 .map_err(durable_steps::StoreError::backend)?;
-            let mut outbox = fleet_sync_delivery::Outbox::<
+            let mut outbox = fleet_mail_delivery::Outbox::<
                 _,
                 collaboration_contracts::RouterDeliveryTypes,
                 _,
             >::new(scope, limits, &binding);
             outbox
-                .resolve_submit(&fleet_sync_protocol::DeliveryItemRef { item: sdk, digest })
+                .resolve_submit(&fleet_protocol::DeliveryItemRef { item: sdk, digest })
                 .await
                 .map(|resolved| resolved.item)
-                .map_err(fleet_sync_delivery::delivery_rollback)
+                .map_err(fleet_mail_delivery::delivery_rollback)
         })
     })
     .await?;
-    let fleet_sync_protocol::DeliveryEnvelope::Item(item) = item else {
+    let fleet_protocol::DeliveryEnvelope::Item(item) = item else {
         return Err("reply control".into());
     };
     let board_sync_protocol::BoardDeliveryBody::Message(body) = item.body() else {

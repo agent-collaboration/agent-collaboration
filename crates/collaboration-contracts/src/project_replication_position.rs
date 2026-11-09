@@ -16,7 +16,7 @@ pub trait ProjectReplicationPosition: Send + Sync {
     fn confirmed_writer_epoch<'port>(
         &'port self,
         _project: &'port ProjectId,
-    ) -> Pin<Box<dyn Future<Output = Option<fleet_sync_protocol::Epoch>> + Send + 'port>> {
+    ) -> Pin<Box<dyn Future<Output = Option<fleet_protocol::Epoch>> + Send + 'port>> {
         Box::pin(async { None })
     }
     fn acknowledged_mail_changes<'port>(

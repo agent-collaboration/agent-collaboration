@@ -49,7 +49,7 @@ pub async fn enroll_admitted_peer_with_label(
         .send(Message::Text(admitted.hello.to_string()))
         .await?;
     client
-        .wake_due_after_hello(fleet_sync_protocol::SessionId::new(uuid::Uuid::parse_str(
+        .wake_due_after_hello(fleet_protocol::SessionId::new(uuid::Uuid::parse_str(
             session,
         )?)?)
         .await?;

@@ -4,7 +4,7 @@ use durable_steps::{
     AtomicStore, CallTarget, StoreError,
     storage::{JournalStorage, OperationExecution},
 };
-use fleet_sync_protocol::{SettleOutcome, SettlementRecorded};
+use fleet_protocol::{SettleOutcome, SettlementRecorded};
 use serde_json::{Value, json};
 
 #[expect(
@@ -45,7 +45,8 @@ async fn restart_drives_a_committed_registry_task_and_keeps_its_result() -> Test
     assert_eq!(claim_counts(&reopened).await?, (0, 0));
     hold_next_settlement(&reopened).await?;
     let controller = async {
-        let call = held_settlement_kind(&reopened, fleet_sync_lease::ClaimSettlement::KIND).await?;
+        let call =
+            held_settlement_kind(&reopened, fleet_project_lease::ClaimSettlement::KIND).await?;
         assert_eq!(call.get("source"), Some(&json!({"kind":"fleet"})));
         assert_eq!(call.get("sourceFace"), Some(&json!("registry")));
         assert_eq!(call.get("destinationFace"), Some(&json!("fleet")));
@@ -55,11 +56,11 @@ async fn restart_drives_a_committed_registry_task_and_keeps_its_result() -> Test
             Some(&json!(operation.as_uuid()))
         );
         assert_eq!(call.pointer("/identity/step"), Some(&json!("settle")));
-        let request: fleet_sync_protocol::ClaimSettlement =
+        let request: fleet_protocol::ClaimSettlement =
             serde_json::from_value(call["request"].clone())?;
         assert_eq!(request.outcome, SettleOutcome::Cancelled);
         assert!(
-            matches!(request.change, fleet_sync_protocol::HolderChangeRequest::Claim {database,claimant,..} if database.to_string() == PROJECT && claimant.to_string() == A)
+            matches!(request.change, fleet_protocol::HolderChangeRequest::Claim {database,claimant,..} if database.to_string() == PROJECT && claimant.to_string() == A)
         );
         resume_settlement(&reopened).await?;
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(call)

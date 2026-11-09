@@ -1,4 +1,4 @@
-use fleet_sync_protocol::{Epoch, PeerId, ReplicationPosition};
+use fleet_protocol::{Epoch, PeerId, ReplicationPosition};
 use message_board::{ActorOrigin, BoardId, ProjectId, RecordTime, RequestId};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
@@ -89,8 +89,8 @@ pub enum BoardReadScope {
 pub enum BoardReadCursor {
     Fleet(message_board::FleetPosition),
     FleetSnapshot(crate::FleetSnapshotCursor),
-    Notices(fleet_sync_protocol::NoticePosition),
-    Snapshot(fleet_sync_protocol::SnapshotCursor),
+    Notices(fleet_protocol::NoticePosition),
+    Snapshot(fleet_protocol::SnapshotCursor),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -123,7 +123,7 @@ pub enum ForwardOutcome {
     SenderHolds,
     NotHeld,
     HolderUnreachable {
-        last_seen: Option<fleet_sync_protocol::SyncTime>,
+        last_seen: Option<fleet_protocol::SyncTime>,
     },
     Unanswered,
     Overloaded,
@@ -285,7 +285,7 @@ impl TryFrom<InstallationPeerPageFields> for InstallationPeerPage {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PositionedBoardNotice {
-    pub position: fleet_sync_protocol::NoticePosition,
+    pub position: fleet_protocol::NoticePosition,
     pub kind: BoardNotice,
 }
 
@@ -305,7 +305,7 @@ pub enum NoticeRead {
     CursorExpired {
         /// Last pruned machine position; reading after this floor is valid.
         /// The first retained notice, when present, is floor plus one.
-        floor: fleet_sync_protocol::NoticePosition,
+        floor: fleet_protocol::NoticePosition,
     },
     CursorInvalid,
 }

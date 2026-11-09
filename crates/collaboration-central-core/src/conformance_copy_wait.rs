@@ -8,8 +8,8 @@ use std::sync::Mutex;
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct CopyWaitTarget {
-    pub copy: fleet_sync_protocol::ReceiverId,
-    pub database: fleet_sync_protocol::DatabaseId,
+    pub copy: fleet_protocol::ReceiverId,
+    pub database: fleet_protocol::DatabaseId,
 }
 impl durable_steps::CallTarget for CopyWaitTarget {
     const KIND: &'static str = "central.conformance-copy-wait";
@@ -20,8 +20,8 @@ impl durable_steps::CallTarget for CopyWaitTarget {
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct CopyWaitInput {
-    pub copy: fleet_sync_protocol::ReceiverId,
-    pub database: fleet_sync_protocol::DatabaseId,
+    pub copy: fleet_protocol::ReceiverId,
+    pub database: fleet_protocol::DatabaseId,
     pub control: CopyWaitControl,
 }
 #[derive(Serialize, Deserialize)]

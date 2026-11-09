@@ -1,7 +1,7 @@
 //! Terminal Copy integrity refusal drains only its actual project sender.
 use super::*;
-use fleet_sync_protocol::{DatabaseId, PieceRefusal, TableName};
-use fleet_sync_writer::{CopyFailure, SenderError};
+use fleet_project_writer::{CopyFailure, SenderError};
+use fleet_protocol::{DatabaseId, PieceRefusal, TableName};
 type TestValue<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[tokio::test]

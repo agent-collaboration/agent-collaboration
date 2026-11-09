@@ -3,7 +3,7 @@ use crate::{InteractionStore, StorageError};
 use chrono::{DateTime, SecondsFormat, Utc};
 use collaboration_protocol::SessionRef;
 use durable_steps::{Host, storage::TransactionScope, turso_store::TursoScope};
-use fleet_sync_protocol::ItemId;
+use fleet_protocol::ItemId;
 use message_board::RecordId;
 use sqlx_turso::TursoConnection;
 

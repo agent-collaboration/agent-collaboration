@@ -2,9 +2,9 @@
 use super::*;
 use collaboration_contracts::ProjectRegistrationState;
 use collaboration_protocol::UuidIdentity;
-use fleet_sync_protocol::{GateAnswer, GateReason, GateReasonCode, RegistrationRefusal};
-use fleet_sync_session::SessionClientStore;
-use fleet_sync_writer::WriterRegistrationOutcome;
+use fleet_project_writer::WriterRegistrationOutcome;
+use fleet_protocol::{GateAnswer, GateReason, GateReasonCode, RegistrationRefusal};
+use fleet_session::SessionClientStore;
 use message_board::*;
 use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, path::Path, sync::atomic::Ordering};
@@ -335,7 +335,8 @@ async fn accepted_directory_registration_waits_for_welcome_and_grant_before_the_
     assert!(matches!(
         writer.store.begin_admission(origin()?).await,
         Err(message_board_storage::ProjectStorageError::WriteRefused(
-            fleet_sync_writer::WriteRefusal::Provisional | fleet_sync_writer::WriteRefusal::Seeding
+            fleet_project_writer::WriteRefusal::Provisional
+                | fleet_project_writer::WriteRefusal::Seeding
         ))
     ));
     let projection = (collaboration_service::ApplicationFixture::new(
@@ -550,7 +551,7 @@ async fn assert_native_registration_refusal(cleanup_first: bool) -> TestResult {
     timeout(BOUND, selected).await??;
     let database = projects.registry()?.database(&request.project_id).await?;
     if !cleanup_first {
-        database.hold_move_aside(fleet_sync_writer::MoveAsidePhase::BeforeLink);
+        database.hold_move_aside(fleet_project_writer::MoveAsidePhase::BeforeLink);
     }
     service.release_registration()?;
     if cleanup_first {
@@ -558,7 +559,7 @@ async fn assert_native_registration_refusal(cleanup_first: bool) -> TestResult {
     } else {
         assert_eq!(
             timeout(BOUND, database.wait_move_aside()).await??,
-            fleet_sync_writer::MoveAsidePhase::BeforeLink
+            fleet_project_writer::MoveAsidePhase::BeforeLink
         );
     }
     release

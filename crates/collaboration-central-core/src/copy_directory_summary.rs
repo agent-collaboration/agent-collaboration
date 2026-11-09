@@ -12,7 +12,7 @@ use crate::{
 use durable_steps::{
     AtomicStore, BoxFuture, CallFailure, CallTarget, StoreError, storage::TransactionScope,
 };
-use fleet_sync_protocol::DatabaseId;
+use fleet_protocol::DatabaseId;
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,

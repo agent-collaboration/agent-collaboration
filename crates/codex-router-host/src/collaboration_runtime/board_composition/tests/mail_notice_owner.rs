@@ -13,12 +13,12 @@ use collaboration_service::SubscriptionDeliveryServiceProps;
 use collaboration_service::SystemSubscriptionClock;
 use durable_steps::{AtomicStore, CallFailure, StoreError};
 use durable_steps::{storage::TransactionScope, turso_store::TursoScope};
-use fleet_sync_delivery::{
+use fleet_mail_delivery::{
     DeliveryConsumer, DeliveryError, DeliveryLimits, GateDecision, LocalDelivery, Outbox,
     SubmitItem, delivery_rollback, minimum_settlement_allowance,
 };
-use fleet_sync_protocol::{DeliveryHeader, DeliveryItem, ItemId, PeerId};
-use fleet_sync_tokio_runner::{CallEnvelope, CallRouter, TokioHost};
+use fleet_protocol::{DeliveryHeader, DeliveryItem, ItemId, PeerId};
+use fleet_tokio_objects::{CallEnvelope, CallRouter, TokioHost};
 use interaction_storage::{InteractionAtomicStore, InteractionStore};
 use runtime_primitives::SystemClock;
 use serde_json::Value;
@@ -84,7 +84,7 @@ impl MailOwner {
         &self,
         item: ItemId,
     ) -> Result<
-        fleet_sync_delivery::OutboxStatus<collaboration_mail_protocol::CarrierAcceptance>,
+        fleet_mail_delivery::OutboxStatus<collaboration_mail_protocol::CarrierAcceptance>,
         TestError,
     > {
         let limits = DeliveryLimits::new::<collaboration_contracts::RouterDeliveryTypes>(
@@ -178,9 +178,7 @@ impl MailOwner {
         peer: PeerId,
         item: ItemId,
     ) -> Result<
-        Option<
-            fleet_sync_protocol::RecipientOutcome<collaboration_mail_protocol::CarrierAcceptance>,
-        >,
+        Option<fleet_protocol::RecipientOutcome<collaboration_mail_protocol::CarrierAcceptance>>,
         TestError,
     > {
         let limits = DeliveryLimits::new::<collaboration_contracts::RouterDeliveryTypes>(
@@ -194,7 +192,7 @@ impl MailOwner {
             .store
             .transaction(move |scope| {
                 Box::pin(async move {
-                    fleet_sync_delivery::Inbox::<
+                    fleet_mail_delivery::Inbox::<
                             _,
                             collaboration_contracts::RouterDeliveryTypes,
                             _,
@@ -245,19 +243,19 @@ impl MailOwner {
     }
     pub async fn rows(
         &self,
-    ) -> Result<Vec<fleet_sync_delivery::test_support::DeliveryObservation>, TestError> {
+    ) -> Result<Vec<fleet_mail_delivery::test_support::DeliveryObservation>, TestError> {
         let binding = self.binding.clone();
         Ok(self
             .store
             .transaction(move |scope| {
                 Box::pin(async move {
-                    fleet_sync_delivery::test_support::snapshot::<
+                    fleet_mail_delivery::test_support::snapshot::<
                         _,
                         collaboration_contracts::RouterDeliveryTypes,
                         _,
                     >(
                         scope,
-                        fleet_sync_delivery::DeliveryHostRole::Machine,
+                        fleet_mail_delivery::DeliveryHostRole::Machine,
                         binding.as_ref(),
                     )
                     .await
@@ -274,11 +272,11 @@ impl MailOwner {
         let id = item.id();
         let submitter = match item.sender() {
             collaboration_mail_protocol::MailSender::Project { project } => {
-                fleet_sync_protocol::Submitter::Project(project.as_str().to_owned().try_into()?)
+                fleet_protocol::Submitter::Project(project.as_str().to_owned().try_into()?)
             }
             collaboration_mail_protocol::MailSender::Session(_)
             | collaboration_mail_protocol::MailSender::HumanUser { .. } => {
-                fleet_sync_protocol::Submitter::Machine(self.peer)
+                fleet_protocol::Submitter::Machine(self.peer)
             }
         };
         let limits = DeliveryLimits::new::<collaboration_contracts::RouterDeliveryTypes>(
@@ -297,7 +295,7 @@ impl MailOwner {
                         collaboration_contracts::RouterDeliveryTypes,
                         _,
                     >::new(scope, limits, binding.as_ref())
-                    .enqueue_and_admit::<ArrangedSubmit, fleet_sync_delivery::RemoveDeliveryRecord<ObserverStore, ObserverDatabase>>(
+                    .enqueue_and_admit::<ArrangedSubmit, fleet_mail_delivery::RemoveDeliveryRecord<ObserverStore, ObserverDatabase>>(
                         item,
                         relay,
                         submitter,
@@ -305,7 +303,7 @@ impl MailOwner {
                     )
                     .await
                     .map_err(delivery_rollback)?;
-                    if !matches!(answer, fleet_sync_delivery::OutboxAdmission::Queued { .. })
+                    if !matches!(answer, fleet_mail_delivery::OutboxAdmission::Queued { .. })
                         || admitted.is_none()
                     {
                         return Err(StoreError::backend(
@@ -327,7 +325,7 @@ impl MailOwner {
     ) -> Result<(ItemId, runtime_primitives::OperationId), TestError> {
         use durable_steps::{Task as _, storage::JournalStorage as _};
         let id = item.id();
-        let key = fleet_sync_delivery::delivery_request_key(&id)?;
+        let key = fleet_mail_delivery::delivery_request_key(&id)?;
         let admitted = self
             .mail
             .enqueue_project_item(item, epoch)
@@ -337,7 +335,7 @@ impl MailOwner {
             })?;
         if !matches!(
             admitted,
-            fleet_sync_delivery::OutboxAdmission::Queued { .. }
+            fleet_mail_delivery::OutboxAdmission::Queued { .. }
         ) {
             return Err(io::Error::other("expected fresh project custody").into());
         }

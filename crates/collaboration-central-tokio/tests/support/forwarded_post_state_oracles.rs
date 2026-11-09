@@ -5,7 +5,7 @@ use super::{
     forwarded_post_scenarios::{HOLDER_PEER, SENDER_PEER, SENDER_SESSION},
 };
 use collaboration_central_conformance::ConformanceResult;
-use fleet_sync_protocol::{ConnectionId, DatabaseId, FrameId};
+use fleet_protocol::{ConnectionId, DatabaseId, FrameId};
 use serde_json::{Value, json};
 
 pub(super) fn records<'a>(state: &'a Value, field: &str) -> ConformanceResult<&'a Vec<Value>> {

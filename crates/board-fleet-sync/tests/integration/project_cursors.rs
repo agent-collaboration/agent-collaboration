@@ -19,7 +19,7 @@ fn cursor(epoch: u64, position: u64) -> FeedCursor {
     reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
 )]
 async fn arrange_accepted_prefix(
-    database: &fleet_sync_writer::ReplicatedDatabase<board_fleet_sync::BoardProjectSchema>,
+    database: &fleet_project_writer::ReplicatedDatabase<board_fleet_sync::BoardProjectSchema>,
     project: &ProjectId,
     source: &ActorOrigin,
 ) -> Record {

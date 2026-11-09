@@ -1,7 +1,7 @@
 //! One exact typed grant can be lost at the fixture's existing Access bridge.
 use crate::FixtureResult;
 use board_sync_protocol::BoardConsumerProtocol;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientFrame, DatabaseId, Epoch, FrameId, HolderChangeAnswer, LeaseAnswer, LeaseRequest,
     OperationAnswer, OperationRequest, ReplicationPosition, RequestId, ServerFrame, SyncTime,
 };

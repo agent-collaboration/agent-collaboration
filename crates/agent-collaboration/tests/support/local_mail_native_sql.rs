@@ -109,17 +109,17 @@ pub async fn retention(owner: Arc<InteractionStore>, item: String) -> Result<Str
 
 pub async fn local_is_compacted(
     owner: Arc<InteractionStore>,
-    peer: fleet_sync_protocol::PeerId,
-    reference: fleet_sync_protocol::DeliveryItemRef,
+    peer: fleet_protocol::PeerId,
+    reference: fleet_protocol::DeliveryItemRef,
     binding: collaboration_service::MachineSenderBinding,
 ) -> Result<bool, StoreError> {
     // This read context uses PD4's limits and only the SDK's public observation methods.
     let limits =
-        fleet_sync_delivery::DeliveryLimits::new::<collaboration_contracts::RouterDeliveryTypes>(
+        fleet_mail_delivery::DeliveryLimits::new::<collaboration_contracts::RouterDeliveryTypes>(
             256 * 1024 * 1024,
             50_000,
             256 * 1024 * 1024,
-            fleet_sync_delivery::minimum_settlement_allowance::<
+            fleet_mail_delivery::minimum_settlement_allowance::<
                 collaboration_contracts::RouterDeliveryTypes,
             >()
             .map_err(StoreError::backend)?,
@@ -128,7 +128,7 @@ pub async fn local_is_compacted(
     InteractionAtomicStore::new(owner, Arc::new(SqlHost))
         .transaction(move |scope| {
             Box::pin(async move {
-                let mut inbox = fleet_sync_delivery::Inbox::<
+                let mut inbox = fleet_mail_delivery::Inbox::<
                     _,
                     collaboration_contracts::RouterDeliveryTypes,
                     _,
@@ -138,12 +138,12 @@ pub async fn local_is_compacted(
                         .local_outcome(reference.item)
                         .await
                         .map_err(StoreError::backend)?,
-                    Some(fleet_sync_protocol::RecipientOutcome::Delivered { .. })
+                    Some(fleet_protocol::RecipientOutcome::Delivered { .. })
                 ) {
                     return Ok(false);
                 }
                 match inbox.resolve_delivery(&reference).await {
-                    Err(fleet_sync_delivery::DeliveryError::CustodyMissing) => Ok(true),
+                    Err(fleet_mail_delivery::DeliveryError::CustodyMissing) => Ok(true),
                     Ok(_) => Ok(false),
                     Err(error) => Err(StoreError::backend(error)),
                 }

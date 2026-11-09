@@ -6,8 +6,8 @@ use crate::{
 };
 use board_sync_protocol::{BoardConsumerRequest, BoardDeliveryTypes, MailSubmitAnswer};
 use durable_steps::{AtomicStore, BoxFuture, StoreError, storage::TransactionScope};
-use fleet_sync_delivery::{DeliveryLimits, Outbox};
-use fleet_sync_protocol::{DatabaseId, DeliveryRefusal, SubmitResult};
+use fleet_mail_delivery::{DeliveryLimits, Outbox};
+use fleet_protocol::{DatabaseId, DeliveryRefusal, SubmitResult};
 use message_board::ServiceId;
 use runtime_primitives::Clock;
 use sqlx_core::{
@@ -24,7 +24,7 @@ pub(crate) struct AdmitMailSubmit {
     pub source: ServiceId,
     pub request: MailSubmitRequest,
     pub limits: DeliveryLimits,
-    pub relay: fleet_sync_protocol::PeerId,
+    pub relay: fleet_protocol::PeerId,
     pub clock: std::sync::Arc<dyn Clock>,
 }
 
@@ -124,19 +124,19 @@ where
                 (collaboration_mail_protocol::MailSender::Project { project }, Some(epoch)) => {
                     let database = DatabaseId::try_from(project.as_str().to_owned())
                         .map_err(StoreError::backend)?;
-                    let grant = fleet_sync_lease::epoch_holder(scope, database, epoch)
+                    let grant = fleet_project_lease::epoch_holder(scope, database, epoch)
                         .await
                         .map_err(StoreError::backend)?;
                     if !grant.is_some_and(|grant| grant.holder == session.peer) {
                         return reply(MailSubmitReply::Answer(MailSubmitAnswer::NotWriter));
                     }
-                    fleet_sync_protocol::Submitter::Project(database)
+                    fleet_protocol::Submitter::Project(database)
                 }
                 (
                     collaboration_mail_protocol::MailSender::Session(_)
                     | collaboration_mail_protocol::MailSender::HumanUser { .. },
                     None,
-                ) => fleet_sync_protocol::Submitter::Machine(session.peer),
+                ) => fleet_protocol::Submitter::Machine(session.peer),
                 (collaboration_mail_protocol::MailSender::Project { .. }, None)
                 | (
                     collaboration_mail_protocol::MailSender::Session(_)
@@ -154,14 +154,14 @@ where
                 &crate::fleet_sender_binding::FleetSenderBinding,
             );
             if recipient_revoked
-                && !fleet_sync_delivery::item_is_too_old(item.id(), now)
+                && !fleet_mail_delivery::item_is_too_old(item.id(), now)
                 && matches!(
                     outbox
                         .status(item.id())
                         .await
-                        .map_err(fleet_sync_delivery::delivery_rollback)?
+                        .map_err(fleet_mail_delivery::delivery_rollback)?
                         .state,
-                    fleet_sync_delivery::OutboxStatusState::Unknown,
+                    fleet_mail_delivery::OutboxStatusState::Unknown,
                 )
             {
                 return reply(MailSubmitReply::Answer(MailSubmitAnswer::Submitted(
@@ -178,7 +178,7 @@ where
                     crate::fleet_mail_tasks::FleetMailRemoval<Store, Driver>,
                 >(submitter, *item, self.relay, origin.installation, now)
                 .await
-                .map_err(fleet_sync_delivery::delivery_rollback)?;
+                .map_err(fleet_mail_delivery::delivery_rollback)?;
             Ok((
                 MailSubmitReply::Answer(MailSubmitAnswer::Submitted(answer)),
                 Vec::new(),

@@ -1,7 +1,7 @@
 //! StatusFetch's actual relay answer is held while the native apply transaction is blocked.
 use super::*;
 use collaboration_contracts::RouterDeliveryTypes;
-use fleet_sync_delivery::{
+use fleet_mail_delivery::{
     DeliveryLimits, Outbox, delivery_rollback, minimum_settlement_allowance,
 };
 
@@ -100,7 +100,7 @@ pub(super) async fn status_batch_child(base: &Path) -> Result<(), TestError> {
         harness
             .submit_generic(DeliveryEnvelope::Item(envelope))
             .await?,
-        fleet_sync_protocol::SubmitResult::Accepted { .. }
+        fleet_protocol::SubmitResult::Accepted { .. }
     ));
     harness.report_held(item_id).await?;
     harness.release_welcome()?;

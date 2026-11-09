@@ -1,6 +1,6 @@
 //! Independent readback of the committed attempt identities, without selecting a new one.
 use super::*;
-use fleet_sync_protocol::Epoch;
+use fleet_protocol::Epoch;
 use message_board_storage::SnapshotInstallAttempt;
 use sqlx::Connection;
 type AttemptKey = (std::path::PathBuf, ProjectId, Epoch);
@@ -30,7 +30,7 @@ pub(in crate::collaboration_runtime::board_composition) async fn attempt_record(
         Ok(SnapshotInstallAttempt {
             project: ProjectId::try_from(row.project)?,
             epoch: Epoch::new(row.epoch.parse()?)?,
-            attempt: fleet_sync_protocol::InstallAttemptId::new(uuid::Uuid::parse_str(&row.id)?)?,
+            attempt: fleet_protocol::InstallAttemptId::new(uuid::Uuid::parse_str(&row.id)?)?,
         })
     })
     .transpose()

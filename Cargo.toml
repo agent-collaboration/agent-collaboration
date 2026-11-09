@@ -1,6 +1,18 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/fleet-native-writer",
+    "crates/fleet-session-client",
+    "crates/fleet-native-session",
+    "crates/fleet-tokio-objects",
+    "crates/fleet-websocket-transport",
+    "crates/fleet-native-services",
+    "crates/fleet-project-copy",
+    "crates/fleet-project-writer",
+    "crates/fleet-project-lease",
+    "crates/fleet-mail-delivery",
+    "crates/fleet-session",
+    "crates/fleet-protocol",
     "crates/tailnet-verification-host",
     "crates/board-central-test-support",
     "crates/board-legacy-upgrade",
@@ -67,17 +79,22 @@ license = "MIT OR Apache-2.0"
 publish = false
 
 [workspace.dependencies]
-fleet-sync-protocol = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "0b2742975ca8b20270929b89f4959c1987bdb090" }
-durable-steps = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "0b2742975ca8b20270929b89f4959c1987bdb090", default-features = false }
-fleet-sync-query-gen = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "0b2742975ca8b20270929b89f4959c1987bdb090", default-features = false }
-runtime-primitives = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "0b2742975ca8b20270929b89f4959c1987bdb090", default-features = false }
-fleet-sync-lease = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "0b2742975ca8b20270929b89f4959c1987bdb090", default-features = false }
-fleet-sync-session = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "0b2742975ca8b20270929b89f4959c1987bdb090", default-features = false }
-fleet-sync-tokio-runner = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "0b2742975ca8b20270929b89f4959c1987bdb090" }
-fleet-sync-service = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "0b2742975ca8b20270929b89f4959c1987bdb090" }
-fleet-sync-receiver = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "0b2742975ca8b20270929b89f4959c1987bdb090" }
-fleet-sync-writer = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "0b2742975ca8b20270929b89f4959c1987bdb090" }
-fleet-sync-delivery = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "0b2742975ca8b20270929b89f4959c1987bdb090", default-features = false }
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "eec81ee707873b5a8b266f30e0d193c70338415e" }
+fleet-native-writer = { path = "crates/fleet-native-writer", version = "0.4.0", default-features = false }
+fleet-session-client = { path = "crates/fleet-session-client", version = "0.4.0", default-features = false }
+fleet-native-session = { path = "crates/fleet-native-session", version = "0.4.0", default-features = false }
+fleet-tokio-objects = { path = "crates/fleet-tokio-objects", version = "0.4.0", default-features = false }
+fleet-websocket-transport = { path = "crates/fleet-websocket-transport", version = "0.4.0", default-features = false }
+fleet-native-services = { path = "crates/fleet-native-services", version = "0.4.0", default-features = false }
+fleet-project-copy = { path = "crates/fleet-project-copy", version = "0.4.0", default-features = false }
+fleet-project-writer = { path = "crates/fleet-project-writer", version = "0.4.0", default-features = false }
+fleet-project-lease = { path = "crates/fleet-project-lease", version = "0.4.0", default-features = false }
+fleet-mail-delivery = { path = "crates/fleet-mail-delivery", version = "0.4.0", default-features = false }
+fleet-session = { path = "crates/fleet-session", version = "0.4.0", default-features = false }
+fleet-protocol = { path = "crates/fleet-protocol", version = "0.4.0", default-features = false }
+durable-steps = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "eec81ee707873b5a8b266f30e0d193c70338415e", default-features = false }
+fleet-sync-query-gen = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "eec81ee707873b5a8b266f30e0d193c70338415e", default-features = false }
+runtime-primitives = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "eec81ee707873b5a8b266f30e0d193c70338415e", default-features = false }
 aes-gcm = { version = "=0.11.1", features = ["zeroize"] }
 apple-native-keyring-store = { version = "=1.0.2", default-features = false, features = ["keychain"] }
 agent-client-protocol = "=2.2.0"

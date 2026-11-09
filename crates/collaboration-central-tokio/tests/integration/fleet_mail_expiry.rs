@@ -6,7 +6,7 @@ use super::{
 use board_sync_protocol::BoardDeliveryTypes;
 use collaboration_central_core::ObjectHost;
 use durable_steps::StoreError;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DeliveryAnswer, DeliveryEnvelope, DeliveryItem, DeliveryStatus, ItemStatusState, PushResult,
     StatusVersion,
 };

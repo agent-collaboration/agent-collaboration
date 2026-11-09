@@ -15,7 +15,7 @@ pub(super) struct ArchiveState {
     pub reports: Vec<Value>,
     pub projection: Option<String>,
     pub reservation: Option<ClaimReservationState>,
-    pub registry: Option<fleet_sync_lease::RegistrySnapshot>,
+    pub registry: Option<fleet_project_lease::RegistrySnapshot>,
     pub incarnations: Vec<i64>,
     pub notices: Vec<String>,
 }
@@ -41,7 +41,7 @@ pub(super) async fn inspect(
         let projection = collaboration_central_core::read_fleet_lease_projection_in_scope(scope,PROJECT.parse().map_err(StoreError::backend)?).await?;
         let row = query::<sqlx_turso::Turso>("SELECT d.project_id,r.state_kind,r.outcome FROM fleet_project_directory d LEFT JOIN lease_claim_reservations r ON r.project_id=d.project_id AND r.attempt_id=? WHERE d.project_id=?").bind(attempt.to_string()).bind(PROJECT).fetch_one(scope.executor()).await.map_err(StoreError::backend)?;
         let reservation = claim_observer::reservation_state(&row)?.map(|value|serde_json::from_value(value).map_err(StoreError::backend)).transpose()?;
-        let registry = fleet_sync_lease::registry_snapshot(scope,PROJECT.to_owned().try_into().map_err(StoreError::backend)?)
+        let registry = fleet_project_lease::registry_snapshot(scope,PROJECT.to_owned().try_into().map_err(StoreError::backend)?)
             .await.map_err(StoreError::backend)?;
         let incarnations = query::<sqlx_turso::Turso>("SELECT incarnation FROM lease_incarnation ORDER BY name")
             .fetch_all(scope.executor()).await.map_err(StoreError::backend)?.into_iter()

@@ -12,7 +12,7 @@ use durable_steps::{
     RequestKey, StoreError, Task,
     storage::{JournalStorage, OperationExecution, TransactionScope},
 };
-use fleet_sync_protocol::PeerId;
+use fleet_protocol::PeerId;
 use runtime_primitives::Clock;
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
@@ -65,14 +65,11 @@ where
                 })?,
                 move |scope| {
                     Box::pin(async move {
-                        let effects = fleet_sync_session::end_sessions::<
+                        let effects = fleet_session::end_sessions::<
                             _,
                             board_sync_protocol::BoardConsumerProtocol,
                         >(
-                            scope,
-                            &peer,
-                            fleet_sync_session::EndReason::PeerRevoked,
-                            now,
+                            scope, &peer, fleet_session::EndReason::PeerRevoked, now
                         )
                         .await
                         .map_err(StoreError::backend)?;

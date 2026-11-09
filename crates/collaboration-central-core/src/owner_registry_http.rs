@@ -14,7 +14,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use collaboration_central_admin_protocol::{OwnerOperationFailure, OwnerPreviewRefusal};
-use fleet_sync_protocol::DatabaseId;
+use fleet_protocol::DatabaseId;
 use std::sync::Arc;
 
 async fn execute<Platform: CentralPlatform>(

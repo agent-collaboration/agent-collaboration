@@ -38,8 +38,8 @@ async fn startup_refuses_non_arming_controls_before_discovery() -> ConformanceRe
             key: DispatchKey::any(collaboration_central_core::ObjectAddress::Fleet),
         },
         RuntimeControl::AwaitDroppedAnswer {
-            connection: fleet_sync_protocol::ConnectionId::new(durable_steps::Uuid::now_v7())?,
-            frame: fleet_sync_protocol::FrameId::new(durable_steps::Uuid::now_v7())?,
+            connection: fleet_protocol::ConnectionId::new(durable_steps::Uuid::now_v7())?,
+            frame: fleet_protocol::FrameId::new(durable_steps::Uuid::now_v7())?,
         },
     ] {
         let unopened = root.path().join("must-stay-unopened");

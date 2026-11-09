@@ -112,7 +112,7 @@ async fn a_failed_follow_projection_keeps_one_frozen_item_for_the_next_project_h
                 activated_at: *activated_at,
                 generation: *generation,
                 roots: roots.clone(),
-                item: fleet_sync_protocol::ItemId::new(uuid::Uuid::now_v7()).unwrap(),
+                item: fleet_protocol::ItemId::new(uuid::Uuid::now_v7()).unwrap(),
                 enrollment: crate::IntentRecipientEnrollment {
                     service: frozen[0].recipient().address.endpoint.service_id.clone(),
                     peer: frozen[0].recipient().peer,
@@ -184,7 +184,7 @@ async fn a_failed_follow_projection_keeps_one_frozen_item_for_the_next_project_h
     assert_eq!(calls, 1);
     assert!(matches!(
         sdk,
-        Some(fleet_sync_protocol::RecipientOutcome::Delivered { .. })
+        Some(fleet_protocol::RecipientOutcome::Delivered { .. })
     ));
     assert_eq!(shown.record.delivery_state, PushDeliveryState::Delivered);
     assert_eq!(
@@ -335,7 +335,7 @@ async fn a_follow_outcome_write_fault_recovers_without_a_second_native_call() {
     );
     assert!(matches!(
         sdk,
-        Some(fleet_sync_protocol::RecipientOutcome::Delivered { .. })
+        Some(fleet_protocol::RecipientOutcome::Delivered { .. })
     ));
     assert_eq!(after.record.delivery_state, PushDeliveryState::Delivered);
     assert_eq!(after.link, before.link);

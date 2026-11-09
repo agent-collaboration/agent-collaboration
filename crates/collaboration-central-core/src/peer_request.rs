@@ -9,8 +9,8 @@ use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
 use durable_steps::{
     AtomicStore, CallFailure, CallRetryReason, StoreError, storage::TransactionScope,
 };
-use fleet_sync_protocol::{FrameId, PeerId, ServerCall, ServerFrame, ServerRequest};
-use fleet_sync_session::{ConnectionRegistration, SessionKey};
+use fleet_protocol::{FrameId, PeerId, ServerCall, ServerFrame, ServerRequest};
+use fleet_session::{ConnectionRegistration, SessionKey};
 use futures_util::future::{Either, select};
 use runtime_primitives::{Clock, IdSource, WakeScheduler};
 use sqlx_core::{

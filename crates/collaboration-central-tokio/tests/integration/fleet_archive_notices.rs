@@ -40,8 +40,8 @@ async fn prepare(fixture: &Fixture) -> TestResult {
             "request":{"kind":"renew","value":{"attempt":durable_steps::Uuid::now_v7(),"database":project,"epoch":1}}
         })).await?;
         if !matches!(
-            serde_json::from_value::<fleet_sync_protocol::LeaseAnswer>(answer)?,
-            fleet_sync_protocol::LeaseAnswer::Renew(fleet_sync_protocol::RenewAnswer::Renewed {
+            serde_json::from_value::<fleet_protocol::LeaseAnswer>(answer)?,
+            fleet_protocol::LeaseAnswer::Renew(fleet_protocol::RenewAnswer::Renewed {
                 replayed: false,
                 ..
             })

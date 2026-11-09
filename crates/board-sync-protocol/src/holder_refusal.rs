@@ -1,4 +1,4 @@
-use fleet_sync_protocol as wire;
+use fleet_protocol as wire;
 use serde::{Deserialize, Deserializer, Serialize};
 
 /// Presence and renewal observations keep their original field and meaning.

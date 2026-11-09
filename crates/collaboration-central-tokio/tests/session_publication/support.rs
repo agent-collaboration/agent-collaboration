@@ -7,12 +7,12 @@ use durable_steps::{
     AtomicStore, BoxFuture, CallFailure, NotSentReason, ReborrowScope, StoreError,
     storage::TransactionScope,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientFrame, CloseReason, ConnectionId, NoConsumer, PeerId, ReceiverId, SchemaSupport,
     SessionId,
 };
-use fleet_sync_session::{Bytes, ConnectionBinding, ConnectionRegistration, VerifiedPeer};
-use fleet_sync_tokio_runner::{ObjectKey, ObjectStore, TokioObject};
+use fleet_session::{Bytes, ConnectionBinding, ConnectionRegistration, VerifiedPeer};
+use fleet_tokio_objects::{ObjectKey, ObjectStore, TokioObject};
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use sqlx_core::{query::query, row::Row};
 use std::{
@@ -257,9 +257,8 @@ impl ObjectHost for TestHost {
     }
     async fn admission_binding(
         &self,
-        connection: fleet_sync_protocol::ConnectionId,
-    ) -> Result<fleet_sync_session::ConnectionBinding, collaboration_central_core::SocketFailure>
-    {
+        connection: fleet_protocol::ConnectionId,
+    ) -> Result<fleet_session::ConnectionBinding, collaboration_central_core::SocketFailure> {
         self.native.admission_binding(connection).await
     }
     async fn admission_origin(
@@ -364,9 +363,9 @@ impl Fixture {
         let runtime = Arc::new(Runtime::fleet(
             host.clone(),
             io.clone(),
-            fleet_sync_lease::RegistryConfig {
+            fleet_project_lease::RegistryConfig {
                 authoritative_receiver: receiver,
-                lease: fleet_sync_lease::LeasePolicy {
+                lease: fleet_project_lease::LeasePolicy {
                     lease_duration: std::time::Duration::from_secs(60),
                     renew_interval: std::time::Duration::from_secs(20),
                 },

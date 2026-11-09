@@ -14,7 +14,7 @@ use collaboration_central_conformance::{ConformanceResult, RuntimeControl};
 use collaboration_central_core::ObjectAddress;
 use creation_scenarios as creation;
 use durable_steps::{CallId, Uuid};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use serde_json::{Value, json};
 use std::time::Duration;
 

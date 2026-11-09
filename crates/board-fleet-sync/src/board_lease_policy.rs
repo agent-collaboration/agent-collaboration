@@ -1,5 +1,5 @@
 //! Board lease duration and ordinary renewal cadence (U38).
-use fleet_sync_lease::LeasePolicy;
+use fleet_project_lease::LeasePolicy;
 use std::time::Duration;
 
 pub const BOARD_LEASE_POLICY: LeasePolicy = LeasePolicy {

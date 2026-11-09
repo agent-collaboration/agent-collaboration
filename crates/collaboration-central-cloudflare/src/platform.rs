@@ -73,7 +73,7 @@ impl CentralPlatform for CloudflareCentralPlatform {
     fn upgrade_session(
         &self,
         parts: http::request::Parts,
-        binding: fleet_sync_session::ConnectionBinding,
+        binding: fleet_session::ConnectionBinding,
         admission_origin: collaboration_central_core::AdmissionOrigin,
     ) -> impl Future<
         Output = Result<
@@ -114,7 +114,7 @@ impl CentralPlatform for CloudflareCentralPlatform {
                 connection: binding.connection,
                 peer: binding.peer,
                 expires_at: binding.expires_at,
-                registration: fleet_sync_session::ConnectionRegistration::Opening,
+                registration: fleet_session::ConnectionRegistration::Opening,
                 admission_origin,
             };
             let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD

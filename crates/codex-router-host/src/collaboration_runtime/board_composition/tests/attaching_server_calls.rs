@@ -3,12 +3,12 @@ use super::*;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use board_sync_protocol::BoardConsumerProtocol;
 use durable_steps::{CallId, Uuid};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientAnswer, ClientFrame, DatabaseId, Epoch, FrameId, ReleaseAnswer, ReleaseRequest,
     ServerCall, ServerCallAnswer, ServerFrame, ServerRequest, TransferId, WithdrawAnswer,
     WithdrawRelease,
 };
-use fleet_sync_session::Endpoint;
+use fleet_session::Endpoint;
 use runtime_primitives::{OperationId, StepName};
 use tokio::{net::TcpListener, sync::mpsc};
 

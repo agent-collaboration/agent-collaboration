@@ -1,7 +1,7 @@
 //! The admin workflow records completion separately from a library reservation.
 
 use board_sync_protocol::BoardAnnotation;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DatabaseId, ImportDigest, PageDigest, ReplicationPosition, RequestId, SeedId, SnapshotManifest,
     SnapshotPage,
 };
@@ -98,10 +98,10 @@ pub enum AdminProjectImportAnswer {
     Retired,
     Pending,
     CopyUnavailable {
-        reason: fleet_sync_protocol::CopyUnavailableReason,
+        reason: fleet_protocol::CopyUnavailableReason,
     },
     OutcomeUnknown {
-        reason: fleet_sync_protocol::OutcomeUnknownReason,
+        reason: fleet_protocol::OutcomeUnknownReason,
     },
     Refused(AdminImportRefusal),
 }
@@ -151,7 +151,7 @@ pub enum AdminImportRefusal {
     IdentityMismatch,
     NotPublished,
     PositionMismatch,
-    PageRefused(fleet_sync_protocol::SeedPageAnswer),
-    SeedRefused(fleet_sync_protocol::SeedAnswer),
-    CopyRefused(fleet_sync_protocol::PieceRefusal),
+    PageRefused(fleet_protocol::SeedPageAnswer),
+    SeedRefused(fleet_protocol::SeedAnswer),
+    CopyRefused(fleet_protocol::PieceRefusal),
 }

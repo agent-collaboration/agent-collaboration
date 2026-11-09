@@ -7,7 +7,7 @@ use crate::{
 };
 use board_sync_protocol::BoardAnnotation;
 use durable_steps::{StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CommitSequence, DatabaseId, Epoch, ImportDigest, ReplicationPosition, RequestId,
     SchemaIdentity, SnapshotManifest, TableDigest, TableManifest, TableName,
 };

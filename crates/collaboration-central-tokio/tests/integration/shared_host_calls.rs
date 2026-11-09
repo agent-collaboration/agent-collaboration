@@ -2,8 +2,8 @@
 
 use collaboration_central_core::{CoreHost, ObjectAddress, PlatformIo};
 use durable_steps::{CallFailure, CallId, CallTarget, Host, OperationId, StepName};
-use fleet_sync_lease::CopyRead;
-use fleet_sync_protocol::{CopyStatusAnswer, DatabaseId, ReceiverId};
+use fleet_project_lease::CopyRead;
+use fleet_protocol::{CopyStatusAnswer, DatabaseId, ReceiverId};
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use std::sync::{Arc, Mutex};
 
@@ -96,7 +96,7 @@ async fn registry_call_carries_its_bound_face_target_and_original_call_identity(
     };
     assert_eq!(
         *destination,
-        ObjectAddress::Copy(fleet_sync_protocol::DatabaseId::try_from(
+        ObjectAddress::Copy(fleet_protocol::DatabaseId::try_from(
             "019f0000-0000-7000-8000-000000000012".to_owned()
         )?)
     );

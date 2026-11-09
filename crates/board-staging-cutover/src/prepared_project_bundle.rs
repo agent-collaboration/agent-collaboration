@@ -11,7 +11,7 @@ use crate::{
 use board_sync_protocol::BoardAnnotation;
 use collaboration_central_core::AdminImportHeader;
 use fleet_admission::{FleetImportBundle, FleetImportRecord, FleetImportResult, FleetSnapshot};
-use fleet_sync_protocol::{ImportDigest, PageDigest, SnapshotManifest, SnapshotPage};
+use fleet_protocol::{ImportDigest, PageDigest, SnapshotManifest, SnapshotPage};
 use message_board::{CanonicalHash, RequestId};
 use serde::{Deserialize, Serialize};
 use std::{

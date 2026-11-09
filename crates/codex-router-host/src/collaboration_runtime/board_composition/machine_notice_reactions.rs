@@ -8,8 +8,8 @@ use board_sync_protocol::{
 use collaboration_runtime::FleetClient;
 use collaboration_service::MailDeliveryRuntime;
 use collaboration_service::ProjectAdmission;
-use fleet_sync_protocol::{NoticePosition, OperationAnswer, OperationRequest};
-use fleet_sync_tokio_runner::SessionRequests;
+use fleet_protocol::{NoticePosition, OperationAnswer, OperationRequest};
+use fleet_session_client::SessionRequests;
 use std::{
     io,
     path::Path,

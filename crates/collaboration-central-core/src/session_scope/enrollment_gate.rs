@@ -6,7 +6,7 @@ use super::{
 use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerProtocol, BoardConsumerRequest, BoardPayload, ForwardOutcome,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DeliveryAnswer, DeliveryRefusal, DeliveryRequest, GateReason, GateReasonCode,
     HolderChangeAnswer, HolderChangeRefusal, HookRefusal, HookRefusalCode, LeaseAnswer,
     LeaseRefusal, LeaseRequest, OperationAnswer, OperationRequest, PieceRefusal,

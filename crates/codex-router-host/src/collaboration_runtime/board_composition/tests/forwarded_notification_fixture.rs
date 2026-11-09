@@ -11,8 +11,8 @@ use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
 use collaboration_service::SystemSubscriptionClock;
 use durable_steps::{AtomicStore, CallFailure, StoreError};
-use fleet_sync_protocol::ItemId;
-use fleet_sync_tokio_runner::{CallEnvelope, CallRouter, TokioHost};
+use fleet_protocol::ItemId;
+use fleet_tokio_objects::{CallEnvelope, CallRouter, TokioHost};
 use interaction_storage::{InteractionAtomicStore, InteractionStore};
 use native_mail_owner::NativeMailOwner;
 use tokio::sync::Mutex;
@@ -162,7 +162,7 @@ impl HolderNotifications {
     pub async fn rows(
         &self,
     ) -> Result<
-        Vec<fleet_sync_delivery::test_support::DeliveryObservation>,
+        Vec<fleet_mail_delivery::test_support::DeliveryObservation>,
         Box<dyn std::error::Error + Send + Sync>,
     > {
         let observer = InteractionAtomicStore::new(
@@ -173,13 +173,13 @@ impl HolderNotifications {
         Ok(observer
             .transaction(move |scope| {
                 Box::pin(async move {
-                    fleet_sync_delivery::test_support::snapshot::<
+                    fleet_mail_delivery::test_support::snapshot::<
                         _,
                         collaboration_contracts::RouterDeliveryTypes,
                         _,
                     >(
                         scope,
-                        fleet_sync_delivery::DeliveryHostRole::Machine,
+                        fleet_mail_delivery::DeliveryHostRole::Machine,
                         binding.as_ref(),
                     )
                     .await

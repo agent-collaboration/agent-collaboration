@@ -1,5 +1,5 @@
 //! Remote derives keep the library's values authoritative; only names change.
-use fleet_sync_protocol as wire;
+use fleet_protocol as wire;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
@@ -161,7 +161,7 @@ pub(crate) enum CancelResultCodec {
 
 mod holder_refusal_value {
     use crate::BoardHolderChangeRefusal;
-    use fleet_sync_protocol::HolderChangeRefusal;
+    use fleet_protocol::HolderChangeRefusal;
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
     pub fn serialize<S: Serializer>(

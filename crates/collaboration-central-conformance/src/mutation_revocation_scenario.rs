@@ -152,7 +152,7 @@ async fn revoked_seed_begin_selects_no_copy_write(socket: &mut WebSocket) -> Con
     expect_refusal(socket, json!({"kind":"replication","value":{"kind":"seedBegin","value":{"database":PROJECT,"attempt":PROJECT}}}),replication_refusal()).await
 }
 fn piece() -> ConformanceResult<Value> {
-    use fleet_sync_protocol::{
+    use fleet_protocol::{
         CommitSequence, Epoch, Piece, PieceContents, ReplicatedTransaction, ReplicationPosition,
     };
     let epoch = Epoch::new(1)?;
@@ -178,14 +178,14 @@ async fn revoked_piece_selects_no_copy_write(socket: &mut WebSocket) -> Conforma
     )
     .await
 }
-fn page() -> ConformanceResult<fleet_sync_protocol::SnapshotPage> {
-    Ok(fleet_sync_protocol::SnapshotPage {
+fn page() -> ConformanceResult<fleet_protocol::SnapshotPage> {
+    Ok(fleet_protocol::SnapshotPage {
         database: PROJECT.to_owned().try_into()?,
-        position: fleet_sync_protocol::ReplicationPosition::new(
-            fleet_sync_protocol::Epoch::new(1)?,
-            fleet_sync_protocol::CommitSequence::new(0),
+        position: fleet_protocol::ReplicationPosition::new(
+            fleet_protocol::Epoch::new(1)?,
+            fleet_protocol::CommitSequence::new(0),
         ),
-        schema: fleet_sync_protocol::SchemaIdentity::new(1, "gate-fixture".into())?,
+        schema: fleet_protocol::SchemaIdentity::new(1, "gate-fixture".into())?,
         schema_steps: Vec::new(),
         table: "".into(),
         rows: Vec::new(),
@@ -194,10 +194,10 @@ fn page() -> ConformanceResult<fleet_sync_protocol::SnapshotPage> {
 }
 async fn revoked_seed_page_selects_no_copy_write(socket: &mut WebSocket) -> ConformanceResult<()> {
     let page = page()?;
-    let request = fleet_sync_protocol::SeedPage {
-        seed: fleet_sync_protocol::SeedId { generation: 1 },
+    let request = fleet_protocol::SeedPage {
+        seed: fleet_protocol::SeedId { generation: 1 },
         page: 0,
-        digest: fleet_sync_protocol::PageDigest::of_canonical(&page)?,
+        digest: fleet_protocol::PageDigest::of_canonical(&page)?,
         contents: page,
     };
     expect_refusal(

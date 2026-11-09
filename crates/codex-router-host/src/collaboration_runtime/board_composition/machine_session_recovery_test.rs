@@ -4,14 +4,14 @@ use super::*;
 use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerRequest, BoardReadPage, BoardReadScope, NoticeRead,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     AuthRefusal, ClientFrame, OperationAnswer, OperationRequest, ServerFrame, SessionId,
 };
-use fleet_sync_session::{
+use fleet_session::{
     Bytes, ClientError, ClientSessionState, ConnectFailure, ConnectionClosed, Endpoint,
     PeerCredential, SessionClientStore, SessionTransport, StoreError, TransportConnection,
 };
-use fleet_sync_tokio_runner::SessionLinkEventKind;
+use fleet_session_client::SessionLinkEventKind;
 use runtime_primitives::{Clock, SyncTime};
 use std::{collections::VecDeque, sync::Mutex};
 use tokio::time::{Instant, advance, timeout};
@@ -96,7 +96,7 @@ impl TransportConnection for ScriptedConnection {
                             .send(serde_json::to_vec(&welcome).unwrap().into())
                             .unwrap();
                         ServerFrame::Closed {
-                            reason: fleet_sync_protocol::CloseReason::ConnectionReplaced,
+                            reason: fleet_protocol::CloseReason::ConnectionReplaced,
                         }
                     }
                     HelloReply::Welcome => ServerFrame::Welcome {
@@ -104,7 +104,7 @@ impl TransportConnection for ScriptedConnection {
                         databases: Vec::new(),
                     },
                     HelloReply::Ended => ServerFrame::Closed {
-                        reason: fleet_sync_protocol::CloseReason::SessionEnded,
+                        reason: fleet_protocol::CloseReason::SessionEnded,
                     },
                     HelloReply::Silent => return Ok(()),
                 }
@@ -137,7 +137,7 @@ impl TransportConnection for ScriptedConnection {
     async fn receive(&mut self) -> Option<Result<Bytes, ConnectionClosed>> {
         self.receive.recv().await.map(Ok)
     }
-    async fn close(self, _: fleet_sync_protocol::CloseReason) {}
+    async fn close(self, _: fleet_protocol::CloseReason) {}
 }
 
 type RecoveryPump = SessionPump<ScriptedTransport, MemorySessionStore, BoardConsumerProtocol>;
@@ -249,9 +249,9 @@ async fn host_policy_stops_after_same_session_connection_replacement_without_rec
     assert!(requests.is_closed());
     assert!(matches!(
         state.borrow().status,
-        fleet_sync_tokio_runner::SessionLinkStatus::Refused {
-            reason: fleet_sync_tokio_runner::SessionDropReason::Disconnected {
-                reason: Some(fleet_sync_protocol::CloseReason::ConnectionReplaced)
+        fleet_session_client::SessionLinkStatus::Refused {
+            reason: fleet_session_client::SessionDropReason::Disconnected {
+                reason: Some(fleet_protocol::CloseReason::ConnectionReplaced)
             }
         }
     ));

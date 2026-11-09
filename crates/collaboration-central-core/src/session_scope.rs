@@ -11,8 +11,8 @@ use durable_steps::{
     StartRefusal, StoreError, SyncTime, Task, Uuid,
     storage::{JournalStorage, OperationOutcome, OperationRecord, StepRecord, TransactionScope},
 };
-use fleet_sync_protocol::{ConnectionId, PeerId, SessionId};
-use fleet_sync_session::{
+use fleet_protocol::{ConnectionId, PeerId, SessionId};
+use fleet_session::{
     ConnectionRegistration, PublishSchemaSupport, PublishSchemaSupportInput, SessionScope,
     schema_support_request_key,
 };
@@ -87,7 +87,7 @@ where
         &mut self,
         input: PublishSchemaSupportInput,
         now: SyncTime,
-    ) -> Result<(), fleet_sync_session::StoreError> {
+    ) -> Result<(), fleet_session::StoreError> {
         let key = schema_support_request_key(&input.report).map_err(session_error)?;
         self.admit::<PublishSchemaSupport<CoreSessionStore<Host, Io>, Host::Database>>(
             &key, &input,
@@ -109,8 +109,8 @@ where
         });
     }
 }
-fn session_error(error: impl std::fmt::Display) -> fleet_sync_session::StoreError {
-    fleet_sync_session::StoreError::Unavailable {
+fn session_error(error: impl std::fmt::Display) -> fleet_session::StoreError {
+    fleet_session::StoreError::Unavailable {
         message: error.to_string(),
     }
 }
@@ -133,17 +133,17 @@ where
     /// Own-stream reads remain local to the admitted frame's transaction.
     pub(crate) async fn stage_frame_effects(
         &mut self,
-        effects: Vec<fleet_sync_session::SessionEffect<board_sync_protocol::BoardConsumerProtocol>>,
+        effects: Vec<fleet_session::SessionEffect<board_sync_protocol::BoardConsumerProtocol>>,
         connection: ConnectionId,
         installation: message_board::ServiceId,
         now: SyncTime,
-        forward_frame: fleet_sync_protocol::FrameId,
+        forward_frame: fleet_protocol::FrameId,
     ) -> Result<(), StoreError> {
         use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
-        use fleet_sync_protocol::{
+        use fleet_protocol::{
             DeliveryAnswer, DeliveryRequest, OperationAnswer, OperationRequest, ServerFrame,
         };
-        use fleet_sync_session::SessionEffect;
+        use fleet_session::SessionEffect;
         for effect in effects {
             if let SessionEffect::Route {
                 session,
@@ -164,7 +164,7 @@ where
                     operation: OperationRequest::Delivery(DeliveryRequest::Report { report, .. }),
                 } => {
                     let limits = crate::fleet_outbox_limits().map_err(StoreError::backend)?;
-                    let result = fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes, _>::new(
+                    let result = fleet_mail_delivery::Outbox::<_, BoardDeliveryTypes, _>::new(
                         self,
                         limits,
                         &crate::fleet_sender_binding::FleetSenderBinding,
@@ -174,7 +174,7 @@ where
                         Host::Database,
                     >>(session.peer, report, now)
                     .await
-                    .map_err(fleet_sync_delivery::delivery_rollback)?;
+                    .map_err(fleet_mail_delivery::delivery_rollback)?;
                     self.stage_operation_answer(
                         connection,
                         frame,
@@ -187,9 +187,9 @@ where
                     operation:
                         OperationRequest::Delivery(DeliveryRequest::StatusAck { through, .. }),
                 } => {
-                    let result = fleet_sync_delivery::StatusStream::<_, BoardDeliveryTypes>::new(
+                    let result = fleet_mail_delivery::StatusStream::<_, BoardDeliveryTypes>::new(
                         self,
-                        fleet_sync_protocol::Submitter::Machine(session.peer),
+                        fleet_protocol::Submitter::Machine(session.peer),
                         installation.clone(),
                     )
                     .acknowledge(through, now)
@@ -214,13 +214,13 @@ where
                         }),
                 } => {
                     let answer =
-                        match fleet_sync_delivery::StatusStream::<_, BoardDeliveryTypes>::new(
+                        match fleet_mail_delivery::StatusStream::<_, BoardDeliveryTypes>::new(
                             self,
-                            fleet_sync_protocol::Submitter::Machine(session.peer),
+                            fleet_protocol::Submitter::Machine(session.peer),
                             installation.clone(),
                         )
                         .fetch(
-                            fleet_sync_protocol::Submitter::Machine(session.peer),
+                            fleet_protocol::Submitter::Machine(session.peer),
                             after,
                             limit,
                         )
@@ -229,7 +229,7 @@ where
                             Ok(result) => {
                                 OperationAnswer::Delivery(DeliveryAnswer::StatusFetch(result))
                             }
-                            Err(fleet_sync_delivery::DeliveryError::InvalidBatch) => {
+                            Err(fleet_mail_delivery::DeliveryError::InvalidBatch) => {
                                 OperationAnswer::InvalidShape {
                                     field: "after".into(),
                                 }
@@ -258,7 +258,7 @@ where
                     session,
                     frame,
                     answer:
-                        fleet_sync_protocol::ClientAnswer::Consumer(
+                        fleet_protocol::ClientAnswer::Consumer(
                             board_sync_protocol::BoardClientAnswer::ForwardedPost(reply),
                         ),
                 } => {
@@ -365,7 +365,7 @@ where
 {
     pub(crate) fn stage_transport(
         &mut self,
-        effects: Vec<fleet_sync_session::SessionEffect<board_sync_protocol::BoardConsumerProtocol>>,
+        effects: Vec<fleet_session::SessionEffect<board_sync_protocol::BoardConsumerProtocol>>,
         requesting_connection: Option<ConnectionId>,
     ) -> Result<(), StoreError> {
         let request_connection = || {
@@ -375,7 +375,7 @@ where
         };
         for effect in effects {
             match effect {
-                fleet_sync_session::SessionEffect::Welcome {
+                fleet_session::SessionEffect::Welcome {
                     connection,
                     peer,
                     session_id,
@@ -384,7 +384,7 @@ where
                     peer,
                     session_id,
                 }),
-                fleet_sync_session::SessionEffect::Send { connection, frame } => {
+                fleet_session::SessionEffect::Send { connection, frame } => {
                     self.transport.push(SessionTransportEffect::Frame {
                         connection,
                         bytes: serde_json::to_vec(&frame)
@@ -392,15 +392,15 @@ where
                             .into(),
                     })
                 }
-                fleet_sync_session::SessionEffect::Close { connection, reason } => self
+                fleet_session::SessionEffect::Close { connection, reason } => self
                     .transport
                     .push(SessionTransportEffect::Close { connection, reason }),
-                fleet_sync_session::SessionEffect::Route { .. } => {
+                fleet_session::SessionEffect::Route { .. } => {
                     return Err(StoreError::Aborted {
                         reason: "a non-frame session step produced an operation".into(),
                     });
                 }
-                fleet_sync_session::SessionEffect::RouteAnswer {
+                fleet_session::SessionEffect::RouteAnswer {
                     session,
                     frame,
                     answer,

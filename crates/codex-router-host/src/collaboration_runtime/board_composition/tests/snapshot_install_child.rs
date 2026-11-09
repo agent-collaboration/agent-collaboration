@@ -1,8 +1,8 @@
 //! The physical restart child shares its cold gates across both real producers.
 use super::*;
 use crate::collaboration_runtime::board_composition::BoardComposition;
-use fleet_sync_protocol::NoticePosition;
-use fleet_sync_session::SessionClientStore;
+use fleet_protocol::NoticePosition;
+use fleet_session::SessionClientStore;
 
 #[derive(Clone, Copy)]
 enum InstallProducer {
@@ -66,7 +66,7 @@ pub(super) async fn run(inputs: ChildInputs, phase: &str, board: BoardCompositio
                     let answer = projects
                         .requests
                         .request(OperationRequest::Lease(LeaseRequest::Claim {
-                            attempt: fleet_sync_protocol::RequestId::try_from(
+                            attempt: fleet_protocol::RequestId::try_from(
                                 inputs.request.request_id.as_str().to_owned(),
                             )?,
                             database: database_id,
@@ -135,7 +135,7 @@ pub(super) async fn run(inputs: ChildInputs, phase: &str, board: BoardCompositio
                         .await?
                         .is_some_and(|state| state.notice_cursor >= position)
                     {
-                        return Ok::<_, fleet_sync_session::StoreError>(());
+                        return Ok::<_, fleet_session::StoreError>(());
                     }
                     tokio::task::yield_now().await;
                 }
@@ -144,7 +144,7 @@ pub(super) async fn run(inputs: ChildInputs, phase: &str, board: BoardCompositio
             let record = observer.install_record(installed.install_id).await?;
             assert!(matches!(
                 record.status,
-                fleet_sync_tokio_runner::InstallStatus::Running { .. }
+                fleet_native_writer::InstallStatus::Running { .. }
             ));
             assert!(matches!(
                 registry.existing_project(project).await,
@@ -219,7 +219,7 @@ pub(super) async fn run(inputs: ChildInputs, phase: &str, board: BoardCompositio
             let store = timeout(BOUND, async {
                 loop {
                     if let Ok(Some(store)) = registry.existing_project(project).await
-                        && matches!(store.writer_state().await?, fleet_sync_lease::WriterState::Writing { epoch } if epoch == grant.epoch)
+                        && matches!(store.writer_state().await?, fleet_project_lease::WriterState::Writing { epoch } if epoch == grant.epoch)
                     { return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(store); }
                     tokio::task::yield_now().await;
                 }
@@ -241,7 +241,7 @@ pub(super) async fn run(inputs: ChildInputs, phase: &str, board: BoardCompositio
             let record = observer.install_record(receipt.install.install_id).await?;
             assert!(matches!(
                 record.status,
-                fleet_sync_tokio_runner::InstallStatus::Ready { .. }
+                fleet_native_writer::InstallStatus::Ready { .. }
             ));
             timeout(BOUND, projects.settle_operations()).await??;
             emit(
@@ -266,7 +266,7 @@ pub(super) async fn run(inputs: ChildInputs, phase: &str, board: BoardCompositio
 fn seed_grant(
     inputs: &ChildInputs,
     grant: &ChildGrant,
-    request_started: fleet_sync_protocol::SyncTime,
+    request_started: fleet_protocol::SyncTime,
 ) -> Result<BootstrapGrant, Box<dyn std::error::Error + Send + Sync>> {
     Ok(BootstrapGrant {
         lease: LeaseStatus {
@@ -284,7 +284,7 @@ fn seed_grant(
 pub(super) async fn open_install_record_observer(
     projects: &crate::collaboration_runtime::board_composition::project_writers::ProjectWriters,
     project: &ProjectId,
-    database: Arc<fleet_sync_writer::ReplicatedDatabase<board_fleet_sync::BoardProjectSchema>>,
+    database: Arc<fleet_project_writer::ReplicatedDatabase<board_fleet_sync::BoardProjectSchema>>,
 ) -> Result<
     NativeWriterRuntime<
         board_fleet_sync::BoardProjectSchema,

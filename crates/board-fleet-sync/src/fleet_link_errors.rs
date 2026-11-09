@@ -1,6 +1,6 @@
 //! Exhaustive mappings keep new native client failures visible at the Host boundary.
 use board_sync_protocol::FleetLinkFailureReason;
-use fleet_sync_session::{ClientError, ConnectFailure, ConnectionClosed, StoreError};
+use fleet_session::{ClientError, ConnectFailure, ConnectionClosed, StoreError};
 use runtime_primitives::WakeFailure;
 
 pub(super) fn connect_failure(error: &ConnectFailure) -> FleetLinkFailureReason {
@@ -56,14 +56,14 @@ pub(super) fn client_failure(error: &ClientError) -> FleetLinkFailureReason {
         },
         ClientError::SessionEnded => FleetLinkFailureReason::SessionEnded,
         ClientError::Revoked => FleetLinkFailureReason::CredentialRejected {
-            reason: fleet_sync_protocol::AuthRefusal::Revoked,
+            reason: fleet_protocol::AuthRefusal::Revoked,
         },
         ClientError::CredentialRejected { reason } => {
             FleetLinkFailureReason::CredentialRejected { reason: *reason }
         }
         ClientError::ReplacedByNewerSession => FleetLinkFailureReason::ReplacedByNewerSession,
         ClientError::ConnectionReplaced => FleetLinkFailureReason::SessionClosed {
-            reason: fleet_sync_protocol::CloseReason::ConnectionReplaced,
+            reason: fleet_protocol::CloseReason::ConnectionReplaced,
         },
         ClientError::StaleNoticeAcknowledgement { expected, received } => {
             FleetLinkFailureReason::StaleNoticeAcknowledgement {

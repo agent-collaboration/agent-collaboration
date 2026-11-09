@@ -4,7 +4,7 @@ use super::{
     MailHost, MailSender, RemoveMailRecord, RouterDeliveryTypes, StoreError, SubmitMailTask,
     TursoScope, WakeScheduler,
 };
-use fleet_sync_delivery::{
+use fleet_mail_delivery::{
     DeliveryTransactionFailure, Outbox, OutboxAdmission, classify_delivery_store_error,
     delivery_rollback,
 };
@@ -73,12 +73,12 @@ impl MailDeliveryRuntime {
                 DeliveryTransactionFailure::OutcomeUnknown(StoreError::backend(error))
             })?;
         let limits = self.config.limits;
-        let submitter = fleet_sync_protocol::Submitter::Project(
-            fleet_sync_protocol::DatabaseId::try_from(project.as_str().to_owned()).map_err(
-                |_| DeliveryTransactionFailure::Corrupt {
+        let submitter = fleet_protocol::Submitter::Project(
+            fleet_protocol::DatabaseId::try_from(project.as_str().to_owned()).map_err(|_| {
+                DeliveryTransactionFailure::Corrupt {
                     field: "project submitter".into(),
-                },
-            )?,
+                }
+            })?,
         );
         let now = self.clock.now();
         let read_context = collaboration_protocol::MailReadContext::Project {
@@ -203,8 +203,8 @@ pub(super) async fn record_project_custody_epoch(
         OutboxAdmission::CancelAlreadyRequested { .. } => {}
         OutboxAdmission::BindingUnavailable { reason } => {
             return Err(delivery_rollback(DeliveryError::SenderBindingUnavailable {
-                row: fleet_sync_delivery::CustodyRow::Outbox(
-                    fleet_sync_protocol::ItemId::try_from(item.as_str().to_owned())
+                row: fleet_mail_delivery::CustodyRow::Outbox(
+                    fleet_protocol::ItemId::try_from(item.as_str().to_owned())
                         .map_err(StoreError::backend)?,
                 ),
                 reason: *reason,

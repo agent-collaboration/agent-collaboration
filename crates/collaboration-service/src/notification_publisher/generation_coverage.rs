@@ -1,7 +1,7 @@
 //! Per-pass SDK evidence names immutable references; admission revalidates their board cause.
 use super::{BoardError, NotificationPublisher, ProjectId, publication_epoch_if_writable};
 use crate::mail_delivery_runtime::{FrozenCancelSettlement, RemoteCancelReplay};
-use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItemRef};
+use fleet_protocol::{DeliveryEnvelope, DeliveryItemRef};
 use message_board::{CancelExpansionSeq, MailItemRef};
 use message_board_storage::{MailCancelGroupCause, MailHandoffItem};
 

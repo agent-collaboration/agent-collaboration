@@ -1,6 +1,6 @@
 use super::fleet_outbox_limits;
 use board_sync_protocol::BoardDeliveryTypes;
-use fleet_sync_delivery::minimum_settlement_allowance;
+use fleet_mail_delivery::minimum_settlement_allowance;
 
 #[test]
 fn fleet_outbox_defaults_reserve_enough_room_to_settle_admitted_items() {

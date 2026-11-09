@@ -10,8 +10,8 @@ use durable_steps::{
     AtomicStore, BoxFuture, CallFailure, CallId, CallRetryReason, StoreError,
     storage::TransactionScope,
 };
-use fleet_sync_delivery::{PublicationRef, PublicationTarget, PublishCall, resolve_publication};
-use fleet_sync_protocol::{
+use fleet_mail_delivery::{PublicationRef, PublicationTarget, PublishCall, resolve_publication};
+use fleet_protocol::{
     ClientAnswer, DatabaseId, DeliveryFailureKind, DeliveryRefusal, PeerId, ServerCall,
     ServerCallAnswer, StatusPublication, StatusPublicationResult,
 };
@@ -35,7 +35,7 @@ enum StatusDestination {
 }
 
 type Publication =
-    StatusPublication<<BoardDeliveryTypes as fleet_sync_protocol::DeliveryTypes>::Acceptance>;
+    StatusPublication<<BoardDeliveryTypes as fleet_protocol::DeliveryTypes>::Acceptance>;
 pub(crate) type PublicationDispatcher = Arc<
     dyn Fn(
             PublishCall<BoardDeliveryTypes>,
@@ -194,14 +194,15 @@ where
         scope: &'scope mut Store::Scope<'transaction>,
     ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
         Box::pin(async move {
-            let lease = match fleet_sync_lease::lease_status(scope, self.project, self.now).await {
+            let lease = match fleet_project_lease::lease_status(scope, self.project, self.now).await
+            {
                 Ok(lease) => lease,
-                Err(fleet_sync_lease::LeaseError::Retired) => None,
+                Err(fleet_project_lease::LeaseError::Retired) => None,
                 Err(error) => return Err(StoreError::backend(error)),
             };
             Ok((
                 lease
-                    .filter(|lease| lease.state == fleet_sync_protocol::LeaseState::Held)
+                    .filter(|lease| lease.state == fleet_protocol::LeaseState::Held)
                     .map(|lease| lease.holder),
                 Vec::new(),
             ))

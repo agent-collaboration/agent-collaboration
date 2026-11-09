@@ -3,13 +3,15 @@ use super::*;
 use durable_steps::{
     AtomicStore, CallFailure, CallTarget, Engine, StoreError, storage::TransactionScope,
 };
-use fleet_sync_protocol::*;
-use fleet_sync_tokio_runner::{
-    CallEnvelope, CallRouter, InstallCoordinator, InstallFile, InstallFileRequest,
-    InstallFileResult, InstallRefusal, InstallRequest, InstallSnapshot, InstallSource,
-    InstallStatus, ObjectKey, ObjectOptions, ObjectStore, StagingStore, TokioHost, TokioObject,
+use fleet_native_writer::{
+    InstallCoordinator, InstallFile, InstallFileRequest, InstallFileResult, InstallRefusal,
+    InstallRequest, InstallSnapshot, InstallSource, InstallStatus, StagingStore,
 };
-use fleet_sync_writer::{Migration, ReplicatedDatabase, ReplicatedSchema, WriterOptions};
+use fleet_project_writer::{Migration, ReplicatedDatabase, ReplicatedSchema, WriterOptions};
+use fleet_protocol::*;
+use fleet_tokio_objects::{
+    CallEnvelope, CallRouter, ObjectKey, ObjectOptions, ObjectStore, TokioHost, TokioObject,
+};
 use sqlx::{SqlSafeStr, migrate::MigrationType};
 use std::sync::{LazyLock, OnceLock, Weak};
 
@@ -65,7 +67,7 @@ struct SchemaInstallParts {
     target: Arc<TokioObject<SchemaHost>>,
 }
 struct SchemaCopyCalls {
-    snapshot: tokio::sync::Mutex<Option<fleet_sync_writer::WriterSnapshot>>,
+    snapshot: tokio::sync::Mutex<Option<fleet_project_writer::WriterSnapshot>>,
     source: CopyStatus,
     parts: OnceLock<Weak<SchemaInstallParts>>,
 }
@@ -147,7 +149,7 @@ impl CallRouter for SchemaCopyCalls {
 async fn verified_schema_copy(
     root: &Path,
     kind: SourceSchema,
-) -> Result<(ProjectId, fleet_sync_writer::ReadCopy), Box<dyn std::error::Error + Send + Sync>> {
+) -> Result<(ProjectId, fleet_project_writer::ReadCopy), Box<dyn std::error::Error + Send + Sync>> {
     let tables = TABLES.as_ref().map_err(Clone::clone)?;
     let tables = match kind {
         SourceSchema::DifferentLayout => tables.get(..1).unwrap(),
@@ -220,7 +222,7 @@ async fn verified_schema_copy(
         .transaction(|scope| {
             Box::pin(async move {
                 let mut migrator = sqlx::migrate::Migrator::with_migrations(
-                    fleet_sync_receiver::RECEIVER_MIGRATOR
+                    fleet_project_copy::RECEIVER_MIGRATOR
                         .iter()
                         .cloned()
                         .collect::<Vec<_>>(),

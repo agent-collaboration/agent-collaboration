@@ -17,7 +17,7 @@ use crate::{
     step_driver::{StepCallback, StepDriver},
 };
 use durable_steps::{AtomicStore, BoxFuture, ReborrowScope, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{ConnectionId, PeerId, SessionId};
+use fleet_protocol::{ConnectionId, PeerId, SessionId};
 use runtime_primitives::SyncTime;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
@@ -34,8 +34,8 @@ pub(crate) struct PendingWelcome {
 pub(crate) enum SessionTransportEffect {
     InstallationRead {
         connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        frame: fleet_sync_protocol::FrameId,
+        session: fleet_session::SessionKey,
+        frame: fleet_protocol::FrameId,
         request: crate::installation_peer_reads::InstallationReadRequest,
     },
     ForwardRoute {
@@ -49,79 +49,79 @@ pub(crate) enum SessionTransportEffect {
     },
     ForwardFrame {
         connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        bytes: fleet_sync_session::Bytes,
+        session: fleet_session::SessionKey,
+        bytes: fleet_session::Bytes,
     },
     FleetRead {
         connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        frame: fleet_sync_protocol::FrameId,
+        session: fleet_session::SessionKey,
+        frame: fleet_protocol::FrameId,
         request: crate::fleet_read_calls::FleetReadRequest,
     },
     SenderMailRequest {
         connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        frame: fleet_sync_protocol::FrameId,
-        request: Box<fleet_sync_protocol::DeliveryRequest<board_sync_protocol::BoardDeliveryTypes>>,
+        session: fleet_session::SessionKey,
+        frame: fleet_protocol::FrameId,
+        request: Box<fleet_protocol::DeliveryRequest<board_sync_protocol::BoardDeliveryTypes>>,
     },
     FleetRequest {
         connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        frame: fleet_sync_protocol::FrameId,
+        session: fleet_session::SessionKey,
+        frame: fleet_protocol::FrameId,
         request: board_sync_protocol::FleetRequestEnvelope,
     },
     ArchiveReport {
         connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        frame: fleet_sync_protocol::FrameId,
+        session: fleet_session::SessionKey,
+        frame: fleet_protocol::FrameId,
         report: board_sync_protocol::ArchiveSeen,
     },
     MailSubmit {
         connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        frame: fleet_sync_protocol::FrameId,
-        item: Box<fleet_sync_protocol::DeliveryEnvelope<board_sync_protocol::BoardDeliveryTypes>>,
-        origin_epoch: Option<fleet_sync_protocol::Epoch>,
+        session: fleet_session::SessionKey,
+        frame: fleet_protocol::FrameId,
+        item: Box<fleet_protocol::DeliveryEnvelope<board_sync_protocol::BoardDeliveryTypes>>,
+        origin_epoch: Option<fleet_protocol::Epoch>,
     },
     FleetEffects {
         connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        frame: fleet_sync_protocol::FrameId,
+        session: fleet_session::SessionKey,
+        frame: fleet_protocol::FrameId,
         request: message_board::RequestEffectsRequest,
     },
     CopyWrite {
         connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        frame: fleet_sync_protocol::FrameId,
-        database: fleet_sync_protocol::DatabaseId,
+        session: fleet_session::SessionKey,
+        frame: fleet_protocol::FrameId,
+        database: fleet_protocol::DatabaseId,
         request: Box<crate::copy_write_calls::WriterCopyRequest>,
     },
     CopyRead {
         connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        frame: fleet_sync_protocol::FrameId,
-        database: fleet_sync_protocol::DatabaseId,
+        session: fleet_session::SessionKey,
+        frame: fleet_protocol::FrameId,
+        database: fleet_protocol::DatabaseId,
         request: crate::copy_read_calls::CopyReadRequest,
     },
     PeerAnswer {
         connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        frame: fleet_sync_protocol::FrameId,
-        answer: fleet_sync_protocol::ClientAnswer<board_sync_protocol::BoardConsumerProtocol>,
+        session: fleet_session::SessionKey,
+        frame: fleet_protocol::FrameId,
+        answer: fleet_protocol::ClientAnswer<board_sync_protocol::BoardConsumerProtocol>,
     },
     LeaseRequest {
         connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        frame: fleet_sync_protocol::FrameId,
-        request: fleet_sync_protocol::LeaseRequest,
+        session: fleet_session::SessionKey,
+        frame: fleet_protocol::FrameId,
+        request: fleet_protocol::LeaseRequest,
     },
     Frame {
         connection: ConnectionId,
-        bytes: fleet_sync_session::Bytes,
+        bytes: fleet_session::Bytes,
     },
     Close {
         connection: ConnectionId,
-        reason: fleet_sync_protocol::CloseReason,
+        reason: fleet_protocol::CloseReason,
     },
 }
 
@@ -212,7 +212,7 @@ where
                     || scope.edits.values().any(|registration| {
                         matches!(
                             registration,
-                            fleet_sync_session::ConnectionRegistration::Attached { .. }
+                            fleet_session::ConnectionRegistration::Attached { .. }
                         )
                     }))
             {

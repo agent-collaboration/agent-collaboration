@@ -490,13 +490,13 @@ async fn claimed_retained_holder_delivers_an_already_consumed_reinstatement_in_t
 
 fn intent_handoff_input() -> Option<crate::IntentHandoffInput> {
     Some(crate::IntentHandoffInput {
-        item: fleet_sync_protocol::ItemId::new(uuid::Uuid::now_v7()).unwrap(),
+        item: fleet_protocol::ItemId::new(uuid::Uuid::now_v7()).unwrap(),
         enrollment: crate::IntentRecipientEnrollment {
             service: crate::subscription_delivery::tests::owner_fixture::SERVICE_ID
                 .to_owned()
                 .try_into()
                 .unwrap(),
-            peer: fleet_sync_protocol::PeerId::new(
+            peer: fleet_protocol::PeerId::new(
                 uuid::Uuid::parse_str("0192a1b2-c3d4-7000-8000-000000000001").unwrap(),
             )
             .unwrap(),

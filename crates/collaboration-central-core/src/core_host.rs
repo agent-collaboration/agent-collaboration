@@ -7,11 +7,11 @@ use crate::{
     object_call_envelope::{encode_refusal, encode_shared_call},
 };
 use durable_steps::{CallFailure, CallId, CallTarget, Host, NotSentReason};
-use fleet_sync_lease::{
+use fleet_project_lease::{
     ClaimReservation, ClaimSettlement, CopyAcknowledged, CopyCreate, CopyFence, CopyRead,
     CopyRetire, HolderRelease, HolderWithdrawal, RegistrationAdmission, RetirementAdmission,
 };
-use fleet_sync_protocol::{DatabaseId, PeerId, ReceiverId};
+use fleet_protocol::{DatabaseId, PeerId, ReceiverId};
 use message_board::ServiceId;
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use serde::de::DeserializeOwned;
@@ -192,8 +192,8 @@ impl<Io: PlatformIo> CoreHost<Io> {
     pub(crate) async fn gather_welcome(
         &self,
         peer: PeerId,
-    ) -> Result<Vec<fleet_sync_protocol::DatabaseStatus>, CallFailure> {
-        use fleet_sync_protocol::{CopyStatusAnswer, CopyUnavailableReason, DatabaseStatus};
+    ) -> Result<Vec<fleet_protocol::DatabaseStatus>, CallFailure> {
+        use fleet_protocol::{CopyStatusAnswer, CopyUnavailableReason, DatabaseStatus};
         let leases = self
             .dispatch(
                 crate::session_calls::WelcomeLeases,
@@ -322,11 +322,11 @@ impl<Io: PlatformIo> CoreHost<Io> {
                         )
                     };
                 }
-                if Call::KIND == fleet_sync_session::SchemaSupportRegistry::KIND
+                if Call::KIND == fleet_session::SchemaSupportRegistry::KIND
                     || Call::KIND == crate::session_calls::WelcomeLeases::KIND
                 {
-                    let peer = if Call::KIND == fleet_sync_session::SchemaSupportRegistry::KIND {
-                        decode::<fleet_sync_protocol::ReportSchemaSupport>(request.clone())?.peer
+                    let peer = if Call::KIND == fleet_session::SchemaSupportRegistry::KIND {
+                        decode::<fleet_protocol::ReportSchemaSupport>(request.clone())?.peer
                     } else {
                         decode::<PeerId>(request.clone())?
                     };
@@ -358,22 +358,22 @@ impl<Io: PlatformIo> CoreHost<Io> {
                     }
                     CopyAcknowledged::KIND => to_copy!(
                         CopyAcknowledged,
-                        |target: &CopyAcknowledged, _: &fleet_sync_protocol::AwaitAcked| target
+                        |target: &CopyAcknowledged, _: &fleet_protocol::AwaitAcked| target
                             .database
                     ),
                     CopyFence::KIND => to_copy!(
                         CopyFence,
-                        |_: &CopyFence, request: &fleet_sync_protocol::FenceRequest| request
+                        |_: &CopyFence, request: &fleet_protocol::FenceRequest| request
                             .database
                     ),
                     CopyCreate::KIND => to_copy!(
                         CopyCreate,
-                        |_: &CopyCreate, request: &fleet_sync_protocol::CreateCopy| request
+                        |_: &CopyCreate, request: &fleet_protocol::CreateCopy| request
                             .database
                     ),
                     CopyRetire::KIND => to_copy!(
                         CopyRetire,
-                        |_: &CopyRetire, request: &fleet_sync_protocol::RetireCopy| request
+                        |_: &CopyRetire, request: &fleet_protocol::RetireCopy| request
                             .database
                     ),
                     crate::machine_enrollment::EndPeerSessions::KIND => {
@@ -388,7 +388,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
                     }
                     HolderRelease::KIND => {
                         let target: HolderRelease = decode(target)?;
-                        let request: fleet_sync_protocol::ReleaseRequest = decode(request)?;
+                        let request: fleet_protocol::ReleaseRequest = decode(request)?;
                         if target.database != request.database {
                             return Err(no_route());
                         }
@@ -469,7 +469,7 @@ impl<Io: PlatformIo> Host for CoreHost<Io> {
         identity: CallId,
     ) -> Result<Call::Answer, CallFailure> {
         if Call::KIND
-            == fleet_sync_delivery::PushCall::<board_sync_protocol::BoardDeliveryTypes>::KIND
+            == fleet_mail_delivery::PushCall::<board_sync_protocol::BoardDeliveryTypes>::KIND
             && let Some(push) = &self.push
         {
             let target = decode(serde_json::to_value(target).map_err(encode_refusal)?)?;
@@ -480,7 +480,7 @@ impl<Io: PlatformIo> Host for CoreHost<Io> {
         if Call::KIND == RegistrationAdmission::KIND {
             let _: RegistrationAdmission =
                 decode(serde_json::to_value(&target).map_err(encode_refusal)?)?;
-            let admission: fleet_sync_protocol::RegistrationAdmission =
+            let admission: fleet_protocol::RegistrationAdmission =
                 decode(serde_json::to_value(&request).map_err(encode_refusal)?)?;
             let answer = self.admit_registration(admission, identity).await?;
             return decode(serde_json::to_value(answer).map_err(encode_refusal)?);
@@ -488,22 +488,22 @@ impl<Io: PlatformIo> Host for CoreHost<Io> {
         if Call::KIND == ClaimSettlement::KIND {
             let _: ClaimSettlement =
                 decode(serde_json::to_value(&target).map_err(encode_refusal)?)?;
-            let settlement: fleet_sync_protocol::ClaimSettlement =
+            let settlement: fleet_protocol::ClaimSettlement =
                 decode(serde_json::to_value(&request).map_err(encode_refusal)?)?;
             if matches!(
                 settlement.outcome,
-                fleet_sync_protocol::SettleOutcome::Granted { .. }
+                fleet_protocol::SettleOutcome::Granted { .. }
             ) {
                 return decode(self.settle_granted_claim(settlement, identity).await?);
             }
         }
-        if Call::KIND == fleet_sync_receiver::FollowUpCall::<crate::CopyDirectorySummary>::KIND {
+        if Call::KIND == fleet_project_copy::FollowUpCall::<crate::CopyDirectorySummary>::KIND {
             let target = serde_json::to_value(target).map_err(encode_refusal)?;
             let request = serde_json::to_value(request).map_err(encode_refusal)?;
             return decode(self.copy_follow_up(target, request, identity).await?);
         }
         if Call::KIND
-            == fleet_sync_delivery::PublishCall::<board_sync_protocol::BoardDeliveryTypes>::KIND
+            == fleet_mail_delivery::PublishCall::<board_sync_protocol::BoardDeliveryTypes>::KIND
             && let Some(publication) = &self.publication
         {
             let target = decode(serde_json::to_value(target).map_err(encode_refusal)?)?;

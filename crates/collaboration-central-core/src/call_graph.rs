@@ -1,6 +1,6 @@
 //! The only synchronous object edges. Rank checks and wire checks share this table.
 use crate::{FleetCall, FleetResult, ObjectAddress, RegistryCall, RegistryResult};
-use fleet_sync_protocol::DatabaseId;
+use fleet_protocol::DatabaseId;
 use message_board::ServiceId;
 use serde::{Deserialize, Serialize};
 

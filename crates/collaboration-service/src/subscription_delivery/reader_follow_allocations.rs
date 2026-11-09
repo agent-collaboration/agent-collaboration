@@ -120,7 +120,7 @@ impl ReaderDeliveryOwner {
                 activated_at: proposal.activated_at,
                 generation: proposal.generation,
                 roots: proposal.roots,
-                item: fleet_sync_protocol::ItemId::new(uuid::Uuid::now_v7())
+                item: fleet_protocol::ItemId::new(uuid::Uuid::now_v7())
                     .map_err(|_| BoardError::board_unavailable())?,
                 enrollment: enrollment.clone(),
                 preventions: proposal.preventions,

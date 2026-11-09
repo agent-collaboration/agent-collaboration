@@ -1,5 +1,5 @@
-use fleet_sync_protocol::{SchemaIdentity, TableName, TextValueError};
-use fleet_sync_writer::{Migration, ReplicatedSchema};
+use fleet_project_writer::{Migration, ReplicatedSchema};
+use fleet_protocol::{SchemaIdentity, TableName, TextValueError};
 use std::sync::LazyLock;
 
 static REPLICATED_TABLES: LazyLock<Result<Vec<TableName>, TextValueError>> = LazyLock::new(|| {

@@ -1,7 +1,7 @@
 //! Presence records verified admission, independently of a lease renewal.
 use super::*;
 use durable_steps::CallTarget;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use serde_json::json;
 use std::sync::atomic::{AtomicI64, Ordering};
 
@@ -60,7 +60,7 @@ fn runtime(fixture: &Fixture, clock: &PresenceIo) -> TestResult<PresenceRuntime>
         clock.clone(),
         config()?,
         collaboration_central_tokio::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
+            relay_peer: fleet_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },
@@ -103,7 +103,7 @@ async fn report(
     let bytes = invoke(
         runtime,
         service,
-        fleet_sync_session::SchemaSupportRegistry::KIND,
+        fleet_session::SchemaSupportRegistry::KIND,
         serde_json::to_value(report)?,
     )
     .await?;
@@ -232,7 +232,7 @@ async fn only_a_new_verified_admission_sets_presence_and_a_renewal_does_not() ->
         ));
     }
     let bytes=invoke(&registry,&request.installation,"central.session-lease",json!({
-        "session":fleet_sync_session::SessionKey {peer:request.peer,session_id:next.session_id},
+        "session":fleet_session::SessionKey {peer:request.peer,session_id:next.session_id},
         "request":LeaseRequest::Renew(RenewRequest {attempt:RequestId::new(durable_steps::Uuid::now_v7())?,database,epoch:Epoch::new(1)?})
     })).await?;
     assert!(

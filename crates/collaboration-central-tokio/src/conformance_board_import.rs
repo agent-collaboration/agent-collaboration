@@ -5,9 +5,9 @@ impl NativeObjects {
         self: &Arc<Self>,
         owner: collaboration_central_core::OwnerIdentity,
         state: collaboration_central_core::ConformanceBoardState,
-        pages: Vec<fleet_sync_protocol::SnapshotPage>,
-        manifest: fleet_sync_protocol::SnapshotManifest,
-    ) -> Result<fleet_sync_protocol::ReplicationPosition, StoreError> {
+        pages: Vec<fleet_protocol::SnapshotPage>,
+        manifest: fleet_protocol::SnapshotManifest,
+    ) -> Result<fleet_protocol::ReplicationPosition, StoreError> {
         let slot = self.slot(ObjectAddress::Fleet).await?;
         let runtime = slot
             .runtime

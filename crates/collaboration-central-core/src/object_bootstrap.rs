@@ -94,12 +94,12 @@ impl EngineSchema {
     }
     fn migrations(self) -> Vec<&'static sqlx_core::migrate::Migration> {
         match self {
-            Self::Registry => fleet_sync_lease::LEASE_MIGRATOR.sql_migrations().collect(),
-            Self::Copy => fleet_sync_receiver::RECEIVER_MIGRATOR.iter().collect(),
-            Self::Session => fleet_sync_session::SESSION_MIGRATOR
+            Self::Registry => fleet_project_lease::LEASE_MIGRATOR
                 .sql_migrations()
                 .collect(),
-            Self::Delivery => fleet_sync_delivery::DELIVERY_MIGRATOR.iter().collect(),
+            Self::Copy => fleet_project_copy::RECEIVER_MIGRATOR.iter().collect(),
+            Self::Session => fleet_session::SESSION_MIGRATOR.sql_migrations().collect(),
+            Self::Delivery => fleet_mail_delivery::DELIVERY_MIGRATOR.iter().collect(),
             Self::Fleet => FLEET_MIGRATIONS.iter().collect(),
         }
     }
@@ -190,9 +190,9 @@ where
                 None => CopyMigrationResult::Failed {
                     corpus: EngineSchema::Copy.corpus().into(),
                     version: None,
-                    reason: match fleet_sync_receiver::classify_copy_store_error(error.clone()) {
-                        fleet_sync_receiver::CopyTransactionFailure::Unavailable(
-                            fleet_sync_protocol::CopyUnavailableReason::Damaged { detail },
+                    reason: match fleet_project_copy::classify_copy_store_error(error.clone()) {
+                        fleet_project_copy::CopyTransactionFailure::Unavailable(
+                            fleet_protocol::CopyUnavailableReason::Damaged { detail },
                         ) => detail,
                         _ => error.to_string(),
                     },
@@ -260,9 +260,9 @@ where
             )
             .await?;
             if self.schema == EngineSchema::Delivery {
-                fleet_sync_delivery::retire_relay_host_tables(scope)
+                fleet_mail_delivery::retire_relay_host_tables(scope)
                     .await
-                    .map_err(fleet_sync_delivery::delivery_rollback)?;
+                    .map_err(fleet_mail_delivery::delivery_rollback)?;
             }
             let mut count = primary.count;
             if self.schema == EngineSchema::Copy {
@@ -270,14 +270,14 @@ where
                     runtime_primitives::SyncTime::from_unix_millis(0),
                     None,
                 )?;
-                fleet_sync_receiver::initialize_hook(scope, &rules)
+                fleet_project_copy::initialize_hook(scope, &rules)
                     .await
                     .map_err(|error| {
                         crate::migration_failure::MigrationFailure::rollback(
                             crate::copy_receiver_rules::COPY_SUMMARY_CORPUS,
                             crate::copy_receiver_rules::COPY_SUMMARY_VERSION,
                             self.now,
-                            fleet_sync_receiver::receiver_rollback(error),
+                            fleet_project_copy::receiver_rollback(error),
                         )
                     })?;
                 generated_bootstrap::clear_migration_failure(
@@ -523,10 +523,10 @@ where
         }
         // Validate legacy domain rows after their old corpus prefix, before typed DDL consumes them.
         let validated = match (corpus, migration.version) {
-            ("fleet-sync-lease", 5 | 6) => fleet_sync_lease::validate_legacy_rows(scope)
+            ("fleet-sync-lease", 5 | 6) => fleet_project_lease::validate_legacy_rows(scope)
                 .await
                 .map_err(|error| error.to_string()),
-            ("fleet-sync-session", 202611030001) => fleet_sync_session::validate_legacy_rows(scope)
+            ("fleet-sync-session", 202611030001) => fleet_session::validate_legacy_rows(scope)
                 .await
                 .map_err(|error| error.to_string()),
             _ => Ok(()),
@@ -612,8 +612,8 @@ fn corrupt(message: &str) -> StoreError {
 }
 
 fn bootstrap_sql_error(error: sqlx_core::Error) -> StoreError {
-    fleet_sync_receiver::receiver_rollback(fleet_sync_receiver::ReceiverError::Storage(
-        fleet_sync_receiver::classify_sqlx_error(error),
+    fleet_project_copy::receiver_rollback(fleet_project_copy::ReceiverError::Storage(
+        fleet_project_copy::classify_sqlx_error(error),
     ))
 }
 
@@ -652,8 +652,8 @@ where
             // Retired is observed inside the same transaction, before even
             // migration-history DDL; the minimal receipt is left unchanged.
             if matches!(
-                fleet_sync_receiver::inspect_copy(scope).await,
-                fleet_sync_receiver::CopyInspection::Retired { .. }
+                fleet_project_copy::inspect_copy(scope).await,
+                fleet_project_copy::CopyInspection::Retired { .. }
             ) {
                 return Ok((CopyMigrationResult::Retired, Vec::new()));
             }

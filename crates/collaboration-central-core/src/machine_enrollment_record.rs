@@ -2,7 +2,7 @@
 use crate::{AccessClientId, AdmissionOrigin, generated_enrollment as queries};
 use chrono::{DateTime, Utc};
 use durable_steps::{OperationId, StoreError};
-use fleet_sync_protocol::PeerId;
+use fleet_protocol::PeerId;
 use message_board::{MachineLabel, ServiceId};
 use runtime_primitives::SyncTime;
 #[cfg(feature = "conformance")]

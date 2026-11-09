@@ -5,7 +5,7 @@ use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::storage::TransactionScope;
 use durable_steps::{AtomicStore, BoxFuture, CallFailure, CallId, CallTarget, Host, StoreError};
 use fleet_admission::FleetRequestResult;
-use fleet_sync_tokio_runner::{ObjectKey, ObjectOptions, ObjectStore, TokioObject};
+use fleet_tokio_objects::{ObjectKey, ObjectOptions, ObjectStore, TokioObject};
 use message_board::*;
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use sqlx_core::{query::query, row::Row};
@@ -399,33 +399,32 @@ impl ObjectHost for HeldHost {
     ) -> Result<Output, collaboration_central_core::LocalSectionFailure> {
         self.native.with_local_section(run).await
     }
-    async fn quarantine_connections(&self, connections: Vec<fleet_sync_protocol::ConnectionId>) {
+    async fn quarantine_connections(&self, connections: Vec<fleet_protocol::ConnectionId>) {
         self.native.quarantine_connections(connections).await;
     }
     async fn send_frame(
         &self,
-        to: fleet_sync_protocol::ConnectionId,
-        frame: fleet_sync_session::Bytes,
+        to: fleet_protocol::ConnectionId,
+        frame: fleet_session::Bytes,
     ) -> Result<(), collaboration_central_core::SocketFailure> {
         self.native.send_frame(to, frame).await
     }
     async fn close_connection(
         &self,
-        to: fleet_sync_protocol::ConnectionId,
-        reason: fleet_sync_protocol::CloseReason,
+        to: fleet_protocol::ConnectionId,
+        reason: fleet_protocol::CloseReason,
     ) -> Result<(), collaboration_central_core::SocketFailure> {
         self.native.close_connection(to, reason).await
     }
     async fn admission_binding(
         &self,
-        connection: fleet_sync_protocol::ConnectionId,
-    ) -> Result<fleet_sync_session::ConnectionBinding, collaboration_central_core::SocketFailure>
-    {
+        connection: fleet_protocol::ConnectionId,
+    ) -> Result<fleet_session::ConnectionBinding, collaboration_central_core::SocketFailure> {
         self.native.admission_binding(connection).await
     }
     async fn admission_origin(
         &self,
-        connection: fleet_sync_protocol::ConnectionId,
+        connection: fleet_protocol::ConnectionId,
     ) -> Result<
         collaboration_central_core::AdmissionOrigin,
         collaboration_central_core::SocketFailure,
@@ -444,7 +443,7 @@ impl ObjectHost for HeldHost {
         &self,
         edits: collaboration_central_core::RegistrationEdits,
     ) -> Vec<(
-        fleet_sync_protocol::ConnectionId,
+        fleet_protocol::ConnectionId,
         collaboration_central_core::SocketFailure,
     )> {
         self.native.publish_registrations(edits).await

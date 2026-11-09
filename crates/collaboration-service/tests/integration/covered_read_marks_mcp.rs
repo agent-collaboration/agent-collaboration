@@ -112,8 +112,8 @@ async fn too_new_schema_is_refused_unchanged_and_mismatched_schema_keeps_readabl
             match fixture._registry.existing_project(&project).await {
                 Err(collaboration_runtime::ProjectRegistryError::Storage(
                     message_board_storage::ProjectStorageError::Writer(
-                        fleet_sync_writer::OpenError::SchemaUnsupported {
-                            form: fleet_sync_writer::SchemaForm::SchemaTooNew { .. },
+                        fleet_project_writer::OpenError::SchemaUnsupported {
+                            form: fleet_project_writer::SchemaForm::SchemaTooNew { .. },
                         },
                     ),
                 )) => {}
@@ -166,9 +166,7 @@ async fn too_new_schema_is_refused_unchanged_and_mismatched_schema_keeps_readabl
 )]
 async fn an_expired_project_still_returns_the_read_and_never_allocates_a_mark()
 -> Result<(), TestError> {
-    use fleet_sync_protocol::{
-        DatabaseId, Epoch, LeaseState, LeaseStatus, RenewAnswer, RenewResult,
-    };
+    use fleet_protocol::{DatabaseId, Epoch, LeaseState, LeaseStatus, RenewAnswer, RenewResult};
     use runtime_primitives::{Clock, SystemClock};
     for scenario in ["pastExpiry", "pastDeadline"] {
         let clock = std::sync::Arc::new(board_fixture::controlled_clock::ControlledClock::at(
@@ -217,7 +215,7 @@ async fn an_expired_project_still_returns_the_read_and_never_allocates_a_mark()
         clock.set(started.after(std::time::Duration::from_secs(120)));
         assert!(matches!(
             database.writer_state().await?,
-            fleet_sync_lease::WriterState::Paused { .. }
+            fleet_project_lease::WriterState::Paused { .. }
         ));
         let view = fixture
             .api
@@ -271,11 +269,9 @@ async fn superseded_project_reads_are_unavailable_and_allocate_no_mark() -> Resu
         .database(&project)
         .await?
         .observe_renewal(
-            fleet_sync_protocol::RenewAnswer::Refused(
-                fleet_sync_protocol::LeaseRefusal::NotWriter {
-                    current: Some(fleet_sync_protocol::Epoch::new(2)?),
-                },
-            ),
+            fleet_protocol::RenewAnswer::Refused(fleet_protocol::LeaseRefusal::NotWriter {
+                current: Some(fleet_protocol::Epoch::new(2)?),
+            }),
             runtime_primitives::SystemClock.now(),
         )
         .await?;

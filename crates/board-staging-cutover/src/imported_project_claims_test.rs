@@ -12,7 +12,7 @@ use codex_router_secret_store::{
     fleet_secret_key::{FleetSecretKey, FleetSecretKind},
 };
 use fleet_admission::{FleetImportBundle, FleetImportRecord, ImportProvenance, ImportedBoardState};
-use fleet_sync_protocol::{PeerId, ReceiverId};
+use fleet_protocol::{PeerId, ReceiverId};
 use message_board::ActorOrigin;
 use std::os::unix::fs::PermissionsExt;
 use url::Url;

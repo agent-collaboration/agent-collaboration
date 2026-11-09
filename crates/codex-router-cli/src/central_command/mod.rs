@@ -66,8 +66,8 @@ pub(crate) async fn run_central_command(
                     root: root.join("objects"),
                     jwks_url: config.policy.jwks_url.clone(),
                     access_policy: config.policy,
-                    registry: fleet_sync_lease::RegistryConfig {
-                        lease: fleet_sync_lease::LeasePolicy {
+                    registry: fleet_project_lease::RegistryConfig {
+                        lease: fleet_project_lease::LeasePolicy {
                             lease_duration: Duration::from_secs(14400),
                             renew_interval: Duration::from_secs(900),
                         },

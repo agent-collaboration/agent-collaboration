@@ -5,11 +5,11 @@ use board_fixture::{BoardFixture, TestError, accepted};
 use board_fleet_sync::{BoardCaptureBookkeeping, BoardPieceAnnotation};
 use board_sync_protocol::{BoardAnnotation, BoardConsumerProtocol};
 use durable_steps::{CallFailure, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{CopyRole, InstallId, Piece, ReceiverId, ReplicationAnswer};
-use fleet_sync_tokio_runner::{CallEnvelope, CallRouter, TokioHost};
-use fleet_sync_writer::{
+use fleet_project_writer::{
     ReplicationSender, ReplicationTransport, SendFailure, SenderError, SenderOptions,
 };
+use fleet_protocol::{CopyRole, InstallId, Piece, ReceiverId, ReplicationAnswer};
+use fleet_tokio_objects::{CallEnvelope, CallRouter, TokioHost};
 use message_board::{EpochNumber, FeedCursor, ProjectId, TaskId, WorkstreamId};
 use runtime_primitives::SystemClock;
 use serde_json::{Value, json};

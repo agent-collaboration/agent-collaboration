@@ -1,7 +1,7 @@
 //! Real admission writes bind intent state and frozen mail under one native guard.
 use super::subscription_fixture::*;
 use crate::{IntentHandoffInput, IntentRecipientEnrollment, IntentReply, ProjectAdmissionError};
-use fleet_sync_protocol::{DeliveryEnvelope, ItemId, PeerId};
+use fleet_protocol::{DeliveryEnvelope, ItemId, PeerId};
 use message_board::*;
 use message_board_storage::{MailHandoffItem, ProjectStorageError};
 use sqlx::{ConnectOptions, Connection};

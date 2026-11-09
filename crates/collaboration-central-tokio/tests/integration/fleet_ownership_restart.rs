@@ -2,8 +2,8 @@
 use super::composed_fleet_fixture::*;
 use collaboration_central_core::ObjectHost;
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{ClientFrame, ConnectionId, SchemaSupport, SessionId};
-use fleet_sync_session::{ConnectionBinding, VerifiedPeer};
+use fleet_protocol::{ClientFrame, ConnectionId, SchemaSupport, SessionId};
+use fleet_session::{ConnectionBinding, VerifiedPeer};
 use serde_json::{Value, json};
 use sqlx_core::{query::query, row::Row};
 use std::{collections::BTreeSet, sync::atomic::Ordering};
@@ -134,7 +134,7 @@ async fn one_fleet_dispatcher_recovers_holder_change_feed_notice_and_schema_supp
         ConnectionId::new(durable_steps::Uuid::now_v7())?,
         VerifiedPeer {
             peer: Fixture::peer()?,
-            expires_at: fleet_sync_protocol::SyncTime::from_unix_millis(NOW + 60_000),
+            expires_at: fleet_protocol::SyncTime::from_unix_millis(NOW + 60_000),
         },
     );
     let mut socket = fixture

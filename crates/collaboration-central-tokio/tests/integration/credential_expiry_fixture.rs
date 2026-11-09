@@ -3,7 +3,7 @@
 use super::{fixture, reconnect_unrelated_installation};
 use collaboration_central_conformance::{ConformanceResult, access_client_id, owner_assertion};
 use collaboration_central_core::EnrollmentDecision;
-use fleet_sync_protocol::PeerId;
+use fleet_protocol::PeerId;
 use serde_json::json;
 
 pub(super) async fn retain_unrelated_credential(

@@ -7,12 +7,12 @@ use super::{
 use board_sync_protocol::BoardDeliveryBody;
 use collaboration_mail_protocol::NotificationSource;
 use collaboration_protocol::{DeliveryOutcome, PushDeliveryState};
-use fleet_sync_protocol::DeliveryEnvelope;
+use fleet_protocol::DeliveryEnvelope;
 use message_board_storage::MailHandoffItem;
 
 struct FrozenMemberAllocation {
     sequence: HandoffSeq,
-    item: fleet_sync_protocol::ItemId,
+    item: fleet_protocol::ItemId,
     recipient: collaboration_protocol::SessionRef,
     mode: SubscriptionMode,
 }

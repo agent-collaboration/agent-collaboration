@@ -8,11 +8,11 @@ use super::{
 use super::{CarrierAcceptance, DeliveryError, DeliveryItemRef, ItemId, RecipientOutcome};
 use crate::push_record_delivery::PushDeliveryFailure;
 use collaboration_protocol::{MailItemId, MessageSendResult};
-use fleet_sync_delivery::{
+use fleet_mail_delivery::{
     DeliveryAttempt, DeliveryTransactionFailure, LocalItemAdmission, classify_delivery_store_error,
     delivery_request_key, delivery_rollback,
 };
-use fleet_sync_protocol::DeliveryRefusal;
+use fleet_protocol::DeliveryRefusal;
 use interaction_storage::{
     insert_mail_push_in_scope, read_message_send_answer_in_scope, record_message_send_admission,
 };
@@ -35,9 +35,9 @@ impl MailDeliveryRuntime {
             .transaction(move |scope| {
                 Box::pin(async move {
                     let rows =
-                        fleet_sync_delivery::test_support::snapshot::<_, RouterDeliveryTypes, _>(
+                        fleet_mail_delivery::test_support::snapshot::<_, RouterDeliveryTypes, _>(
                             scope,
-                            fleet_sync_delivery::DeliveryHostRole::Machine,
+                            fleet_mail_delivery::DeliveryHostRole::Machine,
                             binding.as_ref(),
                         )
                         .await

@@ -17,10 +17,10 @@ use durable_steps::{
     OperationContext, OperationFailure, OperationId, RequestKey, StoreError, Task,
     storage::TransactionScope,
 };
-use fleet_sync_lease::{
+use fleet_project_lease::{
     CopyAcknowledged, CopyCreate, CopyFence, CopyRead, CopyRetire, HolderRelease,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     AwaitAcked, AwaitAckedAnswer, CopyStatusAnswer, CreateCopy, CreateCopyAnswer, DatabaseId,
     FenceRequest, FenceResult, PeerId, ReceiverId, ReleaseAnswer, ReleaseRequest, RequestId,
     RetireCopy, RetireCopyAnswer,

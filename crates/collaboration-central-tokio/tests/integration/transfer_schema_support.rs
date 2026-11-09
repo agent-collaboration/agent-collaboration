@@ -22,7 +22,7 @@ use collaboration_central_core::{ObjectAddress, RegistryTime};
 use collaboration_central_tokio::{TokioServer, TokioSettings};
 use creation_scenarios as creation;
 use durable_steps::Uuid;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use futures_util::{SinkExt, StreamExt};
 use reqwest_websocket::{Message, RequestBuilderExt, WebSocket};
 use serde_json::json;

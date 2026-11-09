@@ -4,9 +4,9 @@ use board_sync_protocol::{
     FleetLinkRefusal, FleetLinkState,
 };
 use chrono::{DateTime, Utc};
-use fleet_sync_protocol::{AuthRefusal, CloseReason};
-use fleet_sync_session::StoreError;
-use fleet_sync_tokio_runner::{
+use fleet_protocol::{AuthRefusal, CloseReason};
+use fleet_session::StoreError;
+use fleet_session_client::{
     SessionConnectFailureKind, SessionDropReason, SessionLinkEvent, SessionLinkEventKind,
     SessionLinkState, SessionLinkStatus,
 };

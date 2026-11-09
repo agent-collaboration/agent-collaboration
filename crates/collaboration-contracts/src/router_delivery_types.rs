@@ -1,7 +1,7 @@
 //! Router-local evidence changes no board delivery payload or wire identity.
 use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
 use collaboration_protocol::{DeliveryReceipt, ProviderAcpRouteEvidence};
-use fleet_sync_protocol::{ConsumerProtocol, DeliveryTypes};
+use fleet_protocol::{ConsumerProtocol, DeliveryTypes};
 use runtime_primitives::SyncTime;
 use serde::{Deserialize, Serialize};
 

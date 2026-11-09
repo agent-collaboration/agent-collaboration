@@ -5,11 +5,11 @@ use board_sync_protocol::{
     VerifiedForwardedPost,
 };
 use collaboration_service::{MailDeliveryRuntime, NotificationPublisher, ProjectAdmission};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientAnswer, FrameId, ReleaseAnswer, ReleaseRefusal, ServerCall, ServerCallAnswer,
     ServerRequest, WithdrawAnswer,
 };
-use fleet_sync_tokio_runner::SessionRequests;
+use fleet_session_client::SessionRequests;
 use message_board::{BoardOperation, ProjectId, ProjectRequest};
 use std::{
     io,
@@ -39,8 +39,8 @@ pub(super) async fn answer_server_call(
             #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
             if matches!(
                 &receipt,
-                fleet_sync_protocol::PushResult::Accepted { .. }
-                    | fleet_sync_protocol::PushResult::Replayed { .. }
+                fleet_protocol::PushResult::Accepted { .. }
+                    | fleet_protocol::PushResult::Replayed { .. }
             ) {
                 crate::debug_runtime_barrier::wait_at_socket(
                     "CODEX_ROUTER_DEBUG_INBOX_ACCEPTED_BARRIER_SOCKET",
@@ -141,7 +141,7 @@ pub(super) async fn answer_server_call(
                 .answer(
                     frame,
                     ClientAnswer::Crate(ServerCallAnswer::Published(
-                        fleet_sync_protocol::StatusPublicationResult::Applied,
+                        fleet_protocol::StatusPublicationResult::Applied,
                     )),
                 )
                 .await
@@ -155,7 +155,7 @@ fn superseded_release_answer(
 ) -> io::Result<Option<ReleaseAnswer>> {
     current
         .map(|epoch| {
-            let current = fleet_sync_protocol::Epoch::new(epoch.get()).map_err(io::Error::other)?;
+            let current = fleet_protocol::Epoch::new(epoch.get()).map_err(io::Error::other)?;
             Ok(ReleaseAnswer::ReleaseRefused(ReleaseRefusal::Superseded {
                 current,
             }))
@@ -200,7 +200,7 @@ mod tests {
     )]
     fn superseded_release_requires_the_actual_successor_and_never_guesses_one()
     -> Result<(), Box<dyn std::error::Error>> {
-        let current = fleet_sync_protocol::Epoch::new(7)?;
+        let current = fleet_protocol::Epoch::new(7)?;
         assert_eq!(superseded_release_answer(None)?, None);
         assert_eq!(
             superseded_release_answer(Some(message_board::EpochNumber::try_from(7)?))?,

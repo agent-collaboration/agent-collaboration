@@ -22,7 +22,7 @@ pub struct ProjectImportBatch {
 
 pub async fn apply_project_import(
     project: ProjectId,
-    transaction: fleet_sync_writer::WriteTransaction,
+    transaction: fleet_project_writer::WriteTransaction,
     provenance: fleet_admission::ImportProvenance,
     row_keys: Arc<dyn ImportRowKeys>,
     batch: ProjectImportBatch,

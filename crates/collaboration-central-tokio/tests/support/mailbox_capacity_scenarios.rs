@@ -7,8 +7,8 @@ use super::{
 };
 use board_sync_protocol::BoardDeliveryTypes;
 use collaboration_central_conformance::ConformanceResult;
-use fleet_sync_delivery::DeliveryLimits;
-use fleet_sync_protocol::{
+use fleet_mail_delivery::DeliveryLimits;
+use fleet_protocol::{
     CancelBody, DeliveryCancel, DeliveryEnvelope, DeliveryRefusal, ItemId, PeerId, PushResult,
     ServerCall, Submitter,
 };
@@ -49,7 +49,7 @@ pub(super) async fn run(base: &str) -> ConformanceResult<()> {
         let full=DeliveryLimits::new::<BoardDeliveryTypes>(1_000_000,
 100,
 used,
-fleet_sync_delivery::minimum_settlement_allowance::<BoardDeliveryTypes>()?,)?;
+fleet_mail_delivery::minimum_settlement_allowance::<BoardDeliveryTypes>()?,)?;
         if pair.submit(&rejected).await?.pointer("/value/value/value/kind")!=Some(&json!("accepted")) {return Err("Fleet refused before recipient capacity could be exercised".into());}
         let (frame,ServerCall::Push {submitter,item:offered,..})=next_push(&mut pair.recipient.socket).await? else {return Err("new item not pushed to full Inbox".into());};
         if submitter!=claim||serde_json::to_vec(&offered)?!=serde_json::to_vec(&rejected)? {return Err("capacity request changed sender/body".into());}
@@ -69,7 +69,7 @@ fleet_sync_delivery::minimum_settlement_allowance::<BoardDeliveryTypes>()?,)?;
         pushed(&mut pair.recipient.socket,frame,receipt).await?;
         for item in [original.id(),cancel.id()] {
             let report=inbox.report(item).await?;
-            if !matches!(report.outcome,fleet_sync_protocol::RecipientOutcome::Prevented {cancel:actual} if actual==cancel.id()) {return Err("real cancellation lost its exact prevention outcome".into());}
+            if !matches!(report.outcome,fleet_protocol::RecipientOutcome::Prevented {cancel:actual} if actual==cancel.id()) {return Err("real cancellation lost its exact prevention outcome".into());}
             require(operation(&mut pair.recipient.socket,relay_request("report",json!({"report":report}))).await?,json!({"kind":"delivery","value":{"kind":"report","value":{"kind":"ack","value":{"reportSeq":1}}}}))?;
         }
         println!("MAILBOX_RULE_CASE full_mailbox_refuses_before_custody_and_reserves_settlement passed");

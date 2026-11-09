@@ -8,9 +8,9 @@ use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{
     AtomicStore, CallFailure, NotSentReason, StoreError, storage::TransactionScope,
 };
-use fleet_sync_lease::{LeasePolicy, RegistryConfig};
-use fleet_sync_protocol::{AuthRefusal, PeerId, ReceiverId};
-use fleet_sync_tokio_runner::{ObjectKey, ObjectStore, TokioObject};
+use fleet_project_lease::{LeasePolicy, RegistryConfig};
+use fleet_protocol::{AuthRefusal, PeerId, ReceiverId};
+use fleet_tokio_objects::{ObjectKey, ObjectStore, TokioObject};
 use message_board::{MachineLabel, ServiceId};
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use sqlx_core::{executor::Executor, query::query, row::Row};
@@ -89,7 +89,7 @@ impl Fixture {
                 move_needs_renewal_within: None,
             },
             collaboration_central_tokio::DeliveryConfig {
-                relay_peer: fleet_sync_protocol::PeerId::try_from(
+                relay_peer: fleet_protocol::PeerId::try_from(
                     "019f0000-0000-7000-8000-000000005240".to_owned(),
                 )?,
             },

@@ -8,7 +8,7 @@ use super::{
 };
 use collaboration_central_conformance::{ConformanceResult, machine_assertion, owner_assertion};
 use collaboration_central_core::{FORWARD_STATE_PATH, ForwardStateRequest};
-use fleet_sync_protocol::{DatabaseId, FrameId};
+use fleet_protocol::{DatabaseId, FrameId};
 use reqwest_websocket::WebSocket;
 use serde_json::Value;
 use std::time::Duration;
@@ -135,7 +135,7 @@ async fn read_barrier(socket: &mut WebSocket) -> ConformanceResult<()> {
     use board_sync_protocol::{
         BoardConsumerAnswer, BoardConsumerRequest, BoardReadPage, BoardReadScope,
     };
-    use fleet_sync_protocol::{OperationAnswer, OperationRequest};
+    use fleet_protocol::{OperationAnswer, OperationRequest};
     let answer = super::creation_scenarios::operation_answer(
         socket,
         OperationRequest::Consumer(BoardConsumerRequest::Read {

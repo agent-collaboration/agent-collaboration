@@ -1,6 +1,6 @@
 //! A singleton cannot claim settlement beyond the actual handoff head.
 use super::*;
-use fleet_sync_protocol::SqlValue;
+use fleet_protocol::SqlValue;
 use std::collections::BTreeMap;
 
 #[tokio::test]

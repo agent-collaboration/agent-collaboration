@@ -7,7 +7,7 @@ use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
 use collaboration_mail_protocol::{
     MailSender, MembershipId, NotificationBody, NotificationSource, RecordPointer, RootRange,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CancelBody, DeliveryCancel, DeliveryEnvelope, DeliveryItem, ItemId, PeerId, Recipient,
 };
 use message_board::*;
@@ -110,7 +110,7 @@ impl ExpansionFixture {
                 id,
                 target.sender().clone(),
                 target.recipient().clone(),
-                Some(fleet_sync_protocol::SyncTime::from_unix_millis(123_456)),
+                Some(fleet_protocol::SyncTime::from_unix_millis(123_456)),
                 CancelBody {
                     target: target.id(),
                 },
@@ -216,7 +216,7 @@ async fn expansions_replay_exactly_follow_commit_order_and_reopen_with_the_origi
             original_cancel.id(),
             original_cancel.sender().clone(),
             original_cancel.recipient().clone(),
-            Some(fleet_sync_protocol::SyncTime::from_unix_millis(999_999)),
+            Some(fleet_protocol::SyncTime::from_unix_millis(999_999)),
             CancelBody {
                 target: original_cancel.target(),
             },

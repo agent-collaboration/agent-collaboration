@@ -4,9 +4,9 @@ use collaboration_central_core::{
 };
 use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{AtomicStore, BoxFuture, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{CloseReason, ConnectionId};
-use fleet_sync_session::Bytes;
-use fleet_sync_tokio_runner::TokioObject;
+use fleet_protocol::{CloseReason, ConnectionId};
+use fleet_session::Bytes;
+use fleet_tokio_objects::TokioObject;
 use sqlx_core::{query::query, row::Row};
 use std::{
     future::Future,
@@ -101,7 +101,7 @@ impl<Io: PlatformIo> ObjectHost for FaultHost<Io> {
     async fn admission_binding(
         &self,
         to: ConnectionId,
-    ) -> Result<fleet_sync_session::ConnectionBinding, SocketFailure> {
+    ) -> Result<fleet_session::ConnectionBinding, SocketFailure> {
         self.native.admission_binding(to).await
     }
     async fn publish_registrations(

@@ -28,7 +28,7 @@ impl CallRouter for MailCallRouter {
                     let resolved = inbox
                         .resolve_local_delivery(&reference)
                         .await
-                        .map_err(fleet_sync_delivery::delivery_rollback)?;
+                        .map_err(fleet_mail_delivery::delivery_rollback)?;
                     let item = resolved.item();
                     // SDK custody retains Held for later attempt identities, even
                     // after readiness makes the application projection Pending.
@@ -83,7 +83,7 @@ impl CallRouter for MailCallRouter {
         } else if collaboration_runtime::received_mail_push::is_poll_mail(item) {
             // The reader actor owns its input; retain the resolved custody value
             // here so its stored receipt bound still validates the returned answer.
-            let poll_item = fleet_sync_protocol::DeliveryItem::new(
+            let poll_item = fleet_protocol::DeliveryItem::new(
                 item.id(),
                 item.sender().clone(),
                 item.recipient().clone(),
@@ -113,11 +113,11 @@ impl CallRouter for MailCallRouter {
 
 impl MailCallRouter {
     pub(super) async fn binding_call_failure(&self, error: StoreError) -> CallFailure {
-        match fleet_sync_delivery::classify_delivery_store_error(error) {
-            fleet_sync_delivery::DeliveryTransactionFailure::BindingUnavailable {
+        match fleet_mail_delivery::classify_delivery_store_error(error) {
+            fleet_mail_delivery::DeliveryTransactionFailure::BindingUnavailable {
                 reason, ..
             } => {
-                if reason == fleet_sync_protocol::SenderBindingFailure::Unknown {
+                if reason == fleet_protocol::SenderBindingFailure::Unknown {
                     let _ = super::installation_directory::refresh_sender_bindings(
                         self.binding.as_ref(),
                         self.owner.as_ref(),

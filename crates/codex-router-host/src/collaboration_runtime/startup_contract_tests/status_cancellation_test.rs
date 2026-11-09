@@ -3,10 +3,10 @@ use super::*;
 use durable_steps::AtomicStore;
 
 struct NoCalls;
-impl fleet_sync_tokio_runner::CallRouter for NoCalls {
+impl fleet_tokio_objects::CallRouter for NoCalls {
     async fn dispatch(
         &self,
-        _: fleet_sync_tokio_runner::CallEnvelope,
+        _: fleet_tokio_objects::CallEnvelope,
     ) -> Result<serde_json::Value, durable_steps::CallFailure> {
         Err(durable_steps::CallFailure::NotSent {
             reason: durable_steps::NotSentReason::Overloaded,
@@ -24,7 +24,7 @@ async fn cancelling_a_pending_fleet_read_releases_store_ownership_before_runtime
         .upgrade()
         .expect("interaction owner");
     let weak = Arc::downgrade(&store);
-    let host = Arc::new(fleet_sync_tokio_runner::TokioHost::new(
+    let host = Arc::new(fleet_tokio_objects::TokioHost::new(
         Arc::new(NoCalls),
         runtime_primitives::SystemClock,
     ));

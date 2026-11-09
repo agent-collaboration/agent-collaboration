@@ -65,8 +65,8 @@ pub(super) enum OwnerObservation {
     Sleeping(Option<tokio::time::Instant>),
     DirectMessageQueued,
     MailAttemptQueued(PushId),
-    PollCancellationDeferred(fleet_sync_protocol::ItemId),
-    PollPublisherUnavailable(fleet_sync_protocol::ItemId),
+    PollCancellationDeferred(fleet_protocol::ItemId),
+    PollPublisherUnavailable(fleet_protocol::ItemId),
     NativeHeldChecked { item: PushId, running: bool },
     DirectMessageHeld,
     DirectMessageSettled,
@@ -328,7 +328,7 @@ impl SubscriptionDeliveryService {
     pub(crate) async fn attempt_follow_mail_once(
         &self,
         project: ProjectId,
-        reference: fleet_sync_protocol::DeliveryItemRef,
+        reference: fleet_protocol::DeliveryItemRef,
         request: collaboration_contracts::layer_zero::DeliveryRequest,
     ) -> collaboration_contracts::NativeDeliveryResult {
         self.attempt_checked_mail(

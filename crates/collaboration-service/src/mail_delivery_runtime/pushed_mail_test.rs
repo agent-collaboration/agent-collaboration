@@ -7,10 +7,10 @@ use board_fleet_sync::{AccessServiceToken, MachineSessionStore, ReqwestSessionTr
 use board_sync_protocol::BoardConsumerProtocol;
 use collaboration_contracts::MachineIdentity;
 use collaboration_runtime::{MailDeliverySession, SessionDeliveryRouter};
-use fleet_sync_delivery::{DeliveryLimits, minimum_settlement_allowance};
-use fleet_sync_protocol::{ClientAnswer, DeliveryRefusal, PeerId, SchemaSupport, ServerCallAnswer};
-use fleet_sync_session::{Endpoint, PeerCredential, SessionClient};
-use fleet_sync_tokio_runner::SessionPump;
+use fleet_mail_delivery::{DeliveryLimits, minimum_settlement_allowance};
+use fleet_protocol::{ClientAnswer, DeliveryRefusal, PeerId, SchemaSupport, ServerCallAnswer};
+use fleet_session::{Endpoint, PeerCredential, SessionClient};
+use fleet_session_client::SessionPump;
 use runtime_primitives::{Backoff, UuidV7Ids};
 use std::{sync::Arc, time::Duration};
 
@@ -115,7 +115,7 @@ async fn full_push_inbox_returns_wire_capacity_refusal_without_admitting_custody
 
     // Act through the same typed intake used by the machine socket.
     let answer = runtime
-        .accept_pushed_mail(fleet_sync_protocol::Submitter::Machine(peer), envelope)
+        .accept_pushed_mail(fleet_protocol::Submitter::Machine(peer), envelope)
         .await?;
 
     // Assert the wire refusal is not an error/receipt, and both projections stay absent.
@@ -139,9 +139,9 @@ async fn full_push_inbox_returns_wire_capacity_refusal_without_admitting_custody
         .store
         .transaction(move |scope| {
             Box::pin(async move {
-                fleet_sync_delivery::test_support::snapshot::<_, RouterDeliveryTypes, _>(
+                fleet_mail_delivery::test_support::snapshot::<_, RouterDeliveryTypes, _>(
                     scope,
-                    fleet_sync_delivery::DeliveryHostRole::Machine,
+                    fleet_mail_delivery::DeliveryHostRole::Machine,
                     binding.as_ref(),
                 )
                 .await

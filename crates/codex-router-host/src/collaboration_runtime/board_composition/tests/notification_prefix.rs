@@ -2,7 +2,7 @@
 use super::notification_owner::ProjectNotificationFixture;
 use super::*;
 use collaboration_service::{IntentHandoffInput, IntentRecipientEnrollment};
-use fleet_sync_protocol::{ItemId, RecipientOutcome};
+use fleet_protocol::{ItemId, RecipientOutcome};
 use message_board::*;
 
 #[tokio::test]
@@ -208,7 +208,7 @@ async fn a_pending_remote_handoff_does_not_block_a_later_local_handoff() -> Resu
     );
     assert_eq!(
         remote_after_ack??,
-        Some(fleet_sync_protocol::Epoch::new(fixture_epoch.get())?)
+        Some(fleet_protocol::Epoch::new(fixture_epoch.get())?)
     );
     assert_eq!(local_rows, 1, "L allocated duplicate native inbox custody");
     assert_eq!(

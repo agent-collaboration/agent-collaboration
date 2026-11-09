@@ -3,11 +3,11 @@
 use super::*;
 use crate::fleet_storage_fixture::{FixtureIo, FleetStorageFixture, NOW, TestError};
 use durable_steps::{CallId, OperationId, StepName, StoreError};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DatabaseId, DeliveryFailureKind, DeliveryRefusal, DeliveryStatus, ItemDigest, ItemId,
     ItemStatusState, SessionId, SettleResult, StatusVersion, Submitter,
 };
-use fleet_sync_tokio_runner::TokioObject;
+use fleet_tokio_objects::TokioObject;
 use sqlx_core::{query::query, row::Row};
 
 type Store = TokioObject<crate::CoreHost<FixtureIo>>;
@@ -41,9 +41,9 @@ async fn prepare() -> TestResult<FleetStorageFixture> {
     fixture.object.transaction(|scope|Box::pin(async move {
         // Public SQLx migration apparatus has a version key of its own. Isolate
         // lease history from delivery history in this disposable test store.
-        fleet_sync_lease::LEASE_MIGRATOR.with_history_table("fixture_lease_history")
+        fleet_project_lease::LEASE_MIGRATOR.with_history_table("fixture_lease_history")
             .run_direct(None,scope.executor(),false).await.map_err(StoreError::backend)?;
-        fleet_sync_delivery::DELIVERY_MIGRATOR.run_direct(None,scope.executor(),false).await.map_err(StoreError::backend)?;
+        fleet_mail_delivery::DELIVERY_MIGRATOR.run_direct(None,scope.executor(),false).await.map_err(StoreError::backend)?;
         // Arrange an existing current B lease at epoch2. The callback below uses
         // public lease_status in this same real transaction; no publisher runs.
         query::<sqlx_turso::Turso>("INSERT INTO _fleet_sync_databases(database,lifecycle_kind,origin_kind,revision_epoch,revision_change,changed_at,created_at,updated_at) VALUES(?,'registered','empty','2','1',?,?,?)")
@@ -130,14 +130,14 @@ async fn recorded_owner(
         .object
         .transaction(move |scope| {
             Box::pin(async move {
-                fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes, _>::new(
+                fleet_mail_delivery::Outbox::<_, BoardDeliveryTypes, _>::new(
                     scope,
                     crate::fleet_outbox_limits().map_err(StoreError::backend)?,
                     &crate::fleet_sender_binding::FleetSenderBinding,
                 )
                 .relay_submitter(item)
                 .await
-                .map_err(fleet_sync_delivery::delivery_rollback)
+                .map_err(fleet_mail_delivery::delivery_rollback)
             })
         })
         .await?)

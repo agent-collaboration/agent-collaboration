@@ -1,7 +1,7 @@
 //! The approved workspace schema keeps domain fields and ordered repositories typed.
 use super::*;
 use crate::fleet_storage_fixture::{FixtureIo, FleetStorageFixture, NOW, TestError};
-use fleet_sync_tokio_runner::TokioObject;
+use fleet_tokio_objects::TokioObject;
 use message_board::{
     ActorOrigin, FleetFeedEntry, FleetPosition, Record, RecordEnvelope, RecordPlacement,
     RecordScope, RecordTime, RecordedActor, RepositoryRef, Workspace, WorkspaceState,

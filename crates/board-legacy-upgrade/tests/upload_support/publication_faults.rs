@@ -357,7 +357,7 @@ pub(super) async fn project_phase(
     http: &reqwest::Client,
     endpoint: &str,
     project: &str,
-    digest: &fleet_sync_protocol::ImportDigest,
+    digest: &fleet_protocol::ImportDigest,
 ) -> SafeResult<AdminImportPhase> {
     let response = http
         .post(format!("{endpoint}/admin/v1/import/projects/{project}"))

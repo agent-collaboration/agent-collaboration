@@ -1,9 +1,7 @@
 //! Hold a real registration answer while its independently committed notice passes.
 use crate::FixtureResult;
 use board_sync_protocol::BoardConsumerProtocol;
-use fleet_sync_protocol::{
-    DatabaseId, LeaseAnswer, OperationAnswer, RegistrationAnswer, ServerFrame,
-};
+use fleet_protocol::{DatabaseId, LeaseAnswer, OperationAnswer, RegistrationAnswer, ServerFrame};
 use std::sync::{Arc, Mutex};
 use tokio::sync::watch;
 

@@ -15,7 +15,7 @@ fn reading_an_installation_peer_never_creates_or_replaces_identity() -> io::Resu
     // Assert no generated identity or lock artifact, then exact existing-byte preservation.
     assert_eq!(absent, None);
     assert_eq!(std::fs::read_dir(area.path())?.count(), 0);
-    let peer = fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).map_err(io::Error::other)?;
+    let peer = fleet_protocol::PeerId::new(uuid::Uuid::now_v7()).map_err(io::Error::other)?;
     let bytes = serde_json::to_vec(&serde_json::json!({"version":1,"peerId":peer}))?;
     let path = area.path().join("installation-peer.json");
     std::fs::write(&path, &bytes)?;

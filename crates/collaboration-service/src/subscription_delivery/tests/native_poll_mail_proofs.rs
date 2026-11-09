@@ -2,7 +2,7 @@
 use super::native_follow_mail_proofs::{follow_application, frozen_follow};
 use super::*;
 use crate::{SubscriptionWaitFilter, SubscriptionWaitResult};
-use fleet_sync_protocol::RecipientOutcome;
+use fleet_protocol::RecipientOutcome;
 use message_board::{SubscriptionMode, WhenIdle};
 
 #[tokio::test]

@@ -13,7 +13,7 @@ workspace = true
 test-support = []
 
 [dependencies]
-fleet-sync-protocol.workspace = true
+fleet-protocol.workspace = true
 message-board = { path = "../message-board", version = "0.1.20" }
 chrono = { version = "=0.4.45", default-features = false, features = ["std", "serde"] }
 serde.workspace = true

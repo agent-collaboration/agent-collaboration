@@ -285,7 +285,7 @@ impl BoardHost {
     // Only takeover targets need the private replay observation.
     pub async fn local_cancel_delivery_recorded(
         &mut self,
-        cancel: fleet_sync_protocol::ItemId,
+        cancel: fleet_protocol::ItemId,
     ) -> FixtureResult<bool> {
         let reply = self
             .query_project(json!({"kind":"localCancelDelivery", "cancel": cancel}))

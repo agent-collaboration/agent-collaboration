@@ -1,7 +1,7 @@
 //! Central's delivery quotas include payload and reserved settlement bytes.
 
 use board_sync_protocol::BoardDeliveryTypes;
-use fleet_sync_delivery::{DeliveryConfigError, DeliveryLimits, minimum_settlement_allowance};
+use fleet_mail_delivery::{DeliveryConfigError, DeliveryLimits, minimum_settlement_allowance};
 
 pub fn fleet_outbox_limits() -> Result<DeliveryLimits, DeliveryConfigError> {
     DeliveryLimits::new::<BoardDeliveryTypes>(

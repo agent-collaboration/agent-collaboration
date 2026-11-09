@@ -4,7 +4,7 @@ use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerRequest, BoardReadCursor, BoardReadPage, BoardReadScope,
     FleetFeedRead,
 };
-use fleet_sync_protocol::{OperationAnswer, OperationRequest};
+use fleet_protocol::{OperationAnswer, OperationRequest};
 use message_board::{FleetPosition, Record};
 
 impl FleetTestRuntime {

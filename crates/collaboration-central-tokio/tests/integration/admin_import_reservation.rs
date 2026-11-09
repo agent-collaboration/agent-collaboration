@@ -9,7 +9,7 @@ use collaboration_central_core::{
     AdminProjectImportRequest,
 };
 use collaboration_central_tokio::{TokioServer, TokioSettings};
-use fleet_sync_protocol::{PageDigest, SeedId, SnapshotPage};
+use fleet_protocol::{PageDigest, SeedId, SnapshotPage};
 use sqlx_core::row::Row;
 use sqlx_turso::sqlx::{ConnectOptions, Connection};
 use std::{path::Path, time::Duration};
@@ -35,7 +35,7 @@ fn header() -> ConformanceResult<AdminImportHeader> {
 async fn start(root: &Path, jwks: &JwksFixtureServer) -> ConformanceResult<TokioServer> {
     Ok(TokioServer::start(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
+            relay_peer: fleet_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },
@@ -76,7 +76,7 @@ async fn request(
 async fn begin(
     server: &TokioServer,
     header: &AdminImportHeader,
-) -> ConformanceResult<(fleet_sync_protocol::RequestId, SeedId)> {
+) -> ConformanceResult<(fleet_protocol::RequestId, SeedId)> {
     tokio::time::timeout(Duration::from_secs(10), async {
         loop {
             match request(
@@ -222,7 +222,7 @@ async fn reservation_and_seed_identity_survive_reopen_without_reporting_completi
             )
             .await?,
             AdminProjectImportAnswer::Refused(AdminImportRefusal::SeedRefused(
-                fleet_sync_protocol::SeedAnswer::SchemaMismatch
+                fleet_protocol::SeedAnswer::SchemaMismatch
             ))
         );
         let mut changed = offered.clone();

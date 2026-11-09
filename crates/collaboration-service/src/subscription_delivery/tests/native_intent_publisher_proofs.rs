@@ -49,7 +49,7 @@ fn installation_peer() -> PeerId {
 pub(super) async fn frozen_item(
     fixture: &OwnerFixture,
     intent: &NotifyIntent,
-) -> fleet_sync_protocol::DeliveryItem<collaboration_contracts::RouterDeliveryTypes> {
+) -> fleet_protocol::DeliveryItem<collaboration_contracts::RouterDeliveryTypes> {
     let store = fixture
         .registry
         .existing_project(&fixture.project)
@@ -79,7 +79,7 @@ pub(super) async fn frozen_item(
     let MailHandoffItem::Delivery(envelope) = handoff.item else {
         panic!("delivery");
     };
-    let fleet_sync_protocol::DeliveryEnvelope::Item(frozen) = *envelope else {
+    let fleet_protocol::DeliveryEnvelope::Item(frozen) = *envelope else {
         panic!("item");
     };
     assert_eq!(item.as_str(), frozen.id().as_uuid().to_string());

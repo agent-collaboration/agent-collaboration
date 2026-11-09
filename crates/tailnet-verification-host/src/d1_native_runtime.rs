@@ -102,9 +102,9 @@ impl D1HostPlan {
 
 fn session_inputs(fixture: &D1MachineFixture) -> DriverResult<BoardSessionInputs> {
     Ok(BoardSessionInputs {
-        endpoint: fleet_sync_session::Endpoint::new(&fixture.endpoint).map_err(boundary_error)?,
+        endpoint: fleet_session::Endpoint::new(&fixture.endpoint).map_err(boundary_error)?,
         access: AccessServiceToken::self_hosted(&fixture.assertion).map_err(boundary_error)?,
-        credential: fleet_sync_session::PeerCredential::new(fixture.credential.clone())
+        credential: fleet_session::PeerCredential::new(fixture.credential.clone())
             .map_err(boundary_error)?,
         peer: fixture.peer.clone().try_into().map_err(boundary_error)?,
         receiver: fixture

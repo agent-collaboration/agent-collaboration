@@ -1,6 +1,6 @@
 //! Typed central-answer fixtures are persisted and interpreted by the actual library owner.
 use collaboration_runtime::ProjectStoreRegistry;
-use fleet_sync_protocol::{LeaseStatus, RenewAnswer, RenewResult};
+use fleet_protocol::{LeaseStatus, RenewAnswer, RenewResult};
 use message_board::ProjectId;
 use runtime_primitives::SyncTime;
 

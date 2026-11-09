@@ -10,18 +10,21 @@ use durable_steps::{
     storage::{JournalStorage, OperationExecution},
 };
 use fleet_admission::FleetOperation;
-use fleet_sync_lease::ImportTask;
-use fleet_sync_protocol::{Import, ImportAnswer};
-use fleet_sync_tokio_runner::TokioObject;
+use fleet_project_lease::ImportTask;
+use fleet_protocol::{Import, ImportAnswer};
+use fleet_tokio_objects::TokioObject;
 use message_board::{BoardState, FleetPosition, Record, RecordPlacement, WorkspaceState};
 use runtime_primitives::Clock;
 use serde_json::json;
 
-type ImportAdmission =
-    ImportTask<TokioObject<CoreHost<Io>>, sqlx_turso::Turso, fleet_sync_lease::NoLeaseChangeHook>;
+type ImportAdmission = ImportTask<
+    TokioObject<CoreHost<Io>>,
+    sqlx_turso::Turso,
+    fleet_project_lease::NoLeaseChangeHook,
+>;
 
 async fn admit_import(fixture: &Fixture, request: Import) -> TestResult<OperationId> {
-    let key = fleet_sync_lease::lifecycle_request_key(request.attempt)?;
+    let key = fleet_project_lease::lifecycle_request_key(request.attempt)?;
     Ok(fixture
         .store
         .transaction(move |scope| {
@@ -40,9 +43,9 @@ async fn admit_import(fixture: &Fixture, request: Import) -> TestResult<Operatio
 
 fn import_request() -> TestResult<Import> {
     Ok(Import {
-        attempt: fleet_sync_protocol::RequestId::new(durable_steps::Uuid::now_v7())?,
+        attempt: fleet_protocol::RequestId::new(durable_steps::Uuid::now_v7())?,
         database: PROJECT.to_owned().try_into()?,
-        digest: fleet_sync_protocol::ImportDigest::new("a".repeat(64))?,
+        digest: fleet_protocol::ImportDigest::new("a".repeat(64))?,
     })
 }
 
@@ -198,7 +201,7 @@ async fn genuine_unheld_hook_and_archive_completion_roll_back_then_retry_togethe
     let after = inspect(&fixture, attempt).await?;
     assert!(after.projection.is_some());
     assert!(
-        matches!(after.registry.as_ref(),Some(snapshot) if matches!(snapshot.lifecycle,fleet_sync_lease::DatabaseLifecycle::Unheld {..})&&snapshot.grant.is_none())
+        matches!(after.registry.as_ref(),Some(snapshot) if matches!(snapshot.lifecycle,fleet_project_lease::DatabaseLifecycle::Unheld {..})&&snapshot.grant.is_none())
     );
     assert_eq!(after.incarnations, vec![1]);
     assert!(after.reservation.is_none());
@@ -238,7 +241,7 @@ async fn refused_reservation_and_archive_completion_roll_back_then_retry_togethe
     assert_eq!(inspect(&fixture, attempt).await?, before);
     fixture.sql("DROP TRIGGER reject_archive_board").await?;
     let reply = fixture.runtime.on_call(call.clone()).await?;
-    let _: fleet_sync_protocol::SettlementRecorded = serde_json::from_slice(&reply)?;
+    let _: fleet_protocol::SettlementRecorded = serde_json::from_slice(&reply)?;
     let after = inspect(&fixture, attempt).await?;
     assert_eq!(
         after.reservation,

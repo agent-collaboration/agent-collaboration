@@ -2,7 +2,7 @@
 use super::{BoardError, NotificationPublisher, ProjectId, PublisherInner};
 use board_sync_protocol::BoardDeliveryBody;
 use collaboration_mail_protocol::{CancelCause, NotificationSource};
-use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItemRef};
+use fleet_protocol::{DeliveryEnvelope, DeliveryItemRef};
 use message_board::{HandoffSeq, MailItemRef};
 use message_board_storage::{MailCancelGroup, MailHandoffItem};
 

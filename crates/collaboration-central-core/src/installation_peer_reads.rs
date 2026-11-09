@@ -1,7 +1,7 @@
 //! Session directory reads use the Registry's immutable enrollment bindings.
 use board_sync_protocol::InstallationPeerPage;
 use durable_steps::CallTarget;
-use fleet_sync_protocol::PeerId;
+use fleet_protocol::PeerId;
 use message_board::ServiceId;
 use serde::{Deserialize, Serialize};
 

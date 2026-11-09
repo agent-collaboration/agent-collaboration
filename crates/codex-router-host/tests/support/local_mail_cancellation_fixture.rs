@@ -11,15 +11,15 @@ use collaboration_protocol::{
 use durable_steps::{
     AtomicStore, CallFailure, CallId, NotSentReason, StoreError, turso_store::TursoScope,
 };
-use fleet_sync_delivery::{
+use fleet_mail_delivery::{
     DeliveryConsumer, DeliveryError, DeliveryLimits, GateDecision, Inbox, LocalDelivery,
     LocalOutcome, delivery_rollback, minimum_settlement_allowance,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CancelBody, DeliveryCancel, DeliveryHeader, DeliveryItem, ItemId, PeerId, Recipient,
     RecipientOutcome,
 };
-use fleet_sync_tokio_runner::{CallEnvelope, CallRouter, TokioHost};
+use fleet_tokio_objects::{CallEnvelope, CallRouter, TokioHost};
 use interaction_storage::{InteractionAtomicStore, InteractionStore, MessageSendAnswer};
 use runtime_primitives::{Clock, SystemClock};
 use serde_json::{Value, json};

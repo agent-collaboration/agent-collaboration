@@ -1,7 +1,7 @@
 //! Feature-gated entry and admission observation for real Host startup contract tests.
 use super::{LocalDelivery, MailDeliveryRuntime, RouterDeliveryTypes};
 use collaboration_mail_protocol::WakeBody;
-use fleet_sync_protocol::DeliveryItem;
+use fleet_protocol::DeliveryItem;
 
 impl MailDeliveryRuntime {
     /// Drives the actual attached inbound consumer without replacing its wake owner.

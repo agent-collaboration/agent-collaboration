@@ -33,7 +33,7 @@ pub struct CopyMigrationFailureRecord {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct StagedPartHealth {
-    pub transaction: fleet_sync_protocol::TransactionKey,
+    pub transaction: fleet_protocol::TransactionKey,
     pub index: u32,
     pub staged_at: chrono::DateTime<chrono::Utc>,
 }
@@ -43,7 +43,7 @@ pub struct LiveCopyHealth {
     pub bookkeeping: CopyHealthRead<Vec<CopyBookkeepingVersion>>,
     pub migration_failures: CopyHealthRead<Vec<CopyMigrationFailureRecord>>,
     pub stage: CopyHealthRead<Option<CopyStage>>,
-    pub copy: CopyHealthRead<Option<fleet_sync_protocol::CopyStatus>>,
+    pub copy: CopyHealthRead<Option<fleet_protocol::CopyStatus>>,
     pub project_fingerprint: CopyHealthRead<String>,
     pub staged_parts: CopyHealthRead<Vec<StagedPartHealth>>,
     pub storage_bytes: u64,

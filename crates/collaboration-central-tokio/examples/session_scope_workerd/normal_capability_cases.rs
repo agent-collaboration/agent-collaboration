@@ -187,7 +187,7 @@ async fn wait_for_holder_alarm(
 
 async fn alarm_owner(base: &str) -> ConformanceResult<()> {
     use super::holder_writer_retry::{read_status, received, send, start};
-    use fleet_sync_protocol::{ReleaseAnswer, ReplicationPosition, ServerCall, ServerCallAnswer};
+    use fleet_protocol::{ReleaseAnswer, ReplicationPosition, ServerCall, ServerCallAnswer};
     use tokio::task::JoinSet;
 
     let client = ConformanceClient::new(base)?;
@@ -264,14 +264,14 @@ async fn alarm_owner(base: &str) -> ConformanceResult<()> {
         let (later_frame, later_request) = received(&mut peer.socket).await?;
         let ServerCall::Release { call: later_call, request: later_request } = later_request else { return Err("competing alarm did not receive its second real holder call".into()); };
         wait_for_holder_alarm(base, &command, connection, &peer.peer.to_string(), session, deadline).await?;
-        let later_answer = ReleaseAnswer::Released { final_position: ReplicationPosition::new(later_request.epoch, fleet_sync_protocol::CommitSequence::new(0)) };
+        let later_answer = ReleaseAnswer::Released { final_position: ReplicationPosition::new(later_request.epoch, fleet_protocol::CommitSequence::new(0)) };
         send(&mut peer.socket, later_frame, ServerCallAnswer::Release(later_answer.clone())).await?;
         tokio::time::timeout(Duration::from_secs(10), async { loop {
             if read_status(&http, base, later_call.operation).await? == json!({"kind":"completed","value":{"kind":"release","value":later_answer}}) { return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(()); }
             tokio::task::yield_now().await;
         }}).await??;
         let answer = ReleaseAnswer::Released {
-            final_position: ReplicationPosition::new(request.epoch, fleet_sync_protocol::CommitSequence::new(0)),
+            final_position: ReplicationPosition::new(request.epoch, fleet_protocol::CommitSequence::new(0)),
         };
         send(&mut peer.socket, frame, ServerCallAnswer::Release(answer.clone())).await?;
         let expected = json!({"kind":"completed","value":{"kind":"release","value":answer}});

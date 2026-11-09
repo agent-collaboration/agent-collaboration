@@ -1,7 +1,7 @@
 //! The same actual authenticated socket/frame transport serves Native and Worker oracles.
 use board_sync_protocol::{BoardConsumerProtocol, BoardConsumerRequest, ForwardedPost};
 use collaboration_central_conformance::{ConformanceResult, machine_assertion};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientFrame, FrameId, OperationRequest, SchemaSupport, ServerFrame, SessionId,
 };
 use futures_util::{SinkExt, StreamExt};

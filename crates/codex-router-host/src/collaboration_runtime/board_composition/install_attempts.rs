@@ -1,5 +1,5 @@
 //! The existing cache transaction selects one attempt per granted project epoch.
-use fleet_sync_protocol::{Epoch, InstallAttemptId};
+use fleet_protocol::{Epoch, InstallAttemptId};
 use message_board::ProjectId;
 use message_board_storage::FleetCache;
 use std::io;

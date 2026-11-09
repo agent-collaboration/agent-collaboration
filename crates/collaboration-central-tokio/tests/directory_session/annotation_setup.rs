@@ -10,7 +10,7 @@ use collaboration_central_core::{CoreHost, ObjectAddress, RegistryTime};
 use collaboration_central_tokio::{TokioServer, TokioSettings};
 use durable_steps::{AtomicStore, JournalScope, StoreError};
 use fleet_admission::{FleetOperation, FleetRequest, FleetRequestResult};
-use fleet_sync_tokio_runner::{ObjectKey, ObjectStore, TokioObject};
+use fleet_tokio_objects::{ObjectKey, ObjectStore, TokioObject};
 use std::sync::Arc;
 
 pub(super) const NOW: i64 = 1_792_281_600_000;
@@ -165,17 +165,17 @@ pub(super) async fn admit_imports(root: &Path, databases: &[DatabaseId]) -> Conf
             database: *database,
             digest: ImportDigest::new("d".repeat(64))?,
         };
-        let key = fleet_sync_lease::lifecycle_request_key(input.attempt)?;
+        let key = fleet_project_lease::lifecycle_request_key(input.attempt)?;
         store
             .transaction(move |scope| {
                 Box::pin(async move {
                     // The type supplies the public task kind/version only. No NoHook
                     // engine executes: the reopened native Fleet registers its real hook.
                     scope
-                        .admit::<fleet_sync_lease::ImportTask<
+                        .admit::<fleet_project_lease::ImportTask<
                             Store,
                             sqlx_turso::Turso,
-                            fleet_sync_lease::NoLeaseChangeHook,
+                            fleet_project_lease::NoLeaseChangeHook,
                         >>(&key, &input)
                         .await
                         .map(|_| ())

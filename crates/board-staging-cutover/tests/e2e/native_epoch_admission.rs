@@ -14,8 +14,8 @@ use board_staging_cutover::{
 };
 use board_sync_protocol::ProjectClaimReply;
 use collaboration_client::{BoardClientError, CollaborationClient};
-use fleet_sync_protocol::{Epoch, TransferId};
-use fleet_sync_writer::RetainedFile;
+use fleet_project_writer::RetainedFile;
+use fleet_protocol::{Epoch, TransferId};
 use message_board::{
     ActorOrigin, BoardFailureKind, BoardOperation, CopySource, CurrentWriter, EpochNumber,
     FeedCursor, HumanId, Identity, PageLimit, ProjectRequest, ProjectViewRequest, ProtocolVersion,

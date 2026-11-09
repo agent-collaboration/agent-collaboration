@@ -8,7 +8,7 @@ use super::{
 use board_sync_protocol::{BoardAnnotation, BoardConsumerProtocol};
 use collaboration_central_conformance::{ConformanceClient, enroll_admitted_peer};
 use durable_steps::Uuid;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CommitSequence, DatabaseId, Epoch, OperationAnswer, PeerId, Piece, PieceContents, PieceRefusal,
     ReplicatedTransaction, ReplicationAnswer, ReplicationPosition,
 };

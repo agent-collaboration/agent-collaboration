@@ -6,8 +6,8 @@ use collaboration_service::MachineSenderBinding;
 use durable_steps::{
     CallFailure, CallId, CallTarget, Host, NotSentReason, turso_store::TursoScope,
 };
-use fleet_sync_delivery::{DeliveryLimits, Inbox, minimum_settlement_allowance};
-use fleet_sync_protocol::{ItemId, PeerId, RecipientOutcome};
+use fleet_mail_delivery::{DeliveryLimits, Inbox, minimum_settlement_allowance};
+use fleet_protocol::{ItemId, PeerId, RecipientOutcome};
 use message_board::ServiceId;
 use runtime_primitives::{Clock, IdSource, SyncTime, SystemClock, WakeFailure, WakeScheduler};
 use sqlx::Connection;

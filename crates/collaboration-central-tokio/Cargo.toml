@@ -22,11 +22,11 @@ serde_json.workspace = true
 axum = { workspace = true, features = ["http1", "tokio", "ws", "json"] }
 futures-util.workspace = true
 tokio-util.workspace = true
-fleet-sync-lease.workspace = true
+fleet-project-lease.workspace = true
 message-board = { version = "0.1.96", path = "../message-board" }
 tokio.workspace = true
-fleet-sync-protocol.workspace = true
-fleet-sync-session.workspace = true
+fleet-protocol.workspace = true
+fleet-session.workspace = true
 reqwest.workspace = true
 runtime-primitives = { workspace = true, features = ["tokio"] }
 thiserror.workspace = true
@@ -38,8 +38,10 @@ serde.workspace = true
 chrono.workspace = true
 collaboration-central-core = { version = "0.1.96", path = "../collaboration-central-core" }
 durable-steps = { workspace = true, features = ["turso"] }
-fleet-sync-tokio-runner.workspace = true
-sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "0b2742975ca8b20270929b89f4959c1987bdb090", default-features = false }
+fleet-native-writer.workspace = true
+fleet-session-client.workspace = true
+fleet-tokio-objects.workspace = true
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "eec81ee707873b5a8b266f30e0d193c70338415e", default-features = false }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
@@ -51,13 +53,13 @@ message-board-storage = { version = "0.1.96", path = "../message-board-storage" 
 collaboration-service = { version = "0.1.96", path = "../collaboration-service", features = ["test-support"] }
 board-fleet-sync = { version = "0.1.96", path = "../board-fleet-sync" }
 board-sync-protocol = { version = "0.1.96", path = "../board-sync-protocol" }
-fleet-sync-delivery.workspace = true
-fleet-sync-writer.workspace = true
+fleet-mail-delivery.workspace = true
+fleet-project-writer.workspace = true
 reqwest-websocket = "=0.5.1"
 futures-util.workspace = true
 collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance" }
 fleet-admission = { version = "0.1.96", path = "../fleet-admission" }
-fleet-sync-receiver.workspace = true
+fleet-project-copy.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlx-core.workspace = true

@@ -14,7 +14,7 @@ use collaboration_central_core::ObjectAddress;
 use collaboration_central_tokio::{TokioServer, TokioSettings};
 use durable_steps::{CallTarget, Uuid};
 use fleet_admission::FleetOperation;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use futures_util::StreamExt;
 use message_board::{BoardId, Description, ResourceName, WorkspaceId};
 use reqwest_websocket::{Message, WebSocket};
@@ -283,7 +283,7 @@ async fn normal_held_order(base: &str, order: ReleaseOrder) -> ConformanceResult
         let send_http=http.clone();let send_route=route.clone();let send_body=confirmation.clone();
         callers.spawn(async move {owner_post(&send_http,&send_route,&send_body).await});
         let fence_envelope=held_request(base,ObjectAddress::Fleet,&fence_key).await?;
-        if fence_envelope.get("kind")!=Some(&json!(<fleet_sync_lease::CopyFence as CallTarget>::KIND)) {return Err("owner Takeover held another call instead of its real Fence".into());}
+        if fence_envelope.get("kind")!=Some(&json!(<fleet_project_lease::CopyFence as CallTarget>::KIND)) {return Err("owner Takeover held another call instead of its real Fence".into());}
         let fence:FenceRequest=serde_json::from_value(fence_envelope.get("request").cloned().ok_or("held Fence omitted its native request")?)?;
         if fence.database!=database || fence.transfer_id!=transfer || fence.new_epoch!=Epoch::new(2)? || fence.expect!= (FenceExpectation {epoch:Epoch::new(1)?,acked:original_position(1)?}) || fence.holder!=PeerId::try_from(NEW_PEER.to_owned())? {return Err("held Fence belongs to another transfer, holder or preview prefix".into());}
         runtime_control(base,session.clone(),RuntimeControl::HoldNextDispatch { key: piece_key.clone() }).await?;

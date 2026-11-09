@@ -9,7 +9,7 @@ use board_sync_protocol::{
     FleetRequestEnvelope,
 };
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{ClientFrame, FrameId, OperationAnswer, OperationRequest, ServerFrame};
+use fleet_protocol::{ClientFrame, FrameId, OperationAnswer, OperationRequest, ServerFrame};
 use sqlx_core::query::query;
 use std::future::Future;
 

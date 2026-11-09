@@ -1,7 +1,7 @@
 //! The recipient's actual Host pump commits Push into its SDK Inbox.
 use super::*;
 use board_sync_protocol::BoardDeliveryTypes;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CancelBody, DeliveryCancel, DeliveryEnvelope, DeliveryItemRef, DeliveryStream, ItemDigest,
     ItemId, OperationAnswer, OperationRequest, Recipient,
 };
@@ -16,13 +16,13 @@ struct CommittedInboxHeader {
     cancel_target: Option<ItemId>,
     valid_until: Option<runtime_primitives::SyncTime>,
     stream: DeliveryStream,
-    submitter: fleet_sync_protocol::Submitter,
+    submitter: fleet_protocol::Submitter,
 }
 
 impl RuleMachine {
     pub async fn assert_retained_original(
         &self,
-        expected: &fleet_sync_protocol::DeliveryItem<BoardDeliveryTypes>,
+        expected: &fleet_protocol::DeliveryItem<BoardDeliveryTypes>,
     ) -> TestResult {
         let rows = self.notifications.rows().await?;
         let originals = rows
@@ -56,7 +56,7 @@ impl RuleMachine {
         };
         assert_eq!(
             header.submitter,
-            fleet_sync_protocol::Submitter::Project(fleet_sync_protocol::DatabaseId::try_from(
+            fleet_protocol::Submitter::Project(fleet_protocol::DatabaseId::try_from(
                 project.as_str().to_owned()
             )?)
         );

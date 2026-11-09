@@ -1,7 +1,7 @@
 //! Independent historical assertions while the owning server is stopped.
 use super::*;
 use durable_steps::storage::TransactionScope;
-use fleet_sync_lease::EpochGrant;
+use fleet_project_lease::EpochGrant;
 use sqlx_core::connection::{ConnectOptions, Connection};
 
 // The public lease read needs only an executor, not a Host or an object runtime.
@@ -30,9 +30,9 @@ pub(super) async fn assert_history(
     let proof = async {
         let mut transaction = connection.begin().await?;
         let mut scope = HistoryReadScope(&mut transaction);
-        let first = fleet_sync_lease::epoch_holder(&mut scope, database, Epoch::new(1)?).await?;
-        let skipped = fleet_sync_lease::epoch_holder(&mut scope, database, Epoch::new(2)?).await?;
-        let final_grant = fleet_sync_lease::epoch_holder(&mut scope, database, Epoch::new(3)?).await?;
+        let first = fleet_project_lease::epoch_holder(&mut scope, database, Epoch::new(1)?).await?;
+        let skipped = fleet_project_lease::epoch_holder(&mut scope, database, Epoch::new(2)?).await?;
+        let final_grant = fleet_project_lease::epoch_holder(&mut scope, database, Epoch::new(3)?).await?;
         transaction.rollback().await?;
         let start: chrono::DateTime<chrono::Utc> = START.parse()?;
         let expected_first = EpochGrant {

@@ -5,7 +5,7 @@ use collaboration_central_core::{
     FLEET_MAIL_CUSTODY_PATH, FleetMailCustodyObservation, FleetMailCustodyRequest,
     FleetMailCustodyRow, FleetMailStatusKind,
 };
-use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem, ItemId, PeerId, StatusVersion};
+use fleet_protocol::{DeliveryEnvelope, DeliveryItem, ItemId, PeerId, StatusVersion};
 use futures_util::SinkExt;
 use reqwest_websocket::{CloseCode, Message, WebSocket};
 use serde_json::{Value, json};

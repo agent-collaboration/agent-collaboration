@@ -175,7 +175,7 @@ pub(crate) async fn initialize_history(
             .await
             .map_err(|_| StorageError::InvalidSchema)?;
         let mut delivery_migrator = sqlx::migrate::Migrator::with_migrations(
-            fleet_sync_delivery::DELIVERY_MIGRATOR
+            fleet_mail_delivery::DELIVERY_MIGRATOR
                 .iter()
                 .cloned()
                 .collect::<Vec<_>>(),

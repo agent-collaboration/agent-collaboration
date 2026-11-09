@@ -4,7 +4,7 @@ use collaboration_protocol::{
     DeliveryNextAction, DeliveryOutcome, DeliveryPeerClaim, DeliveryReceipt, DeliveryRejection,
     DeliveryRejectionReason, SessionReachability,
 };
-use fleet_sync_protocol::{CancelBody, DeliveryCancel, DeliveryItem, ItemId, PeerId, Recipient};
+use fleet_protocol::{CancelBody, DeliveryCancel, DeliveryItem, ItemId, PeerId, Recipient};
 use serde_json::json;
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
@@ -104,7 +104,7 @@ fn realistic_multi_claim_rejection_has_generous_local_observation_headroom() -> 
 
 #[test]
 fn local_observation_wrapper_bound_is_measured_and_enforced_by_the_sdk() {
-    use fleet_sync_delivery::{DeliverCall, LocalDelivery, LocalOutcome};
+    use fleet_mail_delivery::{DeliverCall, LocalDelivery, LocalOutcome};
     let receipt = DeliveryReceipt {
         outcome: DeliveryOutcome::NotSubmitted {
             reason: String::new(),
@@ -173,9 +173,9 @@ fn maximal_escaped_provider_context_fits_the_declared_observation_allowance() {
     println!("maximal escaped provider wrapper bytes={overhead}; allowance=32768");
     assert!(overhead <= 32 * 1024);
     let encoded = serde_json::to_value(
-        fleet_sync_delivery::DeliverCall::<RouterDeliveryTypes>::validated_answer(
-            fleet_sync_delivery::LocalDelivery {
-                outcome: fleet_sync_delivery::LocalOutcome::Uncertain,
+        fleet_mail_delivery::DeliverCall::<RouterDeliveryTypes>::validated_answer(
+            fleet_mail_delivery::LocalDelivery {
+                outcome: fleet_mail_delivery::LocalOutcome::Uncertain,
                 observation,
             },
         ),

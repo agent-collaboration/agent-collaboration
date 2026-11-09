@@ -43,16 +43,16 @@ async fn aggregate_initializations_expose_each_result_when_a_project_file_is_mov
     // This native write creates newer WAL frames while the reader pins the
     // empty Pending database. Ready registration cannot subsequently reject.
     database
-        .reject_registration(fleet_sync_protocol::GateReason {
-            code: fleet_sync_protocol::GateReasonCode::new("fixture.rejected")?,
+        .reject_registration(fleet_protocol::GateReason {
+            code: fleet_protocol::GateReasonCode::new("fixture.rejected")?,
             detail: "partial initialization during a busy native move".to_owned(),
         })
         .await?;
     assert!(matches!(
         fixture._registry.orphan_project(&moving).await,
         Err(collaboration_runtime::ProjectRegistryError::Move(
-            fleet_sync_writer::MoveAsideError::Publish(
-                fleet_sync_writer::native_file::PublishError::CheckpointBusy { .. },
+            fleet_project_writer::MoveAsideError::Publish(
+                fleet_project_writer::native_file::PublishError::CheckpointBusy { .. },
             )
         ))
     ));

@@ -3,14 +3,14 @@ use super::native_follow_mail_proofs::{follow_application, frozen_follow};
 use super::*;
 use crate::subscription_delivery::subscription_service::PollHandoverStage;
 use crate::{SubscriptionWaitFilter, SubscriptionWaitResult};
-use fleet_sync_protocol::RecipientOutcome;
+use fleet_protocol::RecipientOutcome;
 use message_board::*;
 
 async fn held_item(
     fixture: &OwnerFixture,
     runtime: &OwnerRuntime,
     publisher: &crate::NotificationPublisher,
-) -> fleet_sync_protocol::ItemId {
+) -> fleet_protocol::ItemId {
     runtime.owner_barrier(&fixture.reader).await;
     tokio::time::timeout(Duration::from_secs(6), async {
         while frozen_follow(fixture).await.is_empty() {
@@ -211,7 +211,7 @@ async fn held_poll_policy_and_original_identity_survive_physical_owner_reopen() 
 }
 
 fn includes_root(
-    item: &fleet_sync_protocol::DeliveryItem<board_sync_protocol::BoardDeliveryTypes>,
+    item: &fleet_protocol::DeliveryItem<board_sync_protocol::BoardDeliveryTypes>,
     root: &ThreadId,
 ) -> bool {
     matches!(item.body(),board_sync_protocol::BoardDeliveryBody::Notification(body)

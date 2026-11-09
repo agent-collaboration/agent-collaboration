@@ -6,7 +6,7 @@ use collaboration_contracts::UnsentCause;
 use collaboration_protocol::{
     DeliveryNextAction, DeliveryRejection, DeliveryRejectionReason, MessageDelivery,
 };
-use fleet_sync_protocol::{DeliveryFailureKind, DeliveryRefusal, ItemId};
+use fleet_protocol::{DeliveryFailureKind, DeliveryRefusal, ItemId};
 use serde_json::json;
 
 struct Wakeable;

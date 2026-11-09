@@ -7,8 +7,8 @@
 
 use collaboration_central_conformance::{JwksFixtureServer, fixture_policy, owner_assertion};
 use collaboration_central_tokio::{TokioServer, TokioSettings};
-use fleet_sync_lease::{LeasePolicy, RegistryConfig};
-use fleet_sync_protocol::{DatabaseId, ReceiverId};
+use fleet_project_lease::{LeasePolicy, RegistryConfig};
+use fleet_protocol::{DatabaseId, ReceiverId};
 use serde::{Deserialize, Serialize};
 use sqlx_turso::sqlx::{ConnectOptions, Connection, Row};
 use std::{
@@ -212,7 +212,7 @@ async fn main() -> DriverResult<()> {
     let jwks = JwksFixtureServer::start().await?;
     let server = match TokioServer::start(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
+            relay_peer: fleet_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },

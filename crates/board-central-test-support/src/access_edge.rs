@@ -110,41 +110,41 @@ impl SignedAccessEdge {
     #[cfg(feature = "conformance")]
     pub(crate) fn refuse_piece_integrity(
         &self,
-        database: fleet_sync_protocol::DatabaseId,
-        table: fleet_sync_protocol::TableName,
-        references: fleet_sync_protocol::TableName,
+        database: fleet_protocol::DatabaseId,
+        table: fleet_protocol::TableName,
+        references: fleet_protocol::TableName,
     ) -> FixtureResult<crate::PieceIntegrityObservation> {
         self.piece_integrity.begin(database, table, references)
     }
     pub(crate) fn drop_claim_grant_once(
         &self,
-        attempt: fleet_sync_protocol::RequestId,
+        attempt: fleet_protocol::RequestId,
     ) -> FixtureResult<crate::ClaimGrantDropObservation> {
         self.claim_grants.begin(attempt)
     }
     pub(crate) fn observe_mail_wire(
         &self,
-        drop_terminal: Option<fleet_sync_protocol::ItemId>,
+        drop_terminal: Option<fleet_protocol::ItemId>,
     ) -> FixtureResult<crate::MailWireObservation> {
         self.mail_wire.begin(drop_terminal)
     }
     pub(crate) fn hold_granted_notice(
         &self,
         project: message_board::ProjectId,
-        epoch: fleet_sync_protocol::Epoch,
+        epoch: fleet_protocol::Epoch,
     ) -> FixtureResult<crate::LeaseNoticeObservation> {
         self.lease_notices.begin(project, epoch)
     }
     pub(crate) fn hold_registration_answer(
         &self,
-        database: fleet_sync_protocol::DatabaseId,
+        database: fleet_protocol::DatabaseId,
     ) -> FixtureResult<crate::RegistrationAnswerObservation> {
         self.registration_answers.begin(database)
     }
     pub(crate) fn hold_superseded_notice(
         &self,
         project: message_board::ProjectId,
-        epoch: fleet_sync_protocol::Epoch,
+        epoch: fleet_protocol::Epoch,
     ) -> FixtureResult<crate::LeaseNoticeObservation> {
         self.lease_notices.begin_superseded(project, epoch)
     }

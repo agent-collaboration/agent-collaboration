@@ -1,7 +1,7 @@
 //! Keep old snapshot bytes exact while checking each named recovery addition.
 use super::offline_cli_fixture::TestResult;
 use board_staging_cutover::{NativeProjectSnapshot, PreparedProjectBundle};
-use fleet_sync_protocol::{SnapshotManifest, SqlValue};
+use fleet_protocol::{SnapshotManifest, SqlValue};
 use std::collections::BTreeMap;
 
 pub(super) type Row = Vec<SqlValue>;

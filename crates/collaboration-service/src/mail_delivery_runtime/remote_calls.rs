@@ -7,11 +7,11 @@ use super::{
 use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerRequest, BoardDeliveryTypes, MailSubmitAnswer,
 };
-use fleet_sync_delivery::{
+use fleet_mail_delivery::{
     DeliveryTransactionFailure, DispatchOutcome, Outbox, ReportCall, SubmitCall,
     classify_delivery_store_error, delivery_rollback, submit_settlement_outcome,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DeliveryAnswer, DeliveryEnvelope, DeliveryFailureKind, DeliveryRequest, ItemId,
     OperationAnswer, OperationRequest, SubmitResult, Submitter,
 };
@@ -34,7 +34,7 @@ fn encode_answer(answer: impl Serialize) -> Result<Value, CallFailure> {
 async fn recorded_submission_epoch(
     scope: &mut TursoScope<'_, MailHost>,
     envelope: &DeliveryEnvelope<RouterDeliveryTypes>,
-) -> Result<Option<fleet_sync_protocol::Epoch>, StoreError> {
+) -> Result<Option<fleet_protocol::Epoch>, StoreError> {
     let MailSender::Project { project } = envelope.sender() else {
         return Ok(None);
     };
@@ -57,7 +57,7 @@ async fn recorded_submission_epoch(
             "project mail submission epoch belongs to another project",
         ));
     }
-    fleet_sync_protocol::Epoch::new(recorded.epoch.get())
+    fleet_protocol::Epoch::new(recorded.epoch.get())
         .map(Some)
         .map_err(StoreError::backend)
 }
@@ -171,7 +171,7 @@ impl MailCallRouter {
                                 MailSubmitAnswer::Submitted(answer),
                             )) => {
                                 encode_answer(SubmitCall::<RouterDeliveryTypes>::validated_answer(
-                                    fleet_sync_delivery::DispatchOutcome::Answered(answer),
+                                    fleet_mail_delivery::DispatchOutcome::Answered(answer),
                                 )?)
                             }
                             OperationAnswer::Consumer(BoardConsumerAnswer::MailSubmit(
@@ -236,7 +236,7 @@ impl MailCallRouter {
                                 encode_answer(submit_settlement_outcome(answer))
                             }
                             OperationAnswer::Delivery(DeliveryAnswer::DeliveryUnavailable {
-                                reason: fleet_sync_protocol::DeliveryRefusal::SenderNotEnrolled,
+                                reason: fleet_protocol::DeliveryRefusal::SenderNotEnrolled,
                             }) => Err(CallFailure::Retryable {
                                 reason: durable_steps::CallRetryReason {
                                     code: "callerNotEnrolled".into(),
@@ -282,9 +282,9 @@ impl super::MailDeliveryRuntime {
     /// Exercise the real call adapter with a deliberately unresolvable reference.
     pub async fn runtime_test_submit_reference(
         &self,
-        mailbox: fleet_sync_protocol::PeerId,
+        mailbox: fleet_protocol::PeerId,
         reference: DeliveryItemRef,
-    ) -> Result<fleet_sync_delivery::SubmitOutcome<CarrierAcceptance>, CallFailure> {
+    ) -> Result<fleet_mail_delivery::SubmitOutcome<CarrierAcceptance>, CallFailure> {
         use durable_steps::Host as _;
         let call = super::remote_status::status_call("test-submit")
             .map_err(|_| CallFailure::AnswerLost)?;

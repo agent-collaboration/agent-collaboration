@@ -3,14 +3,14 @@ use super::native_generation_isolation_proofs::arrange_remote_generation_cancel;
 use super::*;
 use crate::frozen_mail_query_fixture::FrozenMailQuery;
 use durable_steps::{AtomicStore, CallFailure};
-use fleet_sync_delivery::{
+use fleet_mail_delivery::{
     DeliveryLimits, Outbox, OutboxAdmission, delivery_rollback, minimum_settlement_allowance,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CancelResult, DeliveryEnvelope, DeliveryFailureKind, DeliveryItem, DeliveryRefusal,
     DeliveryStatus, ItemId, ItemStatus, ItemStatusState, StatusVersion,
 };
-use fleet_sync_tokio_runner::{CallEnvelope, CallRouter, TokioHost};
+use fleet_tokio_objects::{CallEnvelope, CallRouter, TokioHost};
 use message_board::{CancelExpansionSeq, EpochNumber, FeedCursor, FeedPosition, ProjectId};
 use message_board_storage::{AcknowledgedProjectChanges, MailHandoffItem};
 
@@ -143,8 +143,8 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
                     .enqueue(
                         filler,
                         relay,
-                        fleet_sync_protocol::Submitter::Project(
-                            fleet_sync_protocol::DatabaseId::try_from(
+                        fleet_protocol::Submitter::Project(
+                            fleet_protocol::DatabaseId::try_from(
                                 fixture_project.as_str().to_owned(),
                             )
                             .unwrap(),
@@ -197,16 +197,15 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
             Arc::downgrade(&native.runtime_handle()),
         ));
         let app = Arc::new((identity.with_notification_publisher(publisher.clone())).build());
-        let control: fleet_sync_protocol::DeliveryCancel<
-            collaboration_contracts::RouterDeliveryTypes,
-        > = match serde_json::from_value::<
-            DeliveryEnvelope<collaboration_contracts::RouterDeliveryTypes>,
-        >(frozen.clone())
-        .unwrap()
-        {
-            DeliveryEnvelope::Cancel(control) => control,
-            DeliveryEnvelope::Item(_) => panic!("frozen child control"),
-        };
+        let control: fleet_protocol::DeliveryCancel<collaboration_contracts::RouterDeliveryTypes> =
+            match serde_json::from_value::<
+                DeliveryEnvelope<collaboration_contracts::RouterDeliveryTypes>,
+            >(frozen.clone())
+            .unwrap()
+            {
+                DeliveryEnvelope::Cancel(control) => control,
+                DeliveryEnvelope::Item(_) => panic!("frozen child control"),
+            };
         let refusal = native
             .runtime()
             .enqueue_project_cancel(control, epoch)
@@ -214,7 +213,7 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
         assert!(
             matches!(
                 refusal,
-                Err(fleet_sync_delivery::DeliveryTransactionFailure::Refused(
+                Err(fleet_mail_delivery::DeliveryTransactionFailure::Refused(
                     DeliveryRefusal::MailboxFull
                 ))
             ),
@@ -337,7 +336,7 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
                             scope_binding.as_ref(),
                         )
                         .publish_status(
-                            fleet_sync_protocol::StatusPublication {
+                            fleet_protocol::StatusPublication {
                                 item,
                                 status: DeliveryStatus::Cancelled,
                                 version: StatusVersion::new(2),

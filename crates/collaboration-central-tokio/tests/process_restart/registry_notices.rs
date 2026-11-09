@@ -1,7 +1,7 @@
 //! A real Claim produces the retained hint; a fresh OS process reconstructs expiry.
 use super::*;
 use collaboration_central_core::{ConformanceBoardState, RegistryTime};
-use fleet_sync_protocol::{DatabaseId, Epoch, HolderChangeAnswer, NoticePosition};
+use fleet_protocol::{DatabaseId, Epoch, HolderChangeAnswer, NoticePosition};
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
     query::query,
@@ -80,17 +80,17 @@ async fn prepare(
     let grant = imported_claim_scenarios::claim(
         &mut holder.socket,
         database,
-        fleet_sync_protocol::RequestId::new(Uuid::now_v7())?,
+        fleet_protocol::RequestId::new(Uuid::now_v7())?,
     )
     .await?;
     assert_eq!(
         grant,
         HolderChangeAnswer::Granted {
             epoch: Epoch::new(2)?,
-            expires_at: fleet_sync_protocol::SyncTime::from_unix_millis(CREATED + 14_400_000,),
-            start: fleet_sync_protocol::ReplicationPosition::new(
+            expires_at: fleet_protocol::SyncTime::from_unix_millis(CREATED + 14_400_000,),
+            start: fleet_protocol::ReplicationPosition::new(
                 Epoch::new(1)?,
-                fleet_sync_protocol::CommitSequence::new(1),
+                fleet_protocol::CommitSequence::new(1),
             ),
         }
     );

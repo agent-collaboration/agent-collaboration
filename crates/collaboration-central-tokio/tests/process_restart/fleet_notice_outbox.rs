@@ -5,7 +5,7 @@ mod notice_retry;
 use collaboration_central_conformance::ObjectReplyFaultObservation;
 use collaboration_central_core::{ConformanceBoardState, RegistryTime};
 use fleet_admission::{DirectoryEntry, DirectoryLease, DirectorySide, LeaseMetadata};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DatabaseId, Epoch, HolderChangeAnswer, NoticePosition, RequestId as LeaseRequestId,
 };
 use reqwest_websocket::WebSocket;
@@ -130,8 +130,8 @@ async fn prepare_notice_loss(
             expires_at: runtime_primitives::SyncTime::from_unix_millis(
                 at.0.timestamp_millis() + 14_400_000,
             ),
-            start: fleet_sync_protocol::ReplicationPosition::new(
-                Epoch::new(1)?, fleet_sync_protocol::CommitSequence::new(1),
+            start: fleet_protocol::ReplicationPosition::new(
+                Epoch::new(1)?, fleet_protocol::CommitSequence::new(1),
             ),
         });
         eprintln!("FLEET_NOTICE_RESTART_STAGE normal imported Claim granted");

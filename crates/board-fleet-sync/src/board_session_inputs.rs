@@ -1,7 +1,7 @@
 //! Enrollment supplies connection inputs; the Host owns the one machine session.
 use crate::AccessServiceToken;
-use fleet_sync_protocol::{PeerId, ReceiverId};
-use fleet_sync_session::{Endpoint, PeerCredential};
+use fleet_protocol::{PeerId, ReceiverId};
+use fleet_session::{Endpoint, PeerCredential};
 
 pub struct BoardSessionInputs {
     pub endpoint: Endpoint,

@@ -2,12 +2,12 @@
 use board_fleet_sync::{AccessServiceToken, MachineSessionStore, ReqwestSessionTransport};
 use board_sync_protocol::BoardConsumerProtocol;
 use collaboration_mail_protocol::CarrierAcceptance;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientFrame, DeliveryAnswer, DeliveryRequest, ItemId, ItemStatus, ItemStatusState,
     OperationAnswer, OperationRequest, PeerId, QueryResult, SchemaSupport, ServerFrame,
 };
-use fleet_sync_session::{Endpoint, PeerCredential, SessionClient};
-use fleet_sync_tokio_runner::SessionPump;
+use fleet_session::{Endpoint, PeerCredential, SessionClient};
+use fleet_session_client::SessionPump;
 use futures_util::{SinkExt, StreamExt};
 use runtime_primitives::{Backoff, UuidV7Ids};
 use std::{
@@ -29,7 +29,7 @@ type QueriedItemStatus = (ItemId, ItemStatus<CarrierAcceptance>);
 pub(crate) struct FrozenMailQuery {
     answers: Arc<Mutex<Vec<QueriedItemStatus>>>,
     accept_submissions: Arc<AtomicBool>,
-    submissions: Arc<Mutex<Vec<fleet_sync_protocol::DeliveryItemRef>>>,
+    submissions: Arc<Mutex<Vec<fleet_protocol::DeliveryItemRef>>>,
     pub session: collaboration_runtime::MailDeliverySession,
     pub entered: mpsc::UnboundedReceiver<Vec<ItemId>>,
     released: watch::Sender<bool>,
@@ -85,7 +85,7 @@ impl FrozenMailQuery {
                         submitted
                             .lock()
                             .unwrap()
-                            .push(fleet_sync_protocol::DeliveryItemRef {
+                            .push(fleet_protocol::DeliveryItemRef {
                                 item: item.id(),
                                 digest: item.digest().clone(),
                             });
@@ -103,15 +103,15 @@ impl FrozenMailQuery {
                                 version,
                                 cancel,
                                 ..
-                            }) => fleet_sync_protocol::SubmitResult::Replayed {
+                            }) => fleet_protocol::SubmitResult::Replayed {
                                 status,
                                 version,
                                 cancel,
                             },
-                            _ => fleet_sync_protocol::SubmitResult::Accepted {
-                                status: fleet_sync_protocol::DeliveryStatus::Held,
-                                version: fleet_sync_protocol::StatusVersion::new(1),
-                                cancel: Some(fleet_sync_protocol::CancelResult::Pending),
+                            _ => fleet_protocol::SubmitResult::Accepted {
+                                status: fleet_protocol::DeliveryStatus::Held,
+                                version: fleet_protocol::StatusVersion::new(1),
+                                cancel: Some(fleet_protocol::CancelResult::Pending),
                             },
                         };
                         ServerFrame::Answer {
@@ -202,7 +202,7 @@ impl FrozenMailQuery {
         let (welcomed, mut readiness) = watch::channel(false);
         tasks.spawn(async move {
             while let Some(event) = events.recv().await {
-                if matches!(event, fleet_sync_session::ClientEvent::Welcome { .. }) {
+                if matches!(event, fleet_session::ClientEvent::Welcome { .. }) {
                     welcomed.send_replace(true);
                 }
             }
@@ -242,7 +242,7 @@ impl FrozenMailQuery {
     pub fn accept_submissions(&self) {
         self.accept_submissions.store(true, Ordering::SeqCst);
     }
-    pub fn submissions(&self) -> Vec<fleet_sync_protocol::DeliveryItemRef> {
+    pub fn submissions(&self) -> Vec<fleet_protocol::DeliveryItemRef> {
         self.submissions.lock().unwrap().clone()
     }
     pub async fn close(mut self) {

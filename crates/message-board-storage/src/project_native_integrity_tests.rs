@@ -149,7 +149,7 @@ async fn native_keys_parents_and_boolean_columns_refuse_mutation_without_changin
             .await;
         assert!(
             matches!(result.map_err(ProjectStorageError::from), Err(ProjectStorageError::WriteRefused(
-            fleet_sync_writer::WriteRefusal::KeyChange { table: actual }
+            fleet_project_writer::WriteRefusal::KeyChange { table: actual }
         )) if actual == table),
             "native key assignment in {table} was not refused"
         );

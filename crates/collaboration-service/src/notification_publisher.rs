@@ -38,8 +38,10 @@ async fn publication_epoch_if_writable(
         .await
         .map_err(|_| BoardError::board_unavailable())?
     {
-        fleet_sync_lease::WriterState::Provisional => Ok(Some(message_board::EpochNumber::INITIAL)),
-        fleet_sync_lease::WriterState::Writing { epoch } => {
+        fleet_project_lease::WriterState::Provisional => {
+            Ok(Some(message_board::EpochNumber::INITIAL))
+        }
+        fleet_project_lease::WriterState::Writing { epoch } => {
             message_board::EpochNumber::try_from(epoch.value())
                 .map(Some)
                 .map_err(|_| BoardError::board_unavailable())
@@ -77,7 +79,7 @@ pub struct NotificationPublisher {
 impl NotificationPublisher {
     pub(crate) async fn prompt_terminal_item(
         &self,
-        item: fleet_sync_protocol::ItemId,
+        item: fleet_protocol::ItemId,
     ) -> Result<(), BoardError> {
         let id = item
             .as_uuid()

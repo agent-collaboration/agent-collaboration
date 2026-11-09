@@ -2,8 +2,8 @@
 use super::{TestResult, identity};
 use crate::collaboration_runtime::board_composition::open_board_admission;
 use board_fleet_sync::{AccessServiceToken, BoardSessionInputs};
-use fleet_sync_protocol::ReceiverId;
-use fleet_sync_session::{Endpoint, PeerCredential};
+use fleet_protocol::ReceiverId;
+use fleet_session::{Endpoint, PeerCredential};
 use message_board::*;
 use std::{io, sync::Arc};
 

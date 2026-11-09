@@ -12,7 +12,7 @@ use collaboration_central_conformance::{
 use collaboration_central_core::{
     AdminProjectImportAnswer, ClaimReservationState, StepControl, StepControlReply,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientFrame, CopyStatusAnswer, DatabaseId, Epoch, FrameId, HolderChangeAnswer,
     HolderChangeRefusal, LeaseAnswer, LeaseRequest, OperationAnswer, OperationRequest, PeerId,
     ReplicationAnswer, ReplicationRequest, RequestId, ServerFrame, SnapshotRead, TransferId,

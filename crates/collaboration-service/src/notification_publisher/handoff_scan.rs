@@ -79,7 +79,7 @@ impl PublisherInner {
         let MailHandoffItem::Delivery(envelope) = handoff.item else {
             return Err(BoardError::board_unavailable());
         };
-        let fleet_sync_protocol::DeliveryEnvelope::Item(item) = *envelope else {
+        let fleet_protocol::DeliveryEnvelope::Item(item) = *envelope else {
             return Err(BoardError::board_unavailable());
         };
         let local = item.recipient().address.endpoint.service_id == self.admission.installation;
@@ -105,8 +105,8 @@ impl PublisherInner {
         } else {
             match runtime.enqueue_project_item(item, epoch).await {
                 Ok(_) => {}
-                Err(fleet_sync_delivery::DeliveryTransactionFailure::Refused(
-                    fleet_sync_protocol::DeliveryRefusal::MailboxFull,
+                Err(fleet_mail_delivery::DeliveryTransactionFailure::Refused(
+                    fleet_protocol::DeliveryRefusal::MailboxFull,
                 )) => return Ok(IntentHandling::Pending),
                 Err(_) => return Err(BoardError::board_unavailable()),
             }

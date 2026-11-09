@@ -142,7 +142,7 @@ async fn resumed_reader_keeps_separate_membership_items_with_staggered_presence_
             .local_outcome_for_test(poll_items[0].id())
             .await
             .unwrap(),
-        Some(fleet_sync_protocol::RecipientOutcome::Held)
+        Some(fleet_protocol::RecipientOutcome::Held)
     ));
     publisher.shutdown().await;
     drop(publisher);

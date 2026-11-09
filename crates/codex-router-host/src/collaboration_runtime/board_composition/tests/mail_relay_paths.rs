@@ -1,13 +1,13 @@
 //! Actual SDK engine and generic relay; only central Board admission policy stands in.
 use super::*;
-use fleet_sync_protocol::{DeliveryEnvelope, ItemStatusState};
+use fleet_protocol::{DeliveryEnvelope, ItemStatusState};
 use transport::WireEvent;
 
 async fn wait_known(
     harness: &MailHarness,
-    item: fleet_sync_protocol::ItemId,
+    item: fleet_protocol::ItemId,
 ) -> Result<
-    fleet_sync_protocol::ItemStatusState<collaboration_mail_protocol::CarrierAcceptance>,
+    fleet_protocol::ItemStatusState<collaboration_mail_protocol::CarrierAcceptance>,
     TestError,
 > {
     tokio::time::timeout(BOUND, async {
@@ -66,7 +66,7 @@ async fn submit_push_report_and_committed_status_use_one_actual_session() -> Res
                     WireEvent::Publication {
                         frame,
                         item,
-                        status: fleet_sync_protocol::DeliveryStatus::Held,
+                        status: fleet_protocol::DeliveryStatus::Held,
                     } if *item == id => Some(frame),
                     _ => None,
                 });
@@ -74,7 +74,7 @@ async fn submit_push_report_and_committed_status_use_one_actual_session() -> Res
                     matches!(
                         event,
                         WireEvent::Pushed {
-                            result: fleet_sync_protocol::PushResult::Accepted { .. },
+                            result: fleet_protocol::PushResult::Accepted { .. },
                             ..
                         }
                     )
@@ -114,7 +114,7 @@ async fn submit_push_report_and_committed_status_use_one_actual_session() -> Res
     };
     // Auto intentionally holds when no route currently claims the target.
     // Keep that policy and require the exact canonical report/publication.
-    assert_eq!(status, fleet_sync_protocol::DeliveryStatus::Held);
+    assert_eq!(status, fleet_protocol::DeliveryStatus::Held);
     let rows = harness.mail.rows().await?;
     let row = rows
         .iter()
@@ -164,7 +164,7 @@ async fn largest_pushed_items_commit_through_the_actual_machine_session() -> Res
         // Act through a correlated typed frame, real pump, Host and Inbox.
         assert!(matches!(
             pushed_mail::push(&harness, envelope).await?,
-            fleet_sync_protocol::PushResult::Accepted { .. }
+            fleet_protocol::PushResult::Accepted { .. }
         ));
         // Assert maximum inputs commit once without admitting a recipient Fetch.
         assert_eq!(
@@ -194,7 +194,7 @@ async fn wrong_relay_is_never_sent_while_a_correct_submission_on_the_same_sessio
     let mut harness = MailHarness::open(false).await?;
     let wrong_item = relay_items::ordinary_message(harness.peer());
     let wrong_id = wrong_item.id();
-    let wrong_relay = fleet_sync_protocol::PeerId::new(durable_steps::Uuid::now_v7())?;
+    let wrong_relay = fleet_protocol::PeerId::new(durable_steps::Uuid::now_v7())?;
     assert_ne!(wrong_relay, harness.relay);
     let (_, wrong_operation) = harness.mail.enqueue(wrong_item, wrong_relay).await?;
     let correct = relay_items::ordinary_message(harness.peer());

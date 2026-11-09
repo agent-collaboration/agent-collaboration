@@ -2,7 +2,7 @@
 
 use crate::copy_receiver_fixture as support;
 use board_sync_protocol::BoardAnnotation;
-use fleet_sync_protocol::{Piece, PieceContents, ReplicatedTransaction, ReplicationAnswer};
+use fleet_protocol::{Piece, PieceContents, ReplicatedTransaction, ReplicationAnswer};
 use message_board::RecordTime;
 use serde_json::json;
 use support::{Fixture, TestResult, position};
@@ -51,7 +51,7 @@ mod rollback;
 #[path = "../copy_receiver/snapshot.rs"]
 mod snapshot;
 
-fn schema_piece(database: fleet_sync_protocol::DatabaseId) -> TestResult<Piece<BoardAnnotation>> {
+fn schema_piece(database: fleet_protocol::DatabaseId) -> TestResult<Piece<BoardAnnotation>> {
     Ok(Piece::new(PieceContents {
         database,
         epoch: position(0)?.epoch,

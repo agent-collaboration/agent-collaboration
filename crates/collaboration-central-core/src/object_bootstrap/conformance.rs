@@ -7,7 +7,7 @@ use super::{
 };
 use crate::generated_bootstrap_probes as queries;
 use board_sync_protocol::BoardDeliveryTypes;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     AttachSequence, CopyOrigin, CopyStatusAnswer, CreateCopy, DatabaseId, DeliveryTypes, Epoch,
     ItemId, PeerId, QueryResult, ReplicationAnswer, ReportSchemaSupport, SchemaSupport, SessionId,
 };
@@ -236,7 +236,7 @@ where
                     // This migration has only two independent CREATE statements.
                     // Bootstrap subsequently writes migrations 1 and 2 before
                     // the third meets these already-existing tables.
-                    let migration = fleet_sync_receiver::RECEIVER_MIGRATOR
+                    let migration = fleet_project_copy::RECEIVER_MIGRATOR
                         .iter()
                         .find(|migration| migration.version == 3)
                         .ok_or_else(|| corrupt("snapshot-install migration absent"))?;
@@ -282,10 +282,10 @@ where
                                 attach_seq: AttachSequence::new(1).map_err(StoreError::backend)?,
                                 support: SchemaSupport { max_version: 7 },
                             };
-                            fleet_sync_lease::report_schema_support(scope, &report, self.now)
+                            fleet_project_lease::report_schema_support(scope, &report, self.now)
                                 .await
                                 .map_err(StoreError::backend)?;
-                            let stored = fleet_sync_lease::accepted_schema_support(scope, peer)
+                            let stored = fleet_project_lease::accepted_schema_support(scope, peer)
                                 .await
                                 .map_err(StoreError::backend)?
                                 .ok_or_else(|| corrupt("schema report not stored"))?;
@@ -302,22 +302,22 @@ where
                                 holder: Some(peer),
                                 origin: CopyOrigin::Empty,
                             };
-                            let _answer = fleet_sync_receiver::create_copy(scope, &request)
+                            let _answer = fleet_project_copy::create_copy(scope, &request)
                                 .await
-                                .map_err(fleet_sync_receiver::receiver_rollback)?;
+                                .map_err(fleet_project_copy::receiver_rollback)?;
                             BootstrapProbeReply::Copy(Box::new(
-                                fleet_sync_receiver::copy_status(scope)
+                                fleet_project_copy::copy_status(scope)
                                     .await
-                                    .map_err(fleet_sync_receiver::receiver_rollback)?,
+                                    .map_err(fleet_project_copy::receiver_rollback)?,
                             ))
                         }
                         BootstrapProbe::Delivery => {
-                            let allowance = fleet_sync_delivery::minimum_settlement_allowance::<
+                            let allowance = fleet_mail_delivery::minimum_settlement_allowance::<
                                 BoardDeliveryTypes,
                             >()
                             .map_err(StoreError::backend)?;
                             let limits =
-                                fleet_sync_delivery::DeliveryLimits::new::<BoardDeliveryTypes>(
+                                fleet_mail_delivery::DeliveryLimits::new::<BoardDeliveryTypes>(
                                     1_000_000, 100, 1_000_000, allowance,
                                 )
                                 .map_err(StoreError::backend)?;
@@ -325,12 +325,12 @@ where
                                 ItemId::try_from("019f0000-0000-7000-8000-000000000604".to_owned())
                                     .map_err(StoreError::backend)?;
                             let status =
-                                fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes, _>::new(
+                                fleet_mail_delivery::Outbox::<_, BoardDeliveryTypes, _>::new(
                                     scope,
                                     limits,
                                     &crate::fleet_sender_binding::FleetSenderBinding,
                                 )
-                                .relay_query(fleet_sync_protocol::Submitter::Machine(peer), item)
+                                .relay_query(fleet_protocol::Submitter::Machine(peer), item)
                                 .await
                                 .map_err(StoreError::backend)?;
                             let result = QueryResult {

@@ -20,8 +20,8 @@ pub fn new_registry_with_clock(
     )))
 }
 
-pub fn fixture_peer() -> Result<fleet_sync_protocol::PeerId, FixtureError> {
-    Ok(fleet_sync_protocol::PeerId::try_from(
+pub fn fixture_peer() -> Result<fleet_protocol::PeerId, FixtureError> {
+    Ok(fleet_protocol::PeerId::try_from(
         "0192a1b2-c3d4-7000-8000-000000000001".to_owned(),
     )?)
 }
@@ -60,7 +60,7 @@ pub async fn prepare_registered_creation_for_peer(
     registry: &ProjectStoreRegistry,
     input: &message_board::ProjectCreateRequest,
     origin: &message_board::ActorOrigin,
-    peer: fleet_sync_protocol::PeerId,
+    peer: fleet_protocol::PeerId,
 ) -> Result<(), FixtureError> {
     use fleet_admission::{FleetOperation, FleetRequest};
     use message_board::{Record, RecordedActor, RequestDecision, RequestResult};
@@ -103,8 +103,8 @@ pub async fn prepare_registered_creation_for_peer(
     }
     let store = registry.open_project(&input.project_id).await?;
     match store.registration_outcome().await? {
-        fleet_sync_writer::WriterRegistrationOutcome::Ready { .. } => return Ok(()),
-        fleet_sync_writer::WriterRegistrationOutcome::Pending => {}
+        fleet_project_writer::WriterRegistrationOutcome::Ready { .. } => return Ok(()),
+        fleet_project_writer::WriterRegistrationOutcome::Pending => {}
         outcome => {
             return Err(format!("fixture registration cannot receive a grant: {outcome:?}").into());
         }
@@ -114,13 +114,13 @@ pub async fn prepare_registered_creation_for_peer(
         .database(&input.project_id)
         .await?
         .observe_registration(
-            fleet_sync_protocol::LeaseStatus {
-                database: fleet_sync_protocol::DatabaseId::new(uuid::Uuid::parse_str(
+            fleet_protocol::LeaseStatus {
+                database: fleet_protocol::DatabaseId::new(uuid::Uuid::parse_str(
                     input.project_id.as_str(),
                 )?)?,
-                epoch: fleet_sync_protocol::Epoch::new(1)?,
+                epoch: fleet_protocol::Epoch::new(1)?,
                 holder: peer,
-                state: fleet_sync_protocol::LeaseState::Held,
+                state: fleet_protocol::LeaseState::Held,
                 expires_at: now.after(board_fleet_sync::BOARD_LEASE_POLICY.lease_duration),
                 remaining_ms: u64::try_from(
                     board_fleet_sync::BOARD_LEASE_POLICY

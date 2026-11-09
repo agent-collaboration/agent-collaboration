@@ -1,6 +1,6 @@
 //! Enrollment forgets the former stream without throwing away sender custody.
 use super::*;
-use fleet_sync_protocol::{DeliveryEnvelope, DeliveryStatus, RecipientOutcome, SubmitResult};
+use fleet_protocol::{DeliveryEnvelope, DeliveryStatus, RecipientOutcome, SubmitResult};
 use sqlx::Connection;
 use transport::WireEvent;
 
@@ -16,7 +16,7 @@ async fn seed_old_cursor(root: &Path) -> Result<(), TestError> {
 }
 
 fn retained_custody(
-    rows: Vec<fleet_sync_delivery::test_support::DeliveryObservation>,
+    rows: Vec<fleet_mail_delivery::test_support::DeliveryObservation>,
 ) -> Result<Vec<serde_json::Value>, TestError> {
     rows.into_iter()
         .filter(|row| matches!(row.category.as_str(), "outbox" | "inbox" | "report"))
@@ -128,7 +128,7 @@ async fn reenrollment_resets_old_status_cursor_and_reconnect_catches_new_mail_wi
     assert_eq!(reconnected.mail.status_cursor().await?, through);
     assert!(matches!(
         reconnected.mail.outbox_status(item).await?.state,
-        fleet_sync_delivery::OutboxStatusState::Known {
+        fleet_mail_delivery::OutboxStatusState::Known {
             status: DeliveryStatus::Delivered {
                 acceptance: collaboration_mail_protocol::CarrierAcceptance::Started
             },

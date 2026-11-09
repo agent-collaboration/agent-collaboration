@@ -4,7 +4,7 @@ use super::copy_wait_scenarios::CopyClient;
 use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, enroll_admitted_peer,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientFrame, CopyStatusAnswer, CopyUnavailableReason, DatabaseId, Epoch, FrameId, NoConsumer,
     OperationAnswer, OperationRequest, PieceRefusal, ReplicationAnswer, ReplicationRequest,
     ServerFrame, SnapshotCursor, SnapshotManifestAnswer, SnapshotRead,

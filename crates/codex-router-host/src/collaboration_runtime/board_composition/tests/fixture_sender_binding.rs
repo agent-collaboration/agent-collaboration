@@ -1,7 +1,7 @@
 //! Resolve fixture senders from configured authentication and explicit directory answers.
 use super::*;
-use fleet_sync_delivery::{SenderBinding, SenderBindingFailure};
-use fleet_sync_protocol::Submitter;
+use fleet_mail_delivery::{SenderBinding, SenderBindingFailure};
+use fleet_protocol::Submitter;
 impl SenderBinding<ServiceScope<'_>, board_sync_protocol::BoardDeliveryTypes> for Consumer {
     async fn resolve_submitter(
         &self,

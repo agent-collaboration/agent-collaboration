@@ -6,7 +6,7 @@ use crate::{
     step_driver::{StepCallback, StepDriver, StepResult},
 };
 use durable_steps::{AtomicStore, BoxFuture, CallFailure, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CreateCopy, CreateCopyAnswer, FenceRequest, FenceResult, RetireCopy, RetireCopyAnswer,
 };
 use runtime_primitives::SyncTime;
@@ -65,9 +65,7 @@ where
                 now: io.now(),
             })
             .await
-            .map_err(|error| {
-                fleet_sync_receiver::classify_copy_store_error(error).call_failure()
-            })?;
+            .map_err(|error| fleet_project_copy::classify_copy_store_error(error).call_failure())?;
         for CopyChanged in committed.into_effects() {
             changes.signal_committed();
         }
@@ -95,19 +93,19 @@ where
         Box::pin(async move {
             let answer = match self.mutation {
                 CopyMutation::Create(request) => CopyMutationAnswer::Created(
-                    fleet_sync_receiver::create_copy(scope, &request)
+                    fleet_project_copy::create_copy(scope, &request)
                         .await
-                        .map_err(fleet_sync_receiver::receiver_rollback)?,
+                        .map_err(fleet_project_copy::receiver_rollback)?,
                 ),
                 CopyMutation::Fence(request) => CopyMutationAnswer::Fenced(
-                    fleet_sync_receiver::fence(scope, &request)
+                    fleet_project_copy::fence(scope, &request)
                         .await
-                        .map_err(fleet_sync_receiver::receiver_rollback)?,
+                        .map_err(fleet_project_copy::receiver_rollback)?,
                 ),
                 // The native library service treats an ambiguous retire as a
                 // lost answer. Do not fabricate a no-effect classification.
                 CopyMutation::Retire(request) => CopyMutationAnswer::Retired(
-                    fleet_sync_receiver::retire_copy(scope, &request, self.now)
+                    fleet_project_copy::retire_copy(scope, &request, self.now)
                         .await
                         .map_err(StoreError::backend)?,
                 ),

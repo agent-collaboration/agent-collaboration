@@ -3,7 +3,7 @@
 use crate::{
     ImportRowKind, ProjectSnapshot, ProjectStorageError, project_import_keys::RecordAdmission,
 };
-use fleet_sync_writer::WriteTransaction;
+use fleet_project_writer::WriteTransaction;
 use message_board::{EpochLine, EpochLineId, EpochNumber, FeedCursor, FeedPosition, RecordId};
 use sqlx::Executor;
 use sqlx_turso::Turso;

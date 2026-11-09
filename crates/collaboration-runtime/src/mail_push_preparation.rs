@@ -16,8 +16,8 @@ use collaboration_protocol::{
     DeliveryRejection, DeliveryRejectionReason, MachineId, MessageDelivery, MessageText,
     PushHeaderFacts, PushKind, PushLineInput, PushRecord, RouterLink, render_push_line,
 };
-use fleet_sync_delivery::DeliveryError;
-use fleet_sync_protocol::DeliveryItem;
+use fleet_mail_delivery::DeliveryError;
+use fleet_protocol::DeliveryItem;
 use message_board::{SubscriptionMode, WhenIdle};
 use runtime_primitives::CallId;
 

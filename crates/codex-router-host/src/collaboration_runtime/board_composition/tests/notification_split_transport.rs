@@ -1,11 +1,11 @@
 //! Delegate real replication and hold the send after an actual PartStaged was processed.
 use board_fleet_sync::BoardProjectSchema;
 use board_sync_protocol::{BoardAnnotation, BoardConsumerProtocol};
-use fleet_sync_protocol::{
+use fleet_native_writer::WriterSessionCalls;
+use fleet_project_writer::{ReplicationTransport, SendFailure};
+use fleet_protocol::{
     Piece, ReceiverId, ReplicatedTransaction, ReplicationAnswer, RowChange, TransactionKey,
 };
-use fleet_sync_tokio_runner::WriterSessionCalls;
-use fleet_sync_writer::{ReplicationTransport, SendFailure};
 use std::sync::{
     Arc,
     atomic::{AtomicUsize, Ordering},

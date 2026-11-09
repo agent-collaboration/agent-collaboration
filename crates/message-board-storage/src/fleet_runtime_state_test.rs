@@ -1,7 +1,7 @@
 use super::*;
 use board_sync_protocol::{FleetLinkDrop, FleetLinkDropReason, FleetLinkRecord, FleetLinkState};
 use chrono::{DateTime, Utc};
-use fleet_sync_protocol::PeerId;
+use fleet_protocol::PeerId;
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
 #[tokio::test]
@@ -112,7 +112,7 @@ async fn reenrollment_clears_session_and_link_but_retains_unfinished_attempt() -
     let path = directory.path().join("fleet-cache.sqlite");
     let cache = FleetCache::open(&path).await?;
     let state = ClientSessionState {
-        session_id: fleet_sync_protocol::SessionId::new(uuid::Uuid::now_v7())?,
+        session_id: fleet_protocol::SessionId::new(uuid::Uuid::now_v7())?,
         notice_cursor: NoticePosition::new(u64::MAX),
     };
     cache.save_machine_session_state(&state).await?;
@@ -162,7 +162,7 @@ async fn orphan_progress_is_discarded_without_creating_a_session_or_blocking_sta
     );
     assert!(!source.exists());
     let state = ClientSessionState {
-        session_id: fleet_sync_protocol::SessionId::new(uuid::Uuid::now_v7())?,
+        session_id: fleet_protocol::SessionId::new(uuid::Uuid::now_v7())?,
         notice_cursor: NoticePosition::new(0),
     };
     cache.save_machine_session_state(&state).await?;
@@ -290,7 +290,7 @@ async fn legacy_import_validates_the_whole_set_before_committing_or_deleting() -
     tokio::fs::create_dir(&session_home).await?;
     tokio::fs::create_dir(&attempt_home).await?;
     let session = ClientSessionState {
-        session_id: fleet_sync_protocol::SessionId::new(uuid::Uuid::now_v7())?,
+        session_id: fleet_protocol::SessionId::new(uuid::Uuid::now_v7())?,
         notice_cursor: NoticePosition::new(19),
     };
     let session_path = session_home.join("state.json");
@@ -393,7 +393,7 @@ async fn malformed_session_columns_and_duplicate_singletons_are_rejected() -> Te
     let root = tempfile::tempdir()?;
     let cache = FleetCache::open(&root.path().join("fleet-cache.sqlite")).await?;
     let state = ClientSessionState {
-        session_id: fleet_sync_protocol::SessionId::new(uuid::Uuid::now_v7())?,
+        session_id: fleet_protocol::SessionId::new(uuid::Uuid::now_v7())?,
         notice_cursor: NoticePosition::new(u64::MAX),
     };
     for statement in [

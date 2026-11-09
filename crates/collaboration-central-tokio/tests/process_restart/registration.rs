@@ -1,6 +1,6 @@
 //! Registration's result is durable before its outgoing answer is dropped.
 use super::*;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientFrame, DatabaseId, FrameId, LeaseRequest, Origin, PeerId, Registration,
     RegistrationAnswer,
 };
@@ -45,7 +45,7 @@ async fn registration_replays_the_committed_answer_after_the_server_process_dies
         )?;
     }
     let request = Registration {
-        attempt: fleet_sync_protocol::RequestId::new(Uuid::now_v7())?,
+        attempt: fleet_protocol::RequestId::new(Uuid::now_v7())?,
         database,
         writer: PeerId::new(peer.peer)?,
         origin: Origin::Empty,
@@ -148,7 +148,7 @@ pub(super) async fn reconnect_peer_with_welcome(
     max_schema_version: u64,
 ) -> ConformanceResult<(
     reqwest_websocket::WebSocket,
-    Vec<fleet_sync_protocol::DatabaseStatus>,
+    Vec<fleet_protocol::DatabaseStatus>,
 )> {
     use reqwest_websocket::RequestBuilderExt;
     let mut socket = reqwest::Client::builder()
@@ -174,7 +174,7 @@ pub(super) async fn reconnect_peer_with_welcome(
         ))
         .await?;
     ConformanceClient::new(base)?
-        .wake_due_after_hello(fleet_sync_protocol::SessionId::new(session)?)
+        .wake_due_after_hello(fleet_protocol::SessionId::new(session)?)
         .await?;
     let databases = read_reopened_welcome(&mut socket, session).await?;
     Ok((socket, databases))
@@ -183,7 +183,7 @@ pub(super) async fn reconnect_peer_with_welcome(
 async fn read_reopened_welcome<Messages>(
     messages: &mut Messages,
     session: Uuid,
-) -> ConformanceResult<Vec<fleet_sync_protocol::DatabaseStatus>>
+) -> ConformanceResult<Vec<fleet_protocol::DatabaseStatus>>
 where
     Messages: futures_util::Stream<Item = Result<reqwest_websocket::Message, reqwest_websocket::Error>>
         + Unpin,
@@ -230,17 +230,17 @@ where
 )]
 async fn reopened_welcome_accepts_notice_before_its_exact_session() -> ConformanceResult<()> {
     // Attached sessions may receive a notice while Welcome gathers Registry/Copy state.
-    let session = fleet_sync_protocol::SessionId::new(Uuid::now_v7())?;
+    let session = fleet_protocol::SessionId::new(Uuid::now_v7())?;
     let notice = ServerFrame::<BoardConsumerProtocol>::Notice {
-        position: fleet_sync_protocol::NoticePosition::new(1),
+        position: fleet_protocol::NoticePosition::new(1),
         body: Notice::LeaseChanged {
             database: DatabaseId::new(Uuid::now_v7())?,
         },
     };
-    let expected = vec![fleet_sync_protocol::DatabaseStatus::Unavailable {
+    let expected = vec![fleet_protocol::DatabaseStatus::Unavailable {
         database: DatabaseId::new(Uuid::now_v7())?,
         lease: None,
-        reason: fleet_sync_protocol::CopyUnavailableReason::Uninitialized,
+        reason: fleet_protocol::CopyUnavailableReason::Uninitialized,
     }];
     let welcome = ServerFrame::<BoardConsumerProtocol>::Welcome {
         session_id: session,
@@ -273,7 +273,7 @@ async fn reopened_welcome_accepts_notice_before_its_exact_session() -> Conforman
 async fn reopened_welcome_notices_do_not_restart_the_total_deadline() -> ConformanceResult<()> {
     let session = Uuid::now_v7();
     let notice = serde_json::to_string(&ServerFrame::<BoardConsumerProtocol>::Notice {
-        position: fleet_sync_protocol::NoticePosition::new(1),
+        position: fleet_protocol::NoticePosition::new(1),
         body: Notice::LeaseChanged {
             database: DatabaseId::new(Uuid::now_v7())?,
         },
@@ -307,15 +307,15 @@ async fn reopened_welcome_rejects_a_changed_session_or_another_frame() -> Confor
     let session = Uuid::now_v7();
     for frame in [
         ServerFrame::<BoardConsumerProtocol>::Welcome {
-            session_id: fleet_sync_protocol::SessionId::new(Uuid::now_v7())?,
+            session_id: fleet_protocol::SessionId::new(Uuid::now_v7())?,
             databases: Vec::new(),
         },
         ServerFrame::Closed {
-            reason: fleet_sync_protocol::CloseReason::SessionEnded,
+            reason: fleet_protocol::CloseReason::SessionEnded,
         },
     ] {
         let valid_welcome = ServerFrame::<BoardConsumerProtocol>::Welcome {
-            session_id: fleet_sync_protocol::SessionId::new(session)?,
+            session_id: fleet_protocol::SessionId::new(session)?,
             databases: Vec::new(),
         };
         let mut messages = futures_util::stream::iter([

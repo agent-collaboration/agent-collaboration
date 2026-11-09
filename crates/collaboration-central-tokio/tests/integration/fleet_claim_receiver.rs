@@ -5,7 +5,7 @@ use super::{
     fleet_claim_settlement::{settle, settlement_call},
 };
 use durable_steps::{AtomicStore, CallTarget, OperationId, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClaimReservation, ClaimSettlement, GateAnswer, HolderChangeRequest, SettleOutcome,
 };
 use serde_json::{Value, json};
@@ -31,13 +31,13 @@ pub(super) fn claim_gate_call(
     cancelled: bool,
 ) -> TestResult<Vec<u8>> {
     let change = HolderChangeRequest::Claim {
-        attempt: fleet_sync_protocol::TransferId::new(attempt)?,
+        attempt: fleet_protocol::TransferId::new(attempt)?,
         database: PROJECT.to_owned().try_into()?,
         claimant: A.to_owned().try_into()?,
     };
     let (kind, request) = if cancelled {
         (
-            fleet_sync_lease::ClaimSettlement::KIND,
+            fleet_project_lease::ClaimSettlement::KIND,
             serde_json::to_value(ClaimSettlement {
                 change,
                 outcome: SettleOutcome::Cancelled,
@@ -45,7 +45,7 @@ pub(super) fn claim_gate_call(
         )
     } else {
         (
-            fleet_sync_lease::ClaimReservation::KIND,
+            fleet_project_lease::ClaimReservation::KIND,
             serde_json::to_value(ClaimReservation { change })?,
         )
     };
@@ -93,8 +93,8 @@ async fn renew(fixture: &Fixture) -> TestResult {
         "request":{"kind":"renew","value":{"attempt":durable_steps::Uuid::now_v7(),"database":PROJECT,"epoch":1}}
     })).await?;
     if !matches!(
-        serde_json::from_value::<fleet_sync_protocol::LeaseAnswer>(answer)?,
-        fleet_sync_protocol::LeaseAnswer::Renew(fleet_sync_protocol::RenewAnswer::Renewed {
+        serde_json::from_value::<fleet_protocol::LeaseAnswer>(answer)?,
+        fleet_protocol::LeaseAnswer::Renew(fleet_protocol::RenewAnswer::Renewed {
             replayed: false,
             ..
         })

@@ -6,8 +6,8 @@ use crate::collaboration_runtime::board_composition::{
 };
 use crate::collaboration_runtime::{CollaborationRuntime, CollaborationRuntimeInputs};
 use collaboration_runtime::ProjectReadCopySource;
-use fleet_sync_protocol::{CopyStatusAnswer, ReplicationAnswer, ReplicationRequest};
-use fleet_sync_session::SessionClientStore;
+use fleet_protocol::{CopyStatusAnswer, ReplicationAnswer, ReplicationRequest};
+use fleet_session::SessionClientStore;
 use std::os::unix::fs::PermissionsExt;
 
 pub(super) async fn run(inputs: ChildInputs, phase: &str) -> TestResult {
@@ -40,12 +40,12 @@ pub(super) async fn run(inputs: ChildInputs, phase: &str) -> TestResult {
         }
     }
     let session = board_fleet_sync::BoardSessionInputs {
-        endpoint: fleet_sync_session::Endpoint::new(&inputs.endpoint)?,
+        endpoint: fleet_session::Endpoint::new(&inputs.endpoint)?,
         access: board_fleet_sync::AccessServiceToken::new(
             "board-fixture-client",
             "board-fixture-secret",
         )?,
-        credential: fleet_sync_session::PeerCredential::new("Bearer board-central-native-fixture")?,
+        credential: fleet_session::PeerCredential::new("Bearer board-central-native-fixture")?,
         peer: inputs.peer,
         relay: inputs.relay,
         receiver: inputs.receiver,
@@ -93,7 +93,7 @@ async fn stop_held_install(
             let answer = projects
                 .requests
                 .request(OperationRequest::Lease(LeaseRequest::Claim {
-                    attempt: fleet_sync_protocol::RequestId::try_from(
+                    attempt: fleet_protocol::RequestId::try_from(
                         inputs.request.request_id.as_str().to_owned(),
                     )?,
                     database: database_id,
@@ -143,7 +143,7 @@ async fn stop_held_install(
             .await?;
     emit("RECEIVE_RESTART_ARMED ", serde_json::json!({"grant":grant}))?;
     let mut instructions = BufReader::new(tokio::io::stdin()).lines();
-    let position = fleet_sync_protocol::NoticePosition::new(
+    let position = fleet_protocol::NoticePosition::new(
         instructions
             .next_line()
             .await?
@@ -159,7 +159,7 @@ async fn stop_held_install(
                 .await?
                 .is_some_and(|state| state.notice_cursor >= position)
             {
-                return Ok::<_, fleet_sync_session::StoreError>(());
+                return Ok::<_, fleet_session::StoreError>(());
             }
             tokio::task::yield_now().await;
         }
@@ -168,7 +168,7 @@ async fn stop_held_install(
     let record = observer.install_record(installed.install_id).await?;
     assert!(matches!(
         record.status,
-        fleet_sync_tokio_runner::InstallStatus::Running { .. }
+        fleet_native_writer::InstallStatus::Running { .. }
     ));
     assert!(matches!(
         registry.existing_project(project).await,
@@ -247,7 +247,7 @@ async fn resume_and_post(
     let record = observer.install_record(receipt.install.install_id).await?;
     assert!(matches!(
         record.status,
-        fleet_sync_tokio_runner::InstallStatus::Ready { .. }
+        fleet_native_writer::InstallStatus::Ready { .. }
     ));
     timeout(BOUND, projects.settle_operations()).await??;
     emit(

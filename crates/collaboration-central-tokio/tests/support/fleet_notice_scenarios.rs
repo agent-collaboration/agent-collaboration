@@ -9,7 +9,7 @@ use collaboration_central_conformance::{
 };
 use durable_steps::Uuid;
 use fleet_admission::{FleetOperation, FleetRequest, FleetRequestResult};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientFrame, FrameId, Notice, OperationAnswer, OperationRequest, ServerFrame,
 };
 use futures_util::{SinkExt, StreamExt};
@@ -36,7 +36,7 @@ async fn next(socket: &mut WebSocket) -> ConformanceResult<ServerFrame<BoardCons
 /// The same typed client sockets survive one directory write and then carry mail.
 pub async fn one_write_then_mail(base: &str) -> ConformanceResult<()> {
     use board_sync_protocol::{BoardDeliveryTypes, MailSubmitAnswer};
-    use fleet_sync_protocol::{
+    use fleet_protocol::{
         DeliveryEnvelope, DeliveryItem, ItemId, PeerId, ServerCall, ServerRequest, SubmitResult,
     };
     let client = ConformanceClient::new(base)?;
@@ -127,9 +127,9 @@ async fn operation(
             ServerFrame::Notice { .. } => {}
             ServerFrame::Request {
                 body:
-                    fleet_sync_protocol::ServerRequest::Crate(
-                        fleet_sync_protocol::ServerCall::PublishStatus { .. },
-                    ),
+                    fleet_protocol::ServerRequest::Crate(fleet_protocol::ServerCall::PublishStatus {
+                        ..
+                    }),
                 ..
             } => {}
             _ => {
@@ -267,8 +267,8 @@ pub async fn feed_advancement_reaches_reader_once(base: &str) -> ConformanceResu
         }
 
         let expected = vec![
-            PositionedBoardNotice {position: fleet_sync_protocol::NoticePosition::new(1),kind: expected_notice},
-            PositionedBoardNotice {position: fleet_sync_protocol::NoticePosition::new(2),kind: BoardNotice::ProjectListChanged {}},
+            PositionedBoardNotice {position: fleet_protocol::NoticePosition::new(1),kind: expected_notice},
+            PositionedBoardNotice {position: fleet_protocol::NoticePosition::new(2),kind: BoardNotice::ProjectListChanged {}},
         ];
         for socket in [&mut reader.socket, &mut other_reader.socket] {
             if !matches!(operation(socket, BoardConsumerRequest::Read {scope: BoardReadScope::Notices, cursor: None}).await?,
@@ -300,9 +300,7 @@ pub async fn feed_advancement_reaches_reader_once(base: &str) -> ConformanceResu
 }
 
 async fn archive_hint(socket: &mut WebSocket, template: &FleetRequest) -> ConformanceResult<()> {
-    use fleet_sync_protocol::{
-        DatabaseId, Epoch, NoticePosition, PeerId, RequestId as LeaseRequestId,
-    };
+    use fleet_protocol::{DatabaseId, Epoch, NoticePosition, PeerId, RequestId as LeaseRequestId};
     let board = message_board::BoardId::generate();
     let project = message_board::ProjectId::generate();
     let mut request = template.clone();

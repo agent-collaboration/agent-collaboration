@@ -7,7 +7,7 @@ use crate::{
     object_runtime::ObjectWork,
 };
 use durable_steps::{AtomicStore, OperationState, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CommitSequence, Epoch, Import, ImportAnswer, ImportDigest, PageDigest, ReplicationAnswer,
     ReplicationPosition, RequestId, SchemaEntry, SchemaIdentity, SchemaObjectKind, SeedAnswer,
     SeedAttemptId, SeedComplete, SeedPage, SeedPageAnswer, SnapshotPage, SqlValue,
@@ -59,7 +59,8 @@ where
         let attempt = RequestId::new(shared_host.new_id()).map_err(StoreError::backend)?;
         let operation = engine
             .start_import(
-                &fleet_sync_lease::lifecycle_request_key(attempt).map_err(StoreError::backend)?,
+                &fleet_project_lease::lifecycle_request_key(attempt)
+                    .map_err(StoreError::backend)?,
                 Import {
                     attempt,
                     database,

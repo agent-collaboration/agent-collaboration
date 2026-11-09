@@ -5,7 +5,7 @@ use crate::{
     record_local_cancel_outcome_in_scope,
 };
 use collaboration_mail_protocol::{CancelCause, CarrierAcceptance, MailItemId};
-use fleet_sync_protocol::RecipientOutcome;
+use fleet_protocol::RecipientOutcome;
 
 fn first_clock() -> chrono::DateTime<chrono::Utc> {
     "2026-10-20T12:00:00Z".parse().unwrap()

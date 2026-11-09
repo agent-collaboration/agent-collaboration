@@ -326,7 +326,7 @@ async fn deferred_discovery_preserves_a_selection_owned_by_a_reader_started_afte
         }
         assert_eq!(
             runtime.await_mail_outcome(&push).await,
-            fleet_sync_protocol::RecipientOutcome::Delivered {
+            fleet_protocol::RecipientOutcome::Delivered {
                 acceptance: collaboration_mail_protocol::CarrierAcceptance::Started,
             }
         );

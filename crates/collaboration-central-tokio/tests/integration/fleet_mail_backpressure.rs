@@ -4,7 +4,7 @@ use durable_steps::{
     AtomicStore, StoreError,
     storage::{JournalStorage, StepState},
 };
-use fleet_sync_protocol::PushResult;
+use fleet_protocol::PushResult;
 use runtime_primitives::Clock;
 
 #[expect(

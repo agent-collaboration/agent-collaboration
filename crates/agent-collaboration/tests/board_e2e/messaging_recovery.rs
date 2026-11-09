@@ -6,7 +6,7 @@ use super::{
 };
 use board_sync_protocol::BoardDeliveryBody;
 use codex_router_test_support::FixtureResult;
-use fleet_sync_protocol::DeliveryEnvelope;
+use fleet_protocol::DeliveryEnvelope;
 use message_board::{IntentState, NotifyIntent, PostId};
 use message_board_storage::MailHandoffItem;
 use serde_json::json;

@@ -108,10 +108,10 @@ async fn admin_import_schema_exposes_typed_header_phase_and_manifest_children()
 
 type Fixture = crate::fleet_storage_fixture::FleetStorageFixture;
 type Store =
-    fleet_sync_tokio_runner::TokioObject<crate::CoreHost<crate::fleet_storage_fixture::FixtureIo>>;
+    fleet_tokio_objects::TokioObject<crate::CoreHost<crate::fleet_storage_fixture::FixtureIo>>;
 
 pub(super) fn header(legacy: bool) -> Result<crate::AdminImportHeader, TestError> {
-    use fleet_sync_protocol::{
+    use fleet_protocol::{
         CommitSequence, DatabaseId, Epoch, ImportDigest, ReplicationPosition, SchemaIdentity,
         SnapshotManifest, TableDigest, TableManifest, TableName,
     };
@@ -160,7 +160,7 @@ pub(super) fn header(legacy: bool) -> Result<crate::AdminImportHeader, TestError
         },
     })
 }
-pub(super) fn id(suffix: u16) -> Result<fleet_sync_protocol::RequestId, TestError> {
+pub(super) fn id(suffix: u16) -> Result<fleet_protocol::RequestId, TestError> {
     Ok(format!("019f0000-0000-7000-8000-00000000{suffix:04x}").try_into()?)
 }
 pub(super) async fn command(
@@ -265,9 +265,9 @@ async fn admin_import_header_and_ordered_manifest_survive_phases_replay_and_owni
             .await?,
             Err(AdminImportRefusal::IdentityMismatch)
         );
-        let wrong_position = fleet_sync_protocol::ReplicationPosition::new(
-            fleet_sync_protocol::Epoch::new(1)?,
-            fleet_sync_protocol::CommitSequence::new(0),
+        let wrong_position = fleet_protocol::ReplicationPosition::new(
+            fleet_protocol::Epoch::new(1)?,
+            fleet_protocol::CommitSequence::new(0),
         );
         assert_eq!(
             command(
@@ -516,9 +516,9 @@ async fn admin_import_first_header_guards_and_empty_manifest_use_existing_domain
     for invalid_epoch in [false, true] {
         let mut offered = header(false)?;
         if invalid_epoch {
-            offered.manifest.position = fleet_sync_protocol::ReplicationPosition::new(
-                fleet_sync_protocol::Epoch::new(2)?,
-                fleet_sync_protocol::CommitSequence::new(1),
+            offered.manifest.position = fleet_protocol::ReplicationPosition::new(
+                fleet_protocol::Epoch::new(2)?,
+                fleet_protocol::CommitSequence::new(1),
             );
         } else {
             offered.pages = 0;

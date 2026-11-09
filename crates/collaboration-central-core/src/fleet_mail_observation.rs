@@ -1,8 +1,8 @@
 //! Owner-only conformance projection of one item's committed Fleet custody.
 use board_sync_protocol::BoardDeliveryTypes;
 use durable_steps::{StoreError, storage::TransactionScope};
-use fleet_sync_delivery::{Outbox, OutboxStatusState};
-use fleet_sync_protocol::{DeliveryStatus, ItemId, StatusVersion};
+use fleet_mail_delivery::{Outbox, OutboxStatusState};
+use fleet_protocol::{DeliveryStatus, ItemId, StatusVersion};
 use serde::{Deserialize, Serialize};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
@@ -108,7 +108,7 @@ where
     )
     .status(item)
     .await
-    .map_err(fleet_sync_delivery::delivery_rollback)?;
+    .map_err(fleet_mail_delivery::delivery_rollback)?;
     let row = match (payload.as_deref(), status.state) {
         (None, OutboxStatusState::Unknown) => FleetMailCustodyRow::Absent,
         (

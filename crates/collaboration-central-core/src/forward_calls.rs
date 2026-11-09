@@ -1,8 +1,8 @@
 //! Closed calls for routing and delivering forwarded posts.
 use board_sync_protocol::VerifiedForwardedPost;
 use durable_steps::CallTarget;
-use fleet_sync_protocol::{FrameId, PeerId};
-use fleet_sync_session::SessionKey;
+use fleet_protocol::{FrameId, PeerId};
+use fleet_session::SessionKey;
 use message_board::{ActorOrigin, ProjectId, ServiceId};
 use runtime_primitives::SyncTime;
 use serde::{Deserialize, Serialize};
@@ -51,7 +51,7 @@ pub(crate) struct ForwardDeliveryRequest {
     pub deadline: SyncTime,
     pub origin_session: SessionKey,
     pub request_frame: FrameId,
-    pub connection: fleet_sync_protocol::ConnectionId,
+    pub connection: fleet_protocol::ConnectionId,
     pub created_at: SyncTime,
     pub post: VerifiedForwardedPost,
 }

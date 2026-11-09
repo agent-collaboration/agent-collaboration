@@ -2,9 +2,9 @@
 use crate::SelectedWriterFile;
 use crate::cutover_host_fixture::CutoverHostFixture;
 use board_fleet_sync::{BOARD_LEASE_POLICY, BoardProjectSchema};
-use fleet_sync_lease::LeaseHolder;
-use fleet_sync_protocol::{DatabaseId, Epoch, PeerId, SnapshotManifest};
-use fleet_sync_writer::{ReplicatedDatabase, WriterOptions};
+use fleet_project_lease::LeaseHolder;
+use fleet_project_writer::{ReplicatedDatabase, WriterOptions};
+use fleet_protocol::{DatabaseId, Epoch, PeerId, SnapshotManifest};
 use message_board::{
     ActorOrigin, BoardId, Identity, ProjectFeedEntry, ProjectState, RecordEnvelope,
     RecordPlacement, RecordScope, RecordedActor, RequestId, SubjectRevision, WorkspaceId,

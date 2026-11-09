@@ -1,5 +1,5 @@
 //! Status reads observe the library owner outside admission's write scope.
-use fleet_sync_lease::WriterState;
+use fleet_project_lease::WriterState;
 use message_board::ProjectId;
 use std::future::Future;
 

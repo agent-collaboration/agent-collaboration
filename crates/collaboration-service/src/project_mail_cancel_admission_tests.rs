@@ -1,6 +1,6 @@
 //! Another canonical control never supplies the proposed child's SDK custody or epoch.
 use super::*;
-use fleet_sync_protocol::{CancelBody, DeliveryCancel, DeliveryItemRef};
+use fleet_protocol::{CancelBody, DeliveryCancel, DeliveryItemRef};
 #[path = "frozen_remote_cancel_tests.rs"]
 mod frozen_remote;
 
@@ -44,7 +44,7 @@ async fn a_relay_cancel_refusal_remains_another_canonical_control_on_same_id_rep
         digest: earlier_cancel.digest().clone(),
     };
     let answer_ref = earlier.clone();
-    let input = fleet_sync_delivery::SubmitInput {
+    let input = fleet_mail_delivery::SubmitInput {
         item: id,
         digest: child(&original, id).digest().clone(),
         relay,
@@ -61,16 +61,16 @@ async fn a_relay_cancel_refusal_remains_another_canonical_control_on_same_id_rep
         .store
         .transaction(move |scope| {
             Box::pin(async move {
-                fleet_sync_delivery::Outbox::<_, collaboration_contracts::RouterDeliveryTypes, _>::new(
+                fleet_mail_delivery::Outbox::<_, collaboration_contracts::RouterDeliveryTypes, _>::new(
                     scope, limits, binding.as_ref(),
                 )
                 .mark_submitted(
                     &input,
-                    fleet_sync_protocol::SubmitResult::CancelAlreadyRequested {
+                    fleet_protocol::SubmitResult::CancelAlreadyRequested {
                         existing: answer_ref,
-                        status: fleet_sync_protocol::DeliveryStatus::Held,
-                        version: fleet_sync_protocol::StatusVersion::new(1),
-                        cancel: Some(fleet_sync_protocol::CancelResult::Pending),
+                        status: fleet_protocol::DeliveryStatus::Held,
+                        version: fleet_protocol::StatusVersion::new(1),
+                        cancel: Some(fleet_protocol::CancelResult::Pending),
                     },
                     observed_at,
                 )
@@ -90,8 +90,8 @@ async fn a_relay_cancel_refusal_remains_another_canonical_control_on_same_id_rep
         "relay refusal was treated as the proposed child's successful replay"
     );
     assert!(matches!(replay, OutboxAdmission::Replayed {
-        status: fleet_sync_protocol::DeliveryStatus::Refused {
-            reason: fleet_sync_protocol::DeliveryRefusal::CancelAlreadyRequested { existing },
+        status: fleet_protocol::DeliveryStatus::Refused {
+            reason: fleet_protocol::DeliveryRefusal::CancelAlreadyRequested { existing },
         }, ..
     } if existing == earlier));
     drop(mail);
@@ -174,7 +174,7 @@ async fn another_canonical_cancel_leaves_no_proposed_child_custody_or_epoch_afte
         mail.enqueue_project_cancel(changed, 5.try_into().unwrap())
             .await,
         Err(DeliveryTransactionFailure::Refused(
-            fleet_sync_protocol::DeliveryRefusal::ItemConflict { .. }
+            fleet_protocol::DeliveryRefusal::ItemConflict { .. }
         ))
     ));
     assert_eq!(

@@ -9,7 +9,7 @@ use std::{path::Path, sync::Arc};
 type FixtureError = Box<dyn std::error::Error + Send + Sync>;
 
 pub(crate) fn registry(root: &Path) -> Result<Arc<ProjectStoreRegistry>, FixtureError> {
-    let peer = fleet_sync_protocol::PeerId::new(uuid::Uuid::parse_str(
+    let peer = fleet_protocol::PeerId::new(uuid::Uuid::parse_str(
         "0192a1b2-c3d4-7000-8000-000000000001",
     )?)?;
     Ok(Arc::new(ProjectStoreRegistry::new(
@@ -91,15 +91,15 @@ pub(crate) async fn prepare_registered_creation(
         .database(&input.project_id)
         .await?
         .observe_registration(
-            fleet_sync_protocol::LeaseStatus {
-                database: fleet_sync_protocol::DatabaseId::new(uuid::Uuid::parse_str(
+            fleet_protocol::LeaseStatus {
+                database: fleet_protocol::DatabaseId::new(uuid::Uuid::parse_str(
                     input.project_id.as_str(),
                 )?)?,
-                epoch: fleet_sync_protocol::Epoch::new(1)?,
-                holder: fleet_sync_protocol::PeerId::new(uuid::Uuid::parse_str(
+                epoch: fleet_protocol::Epoch::new(1)?,
+                holder: fleet_protocol::PeerId::new(uuid::Uuid::parse_str(
                     "0192a1b2-c3d4-7000-8000-000000000001",
                 )?)?,
-                state: fleet_sync_protocol::LeaseState::Held,
+                state: fleet_protocol::LeaseState::Held,
                 expires_at: now.after(board_fleet_sync::BOARD_LEASE_POLICY.lease_duration),
                 remaining_ms: u64::try_from(
                     board_fleet_sync::BOARD_LEASE_POLICY
@@ -117,22 +117,22 @@ pub(crate) async fn prepare_registered_creation(
 pub(crate) async fn expire_lease(
     registry: &ProjectStoreRegistry,
     project: &ProjectId,
-) -> Result<fleet_sync_protocol::LeaseStatus, FixtureError> {
-    use fleet_sync_protocol::{LeaseState, LeaseStatus};
+) -> Result<fleet_protocol::LeaseStatus, FixtureError> {
+    use fleet_protocol::{LeaseState, LeaseStatus};
     use runtime_primitives::{Clock, SystemClock};
     let database = registry.database(project).await?;
     let epoch = match database.writer_state().await? {
-        fleet_sync_lease::WriterState::Writing { epoch }
-        | fleet_sync_lease::WriterState::Paused { epoch, .. } => epoch,
+        fleet_project_lease::WriterState::Writing { epoch }
+        | fleet_project_lease::WriterState::Paused { epoch, .. } => epoch,
         _ => return Err("lease expiry fixture requires an established writer".into()),
     };
     // A fresh zero-remaining answer expires authority immediately. Backdating
     // the request would now correctly lose to the saved newer observation.
     let started = SystemClock.now();
     let lease = LeaseStatus {
-        database: fleet_sync_protocol::DatabaseId::new(uuid::Uuid::parse_str(project.as_str())?)?,
+        database: fleet_protocol::DatabaseId::new(uuid::Uuid::parse_str(project.as_str())?)?,
         epoch,
-        holder: fleet_sync_protocol::PeerId::new(uuid::Uuid::parse_str(
+        holder: fleet_protocol::PeerId::new(uuid::Uuid::parse_str(
             "0192a1b2-c3d4-7000-8000-000000000001",
         )?)?,
         state: LeaseState::Held,
@@ -141,8 +141,8 @@ pub(crate) async fn expire_lease(
     };
     database
         .observe_renewal(
-            fleet_sync_protocol::RenewAnswer::Renewed {
-                recorded: fleet_sync_protocol::RenewResult {
+            fleet_protocol::RenewAnswer::Renewed {
+                recorded: fleet_protocol::RenewResult {
                     epoch: lease.epoch,
                     expires_at: lease.expires_at,
                 },
@@ -155,7 +155,7 @@ pub(crate) async fn expire_lease(
         .await?;
     if !matches!(
         database.writer_state().await?,
-        fleet_sync_lease::WriterState::Paused { .. }
+        fleet_project_lease::WriterState::Paused { .. }
     ) {
         return Err("lease expiry observation did not pause the writer".into());
     }
@@ -165,9 +165,9 @@ pub(crate) async fn expire_lease(
 pub(crate) async fn renew_lease(
     registry: &ProjectStoreRegistry,
     project: &ProjectId,
-    previous: fleet_sync_protocol::LeaseStatus,
+    previous: fleet_protocol::LeaseStatus,
 ) -> Result<(), FixtureError> {
-    use fleet_sync_protocol::{RenewAnswer, RenewResult};
+    use fleet_protocol::{RenewAnswer, RenewResult};
     use runtime_primitives::{Clock, SystemClock};
     let started = SystemClock.now();
     let expires_at = started.after(board_fleet_sync::BOARD_LEASE_POLICY.lease_duration);
@@ -180,7 +180,7 @@ pub(crate) async fn renew_lease(
                     epoch: previous.epoch,
                     expires_at,
                 },
-                current: fleet_sync_protocol::LeaseStatus {
+                current: fleet_protocol::LeaseStatus {
                     expires_at,
                     remaining_ms: 14_400_000,
                     ..previous

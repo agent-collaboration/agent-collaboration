@@ -158,7 +158,7 @@ async fn host_mail_clock_steps_remove_both_holders_at_day_60_and_refuse_day_61()
     )
     .expect("old item through the normal outgoing encoder");
     let envelope = serde_json::from_value(
-        serde_json::to_value(fleet_sync_protocol::DeliveryEnvelope::Item(old_item)).unwrap(),
+        serde_json::to_value(fleet_protocol::DeliveryEnvelope::Item(old_item)).unwrap(),
     )
     .unwrap();
     let mail = fixture
@@ -169,7 +169,7 @@ async fn host_mail_clock_steps_remove_both_holders_at_day_60_and_refuse_day_61()
         .expect("Host mail owner");
     let refusal = mail
         .accept_pushed_mail(
-            fleet_sync_protocol::Submitter::Machine(fixture.runtime.installation_peer()),
+            fleet_protocol::Submitter::Machine(fixture.runtime.installation_peer()),
             envelope,
         )
         .await
@@ -177,8 +177,8 @@ async fn host_mail_clock_steps_remove_both_holders_at_day_60_and_refuse_day_61()
     assert!(
         matches!(
             refusal,
-            fleet_sync_protocol::PushResult::Refused {
-                reason: fleet_sync_protocol::DeliveryRefusal::TooOld
+            fleet_protocol::PushResult::Refused {
+                reason: fleet_protocol::DeliveryRefusal::TooOld
             }
         ),
         "{refusal:?}"

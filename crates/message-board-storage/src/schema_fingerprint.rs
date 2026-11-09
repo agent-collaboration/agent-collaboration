@@ -1,6 +1,6 @@
 //! The library owns schema canonicalization and hashing; storage excludes its local table.
 use crate::ProjectStorageError;
-use fleet_sync_protocol::{SchemaEntry, SchemaObjectKind};
+use fleet_protocol::{SchemaEntry, SchemaObjectKind};
 use message_board::SchemaFingerprint;
 use sqlx::Executor;
 use sqlx_turso::Turso;
@@ -29,7 +29,7 @@ pub fn fingerprint_entries(
 ) -> Result<SchemaFingerprint, ProjectStorageError> {
     let entries = entries
         .into_iter()
-        .filter(|(_, name, _)| !fleet_sync_protocol::reserved_namespace(name))
+        .filter(|(_, name, _)| !fleet_protocol::reserved_namespace(name))
         .map(|(kind, name, sql)| {
             Ok(SchemaEntry {
                 kind: SchemaObjectKind::try_from(kind.as_str())
@@ -39,7 +39,7 @@ pub fn fingerprint_entries(
             })
         })
         .collect::<Result<Vec<_>, ProjectStorageError>>()?;
-    let fingerprint = fleet_sync_protocol::schema_fingerprint(&entries)
+    let fingerprint = fleet_protocol::schema_fingerprint(&entries)
         .map_err(|_| ProjectStorageError::InvalidSchema)?;
     SchemaFingerprint::try_from(fingerprint).map_err(|_| ProjectStorageError::InvalidSchema)
 }

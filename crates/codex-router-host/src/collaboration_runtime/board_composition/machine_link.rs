@@ -42,32 +42,31 @@ impl PreparedMachineLink {
         } = self;
         match error
             .get_ref()
-            .and_then(|error| error.downcast_ref::<fleet_sync_session::ClientError>())
+            .and_then(|error| error.downcast_ref::<fleet_session::ClientError>())
         {
             Some(error) => publisher.session_failed(error),
             None => match error
                 .get_ref()
-                .and_then(|error| error.downcast_ref::<fleet_sync_session::ConnectFailure>())
+                .and_then(|error| error.downcast_ref::<fleet_session::ConnectFailure>())
             {
-                Some(error) => publisher
-                    .session_stopped(&fleet_sync_session::ClientError::Connect(error.clone())),
+                Some(error) => {
+                    publisher.session_stopped(&fleet_session::ClientError::Connect(error.clone()))
+                }
                 None => match error.get_ref().and_then(|error| {
                     error.downcast_ref::<message_board_storage::RouterLocalStorageError>()
                 }) {
                     Some(message_board_storage::RouterLocalStorageError::InvalidRecordKey {
                         field,
-                    }) => publisher.session_failed(&fleet_sync_session::ClientError::Store(
-                        fleet_sync_session::StoreError::Corrupt {
+                    }) => publisher.session_failed(&fleet_session::ClientError::Store(
+                        fleet_session::StoreError::Corrupt {
                             field: (*field).to_owned(),
                         },
                     )),
-                    Some(error) => {
-                        publisher.session_failed(&fleet_sync_session::ClientError::Store(
-                            fleet_sync_session::StoreError::Unavailable {
-                                message: error.to_string(),
-                            },
-                        ))
-                    }
+                    Some(error) => publisher.session_failed(&fleet_session::ClientError::Store(
+                        fleet_session::StoreError::Unavailable {
+                            message: error.to_string(),
+                        },
+                    )),
                     None => publisher.preparation_failed(error.to_string()),
                 },
             },

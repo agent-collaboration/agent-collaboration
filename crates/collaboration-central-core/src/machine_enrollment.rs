@@ -14,8 +14,8 @@ use durable_steps::{
     JournalScope, OperationId, RequestKey,
     storage::{JournalStorage, OperationExecution},
 };
-use fleet_sync_protocol::{AuthRefusal, ConnectionId, PeerId, ReceiverId};
-use fleet_sync_session::{ConnectionBinding, VerifiedPeer};
+use fleet_protocol::{AuthRefusal, ConnectionId, PeerId, ReceiverId};
+use fleet_session::{ConnectionBinding, VerifiedPeer};
 use message_board::{MachineLabel, ServiceId};
 use runtime_primitives::{Clock, IdSource, SyncTime};
 use serde::{Deserialize, Serialize};

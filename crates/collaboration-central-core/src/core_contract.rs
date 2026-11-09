@@ -1,6 +1,6 @@
 //! Addresses and time at the shared application boundary.
 use chrono::{DateTime, Utc};
-use fleet_sync_protocol::DatabaseId;
+use fleet_protocol::DatabaseId;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]

@@ -2,7 +2,7 @@
 
 pub use collaboration_service::NativeMailOwner;
 use collaboration_service::{ApplicationFixture, MailDeliveryRuntime, MailPushDeliveryProps};
-use fleet_sync_protocol::PeerId;
+use fleet_protocol::PeerId;
 use interaction_storage::InteractionStore;
 use std::{io, sync::Arc};
 

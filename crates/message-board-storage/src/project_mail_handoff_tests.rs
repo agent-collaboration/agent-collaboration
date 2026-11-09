@@ -5,7 +5,7 @@ use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
 use collaboration_mail_protocol::{
     Excerpt, MailSender, NotificationBody, NotificationSource, RecordPointer,
 };
-use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem, ItemId, PeerId, Recipient};
+use fleet_protocol::{DeliveryEnvelope, DeliveryItem, ItemId, PeerId, Recipient};
 use message_board::*;
 use sqlx::{ConnectOptions, Connection, Row};
 

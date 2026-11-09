@@ -343,11 +343,11 @@ fn claim_schema_requires_attempt_and_project_without_an_actor_or_feed_cursor() {
     let validator = jsonschema::validator_for(&output).expect("claim output schema");
     let reply = super::super::domain_result(
         Ok::<_, message_board::BoardError>(board_sync_protocol::ProjectClaimReply::Claimed {
-            epoch: fleet_sync_protocol::Epoch::new(2).expect("epoch"),
-            expires_at: fleet_sync_protocol::SyncTime::from_unix_millis(1234),
-            start: fleet_sync_protocol::ReplicationPosition::new(
-                fleet_sync_protocol::Epoch::new(1).expect("epoch"),
-                fleet_sync_protocol::CommitSequence::new(7),
+            epoch: fleet_protocol::Epoch::new(2).expect("epoch"),
+            expires_at: fleet_protocol::SyncTime::from_unix_millis(1234),
+            start: fleet_protocol::ReplicationPosition::new(
+                fleet_protocol::Epoch::new(1).expect("epoch"),
+                fleet_protocol::CommitSequence::new(7),
             ),
         }),
         true,

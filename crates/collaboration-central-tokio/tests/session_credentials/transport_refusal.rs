@@ -6,7 +6,7 @@ use axum::{
     routing::get,
 };
 use board_fleet_sync::{AccessServiceToken, ReqwestSessionTransport};
-use fleet_sync_session::{ConnectFailure, Endpoint, PeerCredential, SessionTransport};
+use fleet_session::{ConnectFailure, Endpoint, PeerCredential, SessionTransport};
 
 #[derive(Clone, Copy)]
 pub(super) enum HeaderMode {

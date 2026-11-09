@@ -131,7 +131,7 @@ async fn mode_change_during_flight_settles_original_push_and_polls_released_back
         assert_eq!(roots[0].post_count(), 1);
         assert_eq!(
             runtime.local_mail_outcome(poll_item.id()).await,
-            Some(fleet_sync_protocol::RecipientOutcome::Held)
+            Some(fleet_protocol::RecipientOutcome::Held)
         );
         assert!(runtime.requests.lock().await.try_recv().is_err());
 
@@ -160,7 +160,7 @@ async fn mode_change_during_flight_settles_original_push_and_polls_released_back
         );
         assert_eq!(
             runtime.await_mail_outcome(&push_id).await,
-            fleet_sync_protocol::RecipientOutcome::Delivered {
+            fleet_protocol::RecipientOutcome::Delivered {
                 acceptance: collaboration_mail_protocol::CarrierAcceptance::Started,
             }
         );
@@ -238,7 +238,7 @@ async fn one_owner_serializes_push_and_wait_and_does_not_hold_the_board_lock() {
         assert!(runtime.requests.lock().await.try_recv().is_err());
         assert_eq!(
             runtime.await_mail_outcome(&push_id).await,
-            fleet_sync_protocol::RecipientOutcome::Delivered {
+            fleet_protocol::RecipientOutcome::Delivered {
                 acceptance: collaboration_mail_protocol::CarrierAcceptance::Started,
             }
         );

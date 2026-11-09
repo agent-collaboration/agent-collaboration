@@ -10,7 +10,7 @@ use collaboration_central_conformance::{
     ConformanceClient, RuntimeControl, RuntimeControlRequest, enroll_admitted_peer,
 };
 use durable_steps::Uuid;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DeliveryEnvelope, DeliveryItem, ItemId, PeerId, PushResult, ServerCall, Submitter,
 };
 use reqwest_websocket::CloseCode;
@@ -142,7 +142,7 @@ async fn whole_server_restart_replays_the_same_push_call_then_receipts_release_o
                 let ServerCall::Push {submitter,item:offered,..}=retry else {return Err("reopened request was not Push".into());};
                 let receipt=inbox.accept(submitter,offered).await?;
                 if !matches!(receipt,PushResult::Replayed {..})||inbox.count().await?!=1 {return Err("owning Inbox reopen forgot or duplicated custody".into());}
-                let reference=fleet_sync_protocol::DeliveryItemRef {item:item.id(),digest:item.digest().clone()};
+                let reference=fleet_protocol::DeliveryItemRef {item:item.id(),digest:item.digest().clone()};
                 let saved=inbox.payload(reference).await?;
                 require(serde_json::to_value(saved)?,serde_json::to_value(&item)?.get("value").cloned().ok_or("item value absent")?)?;
                 let receipt_bytes=serde_json::to_vec(&receipt)?;

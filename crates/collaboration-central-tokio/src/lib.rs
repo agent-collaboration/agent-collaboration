@@ -28,7 +28,7 @@ pub use socket_host::SocketCommand;
 
 use collaboration_central_core::ObjectHost;
 use durable_steps::Host;
-use fleet_sync_tokio_runner::TokioObject;
+use fleet_tokio_objects::TokioObject;
 use std::sync::Arc;
 
 pub struct TokioStorageHost<SharedHost: Host> {
@@ -91,13 +91,13 @@ impl<SharedHost: Host> TokioStorageHost<SharedHost> {
 
     pub async fn attach_socket(
         &self,
-        binding: fleet_sync_session::ConnectionBinding,
+        binding: fleet_session::ConnectionBinding,
         admission_origin: collaboration_central_core::AdmissionOrigin,
     ) -> tokio::sync::mpsc::Receiver<SocketCommand> {
         self.sockets.attach(binding, admission_origin).await
     }
 
-    pub(crate) async fn detach_socket(&self, connection: fleet_sync_protocol::ConnectionId) {
+    pub(crate) async fn detach_socket(&self, connection: fleet_protocol::ConnectionId) {
         self.sockets.detach(connection).await;
     }
 }
@@ -139,13 +139,13 @@ impl<SharedHost: Host> ObjectHost for TokioStorageHost<SharedHost> {
         let _guard = exclusion.lock().await;
         Ok(run.await)
     }
-    async fn quarantine_connections(&self, connections: Vec<fleet_sync_protocol::ConnectionId>) {
+    async fn quarantine_connections(&self, connections: Vec<fleet_protocol::ConnectionId>) {
         self.sockets.quarantine(connections).await;
     }
     async fn send_frame(
         &self,
-        to: fleet_sync_protocol::ConnectionId,
-        frame: fleet_sync_session::Bytes,
+        to: fleet_protocol::ConnectionId,
+        frame: fleet_session::Bytes,
     ) -> Result<(), collaboration_central_core::SocketFailure> {
         #[cfg(feature = "conformance")]
         if let Ok(identity) = serde_json::from_slice::<
@@ -163,8 +163,8 @@ impl<SharedHost: Host> ObjectHost for TokioStorageHost<SharedHost> {
     }
     async fn close_connection(
         &self,
-        to: fleet_sync_protocol::ConnectionId,
-        reason: fleet_sync_protocol::CloseReason,
+        to: fleet_protocol::ConnectionId,
+        reason: fleet_protocol::CloseReason,
     ) -> Result<(), collaboration_central_core::SocketFailure> {
         self.sockets.send(to, SocketCommand::Close(reason)).await
     }
@@ -178,7 +178,7 @@ impl<SharedHost: Host> ObjectHost for TokioStorageHost<SharedHost> {
     }
     async fn admission_origin(
         &self,
-        connection: fleet_sync_protocol::ConnectionId,
+        connection: fleet_protocol::ConnectionId,
     ) -> Result<
         collaboration_central_core::AdmissionOrigin,
         collaboration_central_core::SocketFailure,
@@ -187,16 +187,15 @@ impl<SharedHost: Host> ObjectHost for TokioStorageHost<SharedHost> {
     }
     async fn admission_binding(
         &self,
-        connection: fleet_sync_protocol::ConnectionId,
-    ) -> Result<fleet_sync_session::ConnectionBinding, collaboration_central_core::SocketFailure>
-    {
+        connection: fleet_protocol::ConnectionId,
+    ) -> Result<fleet_session::ConnectionBinding, collaboration_central_core::SocketFailure> {
         self.sockets.admission_binding(connection).await
     }
     async fn publish_registrations(
         &self,
         edits: collaboration_central_core::RegistrationEdits,
     ) -> Vec<(
-        fleet_sync_protocol::ConnectionId,
+        fleet_protocol::ConnectionId,
         collaboration_central_core::SocketFailure,
     )> {
         self.sockets.publish(edits).await

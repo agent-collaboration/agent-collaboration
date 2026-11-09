@@ -5,10 +5,10 @@ use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{
     AtomicStore, CallFailure, CallId, NotSentReason, StoreError, storage::TransactionScope,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DatabaseId, Epoch, Piece, ReceiverId, ReplicationAnswer, ReplicationPosition,
 };
-use fleet_sync_tokio_runner::{ObjectKey, ObjectOptions, ObjectStore, TokioObject};
+use fleet_tokio_objects::{ObjectKey, ObjectOptions, ObjectStore, TokioObject};
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use serde_json::{Value, json};
 use sqlx_core::{query::query, row::Row};
@@ -136,9 +136,9 @@ impl Fixture {
         let fleet_runtime = Arc::new(ObjectRuntime::fleet(
             Arc::new(TokioStorageHost::new(fleet.clone())),
             io.clone(),
-            fleet_sync_lease::RegistryConfig {
+            fleet_project_lease::RegistryConfig {
                 authoritative_receiver: receiver,
-                lease: fleet_sync_lease::LeasePolicy {
+                lease: fleet_project_lease::LeasePolicy {
                     lease_duration: std::time::Duration::from_secs(60),
                     renew_interval: std::time::Duration::from_secs(20),
                 },
@@ -241,8 +241,8 @@ impl Fixture {
             .map_err(|error| format!("seed call failed: {error:?}"))?;
         Ok(serde_json::from_slice(&response)?)
     }
-    pub async fn prepare_seed(&self, admin: bool) -> TestResult<fleet_sync_protocol::SeedComplete> {
-        use fleet_sync_protocol::*;
+    pub async fn prepare_seed(&self, admin: bool) -> TestResult<fleet_protocol::SeedComplete> {
+        use fleet_protocol::*;
         self.create_as(true, admin).await?;
         let attempt = SeedAttemptId::new(durable_steps::Uuid::now_v7())?;
         let kind = if admin { "begin" } else { "seedBegin" };
@@ -307,7 +307,7 @@ impl Fixture {
     pub async fn complete_seed(
         &self,
         admin: bool,
-        done: &fleet_sync_protocol::SeedComplete,
+        done: &fleet_protocol::SeedComplete,
         summary: Option<board_sync_protocol::BoardAnnotation>,
     ) -> TestResult<ReplicationAnswer> {
         let request = if admin {
@@ -373,6 +373,6 @@ impl Fixture {
 pub fn position(commit: u64) -> TestResult<ReplicationPosition> {
     Ok(ReplicationPosition::new(
         Epoch::new(1)?,
-        fleet_sync_protocol::CommitSequence::new(commit),
+        fleet_protocol::CommitSequence::new(commit),
     ))
 }

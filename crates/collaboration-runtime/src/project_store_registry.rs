@@ -1,8 +1,8 @@
 //! Own project file handles without serializing different projects' admissions.
 use board_fleet_sync::{BOARD_LEASE_POLICY, BoardProjectSchema};
-use fleet_sync_lease::LeaseHolder;
-use fleet_sync_protocol::{DatabaseId, Epoch, PeerId};
-use fleet_sync_writer::{ReplicatedDatabase, RetainedAuthority, WriteRefusal, WriterOptions};
+use fleet_project_lease::LeaseHolder;
+use fleet_project_writer::{ReplicatedDatabase, RetainedAuthority, WriteRefusal, WriterOptions};
+use fleet_protocol::{DatabaseId, Epoch, PeerId};
 use message_board::{EpochNumber, ProjectId, ThreadRef};
 use message_board_storage::{
     ProjectLedgerReader, ProjectReadStore, ProjectStorageError, ProjectStore,
@@ -67,7 +67,7 @@ pub enum ProjectRegistryError {
     #[error(transparent)]
     Schema(#[from] board_fleet_sync::BoardProjectSchemaError),
     #[error(transparent)]
-    Move(#[from] fleet_sync_writer::MoveAsideError),
+    Move(#[from] fleet_project_writer::MoveAsideError),
     #[error("the project is orphaned after directory rejection")]
     ProjectRejected,
     #[error("the committed writer guard belongs to another project")]
@@ -100,7 +100,7 @@ impl board_fleet_sync::LeaseAuthority for ProjectStoreRegistry {
     async fn writer_state(
         &self,
         project: &ProjectId,
-    ) -> Result<fleet_sync_lease::WriterState, Self::Error> {
+    ) -> Result<fleet_project_lease::WriterState, Self::Error> {
         let store = self.existing_project(project).await?.ok_or_else(|| {
             ProjectRegistryError::Unavailable {
                 project: project.clone(),
@@ -258,7 +258,7 @@ impl ProjectStoreRegistry {
             let existing = crate::project_store_paths::live_file_with_epoch(&directory).await?;
             let bootstrap_origin = if let Some((epoch, path)) = &existing {
                 // Inspect persisted authority before constructing any writer.
-                let inspected = fleet_sync_writer::inspect_native_file(path).await
+                let inspected = fleet_project_writer::inspect_native_file(path).await
                     .map_err(ProjectStorageError::from)?;
                 let expected_database = DatabaseId::new(
                     uuid::Uuid::parse_str(project.as_str())
@@ -271,7 +271,7 @@ impl ProjectStoreRegistry {
                 } else { None };
                 if let Some(field) = mismatch {
                     return Err(ProjectStorageError::Writer(
-                        fleet_sync_writer::OpenError::Corrupt { field: field.to_owned() },
+                        fleet_project_writer::OpenError::Corrupt { field: field.to_owned() },
                     ).into());
                 }
                 match inspected.authority {
@@ -285,7 +285,7 @@ impl ProjectStoreRegistry {
                     }),
                     None => {},
                 }
-                inspected.origin.kind == fleet_sync_writer::RetainedFileOriginKind::Bootstrap
+                inspected.origin.kind == fleet_project_writer::RetainedFileOriginKind::Bootstrap
             } else { false };
             let peer = self.peer.ok_or(ProjectRegistryError::NotEnrolled)?;
             tokio::fs::create_dir_all(&directory).await?;
@@ -310,7 +310,7 @@ impl ProjectStoreRegistry {
                 &path, database_id, BoardProjectSchema::new()?, holder, self.clock.clone(),
                 WriterOptions { allow_provisional_writes: false },
             ).await.map_err(ProjectStorageError::from)?);
-            if bootstrap_origin && matches!(database.writer_state().await.map_err(ProjectStorageError::from)?, fleet_sync_lease::WriterState::Seeding { .. }) {
+            if bootstrap_origin && matches!(database.writer_state().await.map_err(ProjectStorageError::from)?, fleet_project_lease::WriterState::Seeding { .. }) {
                 // Reopening does not publish a granted file whose installer
                 // has not reached Ready. Claim resumes its durable attempt.
                 return Ok(Arc::new(RwLock::new(ProjectRuntime::SnapshotInstalling { database })));
@@ -347,7 +347,7 @@ impl ProjectStoreRegistry {
         let (database, current) = match &*owner {
             ProjectRuntime::Writable { database, .. }
             | ProjectRuntime::SnapshotInstalling { database } => {
-                let fleet_sync_lease::WriterState::Superseded { current } = database
+                let fleet_project_lease::WriterState::Superseded { current } = database
                     .writer_state()
                     .await
                     .map_err(ProjectStorageError::from)?

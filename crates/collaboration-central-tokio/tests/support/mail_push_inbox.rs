@@ -5,12 +5,12 @@ use durable_steps::{
     AtomicStore, CallFailure, CallId, CallTarget, Engine, Host, OperationState, StoreError,
     storage::TransactionScope, turso_store::TursoStore,
 };
-use fleet_sync_delivery::{
+use fleet_mail_delivery::{
     DeliverCall, DeliverLocally, DeliveryAttempt, DeliveryConsumer, DeliveryError, DeliveryLimits,
     GateDecision, Inbox, LocalDelivery, LocalDeliveryConfig, LocalOutcome, RemoveDeliveryRecord,
     ReportOutcome, SenderBinding, SenderBindingFailure, delivery_request_key, delivery_rollback,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DeliveryEnvelope, DeliveryHeader, DeliveryItem, DeliveryItemRef, PeerId, PushResult,
     RecipientReport, Submitter,
 };
@@ -26,8 +26,8 @@ use std::{
 };
 
 type Store = TursoStore<RecipientHost>;
-type Acceptance = <BoardDeliveryTypes as fleet_sync_protocol::DeliveryTypes>::Acceptance;
-type Sender = <BoardDeliveryTypes as fleet_sync_protocol::DeliveryTypes>::Sender;
+type Acceptance = <BoardDeliveryTypes as fleet_protocol::DeliveryTypes>::Acceptance;
+type Sender = <BoardDeliveryTypes as fleet_protocol::DeliveryTypes>::Sender;
 type Attempt =
     DeliverLocally<Store, sqlx_turso::Turso, BoardDeliveryTypes, HeldConsumer, RosterBinding>;
 type Report = ReportOutcome<Store, sqlx_turso::Turso, BoardDeliveryTypes, RosterBinding>;
@@ -181,7 +181,7 @@ impl PushInbox {
         let store = Arc::new(TursoStore::open_and_migrate(path, host.clone()).await?);
         store.transaction(move |scope| Box::pin(async move {
             let mut migrations = sqlx_core::migrate::Migrator::with_migrations(
-                fleet_sync_delivery::DELIVERY_MIGRATOR.iter().cloned().collect::<Vec<_>>());
+                fleet_mail_delivery::DELIVERY_MIGRATOR.iter().cloned().collect::<Vec<_>>());
             migrations.dangerous_set_table_name("_fleet_sync_delivery_migrations");
             migrations.run_direct(None, scope.executor(), false).await.map_err(StoreError::backend)?;
             query::<sqlx_turso::Turso>("CREATE TABLE IF NOT EXISTS fixture_push_senders(row_id TEXT NOT NULL PRIMARY KEY,service_id TEXT NOT NULL UNIQUE,peer_id TEXT NOT NULL UNIQUE,created_at INTEGER NOT NULL,updated_at INTEGER NOT NULL)")
@@ -197,7 +197,7 @@ impl PushInbox {
             1_000_000,
             100,
             1_000_000,
-            fleet_sync_delivery::minimum_settlement_allowance::<BoardDeliveryTypes>()?,
+            fleet_mail_delivery::minimum_settlement_allowance::<BoardDeliveryTypes>()?,
         )?;
         Ok(Self {
             store,
@@ -243,7 +243,7 @@ impl PushInbox {
     }
     pub(super) async fn hold_and_report(
         &self,
-        item: fleet_sync_protocol::ItemId,
+        item: fleet_protocol::ItemId,
     ) -> ConformanceResult<RecipientReport<BoardDeliveryTypes>> {
         let input = DeliveryAttempt {
             item,
@@ -286,7 +286,7 @@ impl PushInbox {
     }
     pub(super) async fn drive_retention_if_due(
         &self,
-        item: fleet_sync_protocol::ItemId,
+        item: fleet_protocol::ItemId,
     ) -> ConformanceResult<()> {
         let kind = <Removal as durable_steps::Task>::KIND;
         let admitted: i64 = self
@@ -309,7 +309,7 @@ impl PushInbox {
             return Err("Push did not schedule exactly one real record-retention task".into());
         }
         let mut engine = Engine::new(self.store.clone(), self.host.clone());
-        engine.register(Removal::new(fleet_sync_delivery::DeliveryHostRole::Machine))?;
+        engine.register(Removal::new(fleet_mail_delivery::DeliveryHostRole::Machine))?;
         let status = engine
             .start_and_settle::<Removal>(&delivery_request_key(&item)?, item)
             .await?;
@@ -320,7 +320,7 @@ impl PushInbox {
     }
     pub(super) async fn release_and_report(
         &self,
-        item: fleet_sync_protocol::ItemId,
+        item: fleet_protocol::ItemId,
     ) -> ConformanceResult<RecipientReport<BoardDeliveryTypes>> {
         *self
             .host
@@ -354,7 +354,7 @@ impl PushInbox {
     }
     pub(super) async fn report(
         &self,
-        item: fleet_sync_protocol::ItemId,
+        item: fleet_protocol::ItemId,
     ) -> ConformanceResult<RecipientReport<BoardDeliveryTypes>> {
         let (owner, limits) = (self.owner, self.limits);
         Ok(self
@@ -431,7 +431,7 @@ impl PushInbox {
     }
     pub(super) async fn payload_bytes_for(
         &self,
-        item: fleet_sync_protocol::ItemId,
+        item: fleet_protocol::ItemId,
     ) -> ConformanceResult<i64> {
         Ok(self.store.transaction(move |scope|Box::pin(async move {
             query::<sqlx_turso::Turso>("SELECT payload_bytes AS bytes FROM _fleet_sync_inbox_items WHERE item_id=?")

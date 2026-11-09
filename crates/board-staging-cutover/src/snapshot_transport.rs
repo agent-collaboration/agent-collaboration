@@ -1,5 +1,5 @@
 //! Reframe snapshot transport headers while retaining source paging and row bytes.
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DigestError, Epoch, EpochError, PageDigest, SnapshotCursor, SnapshotManifest, SnapshotPage,
 };
 

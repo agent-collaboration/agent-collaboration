@@ -3,7 +3,7 @@ use super::{BoardError, ProjectId, PublisherInner, publication_epoch};
 use crate::mail_delivery_runtime::{FrozenCancelSettlement, RemoteCancelReplay};
 use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
 use collaboration_mail_protocol::NotificationSource;
-use fleet_sync_protocol::DeliveryEnvelope;
+use fleet_protocol::DeliveryEnvelope;
 use message_board::{FeedCursor, HandoffSeq, MailItemRef};
 use message_board_storage::{
     MailCancelGroup, MailCancelGroupCause, MailHandoff, MailHandoffItem, ProjectStorageError,

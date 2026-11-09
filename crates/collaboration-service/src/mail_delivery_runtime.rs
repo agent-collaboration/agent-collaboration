@@ -17,15 +17,15 @@ use durable_steps::{
     AtomicStore, CallFailure, CallId, CallTarget, Engine, NotSentReason, OperationState,
     StoreError, storage::TransactionScope, turso_store::TursoScope,
 };
-use fleet_sync_delivery::{
+use fleet_mail_delivery::{
     DeliverCall, DeliverLocally, DeliveryConsumer, DeliveryError, DeliveryLimits, GateDecision,
     Inbox, LocalDelivery, LocalDeliveryConfig, ReportOutcome, SubmitItem,
     minimum_settlement_allowance,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DeliveryHeader, DeliveryItem, DeliveryItemRef, ItemId, PeerId, RecipientOutcome,
 };
-use fleet_sync_tokio_runner::{CallEnvelope, CallRouter, TokioHost, TokioRunner};
+use fleet_tokio_objects::{CallEnvelope, CallRouter, TokioHost, TokioRunner};
 use interaction_storage::{
     InteractionAtomicStore, InteractionStore, mark_mail_push_attempted_in_scope,
     read_mail_push_in_scope,
@@ -73,7 +73,7 @@ type LocalMailTask = DeliverLocally<
     MailConsumer,
     MachineSenderBinding,
 >;
-type RemoveMailRecord = fleet_sync_delivery::RemoveDeliveryRecord<MailStore, MailDatabase>;
+type RemoveMailRecord = fleet_mail_delivery::RemoveDeliveryRecord<MailStore, MailDatabase>;
 type SubmitMailTask =
     SubmitItem<MailStore, MailDatabase, RouterDeliveryTypes, MailConsumer, MachineSenderBinding>;
 type ReportMailTask =
@@ -314,7 +314,7 @@ impl MailDeliveryRuntime {
             binding.clone(),
         ))?;
         engine.register(RemoveMailRecord::new(
-            fleet_sync_delivery::DeliveryHostRole::Machine,
+            fleet_mail_delivery::DeliveryHostRole::Machine,
         ))?;
         if let Some(session) = &session {
             let remote = session.task_config(config)?;
@@ -549,7 +549,7 @@ impl MailConsumer {
         {
             Ok(Some(answer)) => answer,
             Ok(None) => LocalDelivery {
-                outcome: fleet_sync_delivery::LocalOutcome::Held { until: None },
+                outcome: fleet_mail_delivery::LocalOutcome::Held { until: None },
                 observation: DeliveryReceipt {
                     outcome: collaboration_protocol::DeliveryOutcome::NotSubmitted {
                         retryable: true,
@@ -561,7 +561,7 @@ impl MailConsumer {
                 .into(),
             },
             Err(_) => LocalDelivery {
-                outcome: fleet_sync_delivery::LocalOutcome::Uncertain,
+                outcome: fleet_mail_delivery::LocalOutcome::Uncertain,
                 observation: DeliveryReceipt {
                     outcome: collaboration_protocol::DeliveryOutcome::Unknown,
                     reachability: None,

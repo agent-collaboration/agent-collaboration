@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use fleet_sync_protocol::{Epoch, ReplicationPosition, SyncTime};
+use fleet_protocol::{Epoch, ReplicationPosition, SyncTime};
 use message_board::LeaseVersion;
 use message_board::{
     BoardId, BoardState, ProjectId, RecordTime, ResourceName, ServiceId, WorkspaceId,

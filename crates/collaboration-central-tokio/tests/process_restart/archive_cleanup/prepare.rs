@@ -2,7 +2,7 @@
 use super::*;
 use collaboration_central_conformance::DispatchKey;
 use collaboration_central_conformance::enroll_open_peer_with_label;
-use fleet_sync_protocol::{CopyStatusAnswer, ReplicationAnswer, ReplicationRequest, SettleOutcome};
+use fleet_protocol::{CopyStatusAnswer, ReplicationAnswer, ReplicationRequest, SettleOutcome};
 use futures_util::SinkExt;
 
 pub(super) async fn prepare_cleanup(
@@ -39,7 +39,7 @@ pub(super) async fn prepare_cleanup(
         ))
         .await?;
     ConformanceClient::new(base)?
-        .wake_due_after_hello(fleet_sync_protocol::SessionId::new(session)?)
+        .wake_due_after_hello(fleet_protocol::SessionId::new(session)?)
         .await?;
     let welcome = tokio::time::timeout(Duration::from_secs(5), claimant.socket.next())
         .await?
@@ -82,7 +82,7 @@ pub(super) async fn prepare_cleanup(
         supported: Some(0),
     };
     let attempt = TransferId::new(Uuid::now_v7())?;
-    let request = fleet_sync_protocol::RequestId::new(attempt.as_uuid())?;
+    let request = fleet_protocol::RequestId::new(attempt.as_uuid())?;
     let copy = ObjectAddress::Copy(database);
     control(
         base,
@@ -94,7 +94,7 @@ pub(super) async fn prepare_cleanup(
     .await?;
     creation_scenarios::send(
         &mut claimant.socket,
-        OperationRequest::Lease(fleet_sync_protocol::LeaseRequest::Claim {
+        OperationRequest::Lease(fleet_protocol::LeaseRequest::Claim {
             attempt: request,
             database,
         }),
@@ -104,7 +104,7 @@ pub(super) async fn prepare_cleanup(
     let status_call = await_call(base, &copy).await?;
     if status_call.get("kind")
         != Some(&json!(
-            <fleet_sync_lease::CopyRead as durable_steps::CallTarget>::KIND
+            <fleet_project_lease::CopyRead as durable_steps::CallTarget>::KIND
         ))
     {
         return Err(
@@ -127,7 +127,7 @@ pub(super) async fn prepare_cleanup(
     let fence = await_call(base, &copy).await?;
     if fence.get("kind")
         != Some(&json!(
-            <fleet_sync_lease::CopyFence as durable_steps::CallTarget>::KIND
+            <fleet_project_lease::CopyFence as durable_steps::CallTarget>::KIND
         ))
     {
         return Err(format!("Claim did not hold its actual schema-refusing fence: {fence}").into());
@@ -211,7 +211,7 @@ pub(super) async fn prepare_cleanup(
     };
     if call.get("kind")
         != Some(&json!(
-            <fleet_sync_lease::ClaimSettlement as durable_steps::CallTarget>::KIND
+            <fleet_project_lease::ClaimSettlement as durable_steps::CallTarget>::KIND
         ))
     {
         return Err(
@@ -227,7 +227,7 @@ pub(super) async fn prepare_cleanup(
         != (HolderChangeRequest::Claim {
             attempt,
             database,
-            claimant: fleet_sync_protocol::PeerId::try_from(PEER.to_owned())?,
+            claimant: fleet_protocol::PeerId::try_from(PEER.to_owned())?,
         })
         || original.outcome != (SettleOutcome::Refused { reason: refusal })
     {

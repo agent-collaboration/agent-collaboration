@@ -40,7 +40,7 @@ where
 /// Read Fleet's committed Copy summary with its production decoder in this scope.
 pub async fn read_fleet_copy_summary_in_scope<S: TransactionScope>(
     scope: &mut S,
-    database: fleet_sync_protocol::DatabaseId,
+    database: fleet_protocol::DatabaseId,
 ) -> Result<Option<crate::CopyDirectorySummary>, StoreError>
 where
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,
@@ -59,7 +59,7 @@ where
 /// Observe the existing private lease wire shape through its production decoder.
 pub async fn read_fleet_lease_projection_in_scope<S: TransactionScope>(
     scope: &mut S,
-    database: fleet_sync_protocol::DatabaseId,
+    database: fleet_protocol::DatabaseId,
 ) -> Result<Option<String>, StoreError>
 where
     <S::Database as Database>::Arguments: IntoArguments<S::Database>,

@@ -2,8 +2,8 @@
 use super::*;
 use collaboration_central_core::CoreHost;
 use durable_steps::{AtomicStore, StoreError};
-use fleet_sync_lease::RegistrySnapshot;
-use fleet_sync_tokio_runner::{ObjectKey, ObjectStore};
+use fleet_project_lease::RegistrySnapshot;
+use fleet_tokio_objects::{ObjectKey, ObjectStore};
 use std::sync::Arc;
 
 pub(super) struct Fixture {
@@ -352,7 +352,7 @@ pub(super) async fn snapshot(
     let observed = registry
         .transaction(move |scope| {
             Box::pin(async move {
-                fleet_sync_lease::registry_snapshot(scope, database)
+                fleet_project_lease::registry_snapshot(scope, database)
                     .await
                     .map_err(StoreError::backend)
             })

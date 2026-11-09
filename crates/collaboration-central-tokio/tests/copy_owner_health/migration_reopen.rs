@@ -12,7 +12,7 @@ use collaboration_central_core::{ObjectAddress, RegistryTime};
 use collaboration_central_tokio::{HealthFileSample, TokioCentralPlatform};
 use durable_steps::Uuid;
 use fleet_admission::FleetOperation;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CommitSequence, DatabaseId, Epoch, OperationAnswer, OperationRequest, PeerId, Piece,
     PieceContents, ReplicatedTransaction, ReplicationAnswer, ReplicationPosition,
     ReplicationRequest, RequestId, RowChange, SnapshotRead, SqlValue, TakeoverPreview,
@@ -456,7 +456,7 @@ async fn pending_migration_keeps_health_readable_and_preview_recovers_with_origi
 // The held project's lease is already enrolled; reconnect without relabeling it.
 async fn pending_session_refusals(base: &str) -> ConformanceResult<()> {
     use board_sync_protocol::BoardConsumerProtocol;
-    use fleet_sync_protocol::{
+    use fleet_protocol::{
         ClientFrame, CopyUnavailableReason, DatabaseStatus, SchemaSupport, ServerFrame, SessionId,
     };
     use futures_util::SinkExt;
@@ -489,7 +489,7 @@ async fn pending_session_refusals(base: &str) -> ConformanceResult<()> {
         let control = DatabaseId::new(Uuid::now_v7())?;
         let copies=crate::copy_owner_health::copy_wait_scenarios::CopyClient::new(base)?;
         let created=copies.invoke(json!({"kind":"create","value":{"database":control,"epoch":1,"holder":PEER,"origin":{"kind":"empty"}}})).await?;
-        copies.completed(created,crate::copy_owner_health::copy_wait_scenarios::expected("created",fleet_sync_protocol::CreateCopyAnswer::CopyCreated)).await?;
+        copies.completed(created,crate::copy_owner_health::copy_wait_scenarios::expected("created",fleet_protocol::CreateCopyAnswer::CopyCreated)).await?;
         let control_piece = |sequence,statement: &str| -> ConformanceResult<Piece<BoardAnnotation>> {
             Ok(Piece::new(PieceContents {database:control,epoch:Epoch::new(1)?,continues_from:ReplicationPosition::new(Epoch::new(1)?,CommitSequence::new(sequence-1)),through:ReplicationPosition::new(Epoch::new(1)?,CommitSequence::new(sequence)),transactions:vec![ReplicatedTransaction::SchemaStep {commit_id:CommitSequence::new(sequence),migration_version:sequence,statements:vec![statement.into()]}],part:None,annotation:None})?)
         };

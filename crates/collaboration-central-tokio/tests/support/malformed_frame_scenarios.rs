@@ -4,7 +4,7 @@ use super::{copy_read_scenarios as reads, copy_wait_scenarios::CopyClient};
 use collaboration_central_conformance::{
     ConformanceClient, ConformanceResult, enroll_admitted_peer,
 };
-use fleet_sync_protocol::{DatabaseId, FrameId, ReplicationRequest};
+use fleet_protocol::{DatabaseId, FrameId, ReplicationRequest};
 use futures_util::{SinkExt, StreamExt};
 use reqwest_websocket::{Message, WebSocket};
 use serde_json::{Value, json};

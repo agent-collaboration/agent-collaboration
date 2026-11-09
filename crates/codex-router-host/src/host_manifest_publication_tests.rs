@@ -29,8 +29,7 @@ async fn differing_enrollment_peer_refuses_before_publishing_the_host() {
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private Host fixture");
     let original = collaboration_runtime::load_installation_peer(root.path()).expect("owned peer");
-    let other =
-        fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).expect("other enrollment peer");
+    let other = fleet_protocol::PeerId::new(uuid::Uuid::now_v7()).expect("other enrollment peer");
     assert_ne!(original, other);
     let mut inputs = runtime_inputs(root.path());
     inputs.board_session = Some(board_fleet_sync::BoardSessionInputs {
@@ -38,13 +37,13 @@ async fn differing_enrollment_peer_refuses_before_publishing_the_host() {
         relay: "0192a1b2-c3d4-7000-8000-000000000003"
             .parse()
             .expect("configured fixture relay"),
-        receiver: fleet_sync_protocol::ReceiverId::new(uuid::Uuid::now_v7())
+        receiver: fleet_protocol::ReceiverId::new(uuid::Uuid::now_v7())
             .expect("enrollment receiver"),
-        endpoint: fleet_sync_session::Endpoint::new("ws://127.0.0.1:9/session")
+        endpoint: fleet_session::Endpoint::new("ws://127.0.0.1:9/session")
             .expect("fixture endpoint"),
         access: board_fleet_sync::AccessServiceToken::new("fixture-access", "fixture-secret")
             .expect("fixture access"),
-        credential: fleet_sync_session::PeerCredential::new("Bearer peer-mismatch-fixture")
+        credential: fleet_session::PeerCredential::new("Bearer peer-mismatch-fixture")
             .expect("fixture credential"),
     });
     let error = match CollaborationRuntime::start(inputs).await {

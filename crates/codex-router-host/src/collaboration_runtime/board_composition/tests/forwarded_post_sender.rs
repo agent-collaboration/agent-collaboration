@@ -34,7 +34,7 @@ impl SenderFixture {
             .central
             .additional_machine(
                 &origin,
-                fleet_sync_protocol::PeerId::new(durable_steps::Uuid::now_v7())?,
+                fleet_protocol::PeerId::new(durable_steps::Uuid::now_v7())?,
             )
             .await?;
         let directory = holder.directory.path().join("sender");
@@ -408,7 +408,7 @@ async fn non_holder_sender_reports_offline_holder_presence_without_queuing() -> 
             .error_for_status()?
             .json()
             .await?;
-        let observed: Option<fleet_sync_protocol::SyncTime> = serde_json::from_value(
+        let observed: Option<fleet_protocol::SyncTime> = serde_json::from_value(
             preview
                 .get("lastSeen")
                 .cloned()

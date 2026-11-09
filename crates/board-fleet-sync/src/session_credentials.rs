@@ -1,4 +1,4 @@
-use fleet_sync_session::ConnectFailure;
+use fleet_session::ConnectFailure;
 use reqwest::header::HeaderValue;
 
 #[derive(Clone)]

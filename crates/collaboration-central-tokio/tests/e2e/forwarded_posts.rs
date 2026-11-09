@@ -24,7 +24,7 @@ mod support;
 
 use board_sync_protocol::*;
 use collaboration_central_conformance::{ConformanceResult, JwksFixtureServer};
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use message_board::{ActorOrigin, ServiceId};
 use support::*;
 

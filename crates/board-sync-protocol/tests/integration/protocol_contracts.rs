@@ -1,5 +1,5 @@
 use board_sync_protocol::*;
-use fleet_sync_protocol as wire;
+use fleet_protocol as wire;
 use serde::{Serialize, de::DeserializeOwned};
 use serde_json::{Value, json};
 

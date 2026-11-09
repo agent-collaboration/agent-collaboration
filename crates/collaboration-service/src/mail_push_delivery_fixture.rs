@@ -18,7 +18,7 @@ use collaboration_protocol::{
 };
 use durable_steps::{AtomicStore, Engine, storage::TransactionScope, turso_store::TursoScope};
 pub(super) use fixture::{Fixture, ProjectionHost, ProjectionStore, ProjectionTask, recorded_at};
-use fleet_sync_protocol::{ItemId, Recipient};
+use fleet_protocol::{ItemId, Recipient};
 use message_board::{
     BatchTiming, FeedCursor, Identity, SubscriptionGeneration, SubscriptionLifetime,
     SubscriptionMode, WhenIdle,
@@ -172,7 +172,7 @@ impl Runtime {
     }
     pub(super) fn local_mail_with_limits(
         &self,
-        limits: fleet_sync_delivery::DeliveryLimits,
+        limits: fleet_mail_delivery::DeliveryLimits,
     ) -> crate::MailDeliveryRuntime {
         crate::MailDeliveryRuntime::with_test_limits(
             self.fixture.host.config.local.owner,
@@ -332,7 +332,7 @@ impl Runtime {
             .unwrap()
     }
     pub(super) async fn next_attempt(&self, item: ItemId, attempt: u64) -> i64 {
-        let key = fleet_sync_delivery::delivery_request_key(&(item, attempt)).unwrap();
+        let key = fleet_mail_delivery::delivery_request_key(&(item, attempt)).unwrap();
         self.fixture.store.transaction(move |scope| Box::pin(async move {
             Ok(sqlx::query::<Database>("SELECT next_attempt_at FROM _fleet_sync_operations WHERE kind='fleet-sync.delivery.deliver-locally' AND request_key=?")
                 .bind(key.as_str()).fetch_one(scope.executor()).await?.try_get("next_attempt_at")?)

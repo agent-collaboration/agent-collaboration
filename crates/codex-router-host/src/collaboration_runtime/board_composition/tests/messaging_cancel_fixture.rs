@@ -4,7 +4,7 @@ use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
 use collaboration_mail_protocol::{
     MailSender, NotificationBody, NotificationSource, RecordPointer, RootRange,
 };
-use fleet_sync_protocol::{CancelBody, DeliveryCancel, DeliveryEnvelope, DeliveryItem, Recipient};
+use fleet_protocol::{CancelBody, DeliveryCancel, DeliveryEnvelope, DeliveryItem, Recipient};
 use message_board_storage::{MailCancelExpansion, MailCancelGroup, MailHandoffItem};
 
 pub(in crate::collaboration_runtime::board_composition::tests::messaging_rule_cases) struct FollowSeed

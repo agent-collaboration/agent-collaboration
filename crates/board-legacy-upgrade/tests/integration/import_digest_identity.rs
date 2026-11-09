@@ -43,13 +43,13 @@ async fn relabelled_or_different_owner_rerun_keeps_semantic_digest_while_integri
         .report
         .projects
         .iter()
-        .map(|project| fleet_sync_protocol::ImportDigest::of_canonical(&project.manifest))
+        .map(|project| fleet_protocol::ImportDigest::of_canonical(&project.manifest))
         .collect::<Result<Vec<_>, _>>()?;
     let second_integrity = second
         .report
         .projects
         .iter()
-        .map(|project| fleet_sync_protocol::ImportDigest::of_canonical(&project.manifest))
+        .map(|project| fleet_protocol::ImportDigest::of_canonical(&project.manifest))
         .collect::<Result<Vec<_>, _>>()?;
     assert_ne!(first_integrity, second_integrity);
     first.close().await;

@@ -68,6 +68,6 @@ pub enum OwnerOperationFailure {
     Retired,
     CentralCopyFull,
     CopyUnavailable {
-        reason: fleet_sync_protocol::CopyUnavailableReason,
+        reason: fleet_protocol::CopyUnavailableReason,
     },
 }

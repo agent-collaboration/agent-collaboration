@@ -5,7 +5,7 @@ use super::{
 };
 use collaboration_central_core::{ClaimReservationOutcome, ClaimReservationState};
 use durable_steps::{AtomicStore, CallTarget, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DatabaseId, GateAnswer, HolderChangeRequest, PeerId, SettleOutcome, TransferId,
 };
 use sqlx_core::query::query;
@@ -30,8 +30,8 @@ pub(super) async fn reserve(
     let bytes = fixture
         .runtime
         .on_call(registry_call(
-            fleet_sync_lease::ClaimReservation::KIND,
-            serde_json::to_value(fleet_sync_protocol::ClaimReservation { change: change()? })?,
+            fleet_project_lease::ClaimReservation::KIND,
+            serde_json::to_value(fleet_protocol::ClaimReservation { change: change()? })?,
             operation,
         )?)
         .await
@@ -43,8 +43,8 @@ async fn cancel(fixture: &Fixture) -> TestResult {
     let bytes = fixture
         .runtime
         .on_call(registry_call(
-            fleet_sync_lease::ClaimSettlement::KIND,
-            serde_json::to_value(fleet_sync_protocol::ClaimSettlement {
+            fleet_project_lease::ClaimSettlement::KIND,
+            serde_json::to_value(fleet_protocol::ClaimSettlement {
                 change: change()?,
                 outcome: SettleOutcome::Cancelled,
             })?,
@@ -52,7 +52,7 @@ async fn cancel(fixture: &Fixture) -> TestResult {
         )?)
         .await
         .map_err(|error| format!("native cancel did not answer: {error:?}"))?;
-    let _: fleet_sync_protocol::SettlementRecorded = serde_json::from_slice(&bytes)?;
+    let _: fleet_protocol::SettlementRecorded = serde_json::from_slice(&bytes)?;
     Ok(())
 }
 

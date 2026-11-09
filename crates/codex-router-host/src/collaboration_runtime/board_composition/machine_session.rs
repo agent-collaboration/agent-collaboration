@@ -14,11 +14,9 @@ use collaboration_runtime::ProjectStoreRegistry;
 use collaboration_service::MailDeliveryRuntime;
 use collaboration_service::NotificationPublisher;
 use collaboration_service::ProjectAdmission;
-use fleet_sync_protocol::{
-    DatabaseStatus, Notice, NoticePosition, PeerId, SchemaSupport, SessionId,
-};
-use fleet_sync_session::{ClientEvent, SessionClient};
-use fleet_sync_tokio_runner::{SessionPump, SessionRecoveryPolicy, SessionRequests};
+use fleet_protocol::{DatabaseStatus, Notice, NoticePosition, PeerId, SchemaSupport, SessionId};
+use fleet_session::{ClientEvent, SessionClient};
+use fleet_session_client::{SessionPump, SessionRecoveryPolicy, SessionRequests};
 use runtime_primitives::{Backoff, UuidV7Ids};
 use std::{
     future::Future,
@@ -308,8 +306,8 @@ impl RunningMachineSession {
         record: &board_sync_protocol::FleetLinkRecord,
     ) -> bool {
         use board_sync_protocol::{FleetLinkFailureReason, FleetLinkRefusal, FleetLinkState};
-        use fleet_sync_protocol::AuthRefusal;
-        use fleet_sync_session::{ClientError, ConnectFailure};
+        use fleet_protocol::AuthRefusal;
+        use fleet_session::{ClientError, ConnectFailure};
         let Some(native) = error
             .get_ref()
             .and_then(|error| error.downcast_ref::<ClientError>())
@@ -383,8 +381,8 @@ async fn await_machine_stop(mut stopped: watch::Receiver<bool>) -> io::Result<()
     Ok(())
 }
 
-fn expected_terminal(error: &fleet_sync_session::ClientError) -> bool {
-    use fleet_sync_session::{ClientError, ConnectFailure};
+fn expected_terminal(error: &fleet_session::ClientError) -> bool {
+    use fleet_session::{ClientError, ConnectFailure};
     matches!(
         error,
         ClientError::Revoked
@@ -400,7 +398,7 @@ fn expected_terminal(error: &fleet_sync_session::ClientError) -> bool {
 fn expected_terminal_io(error: &io::Error) -> bool {
     error
         .get_ref()
-        .and_then(|error| error.downcast_ref::<fleet_sync_session::ClientError>())
+        .and_then(|error| error.downcast_ref::<fleet_session::ClientError>())
         .is_some_and(expected_terminal)
 }
 
@@ -432,12 +430,12 @@ type MachineSessionPumpParts<T, S> = (
 // Keep the Host's selected policy in the same constructor used by its recovery
 // tests. Tests replace external ports while keeping this policy and pump real.
 fn create_machine_session_pump<
-    T: fleet_sync_session::SessionTransport,
-    S: fleet_sync_session::SessionClientStore,
+    T: fleet_session::SessionTransport,
+    S: fleet_session::SessionClientStore,
 >(
     client: SessionClient<T, S, BoardConsumerProtocol>,
-    endpoint: fleet_sync_session::Endpoint,
-    credential: fleet_sync_session::PeerCredential,
+    endpoint: fleet_session::Endpoint,
+    credential: fleet_session::PeerCredential,
 ) -> MachineSessionPumpParts<T, S> {
     let (requests, events, pump) =
         SessionPump::new(client, endpoint, credential, SESSION_CALL_TIMEOUT);
@@ -445,7 +443,7 @@ fn create_machine_session_pump<
         requests,
         events,
         pump.with_recovery_policy(SessionRecoveryPolicy {
-            connection_replaced: fleet_sync_tokio_runner::ConnectionReplacedRecovery::Terminal,
+            connection_replaced: fleet_session_client::ConnectionReplacedRecovery::Terminal,
             welcome_timeout: Some(Duration::from_secs(30)),
             ..SessionRecoveryPolicy::default()
         }),
@@ -514,7 +512,7 @@ async fn run_events(
                     finish_reaction(completed, generation, &mut reactions, &mut receipts, &requests, &owners.projects, owners.link_failures.as_ref()).await?;
                 }
                 Some(Ok(SessionCompletion::Operation(Err(error)))) => {
-                    if let Some(error) = error.get_ref().and_then(|error| error.downcast_ref::<fleet_sync_session::ClientError>())
+                    if let Some(error) = error.get_ref().and_then(|error| error.downcast_ref::<fleet_session::ClientError>())
                         && let Some(failures) = &owners.link_failures { failures.session_failed(error); }
                     tracing::warn!(%error, "machine-session operation unavailable");
                 },
@@ -545,9 +543,9 @@ async fn run_events(
                     }
                 }
                 Some(ClientEvent::Disconnected { reason, .. }) => {
-                    if matches!(reason, Some(fleet_sync_protocol::CloseReason::MalformedFrame))
+                    if matches!(reason, Some(fleet_protocol::CloseReason::MalformedFrame))
                         && let Some(failures) = &owners.link_failures {
-                        failures.session_failed(&fleet_sync_session::ClientError::Protocol);
+                        failures.session_failed(&fleet_session::ClientError::Protocol);
                     }
                     welcomed.send_replace(false);
                     generation = generation.checked_add(1).ok_or_else(|| io::Error::other("notice generation exhausted"))?;

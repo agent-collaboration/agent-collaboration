@@ -8,7 +8,7 @@ use super::{
 };
 use board_sync_protocol::BoardDeliveryBody;
 use collaboration_mail_protocol::{NotificationSource, RootRange};
-use fleet_sync_protocol::DeliveryEnvelope;
+use fleet_protocol::DeliveryEnvelope;
 use message_board_storage::MailHandoffItem;
 #[cfg(test)]
 use std::sync::Arc;

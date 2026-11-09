@@ -1,8 +1,8 @@
 //! Real local central configuration shared by importer route tests.
 use collaboration_central_conformance::{JwksFixtureServer, fixture_policy, owner_assertion};
 use collaboration_central_tokio::{TokioServer, TokioSettings};
-use fleet_sync_lease::{LeasePolicy, RegistryConfig};
-use fleet_sync_protocol::ReceiverId;
+use fleet_project_lease::{LeasePolicy, RegistryConfig};
+use fleet_protocol::ReceiverId;
 use reqwest::header::{HeaderMap, HeaderValue};
 use std::{net::SocketAddr, path::Path, time::Duration};
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
@@ -133,7 +133,7 @@ pub async fn start_server_on(
 fn settings(root: &std::path::Path, jwks: &JwksFixtureServer) -> TestResult<TokioSettings> {
     Ok(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
+            relay_peer: fleet_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },

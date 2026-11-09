@@ -3,7 +3,7 @@ use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerProtocol, BoardReadPage, InstallationPeerPage,
     InstallationPeerPageError, MAX_INSTALLATION_PEERS_PAGE_ROWS,
 };
-use fleet_sync_protocol as wire;
+use fleet_protocol as wire;
 use message_board::ServiceId;
 use serde_json::{Value, json};
 

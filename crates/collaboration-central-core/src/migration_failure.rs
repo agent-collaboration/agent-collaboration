@@ -24,9 +24,9 @@ impl MigrationFailure {
         let Ok(version) = u64::try_from(version) else {
             return cause;
         };
-        let reason = match fleet_sync_receiver::classify_copy_store_error(cause.clone()) {
-            fleet_sync_receiver::CopyTransactionFailure::Unavailable(
-                fleet_sync_protocol::CopyUnavailableReason::Damaged { detail },
+        let reason = match fleet_project_copy::classify_copy_store_error(cause.clone()) {
+            fleet_project_copy::CopyTransactionFailure::Unavailable(
+                fleet_protocol::CopyUnavailableReason::Damaged { detail },
             ) => detail,
             _ => cause.to_string(),
         };
@@ -63,12 +63,12 @@ impl MigrationFailure {
         }
         Some(failure)
     }
-    pub(crate) fn unavailable(&self) -> fleet_sync_protocol::CopyUnavailableReason {
-        match fleet_sync_receiver::classify_copy_store_error(self.cause.clone()) {
-            fleet_sync_receiver::CopyTransactionFailure::Unavailable(
-                fleet_sync_protocol::CopyUnavailableReason::StorageFull,
-            ) => fleet_sync_protocol::CopyUnavailableReason::StorageFull,
-            _ => fleet_sync_protocol::CopyUnavailableReason::MigrationPending {
+    pub(crate) fn unavailable(&self) -> fleet_protocol::CopyUnavailableReason {
+        match fleet_project_copy::classify_copy_store_error(self.cause.clone()) {
+            fleet_project_copy::CopyTransactionFailure::Unavailable(
+                fleet_protocol::CopyUnavailableReason::StorageFull,
+            ) => fleet_protocol::CopyUnavailableReason::StorageFull,
+            _ => fleet_protocol::CopyUnavailableReason::MigrationPending {
                 version: self.version,
             },
         }

@@ -1,7 +1,7 @@
 //! A failed preparation retains its final observation independently of a running pump.
 use crate::FleetLinkReader;
 use board_sync_protocol::FleetLinkRecord;
-use fleet_sync_session::StoreError;
+use fleet_session::StoreError;
 
 #[derive(Clone)]
 pub enum FleetLinkObservation {

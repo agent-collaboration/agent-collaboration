@@ -13,9 +13,9 @@ pub struct SocketOwnerSnapshot {
 #[cfg(feature = "conformance")]
 #[derive(serde::Serialize)]
 pub(crate) struct SessionConnectionSnapshot {
-    connection: fleet_sync_protocol::ConnectionId,
-    peer: fleet_sync_protocol::PeerId,
-    registration: fleet_sync_session::ConnectionRegistration,
+    connection: fleet_protocol::ConnectionId,
+    peer: fleet_protocol::PeerId,
+    registration: fleet_session::ConnectionRegistration,
 }
 
 use crate::object_keys::{address_from_key, address_key};
@@ -26,9 +26,9 @@ use collaboration_central_core::{
     AdmissionOrigin, CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectRuntime, PlatformIo,
 };
 use durable_steps::{BoxFuture, CallFailure, NotSentReason, StoreError};
-use fleet_sync_lease::RegistryConfig;
-use fleet_sync_session::ConnectionBinding;
-use fleet_sync_tokio_runner::{ObjectKey, ObjectOptions, ObjectStore};
+use fleet_project_lease::RegistryConfig;
+use fleet_session::ConnectionBinding;
+use fleet_tokio_objects::{ObjectKey, ObjectOptions, ObjectStore};
 use runtime_primitives::{Clock, IdSource, SyncTime, TokioWakeTimer, WakeFailure, WakeScheduler};
 use std::{
     collections::BTreeMap,
@@ -174,7 +174,7 @@ pub(crate) struct NativeObjects {
     #[cfg(feature = "conformance")]
     startup_controls: crate::startup_controls::PreparedRuntimeControls,
     #[cfg(feature = "conformance")]
-    health_samples: Mutex<BTreeMap<fleet_sync_protocol::DatabaseId, Vec<HealthFileSample>>>,
+    health_samples: Mutex<BTreeMap<fleet_protocol::DatabaseId, Vec<HealthFileSample>>>,
 }
 impl NativeObjects {
     #[cfg(feature = "conformance")]
@@ -524,7 +524,7 @@ impl NativeObjects {
     pub(crate) async fn holder_frames(
         &self,
         _service: &message_board::ServiceId,
-    ) -> Result<Vec<fleet_sync_protocol::FrameId>, StoreError> {
+    ) -> Result<Vec<fleet_protocol::FrameId>, StoreError> {
         let slot = self.slots.lock().await.get("fleet").cloned();
         match slot
             .as_ref()
@@ -541,7 +541,7 @@ impl NativeObjects {
     #[cfg(feature = "conformance")]
     pub(crate) async fn mail_custody(
         &self,
-        item: fleet_sync_protocol::ItemId,
+        item: fleet_protocol::ItemId,
     ) -> Result<collaboration_central_core::FleetMailCustodyObservation, StoreError> {
         // Observation never creates or migrates an owning store.
         let slot = self.slots.lock().await.get("fleet").cloned();
@@ -632,8 +632,8 @@ impl NativeObjects {
     #[cfg(feature = "conformance")]
     pub(crate) async fn schema_report(
         self: &Arc<Self>,
-        peer: fleet_sync_protocol::PeerId,
-    ) -> Result<Option<fleet_sync_protocol::ReportSchemaSupport>, StoreError> {
+        peer: fleet_protocol::PeerId,
+    ) -> Result<Option<fleet_protocol::ReportSchemaSupport>, StoreError> {
         let slot = self.slot(ObjectAddress::Fleet).await?;
         match slot.runtime.get().map(Arc::as_ref) {
             Some(RuntimeFace::Fleet(runtime)) => runtime.conformance_schema_report(peer).await,

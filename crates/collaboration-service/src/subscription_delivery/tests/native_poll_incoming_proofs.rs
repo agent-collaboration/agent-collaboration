@@ -7,7 +7,7 @@ use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
 use collaboration_mail_protocol::{
     MailSender, NotificationBody, NotificationSource, RecordPointer, RootRange,
 };
-use fleet_sync_protocol::{DeliveryItem, ItemId, Recipient, RecipientOutcome};
+use fleet_protocol::{DeliveryItem, ItemId, Recipient, RecipientOutcome};
 use message_board::*;
 
 #[tokio::test]
@@ -92,15 +92,15 @@ async fn remote_incoming_poll_uses_its_frozen_policy_without_opening_the_senders
         native
             .runtime()
             .accept_pushed_mail(
-                fleet_sync_protocol::Submitter::Project(
-                    fleet_sync_protocol::DatabaseId::try_from(remote_project.as_str().to_owned())
+                fleet_protocol::Submitter::Project(
+                    fleet_protocol::DatabaseId::try_from(remote_project.as_str().to_owned())
                         .unwrap()
                 ),
                 serde_json::from_value(serde_json::to_value(&transport.item).unwrap()).unwrap()
             )
             .await
             .unwrap(),
-        fleet_sync_protocol::PushResult::Accepted { .. }
+        fleet_protocol::PushResult::Accepted { .. }
     ));
     tokio::time::timeout(Duration::from_secs(6), async {
         while !transport

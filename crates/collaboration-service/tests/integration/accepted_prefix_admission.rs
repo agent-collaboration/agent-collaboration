@@ -15,19 +15,18 @@ async fn a_bootstrapped_file_reopened_as_provisional_is_superseded() -> Result<(
     let (project, _) = source.project().await?;
     let target = BoardFixture::start().await?;
     let (_, epoch) = accepted_snapshot::bootstrap_project(&source, &target, &project).await?;
-    let database_id =
-        fleet_sync_protocol::DatabaseId::new(uuid::Uuid::parse_str(project.as_str())?)?;
+    let database_id = fleet_protocol::DatabaseId::new(uuid::Uuid::parse_str(project.as_str())?)?;
     let path = target
         ._directory
         .path()
         .join("projects")
         .join(project.as_str())
         .join(format!("e{}.sqlite", epoch.get()));
-    let database = fleet_sync_writer::ReplicatedDatabase::open(
+    let database = fleet_project_writer::ReplicatedDatabase::open(
         &path,
         database_id,
         board_fleet_sync::BoardProjectSchema::new()?,
-        fleet_sync_lease::LeaseHolder::provisional(
+        fleet_project_lease::LeaseHolder::provisional(
             database_id,
             board_fixture::fixture_peer()?,
             board_fleet_sync::BOARD_LEASE_POLICY,
@@ -35,7 +34,7 @@ async fn a_bootstrapped_file_reopened_as_provisional_is_superseded() -> Result<(
     )
     .await?;
     assert!(matches!(database.writer_state().await?,
-        fleet_sync_lease::WriterState::Superseded { current } if current.value() == epoch.get()));
+        fleet_project_lease::WriterState::Superseded { current } if current.value() == epoch.get()));
     database.close().await;
     target.stop().await?;
     source.stop().await
@@ -65,7 +64,7 @@ async fn a_filename_epoch_that_differs_from_the_native_file_is_refused() -> Resu
     match target._registry.existing_project(&project).await {
         Err(collaboration_runtime::ProjectRegistryError::Storage(
             message_board_storage::ProjectStorageError::Writer(
-                fleet_sync_writer::OpenError::Corrupt { field },
+                fleet_project_writer::OpenError::Corrupt { field },
             ),
         )) => assert_eq!(field, "writer.epoch"),
         Err(error) => return Err(format!("unexpected mismatch refusal: {error}").into()),
@@ -112,7 +111,7 @@ async fn cold_metadata_from_another_project_is_refused_without_rewriting_the_fil
     match registry.existing_project(&other).await {
         Err(collaboration_runtime::ProjectRegistryError::Storage(
             message_board_storage::ProjectStorageError::Writer(
-                fleet_sync_writer::OpenError::Corrupt { field },
+                fleet_project_writer::OpenError::Corrupt { field },
             ),
         )) => assert_eq!(field, "writer.database"),
         Err(error) => return Err(format!("unexpected identity refusal: {error}").into()),
@@ -142,7 +141,7 @@ async fn inherited_cursors_keep_marks_and_late_anchors_while_new_close_coordinat
         .ok_or("seeded project")?;
     let state = store.writer_state().await?;
     assert!(
-        matches!(&state, fleet_sync_lease::WriterState::Writing { epoch: actual } if actual.value() == epoch.get()),
+        matches!(&state, fleet_project_lease::WriterState::Writing { epoch: actual } if actual.value() == epoch.get()),
         "restored writer state: {state:?}"
     );
     let reader: Identity = serde_json::from_value(target.actor.clone())?;

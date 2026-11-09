@@ -6,7 +6,7 @@ use super::{
 };
 use crate::push_record_delivery::PushDeliveryFailure;
 use collaboration_protocol::{MailItemId, MessageSendResult, QueuedMessageSend};
-use fleet_sync_delivery::{Outbox, OutboxAdmission, delivery_rollback};
+use fleet_mail_delivery::{Outbox, OutboxAdmission, delivery_rollback};
 use interaction_storage::{
     read_message_send_answer_in_scope, record_message_send_admission, record_message_send_outcome,
 };
@@ -75,7 +75,7 @@ impl MailDeliveryRuntime {
         };
         let target = draft.target;
         let limits = self.config.limits;
-        let submitter = fleet_sync_protocol::Submitter::Machine(self.config.owner);
+        let submitter = fleet_protocol::Submitter::Machine(self.config.owner);
         let now = self.clock.now();
         let answer = self
             .store
@@ -99,7 +99,7 @@ impl MailDeliveryRuntime {
                         match admission {
                             OutboxAdmission::BindingUnavailable { reason } => {
                                 Err(delivery_rollback(DeliveryError::SenderBindingUnavailable {
-                                    row: fleet_sync_delivery::CustodyRow::Outbox(binding_item),
+                                    row: fleet_mail_delivery::CustodyRow::Outbox(binding_item),
                                     reason,
                                 }))
                             }

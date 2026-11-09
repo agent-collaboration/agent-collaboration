@@ -59,7 +59,7 @@ where
 
     async fn session_store_for(
         &self,
-        connection: fleet_sync_protocol::ConnectionId,
+        connection: fleet_protocol::ConnectionId,
     ) -> Result<SessionRuntimeHandles<Host, Io>, StoreError> {
         let ObjectWork::Fleet {
             host,
@@ -87,7 +87,7 @@ where
     /// Receive a frame through the shared session rules and committed effects.
     pub async fn on_socket_opened(
         &self,
-        binding: fleet_sync_session::ConnectionBinding,
+        binding: fleet_session::ConnectionBinding,
     ) -> Result<(), StoreError> {
         use runtime_primitives::Clock;
         let (store, shared_host) = self.session_store_for(binding.connection).await?;
@@ -96,7 +96,7 @@ where
                 Box::pin(async move {
                     let now = shared_host.now();
                     crate::machine_notice_store::remember_peer(scope, binding.peer, now).await?;
-                    let effects = fleet_sync_session::connection_opened(scope, &binding, now)
+                    let effects = fleet_session::connection_opened(scope, &binding, now)
                         .await
                         .map_err(StoreError::backend)?;
                     scope.stage_transport(effects, Some(binding.connection))
@@ -108,7 +108,7 @@ where
     /// Receive a frame through the shared session rules and committed effects.
     pub async fn on_frame(
         &self,
-        binding: fleet_sync_session::ConnectionBinding,
+        binding: fleet_session::ConnectionBinding,
         frame: Vec<u8>,
     ) -> Result<(), StoreError> {
         use runtime_primitives::Clock;
@@ -123,16 +123,16 @@ where
             .map_err(StoreError::backend)?
             .installation;
         let (store, shared_host) = self.session_store_for(binding.connection).await?;
-        let forward_frame = fleet_sync_protocol::FrameId::new(
-            runtime_primitives::IdSource::new_id(shared_host.as_ref()),
-        )
+        let forward_frame = fleet_protocol::FrameId::new(runtime_primitives::IdSource::new_id(
+            shared_host.as_ref(),
+        ))
         .map_err(StoreError::backend)?;
         store
             .transaction(move |scope| {
                 Box::pin(async move {
                     let now = shared_host.now();
                     crate::machine_notice_store::remember_peer(scope, binding.peer, now).await?;
-                    let effects = fleet_sync_session::frame_received(scope, &binding, &frame, now)
+                    let effects = fleet_session::frame_received(scope, &binding, &frame, now)
                         .await
                         .map_err(StoreError::backend)?;
                     scope
@@ -153,23 +153,30 @@ where
     #[cfg(feature = "conformance")]
     pub async fn conformance_transport_notices(
         &self,
-        session: fleet_sync_session::SessionKey,
-        after: fleet_sync_protocol::NoticePosition,
+        session: fleet_session::SessionKey,
+        after: fleet_protocol::NoticePosition,
     ) -> Result<
-        Vec<fleet_sync_session::StoredNotice<board_sync_protocol::BoardConsumerProtocol>>,
+        Vec<fleet_session::StoredNotice<board_sync_protocol::BoardConsumerProtocol>>,
         StoreError,
     > {
         let (store, _) = self.session_store()?;
-        store.transaction(move |scope|Box::pin(async move {
-            fleet_sync_session::notices_after::<_,board_sync_protocol::BoardConsumerProtocol>(scope,&session,after)
-                .await.map_err(StoreError::backend)
-        })).await
+        store
+            .transaction(move |scope| {
+                Box::pin(async move {
+                    fleet_session::notices_after::<_, board_sync_protocol::BoardConsumerProtocol>(
+                        scope, &session, after,
+                    )
+                    .await
+                    .map_err(StoreError::backend)
+                })
+            })
+            .await
     }
 
     #[cfg(feature = "conformance")]
     pub async fn conformance_frame(
         &self,
-        binding: fleet_sync_session::ConnectionBinding,
+        binding: fleet_session::ConnectionBinding,
         frame: Vec<u8>,
     ) -> Result<(), StoreError> {
         self.on_frame(binding, frame).await
@@ -177,7 +184,7 @@ where
 
     pub async fn on_socket_closed(
         &self,
-        binding: fleet_sync_session::ConnectionBinding,
+        binding: fleet_session::ConnectionBinding,
     ) -> Result<(), StoreError> {
         use runtime_primitives::Clock;
         // The callback already carries its admitted binding. Cleanup is local
@@ -187,10 +194,10 @@ where
         let result = store
             .transaction(move |scope| {
                 Box::pin(async move {
-                    let effects = fleet_sync_session::connection_closed(
+                    let effects = fleet_session::connection_closed(
                         scope,
                         &binding,
-                        fleet_sync_session::CloseCause::Dropped,
+                        fleet_session::CloseCause::Dropped,
                         now,
                     )
                     .await
@@ -208,7 +215,7 @@ where
     #[cfg(feature = "conformance")]
     pub async fn conformance_closed(
         &self,
-        binding: fleet_sync_session::ConnectionBinding,
+        binding: fleet_session::ConnectionBinding,
     ) -> Result<(), StoreError> {
         self.on_socket_closed(binding).await
     }

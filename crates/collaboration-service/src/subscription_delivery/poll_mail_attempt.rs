@@ -7,7 +7,7 @@ use super::{
 impl SubscriptionDeliveryService {
     pub(crate) async fn attempt_poll_mail_once(
         &self,
-        item: Box<fleet_sync_protocol::DeliveryItem<collaboration_contracts::RouterDeliveryTypes>>,
+        item: Box<fleet_protocol::DeliveryItem<collaboration_contracts::RouterDeliveryTypes>>,
     ) -> collaboration_contracts::NativeDeliveryResult {
         let target: SessionRef = match item.recipient().address.clone().try_into() {
             Ok(target) => target,

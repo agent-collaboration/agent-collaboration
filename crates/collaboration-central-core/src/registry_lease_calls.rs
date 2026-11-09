@@ -14,12 +14,12 @@ use durable_steps::{
     AtomicStore, BoxFuture, CallFailure, NotSentReason, OperationState, StoreError,
     storage::TransactionScope,
 };
-use fleet_sync_lease::{DatabaseLifecycle, lifecycle_request_key};
-use fleet_sync_protocol::{
+use fleet_project_lease::{DatabaseLifecycle, lifecycle_request_key};
+use fleet_protocol::{
     ActorRef, DatabaseId, HolderChangeAnswer, HolderChangeRefusal, HolderChangeRequest,
     LeaseAnswer, LeaseRequest, RegistrationAnswer, RegistrationRefusal, TransferId,
 };
-use fleet_sync_session::SessionKey;
+use fleet_session::SessionKey;
 use message_board::ServiceId;
 use runtime_primitives::{Clock, SyncTime};
 use sqlx_core::{
@@ -149,7 +149,7 @@ where
                             {
                                 return Ok(None);
                             }
-                            let answer = fleet_sync_lease::renew(
+                            let answer = fleet_project_lease::renew(
                                 scope,
                                 &request,
                                 &session.peer,
@@ -233,7 +233,7 @@ where
             if service_for_peer(scope, self.session.peer).await?.as_ref() != Some(&self.service) {
                 return Ok((None, Vec::new()));
             }
-            let lifecycle = fleet_sync_lease::database_lifecycle(scope, self.database)
+            let lifecycle = fleet_project_lease::database_lifecycle(scope, self.database)
                 .await
                 .map_err(StoreError::backend)?;
             Ok((Some(LeaseCallerState { lifecycle }), Vec::new()))
@@ -261,7 +261,7 @@ where
         scope: &'scope mut Store::Scope<'transaction>,
     ) -> BoxFuture<'scope, StepResult<(), Self::Effect>> {
         Box::pin(async move {
-            fleet_sync_lease::admit_holder_change::<Store, Driver>(
+            fleet_project_lease::admit_holder_change::<Store, Driver>(
                 scope,
                 &self.request,
                 &self.actor,
@@ -292,7 +292,7 @@ where
     ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
         Box::pin(async move {
             Ok((
-                fleet_sync_lease::holder_change_answer(scope, &self.request)
+                fleet_project_lease::holder_change_answer(scope, &self.request)
                     .await
                     .map_err(StoreError::backend)?,
                 Vec::new(),

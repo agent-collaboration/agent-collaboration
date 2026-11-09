@@ -5,8 +5,8 @@ use axum::{
     routing::get,
 };
 use board_fleet_sync::{AccessServiceToken, ReqwestSessionTransport};
-use fleet_sync_protocol::{AuthRefusal, CloseReason};
-use fleet_sync_session::{
+use fleet_protocol::{AuthRefusal, CloseReason};
+use fleet_session::{
     Bytes, ConnectFailure, ConnectionClosed, Endpoint, PeerCredential, SessionTransport,
     TransportConnection,
 };

@@ -27,8 +27,8 @@ mod wake_capacity_tests;
 #[tokio::test]
 async fn whole_host_shutdown_retains_the_native_failure_when_link_observation_fails() {
     for native in [
-        fleet_sync_session::ClientError::Protocol,
-        fleet_sync_session::ClientError::Revoked,
+        fleet_session::ClientError::Protocol,
+        fleet_session::ClientError::Revoked,
     ] {
         // Arrange: real runtime owners, with a failed session completion and unavailable diagnostic.
         let mut fixture = start_host(false).await;
@@ -53,7 +53,7 @@ async fn whole_host_shutdown_retains_the_native_failure_when_link_observation_fa
         // Assert: the actual typed root cause survives both failure domains.
         let retained = error
             .get_ref()
-            .and_then(|error| error.downcast_ref::<fleet_sync_session::ClientError>())
+            .and_then(|error| error.downcast_ref::<fleet_session::ClientError>())
             .expect("native session cause was replaced by the link read failure");
         assert_eq!(std::mem::discriminant(retained), expected_variant);
         assert_eq!(retained.to_string(), expected);

@@ -32,7 +32,7 @@ use collaboration_central_core::ObjectAddress;
 use collaboration_central_tokio::{TokioServer, TokioSettings};
 use durable_steps::Uuid;
 use fleet_admission::{FleetOperation, FleetRequest, FleetRequestResult};
-use fleet_sync_protocol::{Notice, OperationAnswer, OperationRequest, ServerFrame};
+use fleet_protocol::{Notice, OperationAnswer, OperationRequest, ServerFrame};
 use futures_util::StreamExt;
 use message_board::*;
 use serde_json::{Value, json};

@@ -4,7 +4,7 @@ use super::native_follow_mail_proofs::follow_application_with_replication;
 use super::native_generation_isolation_proofs::arrange_remote_generation_cancel;
 use super::*;
 use crate::frozen_mail_query_fixture::FrozenMailQuery;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CancelResult, DeliveryItemRef, DeliveryStatus, ItemStatus, ItemStatusState, StatusVersion,
     TooLateAt,
 };

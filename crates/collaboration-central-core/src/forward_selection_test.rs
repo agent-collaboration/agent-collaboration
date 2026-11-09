@@ -10,7 +10,7 @@ use crate::{
 use durable_steps::{
     BoxFuture, CallTarget, OperationId, OperationStatus, RequestKey, StartRefusal, StoreError,
 };
-use fleet_sync_session::SessionKey;
+use fleet_session::SessionKey;
 use std::marker::PhantomData;
 struct UnusedEngine;
 impl crate::fleet_task_engine::FleetTaskEngine for UnusedEngine {
@@ -49,14 +49,14 @@ async fn run(revoked: bool, replay: bool) -> Result<(), TestError> {
     });
     let shared_host = Arc::new(crate::CoreHost::for_store(
         FixtureIo,
-        fleet_sync_protocol::ReceiverId::new(durable_steps::Uuid::now_v7())?,
+        fleet_protocol::ReceiverId::new(durable_steps::Uuid::now_v7())?,
     ));
-    let config = fleet_sync_lease::RegistryConfig {
-        lease: fleet_sync_lease::LeasePolicy {
+    let config = fleet_project_lease::RegistryConfig {
+        lease: fleet_project_lease::LeasePolicy {
             lease_duration: std::time::Duration::from_secs(3600),
             renew_interval: std::time::Duration::from_secs(900),
         },
-        authoritative_receiver: fleet_sync_protocol::ReceiverId::new(durable_steps::Uuid::now_v7())?,
+        authoritative_receiver: fleet_protocol::ReceiverId::new(durable_steps::Uuid::now_v7())?,
         release_unsent_for: std::time::Duration::ZERO,
         move_needs_renewal_within: None,
     };
@@ -74,14 +74,14 @@ async fn run(revoked: bool, replay: bool) -> Result<(), TestError> {
         face: PhantomData,
     };
     let request = ForwardDeliveryRequest {
-        forward_frame: fleet_sync_protocol::FrameId::new(durable_steps::Uuid::now_v7())?,
+        forward_frame: fleet_protocol::FrameId::new(durable_steps::Uuid::now_v7())?,
         holder: peer,
         deadline: NOW.after(std::time::Duration::from_secs(20)),
         origin_session: SessionKey {
             peer,
             session_id: session,
         },
-        request_frame: fleet_sync_protocol::FrameId::new(durable_steps::Uuid::now_v7())?,
+        request_frame: fleet_protocol::FrameId::new(durable_steps::Uuid::now_v7())?,
         connection: host.connection,
         created_at: NOW,
         post: serde_json::from_value(

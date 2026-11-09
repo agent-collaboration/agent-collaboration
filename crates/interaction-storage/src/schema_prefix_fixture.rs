@@ -37,7 +37,7 @@ pub(crate) async fn create_native_prefix(path: &Path, last_native_version: i64) 
         .await
         .unwrap();
     let mut delivery = sqlx::migrate::Migrator::with_migrations(
-        fleet_sync_delivery::DELIVERY_MIGRATOR
+        fleet_mail_delivery::DELIVERY_MIGRATOR
             .iter()
             .cloned()
             .collect::<Vec<_>>(),

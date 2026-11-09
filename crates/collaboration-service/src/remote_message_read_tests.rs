@@ -80,11 +80,11 @@ async fn remote_show_and_history_check_immutable_sender_context_before_canonical
         crate::collaboration_application::MessageFailureKind::NotPermitted
     );
     let sdk_item =
-        fleet_sync_protocol::ItemId::new(uuid::Uuid::parse_str(item.as_str()).unwrap()).unwrap();
-    mail.publish_status(fleet_sync_protocol::StatusPublication {
+        fleet_protocol::ItemId::new(uuid::Uuid::parse_str(item.as_str()).unwrap()).unwrap();
+    mail.publish_status(fleet_protocol::StatusPublication {
         item: sdk_item,
-        status: fleet_sync_protocol::DeliveryStatus::Sent,
-        version: fleet_sync_protocol::StatusVersion::new(1),
+        status: fleet_protocol::DeliveryStatus::Sent,
+        version: fleet_protocol::StatusVersion::new(1),
         cancel: None,
     })
     .await

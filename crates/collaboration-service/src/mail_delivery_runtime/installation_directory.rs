@@ -5,7 +5,7 @@ use board_sync_protocol::{
     InstallationPeerLookup,
 };
 use durable_steps::StoreError;
-use fleet_sync_protocol::{OperationAnswer, OperationRequest, PeerId};
+use fleet_protocol::{OperationAnswer, OperationRequest, PeerId};
 use interaction_storage::{InstallationPeerBinding, StorageError};
 use message_board::ServiceId;
 

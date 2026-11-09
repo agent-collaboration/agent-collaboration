@@ -343,13 +343,11 @@ async fn aggregate_cli_pages_and_batch_acknowledgements_keep_project_keys() -> R
         entries.push(json!({"requestId":RequestId::generate(),"scope":{"kind":"project","projectId":project},"through":through}));
     }
     let expired_at = SystemClock.now();
-    let lease = fleet_sync_protocol::LeaseStatus {
-        database: fleet_sync_protocol::DatabaseId::new(uuid::Uuid::parse_str(
-            projects[1].as_str(),
-        )?)?,
-        epoch: fleet_sync_protocol::Epoch::new(1)?,
+    let lease = fleet_protocol::LeaseStatus {
+        database: fleet_protocol::DatabaseId::new(uuid::Uuid::parse_str(projects[1].as_str())?)?,
+        epoch: fleet_protocol::Epoch::new(1)?,
         holder: native_registry::fixture_peer()?,
-        state: fleet_sync_protocol::LeaseState::Held,
+        state: fleet_protocol::LeaseState::Held,
         expires_at: expired_at,
         remaining_ms: 0,
     };
@@ -357,8 +355,8 @@ async fn aggregate_cli_pages_and_batch_acknowledgements_keep_project_keys() -> R
         .database(&projects[1])
         .await?
         .observe_renewal(
-            fleet_sync_protocol::RenewAnswer::Renewed {
-                recorded: fleet_sync_protocol::RenewResult {
+            fleet_protocol::RenewAnswer::Renewed {
+                recorded: fleet_protocol::RenewResult {
                     epoch: lease.epoch,
                     expires_at: lease.expires_at,
                 },
@@ -375,7 +373,7 @@ async fn aggregate_cli_pages_and_batch_acknowledgements_keep_project_keys() -> R
             .await?
             .writer_state()
             .await?,
-        fleet_sync_lease::WriterState::Paused { .. }
+        fleet_project_lease::WriterState::Paused { .. }
     ));
     let strings: Vec<_> = entries.iter().map(Value::to_string).collect();
     let first_entry = strings.first().ok_or("entry")?;

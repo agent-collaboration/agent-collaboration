@@ -3,8 +3,8 @@ use super::*;
 use crate::{LocalCancelReference, MailDeliveryRuntime};
 use collaboration_mail_protocol::{CancelCause, MailItemId};
 use collaboration_protocol::{MessageSendResult, PushRecordDraft};
-use fleet_sync_delivery::DeliveryTransactionFailure;
-use fleet_sync_protocol::{CancelBody, DeliveryCancel, DeliveryRefusal, ItemId, TooLateAt};
+use fleet_mail_delivery::DeliveryTransactionFailure;
+use fleet_protocol::{CancelBody, DeliveryCancel, DeliveryRefusal, ItemId, TooLateAt};
 #[path = "local_mail_admission_tests.rs"]
 mod admission;
 #[path = "local_cancel_crash_tests.rs"]
@@ -43,7 +43,7 @@ fn cancel_for(
     )
     .unwrap()
 }
-fn local_reference(result: LocalCancelReference) -> fleet_sync_protocol::DeliveryItemRef {
+fn local_reference(result: LocalCancelReference) -> fleet_protocol::DeliveryItemRef {
     match result {
         LocalCancelReference::Local { reference } => reference,
         other @ LocalCancelReference::ExistingElsewhere { .. } => {

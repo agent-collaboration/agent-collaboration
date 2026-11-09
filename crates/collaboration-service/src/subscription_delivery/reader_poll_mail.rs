@@ -9,7 +9,7 @@ use collaboration_mail_protocol::NotificationSource;
 #[cfg(test)]
 use collaboration_protocol::PushId;
 use collaboration_protocol::{MachineId, PushLineInput, RouterLink, render_push_line};
-use fleet_sync_protocol::DeliveryItem;
+use fleet_protocol::DeliveryItem;
 
 pub(in crate::subscription_delivery) fn poll_unsent(
     reason: &str,
@@ -130,7 +130,7 @@ impl ReaderDeliveryOwner {
             }
             return poll_unsent("Poll notice exceeds the wait budget");
         }
-        let reference = fleet_sync_protocol::DeliveryItemRef {
+        let reference = fleet_protocol::DeliveryItemRef {
             item: item.id(),
             digest: item.digest().clone(),
         };

@@ -11,13 +11,13 @@ use board_sync_protocol::BoardAnnotation;
 use durable_steps::{
     AtomicStore, BoxFuture, CallFailure, CallTarget, Engine, StoreError, storage::TransactionScope,
 };
-use fleet_sync_protocol::{
-    DatabaseId, PeerId, Piece, ReceiverId, ReplicationAnswer, ReplicationRequest, SeedAttemptId,
-    SeedComplete, SeedPage,
-};
-use fleet_sync_receiver::{
+use fleet_project_copy::{
     ApplyDecision, ApplyFollowUp, CopyTransactionFailure, InstalledSnapshot, SeedAuthority,
     SeedDecision,
+};
+use fleet_protocol::{
+    DatabaseId, PeerId, Piece, ReceiverId, ReplicationAnswer, ReplicationRequest, SeedAttemptId,
+    SeedComplete, SeedPage,
 };
 use runtime_primitives::{SyncTime, WakeScheduler};
 use serde::{Deserialize, Serialize};
@@ -257,7 +257,7 @@ where
                 }
                 answer
             }
-            Err(error) => match fleet_sync_receiver::classify_copy_store_error(error) {
+            Err(error) => match fleet_project_copy::classify_copy_store_error(error) {
                 CopyTransactionFailure::RefusedDiscardingParts {
                     refusal,
                     transaction,
@@ -329,16 +329,16 @@ where
             let answer = match self.request {
                 CopyWrite::Piece { piece, sender } => {
                     let rules = crate::CopyReceiverRules::new(self.now, None)?;
-                    match fleet_sync_receiver::apply_piece(scope, &piece, &sender, &rules, self.now)
+                    match fleet_project_copy::apply_piece(scope, &piece, &sender, &rules, self.now)
                         .await
-                        .map_err(fleet_sync_receiver::apply_rollback)?
+                        .map_err(fleet_project_copy::apply_rollback)?
                     {
                         ApplyDecision::Applied {
                             through,
                             follow_ups,
                         } => {
                             if !follow_ups.is_empty() {
-                                fleet_sync_receiver::admit_follow_ups::<Store,CopyDirectorySummary>(scope,piece.database,piece.epoch,through,follow_ups).await.map_err(StoreError::backend)?;
+                                fleet_project_copy::admit_follow_ups::<Store,CopyDirectorySummary>(scope,piece.database,piece.epoch,through,follow_ups).await.map_err(StoreError::backend)?;
                                 effects.push(CopyWriteEffect::Activate);
                             }
                             effects.push(CopyWriteEffect::Changed);
@@ -371,14 +371,14 @@ where
                     attempt,
                     authority,
                 } => ReplicationAnswer::SeedStarted {
-                    seed: fleet_sync_receiver::seed_begin(scope, database, attempt, &authority)
+                    seed: fleet_project_copy::seed_begin(scope, database, attempt, &authority)
                         .await
-                        .map_err(fleet_sync_receiver::receiver_rollback)?,
+                        .map_err(fleet_project_copy::receiver_rollback)?,
                 },
                 CopyWrite::Page { page, authority } => ReplicationAnswer::SeedPage(
-                    fleet_sync_receiver::seed_page(scope, &page, &authority)
+                    fleet_project_copy::seed_page(scope, &page, &authority)
                         .await
-                        .map_err(fleet_sync_receiver::receiver_rollback)?,
+                        .map_err(fleet_project_copy::receiver_rollback)?,
                 ),
                 CopyWrite::Complete {
                     done,
@@ -387,9 +387,9 @@ where
                 } => {
                     let rules = crate::CopyReceiverRules::new(self.now, summary)?;
                     let answer =
-                        match fleet_sync_receiver::seed_complete(scope, &done, &rules, &authority)
+                        match fleet_project_copy::seed_complete(scope, &done, &rules, &authority)
                             .await
-                            .map_err(fleet_sync_receiver::receiver_rollback)?
+                            .map_err(fleet_project_copy::receiver_rollback)?
                         {
                             SeedDecision::Published {
                                 position,
@@ -401,7 +401,7 @@ where
                                         position,
                                         schema: done.schema,
                                     };
-                                    fleet_sync_receiver::admit_snapshot_follow_ups::<
+                                    fleet_project_copy::admit_snapshot_follow_ups::<
                                         Store,
                                         CopyDirectorySummary,
                                     >(
@@ -412,7 +412,7 @@ where
                                     effects.push(CopyWriteEffect::Activate);
                                 }
                                 effects.push(CopyWriteEffect::Changed);
-                                fleet_sync_protocol::SeedAnswer::Published { position }
+                                fleet_protocol::SeedAnswer::Published { position }
                             }
                             SeedDecision::Answer(answer) => answer,
                         };
@@ -423,7 +423,7 @@ where
         })
     }
 }
-struct DiscardParts(fleet_sync_protocol::TransactionKey);
+struct DiscardParts(fleet_protocol::TransactionKey);
 impl<Store: AtomicStore, Driver: Database> StepCallback<Store, Driver> for DiscardParts
 where
     for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
@@ -439,9 +439,9 @@ where
         scope: &'scope mut Store::Scope<'transaction>,
     ) -> BoxFuture<'scope, StepResult<(), Self::Effect>> {
         Box::pin(async move {
-            fleet_sync_receiver::discard_staged_parts(scope, &self.0)
+            fleet_project_copy::discard_staged_parts(scope, &self.0)
                 .await
-                .map_err(fleet_sync_receiver::receiver_rollback)?;
+                .map_err(fleet_project_copy::receiver_rollback)?;
             Ok(((), Vec::new()))
         })
     }
@@ -450,7 +450,7 @@ fn decode<T: serde::de::DeserializeOwned>(value: serde_json::Value) -> Result<T,
     serde_json::from_value(value).map_err(crate::object_call_envelope::encode_refusal)
 }
 fn failure(error: StoreError) -> ReplicationAnswer {
-    fleet_sync_receiver::classify_copy_store_error(error).answer()
+    fleet_project_copy::classify_copy_store_error(error).answer()
 }
 fn refused() -> CallFailure {
     CallFailure::NotSent {

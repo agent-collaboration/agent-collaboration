@@ -21,7 +21,7 @@ pub(super) struct ProjectNotificationFixture {
     application: CollaborationApplication,
     pub(super) project: ProjectId,
     root: ThreadId,
-    pub(super) seed_item: fleet_sync_protocol::ItemId,
+    pub(super) seed_item: fleet_protocol::ItemId,
     pub(super) seed_epoch: EpochNumber,
 }
 impl ProjectNotificationFixture {
@@ -232,7 +232,7 @@ impl ProjectNotificationFixture {
     pub(super) async fn frozen_peer(
         &self,
         intent: &NotifyIntent,
-    ) -> Result<fleet_sync_protocol::PeerId, TestError> {
+    ) -> Result<fleet_protocol::PeerId, TestError> {
         let IntentState::HandedOff { item } = intent.state() else {
             return Err("expected frozen handoff".into());
         };
@@ -248,7 +248,7 @@ impl ProjectNotificationFixture {
         let message_board_storage::MailHandoffItem::Delivery(envelope) = handoff.item else {
             return Err("not delivery".into());
         };
-        let fleet_sync_protocol::DeliveryEnvelope::Item(envelope) = *envelope else {
+        let fleet_protocol::DeliveryEnvelope::Item(envelope) = *envelope else {
             return Err("not item".into());
         };
         assert_eq!(item.as_str(), envelope.id().as_uuid().to_string());

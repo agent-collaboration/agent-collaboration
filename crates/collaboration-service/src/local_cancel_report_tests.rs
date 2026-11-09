@@ -1,7 +1,7 @@
 //! The internal local producer must journal remote report debt in its outcome transaction.
 use super::*;
 use durable_steps::{AtomicStore, JournalScope, StoreError, Task};
-use fleet_sync_delivery::{Inbox, ReportOutcome, delivery_request_key};
+use fleet_mail_delivery::{Inbox, ReportOutcome, delivery_request_key};
 
 type ReportTask = ReportOutcome<
     ProjectionStore,
@@ -100,8 +100,8 @@ async fn a_final_local_push_promotion_reports_the_preserved_outcome_once_across_
         assert!(
             matches!(
                 receipt,
-                fleet_sync_protocol::PushResult::Replayed {
-                    status: fleet_sync_protocol::DeliveryStatus::Cancelled,
+                fleet_protocol::PushResult::Replayed {
+                    status: fleet_protocol::DeliveryStatus::Cancelled,
                     cancel: None
                 }
             ),
@@ -127,9 +127,7 @@ async fn a_final_local_push_promotion_reports_the_preserved_outcome_once_across_
         // Report. The second Push cannot add sequence3 or a second operation.
         assert_eq!(
             reports,
-            vec![
-                delivery_request_key(&(original, fleet_sync_protocol::ReportSeq::new(2))).unwrap()
-            ],
+            vec![delivery_request_key(&(original, fleet_protocol::ReportSeq::new(2))).unwrap()],
             "replay {replay} duplicated the preserved Report"
         );
     }

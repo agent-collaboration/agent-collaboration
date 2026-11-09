@@ -187,7 +187,7 @@ async fn seed_notification_for_recipient(
     writer.stop().await?;
     assert!(matches!(
         writer.store.writer_state().await?,
-        fleet_sync_lease::WriterState::Writing { .. }
+        fleet_project_lease::WriterState::Writing { .. }
     ));
     let item = ItemId::new(durable_steps::Uuid::now_v7())?;
     admission

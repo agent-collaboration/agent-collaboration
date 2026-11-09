@@ -6,11 +6,11 @@ use super::{
 };
 use collaboration_mail_protocol::{CancelCause, MailItemId};
 use durable_steps::JournalScope;
-use fleet_sync_delivery::{
+use fleet_mail_delivery::{
     DeliveryTransactionFailure, classify_delivery_store_error, delivery_request_key,
     delivery_rollback,
 };
-use fleet_sync_protocol::DeliveryCancel;
+use fleet_protocol::DeliveryCancel;
 use interaction_storage::{
     delete_tentative_local_cancel_in_scope, prepare_local_cancel_in_scope,
     read_local_cancel_in_scope,
@@ -154,7 +154,7 @@ fn local_cancel_mail_id(item: ItemId) -> Result<MailItemId, StoreError> {
 
 async fn admit_cancel_effects(
     scope: &mut TursoScope<'_, MailHost>,
-    effects: &fleet_sync_delivery::InboxEffects,
+    effects: &fleet_mail_delivery::InboxEffects,
 ) -> Result<(), StoreError> {
     for attempt in &effects.attempts {
         scope

@@ -11,8 +11,8 @@ use collaboration_runtime::{
     SessionDeliveryRouter, UnmaterializedThreadHolder,
 };
 use durable_steps::{AtomicStore, StoreError};
-use fleet_sync_delivery::Inbox;
-use fleet_sync_protocol::{RecipientOutcome, SyncTime};
+use fleet_mail_delivery::Inbox;
+use fleet_protocol::{RecipientOutcome, SyncTime};
 use futures_util::{SinkExt, StreamExt};
 use serde_json::{Value, json};
 use std::{
@@ -126,7 +126,7 @@ async fn materialized_unloaded_session_holds_mail_then_delivers_after_readiness(
 
 async fn release_ready_item(
     fixture: &Fixture,
-    item: fleet_sync_protocol::ItemId,
+    item: fleet_protocol::ItemId,
     push: collaboration_protocol::PushId,
 ) {
     let config = fixture.host.config;

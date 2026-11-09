@@ -4,7 +4,7 @@ use board_sync_protocol::{
     FleetLinkDropReason as DropReason, FleetLinkFailureReason as Failure,
     FleetLinkRefusal as Refusal,
 };
-use fleet_sync_protocol::{AuthRefusal, CloseReason, SessionId};
+use fleet_protocol::{AuthRefusal, CloseReason, SessionId};
 
 pub(super) fn encode_refusal(reason: &Refusal) -> (&'static str, Option<String>) {
     match reason {

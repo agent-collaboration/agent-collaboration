@@ -17,7 +17,7 @@ struct IdentityRecord {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct PeerIdentityRecord {
     version: u8,
-    peer_id: fleet_sync_protocol::PeerId,
+    peer_id: fleet_protocol::PeerId,
 }
 
 /// Reads the existing Host identity without creating a directory or identity file.
@@ -118,7 +118,7 @@ fn read_identity(path: &Path) -> io::Result<UuidIdentity> {
 }
 
 /// Reads an existing installation peer without creating a directory or identity file.
-pub fn read_installation_peer(directory: &Path) -> io::Result<Option<fleet_sync_protocol::PeerId>> {
+pub fn read_installation_peer(directory: &Path) -> io::Result<Option<fleet_protocol::PeerId>> {
     match read_peer_identity(&directory.join("installation-peer.json")) {
         Ok(peer) => Ok(Some(peer)),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
@@ -127,7 +127,7 @@ pub fn read_installation_peer(directory: &Path) -> io::Result<Option<fleet_sync_
 }
 
 /// The installation's UUIDv7 peer is independent of its existing service UUID and enrollment.
-pub fn load_installation_peer(directory: &Path) -> io::Result<fleet_sync_protocol::PeerId> {
+pub fn load_installation_peer(directory: &Path) -> io::Result<fleet_protocol::PeerId> {
     let metadata = std::fs::symlink_metadata(directory)?;
     if !directory.is_absolute() || !metadata.is_dir() || metadata.permissions().mode() & 0o077 != 0
     {
@@ -141,7 +141,7 @@ pub fn load_installation_peer(directory: &Path) -> io::Result<fleet_sync_protoco
         Err(error) if error.kind() == io::ErrorKind::NotFound => {}
         Err(error) => return Err(error),
     }
-    let peer = fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).map_err(io::Error::other)?;
+    let peer = fleet_protocol::PeerId::new(uuid::Uuid::now_v7()).map_err(io::Error::other)?;
     let temporary = directory.join(format!(".installation-peer-{}.tmp", uuid::Uuid::now_v7()));
     let result = (|| {
         let mut file = OpenOptions::new()
@@ -179,7 +179,7 @@ pub fn load_installation_peer(directory: &Path) -> io::Result<fleet_sync_protoco
 #[path = "service_identity_storage_test.rs"]
 mod peer_read_tests;
 
-fn read_peer_identity(path: &Path) -> io::Result<fleet_sync_protocol::PeerId> {
+fn read_peer_identity(path: &Path) -> io::Result<fleet_protocol::PeerId> {
     let metadata = std::fs::symlink_metadata(path)?;
     if !metadata.is_file()
         || metadata.uid() != nix::unistd::geteuid().as_raw()

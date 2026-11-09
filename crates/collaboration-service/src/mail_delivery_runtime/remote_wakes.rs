@@ -9,10 +9,10 @@ use collaboration_mail_protocol::{
     RemoteWakeCreator, RemoteWakeMutationState, RemoteWakeRefusal, RemoteWakeResult, WakeBody,
 };
 use collaboration_protocol::{LocalMutationEvidence, LocalMutationState, WakeFailure};
-use fleet_sync_delivery::{
+use fleet_mail_delivery::{
     LocalOutcome, Outbox, OutboxAdmission, OutboxStatusState, delivery_rollback,
 };
-use fleet_sync_protocol::DeliveryStatus;
+use fleet_protocol::DeliveryStatus;
 use serde::{Serialize, de::DeserializeOwned};
 
 pub(crate) struct LocalWakeOwner {
@@ -125,7 +125,7 @@ impl MailDeliveryRuntime {
         let item = DeliveryItem::<RouterDeliveryTypes>::new(
             id,
             sender,
-            fleet_sync_protocol::Recipient {
+            fleet_protocol::Recipient {
                 peer,
                 address: convert(request.target).map_err(|_| RemoteWakeRefusal::InvalidRecord)?,
             },
@@ -136,7 +136,7 @@ impl MailDeliveryRuntime {
         let deadline_ms = request.valid_until_ms;
         let relay = session.relay;
         let limits = self.config.limits;
-        let submitter = fleet_sync_protocol::Submitter::Machine(self.config.owner);
+        let submitter = fleet_protocol::Submitter::Machine(self.config.owner);
         let clock = self.clock.clone();
         let expired =
             self.store
@@ -174,7 +174,7 @@ impl MailDeliveryRuntime {
                             match answer {
                                 OutboxAdmission::BindingUnavailable { reason } => Err(
                                     delivery_rollback(DeliveryError::SenderBindingUnavailable {
-                                        row: fleet_sync_delivery::CustodyRow::Outbox(id),
+                                        row: fleet_mail_delivery::CustodyRow::Outbox(id),
                                         reason,
                                     }),
                                 ),

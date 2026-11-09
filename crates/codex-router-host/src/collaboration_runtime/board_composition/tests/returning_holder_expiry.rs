@@ -2,7 +2,7 @@
 use super::*;
 use board_central_test_support::{DispatchFaultObservation, ObjectAddress, RuntimeControl};
 use board_sync_protocol::ProjectClaimReply;
-use fleet_sync_protocol::{DatabaseId, Epoch, PeerId, TransferId};
+use fleet_protocol::{DatabaseId, Epoch, PeerId, TransferId};
 use received_grants::{wait_published_project, write_and_replicate};
 
 #[tokio::test]

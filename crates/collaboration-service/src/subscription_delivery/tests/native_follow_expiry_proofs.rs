@@ -50,7 +50,7 @@ async fn startup_expires_an_allocated_follow_even_without_local_custody_or_live_
                         )
                         .unwrap()
                     ],
-                    item: fleet_sync_protocol::ItemId::new(uuid::Uuid::now_v7()).unwrap(),
+                    item: fleet_protocol::ItemId::new(uuid::Uuid::now_v7()).unwrap(),
                     preventions: Vec::new(),
                     enrollment: crate::IntentRecipientEnrollment {
                         service: SERVICE_ID.to_owned().try_into().unwrap(),

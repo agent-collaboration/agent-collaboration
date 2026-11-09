@@ -72,9 +72,9 @@ impl NativeBoardSession {
             .request(BoardConsumerRequest::ArchiveSeen(ArchiveSeen {
                 board: board.clone(),
                 project: project.clone(),
-                position: fleet_sync_protocol::ReplicationPosition::new(
-                    fleet_sync_protocol::Epoch::new(epoch)?,
-                    fleet_sync_protocol::CommitSequence::new(9_007_199_254_740_993),
+                position: fleet_protocol::ReplicationPosition::new(
+                    fleet_protocol::Epoch::new(epoch)?,
+                    fleet_protocol::CommitSequence::new(9_007_199_254_740_993),
                 ),
             }))
             .await?

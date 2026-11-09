@@ -153,17 +153,17 @@ async fn reenrollment_preserves_unfinished_typed_and_legacy_attempts_and_clears_
     .await?;
     let cache =
         message_board_storage::FleetCache::open(&storage.join("fleet-cache.sqlite")).await?;
-    let native = fleet_sync_session::ClientSessionState {
-        session_id: fleet_sync_protocol::SessionId::new(uuid::Uuid::now_v7())?,
-        notice_cursor: fleet_sync_protocol::NoticePosition::new(19),
+    let native = fleet_session::ClientSessionState {
+        session_id: fleet_protocol::SessionId::new(uuid::Uuid::now_v7())?,
+        notice_cursor: fleet_protocol::NoticePosition::new(19),
     };
     cache.save_machine_session_state(&native).await?;
     cache
-        .save_machine_notice_progress(fleet_sync_protocol::NoticePosition::new(17))
+        .save_machine_notice_progress(fleet_protocol::NoticePosition::new(17))
         .await?;
     cache
         .save_fleet_link(&board_sync_protocol::FleetLinkRecord {
-            peer: fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7())?,
+            peer: fleet_protocol::PeerId::new(uuid::Uuid::now_v7())?,
             endpoint: "wss://central.example/session".to_owned(),
             instance: u64::MAX,
             connection: 4,
@@ -177,13 +177,13 @@ async fn reenrollment_preserves_unfinished_typed_and_legacy_attempts_and_clears_
         })
         .await?;
     let project = message_board::ProjectId::generate();
-    let epoch = fleet_sync_protocol::Epoch::new(3)?;
+    let epoch = fleet_protocol::Epoch::new(3)?;
     let typed = cache.snapshot_install_attempt(&project, epoch).await?;
     cache.close().await;
     let legacy = message_board_storage::SnapshotInstallAttempt {
         project: message_board::ProjectId::generate(),
         epoch,
-        attempt: fleet_sync_protocol::InstallAttemptId::new(uuid::Uuid::now_v7())?,
+        attempt: fleet_protocol::InstallAttemptId::new(uuid::Uuid::now_v7())?,
     };
     let legacy_path = storage.join(format!(
         "snapshot-install-attempts/{}-e3.json",
@@ -199,7 +199,7 @@ async fn reenrollment_preserves_unfinished_typed_and_legacy_attempts_and_clears_
     assert_eq!(cache.machine_session_state().await?, None);
     assert_eq!(
         cache.machine_notice_progress().await?,
-        fleet_sync_protocol::NoticePosition::new(0)
+        fleet_protocol::NoticePosition::new(0)
     );
     assert_eq!(cache.fleet_link().await?, None);
     assert_eq!(

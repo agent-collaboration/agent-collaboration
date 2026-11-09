@@ -151,9 +151,9 @@ fn decode_archive_report(row: reports::StoredArchiveReport) -> Result<ArchiveRep
         .map_err(|error| corrupt("archive.board_id", error))?;
     let project = ProjectId::try_from(required(row.project_id, "archive.project_id")?)
         .map_err(|error| corrupt("archive.project_id", error))?;
-    let epoch = fleet_sync_protocol::Epoch::new(archive_counter(row.epoch, "archive.epoch")?)
+    let epoch = fleet_protocol::Epoch::new(archive_counter(row.epoch, "archive.epoch")?)
         .map_err(|error| corrupt("archive.epoch", error))?;
-    let sequence = fleet_sync_protocol::CommitSequence::new(archive_counter(
+    let sequence = fleet_protocol::CommitSequence::new(archive_counter(
         row.commit_sequence,
         "archive.commit_sequence",
     )?);
@@ -181,7 +181,7 @@ fn decode_archive_report(row: reports::StoredArchiveReport) -> Result<ArchiveRep
     Ok(ArchiveReport {
         board,
         project,
-        position: fleet_sync_protocol::ReplicationPosition::new(epoch, sequence),
+        position: fleet_protocol::ReplicationPosition::new(epoch, sequence),
         installation,
         reported_at,
     })

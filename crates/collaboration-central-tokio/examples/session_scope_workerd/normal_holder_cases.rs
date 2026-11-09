@@ -9,9 +9,7 @@ use super::{
 use collaboration_central_conformance::ConformanceResult;
 use collaboration_central_conformance::DispatchKey;
 use durable_steps::{CallId, OperationId};
-use fleet_sync_protocol::{
-    FrameId, ReleaseAnswer, ReplicationPosition, ServerCall, ServerCallAnswer,
-};
+use fleet_protocol::{FrameId, ReleaseAnswer, ReplicationPosition, ServerCall, ServerCallAnswer};
 use futures_util::SinkExt;
 use reqwest_websocket::Message;
 use serde_json::{Value, json};
@@ -134,7 +132,7 @@ async fn request(
         ReleaseAnswer::Released {
             final_position: ReplicationPosition::new(
                 request.epoch,
-                fleet_sync_protocol::CommitSequence::new(0),
+                fleet_protocol::CommitSequence::new(0),
             ),
         },
     ))

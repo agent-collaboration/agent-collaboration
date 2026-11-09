@@ -27,7 +27,7 @@ pub enum RegistryCall {
 pub enum RegistryResult {
     Enrollment(crate::EnrollmentDecision),
     EnrollmentRevoked(crate::RevocationDecision),
-    EnrollmentAuthenticated(Result<crate::AdmittedMachine, fleet_sync_protocol::AuthRefusal>),
+    EnrollmentAuthenticated(Result<crate::AdmittedMachine, fleet_protocol::AuthRefusal>),
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(

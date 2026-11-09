@@ -100,7 +100,7 @@ impl CentralPlatform for FixturePlatform {
     async fn upgrade_session(
         &self,
         _: axum::http::request::Parts,
-        _: fleet_sync_session::ConnectionBinding,
+        _: fleet_session::ConnectionBinding,
         _: collaboration_central_core::AdmissionOrigin,
     ) -> Result<axum::http::Response<axum::body::Body>, collaboration_central_core::UpgradeFailure>
     {

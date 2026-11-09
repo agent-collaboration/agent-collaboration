@@ -6,7 +6,7 @@ use collaboration_mail_protocol::{
 use collaboration_protocol::{
     MachineId, MachineLabel, PushLineInput, RouterLink, render_push_line,
 };
-use fleet_sync_protocol::{ItemId, PeerId, Recipient};
+use fleet_protocol::{ItemId, PeerId, Recipient};
 use message_board::{
     BatchTiming, FeedCursor, Identity, PendingRootNotice, SubscriptionBatch,
     SubscriptionGeneration, SubscriptionLifetime, SubscriptionMode, WhenIdle,
@@ -280,7 +280,7 @@ fn send_producer_copies_the_exact_label_through_shared_wire_and_recipient_projec
     let item =
         crate::outgoing_mail_message(&draft, &installation, template.recipient().peer).unwrap();
     let wire = serde_json::to_vec(&item).unwrap();
-    let shared: fleet_sync_protocol::DeliveryItem<board_sync_protocol::BoardDeliveryTypes> =
+    let shared: fleet_protocol::DeliveryItem<board_sync_protocol::BoardDeliveryTypes> =
         serde_json::from_slice(&wire).unwrap();
     let received: DeliveryItem<RouterDeliveryTypes> =
         serde_json::from_slice(&serde_json::to_vec(&shared).unwrap()).unwrap();

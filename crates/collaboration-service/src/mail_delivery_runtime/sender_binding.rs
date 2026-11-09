@@ -1,8 +1,8 @@
 //! Resolve sealed senders from the machine identity and its authenticated directory.
 use collaboration_mail_protocol::MailSender;
 use durable_steps::storage::TransactionScope;
-use fleet_sync_delivery::{SenderBinding, SenderBindingFailure};
-use fleet_sync_protocol::{DatabaseId, DeliveryTypes, PeerId, Submitter};
+use fleet_mail_delivery::{SenderBinding, SenderBindingFailure};
+use fleet_protocol::{DatabaseId, DeliveryTypes, PeerId, Submitter};
 use message_board::ServiceId;
 use std::{collections::BTreeSet, sync::Mutex};
 

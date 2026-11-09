@@ -80,7 +80,7 @@ pub(super) async fn follow_application_with_replication(
 
 pub(in crate::subscription_delivery) async fn frozen_follow(
     fixture: &OwnerFixture,
-) -> Vec<fleet_sync_protocol::DeliveryItem<BoardDeliveryTypes>> {
+) -> Vec<fleet_protocol::DeliveryItem<BoardDeliveryTypes>> {
     let store = fixture
         .registry
         .existing_project(&fixture.project)
@@ -92,7 +92,7 @@ pub(in crate::subscription_delivery) async fn frozen_follow(
     read.finish().await.unwrap();
     handoffs.into_iter().filter_map(|handoff| {
         let MailHandoffItem::Delivery(envelope) = handoff.item else { return None; };
-        let fleet_sync_protocol::DeliveryEnvelope::Item(item) = *envelope else { return None; };
+        let fleet_protocol::DeliveryEnvelope::Item(item) = *envelope else { return None; };
         matches!(item.body(), BoardDeliveryBody::Notification(body) if matches!(body.source, NotificationSource::FollowBatch { .. })).then_some(item)
     }).collect()
 }

@@ -8,9 +8,9 @@ use crate::collaboration_runtime::board_composition::{
 };
 use board_central_test_support::TestCentral;
 use board_sync_protocol::ProjectClaimRequest;
-use fleet_sync_protocol::*;
-use fleet_sync_session::SessionClientStore;
-use fleet_sync_writer::BootstrapGrant;
+use fleet_project_writer::BootstrapGrant;
+use fleet_protocol::*;
+use fleet_session::SessionClientStore;
 use message_board::{ProjectId, ProtocolVersion};
 use runtime_primitives::{Clock, SystemClock};
 use sha2::{Digest, Sha256};
@@ -196,7 +196,7 @@ async fn inline_install_renewal_survives_revocation_readmission_and_a_fresh_sess
         }}).await??;
         let result=projects.finish_snapshot_install(&project,epoch,start).await?;
         assert!(matches!(result,SnapshotAdmission::Pending),"temporary enrollment refusal must leave the Ready installation pending");
-        assert!(matches!(database.writer_state().await?,fleet_sync_lease::WriterState::Paused {..} | fleet_sync_lease::WriterState::Writing {..}));
+        assert!(matches!(database.writer_state().await?,fleet_project_lease::WriterState::Paused {..} | fleet_project_lease::WriterState::Writing {..}));
         assert_eq!(database.installed_snapshot().await?,Some(before.clone()));
         assert!(matches!(&*slot.lock().await,ProjectWriterSlot::Installing(current) if Arc::ptr_eq(current,&install)));
         Ok::<_,Box<dyn std::error::Error+Send+Sync>>(())
@@ -215,8 +215,8 @@ async fn inline_install_renewal_survives_revocation_readmission_and_a_fresh_sess
         matches!(
             terminal
                 .get_ref()
-                .and_then(|error| error.downcast_ref::<fleet_sync_session::ClientError>()),
-            Some(fleet_sync_session::ClientError::Revoked)
+                .and_then(|error| error.downcast_ref::<fleet_session::ClientError>()),
+            Some(fleet_session::ClientError::Revoked)
         ),
         "terminal result was not typed Revoked: {terminal}"
     );
@@ -266,7 +266,7 @@ async fn inline_install_renewal_survives_revocation_readmission_and_a_fresh_sess
     assert_ne!(fresh.session_id, old_session);
     let writer = projects.ensure(&project).await?;
     timeout(BOUND,async {loop {
-        if matches!(writer.store.writer_state().await?,fleet_sync_lease::WriterState::Writing {epoch:actual} if actual==epoch){return Ok::<_,Box<dyn std::error::Error+Send+Sync>>(());}
+        if matches!(writer.store.writer_state().await?,fleet_project_lease::WriterState::Writing {epoch:actual} if actual==epoch){return Ok::<_,Box<dyn std::error::Error+Send+Sync>>(());}
         projects.prompt_project_renewal(&project).await?;tokio::task::yield_now().await;
     }}).await??;
     let recovered = registry.database(&project).await?;

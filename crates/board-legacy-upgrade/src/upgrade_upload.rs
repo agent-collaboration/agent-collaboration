@@ -7,8 +7,8 @@ use collaboration_central_core::{
     AdminImportHeader, AdminProjectImportAnswer, AdminProjectImportRequest,
 };
 use fleet_admission::FleetImportResult;
-use fleet_sync_protocol::{PageDigest, SnapshotCursor};
-use fleet_sync_writer::WriterSnapshot;
+use fleet_project_writer::WriterSnapshot;
+use fleet_protocol::{PageDigest, SnapshotCursor};
 use message_board::{FeedPosition, FeedRead, ProjectId, Record};
 use serde::{Serialize, de::DeserializeOwned};
 

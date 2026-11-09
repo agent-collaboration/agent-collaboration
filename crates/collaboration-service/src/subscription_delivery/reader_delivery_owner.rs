@@ -51,7 +51,7 @@ pub(super) enum MailAttemptCheck {
     CarrierOnly,
     FrozenFollow {
         project: message_board::ProjectId,
-        reference: fleet_sync_protocol::DeliveryItemRef,
+        reference: fleet_protocol::DeliveryItemRef,
     },
 }
 /// Answered by the owner's next pass: after its native window scan, or with the error
@@ -84,7 +84,7 @@ pub(super) enum ReaderDeliveryCommand {
         reply: MailAttemptReply,
     },
     PollMailAttempt {
-        item: Box<fleet_sync_protocol::DeliveryItem<collaboration_contracts::RouterDeliveryTypes>>,
+        item: Box<fleet_protocol::DeliveryItem<collaboration_contracts::RouterDeliveryTypes>>,
         reply: MailAttemptReply,
     },
     Wait {

@@ -6,8 +6,8 @@ mod native;
 mod runner_probe;
 use collaboration_protocol::{DeliveryOutcome, DeliveryReceipt, PushDeliveryState, PushId};
 use durable_steps::{AtomicStore, StoreError};
-use fleet_sync_delivery::Inbox;
-use fleet_sync_protocol::RecipientOutcome;
+use fleet_mail_delivery::Inbox;
+use fleet_protocol::RecipientOutcome;
 
 #[tokio::test]
 async fn poll_has_no_push_or_native_call_at_the_delivery_entry() {
@@ -45,7 +45,7 @@ async fn poll_has_no_push_or_native_call_at_the_delivery_entry() {
         message_board::SubscriptionLifetime::new(600).unwrap(),
     )
     .unwrap();
-    let poll = fleet_sync_protocol::DeliveryItem::new(
+    let poll = fleet_protocol::DeliveryItem::new(
         template.id(),
         template.sender().clone(),
         template.recipient().clone(),

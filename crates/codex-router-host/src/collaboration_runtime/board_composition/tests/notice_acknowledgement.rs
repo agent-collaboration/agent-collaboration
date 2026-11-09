@@ -1,7 +1,7 @@
 //! A real Root write failure cannot be acknowledged or skipped by later notices.
 use super::super::project_writers::NoticeHandling;
 use super::*;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 async fn wait_notice_completion(
     received: &mut tokio::sync::broadcast::Receiver<(NoticePosition, NoticeHandling)>,
     wanted: NoticePosition,
@@ -79,7 +79,7 @@ async fn received_grant_record_failure_defers_later_notices_then_reconnect_recov
     let failure = CacheWriteFailure::hold(&second_root, CacheWriteTarget::InstallAttempt).await?;
     let mut first_notice = second_machine.hold_granted_notice(project.clone(), Epoch::new(3)?)?;
     let proof = async {
-        let moved = fixture.central.move_project(DatabaseId::try_from(project.as_str().to_owned())?, &second_origin.installation, fleet_sync_protocol::TransferId::new(durable_steps::Uuid::now_v7())?).await?;
+        let moved = fixture.central.move_project(DatabaseId::try_from(project.as_str().to_owned())?, &second_origin.installation, fleet_protocol::TransferId::new(durable_steps::Uuid::now_v7())?).await?;
         assert_eq!(moved.pointer("/value/newEpoch"), Some(&serde_json::json!(3)), "{moved}");
         let failed_position = timeout(BOUND, first_notice.wait_held()).await??;
         first_notice.release()?;
@@ -121,7 +121,7 @@ async fn received_grant_record_failure_defers_later_notices_then_reconnect_recov
         granted_notice.release()?;
         assert_eq!(wait_notice_completion(&mut completions, granted_position).await?, NoticeHandling::Failed);
         let mut superseded_notice = second_machine.hold_superseded_notice(later_project.clone(), Epoch::new(1)?)?;
-        let takeover = fixture.central.take_over_project(DatabaseId::try_from(later_project.as_str().to_owned())?, &origin()?.installation, fleet_sync_protocol::TransferId::new(durable_steps::Uuid::now_v7())?).await?;
+        let takeover = fixture.central.take_over_project(DatabaseId::try_from(later_project.as_str().to_owned())?, &origin()?.installation, fleet_protocol::TransferId::new(durable_steps::Uuid::now_v7())?).await?;
         assert_eq!(takeover.pointer("/value/newEpoch"), Some(&serde_json::json!(2)), "{takeover}");
         let later_position = timeout(BOUND, superseded_notice.wait_held()).await??;
         superseded_notice.release()?;
@@ -137,7 +137,7 @@ async fn received_grant_record_failure_defers_later_notices_then_reconnect_recov
         timeout(BOUND, async {
             loop {
                 if let Ok(Some(store)) = fixture.registry.existing_project(&later_project).await
-                    && matches!(store.writer_state().await?, fleet_sync_lease::WriterState::Writing { epoch } if epoch.value() == 2)
+                    && matches!(store.writer_state().await?, fleet_project_lease::WriterState::Writing { epoch } if epoch.value() == 2)
                 { return Ok::<_, Box<dyn std::error::Error + Send + Sync>>(()); }
                 tokio::task::yield_now().await;
             }
@@ -258,7 +258,7 @@ async fn recovered_prefix(
         timeout(BOUND, async {
             loop {
                 if SessionClientStore::load(&session).await?.is_some_and(|state| state.notice_cursor >= through) {
-                    return Ok::<_, fleet_sync_session::StoreError>(());
+                    return Ok::<_, fleet_session::StoreError>(());
                 }
                 tokio::task::yield_now().await;
             }
@@ -268,14 +268,14 @@ async fn recovered_prefix(
         assert_eq!(attempt_count(root).await?, 0);
         let database = registry.database(project).await?;
         let installed = database.installed_snapshot().await?.ok_or("recovered native receipt")?;
-        let mut observer = fleet_sync_tokio_runner::NativeWriterRuntime::<_, board_sync_protocol::BoardConsumerProtocol>::new(
+        let mut observer = fleet_native_writer::NativeWriterRuntime::<_, board_sync_protocol::BoardConsumerProtocol>::new(
             database.clone(), projects.receiver, projects.requests.clone(),
         ).await?;
         observer.enable_snapshot_installs(&root.join("claim-installs").join(project.as_str())).await?;
         let install_record = observer.install_record(installed.install.install_id).await?;
         let bytes = serde_json::to_vec(&install_record.request.attempt)?;
         assert_eq!(install_record.generation, 1);
-        assert!(matches!(install_record.status, fleet_sync_tokio_runner::InstallStatus::Ready { .. }));
+        assert!(matches!(install_record.status, fleet_native_writer::InstallStatus::Ready { .. }));
         let mut snapshot = store.snapshot().await?;
         let record = snapshot.record(&project.clone().into()).await?.ok_or("recovered copied record")?;
         snapshot.finish().await?;

@@ -10,7 +10,7 @@ use collaboration_service::MailPushDeliveryProps;
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
 use collaboration_service::SystemSubscriptionClock;
-use fleet_sync_protocol::{ItemId, PeerId};
+use fleet_protocol::{ItemId, PeerId};
 use interaction_storage::InteractionStore;
 use tokio::sync::Mutex;
 #[path = "notification_project_fixture.rs"]
@@ -205,7 +205,7 @@ async fn an_acknowledged_remote_handoff_is_published_without_another_board_write
     central.stop().await?;
     assert_eq!(
         publication?,
-        Some(fleet_sync_protocol::Epoch::new(seed.epoch.get())?)
+        Some(fleet_protocol::Epoch::new(seed.epoch.get())?)
     );
     Ok(())
 }

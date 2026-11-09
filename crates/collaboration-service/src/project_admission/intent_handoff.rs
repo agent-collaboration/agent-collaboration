@@ -4,7 +4,7 @@ use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
 use collaboration_mail_protocol::{
     MailSender, NotificationBody, NotificationSource, RecordPointer,
 };
-use fleet_sync_protocol::{DeliveryEnvelope, DeliveryItem, ItemId, PeerId, Recipient};
+use fleet_protocol::{DeliveryEnvelope, DeliveryItem, ItemId, PeerId, Recipient};
 use message_board::{Identity, IntentState, MailItemRef, NotifyIntent, Record, ServiceId};
 use message_board_storage::MailHandoffItem;
 use serde::Serialize;

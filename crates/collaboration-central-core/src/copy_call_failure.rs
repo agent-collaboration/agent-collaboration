@@ -1,6 +1,6 @@
 //! Only the closed no-effect Copy carrier can become a retryable session answer.
 use durable_steps::CallFailure;
-use fleet_sync_protocol::{
+use fleet_protocol::{
     CopyUnavailableReason, DiagnosticText, OutcomeUnknownReason, ReplicationAnswer,
 };
 
@@ -37,7 +37,7 @@ mod tests {
             },
         ] {
             assert_eq!(
-                answer(fleet_sync_receiver::retryable_copy(reason.clone())),
+                answer(fleet_project_copy::retryable_copy(reason.clone())),
                 ReplicationAnswer::CopyUnavailable { reason }
             );
         }

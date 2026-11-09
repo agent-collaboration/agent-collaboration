@@ -12,9 +12,9 @@ mod tests;
 
 enum LegacyNoticeProgress {
     Missing,
-    Bound(fleet_sync_protocol::NoticePosition),
+    Bound(fleet_protocol::NoticePosition),
     Orphan {
-        handled_through: Option<fleet_sync_protocol::NoticePosition>,
+        handled_through: Option<fleet_protocol::NoticePosition>,
     },
 }
 
@@ -23,7 +23,7 @@ enum LegacyNoticeProgress {
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ReadableOrphanProgress {
-    handled_through: Option<fleet_sync_protocol::NoticePosition>,
+    handled_through: Option<fleet_protocol::NoticePosition>,
 }
 
 async fn read_notice_progress(
@@ -132,7 +132,7 @@ impl FleetCache {
                     match &progress {
                         LegacyNoticeProgress::Bound(position) => *position,
                         LegacyNoticeProgress::Missing | LegacyNoticeProgress::Orphan { .. } => {
-                            fleet_sync_protocol::NoticePosition::new(0)
+                            fleet_protocol::NoticePosition::new(0)
                         }
                     },
                 )

@@ -11,16 +11,16 @@ use durable_steps::{
     AtomicStore, CallFailure, CallId, CallTarget, Engine, Host, NotSentReason, StoreError,
     storage::TransactionScope, turso_store::TursoScope,
 };
-use fleet_sync_delivery::DeliveryError;
-use fleet_sync_delivery::{
+use fleet_mail_delivery::DeliveryError;
+use fleet_mail_delivery::{
     DeliverCall, DeliverLocally, DeliveryConsumer, DeliveryLimits, DeliveryTaskConfig,
     GateDecision, Inbox, LocalDelivery, LocalDeliveryConfig, LocalItemAdmission, LocalOutcome,
     minimum_settlement_allowance,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     DeliveryEnvelope, DeliveryHeader, DeliveryItemRef, PeerId, PushResult, SyncTime,
 };
-use fleet_sync_protocol::{DeliveryItem, ItemId, RecipientOutcome};
+use fleet_protocol::{DeliveryItem, ItemId, RecipientOutcome};
 use interaction_storage::{
     InteractionAtomicStore, InteractionStore, insert_mail_push_in_scope,
     mark_mail_push_attempted_in_scope, record_message_send_admission,
@@ -38,7 +38,7 @@ use std::{
 
 pub type ProjectionStore = InteractionAtomicStore<ProjectionHost>;
 type ProjectionRetention =
-    fleet_sync_delivery::RemoveDeliveryRecord<ProjectionStore, ProjectionDatabase>;
+    fleet_mail_delivery::RemoveDeliveryRecord<ProjectionStore, ProjectionDatabase>;
 type ProjectionDatabase = <TursoScope<'static, ProjectionHost> as TransactionScope>::Database;
 pub type ProjectionTask = DeliverLocally<
     ProjectionStore,
@@ -47,7 +47,7 @@ pub type ProjectionTask = DeliverLocally<
     ProjectionConsumer,
     crate::MachineSenderBinding,
 >;
-type ProjectionReport = fleet_sync_delivery::ReportOutcome<
+type ProjectionReport = fleet_mail_delivery::ReportOutcome<
     ProjectionStore,
     ProjectionDatabase,
     RouterDeliveryTypes,
@@ -297,7 +297,7 @@ impl Fixture {
         let mut engine = Engine::new(self.store.clone(), self.host.clone());
         engine
             .register(ProjectionRetention::new(
-                fleet_sync_delivery::DeliveryHostRole::Machine,
+                fleet_mail_delivery::DeliveryHostRole::Machine,
             ))
             .unwrap();
         engine

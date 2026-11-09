@@ -8,7 +8,7 @@ use collaboration_central_core::{
     ClaimReservationOutcome, ClaimReservationState, ConformanceBoardState, RegistryTime,
     StepControl, StepControlReply,
 };
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClaimSettlement, DatabaseId, HolderChangeAnswer, HolderChangeRefusal, HolderChangeRequest,
     TransferId,
 };

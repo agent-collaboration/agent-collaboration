@@ -164,9 +164,7 @@ enum Scenario {
     FleetRepositoryColumns,
     FleetFeedColumns,
     FleetSnapshotMerge,
-    DeliveryConfig {
-        relay_peer: fleet_sync_protocol::PeerId,
-    },
+    DeliveryConfig { relay_peer: fleet_protocol::PeerId },
 }
 #[tokio::main]
 async fn main() -> ConformanceResult<()> {
@@ -262,7 +260,7 @@ async fn main() -> ConformanceResult<()> {
         Some("fleet-feed-columns") => Scenario::FleetFeedColumns,
         Some("fleet-snapshot-merge") => Scenario::FleetSnapshotMerge,
         Some("delivery-config") => Scenario::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
+            relay_peer: fleet_protocol::PeerId::try_from(
                 args.next().ok_or("explicit configured relay peer")?,
             )?,
         },
@@ -285,9 +283,9 @@ async fn main() -> ConformanceResult<()> {
     let settings = WorkerdSettings {
         relay_peer: match &scenario {
             Scenario::DeliveryConfig { relay_peer } => *relay_peer,
-            _ => fleet_sync_protocol::PeerId::try_from(
-                "019f0000-0000-7000-8000-000000005240".to_owned(),
-            )?,
+            _ => {
+                fleet_protocol::PeerId::try_from("019f0000-0000-7000-8000-000000005240".to_owned())?
+            }
         },
         node,
         miniflare,
@@ -352,7 +350,7 @@ async fn main() -> ConformanceResult<()> {
                 Ok(client.http.post(format!("{base}/__conformance/admission"))
                     .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
                     .json(&json!({"kind":"holderFrames","value":{"service":fleet_mail_expiry_scenarios::RECIPIENT_SERVICE}}))
-                    .send().await?.error_for_status()?.json::<Vec<fleet_sync_protocol::FrameId>>().await?)
+                    .send().await?.error_for_status()?.json::<Vec<fleet_protocol::FrameId>>().await?)
             }).await
         },
         Scenario::MailboxIdentity => mailbox_identity_scenarios::run(&format!("http://127.0.0.1:{port}")).await,
@@ -487,7 +485,7 @@ async fn main() -> ConformanceResult<()> {
                 Ok(client.http.post(format!("{base}/__conformance/admission"))
                     .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
                     .json(&json!({"kind":"holderFrames","value":{"service":copy_drive_overlap::SERVICE}}))
-                    .send().await?.error_for_status()?.json::<Vec<fleet_sync_protocol::FrameId>>().await?)
+                    .send().await?.error_for_status()?.json::<Vec<fleet_protocol::FrameId>>().await?)
             }).await
         }
         Scenario::HolderWriter => {
@@ -504,7 +502,7 @@ async fn main() -> ConformanceResult<()> {
                 Ok(client.http.post(format!("{base}/__conformance/admission"))
                     .header("Cf-Access-Jwt-Assertion", owner_assertion()?)
                     .json(&json!({"kind":"holderFrames","value":{"service":holder_full_wait::SERVICE}}))
-                    .send().await?.error_for_status()?.json::<Vec<fleet_sync_protocol::FrameId>>().await?)
+                    .send().await?.error_for_status()?.json::<Vec<fleet_protocol::FrameId>>().await?)
             }).await
         }
         Scenario::Holder => {

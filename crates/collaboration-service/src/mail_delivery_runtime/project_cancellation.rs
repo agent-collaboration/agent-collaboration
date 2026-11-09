@@ -3,11 +3,11 @@ use super::{
     AtomicStore, CarrierAcceptance, Clock, DeliveryItemRef, MailDeliveryRuntime, MailSender,
     RemoveMailRecord, RouterDeliveryTypes, StoreError, SubmitMailTask, WakeScheduler,
 };
-use fleet_sync_delivery::{
+use fleet_mail_delivery::{
     DeliveryTransactionFailure, Outbox, OutboxAdmission, classify_delivery_store_error,
     delivery_rollback,
 };
-use fleet_sync_protocol::{DeliveryCancel, DeliveryRefusal, DeliveryStatus};
+use fleet_protocol::{DeliveryCancel, DeliveryRefusal, DeliveryStatus};
 use message_board::EpochNumber;
 
 pub(crate) fn other_canonical_cancel(
@@ -65,12 +65,12 @@ impl MailDeliveryRuntime {
             .map_err(|error| {
                 DeliveryTransactionFailure::OutcomeUnknown(StoreError::backend(error))
             })?;
-        let submitter = fleet_sync_protocol::Submitter::Project(
-            fleet_sync_protocol::DatabaseId::try_from(project.as_str().to_owned()).map_err(
-                |_| DeliveryTransactionFailure::Corrupt {
+        let submitter = fleet_protocol::Submitter::Project(
+            fleet_protocol::DatabaseId::try_from(project.as_str().to_owned()).map_err(|_| {
+                DeliveryTransactionFailure::Corrupt {
                     field: "project cancel submitter".into(),
-                },
-            )?,
+                }
+            })?,
         );
         let config = self.config;
         let consumer = self.consumer.clone();

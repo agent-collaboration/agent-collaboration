@@ -2,8 +2,8 @@
 use super::*;
 use collaboration_contracts::ProjectReplicationPosition;
 use collaboration_mcp::test_support::ServedCollaborationApi;
-use fleet_sync_delivery::OutboxStatusState;
-use fleet_sync_protocol::DeliveryStatus;
+use fleet_mail_delivery::OutboxStatusState;
+use fleet_protocol::DeliveryStatus;
 use serde_json::{Value, json};
 use std::os::unix::fs::PermissionsExt;
 use tokio::time::timeout;

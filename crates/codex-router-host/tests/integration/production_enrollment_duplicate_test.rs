@@ -4,8 +4,8 @@ use board_fleet_sync::{BoardProjectSchema, ReqwestSessionTransport};
 use board_sync_protocol::{
     BoardConsumerProtocol, FleetLinkRecord, FleetLinkRefusal, FleetLinkState,
 };
-use fleet_sync_protocol::{ClientFrame, CloseReason, SchemaSupport, ServerFrame, SessionId};
-use fleet_sync_session::{SessionTransport, TransportConnection};
+use fleet_protocol::{ClientFrame, CloseReason, SchemaSupport, ServerFrame, SessionId};
+use fleet_session::{SessionTransport, TransportConnection};
 use sqlx::{Connection, Row};
 
 #[tokio::test]

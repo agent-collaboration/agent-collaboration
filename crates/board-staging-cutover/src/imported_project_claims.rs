@@ -3,7 +3,7 @@ use crate::offline_run_plan::PlannedProject;
 use crate::{OfflineRunPlan, OwnerAuthentication, PreparedProjectBundle, StagingPublisher};
 use board_sync_protocol::{ProjectClaimRefusal, ProjectClaimReply, ProjectClaimRequest};
 use collaboration_client::{BoardClientError, CollaborationClient};
-use fleet_sync_protocol::{Epoch, ReplicationPosition};
+use fleet_protocol::{Epoch, ReplicationPosition};
 use message_board::{BoardFailureKind, ProjectId, ProtocolVersion, RequestId};
 use serde::Serialize;
 use std::{path::Path, time::Duration};

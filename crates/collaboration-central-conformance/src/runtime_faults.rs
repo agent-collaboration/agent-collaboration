@@ -5,7 +5,7 @@ use crate::runtime_controls::{
     RuntimeControl, RuntimeControlFailure, RuntimeFaultObservation, StorageFaultObservation,
 };
 use collaboration_central_core::{ObjectAddress, RegistryTime};
-use fleet_sync_protocol::{ConnectionId, FrameId};
+use fleet_protocol::{ConnectionId, FrameId};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 #[path = "runtime_faults/session_faults.rs"]

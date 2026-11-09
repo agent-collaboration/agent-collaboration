@@ -13,7 +13,7 @@ use collaboration_central_conformance::{
 };
 use collaboration_central_core::{AccessRefusal, ObjectAddress, RegistryTime};
 use durable_steps::Uuid;
-use fleet_sync_protocol::*;
+use fleet_protocol::*;
 use futures_util::{SinkExt, StreamExt};
 use reqwest_websocket::{Message, RequestBuilderExt, WebSocket};
 use serde_json::{Value, json};

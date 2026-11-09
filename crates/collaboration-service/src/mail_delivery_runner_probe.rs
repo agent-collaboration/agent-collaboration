@@ -9,14 +9,12 @@ use durable_steps::{
     AtomicStore, CallFailure, CallId, CallTarget, Engine, NotSentReason, StoreError,
     storage::TransactionScope, turso_store::TursoScope,
 };
-use fleet_sync_delivery::{
+use fleet_mail_delivery::{
     DeliverCall, DeliverLocally, DeliveryConsumer, DeliveryError, DeliveryTaskConfig, GateDecision,
     Inbox, LocalDelivery,
 };
-use fleet_sync_protocol::{
-    DeliveryHeader, DeliveryItem, DeliveryItemRef, ItemId, RecipientOutcome,
-};
-use fleet_sync_tokio_runner::{CallEnvelope, CallRouter, TokioHost, TokioRunner};
+use fleet_protocol::{DeliveryHeader, DeliveryItem, DeliveryItemRef, ItemId, RecipientOutcome};
+use fleet_tokio_objects::{CallEnvelope, CallRouter, TokioHost, TokioRunner};
 use interaction_storage::{InteractionAtomicStore, mark_mail_push_attempted_in_scope};
 use runtime_primitives::{Clock, SyncTime, WakeScheduler};
 use serde_json::Value;

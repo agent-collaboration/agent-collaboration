@@ -11,7 +11,7 @@ use collaboration_central_conformance::{
 };
 use collaboration_central_tokio::{TokioServer, TokioSettings};
 use fleet_admission::{FleetOperation, FleetRequest, FleetRequestResult};
-use fleet_sync_protocol::{
+use fleet_protocol::{
     ClientFrame, CommitSequence, DatabaseId, Epoch, FrameId, LeaseAnswer, LeaseRequest,
     OperationAnswer, OperationRequest, Origin, PeerId, Piece, PieceContents, Registration,
     RegistrationAnswer, ReplicatedTransaction, ReplicationAnswer, ReplicationPosition,
@@ -28,7 +28,7 @@ async fn accepted_directory_then_registration_makes_the_first_piece_usable_on_th
     let jwks = JwksFixtureServer::start().await?;
     let server = TokioServer::start(TokioSettings {
         delivery: collaboration_central_tokio::DeliveryConfig {
-            relay_peer: fleet_sync_protocol::PeerId::try_from(
+            relay_peer: fleet_protocol::PeerId::try_from(
                 "019f0000-0000-7000-8000-000000005240".to_owned(),
             )?,
         },

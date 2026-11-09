@@ -18,7 +18,7 @@ use crate::{
 };
 use board_sync_protocol::BoardConsumerProtocol;
 use durable_steps::Host as _;
-use fleet_sync_protocol::{CloseReason, ConnectionId, ServerFrame};
+use fleet_protocol::{CloseReason, ConnectionId, ServerFrame};
 use runtime_primitives::{Clock, WakeScheduler};
 use std::{collections::BTreeSet, sync::Arc};
 mod archive_reports;
@@ -303,7 +303,7 @@ impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
                     }
                     let reply = ServerFrame::<BoardConsumerProtocol>::Answer {
                         frame,
-                        body: fleet_sync_protocol::OperationAnswer::Lease(answer),
+                        body: fleet_protocol::OperationAnswer::Lease(answer),
                     };
                     match serde_json::to_vec(&reply) {
                         Ok(bytes) => {
@@ -359,7 +359,7 @@ impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
                                     })
                                 })
                                 .await;
-                            if !matches!(current, Ok(Some(fleet_sync_session::ConnectionRegistration::Attached { session_id: current, .. })) if current == session_id)
+                            if !matches!(current, Ok(Some(fleet_session::ConnectionRegistration::Attached { session_id: current, .. })) if current == session_id)
                             {
                                 continue;
                             }
@@ -378,12 +378,12 @@ impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
     async fn is_attached(
         &self,
         connection: ConnectionId,
-        session: fleet_sync_protocol::SessionId,
+        session: fleet_protocol::SessionId,
     ) -> bool {
         let host = self.host.clone();
         matches!(self.host.with_local_section(async move {
             host.registrations().await.ok().and_then(|registrations| registrations.get(&connection).copied())
-        }).await, Ok(Some(fleet_sync_session::ConnectionRegistration::Attached { session_id, .. })) if session_id == session)
+        }).await, Ok(Some(fleet_session::ConnectionRegistration::Attached { session_id, .. })) if session_id == session)
     }
     async fn fail_connection(&self, connection: ConnectionId) {
         self.replies.fail_connection(connection);

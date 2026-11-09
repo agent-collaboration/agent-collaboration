@@ -6,9 +6,7 @@ use crate::{
     registry_lease_store::RegistryLeaseStore,
 };
 use durable_steps::{CallFailure, CallId, CallTarget, StoreError};
-use fleet_sync_protocol::{
-    ClaimSettlement, HolderChangeRequest, SettleOutcome, SettlementRecorded,
-};
+use fleet_protocol::{ClaimSettlement, HolderChangeRequest, SettleOutcome, SettlementRecorded};
 use std::sync::Arc;
 
 pub(crate) struct RegistryLeasePublication {
@@ -70,8 +68,8 @@ impl<Io: PlatformIo> CoreHost<Io> {
     }
     pub(crate) async fn retirement_directory_acknowledged(
         &self,
-        database: fleet_sync_protocol::DatabaseId,
-        retired_at: fleet_sync_protocol::SyncTime,
+        database: fleet_protocol::DatabaseId,
+        retired_at: fleet_protocol::SyncTime,
     ) -> Result<bool, StoreError> {
         let SharedTaskCaller::Registry {
             lease_publication: Some(publication),
@@ -82,7 +80,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
         };
         let projection = publication.store.projection(database).await?;
         Ok(projection.snapshot().lifecycle
-            == (fleet_sync_lease::DatabaseLifecycle::Retired { at: retired_at }))
+            == (fleet_project_lease::DatabaseLifecycle::Retired { at: retired_at }))
     }
     pub(super) async fn registry_fleet_call<Call: CallTarget>(
         &self,
