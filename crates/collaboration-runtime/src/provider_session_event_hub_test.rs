@@ -9,6 +9,122 @@ use crate::ProviderOperationStore;
 use collaboration_contracts::SessionEventHub;
 
 #[tokio::test]
+async fn inventory_uses_first_user_message_and_existing_session_title() {
+    // Arrange: durable inventory plus the same retained events used by attachments.
+    let root = tempfile::tempdir().expect("root");
+    let mut store = ProviderOperationStore::open(&root.path().join("operations.sqlite"))
+        .await
+        .expect("store");
+    let session: SessionRef = serde_json::from_value(serde_json::json!({
+        "endpoint":{"serviceId":uuid::Uuid::now_v7(),"endpointId":"claude-local"},
+        "sessionId":uuid::Uuid::now_v7()
+    }))
+    .expect("session");
+    let owner: collaboration_protocol::ProviderIdentity =
+        serde_json::from_value(serde_json::json!({"humanId":"owner"})).expect("owner");
+    store
+        .record_session(&crate::ProviderSessionRecord {
+            target: serde_json::from_value(serde_json::to_value(&session).expect("target"))
+                .expect("target"),
+            working_directory: root.path().display().to_string().try_into().expect("cwd"),
+            requested_policy: collaboration_protocol::ProviderRequestedPolicy {
+                access: collaboration_protocol::RouterAccess::WriteRestricted,
+            },
+            created_by: owner.clone(),
+            approver: owner,
+            updated_at_ms: 1,
+        })
+        .await
+        .expect("inventory");
+    let hub = ProviderSessionEventHub::new(Arc::new(Mutex::new(store)));
+    let first_id = uuid::Uuid::now_v7().to_string();
+    for (item_id, kind, text) in [
+        (
+            uuid::Uuid::now_v7().to_string(),
+            SessionItemKind::AgentMessage,
+            "agent greeting",
+        ),
+        (first_id.clone(), SessionItemKind::UserMessage, "first "),
+        (
+            uuid::Uuid::now_v7().to_string(),
+            SessionItemKind::UserMessage,
+            "later message",
+        ),
+    ] {
+        hub.publish(
+            session.clone(),
+            SessionEvent::ItemStarted {
+                item: SessionItem {
+                    item_id,
+                    kind,
+                    text: Some(text.into()),
+                },
+            },
+        )
+        .await
+        .expect("item");
+    }
+    // Act: the first message's final text arrives after another item.
+    hub.publish(
+        session.clone(),
+        SessionEvent::ItemUpdated {
+            item: SessionItem {
+                item_id: first_id,
+                kind: SessionItemKind::UserMessage,
+                text: Some("first message".into()),
+            },
+        },
+    )
+    .await
+    .expect("final first text");
+    let summary = hub
+        .sessions(session.endpoint.clone())
+        .await
+        .expect("sessions")
+        .remove(0);
+    // Assert: order is original user-item order, not lexical ID or last-update order.
+    assert_eq!(summary.preview, "first message");
+    assert_eq!(summary.name, None, "a preview never invents a title");
+
+    // Act / Assert: only a title the provider actually reported becomes the name.
+    hub.publish(
+        session.clone(),
+        SessionEvent::ItemStarted {
+            item: SessionItem {
+                item_id: uuid::Uuid::now_v7().to_string(),
+                kind: SessionItemKind::SessionInfo,
+                text: Some(r#"{"title":"Existing provider title"}"#.into()),
+            },
+        },
+    )
+    .await
+    .expect("session info");
+    let summary = hub
+        .sessions(session.endpoint.clone())
+        .await
+        .expect("sessions")
+        .remove(0);
+    assert_eq!(summary.name.as_deref(), Some("Existing provider title"));
+
+    // Inactivity clears replay items, but must not erase inventory labels.
+    hub.publish(
+        session.clone(),
+        SessionEvent::StateChanged {
+            state: session_event_model::SessionState::Unloaded,
+        },
+    )
+    .await
+    .expect("unload");
+    let summary = hub
+        .sessions(session.endpoint)
+        .await
+        .expect("sessions")
+        .remove(0);
+    assert_eq!(summary.preview, "first message");
+    assert_eq!(summary.name.as_deref(), Some("Existing provider title"));
+}
+
+#[tokio::test]
 async fn closed_and_unloaded_sessions_admit_fresh_history_replay() {
     // Arrange: both states are inactive and retain the provider identity for loading.
     for state in [
