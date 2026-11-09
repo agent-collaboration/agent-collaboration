@@ -74,10 +74,12 @@ After reducing cycles or their edges, update `architecture/module-cycle-baseline
 - Before merging a user-facing code change, advance the workspace package
   version to the next unused semantic version and update `Cargo.lock`. Do not
   merge releasable code while leaving Homebrew on an older version.
-- After the versioned change reaches `main`, publish the matching `v<version>`
-  tag and require `.github/workflows/release.yml` to publish the GitHub release
-  artifact, update `ShravanSunder/homebrew-taps`, and verify the Homebrew
-  installation.
+- After the versioned change reaches `main`, push the matching `v<version>`
+  tag, then start the release from `main`:
+  `gh workflow run release.yml --ref main -f tag=v<version> -f dry_run=false`.
+  Pushing the tag alone starts nothing. Require `.github/workflows/release.yml`
+  to publish the GitHub release artifact, update `ShravanSunder/homebrew-taps`,
+  and verify the Homebrew installation.
 - The release workflow's tap job waits for a second macOS runner. Once its
   build job has published the release asset, run
   `node verification/tooling/publish-homebrew-tap-local.ts` from the repository root on
@@ -115,9 +117,13 @@ After reducing cycles or their edges, update `architecture/module-cycle-baseline
   directly, such as the `--router-binary` a debug-host example launches,
   bypasses the runner; sign it first with
   `scripts/cargo_debug_signing_runner.sh --sign-only <executable>...` (any
-  built executable).
+  built executable). Before running anything, the runner also signs every
+  executable at the top of its profile directory (the files
+  `CARGO_BIN_EXE_*` names), so tests that launch bin targets or copies of
+  them start signed builds.
   When signing cannot happen (no certificate in the login keychain, a locked
-  keychain) the runner runs the build linker-signed and says so.
+  keychain) the runner refuses to run the executable on a developer Mac;
+  only GitHub Actions runs it linker-signed.
 - Keep release publication separate from production process replacement.
   Publishing or installing a new binary never authorizes restarting the
   running production router.
