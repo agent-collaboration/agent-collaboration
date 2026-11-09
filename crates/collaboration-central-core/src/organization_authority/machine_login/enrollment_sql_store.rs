@@ -426,3 +426,7 @@ where
 #[cfg(test)]
 #[path = "enrollment_sql_store_test.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "sql_constraint_test.rs"]
+mod constraint_tests;

@@ -1,7 +1,6 @@
 //! The decisions over the real Tokio store (sqlx-turso), initialized by the
 //! staged v3/v4. Each test drives a public decision entry; the store is read
 //! back through the port, and as raw rows where nothing may change.
-use super::super::decision_support::MachineLoginSettings;
 use super::super::device_login_decision::decide_device_login;
 use super::super::enrollment_port::{
     Decided, EnrollmentFacts, EnrollmentQuery, MachineEnrollmentFailure, MachineEnrollmentPort,
@@ -11,7 +10,7 @@ use super::super::machine_token_decision::decide_machine_token;
 use super::super::sql_store_fixture::{FixturePort, SqlStoreFixture, TestError};
 use super::super::test_fixtures::{
     CODE_LIFETIME_S, CountingIds, MACHINE, NOW_MS, NOW_S, TestClock, WORKSPACE_A, WORKSPACE_B,
-    approval, client, installation, settings, uuid7,
+    approval, client, enrollment, installation, settings, uuid7,
 };
 use crate::identity_contract::{
     AllowanceState, DecideDeviceLogin, DecideMachineToken, DeviceLoginDecision, DeviceLoginRefusal,
@@ -365,4 +364,189 @@ async fn change_records(
             })
         })
         .await?)
+}
+
+/// BA1 on the real store: of two approvals at one generation, the first Grant
+/// wins; the other is refused superseded and never activates.
+#[tokio::test]
+async fn of_two_approvals_the_first_grant_wins_on_the_real_store() -> Result<(), TestError> {
+    let fixture = SqlStoreFixture::b3(&[WORKSPACE_A]).await?;
+    let port = fixture.port();
+    let a = approved_id(
+        approve(
+            &port,
+            approval(REQUEST, MACHINE, &[WORKSPACE_A]),
+            NOW_MS,
+            0xa000,
+        )
+        .await,
+    );
+    let b = approved_id(
+        approve(
+            &port,
+            approval(REQUEST + 1, MACHINE, &[WORKSPACE_A]),
+            NOW_MS + 100,
+            0xa100,
+        )
+        .await,
+    );
+    assert!(matches!(
+        grant(&port, &b, enrollment_suffix(&b), NOW_MS + 1000, 0xb000).await,
+        MachineTokenDecision::Grant { .. }
+    ));
+    let before = fixture.rows().await?;
+
+    let late = grant(&port, &a, enrollment_suffix(&a), NOW_MS + 2000, 0xb100).await;
+
+    assert_eq!(
+        late,
+        MachineTokenDecision::Refuse {
+            reason: MachineTokenRefusal::Superseded {},
+        }
+    );
+    assert_eq!(fixture.rows().await?, before);
+    Ok(())
+}
+
+/// N10 on the real store: approved at minute 9, the code expires at minute 10.
+#[tokio::test]
+async fn the_codes_own_deadline_lapses_an_approval_on_the_real_store() -> Result<(), TestError> {
+    for (at_ms, lapses) in [(NOW_MS - 1, false), (NOW_MS, true), (NOW_MS + 1, true)] {
+        let fixture = SqlStoreFixture::b3(&[WORKSPACE_A]).await?;
+        let port = fixture.port();
+        let request = DecideDeviceLogin {
+            code_expires_at: UnixSeconds(NOW_S),
+            ..approval(REQUEST, MACHINE, &[WORKSPACE_A])
+        };
+        let id = approved_id(approve(&port, request, NOW_MS - 60_000, 0xa000).await);
+        let before = fixture.rows().await?;
+
+        let answer = grant(&port, &id, enrollment_suffix(&id), at_ms, 0xb000).await;
+
+        let stored = facts(
+            &port,
+            EnrollmentQuery {
+                enrollment: Some(id.clone()),
+                ..of_installation()
+            },
+        )
+        .await;
+        if lapses {
+            assert_eq!(
+                answer,
+                MachineTokenDecision::Refuse {
+                    reason: MachineTokenRefusal::EnrollmentNotActive {},
+                },
+                "at {at_ms}"
+            );
+            let lapsed = stored.enrollment.unwrap();
+            assert_eq!(
+                (lapsed.state, lapsed.ended_at_ms),
+                (StoredEnrollmentState::Lapsed, Some(at_ms))
+            );
+            assert_eq!(
+                stored.installation.unwrap().generation,
+                EnrollmentGeneration(0)
+            );
+            // Only the enrollment row changed.
+            let after = fixture.rows().await?;
+            let changed = after
+                .iter()
+                .filter(|row| !before.contains(row))
+                .collect::<Vec<_>>();
+            assert_eq!(changed.len(), 1, "at {at_ms}: {changed:?}");
+            assert!(changed[0].starts_with("machine_enrollments:"));
+        } else {
+            assert!(
+                matches!(answer, MachineTokenDecision::Grant { .. }),
+                "at {at_ms}"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// A new owning handle over the same persistence reads the same facts.
+#[tokio::test]
+async fn the_real_store_reads_back_the_same_after_reopening() -> Result<(), TestError> {
+    let fixture = SqlStoreFixture::b3(&[WORKSPACE_A, WORKSPACE_B]).await?;
+    let port = fixture.port();
+    let id = approved_id(
+        approve(
+            &port,
+            approval(REQUEST, MACHINE, &[WORKSPACE_A, WORKSPACE_B]),
+            NOW_MS,
+            0xa000,
+        )
+        .await,
+    );
+    grant(&port, &id, enrollment_suffix(&id), NOW_MS + 1000, 0xb000).await;
+    let query = EnrollmentQuery {
+        enrollment: Some(id.clone()),
+        ..of_installation()
+    };
+    let before = facts(&port, query.clone()).await;
+    let rows = fixture.rows().await?;
+    drop(port);
+
+    let reopened = fixture.reopen().await?;
+
+    let after = facts(&reopened.port(), query).await;
+    assert_eq!(format!("{after:?}"), format!("{before:?}"));
+    assert_eq!(reopened.rows().await?, rows);
+    Ok(())
+}
+
+/// An engine refusal after real writes rolls the whole decision back: the
+/// enrollment, allowance and record written first are gone too.
+#[tokio::test]
+async fn a_write_failing_after_others_rolls_the_whole_transaction_back() -> Result<(), TestError> {
+    use super::super::enrollment_records::{AllowanceRow, EnrollmentChange};
+    let fixture = SqlStoreFixture::b3(&[WORKSPACE_A]).await?;
+    let port = fixture.port();
+    let id = approved_id(
+        approve(
+            &port,
+            approval(REQUEST, MACHINE, &[WORKSPACE_A]),
+            NOW_MS,
+            0xa000,
+        )
+        .await,
+    );
+    let before = fixture.rows().await?;
+    let stored = facts(
+        &port,
+        EnrollmentQuery {
+            enrollment: Some(id.clone()),
+            ..EnrollmentQuery::default()
+        },
+    )
+    .await
+    .enrollment
+    .unwrap();
+
+    let failed = port
+        .transact(EnrollmentQuery::default(), move |_| {
+            let mut duplicate = stored.clone();
+            duplicate.id = enrollment(0x7777);
+            Decided::writing(
+                (),
+                vec![
+                    EnrollmentChange::PutAllowance(AllowanceRow {
+                        id: durable_steps::Uuid::parse_str(&uuid7(0x7001)).unwrap(),
+                        installation: installation(MACHINE),
+                        workspace: super::super::test_fixtures::workspace(WORKSPACE_B),
+                        state: AllowanceState::Active,
+                    }),
+                    // The same request ID again: the engine's UNIQUE refuses it.
+                    EnrollmentChange::InsertEnrollment(duplicate),
+                ],
+                NOW_MS + 1,
+            )
+        })
+        .await;
+
+    assert_eq!(failed, Err(MachineEnrollmentFailure::Unavailable));
+    assert_eq!(fixture.rows().await?, before);
+    Ok(())
 }

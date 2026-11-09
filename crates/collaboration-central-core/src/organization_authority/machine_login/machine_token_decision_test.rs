@@ -8,7 +8,8 @@ use super::super::enrollment_records::{
 use super::super::in_memory_enrollments::{EnrollmentStore, InMemoryEnrollments};
 use super::super::test_fixtures::{
     APPROVER, CODE_LIFETIME_S, CountingIds, MACHINE, NOW_MS, NOW_S, TestClock, client, empty_store,
-    enrollment, installation, label, settings, uuid7, with_approved, with_enrolled,
+    enrollment, installation, label, settings, uuid7, with_approved, with_approved_until,
+    with_enrolled,
 };
 use super::decide_machine_token;
 use crate::identity_contract::{
@@ -444,4 +445,50 @@ async fn a_first_grant_at_the_device_code_lifetime_finds_the_approval_lapsed() {
         enrollment.ended_at_ms = Some(NOW_MS);
     }
     assert_eq!(port.snapshot(), expected);
+}
+
+/// N10: the code's own deadline decides, even when it comes before
+/// approval + 10 minutes. Approved at minute 9, the code expires at minute
+/// 10; the retired local rule would have allowed until minute 19.
+fn skewed_store() -> EnrollmentStore {
+    let minute = 60_000;
+    with_approved_until(
+        with_enrolled(empty_store(), MACHINE, WORKING, 1, NOW_S - 60),
+        MACHINE,
+        A,
+        1,
+        NOW_MS - minute,
+        NOW_S,
+    )
+}
+
+#[tokio::test]
+async fn the_codes_own_deadline_lapses_an_approval_before_ten_minutes_have_passed() {
+    // Just before the code's deadline: the approval activates and supersedes.
+    let before = InMemoryEnrollments::with(skewed_store());
+    assert_eq!(
+        decide(&before, &first(A), NOW_MS - 1).await,
+        grant(A, NOW_S - 1, Some(ended(WORKING, WORKING)))
+    );
+
+    for at in [NOW_MS, NOW_MS + 1] {
+        let store = skewed_store();
+        let port = InMemoryEnrollments::with(store.clone());
+
+        let answer = decide(&port, &first(A), at).await;
+
+        assert_eq!(
+            answer,
+            refused(MachineTokenRefusal::EnrollmentNotActive {}),
+            "at {at}"
+        );
+        // Only the lapse: the working enrollment, its client, the generation,
+        // the allowances and the records all stay.
+        let mut expected = store;
+        if let Some(enrollment) = expected.enrollments.get_mut(&enrollment(A)) {
+            enrollment.state = StoredEnrollmentState::Lapsed;
+            enrollment.ended_at_ms = Some(at);
+        }
+        assert_eq!(port.snapshot(), expected, "at {at}");
+    }
 }

@@ -202,3 +202,20 @@ pub(super) fn request(suffix: u64) -> DeviceLoginRequestId {
 pub(super) fn label() -> MachineLabel {
     MachineLabel::try_from("fixture machine".to_owned()).unwrap()
 }
+
+/// An approved enrollment whose code expires at `code_expires_at_s`, whatever
+/// its approval time: for cases where the code's own deadline comes first.
+pub(super) fn with_approved_until(
+    store: EnrollmentStore,
+    machine: u64,
+    id: u64,
+    base: u64,
+    approved_at_ms: i64,
+    code_expires_at_s: i64,
+) -> EnrollmentStore {
+    let mut store = with_approved(store, machine, id, base, approved_at_ms);
+    if let Some(enrollment) = store.enrollments.get_mut(&enrollment(id)) {
+        enrollment.code_expires_at = UnixSeconds(code_expires_at_s);
+    }
+    store
+}
