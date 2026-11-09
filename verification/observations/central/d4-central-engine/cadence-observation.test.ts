@@ -15,7 +15,7 @@ function batch(
     construction: "01900000-0000-7000-8000-000000000001",
     sequence: BigInt(index),
     eventId: `01900000-0000-7000-8000-${(index + 100).toString(16).padStart(12, "0")}`,
-    event: { kind: "alarm", redelivery: null },
+    event: { kind: "alarm", redelivery: null, delivery: "platform" },
     enteredAt: at,
     exitedAt: at + 1n,
     units: [],

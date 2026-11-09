@@ -13,7 +13,7 @@ const event = {
     construction,
     sequence: 0n,
     eventId: "01900000-0000-7000-8000-000000000003",
-    event: { kind: "alarm", redelivery: null },
+    event: { kind: "alarm", redelivery: null, delivery: "platform" },
     enteredAt: 1000n,
     exitedAt: 1001n,
     units: [],

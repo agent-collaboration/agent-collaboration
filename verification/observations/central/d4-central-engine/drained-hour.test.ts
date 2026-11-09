@@ -61,7 +61,7 @@ function ring(kind: "alarm" | "frame"): unknown {
             eventId: "01900000-0000-7000-8000-000000000002",
             event:
               kind === "alarm"
-                ? { kind: "alarm", redelivery: null }
+                ? { kind: "alarm", redelivery: null, delivery: "platform" }
                 : {
                     kind: "frame",
                     connection: "01900000-0000-7000-8000-000000000003",

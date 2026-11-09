@@ -1,4 +1,4 @@
-/** Lossless S1/S4 observations from the Implementer's D4 seam contract v3.4.
+/** Lossless S1/S4 observations, including the binding v3.8 Alarm delivery label.
  * Draft until the corresponding product slice is declared and its real bytes qualify this reader.
  */
 import { z } from "zod";
@@ -34,8 +34,13 @@ const eventSchema = z.discriminatedUnion("kind", [
     .object({
       kind: z.literal("alarm"),
       redelivery: z.bigint().nonnegative().max(4294967295n).nullable(),
+      delivery: z.enum(["platform", "injected"]),
     })
-    .strict(),
+    .strict()
+    .refine(
+      (event): boolean => event.delivery !== "injected" || event.redelivery === null,
+      "injected workerd Alarm redelivery must be null",
+    ),
 ]);
 const unitSchema = z
   .object({
@@ -189,6 +194,12 @@ export const d4EventRecordSchema = z
   })
   .strict();
 export type D4EventRecord = z.infer<typeof d4EventRecordSchema>;
+
+/** Necessary label check; the caller still proves the real deadline and target. */
+export function requirePlatformAlarm(record: D4EventRecord): void {
+  if (record.event.kind !== "alarm" || record.event.delivery !== "platform")
+    throw new Error("platform-wake observation requires a platform Alarm record");
+}
 const constructionSchema = z
   .object({
     object: d4ObjectAddressSchema,

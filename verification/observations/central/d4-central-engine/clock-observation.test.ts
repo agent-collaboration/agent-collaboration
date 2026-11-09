@@ -25,7 +25,7 @@ function alarmEvent(): D4EventRecord {
     construction: randomUUIDv7(),
     sequence: 0n,
     eventId: randomUUIDv7(),
-    event: { kind: "alarm", redelivery: null },
+    event: { kind: "alarm", redelivery: null, delivery: "platform" },
     enteredAt: instant,
     exitedAt: instant,
     units: [],

@@ -27,7 +27,7 @@ function alarm(index: number, fault: Fault): D4EventRecord {
     construction: "01900000-0000-7000-8000-000000000001",
     sequence: BigInt(index),
     eventId: `01900000-0000-7000-8000-${(index + 20).toString(16).padStart(12, "0")}`,
-    event: { kind: "alarm", redelivery: BigInt(index) },
+    event: { kind: "alarm", redelivery: BigInt(index), delivery: "platform" },
     enteredAt: index === 0 ? clock : retryAt + BigInt(index),
     exitedAt: index === 0 ? clock : retryAt + BigInt(index),
     units: [],

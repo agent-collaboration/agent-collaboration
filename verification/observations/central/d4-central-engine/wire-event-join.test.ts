@@ -92,7 +92,7 @@ function source(
     construction: identity(20),
     sequence: 0n,
     eventId: identity(21),
-    event: { kind: "alarm", redelivery: null },
+    event: { kind: "alarm", redelivery: null, delivery: "platform" },
     enteredAt: 10n,
     exitedAt: 11n,
     units: [],

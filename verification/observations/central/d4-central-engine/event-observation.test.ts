@@ -6,6 +6,7 @@ import {
   parseD4StderrLine,
   parseD4EventPage,
   requireAlarmCallsFromDueUnits,
+  requirePlatformAlarm,
   d4EventRecordSchema,
   type D4EventRecord,
 } from "./event-observation.ts";
@@ -19,7 +20,7 @@ function eventRecord(sequence = 0n, construction = 1, event = 100): D4EventRecor
     construction: identity(construction),
     sequence,
     eventId: identity(event),
-    event: { kind: "alarm", redelivery: null },
+    event: { kind: "alarm", redelivery: null, delivery: "platform" },
     enteredAt: 1792281600000n,
     exitedAt: 1792281600004n,
     units: [{ unitKind: "summary_call", subject: identity(5), outcome: { kind: "done" } }],
@@ -56,6 +57,58 @@ function constructionRecord(construction = 1, isolate = 20): string {
 function observeLine(sequence: D4EventSequence, line: string): void {
   sequence.observeLine(line);
 }
+
+test("v3.8 Alarm delivery preserves platform and injected labels", (): void => {
+  for (const delivery of ["platform", "injected"] as const) {
+    const parsed = d4EventRecordSchema.parse({
+      ...eventRecord(),
+      event: { kind: "alarm", redelivery: null, delivery },
+    });
+    assert.equal(parsed.event.kind, "alarm");
+    assert.ok(parsed.event.kind === "alarm");
+    assert.equal(parsed.event.delivery, delivery);
+  }
+});
+
+test("v3.8 Alarm records without delivery are refused", (): void => {
+  assert.throws(() =>
+    d4EventRecordSchema.parse({
+      ...eventRecord(),
+      event: { kind: "alarm", redelivery: null },
+    }),
+  );
+});
+
+test("v3.8 invalid delivery labels and injected redelivery counters are refused", (): void => {
+  for (const delivery of ["", "Platform", "clock"]) {
+    assert.throws(() =>
+      d4EventRecordSchema.parse({
+        ...eventRecord(),
+        event: { kind: "alarm", redelivery: null, delivery },
+      }),
+    );
+  }
+  assert.throws(() =>
+    d4EventRecordSchema.parse({
+      ...eventRecord(),
+      event: { kind: "alarm", redelivery: 0n, delivery: "injected" },
+    }),
+  );
+});
+
+test("v3.8 injected delivery cannot earn platform-wake credit", (): void => {
+  assert.doesNotThrow(() => requirePlatformAlarm(eventRecord()));
+  const injected = d4EventRecordSchema.parse({
+    ...eventRecord(),
+    event: { kind: "alarm", redelivery: null, delivery: "injected" },
+  });
+  assert.throws(() => requirePlatformAlarm(injected), /platform Alarm/);
+  const call = d4EventRecordSchema.parse({
+    ...eventRecord(),
+    event: { kind: "call", callKind: "fixture" },
+  });
+  assert.throws(() => requirePlatformAlarm(call), /platform Alarm/);
+});
 
 test("construction evidence is readable without exposing the sequence's retained state", (): void => {
   const sequence = new D4EventSequence();

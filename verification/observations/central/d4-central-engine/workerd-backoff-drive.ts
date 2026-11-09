@@ -5,7 +5,7 @@ import { field, textField } from "../../../exact-json.ts";
 import { submitControlledMail } from "./controlled-mail-drive.ts";
 import type { ControlledMailActor, CompleteClientFrame } from "./controlled-mail-drive.ts";
 import type { D4ControlClient } from "./control-client.ts";
-import type { D4EventRecord } from "./event-observation.ts";
+import { requirePlatformAlarm, type D4EventRecord } from "./event-observation.ts";
 import type { D4Snapshot } from "./snapshot-observation.ts";
 import {
   observeClockPositioningNegative,
@@ -113,6 +113,7 @@ async function requireRetry(
   });
   assert.equal(event.object.kind, "fleet");
   assert.equal(event.event.kind, "alarm");
+  requirePlatformAlarm(event);
   assert.ok(event.enteredAt >= before.nextAttemptAt, "retry arrived before its stored deadline");
   const frame = await input.recipient.connection.receive(isPush);
   assert.equal(field(pushValue(frame), "item", "value", "id"), before.subject);
@@ -187,6 +188,7 @@ async function retireAtAgedBoundary(input: WorkerdBackoffInput, before: Attempt)
     item: null,
   });
   assert.equal(event.event.kind, "alarm");
+  requirePlatformAlarm(event);
   assert.equal(event.enteredAt, at);
   const after = await observed(input, before.subject, "retired");
   assert.equal(after.row.state, "given_up");
