@@ -186,7 +186,7 @@ async fn subscription_restart_contains_project_failure(
         request["policy"] = match fault {
             RestartFault::PendingFeed => json!({"mode":"poll"}),
             RestartFault::Membership => {
-                json!({"mode":"poll","quietSeconds":0,"capSeconds":0})
+                json!({"mode":"poll","quietSeconds":0,"capSeconds":900})
             }
         };
         accepted(&fixture.api.call("thread_subscribe", request).await?);

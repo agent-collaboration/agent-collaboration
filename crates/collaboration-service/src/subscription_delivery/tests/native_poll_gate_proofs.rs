@@ -13,7 +13,13 @@ use sqlx::Connection;
 async fn poll_without_its_publisher_stays_held_until_the_same_wait_is_reconciled() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
-        .policy(&fixture.root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
+        .policy(
+            &fixture.root,
+            SubscriptionMode::Poll,
+            WhenIdle::Hold,
+            0,
+            900,
+        )
         .await;
     let runtime = fixture.runtime().await;
     let (app, native, publisher) = follow_application(&fixture, &runtime).await;
@@ -95,7 +101,13 @@ async fn poll_without_its_publisher_stays_held_until_the_same_wait_is_reconciled
 async fn a_temporary_poll_check_failure_reconsiders_the_same_item_on_an_existing_rescan() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
-        .policy(&fixture.root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
+        .policy(
+            &fixture.root,
+            SubscriptionMode::Poll,
+            WhenIdle::Hold,
+            0,
+            900,
+        )
         .await;
     let runtime = fixture.runtime().await;
     let (app, native, publisher) = follow_application(&fixture, &runtime).await;

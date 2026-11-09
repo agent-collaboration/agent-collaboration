@@ -123,8 +123,9 @@ pub(super) async fn board_subscription_push_targets(
                 policy: SubscriptionPolicyPatch {
                     mode: Some(SubscriptionMode::Deliver),
                     timing: SubscriptionTimingPatch {
-                        quiet_seconds: Some(1),
-                        cap_seconds: Some(10),
+                        // No quiet period: the post itself makes the batch due.
+                        quiet_seconds: Some(0),
+                        cap_seconds: Some(900),
                     },
                     ..SubscriptionPolicyPatch::default()
                 },

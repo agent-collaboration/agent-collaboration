@@ -177,7 +177,7 @@ async fn residual_window_that_reaches_its_cap_is_due_immediately_after_settlemen
                 policy: SubscriptionPolicyPatch {
                     timing: SubscriptionTimingPatch {
                         quiet_seconds: Some(120),
-                        cap_seconds: Some(600),
+                        cap_seconds: Some(900),
                     },
                     ..Default::default()
                 },
@@ -189,14 +189,14 @@ async fn residual_window_that_reaches_its_cap_is_due_immediately_after_settlemen
         .post_at(human("first-author")?, "initial activity", fixture.now)
         .await?;
     fixture.rescan(&reader, fixture.now).await?;
-    let at = fixture.now + Duration::seconds(600);
+    let at = fixture.now + Duration::seconds(900);
     let roots = fixture.windows.due_subscription_roots(&reader, at).await?;
     let (_, selection) = fixture
         .windows
         .select_subscription_notice(&reader, &roots, at, usize::MAX)
         .await?;
-    let first = fixture.now + Duration::seconds(610);
-    let last = fixture.now + Duration::seconds(1211);
+    let first = fixture.now + Duration::seconds(910);
+    let last = fixture.now + Duration::seconds(1811);
     fixture
         .post_at(human("second-author")?, "first residual", first)
         .await?;
@@ -219,7 +219,7 @@ async fn residual_window_that_reaches_its_cap_is_due_immediately_after_settlemen
     assert_eq!(
         fixture
             .windows
-            .due_subscription_roots(&reader, fixture.now + Duration::seconds(1212))
+            .due_subscription_roots(&reader, fixture.now + Duration::seconds(1812))
             .await?,
         vec![fixture.root.clone()]
     );

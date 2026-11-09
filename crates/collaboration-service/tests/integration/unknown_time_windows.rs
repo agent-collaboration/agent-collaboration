@@ -80,7 +80,7 @@ async fn unknown_imported_post_is_covered_and_only_the_later_live_post_opens_a_w
         &project,
         serde_json::json!({
             "kind":"threadSubscribe","scope":{"kind":"project","projectId":project},
-            "policy":{"mode":"poll","quietSeconds":0,"capSeconds":0},
+            "policy":{"mode":"poll","quietSeconds":0,"capSeconds":900},
         }),
     );
     subscribe["actor"] = serde_json::json!(reader);

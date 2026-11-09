@@ -90,7 +90,7 @@ fn subscription_cap_above_sixty_minutes_reports_its_allowed_range() {
         )
         .unwrap_err();
     assert_eq!(policy_patch_error.field, "capSeconds");
-    assert_eq!(policy_patch_error.requirement, cap_range);
+    assert_eq!(policy_patch_error.requirement, REQUESTED_CAP_RANGE);
 }
 
 #[test]
@@ -253,4 +253,96 @@ fn subscription_value_deserialization_uses_validated_constructors() {
     .unwrap();
     encoded_root["lastArrivalAt"] = serde_json::json!(now - chrono::Duration::seconds(1));
     assert!(serde_json::from_value::<SubscriptionRootRecord>(encoded_root).is_err());
+}
+
+/// The refusal a cap a caller sets outside 15 to 55 minutes gets.
+const REQUESTED_CAP_RANGE: &str = "must be between 900 and 3300 seconds (15 to 55 minutes)";
+
+fn cap_patch(quiet_seconds: Option<u64>, cap_seconds: Option<u64>) -> SubscriptionPolicyPatch {
+    SubscriptionPolicyPatch {
+        timing: crate::SubscriptionTimingPatch {
+            quiet_seconds,
+            cap_seconds,
+        },
+        ..SubscriptionPolicyPatch::default()
+    }
+}
+
+/// A policy as stored before the 15 to 55 minute range, decoded the way a stored row is.
+fn stored_policy(cap_seconds: u64) -> SubscriptionPolicy {
+    serde_json::from_value(serde_json::json!({
+        "mode": "deliver",
+        "whenIdle": "hold",
+        "timing": { "quietSeconds": 120, "capSeconds": cap_seconds },
+        "lifetime": 86400
+    }))
+    .unwrap()
+}
+
+#[test]
+fn a_cap_a_caller_sets_is_accepted_from_fifteen_through_fifty_five_minutes() {
+    let reader = session_reader();
+    for cap_seconds in [15 * 60, 55 * 60] {
+        let policy = SubscriptionPolicy::defaults_for(&reader)
+            .apply_patch(&reader, &cap_patch(None, Some(cap_seconds)))
+            .unwrap();
+        assert_eq!(policy.timing().cap_seconds(), cap_seconds);
+    }
+    for cap_seconds in [15 * 60 - 1, 55 * 60 + 1] {
+        let refusal = SubscriptionPolicy::defaults_for(&reader)
+            .apply_patch(&reader, &cap_patch(None, Some(cap_seconds)))
+            .unwrap_err();
+        assert_eq!(refusal.field, "capSeconds", "{cap_seconds}");
+        assert_eq!(refusal.requirement, REQUESTED_CAP_RANGE, "{cap_seconds}");
+    }
+}
+
+#[test]
+fn a_new_subscription_without_a_cap_batches_for_at_most_fifteen_minutes() {
+    let reader = session_reader();
+    assert_eq!(
+        SubscriptionPolicy::defaults_for(&reader)
+            .timing()
+            .cap_seconds(),
+        15 * 60
+    );
+    let policy = SubscriptionPolicy::defaults_for(&reader)
+        .apply_patch(&reader, &cap_patch(Some(0), None))
+        .unwrap();
+    assert_eq!(policy.timing().cap_seconds(), 15 * 60);
+}
+
+#[test]
+fn a_quiet_period_longer_than_the_cap_is_refused() {
+    let reader = session_reader();
+    let refusal = SubscriptionPolicy::defaults_for(&reader)
+        .apply_patch(&reader, &cap_patch(Some(20 * 60), Some(15 * 60)))
+        .unwrap_err();
+    assert_eq!(refusal.field, "capSeconds");
+    // Without a cap, the quiet period is checked against the 15 minute default.
+    assert!(
+        SubscriptionPolicy::defaults_for(&reader)
+            .apply_patch(&reader, &cap_patch(Some(20 * 60), None))
+            .is_err()
+    );
+}
+
+#[test]
+fn a_stored_sixty_minute_subscription_still_loads() {
+    assert_eq!(stored_policy(60 * 60).timing().cap_seconds(), 60 * 60);
+}
+
+#[test]
+fn a_stored_ten_minute_subscription_renews_unchanged_but_cannot_be_set_to_ten_minutes() {
+    let reader = session_reader();
+    let stored = stored_policy(10 * 60);
+    // A renewal applies an empty patch to the stored policy.
+    let renewed = stored
+        .apply_patch(&reader, &SubscriptionPolicyPatch::default())
+        .unwrap();
+    assert_eq!(renewed, stored);
+    let refusal = stored
+        .apply_patch(&reader, &cap_patch(None, Some(10 * 60)))
+        .unwrap_err();
+    assert_eq!(refusal.requirement, REQUESTED_CAP_RANGE);
 }

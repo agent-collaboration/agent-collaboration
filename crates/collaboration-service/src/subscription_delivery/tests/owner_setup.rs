@@ -141,7 +141,7 @@ impl OwnerFixture {
                     },
                     WhenIdle::Hold,
                     0,
-                    0,
+                    900,
                 )
                 .await;
             fleet_runtime.shutdown().await.unwrap();

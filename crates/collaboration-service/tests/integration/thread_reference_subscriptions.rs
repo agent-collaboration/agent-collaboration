@@ -69,7 +69,7 @@ async fn subscriptions_label_projects_and_qualified_roots_do_not_escape_them()
             &keyed_call(
                 &fixture,
                 "thread_subscribe",
-                json!({"scope":target,"policy":{"mode":"poll","quietSeconds":0,"capSeconds":0}}),
+                json!({"scope":target,"policy":{"mode":"poll","quietSeconds":0,"capSeconds":900}}),
             )
             .await?,
         );
