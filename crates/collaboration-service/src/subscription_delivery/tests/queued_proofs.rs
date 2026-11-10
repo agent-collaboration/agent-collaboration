@@ -13,7 +13,7 @@ async fn declared_renewal_before_covering_wait_changes_only_the_covered_membersh
     let uncovered_root = fixture.add_root().await;
     for root in [&fixture.root, &uncovered_root] {
         fixture
-            .policy(root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
+            .policy(root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 900)
             .await;
     }
     let covered_scope = SubscriptionScope::thread(fixture.root.clone());

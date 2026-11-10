@@ -37,7 +37,7 @@ async fn resumed_reader_keeps_separate_membership_items_until_a_load_signal() {
     let second_root = fixture.add_root().await;
     let poll_root = fixture.add_root().await;
     fixture
-        .policy(&poll_root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
+        .policy(&poll_root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 900)
         .await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
     let runtime = fixture.runtime().await;
@@ -186,7 +186,7 @@ async fn one_membership_drains_twenty_roots_then_the_remaining_root_without_lost
                     when_idle: Some(WhenIdle::Hold),
                     timing: SubscriptionTimingPatch {
                         quiet_seconds: Some(0),
-                        cap_seconds: Some(0),
+                        cap_seconds: Some(900),
                     },
                     lifetime_seconds: None,
                 },

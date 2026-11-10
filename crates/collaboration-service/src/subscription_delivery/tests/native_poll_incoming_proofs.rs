@@ -33,7 +33,7 @@ async fn remote_incoming_poll_uses_its_frozen_policy_without_opening_the_senders
                 when_idle: None,
                 timing: SubscriptionTimingPatch {
                     quiet_seconds: Some(0),
-                    cap_seconds: Some(0),
+                    cap_seconds: Some(900),
                 },
                 lifetime_seconds: None,
             },

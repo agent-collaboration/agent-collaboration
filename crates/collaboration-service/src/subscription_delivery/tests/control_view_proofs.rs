@@ -19,7 +19,7 @@ async fn reconcile_receipt_waits_for_the_owner_to_finish_its_native_window_scan(
             message_board::SubscriptionMode::Poll,
             message_board::WhenIdle::Hold,
             0,
-            0,
+            900,
         )
         .await;
     let runtime = fixture.runtime().await;
@@ -89,7 +89,7 @@ async fn reconcile_receipt_reports_the_failed_pass_instead_of_waiting_for_a_late
             message_board::SubscriptionMode::Poll,
             message_board::WhenIdle::Hold,
             0,
-            0,
+            900,
         )
         .await;
     let runtime = fixture.runtime().await;
@@ -150,7 +150,7 @@ async fn subscriptions_list_reconciles_a_subscriber_whose_scan_has_not_run() {
             message_board::SubscriptionMode::Poll,
             message_board::WhenIdle::Hold,
             0,
-            0,
+            900,
         )
         .await;
     let runtime = fixture.runtime().await;

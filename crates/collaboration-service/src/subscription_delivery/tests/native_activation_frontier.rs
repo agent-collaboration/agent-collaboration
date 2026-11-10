@@ -36,7 +36,7 @@ async fn assert_reactivated_frontier(resolved: bool) {
                 SubscriptionMode::Deliver,
                 WhenIdle::Hold,
                 1,
-                2,
+                900,
             )
             .await;
         publisher
@@ -119,7 +119,7 @@ async fn assert_reactivated_frontier(resolved: bool) {
             SubscriptionMode::Deliver,
             WhenIdle::Hold,
             1,
-            2,
+            900,
         )
         .await;
     let activation_b = current_membership(&fixture).await;

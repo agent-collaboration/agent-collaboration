@@ -8,9 +8,8 @@ use super::board_subscription_arguments::{
 };
 use super::board_value_parsing::{command_context, parse_thread_ref, parse_uuid_v7};
 use collaboration_client::board::{
-    BatchTiming, MAX_SUBSCRIPTION_CAP_SECONDS, MAX_SUBSCRIPTION_QUIET_SECONDS,
-    SubscriptionLifetime, SubscriptionMode, SubscriptionPolicyPatch, SubscriptionTarget,
-    SubscriptionTimingPatch, WhenIdle,
+    BatchTiming, MAX_SUBSCRIPTION_QUIET_SECONDS, SubscriptionLifetime, SubscriptionMode,
+    SubscriptionPolicyPatch, SubscriptionTarget, SubscriptionTimingPatch, WhenIdle,
 };
 use collaboration_client::protocol::{
     ThreadSubscribeRequest, ThreadSubscriptionsRequest, ThreadUnsubscribeRequest,
@@ -42,12 +41,14 @@ pub(super) fn prepare_subscribe(
             "--quiet must be between 0 seconds and 30 minutes; for example --quiet 2m".into(),
         );
     }
-    if cap_seconds.is_some_and(|seconds| seconds > MAX_SUBSCRIPTION_CAP_SECONDS) {
-        return Err("--cap must be at most 60 minutes; for example --cap 10m".into());
+    if let Some(seconds) = cap_seconds {
+        BatchTiming::check_requested_cap(seconds).map_err(|_| {
+            "--cap must be between 15 and 55 minutes; for example --cap 15m".to_owned()
+        })?;
     }
     if let (Some(quiet_seconds), Some(cap_seconds)) = (quiet_seconds, cap_seconds) {
         BatchTiming::new(quiet_seconds, cap_seconds).map_err(|_| {
-            "invalid subscription capSeconds: must be at least quietSeconds; --cap must be at least --quiet and at most 60 minutes; for example --quiet 2m --cap 10m".to_owned()
+            "invalid subscription capSeconds: must be at least quietSeconds; --cap must be at least --quiet and between 15 and 55 minutes; for example --quiet 2m --cap 15m".to_owned()
         })?;
     }
     let lifetime_seconds = arguments
@@ -166,7 +167,7 @@ pub(super) fn parse_subscription_duration(
 ) -> Result<u64, String> {
     let example = match flag {
         "--quiet" => "--quiet 2m",
-        "--cap" => "--cap 10m",
+        "--cap" => "--cap 15m",
         "--for" => "--for 24h",
         "--max-wait" => "--max-wait 10m",
         _ => "--for 24h",
@@ -205,7 +206,7 @@ mod tests {
     fn subscription_duration_errors_show_flag_specific_examples() {
         let invalid_duration_cases: [(&str, &str, bool, &str); 4] = [
             ("--quiet", "not-a-duration", true, "--quiet 2m"),
-            ("--cap", "not-a-duration", true, "--cap 10m"),
+            ("--cap", "not-a-duration", true, "--cap 15m"),
             ("--for", "not-a-duration", false, "--for 24h"),
             ("--max-wait", "not-a-duration", true, "--max-wait 10m"),
         ];

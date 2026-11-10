@@ -51,7 +51,7 @@ fn subscription_duration_errors_name_the_field_constraint_and_next_action() {
                 "--json",
             ],
             "--cap",
-            "--cap requires an integer followed by s, m, h, or d; for example --cap 10m",
+            "--cap requires an integer followed by s, m, h, or d; for example --cap 15m",
         ),
         (
             vec![
@@ -62,11 +62,11 @@ fn subscription_duration_errors_name_the_field_constraint_and_next_action() {
                 "--actor",
                 HUMAN_ACTOR,
                 "--cap",
-                "61m",
+                "3301s",
                 "--json",
             ],
             "--cap",
-            "--cap must be at most 60 minutes; for example --cap 10m",
+            "--cap must be between 15 and 55 minutes; for example --cap 15m",
         ),
         (
             vec![

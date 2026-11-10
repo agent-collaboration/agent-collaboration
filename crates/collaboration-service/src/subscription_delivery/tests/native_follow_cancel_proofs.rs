@@ -19,7 +19,7 @@ async fn a_resolved_membership_keeps_its_held_item_and_drains_the_unallocated_ra
             message_board::SubscriptionMode::Deliver,
             message_board::WhenIdle::Hold,
             10,
-            30,
+            900,
         )
         .await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;

@@ -33,7 +33,7 @@ async fn exercise_wait_renewals() -> Result<(), TestError> {
             "scope".to_owned(),
             json!({"kind":"project","projectId":project}),
         );
-        fields.insert("policy".to_owned(), json!({"mode":"poll","whenIdle":null,"quietSeconds":0,"capSeconds":0,"lifetimeSeconds":28800}));
+        fields.insert("policy".to_owned(), json!({"mode":"poll","whenIdle":null,"quietSeconds":0,"capSeconds":900,"lifetimeSeconds":28800}));
         accepted(&fixture.api.call("thread_subscribe", subscribe).await?);
     }
     let first_id = RequestId::generate();

@@ -479,7 +479,7 @@ async fn renamed_command_groups_execute_real_board_journey_and_keep_caller_reque
                 "--quiet",
                 "0s",
                 "--cap",
-                "0s",
+                "15m",
             ],
         )
         .await?,

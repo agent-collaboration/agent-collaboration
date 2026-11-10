@@ -219,7 +219,7 @@ pub(in crate::subscription_delivery) async fn subscribed_project(
                 when_idle: Some(WhenIdle::Hold),
                 timing: SubscriptionTimingPatch {
                     quiet_seconds: Some(0),
-                    cap_seconds: Some(0),
+                    cap_seconds: Some(900),
                 },
                 lifetime_seconds: None,
             },

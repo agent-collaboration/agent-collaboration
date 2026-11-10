@@ -82,7 +82,7 @@ async fn a_terminal_follow_stays_above_frontier_until_its_generation_child_is_fr
         assert!(frontier(&fixture).await < original_sequence);
         crate::test_project_runtime::renew_lease(&fixture.registry, &fixture.project, expired, fixture.clock.as_ref()).await.unwrap();
         fixture.policy(&fixture.root, message_board::SubscriptionMode::Deliver,
-            message_board::WhenIdle::Hold, 1, 2).await;
+            message_board::WhenIdle::Hold, 1, 900).await;
 
         let mut read = store.snapshot().await.unwrap();
         let head = read.mail_handoff_head().await.unwrap();
@@ -165,7 +165,7 @@ async fn two_prevented_generations_keep_a_resolved_drain_above_frontier_until_fi
     let original_sequence = read.mail_handoff(&id).await.unwrap().unwrap().sequence;
     read.finish().await.unwrap();
     let mut before = Vec::new();
-    for (quiet, cap, count) in [(1, 2, 2_usize), (2, 3, 3_usize)] {
+    for (quiet, cap, count) in [(1, 900, 2_usize), (2, 900, 3_usize)] {
         fixture
             .policy(
                 &fixture.root,

@@ -36,7 +36,7 @@ async fn forged_prevention_references_are_refused_before_the_locked_replacement_
             message_board::SubscriptionMode::Deliver,
             message_board::WhenIdle::Hold,
             1,
-            2,
+            900,
         )
         .await;
     publisher
@@ -163,7 +163,7 @@ async fn a_generation_prevented_range_is_replaced_once_and_reaches_the_native_cl
             message_board::SubscriptionMode::Deliver,
             message_board::WhenIdle::Hold,
             1,
-            2,
+            900,
         )
         .await;
     publisher

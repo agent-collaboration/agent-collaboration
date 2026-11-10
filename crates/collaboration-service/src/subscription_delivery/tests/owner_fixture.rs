@@ -339,7 +339,7 @@ impl OwnerFixture {
             None,
         )
         .await;
-        self.policy(&root, SubscriptionMode::Deliver, WhenIdle::Hold, 0, 0)
+        self.policy(&root, SubscriptionMode::Deliver, WhenIdle::Hold, 0, 900)
             .await;
         root
     }

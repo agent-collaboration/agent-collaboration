@@ -94,7 +94,7 @@ async fn follow_admission_rechecks_generation_and_activation_before_allocating()
             message_board::SubscriptionMode::Deliver,
             WhenIdle::Hold,
             1,
-            2,
+            900,
         )
         .await;
     assert_ne!(
@@ -288,7 +288,7 @@ pub(super) async fn project_poll_roots(fixture: &OwnerFixture) -> Vec<message_bo
                     when_idle: Some(WhenIdle::Hold),
                     timing: message_board::SubscriptionTimingPatch {
                         quiet_seconds: Some(0),
-                        cap_seconds: Some(0),
+                        cap_seconds: Some(900),
                     },
                     lifetime_seconds: None,
                 },

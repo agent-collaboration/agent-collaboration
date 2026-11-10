@@ -278,7 +278,7 @@ async fn subscribe_join_wait_and_cancel_use_the_real_api_and_sqlite_paths() -> T
             "--quiet",
             "0s",
             "--cap",
-            "5m",
+            "15m",
             "--for",
             "1h",
         ],
@@ -312,7 +312,7 @@ async fn subscribe_join_wait_and_cancel_use_the_real_api_and_sqlite_paths() -> T
         "thread subscribe quiet period was not applied",
     )?;
     ensure(
-        thread_view["policy"]["timing"]["capSeconds"] == 300,
+        thread_view["policy"]["timing"]["capSeconds"] == 900,
         "thread subscribe cap was not applied",
     )?;
     ensure(
@@ -424,7 +424,7 @@ async fn subscribe_join_wait_and_cancel_use_the_real_api_and_sqlite_paths() -> T
             "--quiet",
             "0s",
             "--cap",
-            "0s",
+            "15m",
         ],
     )
     .await?;

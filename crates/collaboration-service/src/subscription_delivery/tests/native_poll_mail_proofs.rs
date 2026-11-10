@@ -13,7 +13,13 @@ async fn a_poll_sdk_item_waits_without_a_push_then_hands_over_its_own_identity_o
         .try_init();
     let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
-        .policy(&fixture.root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
+        .policy(
+            &fixture.root,
+            SubscriptionMode::Poll,
+            WhenIdle::Hold,
+            0,
+            900,
+        )
         .await;
     let runtime = fixture.runtime().await;
     let (app, native, publisher) = follow_application(&fixture, &runtime).await;

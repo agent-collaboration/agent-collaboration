@@ -99,7 +99,10 @@ fn maximum_membership(state: &ProjectState) -> TestResult<Record> {
                 &reader,
                 SubscriptionMode::Deliver,
                 WhenIdle::Hold,
-                BatchTiming::new(MAX_SUBSCRIPTION_QUIET_SECONDS, MAX_SUBSCRIPTION_CAP_SECONDS)?,
+                BatchTiming::new(
+                    MAX_SUBSCRIPTION_QUIET_SECONDS,
+                    MAX_STORED_SUBSCRIPTION_CAP_SECONDS,
+                )?,
                 SubscriptionLifetime::new(MAX_SUBSCRIPTION_LIFETIME_SECONDS)?,
             )?,
             renewed_at: chrono::DateTime::<chrono::Utc>::MAX_UTC - chrono::Duration::seconds(1),

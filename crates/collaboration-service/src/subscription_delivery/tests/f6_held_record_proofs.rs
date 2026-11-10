@@ -18,7 +18,13 @@ use sqlx::Connection;
 async fn cleanup_write_retry_does_not_block_reader_reconcile() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
-        .policy(&fixture.root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
+        .policy(
+            &fixture.root,
+            SubscriptionMode::Poll,
+            WhenIdle::Hold,
+            0,
+            900,
+        )
         .await;
     let position = fixture
         .post(&fixture.root, "Held before ending scope")
@@ -102,7 +108,7 @@ async fn ending_one_scope_preserves_a_held_batch_with_another_active_root() {
     let active_root = fixture.add_root().await;
     for root in [&fixture.root, &active_root] {
         fixture
-            .policy(root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
+            .policy(root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 900)
             .await;
     }
     let ending_position = fixture.post(&fixture.root, "Ending root").await;
