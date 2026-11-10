@@ -30,6 +30,10 @@ const workspaceAdr = z.object({
   repositoryFiles: z.array(z.unknown()),
   revision: unsigned,
 });
+const workspaceAdrRecord = z
+  .object({ kind: z.literal("adr"), record: workspaceAdr })
+  .strict()
+  .transform((value) => value.record);
 const envelope = z.object({
   kind: z.literal("result"),
   cliVersion: z.string(),
@@ -105,7 +109,7 @@ export async function collectRouterLists(input: {
   if (input.includeWorkspaceGraph === true)
     for (const item of workspaces)
       workspaceAdrs.push(
-        ...(await pages(["adr", "list", "--workspace-id", item.workspaceId], workspaceAdr)),
+        ...(await pages(["adr", "list", "--workspace-id", item.workspaceId], workspaceAdrRecord)),
       );
   function unique(ids: readonly string[]): void {
     if (new Set(ids).size !== ids.length) throw new Error("duplicate Router list identity");

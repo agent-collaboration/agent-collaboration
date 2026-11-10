@@ -111,16 +111,19 @@ test("staging graph capture keeps ADR bodies and repository references, includin
       if (arguments_[0] === "adr")
         return reply([
           {
-            adrId,
-            workspace: workspaceId,
-            title: "saved choice",
-            text: "literal ADR body",
-            status: "accepted",
-            supersedes: null,
-            madeIn: null,
-            repositoryFiles: [],
-            revision: 2n,
-            envelope: { ignoredObservationTime: "now" },
+            kind: "adr",
+            record: {
+              adrId,
+              workspace: workspaceId,
+              title: "saved choice",
+              text: "literal ADR body",
+              status: "accepted",
+              supersedes: null,
+              madeIn: null,
+              repositoryFiles: [],
+              revision: 2n,
+              envelope: { ignoredObservationTime: "now" },
+            },
           },
         ]);
       return reply([{ id: projectId, board: boardId, title: "preserve me" }]);
@@ -136,4 +139,51 @@ test("staging graph capture keeps ADR bodies and repository references, includin
     goal: "literal goal",
     doneWhen: "literal completion",
   });
+});
+
+test("ADR graph collection refuses flat records and a different tagged record kind", async () => {
+  const record = {
+    adrId: "01900000-0000-7000-8000-000000000004",
+    workspace: workspaceId,
+    title: "saved choice",
+    text: "literal ADR body",
+    status: "accepted",
+    supersedes: null,
+    madeIn: null,
+    repositoryFiles: [],
+    revision: 2n,
+  };
+  for (const invalid of [record, { kind: "thread", record }])
+    await assert.rejects(
+      collectRouterLists({
+        expectedVersion: "0.1.125",
+        includeWorkspaceGraph: true,
+        read: async (arguments_) => {
+          if (arguments_[0] === "workspace")
+            return reply([
+              {
+                workspaceId,
+                name: "workspace",
+                description: "",
+                state: "active",
+                repositories: [],
+              },
+            ]);
+          if (arguments_[0] === "board")
+            return reply([
+              {
+                boardId,
+                workspaceId,
+                name: "board",
+                description: "",
+                kind: { kind: "area" },
+                state: "open",
+              },
+            ]);
+          if (arguments_[0] === "adr") return reply([invalid]);
+          return reply([{ id: projectId, board: boardId, title: "project" }]);
+        },
+      }),
+      /adr/,
+    );
 });
