@@ -1,13 +1,21 @@
 use std::path::Path;
 
-use rusqlite::Connection;
+use sqlx::sqlite::SqliteConnectOptions;
+use sqlx::{Connection, SqliteConnection};
 
-pub(super) fn create_v2_database_with_quota_snapshot(database_path: &Path) {
-    let connection = match Connection::open(database_path) {
+pub(super) async fn create_v2_database_with_quota_snapshot(database_path: &Path) {
+    let mut connection = match SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    {
         Ok(connection) => connection,
         Err(error) => panic!("raw v2 database should open: {error}"),
     };
-    if let Err(error) = connection.execute_batch(
+    if let Err(error) = sqlx::raw_sql(
         "
             CREATE TABLE accounts (
                 account_id TEXT PRIMARY KEY NOT NULL,
@@ -56,17 +64,33 @@ pub(super) fn create_v2_database_with_quota_snapshot(database_path: &Path) {
 
             PRAGMA user_version = 2;
             ",
-    ) {
+    )
+    .execute(&mut connection)
+    .await
+    {
         panic!("raw v2 database should initialize: {error}");
     }
+    connection
+        .close()
+        .await
+        .expect("legacy fixture connection should close");
 }
 
-pub(super) fn create_v3_database_with_legacy_code_review_selector_window(database_path: &Path) {
-    let connection = match Connection::open(database_path) {
+pub(super) async fn create_v3_database_with_legacy_code_review_selector_window(
+    database_path: &Path,
+) {
+    let mut connection = match SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    {
         Ok(connection) => connection,
         Err(error) => panic!("raw v3 database should open: {error}"),
     };
-    if let Err(error) = connection.execute_batch(
+    if let Err(error) = sqlx::raw_sql(
         "
             CREATE TABLE accounts (
                 account_id TEXT PRIMARY KEY NOT NULL,
@@ -129,17 +153,31 @@ pub(super) fn create_v3_database_with_legacy_code_review_selector_window(databas
 
             PRAGMA user_version = 3;
             ",
-    ) {
+    )
+    .execute(&mut connection)
+    .await
+    {
         panic!("raw v3 database should initialize: {error}");
     }
+    connection
+        .close()
+        .await
+        .expect("legacy fixture connection should close");
 }
 
-pub(super) fn create_v6_database_without_reset_credits(database_path: &Path) {
-    let connection = match Connection::open(database_path) {
+pub(super) async fn create_v6_database_without_reset_credits(database_path: &Path) {
+    let mut connection = match SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    {
         Ok(connection) => connection,
         Err(error) => panic!("raw v6 database should open: {error}"),
     };
-    if let Err(error) = connection.execute_batch(
+    if let Err(error) = sqlx::raw_sql(
         "
             CREATE TABLE accounts (
                 account_id TEXT PRIMARY KEY NOT NULL,
@@ -212,7 +250,88 @@ pub(super) fn create_v6_database_without_reset_credits(database_path: &Path) {
 
             PRAGMA user_version = 6;
             ",
-    ) {
+    )
+    .execute(&mut connection)
+    .await
+    {
         panic!("raw v6 database should initialize: {error}");
     }
+    connection
+        .close()
+        .await
+        .expect("legacy fixture connection should close");
+}
+
+pub(super) async fn assert_unsupported_quota_fixture_is_preserved(
+    database_path: &Path,
+    expected_version: i64,
+    expected_rows: &[(&str, &[&str])],
+) {
+    let options = SqliteConnectOptions::new()
+        .filename(database_path)
+        .read_only(true)
+        .pragma("query_only", "ON");
+    let mut before = SqliteConnection::connect_with(&options)
+        .await
+        .expect("historical fixture should open read-only");
+    let schema_query =
+        "SELECT name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name";
+    let expected_schema: Vec<(String, Option<String>)> = sqlx::query_as(schema_query)
+        .fetch_all(&mut before)
+        .await
+        .expect("historical schema should read before refusal");
+    for (query, expected) in expected_rows {
+        let actual: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(*query))
+            .fetch_all(&mut before)
+            .await
+            .expect("original historical rows should read before refusal");
+        assert_eq!(
+            actual, *expected,
+            "historical fixture must reach its intended input"
+        );
+    }
+    before
+        .close()
+        .await
+        .expect("historical inspection should close");
+
+    assert_eq!(
+        crate::sqlite::AsyncSqliteStateStore::open(database_path)
+            .await
+            .expect_err("unsupported historical version must be refused"),
+        crate::sqlite::StateStoreError::UnsupportedSchemaVersion {
+            version: expected_version,
+        },
+    );
+
+    let mut after = SqliteConnection::connect_with(&options)
+        .await
+        .expect("refused fixture should reopen read-only");
+    let actual_schema: Vec<(String, Option<String>)> = sqlx::query_as(schema_query)
+        .fetch_all(&mut after)
+        .await
+        .expect("historical schema should survive refusal");
+    assert_eq!(actual_schema, expected_schema);
+    let version: i64 = sqlx::query_scalar("PRAGMA user_version")
+        .fetch_one(&mut after)
+        .await
+        .expect("historical version should remain readable");
+    assert_eq!(version, expected_version);
+    let history_tables: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE name = '_sqlx_migrations'")
+            .fetch_one(&mut after)
+            .await
+            .expect("migration history absence should query");
+    assert_eq!(history_tables, 0);
+    for (query, expected) in expected_rows {
+        let actual: Vec<String> = sqlx::query_scalar(sqlx::AssertSqlSafe(*query))
+            .fetch_all(&mut after)
+            .await
+            .expect("historical rows should survive refusal");
+        assert_eq!(actual, *expected, "unsupported input must remain intact");
+    }
+    after
+        .close()
+        .await
+        .expect("refused inspection should close");
 }

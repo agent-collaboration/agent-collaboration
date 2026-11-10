@@ -1,10 +1,10 @@
 use super::*;
 
-#[test]
-fn credential_mutation_invalidates_response_backed_alias_family_atomically() {
+#[tokio::test]
+async fn credential_mutation_invalidates_response_backed_alias_family_atomically() {
     let temp_dir = TestTempDir::new("credential_mutation_invalidates_aliases");
     let database_path = temp_dir.path().join("state.sqlite");
-    let store = match SqliteStateStore::open(&database_path) {
+    let store = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(store) => store,
         Err(error) => panic!("state store should open and migrate: {error}"),
     };
@@ -15,7 +15,7 @@ fn credential_mutation_invalidates_response_backed_alias_family_atomically() {
         "mutation",
         AccountStatus::Disabled,
     );
-    if let Err(error) = AccountStateRepository::upsert_account(&store, &account) {
+    if let Err(error) = store.upsert_account(&account).await {
         panic!("account should persist: {error}");
     }
     for route_band in [
@@ -31,7 +31,7 @@ fn credential_mutation_invalidates_response_backed_alias_family_atomically() {
                 .with_route_band(route_band, 88)
                 .with_reset_unix_seconds(4_000)
                 .with_stale_penalty(false);
-        if let Err(error) = QuotaSnapshotRepository::upsert_snapshot(&store, &snapshot) {
+        if let Err(error) = store.upsert_quota_snapshot(&snapshot).await {
             panic!("{route_band} snapshot should persist: {error}");
         }
     }
@@ -45,21 +45,25 @@ fn credential_mutation_invalidates_response_backed_alias_family_atomically() {
     .with_reset_unix_seconds(999_999)
     .with_effective(true)
     .with_observed_unix_seconds(12_345);
-    if let Err(error) =
-        SelectorQuotaRepository::upsert_selector_window(&store, &legacy_code_review_selector_window)
+    if let Err(error) = store
+        .upsert_selector_quota_window(&legacy_code_review_selector_window)
+        .await
     {
         panic!("legacy code_review selector window should persist: {error}");
     }
 
-    if let Err(error) = store.activate_account_credential_generation_and_invalidate_quota(
-        &account_id,
-        7,
-        AccountStatus::Enabled,
-    ) {
+    if let Err(error) = store
+        .activate_account_credential_generation_and_invalidate_quota(
+            &account_id,
+            7,
+            AccountStatus::Enabled,
+        )
+        .await
+    {
         panic!("credential mutation should activate and invalidate atomically: {error}");
     }
 
-    let loaded_account = match AccountStateRepository::load_account(&store, &account_id) {
+    let loaded_account = match store.load_account(&account_id).await {
         Ok(Some(account)) => account,
         Ok(None) => panic!("account should still exist"),
         Err(error) => panic!("account should load: {error}"),
@@ -72,11 +76,10 @@ fn credential_mutation_invalidates_response_backed_alias_family_atomically() {
         "memories_trace_summarize",
         "responses_compact",
     ] {
-        let snapshot = match QuotaSnapshotRepository::load_snapshot_for_route_band(
-            &store,
-            &account_id,
-            route_band,
-        ) {
+        let snapshot = match store
+            .load_quota_snapshot_for_route_band(&account_id, route_band)
+            .await
+        {
             Ok(Some(snapshot)) => snapshot,
             Ok(None) => panic!("{route_band} stale marker should exist"),
             Err(error) => panic!("{route_band} stale marker should load: {error}"),
@@ -85,9 +88,10 @@ fn credential_mutation_invalidates_response_backed_alias_family_atomically() {
         assert_eq!(snapshot.observed_unix_seconds(), 0);
         assert_eq!(snapshot.reset_unix_seconds(), None);
         assert!(snapshot.stale_penalty());
-        let selector_inputs = match SelectorQuotaRepository::selector_inputs_for_route_band(
-            &store, route_band, 3_000,
-        ) {
+        let selector_inputs = match store
+            .selector_inputs_for_route_band(route_band, 3_000)
+            .await
+        {
             Ok(inputs) => inputs,
             Err(error) => {
                 panic!("{route_band} selector input should load after mutation: {error}")
@@ -101,34 +105,36 @@ fn credential_mutation_invalidates_response_backed_alias_family_atomically() {
         assert_eq!(windows[0].observed_unix_seconds(), 0);
         assert!(windows[0].effective());
     }
-    let code_review_snapshot = match QuotaSnapshotRepository::load_snapshot_for_route_band(
-        &store,
-        &account_id,
-        "code_review",
-    ) {
+    let code_review_snapshot = match store
+        .load_quota_snapshot_for_route_band(&account_id, "code_review")
+        .await
+    {
         Ok(Some(snapshot)) => snapshot,
         Ok(None) => panic!("code_review stale marker should exist"),
         Err(error) => panic!("code_review stale marker should load: {error}"),
     };
     assert_eq!(code_review_snapshot.remaining_headroom(), 0);
     assert!(code_review_snapshot.stale_penalty());
-    let code_review_inputs =
-        match SelectorQuotaRepository::selector_inputs_for_route_band(&store, "code_review", 3_000)
-        {
-            Ok(inputs) => inputs,
-            Err(error) => panic!("code_review selector input should load: {error}"),
-        };
+    let code_review_inputs = match store
+        .selector_inputs_for_route_band("code_review", 3_000)
+        .await
+    {
+        Ok(inputs) => inputs,
+        Err(error) => panic!("code_review selector input should load: {error}"),
+    };
     assert_eq!(code_review_inputs.len(), 1);
     assert!(code_review_inputs[0].windows().is_empty());
+
+    store.close().await.expect("state store should close");
 }
 
 #[tokio::test]
 async fn async_credential_generation_activation_fails_when_account_was_disabled() {
     let temp_dir = TestTempDir::new("async_credential_activation_disabled_race");
     let database_path = temp_dir.path().join("state.sqlite");
-    let sync_store = match SqliteStateStore::open(&database_path) {
+    let seed_store = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(store) => store,
-        Err(error) => panic!("sync state store should open and migrate: {error}"),
+        Err(error) => panic!("seed state store should open and migrate: {error}"),
     };
     let account_id = account_id("acct_async_activation_disabled_race");
     let enabled_account = AccountRecord::new(
@@ -138,10 +144,10 @@ async fn async_credential_generation_activation_fails_when_account_was_disabled(
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    if let Err(error) = AccountStateRepository::upsert_account(&sync_store, &enabled_account) {
+    if let Err(error) = seed_store.upsert_account(&enabled_account).await {
         panic!("enabled account should persist: {error}");
     }
-    drop(sync_store);
+    seed_store.close().await.expect("seed store should close");
     let async_store = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(store) => store,
         Err(error) => panic!("async state store should open and migrate: {error}"),
@@ -183,15 +189,17 @@ async fn async_credential_generation_activation_fails_when_account_was_disabled(
         .unwrap_or_else(|| panic!("account should still exist"));
     assert_eq!(loaded_account.status(), AccountStatus::Disabled);
     assert_eq!(loaded_account.active_credential_generation(), Some(1));
+
+    async_store.close().await.expect("state store should close");
 }
 
 #[tokio::test]
 async fn provider_rejection_disables_only_current_credential_generation() {
     let temp_dir = TestTempDir::new("provider_rejection_generation_guard");
     let database_path = temp_dir.path().join("state.sqlite");
-    let sync_store = match SqliteStateStore::open(&database_path) {
+    let seed_store = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(store) => store,
-        Err(error) => panic!("sync state store should open and migrate: {error}"),
+        Err(error) => panic!("seed state store should open and migrate: {error}"),
     };
     let account_id = account_id("acct_provider_rejection_generation_guard");
     let account = AccountRecord::new(
@@ -201,18 +209,21 @@ async fn provider_rejection_disables_only_current_credential_generation() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    if let Err(error) = AccountStateRepository::upsert_account(&sync_store, &account) {
+    if let Err(error) = seed_store.upsert_account(&account).await {
         panic!("account should persist: {error}");
     }
     let async_store = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(store) => store,
         Err(error) => panic!("async state store should open and migrate: {error}"),
     };
-    if let Err(error) = sync_store.activate_account_credential_generation_and_invalidate_quota(
-        &account_id,
-        2,
-        AccountStatus::Enabled,
-    ) {
+    if let Err(error) = seed_store
+        .activate_account_credential_generation_and_invalidate_quota(
+            &account_id,
+            2,
+            AccountStatus::Enabled,
+        )
+        .await
+    {
         panic!("new credential generation should activate: {error}");
     }
 
@@ -232,7 +243,7 @@ async fn provider_rejection_disables_only_current_credential_generation() {
         Err(error) => panic!("current provider rejection should disable account: {error}"),
     };
     assert!(current_generation_disabled);
-    let disabled_account = match AccountStateRepository::load_account(&sync_store, &account_id) {
+    let disabled_account = match seed_store.load_account(&account_id).await {
         Ok(Some(account)) => account,
         Ok(None) => panic!("disabled account should still exist"),
         Err(error) => panic!("disabled account should load: {error}"),
@@ -240,27 +251,33 @@ async fn provider_rejection_disables_only_current_credential_generation() {
     assert_eq!(disabled_account.status(), AccountStatus::Disabled);
     assert_eq!(disabled_account.active_credential_generation(), Some(2));
 
-    if let Err(error) = sync_store.activate_account_credential_generation_and_invalidate_quota(
-        &account_id,
-        3,
-        AccountStatus::Enabled,
-    ) {
+    if let Err(error) = seed_store
+        .activate_account_credential_generation_and_invalidate_quota(
+            &account_id,
+            3,
+            AccountStatus::Enabled,
+        )
+        .await
+    {
         panic!("new login generation should restore eligibility: {error}");
     }
-    let restored_account = match AccountStateRepository::load_account(&sync_store, &account_id) {
+    let restored_account = match seed_store.load_account(&account_id).await {
         Ok(Some(account)) => account,
         Ok(None) => panic!("restored account should still exist"),
         Err(error) => panic!("restored account should load: {error}"),
     };
     assert_eq!(restored_account.status(), AccountStatus::Enabled);
     assert_eq!(restored_account.active_credential_generation(), Some(3));
+
+    seed_store.close().await.expect("state store should close");
+    async_store.close().await.expect("state store should close");
 }
 
-#[test]
-fn credential_mutation_invalidates_selector_windows_atomically() {
+#[tokio::test]
+async fn credential_mutation_invalidates_selector_windows_atomically() {
     let temp_dir = TestTempDir::new("credential_mutation_invalidates_selector_windows");
     let database_path = temp_dir.path().join("state.sqlite");
-    let store = match SqliteStateStore::open(&database_path) {
+    let store = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(store) => store,
         Err(error) => panic!("state store should open and migrate: {error}"),
     };
@@ -271,7 +288,7 @@ fn credential_mutation_invalidates_selector_windows_atomically() {
         "selector-mutation",
         AccountStatus::Disabled,
     );
-    if let Err(error) = AccountStateRepository::upsert_account(&store, &account) {
+    if let Err(error) = store.upsert_account(&account).await {
         panic!("account should persist: {error}");
     }
     let selector_window = PersistedSelectorQuotaWindow::new(
@@ -283,7 +300,7 @@ fn credential_mutation_invalidates_selector_windows_atomically() {
     .with_remaining_headroom(50)
     .with_effective(true)
     .with_observed_unix_seconds(9_000);
-    if let Err(error) = SelectorQuotaRepository::upsert_selector_window(&store, &selector_window) {
+    if let Err(error) = store.upsert_selector_quota_window(&selector_window).await {
         panic!("selector window should persist: {error}");
     }
     let weekly_selector_window = PersistedSelectorQuotaWindow::new(
@@ -296,25 +313,31 @@ fn credential_mutation_invalidates_selector_windows_atomically() {
     .with_reset_unix_seconds(700_000)
     .with_effective(true)
     .with_observed_unix_seconds(9_000);
-    if let Err(error) =
-        SelectorQuotaRepository::upsert_selector_window(&store, &weekly_selector_window)
+    if let Err(error) = store
+        .upsert_selector_quota_window(&weekly_selector_window)
+        .await
     {
         panic!("weekly selector window should persist: {error}");
     }
 
-    if let Err(error) = store.activate_account_credential_generation_and_invalidate_quota(
-        &account_id,
-        2,
-        AccountStatus::Enabled,
-    ) {
+    if let Err(error) = store
+        .activate_account_credential_generation_and_invalidate_quota(
+            &account_id,
+            2,
+            AccountStatus::Enabled,
+        )
+        .await
+    {
         panic!("credential mutation should invalidate selector windows: {error}");
     }
 
-    let selector_inputs =
-        match SelectorQuotaRepository::selector_inputs_for_route_band(&store, "responses", 9_000) {
-            Ok(inputs) => inputs,
-            Err(error) => panic!("selector input should load: {error}"),
-        };
+    let selector_inputs = match store
+        .selector_inputs_for_route_band("responses", 9_000)
+        .await
+    {
+        Ok(inputs) => inputs,
+        Err(error) => panic!("selector input should load: {error}"),
+    };
     assert_eq!(selector_inputs.len(), 1);
     let windows = selector_inputs[0].windows();
     assert_eq!(windows.len(), 1);
@@ -324,4 +347,6 @@ fn credential_mutation_invalidates_selector_windows_atomically() {
     assert_eq!(windows[0].reset_unix_seconds(), None);
     assert_eq!(windows[0].observed_unix_seconds(), 0);
     assert!(windows[0].effective());
+
+    store.close().await.expect("state store should close");
 }
