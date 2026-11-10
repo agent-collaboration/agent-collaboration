@@ -11,7 +11,7 @@ async fn subscribe(fixture: &BoardFixture, reader: &Value, project: &str) -> Fix
             fields(
                 header(reader),
                 json!({"scope":{"kind":"project","projectId":project},
-                "policy":{"mode":"poll","quietSeconds":0,"capSeconds":0,"lifetimeSeconds":86400}}),
+                "policy":{"mode":"poll","quietSeconds":0,"capSeconds":900,"lifetimeSeconds":86400}}),
             )?,
         )
         .await?;

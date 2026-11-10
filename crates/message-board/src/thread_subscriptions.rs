@@ -14,11 +14,18 @@ use std::borrow::Cow;
 use uuid::{Uuid, Variant};
 
 pub const DEFAULT_SUBSCRIPTION_QUIET_SECONDS: u64 = 2 * 60;
-pub const DEFAULT_SUBSCRIPTION_CAP_SECONDS: u64 = 10 * 60;
+/// A new subscription batches for at most 15 minutes unless the caller sets its cap.
+pub const DEFAULT_SUBSCRIPTION_CAP_SECONDS: u64 = 15 * 60;
 pub const DEFAULT_SUBSCRIPTION_LIFETIME_SECONDS: u64 = 24 * 60 * 60;
 pub const MIN_SUBSCRIPTION_QUIET_SECONDS: u64 = 0;
 pub const MAX_SUBSCRIPTION_QUIET_SECONDS: u64 = 30 * 60;
-pub const MAX_SUBSCRIPTION_CAP_SECONDS: u64 = 60 * 60;
+/// The range for a cap a caller sets: 15 to 55 minutes, so a batch always lands inside
+/// the one-hour prompt cache.
+pub const MIN_REQUESTED_SUBSCRIPTION_CAP_SECONDS: u64 = 15 * 60;
+pub const MAX_REQUESTED_SUBSCRIPTION_CAP_SECONDS: u64 = 55 * 60;
+/// The largest cap a stored subscription may carry. Caps set before the 15 to 55 minute
+/// range keep loading and are kept until a caller sets a new one.
+pub const MAX_STORED_SUBSCRIPTION_CAP_SECONDS: u64 = 60 * 60;
 pub const MIN_SUBSCRIPTION_LIFETIME_SECONDS: u64 = 10 * 60;
 pub const MAX_SUBSCRIPTION_LIFETIME_SECONDS: u64 = 7 * 24 * 60 * 60;
 /// Maximum number of per-root locators selected into one subscription notice.
@@ -142,6 +149,9 @@ impl TryFrom<RawBatchTiming> for BatchTiming {
 }
 
 impl BatchTiming {
+    /// A timing a stored subscription may carry: quiet up to 30 minutes, and a cap of at
+    /// least the quiet period and at most an hour. A cap a caller sets must also pass
+    /// [`Self::check_requested_cap`].
     pub fn new(quiet_seconds: u64, cap_seconds: u64) -> Result<Self, InvalidSubscriptionField> {
         if !(MIN_SUBSCRIPTION_QUIET_SECONDS..=MAX_SUBSCRIPTION_QUIET_SECONDS)
             .contains(&quiet_seconds)
@@ -151,7 +161,7 @@ impl BatchTiming {
                 "must be between 0 and 1800 seconds",
             ));
         }
-        if !(quiet_seconds..=MAX_SUBSCRIPTION_CAP_SECONDS).contains(&cap_seconds) {
+        if !(quiet_seconds..=MAX_STORED_SUBSCRIPTION_CAP_SECONDS).contains(&cap_seconds) {
             return Err(invalid_subscription_field(
                 "capSeconds",
                 "must be at least quietSeconds and at most 3600 seconds",
@@ -161,6 +171,20 @@ impl BatchTiming {
             quiet_seconds,
             cap_seconds,
         })
+    }
+
+    /// Checks a cap a caller sets on a new or existing subscription: 15 to 55 minutes.
+    pub fn check_requested_cap(cap_seconds: u64) -> Result<(), InvalidSubscriptionField> {
+        if (MIN_REQUESTED_SUBSCRIPTION_CAP_SECONDS..=MAX_REQUESTED_SUBSCRIPTION_CAP_SECONDS)
+            .contains(&cap_seconds)
+        {
+            Ok(())
+        } else {
+            Err(invalid_subscription_field(
+                "capSeconds",
+                "must be between 900 and 3300 seconds (15 to 55 minutes)",
+            ))
+        }
     }
 
     #[must_use]
@@ -333,11 +357,17 @@ impl SubscriptionPolicy {
         }
     }
 
+    /// Applies a caller's patch. A cap the caller sets must be 15 to 55 minutes; a cap the
+    /// patch leaves out keeps its stored value, so a renewal never refuses a cap set
+    /// before that range. Quiet must still be at most the cap.
     pub fn apply_patch(
         &self,
         reader: &Identity,
         patch: &SubscriptionPolicyPatch,
     ) -> Result<Self, InvalidSubscriptionField> {
+        if let Some(cap_seconds) = patch.timing.cap_seconds {
+            BatchTiming::check_requested_cap(cap_seconds)?;
+        }
         let timing = BatchTiming::new(
             patch
                 .timing

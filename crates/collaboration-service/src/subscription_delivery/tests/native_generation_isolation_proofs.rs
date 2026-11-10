@@ -97,7 +97,7 @@ async fn local_generation_replacement_reaches_native_delivery_while_another_read
             SubscriptionMode::Deliver,
             WhenIdle::Hold,
             1,
-            2,
+            900,
         )
         .await;
     publisher
@@ -501,7 +501,7 @@ pub(super) async fn arrange_remote_generation_cancel(
                     when_idle: Some(WhenIdle::Hold),
                     timing: SubscriptionTimingPatch {
                         quiet_seconds: Some(1),
-                        cap_seconds: Some(2),
+                        cap_seconds: Some(900),
                     },
                     lifetime_seconds: None,
                 },

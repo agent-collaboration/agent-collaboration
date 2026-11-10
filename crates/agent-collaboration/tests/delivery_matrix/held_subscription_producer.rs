@@ -119,8 +119,9 @@ pub(super) async fn board_two_thread_subscription_push(
                     mode: Some(SubscriptionMode::Deliver),
                     when_idle: Some(WhenIdle::Hold),
                     timing: SubscriptionTimingPatch {
-                        quiet_seconds: Some(1),
-                        cap_seconds: Some(10),
+                        // No quiet period: the post itself makes the batch due.
+                        quiet_seconds: Some(0),
+                        cap_seconds: Some(900),
                     },
                     ..SubscriptionPolicyPatch::default()
                 },
