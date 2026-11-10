@@ -1,8 +1,9 @@
 // The migration Worker's four owner calls as PD7 runs them (T2): what each
 // sends and what counts as success. Pure: the transport is injected.
 //
-// - inventory: POST with the Mac-file body; success is no stop and nothing
-//   written. Its answer holds the only copy of the retiring classes.
+// - inventory: POST with the Mac-file body; `inventory` or `alreadyMigrated`
+//   succeeds with no stop and nothing written. Its answer holds the only copy
+//   of the retiring classes.
 // - migrate: POST with the facts plus the run time and candidate digest the
 //   Rust decode gate passed (migrateBody); success is `migrated`, or
 //   `alreadyMigrated` on a rerun. A `stopped` answer wrote nothing.
@@ -47,8 +48,10 @@ export function judge(
   };
   switch (step) {
     case "inventory":
-      if (status !== 200 || body.kind !== "inventory")
+      if (status !== 200 || (body.kind !== "inventory" && body.kind !== "alreadyMigrated"))
         return { success: false, reason: `inventory answered ${status} ${String(body.kind)}` };
+      if (body.kind === "alreadyMigrated" && body.stops !== undefined && !Array.isArray(body.stops))
+        return { success: false, reason: "migrated inventory returned invalid stops" };
       if ((body.stops ?? []).length > 0)
         return { success: false, reason: `${body.stops?.length} stops; migrate must not run` };
       if (body.rowsWritten !== 0)

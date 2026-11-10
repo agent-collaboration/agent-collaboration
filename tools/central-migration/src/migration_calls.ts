@@ -33,6 +33,7 @@ import {
   OBJECT_REGISTRY_PROJECTS_URL,
   OBJECT_REHEARSE_URL,
   OBJECT_REVERT_URL,
+  OBJECT_SNAPSHOT_URL,
   type ApplyReply,
   type ObjectDump,
   type ReadReply,
@@ -40,6 +41,7 @@ import {
   type RevertReply,
   type Statement,
 } from "./storage_objects.ts";
+import type { SnapshotCursor, SnapshotPage, SnapshotQuery } from "./storage_snapshot.ts";
 
 export interface StorageNamespaces {
   readonly LEASE_REGISTRY: DurableObjectNamespace;
@@ -56,6 +58,7 @@ export interface StorageNamespaces {
 export class StorageObjects {
   readonly namespaces: StorageNamespaces;
   rowsWritten = 0;
+  readonly readQueries: (SnapshotQuery & { readonly object: string })[] = [];
   constructor(namespaces: StorageNamespaces) {
     this.namespaces = namespaces;
   }
@@ -70,8 +73,26 @@ export class StorageObjects {
       .fetch(url, body === undefined ? undefined : { method: "POST", body: stringifyExact(body) });
     if (!response.ok)
       throw new Error(`${name}: ${url} answered ${response.status}: ${await response.text()}`);
-    const reply = parseExact(await response.text()) as T & { rowsWritten?: number };
+    const reply = parseExact(await response.text()) as T & {
+      rowsWritten?: number;
+      queries?: SnapshotQuery[];
+    };
+    if ([OBJECT_READ_URL, OBJECT_REGISTRY_PROJECTS_URL, OBJECT_SNAPSHOT_URL].includes(url)) {
+      if (
+        reply.rowsWritten !== 0 ||
+        !Array.isArray(reply.queries) ||
+        reply.queries.length === 0 ||
+        reply.queries.some(
+          (query) =>
+            typeof query.statement !== "string" ||
+            !/^\s*SELECT\b/i.test(query.statement) ||
+            query.rowsWritten !== 0,
+        )
+      )
+        throw new Error(`${name}: read response has missing or inconsistent write telemetry`);
+    }
     this.rowsWritten += reply.rowsWritten ?? 0;
+    for (const query of reply.queries ?? []) this.readQueries.push({ object: name, ...query });
     return reply;
   }
   registry(tables: readonly string[]) {
@@ -91,11 +112,14 @@ export class StorageObjects {
     return this.call<ObjectDump>(namespace, name, OBJECT_DUMP_URL);
   }
   projects() {
-    return this.call<string[]>(
+    return this.call<{ projects: string[]; queries: SnapshotQuery[]; rowsWritten: number }>(
       this.namespaces.LEASE_REGISTRY,
       "registry",
       OBJECT_REGISTRY_PROJECTS_URL,
-    );
+    ).then((reply) => reply.projects);
+  }
+  snapshot(namespace: DurableObjectNamespace, name: string, cursor: SnapshotCursor | null) {
+    return this.call<SnapshotPage>(namespace, name, OBJECT_SNAPSHOT_URL, cursor);
   }
   applyFleet(statements: readonly Statement[]) {
     return this.call<ApplyReply>(this.namespaces.FLEET, "fleet", OBJECT_APPLY_URL, {

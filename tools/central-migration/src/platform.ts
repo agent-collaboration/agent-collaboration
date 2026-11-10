@@ -7,6 +7,7 @@ export type SqlRow = Record<string, SqlValue>;
 
 export interface SqlCursor<Row extends SqlRow = SqlRow> extends Iterable<Row> {
   toArray(): Row[];
+  readonly rowsWritten?: number;
 }
 
 export interface SqlStorage {

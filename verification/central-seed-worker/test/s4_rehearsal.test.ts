@@ -168,6 +168,15 @@ test("S4 includes acfx, sqlitex and their dependents, excludes platform tables, 
           ],
         },
       ]);
+      const rawPage = await call("/admin/v1/staging-seed/s4/snapshot", {
+        ...object,
+        payload: null,
+      });
+      assert.equal(rawPage.status, 200);
+      assert.deepEqual(
+        Object.keys(rawPage.body as object).sort(),
+        ["schema", "table", "columns", "rows", "next", "rowsWritten"].sort(),
+      );
       const image = (await snapshotCohort(call, [object]))[cohortKey(object)];
       assert.ok(image !== undefined);
       assert.deepEqual(image.schema.map((row) => row.name).sort(), [

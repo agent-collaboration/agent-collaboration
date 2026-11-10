@@ -3,6 +3,7 @@
 // four owner-authenticated admin calls: inventory (read-only), migrate, verify
 // and revert. Every other request, including Routers' /v1/session, is refused
 // while it is deployed. Deleted after production (R11).
+// S1 alone also exposes a read-only storage snapshot for staging verification.
 
 import { parseExact, stringifyExact } from "./exact_json.ts";
 import { parseMacFiles, parseMigrateRequest } from "./mac_file_evidence.ts";
@@ -18,6 +19,11 @@ import {
 } from "./migration_calls.ts";
 import { accessPolicy, checkOwner, type AccessSettings } from "./owner_access.ts";
 import { Interrupted, storageObjectsFor, type FaultEnv } from "./fault_plan.ts";
+import {
+  STAGING_SNAPSHOT_PATH,
+  STAGING_SNAPSHOT_WORKER,
+  stagingSnapshot,
+} from "./staging_snapshot.ts";
 
 export {
   ConnectionObject,
@@ -70,7 +76,11 @@ async function migrateRequestOf(request: Request) {
 
 export default {
   async fetch(request: Request, env: MigrationEnv): Promise<Response> {
-    const route = ROUTES[new URL(request.url).pathname];
+    const path = new URL(request.url).pathname;
+    const route =
+      path === STAGING_SNAPSHOT_PATH && env.MIGRATION_WORKER_NAME === STAGING_SNAPSHOT_WORKER
+        ? { methods: ["POST"], call: "staging-snapshot" }
+        : ROUTES[path];
     if (route === undefined) return json({ refused: "central is being migrated" }, 503);
     let policy;
     try {
@@ -113,6 +123,15 @@ async function call(
   context: CallContext,
 ): Promise<Response> {
   switch (name) {
+    case "staging-snapshot": {
+      let body: unknown;
+      try {
+        body = parseExact(await request.text());
+      } catch {
+        return json({ refused: "body", reason: "not JSON" }, 400);
+      }
+      return answer(await stagingSnapshot(body, objects));
+    }
     case "inventory": {
       if (request.method === "GET") return answer(await inventory(objects, context, null));
       const macFiles = await macFilesOf(request);

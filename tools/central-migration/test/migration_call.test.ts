@@ -22,7 +22,7 @@ const through =
     return { status: reply.status, text: stringifyExact(reply.body) };
   };
 
-test("PD7's sequence through the caller: inventory, migrate, verify, a rerun, then revert", async () => {
+test("PD7's sequence through the caller: inventory, migrate, verify, a rerun, migrated inventory, then revert", async () => {
   await withProduction(
     () => {},
     async (run) => {
@@ -41,20 +41,32 @@ test("PD7's sequence through the caller: inventory, migrate, verify, a rerun, th
       const migrate = await callStep("migrate", transport, passed, parseExact);
       const verify = await callStep("verify", transport, undefined, parseExact);
       const rerun = await callStep("migrate", transport, passed, parseExact);
+      const migratedInventory = await callStep("inventory", transport, body, parseExact);
       const revert = await callStep("revert", transport, undefined, parseExact);
 
       // Assert
+      assert.equal(migratedInventory.status, 200);
+      assert.ok(typeof migratedInventory.answer === "object" && migratedInventory.answer !== null);
+      assert.equal(
+        "kind" in migratedInventory.answer ? migratedInventory.answer.kind : undefined,
+        "alreadyMigrated",
+      );
+      assert.equal(
+        "rowsWritten" in migratedInventory.answer
+          ? migratedInventory.answer.rowsWritten
+          : undefined,
+        0,
+      );
       assert.deepEqual(
-        [inventory, migrate, verify, rerun, revert].map(({ step, success, reason }) => [
-          step,
-          success,
-          reason,
-        ]),
+        [inventory, migrate, verify, rerun, migratedInventory, revert].map(
+          ({ step, success, reason }) => [step, success, reason],
+        ),
         [
           ["inventory", true, "no stops, nothing written"],
           ["migrate", true, "migrated"],
           ["verify", true, "every check passed"],
           ["migrate", true, "alreadyMigrated"],
+          ["inventory", true, "no stops, nothing written"],
           ["revert", true, "reverted"],
         ],
       );
@@ -86,6 +98,27 @@ test("each step's success rule", () => {
   assert.equal(judge("verify", 409, { kind: "verified", ok: false }).success, false);
   assert.equal(judge("revert", 409, { kind: "notMigrated" }).success, false);
   assert.equal(judge("migrate", 200, { kind: "alreadyMigrated" }).success, true);
+});
+
+test("migrated inventory requires HTTP200, explicit zero writes and no stops", () => {
+  for (const [status, answer, success] of [
+    [200, { kind: "inventory", stops: [], rowsWritten: 0 }, true],
+    [200, { kind: "alreadyMigrated", rowsWritten: 0 }, true],
+    [200, { kind: "alreadyMigrated", stops: [], rowsWritten: 0 }, true],
+    [200, { kind: "alreadyMigrated" }, false],
+    [200, { kind: "alreadyMigrated", rowsWritten: 1 }, false],
+    [200, { kind: "alreadyMigrated", rowsWritten: "0" }, false],
+    [200, { kind: "alreadyMigrated", rowsWritten: null }, false],
+    [200, { kind: "alreadyMigrated", stops: ["refused"], rowsWritten: 0 }, false],
+    [200, { kind: "alreadyMigrated", stops: {}, rowsWritten: 0 }, false],
+    [200, { kind: "alreadyMigrated", stops: null, rowsWritten: 0 }, false],
+    [200, { kind: "stopped", stops: ["refused"], rowsWritten: 0 }, false],
+    [200, { kind: "unknown", rowsWritten: 0 }, false],
+    [200, { rowsWritten: 0 }, false],
+    [409, { kind: "alreadyMigrated", rowsWritten: 0 }, false],
+  ] as const) {
+    assert.equal(judge("inventory", status, answer).success, success);
+  }
 });
 
 test("a step that needs a body refuses to call without it, and migrate's body needs the gate's pass", async () => {

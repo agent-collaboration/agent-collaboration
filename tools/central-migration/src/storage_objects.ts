@@ -9,6 +9,12 @@
 import { exactInteger, stringifyExact } from "./exact_json.ts";
 import { readObjectInventory, readRegistryProjects } from "./object_inventory.ts";
 import type { DurableObjectState, SqlStorage, SqlValue } from "./platform.ts";
+import {
+  parseSnapshotCursor,
+  readSnapshotRows,
+  snapshotPage,
+  type SnapshotQuery,
+} from "./storage_snapshot.ts";
 
 /** Internal object routes, under a host no client can reach. */
 const INTERNAL = "https://central-migration.internal";
@@ -19,6 +25,7 @@ export const OBJECT_APPLY_URL = `${INTERNAL}/apply`;
 export const OBJECT_REVERT_URL = `${INTERNAL}/revert`;
 export const OBJECT_DUMP_URL = `${INTERNAL}/dump`;
 export const OBJECT_REHEARSE_URL = `${INTERNAL}/rehearse`;
+export const OBJECT_SNAPSHOT_URL = `${INTERNAL}/snapshot`;
 
 /** Everything an object stores, read-only: the copy kept of a retiring class. */
 export interface ObjectDump {
@@ -49,6 +56,7 @@ export interface ReadReply {
   /** Rows of each requested table that exists, ordered by rowid. */
   readonly rows: Readonly<Record<string, readonly ReadRow[]>>;
   readonly rowsWritten: number;
+  readonly queries?: readonly SnapshotQuery[];
 }
 
 /** A value with its SQLite storage class, exactly: integers as decimal text, BLOBs as hex. */
@@ -122,13 +130,15 @@ const json = (value: unknown, status = 200): Response =>
 
 const quoted = (name: string): string => `"${name.replaceAll('"', '""')}"`;
 
-function tableNames(sql: SqlStorage): string[] {
-  return sql
-    .exec<{ name: string }>(
-      "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT GLOB '_cf_*' AND name NOT GLOB 'sqlite_*' ORDER BY name",
-    )
-    .toArray()
-    .map((row) => row.name);
+function tableNames(sql: SqlStorage, queries: SnapshotQuery[] = []): string[] {
+  return readSnapshotRows<{ name: string }>(
+    sql,
+    {
+      statement:
+        "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT GLOB '_cf_*' AND name NOT GLOB 'sqlite_*' ORDER BY name",
+    },
+    queries,
+  ).map((row) => row.name);
 }
 
 const hexOf = (value: ArrayBuffer): string =>
@@ -139,19 +149,26 @@ const hexOf = (value: ArrayBuffer): string =>
  * `SELECT *` hands an INTEGER over as a JavaScript number, which rounds above
  * 2^53, so integers are read as their decimal text instead.
  */
-function exactRows(sql: SqlStorage, table: string): { rows: ReadRow[]; rowsWritten: number } {
-  const columns = sql
-    .exec<{ name: string }>("SELECT name FROM pragma_table_info(?) ORDER BY cid", table)
-    .toArray()
-    .map((column) => column.name);
+function exactRows(sql: SqlStorage, table: string, queries: SnapshotQuery[]): ReadRow[] {
+  const columns = readSnapshotRows<{ name: string }>(
+    sql,
+    {
+      statement: "SELECT name FROM pragma_table_info(?) ORDER BY cid",
+      bindings: [table],
+    },
+    queries,
+  ).map((column) => column.name);
   const select = columns
     .map((column, index) => {
       const name = quoted(column);
       return `typeof(${name}) AS "t${index}", CASE typeof(${name}) WHEN 'integer' THEN CAST(${name} AS TEXT) ELSE ${name} END AS "v${index}"`;
     })
     .join(", ");
-  const cursor = sql.exec(`SELECT ${select} FROM ${quoted(table)} ORDER BY rowid`);
-  const rows = cursor.toArray().map((stored) => {
+  return readSnapshotRows(
+    sql,
+    { statement: `SELECT ${select} FROM ${quoted(table)} ORDER BY rowid` },
+    queries,
+  ).map((stored) => {
     const row: Record<string, ReadValue> = {};
     columns.forEach((column, index) => {
       const value = stored[`v${index}`];
@@ -164,7 +181,6 @@ function exactRows(sql: SqlStorage, table: string): { rows: ReadRow[]; rowsWritt
     });
     return row;
   });
-  return { rows, rowsWritten: (cursor as unknown as { rowsWritten: number }).rowsWritten };
 }
 
 class RolledBack extends Error {}
@@ -235,8 +251,15 @@ abstract class MigrationStorageObject {
     switch (`${request.method} ${request.url}`) {
       case `GET ${OBJECT_INVENTORY_URL}`:
         return json(readObjectInventory(sql));
-      case `GET ${OBJECT_REGISTRY_PROJECTS_URL}`:
-        return json(readRegistryProjects(sql));
+      case `GET ${OBJECT_REGISTRY_PROJECTS_URL}`: {
+        const queries: SnapshotQuery[] = [];
+        const projects = readRegistryProjects(sql, queries);
+        return json({
+          projects,
+          queries,
+          rowsWritten: queries.reduce((total, query) => total + query.rowsWritten, 0),
+        });
+      }
       case `POST ${OBJECT_READ_URL}`:
         return json(this.read(sql, (await request.json()) as ReadRequest));
       case `POST ${OBJECT_APPLY_URL}`:
@@ -245,6 +268,16 @@ abstract class MigrationStorageObject {
         return json(this.dump(sql));
       case `POST ${OBJECT_REHEARSE_URL}`:
         return json(this.rehearse(sql, (await request.json()) as RehearseRequest));
+      case `POST ${OBJECT_SNAPSHOT_URL}`: {
+        try {
+          return json(snapshotPage(sql, parseSnapshotCursor(await request.json())));
+        } catch (error) {
+          return json(
+            { refused: "snapshot", reason: error instanceof Error ? error.message : String(error) },
+            400,
+          );
+        }
+      }
       case `POST ${OBJECT_REVERT_URL}`:
         return json(this.revert(sql, (await request.json()) as RevertRequest));
       default:
@@ -253,31 +286,45 @@ abstract class MigrationStorageObject {
   }
 
   private read(sql: SqlStorage, request: ReadRequest): ReadReply {
-    const tables = tableNames(sql);
+    const queries: SnapshotQuery[] = [];
+    const tables = tableNames(sql, queries);
     const rows: Record<string, ReadRow[]> = {};
-    let rowsWritten = 0;
     for (const table of request.tables) {
       if (!tables.includes(table)) continue;
-      const read = exactRows(sql, table);
-      rows[table] = read.rows;
-      rowsWritten += read.rowsWritten;
+      rows[table] = exactRows(sql, table, queries);
     }
-    return { tables, rows, rowsWritten };
+    return {
+      tables,
+      rows,
+      queries,
+      rowsWritten: queries.reduce((total, query) => total + query.rowsWritten, 0),
+    };
   }
 
   private dump(sql: SqlStorage): ObjectDump {
-    const schemaCursor = sql.exec(
-      "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT GLOB '_cf_*' AND name NOT GLOB 'sqlite_*' AND tbl_name NOT GLOB '_cf_*' ORDER BY type, name",
+    const queries: SnapshotQuery[] = [];
+    const schema = readSnapshotRows<{
+      type: string;
+      name: string;
+      tbl_name: string;
+      sql: string | null;
+    }>(
+      sql,
+      {
+        statement:
+          "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT GLOB '_cf_*' AND name NOT GLOB 'sqlite_*' AND tbl_name NOT GLOB '_cf_*' ORDER BY type, name",
+      },
+      queries,
     );
-    const schema = schemaCursor.toArray() as ReadRow[];
-    let rowsWritten = (schemaCursor as unknown as { rowsWritten: number }).rowsWritten;
     const rows: Record<string, ReadRow[]> = {};
-    for (const table of tableNames(sql)) {
-      const read = exactRows(sql, table);
-      rows[table] = read.rows;
-      rowsWritten += read.rowsWritten;
+    for (const table of tableNames(sql, queries)) {
+      rows[table] = exactRows(sql, table, queries);
     }
-    return { schema, rows, rowsWritten };
+    return {
+      schema,
+      rows,
+      rowsWritten: queries.reduce((total, query) => total + query.rowsWritten, 0),
+    };
   }
 
   /** One storage transaction: every statement lands, or none does. */

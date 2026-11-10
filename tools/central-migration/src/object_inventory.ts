@@ -4,6 +4,7 @@
 // inventory can't write even by mistake (R14: the dry run writes nothing).
 
 import type { SqlRow, SqlStorage, SqlValue } from "./platform.ts";
+import { readSnapshotRows, type SnapshotQuery } from "./storage_snapshot.ts";
 
 export interface MigrationRecord {
   readonly corpus: string;
@@ -57,14 +58,19 @@ export function readObjectInventory(sql: SqlStorage): ObjectInventory {
 }
 
 /** The project ids the old registry knows: `_fleet_sync_databases.database` (LO lease 0001:1–4). */
-export function readRegistryProjects(sql: SqlStorage): readonly string[] {
-  const present = readOnly<{ count: number }>(
-    sql,
+export function readRegistryProjects(
+  sql: SqlStorage,
+  queries?: SnapshotQuery[],
+): readonly string[] {
+  const read = <Row extends SqlRow>(statement: string, ...bindings: SqlValue[]): Row[] =>
+    queries === undefined
+      ? readOnly<Row>(sql, statement, ...bindings)
+      : readSnapshotRows<Row>(sql, { statement, bindings }, queries);
+  const present = read<{ count: number }>(
     "SELECT count(*) AS count FROM sqlite_schema WHERE type = 'table' AND name = '_fleet_sync_databases'",
   );
   if ((present[0]?.count ?? 0) === 0) return [];
-  return readOnly<{ database: string }>(
-    sql,
+  return read<{ database: string }>(
     "SELECT database FROM _fleet_sync_databases ORDER BY database",
   ).map((row) => row.database);
 }

@@ -16,153 +16,33 @@
 
 import type { SqlStorage, SqlValue } from "./platform.ts";
 
-export const SNAPSHOT_PAGE_ROWS = 500;
+import {
+  readSnapshotSchema as schema,
+  quoteSqlIdentifier as quoted,
+  snapshotPage as readSnapshotPage,
+  type SnapshotPage as MeasuredSnapshotPage,
+  type SnapshotCursor,
+  type TypedCell,
+  type ObjectImage,
+} from "../../../tools/central-migration/src/storage_snapshot.ts";
+export {
+  SNAPSHOT_PAGE_ROWS,
+  type TypedCell,
+  type SchemaEntry,
+  type SnapshotRow,
+  type SnapshotCursor,
+  type ObjectImage,
+} from "../../../tools/central-migration/src/storage_snapshot.ts";
 
-export type TypedCell =
-  | { readonly kind: "null" }
-  | { readonly kind: "integer" | "real" | "text" | "blob"; readonly value: string };
-
-export interface SchemaEntry {
-  readonly type: string;
-  readonly name: string;
-  readonly tbl_name: string;
-  readonly sql: string | null;
-}
-
-export interface SnapshotRow {
-  /** Present for rowid tables, as decimal text. */
-  readonly rowid?: string;
-  readonly cells: readonly TypedCell[];
-}
-
-export interface SnapshotPage {
-  /** Only on the first page. */
-  readonly schema?: readonly SchemaEntry[];
-  readonly table: string | null;
-  readonly columns: readonly string[];
-  readonly rows: readonly SnapshotRow[];
-  /** Where the next page starts, or null after the last. */
-  readonly next: SnapshotCursor | null;
+/** S4's established public shape; the shared reader still validates every metric. */
+export type SnapshotPage = Omit<MeasuredSnapshotPage, "queries" | "rowsWritten"> & {
   readonly rowsWritten: 0;
-}
-
-export interface SnapshotCursor {
-  readonly table: string;
-  /** The last rowid (or row offset, for a table without rowid) the previous page returned. */
-  readonly after: string | null;
-}
-
-/** An object's full image: the concatenated snapshot pages. */
-export interface ObjectImage {
-  readonly schema: readonly SchemaEntry[];
-  readonly tables: Readonly<
-    Record<string, { readonly columns: readonly string[]; readonly rows: readonly SnapshotRow[] }>
-  >;
-}
-
-const quoted = (name: string) => `"${name.replaceAll('"', '""')}"`;
-const USER_OBJECTS =
-  "name NOT GLOB '_cf_*' AND name NOT GLOB 'sqlite_*' AND tbl_name NOT GLOB '_cf_*'";
-
-function schema(sql: SqlStorage): SchemaEntry[] {
-  return sql
-    .exec<{ type: string; name: string; tbl_name: string; sql: string | null }>(
-      `SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE ${USER_OBJECTS} ORDER BY rowid`,
-    )
-    .toArray()
-    .map(({ type, name, tbl_name, sql: text }) => ({ type, name, tbl_name, sql: text }));
-}
-
-const tables = (entries: readonly SchemaEntry[]) =>
-  entries
-    .filter((entry) => entry.type === "table")
-    .map((entry) => entry.name)
-    .sort();
-
-function columnsOf(sql: SqlStorage, table: string): string[] {
-  return sql
-    .exec<{ name: string }>(`SELECT name FROM pragma_table_info(?) ORDER BY cid`, table)
-    .toArray()
-    .map((row) => row.name);
-}
-
-function hasRowid(sql: SqlStorage, table: string): boolean {
-  try {
-    sql.exec(`SELECT rowid FROM ${quoted(table)} LIMIT 0`).toArray();
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-const cellSelect = (column: string, index: number) => {
-  const name = quoted(column);
-  return `typeof(${name}) AS "t${index}", CASE typeof(${name}) WHEN 'integer' THEN CAST(${name} AS TEXT) WHEN 'real' THEN printf('%!.17g', ${name}) WHEN 'blob' THEN lower(hex(${name})) ELSE ${name} END AS "v${index}"`;
 };
 
-function cellOf(kind: unknown, value: unknown): TypedCell {
-  switch (kind) {
-    case "null":
-      return { kind: "null" };
-    case "integer":
-    case "real":
-    case "text":
-    case "blob":
-      return { kind, value: String(value) };
-    default:
-      throw new Error(`unknown storage class ${String(kind)}`);
-  }
-}
-
-/** One page of the object's raw image. */
 export function snapshotPage(sql: SqlStorage, cursor: SnapshotCursor | null): SnapshotPage {
-  const entries = schema(sql);
-  const names = tables(entries);
-  const table = cursor?.table ?? names[0] ?? null;
-  const first = cursor === null ? { schema: entries } : {};
-  if (table === null)
-    return { ...first, table: null, columns: [], rows: [], next: null, rowsWritten: 0 };
-  if (!names.includes(table)) throw new Error(`no table ${table}`);
-  const columns = columnsOf(sql, table);
-  const select = columns.map(cellSelect).join(", ");
-  const rowid = hasRowid(sql, table);
-  const after = cursor?.after ?? null;
-  const rows = rowid
-    ? // A table's first page has no lower bound, so a row at the minimum rowid is
-      // read too; each later page starts strictly after the previous page's last.
-      // The text copy is aliased row_id: ORDER BY rowid must sort the integer.
-      (after === null
-        ? sql.exec(
-            `SELECT CAST(rowid AS TEXT) AS "row_id", ${select} FROM ${quoted(table)} ORDER BY rowid LIMIT ${SNAPSHOT_PAGE_ROWS}`,
-          )
-        : sql.exec(
-            `SELECT CAST(rowid AS TEXT) AS "row_id", ${select} FROM ${quoted(table)} WHERE rowid > CAST(? AS INTEGER) ORDER BY rowid LIMIT ${SNAPSHOT_PAGE_ROWS}`,
-            after,
-          )
-      ).toArray()
-    : sql
-        .exec(
-          `SELECT ${select} FROM ${quoted(table)} ORDER BY ${columns.map((_, index) => index + 1).join(", ")} LIMIT ${SNAPSHOT_PAGE_ROWS} OFFSET ?`,
-          Number(after ?? "0"),
-        )
-        .toArray();
-  const page: SnapshotRow[] = rows.map((row) => ({
-    ...(rowid ? { rowid: String(row.row_id) } : {}),
-    cells: columns.map((_, index) => cellOf(row[`t${index}`], row[`v${index}`])),
-  }));
-  const tableIndex = names.indexOf(table);
-  const full = page.length === SNAPSHOT_PAGE_ROWS;
-  const next: SnapshotCursor | null = full
-    ? {
-        table,
-        after: rowid
-          ? (page.at(-1)?.rowid ?? null)
-          : String(Number(after ?? "0") + SNAPSHOT_PAGE_ROWS),
-      }
-    : tableIndex + 1 < names.length
-      ? { table: names[tableIndex + 1] ?? table, after: null }
-      : null;
-  return { ...first, table, columns, rows: page, next, rowsWritten: 0 };
+  const { queries: _queries, ...page } = readSnapshotPage(sql, cursor);
+  if (page.rowsWritten !== 0) throw new Error("S4 snapshot reported written rows");
+  return { ...page, rowsWritten: page.rowsWritten };
 }
 
 /** Fixture statements, all in one transaction. */
