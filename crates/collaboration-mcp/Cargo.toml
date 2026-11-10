@@ -34,6 +34,7 @@ tokio-util.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+router-clock = { workspace = true, features = ["test-support"] }
 collaboration-application-test-support = { path = "../collaboration-application-test-support", version = "0.1.126" }
 node-test-fixture = { version = "0.1.105", path = "../node-test-fixture" }
 collaboration-service = { path = "../collaboration-service", version = "0.1.30", features = ["test-support"] }

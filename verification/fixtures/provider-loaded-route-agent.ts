@@ -14,13 +14,16 @@ const names: Readonly<Record<string, string>> = {
   idle: "no-load-fixture",
   close: "close-load-fixture",
   saved: "saved-session-fixture",
+  journal: "journal-session-fixture",
   exit: "exited-provider-fixture",
 };
 const name = names[mode];
 if (name === undefined) throw new Error("unknown loaded-route fixture");
 agent.respond(
   await agent.read(
-    mode === "idle" || mode === "saved" || mode === "close" ? "initialize" : undefined,
+    mode === "idle" || mode === "saved" || mode === "close" || mode === "journal"
+      ? "initialize"
+      : undefined,
   ),
   {
     protocolVersion: 1,
@@ -31,6 +34,8 @@ agent.respond(
           ? { loadSession: true, sessionCapabilities: { close: {} } }
           : { loadSession: true },
     agentInfo: { name, version: "1" },
+    // The journal recipient runs as a Cursor provider, which signs in through this method.
+    ...(mode === "journal" ? { authMethods: [{ id: "cursor_login", name: "Cursor login" }] } : {}),
   },
 );
 if (mode === "exit") {
@@ -77,6 +82,14 @@ else {
         `${request.method}\\n`,
       );
       agent.respond(request, {});
+    } else if (mode === "journal" && request.method === "authenticate") {
+      agent.respond(request, {});
+    } else if (mode === "journal") {
+      // An end-to-end recipient for any session: every request is journaled, a prompt
+      // ends its turn, and anything else is accepted as it stands.
+      appendFileSync(requireArgument(3), `${wireJson(request)}\n`);
+      await sendSocketNotice(requireArgument(4), "observed");
+      agent.respond(request, request.method === "session/prompt" ? { stopReason: "end_turn" } : {});
     } else {
       assert.ok(request.method === "session/load" || request.method === "session/prompt");
       assert.equal(field(request, "params", "sessionId"), "fixture-session");

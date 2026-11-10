@@ -23,7 +23,6 @@ use collaboration_runtime::SessionDeliveryRouter;
 
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
-use collaboration_service::SystemSubscriptionClock;
 
 use crate::native_mail_owner;
 use crate::served_api;
@@ -123,7 +122,9 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
         gate,
         codex_home: root.clone(),
     };
+    let runtime_clock = Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
     let route: Arc<dyn SessionDeliveryRoute> = Arc::new(CodexAppServerDeliveryRoute::new(
+        runtime_clock.clone(),
         service_id.clone(),
         directory,
         backend_config.clone(),
@@ -146,11 +147,12 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
             delivery: Arc::clone(&delivery),
             presence: Arc::clone(&presence),
             machine_identity: machine_identity.clone(),
-            clock: Arc::new(SystemSubscriptionClock),
+            clock: runtime_clock.clone(),
         });
     subscription_delivery.start().await?;
     let identity =
         ApplicationFixture::new(&String::from(service_id.clone()), &String::from(service_id))?
+            .with_runtime_clock(runtime_clock.clone())
             .with_automation_store(Arc::clone(&automation_store))
             .with_endpoints(vec![description])?
             .with_native_backend(backend_config)?
@@ -166,7 +168,7 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
             actors: subscription_delivery.clone(),
             presence,
             machine: machine_identity,
-            clock: Arc::new(SystemSubscriptionClock),
+            clock: runtime_clock.clone(),
         },
     )?;
 

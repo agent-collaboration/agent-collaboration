@@ -1,13 +1,12 @@
 //! Missing sender custody is described from the UUIDv7 age, using the owning clock.
 use super::*;
 use crate::collaboration_rejection::CollaborationRejection;
-use std::sync::atomic::Ordering;
 
 async fn assert_missing_status_copy(days: i64, expected: &str) {
     // Arrange a real store and status runtime; neither owns custody for this id.
     let runtime = Runtime::new().await;
     let (mail, app) = remote_application(&runtime).await;
-    let now = runtime.fixture.host.clock.load(Ordering::SeqCst);
+    let now = runtime_primitives::Clock::now(runtime.fixture.host.clock.as_ref()).unix_millis();
     let birth = u128::try_from(now - days * 86_400_000).unwrap();
     let item: collaboration_protocol::MailItemId =
         uuid::Uuid::from_u128((birth << 80) | (7_u128 << 76) | (8_u128 << 60) | 0x59)

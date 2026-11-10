@@ -26,8 +26,6 @@ pub use crate::native_mail_owner;
 use board_context_backend::BoardContextBackend;
 pub type TestError = Box<dyn std::error::Error + Send + Sync>;
 
-#[path = "controlled_clock.rs"]
-pub mod controlled_clock;
 #[path = "registered_project.rs"]
 pub mod registered_project;
 use registered_project::prepare_registered_creation;
@@ -67,7 +65,7 @@ pub struct BoardFixture {
     native_mail: Option<native_mail_owner::NativeMailOwner>,
     publisher: Option<Arc<collaboration_service::NotificationPublisher>>,
     _context_backend: Option<BoardContextBackend>,
-    _clock: Arc<dyn runtime_primitives::Clock>,
+    pub clock: Arc<dyn router_clock::RuntimeClock>,
 }
 impl BoardFixture {
     pub async fn start() -> Result<Self, TestError> {
@@ -80,14 +78,14 @@ impl BoardFixture {
         Ok(fixture)
     }
     pub async fn start_with_clock(
-        clock: Arc<dyn runtime_primitives::Clock>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Result<Self, TestError> {
         let fixture = Self::compose_with_clock(false, false, None, clock).await?;
         fixture.create_default_scope().await?;
         Ok(fixture)
     }
     pub async fn start_poll_with_clock(
-        clock: Arc<dyn runtime_primitives::Clock>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Result<Self, TestError> {
         let fixture = Self::compose_with_clock(true, false, None, clock).await?;
         fixture.create_default_scope().await?;
@@ -150,7 +148,7 @@ impl BoardFixture {
             with_poll,
             with_context,
             replication,
-            Arc::new(runtime_primitives::SystemClock),
+            Arc::new(router_clock::SystemRuntimeClock::new()),
         )
         .await
     }
@@ -158,7 +156,7 @@ impl BoardFixture {
         with_poll: bool,
         with_context: bool,
         replication: Option<Arc<dyn collaboration_contracts::ProjectReplicationPosition>>,
-        clock: Arc<dyn runtime_primitives::Clock>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Result<Self, TestError> {
         let directory = tempfile::tempdir()?;
         std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
@@ -172,6 +170,7 @@ impl BoardFixture {
         .await?;
         let fleet = Arc::new(fleet);
         let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
+            clock: clock.clone(),
             registry: registry.clone(),
             fleet: fleet.clone(),
             identity: fixture_machine_identity()?,
@@ -180,7 +179,8 @@ impl BoardFixture {
             "00000000-0000-4000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )?
-        .with_project_admission(admission.clone());
+        .with_project_admission(admission.clone())
+        .with_runtime_clock(clock.clone());
         if let Some(replication) = replication {
             identity = identity.with_project_replication(replication);
         }
@@ -218,7 +218,7 @@ impl BoardFixture {
             board: BoardId::generate(),
             actor: json!({"kind":"human","humanId":"owner"}),
             _directory: directory,
-            _clock: clock,
+            clock,
         })
     }
     async fn create_default_scope(&self) -> Result<(), TestError> {
@@ -361,7 +361,7 @@ impl BoardFixture {
             native_mail: _,
             publisher: _,
             _context_backend,
-            _clock,
+            clock,
         } = self;
         api.stop().await?;
         let with_context = _context_backend.is_some();
@@ -378,7 +378,7 @@ impl BoardFixture {
         _fleet_runtime.shutdown().await?;
         after_close(_directory.path())?;
         let registry =
-            native_registry::new_registry_with_clock(_directory.path(), _clock.clone()).await?;
+            native_registry::new_registry_with_clock(_directory.path(), clock.clone()).await?;
         let (fleet, fleet_runtime) = if offline {
             let (requests, mut runtime) = board_central_test_support::machine_session(
                 _directory.path(),
@@ -405,6 +405,7 @@ impl BoardFixture {
         };
         let fleet = Arc::new(fleet);
         let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
+            clock: clock.clone(),
             registry: registry.clone(),
             fleet: fleet.clone(),
             identity: fixture_machine_identity()?,
@@ -436,7 +437,7 @@ impl BoardFixture {
             native_mail: None,
             publisher: None,
             _context_backend: context_backend,
-            _clock,
+            clock,
         })
     }
     pub fn header(&self) -> Value {
@@ -583,7 +584,7 @@ impl BoardFixture {
             &self._registry,
             request,
             &self.record_origin()?,
-            self._clock.as_ref(),
+            self.clock.as_ref(),
         )
         .await
     }
@@ -609,6 +610,7 @@ fn fixture_subscription_service(
     admission: &ProjectAdmission,
     interactions: &Arc<interaction_storage::InteractionStore>,
     routes: &Arc<collaboration_runtime::SessionDeliveryRouter>,
+    clock: Arc<dyn router_clock::RuntimeClock>,
 ) -> Result<collaboration_service::SubscriptionDeliveryService, TestError> {
     Ok(collaboration_service::SubscriptionDeliveryService::new(
         collaboration_service::SubscriptionDeliveryServiceProps {
@@ -619,7 +621,7 @@ fn fixture_subscription_service(
             delivery: routes.clone(),
             presence: routes.clone(),
             machine_identity: fixture_machine_identity()?,
-            clock: Arc::new(collaboration_service::SystemSubscriptionClock),
+            clock,
         },
     ))
 }

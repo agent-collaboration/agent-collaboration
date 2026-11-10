@@ -73,6 +73,7 @@ async fn missing_thread_without_holder_is_known_not_submitted()
     let gate = NativeGenerationGate::default();
     gate.activate(generation, socket.clone(), Some(schemas))?;
     let route = CodexAppServerDeliveryRoute::new(
+        std::sync::Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
         service_id,
         directory,
         NativeControlBackend {

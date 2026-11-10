@@ -1,24 +1,10 @@
 //! Retention boundaries use two calendar months, independent of whether cleanup has already run.
 use crate::{AutomationStore, StorageError};
 
-/// Retains automation events for two calendar months.
+/// Retains automation events, and every other automation history class, for two calendar months.
 pub(crate) const AUTOMATION_EVENT_RETENTION_MONTHS: u32 = 2;
 
 impl AutomationStore {
-    /// Removes a bounded batch strictly before the UTC calendar cutoff; owner records are never pruned.
-    pub async fn prune_automation_events(
-        &mut self,
-        now_ms: i64,
-        batch_limit: u32,
-    ) -> Result<u64, StorageError> {
-        if !(1..=1000).contains(&batch_limit) {
-            return Err(StorageError::InvalidRecord);
-        }
-        let cutoff = calendar_months_before(now_ms, AUTOMATION_EVENT_RETENTION_MONTHS)?;
-        let removed = sqlx::query("DELETE FROM automation_events WHERE event_sequence IN (SELECT event_sequence FROM automation_events WHERE recorded_at_ms < ? ORDER BY event_sequence LIMIT ?)")
-            .bind(cutoff).bind(batch_limit).execute(&mut self.connection).await?;
-        Ok(removed.rows_affected())
-    }
     pub async fn automation_event_floor(
         &mut self,
         now_ms: i64,
@@ -30,8 +16,25 @@ impl AutomationStore {
 }
 pub(crate) fn calendar_months_before(now_ms: i64, months: u32) -> Result<i64, StorageError> {
     chrono::DateTime::<chrono::Utc>::from_timestamp_millis(now_ms)
-        .and_then(|now| now.checked_sub_months(chrono::Months::new(months)))
+        .and_then(|now| sqlite_storage_maintenance::months_before(now, months))
         .map(|cutoff| cutoff.timestamp_millis())
+        .ok_or(StorageError::InvalidRecord)
+}
+
+/// The first millisecond at or after `now_ms` at which a row stamped `stamped_ms` falls
+/// before the cutoff.
+pub(crate) fn first_deletable_ms(
+    stamped_ms: i64,
+    months: u32,
+    now_ms: i64,
+) -> Result<i64, StorageError> {
+    let moment = chrono::DateTime::<chrono::Utc>::from_timestamp_millis;
+    moment(stamped_ms)
+        .zip(moment(now_ms))
+        .and_then(|(stamped, now)| {
+            sqlite_storage_maintenance::first_deletable_at(stamped, months, now)
+        })
+        .map(|due| due.timestamp_millis())
         .ok_or(StorageError::InvalidRecord)
 }
 

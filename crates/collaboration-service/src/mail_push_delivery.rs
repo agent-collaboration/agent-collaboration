@@ -1,5 +1,4 @@
 //! Recipient push policy and native I/O; custody and outcome writes remain in the library.
-use crate::SubscriptionClock;
 use crate::SubscriptionDeliveryService;
 use collaboration_contracts::LoadPolicy;
 use collaboration_contracts::MachineIdentity;
@@ -12,6 +11,7 @@ use collaboration_runtime::received_mail_push;
 use fleet_sync_delivery::{DeliveryError, LocalDelivery, LocalOutcome};
 use fleet_sync_protocol::DeliveryItem;
 use interaction_storage::InteractionStore;
+use router_clock::RuntimeClock;
 use runtime_primitives::{CallId, SyncTime};
 use std::sync::Arc;
 
@@ -20,7 +20,7 @@ pub struct MailPushDeliveryProps {
     pub actors: SubscriptionDeliveryService,
     pub presence: Arc<dyn TargetPresenceProbe>,
     pub machine: MachineIdentity,
-    pub clock: Arc<dyn SubscriptionClock>,
+    pub clock: Arc<dyn RuntimeClock>,
 }
 
 pub struct MailPushDelivery {
@@ -50,7 +50,7 @@ impl MailPushDelivery {
     ) -> Result<Option<LocalDelivery<RouterDeliveryTypes>>, DeliveryError> {
         let is_follow = matches!(item.body(), board_sync_protocol::BoardDeliveryBody::Notification(notification)
             if matches!(notification.source, collaboration_mail_protocol::NotificationSource::FollowBatch { .. }));
-        let Some(draft) = received_mail_push(item, self.props.clock.now())? else {
+        let Some(draft) = received_mail_push(item, self.props.clock.utc_now())? else {
             return Ok(None);
         };
         let working = self
@@ -138,7 +138,7 @@ impl MailPushDelivery {
     }
 
     fn now(&self) -> SyncTime {
-        SyncTime::from_unix_millis(self.props.clock.now().timestamp_millis())
+        SyncTime::from_unix_millis(self.props.clock.utc_now().timestamp_millis())
     }
 }
 use collaboration_mail_protocol::MailSender;

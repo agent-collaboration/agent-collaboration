@@ -158,11 +158,7 @@ async fn assert_history_admission_order(mixed: bool) {
     // Freeze valid-age UUIDv7 inputs at this fixture's injected clock. Their
     // lexical order intentionally opposes the admission order below.
     let millis = u128::try_from(
-        runtime
-            .fixture
-            .host
-            .clock
-            .load(std::sync::atomic::Ordering::SeqCst),
+        runtime_primitives::Clock::now(runtime.fixture.host.clock.as_ref()).unix_millis(),
     )
     .unwrap();
     let prefix = (millis << 80) | (0x7_u128 << 76) | (0x8_u128 << 60);

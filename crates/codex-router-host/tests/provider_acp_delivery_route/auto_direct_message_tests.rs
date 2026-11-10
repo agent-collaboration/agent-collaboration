@@ -8,7 +8,7 @@ use collaboration_protocol::{
 use collaboration_service::BoardAvailability;
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
-use collaboration_service::SystemSubscriptionClock;
+
 use interaction_storage::InteractionStore;
 
 fn loadable_provider_fixture(capture: &Path, prompt_event: &Path) -> ExternalProviderLaunch {
@@ -130,7 +130,12 @@ async fn new_auto_loads_saved_unloaded_acp_session_once_while_queue_stays_held()
             Some("ACP direct-message proof"),
         )
         .expect("machine"),
-        clock: Arc::new(SystemSubscriptionClock),
+        clock: Arc::new(
+            router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+                1792432800000,
+            ))
+            .unwrap(),
+        ),
     });
     owner.start().await.expect("owner starts");
 

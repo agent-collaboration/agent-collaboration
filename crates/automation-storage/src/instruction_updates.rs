@@ -3,7 +3,7 @@ use crate::{AutomationStore, StorageError};
 use agent_automation::{
     EventId, InstructionDocument, InstructionId, InstructionText, OperationId, RevisionId,
 };
-use sqlx::{Connection, Row, SqliteConnection};
+use sqlx::{Row, SqliteConnection};
 
 pub struct InstructionUpdate {
     pub operation_id: OperationId,
@@ -27,7 +27,9 @@ impl AutomationStore {
             &request.text,
         ))
         .map_err(|_| StorageError::InvalidRecord)?;
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         if let Some(row) = sqlx::query("SELECT method_name,canonical_request,operation_status,final_result_json FROM operation_receipts WHERE operation_id=?")
             .bind(request.operation_id.as_str()).fetch_optional(&mut *transaction).await? {
             if row.try_get::<String,_>("method_name")? != "instruction/update" || row.try_get::<Vec<u8>,_>("canonical_request")? != canonical {

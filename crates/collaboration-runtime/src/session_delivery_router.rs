@@ -298,6 +298,12 @@ fn aggregate_presence(presences: &[RoutePresence]) -> TargetPresence {
     {
         return TargetPresence::Wakeable;
     }
+    if presences
+        .iter()
+        .any(|presence| matches!(presence, RoutePresence::NotRunning))
+    {
+        return TargetPresence::NotRunning;
+    }
 
     if unreachable_reasons.is_empty() {
         unreachable_reasons.push("no route holds or can load this session".to_owned());

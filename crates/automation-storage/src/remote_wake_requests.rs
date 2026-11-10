@@ -1,4 +1,5 @@
 //! Sender-side immutable mail requests and owning-target observations; never local timers.
+use crate::automation_connection::OneStatementWrite;
 use crate::{AutomationStore, StorageError, WakeListPosition};
 use agent_automation::{OperationId, WakeupId};
 use collaboration_mail_protocol::WakeBody;
@@ -96,7 +97,7 @@ impl AutomationStore {
             serde_json::to_string(&request.target).map_err(|_| StorageError::InvalidRecord)?;
         let body = serde_json::to_string(&request.body).map_err(|_| StorageError::InvalidRecord)?;
         sqlx::query!("INSERT INTO remote_wake_requests(operation_id,target_json,canonical_request,body_json,valid_until_ms) VALUES(?,?,?,?,?)",request.operation_id.as_str(),target,request.canonical_request,body,request.valid_until_ms)
-            .execute(&mut self.connection).await?;
+            .execute_as_transaction(self).await?;
         Ok(RemoteWakePreparation::New(request))
     }
 
@@ -113,7 +114,7 @@ impl AutomationStore {
         let target = serde_json::to_string(&snapshot.definition.message.target)
             .map_err(|_| StorageError::InvalidRecord)?;
         let result = sqlx::query!("UPDATE remote_wake_requests SET wakeup_id=?,snapshot_json=?,created_at_ms=? WHERE operation_id=? AND target_json=? AND (wakeup_id IS NULL OR wakeup_id=?)",snapshot.definition.wakeup_id.as_str(),json,created,operation.as_str(),target,snapshot.definition.wakeup_id.as_str())
-            .execute(&mut self.connection).await?;
+            .execute_as_transaction(self).await?;
         if result.rows_affected() != 1 {
             return Err(StorageError::InvalidRecord);
         }

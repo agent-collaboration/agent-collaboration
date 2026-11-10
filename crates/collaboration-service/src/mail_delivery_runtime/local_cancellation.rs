@@ -52,7 +52,7 @@ impl MailDeliveryRuntime {
         let target = local_cancel_mail_id(original)?;
         let config = self.config;
         let consumer = self.consumer.clone();
-        let now = self.clock.now();
+        let now = self.clock.utc_now();
         #[cfg(test)]
         let admission_probe = self.cancel_admission_probe.clone();
         self.store

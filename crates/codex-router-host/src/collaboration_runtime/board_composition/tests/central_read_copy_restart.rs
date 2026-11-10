@@ -356,6 +356,11 @@ async fn an_interrupted_native_page_install_is_refetched_after_owning_reopen() -
 )]
 async fn a_fresh_nonholder_without_any_local_project_reads_unknown_authority_from_central()
 -> TestResult {
+    let clock = std::sync::Arc::new(router_clock::ManualClock::new(
+        chrono::DateTime::from_timestamp_millis(1792432800000)
+            .ok_or_else(|| std::io::Error::other("fixed fixture time"))?,
+    ));
+
     let runtime = Box::pin(Runtime::new()).await?;
     let writer = runtime.projects.ensure(&runtime.project).await?;
     let mut read = writer.store.snapshot().await?;
@@ -399,6 +404,7 @@ async fn a_fresh_nonholder_without_any_local_project_reads_unknown_authority_fro
         runtime.readiness.clone(),
     )))?;
     let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
+        clock: clock.clone(),
         registry: registry.clone(),
         fleet: runtime.fleet.clone(),
         identity: identity()?,

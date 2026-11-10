@@ -279,6 +279,7 @@ impl AutomationOperations {
             store,
             self.scheduled_run_execution.as_ref(),
             self.native_backend.as_ref(),
+            self.clock.as_ref(),
             record,
         )
         .await

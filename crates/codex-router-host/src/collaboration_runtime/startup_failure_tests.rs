@@ -41,7 +41,6 @@ async fn assert_exposure_failure_cleanup(provider_launches: Vec<crate::ExternalP
     )
     .await
     .expect("preflight");
-    let (_, relation) = tokio::sync::watch::channel(RouterExecutableRelation::Match);
     let result = Box::pin(
         CollaborationRuntime::start_with_optional_router_proxy_endpoint(
             CollaborationRuntimeInputs {
@@ -58,7 +57,9 @@ async fn assert_exposure_failure_cleanup(provider_launches: Vec<crate::ExternalP
                 ),
             },
             provider_launches,
-            relation,
+            std::sync::Arc::new(collaboration_mcp::FixedRouterExecutableRelation(
+                RouterExecutableRelation::Match,
+            )),
             None,
             prepared,
             None,

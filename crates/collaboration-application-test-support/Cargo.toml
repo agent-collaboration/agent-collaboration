@@ -33,6 +33,7 @@ interaction-storage = { path = "../interaction-storage", version = "0.1.126" }
 message-board = { path = "../message-board", version = "0.1.126" }
 message-board-storage = { path = "../message-board-storage", version = "0.1.126" }
 runtime-primitives.workspace = true
+router-clock = { workspace = true, features = ["test-support"] }
 serde_json.workspace = true
 tempfile = "3.27.0"
 tokio-tungstenite.workspace = true

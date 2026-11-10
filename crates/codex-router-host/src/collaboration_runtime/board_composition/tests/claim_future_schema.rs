@@ -58,6 +58,11 @@ impl ReplicatedSchema for FutureBoardSchema {
     reason = "Contract asserts; setup may fail."
 )]
 async fn future_schema_public_posts_keep_the_typed_refusal_without_forwarding() -> TestResult {
+    let clock = std::sync::Arc::new(router_clock::ManualClock::new(
+        chrono::DateTime::from_timestamp_millis(1792432800000)
+            .ok_or_else(|| std::io::Error::other("fixed fixture time"))?,
+    ));
+
     use collaboration_service::ApplicationFixture;
     use message_board::public_replies as public;
 
@@ -104,6 +109,7 @@ async fn future_schema_public_posts_keep_the_typed_refusal_without_forwarding() 
     ));
     let admission = Arc::new(ProjectAdmission::new(
         collaboration_service::ProjectAdmissionProps {
+            clock: clock.clone(),
             registry,
             fleet,
             identity: identity()?,

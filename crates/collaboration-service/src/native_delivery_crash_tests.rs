@@ -312,6 +312,7 @@ async fn interrupted_wake_attempt_survives_shared_restore_and_worker_delivers_on
         correlation: correlation_receiver,
     } = accepting_native_call(&root)?;
     let sender = WakeDeliverySender::new(
+        identity.runtime_clock(),
         Arc::clone(&interactions),
         identity
             .session_delivery
@@ -397,7 +398,8 @@ async fn native_delivery_crash_child() -> TestResult<()> {
         "target":{"endpoint":{"serviceId":SERVICE,"endpointId":"codex-local"},"sessionId":"fixture-thread"},
         "content":{"kind":"humanUser","text":"fixture work"},"delivery":if generic_queue {"queue"} else {"auto"},"generationGuard":null
     }))?;
-    let anchor_ms = chrono::Utc::now().timestamp_millis() - 1000;
+    let mut identity = identity(&root, Arc::clone(&store), OLD_EPOCH).await?;
+    let anchor_ms = identity.runtime_clock().utc_now().timestamp_millis() - 1000;
     let wake = store
         .lock()
         .await
@@ -433,7 +435,6 @@ async fn native_delivery_crash_child() -> TestResult<()> {
         wakeup_id: fire.wakeup_id,
         occurrence_id: fire.occurrence_id,
     };
-    let mut identity = identity(&root, Arc::clone(&store), OLD_EPOCH).await?;
     let interactions = identity
         .interaction_store
         .clone()
@@ -533,6 +534,7 @@ async fn native_delivery_crash_child() -> TestResult<()> {
     if let Some(broker) = &recorded_owner {
         let route: Arc<dyn SessionDeliveryRoute> = Arc::new(
             CodexAppServerDeliveryRoute::new(
+                identity.runtime_clock(),
                 SERVICE.to_owned().try_into()?,
                 identity.endpoint_directory(),
                 identity.native_backend.clone().ok_or("backend missing")?,
@@ -544,6 +546,7 @@ async fn native_delivery_crash_child() -> TestResult<()> {
             identity.with_session_delivery(Arc::new(SessionDeliveryRouter::new(vec![route])));
     }
     let sender = WakeDeliverySender::new(
+        identity.runtime_clock(),
         interactions,
         identity
             .session_delivery
@@ -614,6 +617,7 @@ async fn identity(
         .with_native_backend(backend.clone())
         .map_err(std::io::Error::other)?;
     let route: Arc<dyn SessionDeliveryRoute> = Arc::new(CodexAppServerDeliveryRoute::new(
+        identity.runtime_clock(),
         collaboration_protocol::UuidIdentity::try_from(SERVICE.to_owned())?,
         identity.endpoint_directory(),
         backend,

@@ -11,7 +11,6 @@ use axum::{
     middleware::{self, Next},
     response::{IntoResponse, Response},
 };
-use collaboration_protocol::RouterExecutableRelation;
 use collaboration_service::CollaborationApplication;
 use rmcp::{
     model::{
@@ -23,7 +22,7 @@ use rmcp::{
     },
 };
 use std::{io, net::SocketAddr, path::PathBuf, sync::Arc, time::Duration};
-use tokio::sync::{OwnedSemaphorePermit, Semaphore, watch};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
 use tokio_util::sync::CancellationToken;
 
 /// The path every listener serves the collaboration API on.
@@ -50,7 +49,8 @@ pub struct CollaborationApiConfig {
     pub service_directory: PathBuf,
     /// Codex native schema definitions that tool schemas' native references bind to.
     pub native_definitions: Option<NativeSchemaDefinitions>,
-    pub router_executable_relation: watch::Receiver<RouterExecutableRelation>,
+    /// Asked at each MCP initialize whether the running Router's executable was replaced.
+    pub router_executable_check: Arc<dyn crate::RouterExecutableCheck>,
     /// Requests one listener runs at once; requests beyond it are shed as `overloaded`.
     pub concurrent_requests: usize,
     /// Cancelling it cancels every in-flight tool call and stops every listener.

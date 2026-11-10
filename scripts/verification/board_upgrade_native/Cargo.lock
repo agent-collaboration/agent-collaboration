@@ -1130,6 +1130,7 @@ dependencies = [
  "nix",
  "opentelemetry",
  "reqwest",
+ "router-clock",
  "runtime-primitives",
  "rustix 1.1.4",
  "serde",
@@ -1437,6 +1438,7 @@ dependencies = [
  "message-board",
  "message-board-storage",
  "nix",
+ "router-clock",
  "runtime-primitives",
  "serde",
  "serde_json",
@@ -1483,6 +1485,7 @@ dependencies = [
  "message-board-storage",
  "nix",
  "petgraph",
+ "router-clock",
  "runtime-primitives",
  "serde",
  "serde_json",
@@ -3020,6 +3023,7 @@ dependencies = [
  "serde",
  "serde_json",
  "session-event-model",
+ "sqlite-storage-maintenance",
  "sqlx",
  "sqlx-turso",
  "thiserror",
@@ -3274,6 +3278,8 @@ dependencies = [
  "chrono",
  "codex-native-integration",
  "collaboration-protocol",
+ "router-clock",
+ "runtime-primitives",
  "serde",
  "serde_json",
  "sqlite-storage-maintenance",
@@ -3431,6 +3437,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sqlite-storage-maintenance",
  "sqlx",
  "sqlx-turso",
  "thiserror",
@@ -4295,6 +4302,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "router-clock"
+version = "0.1.146"
+dependencies = [
+ "chrono",
+ "runtime-primitives",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "runtime-primitives"
 version = "0.4.0"
 source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
@@ -4818,9 +4835,12 @@ dependencies = [
 name = "sqlite-storage-maintenance"
 version = "0.1.146"
 dependencies = [
+ "chrono",
  "fs2",
+ "runtime-primitives",
  "sqlx",
  "thiserror",
+ "tokio",
  "tracing",
 ]
 

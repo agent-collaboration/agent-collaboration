@@ -1,5 +1,4 @@
 //! Store-first subscription records and their prepared Layer-0 delivery.
-use super::SubscriptionClock;
 use agent_automation::AttemptId;
 use collaboration_contracts::DeliveryPrecondition;
 use collaboration_contracts::LoadPolicy;
@@ -17,6 +16,7 @@ use interaction_storage::InteractionStore;
 use message_board::{
     BoardError, Identity, SubscriptionBatch, SubscriptionGeneration, SubscriptionScope,
 };
+use router_clock::RuntimeClock;
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
@@ -24,7 +24,7 @@ pub(super) struct SubscriptionPushStore {
     pub(super) store: Arc<InteractionStore>,
     pub(super) delivery: Arc<dyn SessionMessageDelivery>,
     pub(super) machine: MachineIdentity,
-    pub(super) clock: Arc<dyn SubscriptionClock>,
+    pub(super) clock: Arc<dyn RuntimeClock>,
     pub(super) shutdown: CancellationToken,
     #[cfg(test)]
     observations: tokio::sync::broadcast::Sender<super::subscription_service::OwnerObservation>,
@@ -34,7 +34,7 @@ pub(super) struct SubscriptionPushStoreProps {
     pub store: Arc<InteractionStore>,
     pub delivery: Arc<dyn SessionMessageDelivery>,
     pub machine: MachineIdentity,
-    pub clock: Arc<dyn SubscriptionClock>,
+    pub clock: Arc<dyn RuntimeClock>,
     pub shutdown: CancellationToken,
     #[cfg(test)]
     pub observations: tokio::sync::broadcast::Sender<super::subscription_service::OwnerObservation>,
@@ -166,7 +166,7 @@ impl SubscriptionPushStore {
             header_facts,
             body,
             activity,
-            created_at: self.clock.now(),
+            created_at: self.clock.utc_now(),
         })
     }
 
@@ -260,7 +260,11 @@ impl SubscriptionPushStore {
                         .await
                 } else {
                     store
-                        .settle_push_record(&prepared.push_id, receipt.clone(), self.clock.now())
+                        .settle_push_record(
+                            &prepared.push_id,
+                            receipt.clone(),
+                            self.clock.utc_now(),
+                        )
                         .await
                 }
             };

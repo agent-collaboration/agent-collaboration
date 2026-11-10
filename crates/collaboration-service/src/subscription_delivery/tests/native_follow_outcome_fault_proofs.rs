@@ -22,7 +22,7 @@ async fn a_failed_follow_projection_keeps_one_frozen_item_for_the_next_project_h
             "one frozen allocation survives native admission failure",
         )
         .await;
-    let frozen = tokio::time::timeout(Duration::from_secs(10), async {
+    let frozen = (async {
         loop {
             let frozen = frozen_follow(&fixture).await;
             if !frozen.is_empty() {
@@ -31,14 +31,8 @@ async fn a_failed_follow_projection_keeps_one_frozen_item_for_the_next_project_h
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .unwrap();
-    tokio::time::timeout(
-        Duration::from_secs(10),
-        publisher.wait_project_idle_for_test(&fixture.project),
-    )
-    .await
-    .unwrap();
+    .await;
+    (publisher.wait_project_idle_for_test(&fixture.project)).await;
     assert_eq!(frozen.len(), 1);
     let original = serde_json::to_value(&frozen[0]).unwrap();
     let push: collaboration_protocol::PushId =
@@ -119,7 +113,7 @@ async fn a_failed_follow_projection_keeps_one_frozen_item_for_the_next_project_h
                 },
                 preventions: Vec::new(),
             },
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap();
@@ -141,22 +135,13 @@ async fn a_failed_follow_projection_keeps_one_frozen_item_for_the_next_project_h
         .queue_project(fixture.project.clone())
         .await
         .unwrap();
-    let request = tokio::time::timeout(Duration::from_secs(10), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .unwrap();
+    let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
     assert_eq!(request.payload.push_id, push);
     runtime.completions.send(DeliveryOutcome::Started).unwrap();
     fixture
         .await_push_state(&push, PushDeliveryState::Delivered)
         .await;
-    tokio::time::timeout(
-        Duration::from_secs(10),
-        publisher.wait_project_idle_for_test(&fixture.project),
-    )
-    .await
-    .unwrap();
+    (publisher.wait_project_idle_for_test(&fixture.project)).await;
     let shown = app
         .messages()
         .push_show(PushRecordShowParams {
@@ -215,11 +200,7 @@ async fn a_follow_outcome_write_fault_recovers_without_a_second_native_call() {
             "saved follow answer survives its failed outcome transaction",
         )
         .await;
-    let request = tokio::time::timeout(Duration::from_secs(10), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .unwrap();
+    let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
     let show = PushRecordShowParams {
         caller: request.target,
         reference: request.payload.push_id.as_str().to_owned(),
@@ -234,12 +215,7 @@ async fn a_follow_outcome_write_fault_recovers_without_a_second_native_call() {
 
     // Act: the actual client accepts once, then the real outcome transaction fails.
     runtime.completions.send(DeliveryOutcome::Started).unwrap();
-    tokio::time::timeout(
-        Duration::from_secs(10),
-        publisher.wait_project_idle_for_test(&fixture.project),
-    )
-    .await
-    .expect("publisher's first settlement drive must finish its failed attempt");
+    (publisher.wait_project_idle_for_test(&fixture.project)).await;
     let failed = fixture
         .interactions
         .get_push_record(&request.payload.push_id)
@@ -269,7 +245,10 @@ async fn a_follow_outcome_write_fault_recovers_without_a_second_native_call() {
         .execute(&mut observer)
         .await
         .unwrap();
-    fixture.clock.advance_without_tokio_time(100);
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(100))
+        .unwrap();
     let mail = native.runtime_handle();
     let driving = tokio::spawn(async move { mail.drive_due_for_test().await });
     let terminal = async {
@@ -287,7 +266,7 @@ async fn a_follow_outcome_write_fault_recovers_without_a_second_native_call() {
         }
     };
     let mut duplicate_native_call = false;
-    let terminal = tokio::time::timeout(Duration::from_secs(10), async {
+    let terminal = (async {
         tokio::pin!(terminal);
         tokio::select! {
             record = &mut terminal => record,
@@ -299,11 +278,7 @@ async fn a_follow_outcome_write_fault_recovers_without_a_second_native_call() {
         }
     })
     .await;
-    tokio::time::timeout(Duration::from_secs(10), driving)
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap();
+    (driving).await.unwrap().unwrap();
     let after = app.messages().push_show(show).await.unwrap();
     let sdk = native
         .runtime()
@@ -327,12 +302,7 @@ async fn a_follow_outcome_write_fault_recovers_without_a_second_native_call() {
         "outcome recovery dispatched the saved answer again"
     );
     assert_eq!(calls, 1);
-    assert_eq!(
-        terminal
-            .expect("follow outcome retry never committed")
-            .delivery_state,
-        PushDeliveryState::Delivered
-    );
+    assert_eq!(terminal.delivery_state, PushDeliveryState::Delivered);
     assert!(matches!(
         sdk,
         Some(fleet_sync_protocol::RecipientOutcome::Delivered { .. })

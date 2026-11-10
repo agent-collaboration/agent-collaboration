@@ -1,8 +1,9 @@
 //! Native preparation completion binds the actual thread and updates only future configuration atomically.
+use crate::automation_connection::OneStatementWrite;
 use crate::{AutomationStore, ScheduleInspection, StorageError, ThreadBindingClaim};
 use agent_automation::{ChangeId, ExecutionDestination, OperationId, ScheduleId, ScheduleRecord};
 use serde::{Serialize, de::DeserializeOwned};
-use sqlx::{Connection, Row};
+use sqlx::Row;
 pub struct PreparationIntent<TState> {
     pub operation_id: OperationId,
     pub schedule_id: ScheduleId,
@@ -28,7 +29,7 @@ impl AutomationStore {
         let evidence =
             serde_json::to_string(&request.evidence).map_err(|_| StorageError::InvalidRecord)?;
         let changed=sqlx::query("UPDATE operation_receipts SET operation_status='inProgress',effect_evidence_json=? WHERE operation_id=? AND resource_id=? AND method_name='schedule/prepare' AND operation_status='admitted'")
-            .bind(evidence).bind(request.operation_id.as_str()).bind(request.schedule_id.as_str()).execute(&mut self.connection).await?.rows_affected();
+            .bind(evidence).bind(request.operation_id.as_str()).bind(request.schedule_id.as_str()).execute_as_transaction(self).await?.rows_affected();
         Ok(changed == 1)
     }
     pub async fn complete_thread_preparation<
@@ -42,7 +43,9 @@ impl AutomationStore {
         if request.now_ms < 0 || !std::path::Path::new(&request.cwd).is_absolute() {
             return Err(StorageError::InvalidRecord);
         }
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         let operation=sqlx::query("SELECT operation_status,resource_id FROM operation_receipts WHERE operation_id=? AND method_name='schedule/prepare'").bind(request.operation_id.as_str()).fetch_optional(&mut *transaction).await?.ok_or(StorageError::InvalidRecord)?;
         if operation.try_get::<String, _>("operation_status")? != "inProgress"
             || operation.try_get::<String, _>("resource_id")? != request.schedule_id.as_str()

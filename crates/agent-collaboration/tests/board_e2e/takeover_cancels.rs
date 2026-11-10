@@ -8,7 +8,7 @@ use super::{
         transfer_to_second,
     },
     takeover_readbacks as readbacks,
-    takeover_recipients::{self as recipients, Recipients},
+    takeover_recipients::{self as recipients, AcpRecipients},
 };
 use board_central_test_support::{DispatchCallSelector, ObjectAddress, RuntimeControl};
 use board_sync_protocol::BoardDeliveryTypes;
@@ -36,10 +36,14 @@ struct HeldFollow {
     range: Value,
 }
 
-async fn held_remote(fixture: &mut BoardFixture, second: &SecondHost) -> FixtureResult<HeldFollow> {
+async fn held_remote(
+    fixture: &mut BoardFixture,
+    second: &mut SecondHost,
+    peers: &mut AcpRecipients,
+) -> FixtureResult<HeldFollow> {
     fixture.create().await?;
-    let follow =
-        FollowMembership::arrange(fixture, recipients::session(second.host()?).await?).await?;
+    let target = peers.arm_second(second).await?;
+    let follow = FollowMembership::arrange(fixture, target).await?;
     copy_project(fixture).await?;
     settled_view(fixture.host()?, &fixture.project).await?;
     controls::hold_selected(
@@ -95,7 +99,7 @@ pub async fn remote(
     second: &mut SecondHost,
     prefix: RemoteEndPrefix,
 ) -> FixtureResult {
-    recipients::scenario(fixture, second, async move |fixture, second, peers| {
+    recipients::acp_scenario(fixture, second, async move |fixture, second, peers| {
         Box::pin(controls::scenario(
             fixture,
             second,
@@ -109,11 +113,11 @@ pub async fn remote(
 async fn prove_remote(
     fixture: &mut BoardFixture,
     second: &mut SecondHost,
-    peers: &mut Recipients,
+    peers: &mut AcpRecipients,
     remote_prefix: RemoteEndPrefix,
 ) -> FixtureResult {
     let prefix = remote_prefix.end_prefix();
-    let seed = held_remote(fixture, second).await?;
+    let seed = held_remote(fixture, second, peers).await?;
     let cut = arrange_remote_end(fixture, second, &seed, remote_prefix).await?;
     let stopped = fixture
         .host

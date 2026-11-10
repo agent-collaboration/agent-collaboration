@@ -62,6 +62,7 @@ async fn scheduled_run_to_materialized_thread_preserves_declared_workspace()
     let gate = NativeGenerationGate::default();
     gate.activate(generation.clone(), socket_path.clone(), Some(schemas))?;
     let route = collaboration_runtime::CodexAppServerScheduledRuns::new(
+        std::sync::Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
         NativeControlBackend {
             endpoint: target.endpoint.clone(),
             gate,

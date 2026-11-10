@@ -2,6 +2,7 @@
 mod automation_connection;
 pub use automation_connection::{AutomationStore, StorageError, apply_message_drop_migration};
 mod automation_retention;
+pub use automation_retention::AutomationRetentionClass;
 mod instruction_repository;
 mod instruction_revision_read;
 mod instruction_updates;

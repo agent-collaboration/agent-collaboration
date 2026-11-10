@@ -5,7 +5,7 @@ use crate::BoardAvailability;
 use crate::MailPushDeliveryProps;
 use crate::SubscriptionDeliveryService;
 use crate::SubscriptionDeliveryServiceProps;
-use crate::SystemSubscriptionClock;
+
 use collaboration_contracts::MachineIdentity;
 use collaboration_mail_protocol::{CarrierAcceptance, MailSender, RemoteWakeResult, WakeBody};
 use collaboration_protocol::{
@@ -45,7 +45,12 @@ async fn fixture() -> (
         delivery: router.clone(),
         presence: router.clone(),
         machine_identity: machine.clone(),
-        clock: Arc::new(SystemSubscriptionClock),
+        clock: Arc::new(
+            router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+                1792432800000,
+            ))
+            .unwrap(),
+        ),
     });
     let peer = PeerId::new(uuid::Uuid::now_v7()).expect("peer");
     let mail = Arc::new(
@@ -56,7 +61,7 @@ async fn fixture() -> (
                 actors: actors.clone(),
                 presence: router,
                 machine,
-                clock: Arc::new(SystemSubscriptionClock),
+                clock: actors.runtime_clock(),
             },
             None,
         )
@@ -64,6 +69,7 @@ async fn fixture() -> (
     );
     let mut construction = ApplicationFixture::new(SERVICE, SERVICE)
         .expect("identity")
+        .with_runtime_clock(actors.runtime_clock())
         .with_installation_peer(peer)
         .expect("installation")
         .with_interaction_store(interactions)
@@ -126,7 +132,7 @@ async fn startup_inbound_and_outbound_wake_waits_share_capacity() {
     let body: WakeBody = serde_json::from_value(json!({
         "requestedBy":{"kind":"owner"},"request":{"kind":"wait",
         "wakeupId":saved.definition.wakeup_id,"after":null,
-        "deadline":(chrono::Utc::now()+chrono::Duration::seconds(10)).to_rfc3339_opts(chrono::SecondsFormat::Millis,true)}
+        "deadline":(construction.runtime_clock().utc_now()+chrono::Duration::seconds(10)).to_rfc3339_opts(chrono::SecondsFormat::Millis,true)}
     })).expect("inbound wait");
     let item = DeliveryItem::<collaboration_contracts::RouterDeliveryTypes>::new(
         ItemId::new(uuid::Uuid::now_v7()).expect("mail item"),
@@ -188,7 +194,7 @@ async fn startup_follow_attachment_keeps_neither_admission_nor_publisher_alive()
     let registry = Arc::new(collaboration_runtime::ProjectStoreRegistry::new(
         directory.path(),
         construction.installation_peer,
-        Arc::new(runtime_primitives::SystemClock),
+        construction.runtime_clock(),
         message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
             .expect("32-byte fixture cursor key"),
     ));
@@ -203,6 +209,7 @@ async fn startup_follow_attachment_keeps_neither_admission_nor_publisher_alive()
     ));
     let admission = Arc::new(
         crate::ProjectAdmission::new(crate::ProjectAdmissionProps {
+            clock: construction.runtime_clock(),
             registry,
             fleet,
             identity: construction.machine_identity.clone(),

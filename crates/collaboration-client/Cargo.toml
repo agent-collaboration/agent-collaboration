@@ -27,6 +27,7 @@ thiserror.workspace = true
 tokio.workspace = true
 uuid.workspace = true
 [dev-dependencies]
+router-clock = { workspace = true, features = ["test-support"] }
 codex-native-integration = { workspace = true, features = ["test-support"] }
 collaboration-application-test-support = { path = "../collaboration-application-test-support", version = "0.1.126" }
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }

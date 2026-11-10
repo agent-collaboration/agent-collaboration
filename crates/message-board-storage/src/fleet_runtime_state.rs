@@ -38,7 +38,7 @@ struct MachineNoticeProgress {
 impl FleetCache {
     pub async fn clear_machine_runtime(&self) -> Result<(), RouterLocalStorageError> {
         let _writer = self.database.writer.lock().await;
-        let mut transaction = self.database.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self.database.write_transaction().await?;
         sqlx::query("DELETE FROM fleet_session")
             .execute(&mut *transaction)
             .await?;
@@ -56,7 +56,7 @@ impl FleetCache {
         epoch: Epoch,
     ) -> Result<InstallAttemptId, RouterLocalStorageError> {
         let _writer = self.database.writer.lock().await;
-        let mut transaction = self.database.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self.database.write_transaction().await?;
         let existing = read_attempt(&mut transaction, project, epoch).await?;
         let attempt = match existing {
             Some(attempt) => attempt,
@@ -81,7 +81,7 @@ impl FleetCache {
         epoch: Epoch,
     ) -> Result<(), RouterLocalStorageError> {
         let _writer = self.database.writer.lock().await;
-        let mut transaction = self.database.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self.database.write_transaction().await?;
         // Validate the row even on deletion; corrupted identities are not silently retired.
         let _current = read_attempt(&mut transaction, project, epoch).await?;
         let project = project.as_str();

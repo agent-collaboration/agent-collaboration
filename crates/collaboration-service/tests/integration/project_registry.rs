@@ -1,9 +1,7 @@
 //! Real registry/library scope proof. The enrolled PeerId is B5's explicit fixture stand-in.
-use crate::controlled_clock;
 use board_fleet_sync::BOARD_LEASE_POLICY;
 use collaboration_runtime::ProjectRegistryError;
 use collaboration_runtime::ProjectStoreRegistry;
-use controlled_clock::ControlledClock;
 use fleet_sync_lease::WriterState;
 use fleet_sync_protocol::{
     DatabaseId, Epoch, LeaseState, LeaseStatus, PeerId, RenewAnswer, RenewResult,
@@ -11,6 +9,7 @@ use fleet_sync_protocol::{
 use fleet_sync_writer::WriteRefusal;
 use message_board::*;
 use message_board_storage::ProjectStorageError;
+use router_clock::ManualClock;
 use runtime_primitives::{Clock, SyncTime};
 use std::sync::Arc;
 
@@ -68,7 +67,7 @@ async fn never_enrolled_writer_is_refused_before_any_file_is_created() -> TestRe
     let registry = ProjectStoreRegistry::new(
         &root,
         None,
-        Arc::new(ControlledClock::at(SyncTime::from_unix_millis(START))),
+        Arc::new(ManualClock::starting_at(SyncTime::from_unix_millis(START))?),
         message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
             .expect("32-byte fixture cursor key"),
     );
@@ -89,7 +88,7 @@ async fn never_enrolled_writer_is_refused_before_any_file_is_created() -> TestRe
 async fn an_unregistered_native_file_remains_unwritable_after_reopen() -> TestResult {
     let directory = tempfile::tempdir()?;
     let peer = peer()?;
-    let clock = Arc::new(ControlledClock::at(SyncTime::from_unix_millis(START)));
+    let clock = Arc::new(ManualClock::starting_at(SyncTime::from_unix_millis(START))?);
     // No transport, session or Welcome is supplied. Only the persisted enrollment input is present.
     let registry = ProjectStoreRegistry::new(
         directory.path(),
@@ -153,7 +152,7 @@ async fn real_clock_expiry_refuses_an_open_write_keeps_reads_and_renewal_resumes
 -> TestResult {
     let directory = tempfile::tempdir()?;
     let peer = peer()?;
-    let clock = Arc::new(ControlledClock::at(SyncTime::from_unix_millis(START)));
+    let clock = Arc::new(ManualClock::starting_at(SyncTime::from_unix_millis(START))?);
     let registry = ProjectStoreRegistry::new(
         directory.path(),
         Some(peer),
@@ -185,7 +184,7 @@ async fn real_clock_expiry_refuses_an_open_write_keeps_reads_and_renewal_resumes
 
     let mut write = store.begin_admission(origin()?).await?;
     assert_eq!(write.admitted_epoch()?, EpochNumber::INITIAL);
-    clock.set(expires);
+    clock.advance_to(expires)?;
     let Record::Project(mut changed) = base else {
         return Err("project fixture".into());
     };

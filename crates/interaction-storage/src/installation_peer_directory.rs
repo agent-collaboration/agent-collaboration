@@ -2,7 +2,6 @@
 use crate::{InteractionStore, StorageError};
 use collaboration_protocol::InstallationPeerId;
 use message_board::ServiceId;
-use sqlx::Connection;
 use sqlx_turso::TursoConnection;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -104,7 +103,12 @@ impl InteractionStore {
         bindings: &[InstallationPeerBinding],
     ) -> Result<(), StorageError> {
         let mut connection = self.writer.lock().await;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                sqlite_storage_maintenance::TransactionStart::Immediate,
+            )
+            .await?;
         let result = async {
             for binding in bindings {
                 remember_binding(&mut transaction, binding).await?;

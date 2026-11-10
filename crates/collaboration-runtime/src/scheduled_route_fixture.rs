@@ -76,6 +76,10 @@ pub struct FakeScheduledExecution {
     pub target: SessionRef,
     pub interactions: Arc<interaction_storage::InteractionStore>,
     pub observed_push_ids: Arc<std::sync::Mutex<Vec<PushId>>>,
+    /// Every call to `submit_run`, counted before any check: the native witness. The
+    /// fake refuses some submissions before `observed_push_ids` records them, and a real
+    /// route would have sent those.
+    pub submit_calls: Arc<AtomicUsize>,
     pub generation: CodexGeneration,
     pub attempt_id: AttemptId,
     pub submissions: AtomicUsize,
@@ -224,6 +228,7 @@ impl ScheduledRunExecution for FakeScheduledExecution {
         run: ScheduledRunSubmission,
         sink: &'a dyn RunEvidenceSink,
     ) -> DeliveryFuture<'a, RunSubmission> {
+        self.submit_calls.fetch_add(1, Ordering::SeqCst);
         Box::pin(async move {
             if run.target != self.target {
                 return Err(DeliveryContractError::InvalidEvidence);
@@ -422,4 +427,7 @@ impl ScheduledRunExecution for FakeScheduledExecution {
 
 #[path = "scheduled_run_route_fixture.rs"]
 pub mod fixture;
-pub use fixture::{apply_push_handoff, provider_worker_fixture};
+pub use fixture::{
+    FixtureTiming, apply_push_handoff, provider_worker_fixture,
+    provider_worker_fixture_counting_submits,
+};

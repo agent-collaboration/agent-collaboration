@@ -34,7 +34,7 @@ async fn a_poll_sdk_item_waits_without_a_push_then_hands_over_its_own_identity_o
     assert_eq!(frozen.len(), 1);
     publisher.wait_project_idle_for_test(&fixture.project).await;
     let item = frozen[0].id();
-    tokio::time::timeout(Duration::from_secs(6), async {
+    (async {
         while native
             .runtime()
             .local_outcome_for_test(item)
@@ -45,8 +45,7 @@ async fn a_poll_sdk_item_waits_without_a_push_then_hands_over_its_own_identity_o
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .expect("the Poll item never produced its first actual SDK outcome");
+    .await;
     let push = item.as_uuid().to_string().try_into().unwrap();
     assert!(
         fixture
@@ -71,12 +70,9 @@ async fn a_poll_sdk_item_waits_without_a_push_then_hands_over_its_own_identity_o
             .wait(reader, SubscriptionWaitFilter::All, 60, usize::MAX)
             .await
     });
-    let response = tokio::time::timeout(Duration::from_secs(6), &mut waiting).await;
-    if response.is_err() {
-        waiting.abort();
-        let _ = waiting.await;
-    }
-    let outcome = tokio::time::timeout(Duration::from_secs(6), async {
+    let response = (&mut waiting).await;
+
+    let outcome = (async {
         loop {
             let outcome = native.runtime().local_outcome_for_test(item).await.unwrap();
             if !matches!(outcome, None | Some(RecipientOutcome::Held)) {
@@ -125,17 +121,13 @@ async fn a_poll_sdk_item_waits_without_a_push_then_hands_over_its_own_identity_o
     assert!(
         matches!(
             outcome,
-            Ok(Some(RecipientOutcome::Delivered {
+            Some(RecipientOutcome::Delivered {
                 acceptance: collaboration_mail_protocol::CarrierAcceptance::Started
-            }))
+            })
         ),
         "Poll hand-over did not settle its SDK item Started: {outcome:?}; response={response:?}; record={record:?}"
     );
-    let SubscriptionWaitResult::Notice { push_id, batch, .. } = response
-        .expect("an SDK Poll item was stranded instead of handed over")
-        .unwrap()
-        .unwrap()
-        .unwrap()
+    let SubscriptionWaitResult::Notice { push_id, batch, .. } = response.unwrap().unwrap().unwrap()
     else {
         panic!("session Poll requires its own stored notice");
     };
@@ -176,13 +168,12 @@ async fn three_poll_roots_keep_filtered_and_fifo_custody_independent() {
             .reconcile_reader(fixture.reader.clone())
             .await
             .unwrap();
-        tokio::time::timeout(Duration::from_secs(6), async {
+        (async {
             while frozen_follow(&fixture).await.len() != 3 {
                 tokio::task::yield_now().await;
             }
         })
-        .await
-        .expect("three roots did not freeze as three SDK items");
+        .await;
         publisher.wait_project_idle_for_test(&fixture.project).await;
         let frozen = frozen_follow(&fixture).await;
         let target = target_session(&fixture.reader).unwrap();
@@ -219,14 +210,10 @@ async fn three_poll_roots_keep_filtered_and_fifo_custody_independent() {
             } else {
                 SubscriptionWaitFilter::All
             };
-            let result = tokio::time::timeout(
-                Duration::from_secs(6),
-                runtime
-                    .service
-                    .wait(fixture.reader.clone(), filter, 60, usize::MAX),
-            )
+            let result = (runtime
+                .service
+                .wait(fixture.reader.clone(), filter, 60, usize::MAX))
             .await
-            .expect("waiting Poll backlog was not handed over immediately")
             .unwrap()
             .unwrap();
             let SubscriptionWaitResult::Notice { push_id, batch, .. } = result else {

@@ -3,7 +3,7 @@ use crate::{AutomationStore, StorageError};
 use agent_automation::{
     AttemptOutcome, DeliveryAttempt, DeliveryId, DeliveryStatus, EventId, SubmissionEffect,
 };
-use sqlx::{Connection, Row};
+use sqlx::Row;
 
 impl AutomationStore {
     /// Call only after establishing exclusive Host ownership, before starting dispatch workers.
@@ -15,7 +15,9 @@ impl AutomationStore {
         if now_ms < 0 {
             return Err(StorageError::InvalidRecord);
         }
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         let rows = sqlx::query("SELECT delivery_id,latest_attempt_json,expires_at_ms FROM mailbox_deliveries WHERE delivery_status='dispatching' ORDER BY delivery_id")
             .fetch_all(&mut *transaction).await?;
         let mut recovered = Vec::with_capacity(rows.len());

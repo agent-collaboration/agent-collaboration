@@ -88,7 +88,7 @@ impl BoardOperations {
                 interactions.clone(),
             );
             windows
-                .list_reader_subscriptions(&request.actor, self.subscription_clock.now())
+                .list_reader_subscriptions(&request.actor, self.subscription_clock.utc_now())
                 .await?
         };
         let presence = match &self.subscription_presence {

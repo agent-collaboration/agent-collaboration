@@ -50,6 +50,7 @@ impl ProjectNotificationFixture {
     ) -> Result<Self, TestError> {
         let mut harness =
             MailHarness::open_configured(base, None, false, true, None, Some(central)).await?;
+        let clock = harness.mail.actors.runtime_clock();
         let fleet = Arc::new(FleetClient::new(
             &message_board_storage::FleetStore::open(
                 &harness
@@ -67,6 +68,7 @@ impl ProjectNotificationFixture {
             Some("notice fixture"),
         )?;
         let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
+            clock: clock.clone(),
             registry: harness.registry.clone(),
             fleet: fleet.clone(),
             identity: machine,

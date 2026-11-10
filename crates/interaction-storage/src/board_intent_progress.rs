@@ -35,13 +35,12 @@ impl InteractionStore {
         project: &ProjectId,
         through: FeedCursor,
     ) -> Result<(), StorageError> {
-        let mut connection = self.writer.lock().await;
         let project = project.as_str();
         let epoch = i64::try_from(through.epoch.get()).map_err(|_| StorageError::InvalidRecord)?;
         let position =
             i64::try_from(through.position.get()).map_err(|_| StorageError::InvalidRecord)?;
-        let result = sqlx_turso::query!("INSERT INTO board_intent_scan_cursors(project_id, epoch, position) VALUES (?, ?, ?) ON CONFLICT(project_id) DO UPDATE SET epoch = excluded.epoch, position = CASE WHEN excluded.epoch = board_intent_scan_cursors.epoch THEN max(board_intent_scan_cursors.position, excluded.position) ELSE excluded.position END WHERE excluded.epoch >= board_intent_scan_cursors.epoch", project, epoch, position)
-            .execute(&mut *connection).await?;
+        let result = self.execute_as_transaction(sqlx_turso::query!("INSERT INTO board_intent_scan_cursors(project_id, epoch, position) VALUES (?, ?, ?) ON CONFLICT(project_id) DO UPDATE SET epoch = excluded.epoch, position = CASE WHEN excluded.epoch = board_intent_scan_cursors.epoch THEN max(board_intent_scan_cursors.position, excluded.position) ELSE excluded.position END WHERE excluded.epoch >= board_intent_scan_cursors.epoch", project, epoch, position))
+            .await?;
         if result.rows_affected() != 1 {
             return Err(StorageError::InvalidRecord);
         }

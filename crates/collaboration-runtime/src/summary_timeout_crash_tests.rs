@@ -33,18 +33,29 @@ async fn summary_timeout_crash_child() -> TestResult<()> {
     if child_root()?.is_none() {
         return Err("missing owned fixture root".into());
     }
-    exercise_timeout_connection(false).await
+    Box::pin(exercise_timeout_connection(false)).await
 }
 #[tokio::test]
 async fn summary_timeout_crash_recovery_never_replays_uncertain_interrupt() -> TestResult<()> {
+    let selector = format!(
+        "{}::summary_timeout_crash_child",
+        module_path!()
+            .split_once("::")
+            .ok_or("child selector must have a module")?
+            .1
+    );
     for stage in ["stop-intent", "interrupt-response"] {
         let root = PathBuf::from("/tmp").join(format!(
             "summary-crash-{}",
             agent_automation::OperationId::generate().as_str()
         ));
-        let child = tokio::time::timeout(Duration::from_secs(15), tokio::process::Command::new(std::env::current_exe()?)
-            .args(["--exact", "summary_native_worker::summary_deadline_tests::crash_tests::summary_timeout_crash_child", "--ignored", "--nocapture"])
-            .env(ROOT_ENV, &root).env(STAGE_ENV, stage).kill_on_drop(true).output()).await??;
+        let child = tokio::process::Command::new(std::env::current_exe()?)
+            .args(["--exact", selector.as_str(), "--ignored", "--nocapture"])
+            .env(ROOT_ENV, &root)
+            .env(STAGE_ENV, stage)
+            .kill_on_drop(true)
+            .output()
+            .await?;
         if child.status.code() != Some(CRASH_EXIT) {
             return Err(format!(
                 "{stage}: child did not reach checkpoint: {:?}; {}",
@@ -56,7 +67,7 @@ async fn summary_timeout_crash_recovery_never_replays_uncertain_interrupt() -> T
         if root.join("interrupt-request.json").exists() != (stage == "interrupt-response") {
             return Err("native request witness disagrees with crash boundary".into());
         }
-        recover_and_observe(&root).await?;
+        Box::pin(recover_and_observe(&root)).await?;
         for entry in std::fs::read_dir(&root)? {
             let path = entry?.path();
             match std::fs::remove_file(&path) {
@@ -106,6 +117,7 @@ async fn recover_and_observe(root: &Path) -> TestResult<()> {
     let gate = crate::NativeGenerationGate::default();
     gate.activate(generation, socket_path, Some(schemas))?;
     let admission = gate.acquire()?;
+    let (steps_completed, completion) = tokio::sync::oneshot::channel::<()>();
     let backend = tokio::spawn(async move {
         for status in ["inProgress", "interrupted"] {
             let (socket, _) = listener.accept().await?;
@@ -150,11 +162,10 @@ async fn recover_and_observe(root: &Path) -> TestResult<()> {
             }
             socket.send(Message::Text(json!({"id":request.get("id"),"result":{"data":[{"id":"summary-turn","status":status,"items":[]}],"nextCursor":null}}).to_string().into())).await?;
         }
-        if tokio::time::timeout(Duration::from_millis(100), listener.accept())
-            .await
-            .is_ok()
-        {
-            return Err("recovery made an extra native call".into());
+        tokio::select! {
+            biased;
+            _ = listener.accept() => return Err("recovery made an extra native call".into()),
+            _ = completion => {},
         }
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     });
@@ -179,6 +190,10 @@ async fn recover_and_observe(root: &Path) -> TestResult<()> {
             source: None,
             record,
             timeout_seconds: 999,
+            clock: &router_clock::ManualClock::starting_at(
+                runtime_primitives::SyncTime::from_unix_millis(1792432800000),
+            )
+            .unwrap(),
         })
         .await?;
         let observed = store
@@ -207,7 +222,10 @@ async fn recover_and_observe(root: &Path) -> TestResult<()> {
             );
         }
     }
-    tokio::time::timeout(Duration::from_secs(3), backend).await???;
+    steps_completed
+        .send(())
+        .map_err(|_| "native observer stopped before all steps completed")?;
+    backend.await??;
     drop(store);
     Ok(())
 }

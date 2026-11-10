@@ -2,7 +2,7 @@
 use crate::{AutomationStore, StorageError};
 use agent_automation::OperationId;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use sqlx::{Connection, Row};
+use sqlx::Row;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ExternalOperationRecord<TState, TResult> {
     pub operation_id: OperationId,
@@ -36,7 +36,9 @@ impl AutomationStore {
         if request.now_ms < 0 || request.canonical_request.len() > 1_048_576 {
             return Err(StorageError::InvalidRecord);
         }
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         let existing = sqlx::query("SELECT * FROM operation_receipts WHERE operation_id=?")
             .bind(request.operation_id.as_str())
             .fetch_optional(&mut *transaction)

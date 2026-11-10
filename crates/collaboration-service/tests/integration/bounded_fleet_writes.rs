@@ -116,13 +116,14 @@ async fn fleet_write_reads_only_its_operands_and_survives_an_unrelated_corrupt_c
     // files (2), feed ledger heads (2), and workspace child-tail pruning (1).
     // Enrollment admission adds one current-caller lookup in the Fleet frame
     // transaction. Each feed read batches the range; neither cost scales with
-    // unrelated records.
+    // unrelated records. The commit signal adds SELECT total_changes() after BEGIN and
+    // before COMMIT in each of the three Fleet write transactions (6).
     assert_eq!(
-        small.0.statements, 48,
+        small.0.statements, 54,
         "exact foreground board/cache SQL budget"
     );
     assert_eq!(
-        large.0.statements, 48,
+        large.0.statements, 54,
         "exact foreground board/cache SQL budget"
     );
     assert!(

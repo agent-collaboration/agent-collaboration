@@ -3,6 +3,7 @@ use crate::subscription_delivery::subscription_service::OwnerObservation;
 use collaboration_contracts::LoadPolicy;
 use collaboration_contracts::TargetPresence;
 use message_board::{EndReason, SubscriptionMode, SubscriptionScope, WhenIdle};
+use router_clock::RuntimeClock;
 
 #[tokio::test]
 async fn hold_keeps_each_arrival_in_a_frozen_item_and_delivers_it_once_on_running() {
@@ -31,19 +32,18 @@ async fn hold_keeps_each_arrival_in_a_frozen_item_and_delivers_it_once_on_runnin
         3
     );
     assert!(runtime.requests.lock().await.try_recv().is_err());
+    // The reader runs now; held items wait for a signal that it loaded, not a timer.
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
-    fixture.clock.advance_without_tokio_time(29);
+    fixture
+        .advance_while_renewing_native_lease(std::time::Duration::from_secs(30))
+        .await;
     runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
-    fixture.clock.advance_without_tokio_time(1);
+    fixture.held_mail.observation_retried();
     let mut received = std::collections::BTreeSet::new();
     let mut covered = Vec::new();
     for _ in 0..3 {
-        let request = tokio::time::timeout(std::time::Duration::from_secs(10), async {
-            runtime.requests.lock().await.recv().await.unwrap()
-        })
-        .await
-        .unwrap();
+        let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
         assert!(
             received.insert(request.payload.push_id.as_str().to_owned()),
             "one frozen item was delivered twice"
@@ -92,7 +92,7 @@ async fn hold_keeps_each_arrival_in_a_frozen_item_and_delivers_it_once_on_runnin
     runtime.close().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn wake_uses_may_load_only_for_a_wakeable_target() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
@@ -162,7 +162,7 @@ async fn unreachable_wake_is_held_with_visible_reason() {
     runtime.close().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn drop_then_push_leaves_both_messages_unread() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
@@ -204,12 +204,14 @@ async fn drop_then_push_leaves_both_messages_unread() {
     runtime.close().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn expiry_without_activity_sends_one_stored_renew_command() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.native_runtime().await;
     runtime.owner_barrier(&fixture.reader).await;
-    fixture.clock.advance(24 * 60 * 60).await;
+    fixture
+        .advance_while_renewing_native_lease(std::time::Duration::from_secs(24 * 60 * 60))
+        .await;
     let request = runtime.requests.lock().await.recv().await.unwrap();
     assert!(
         request
@@ -249,7 +251,7 @@ async fn expiry_without_activity_sends_one_stored_renew_command() {
         .get_thread_subscription_record(
             &fixture.reader,
             &SubscriptionScope::thread(fixture.root.clone()),
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap()
@@ -259,7 +261,7 @@ async fn expiry_without_activity_sends_one_stored_renew_command() {
     runtime.close().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn unknown_outcome_advances_delivered_and_preserves_evidence() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.native_runtime().await;
@@ -295,4 +297,3 @@ async fn unknown_outcome_advances_delivered_and_preserves_evidence() {
     assert_eq!(fixture.unread_count().await, 1);
     runtime.close().await;
 }
-use super::super::SubscriptionClock;

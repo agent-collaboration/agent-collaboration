@@ -15,7 +15,9 @@ impl SubscriptionPushStore {
         &self,
     ) -> Result<Vec<SessionRef>, interaction_storage::StorageError> {
         let store = &self.store;
-        store.settle_interrupted_pushes(self.clock.now()).await?;
+        store
+            .settle_interrupted_pushes(self.clock.utc_now())
+            .await?;
         store.direct_message_recovery_targets().await
     }
 
@@ -85,7 +87,7 @@ impl SubscriptionPushStore {
             client: None,
         };
         self.store
-            .reject_unsent_direct_message(&record.push_id, receipt, self.clock.now())
+            .reject_unsent_direct_message(&record.push_id, receipt, self.clock.utc_now())
             .await
             .map_err(|_| BoardError::board_unavailable())
     }

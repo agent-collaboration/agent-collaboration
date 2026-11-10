@@ -2,6 +2,7 @@
 use crate::board_fixture;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
+use router_clock::ManualClock;
 use serde_json::{Value, json};
 use sqlx::{ConnectOptions, Connection};
 
@@ -169,11 +170,11 @@ async fn an_expired_project_still_returns_the_read_and_never_allocates_a_mark()
     use fleet_sync_protocol::{
         DatabaseId, Epoch, LeaseState, LeaseStatus, RenewAnswer, RenewResult,
     };
-    use runtime_primitives::{Clock, SystemClock};
+    use runtime_primitives::Clock;
     for scenario in ["pastExpiry", "pastDeadline"] {
-        let clock = std::sync::Arc::new(board_fixture::controlled_clock::ControlledClock::at(
-            SystemClock.now(),
-        ));
+        let clock = std::sync::Arc::new(ManualClock::starting_at(
+            runtime_primitives::SyncTime::from_unix_millis(1_800_000_000_000),
+        )?);
         let fixture = BoardFixture::start_with_clock(clock.clone()).await?;
         let (project, workstream) = fixture.project().await?;
         let task = fixture.task(&project, &workstream).await?;
@@ -186,7 +187,7 @@ async fn an_expired_project_still_returns_the_read_and_never_allocates_a_mark()
         let high_water = snapshot.high_water();
         snapshot.finish().await?;
         let started = clock.now().after(std::time::Duration::from_millis(1));
-        clock.set(started);
+        clock.advance_to(started)?;
         let database = fixture._registry.database(&project).await?;
         let lease = LeaseStatus {
             database: DatabaseId::new(uuid::Uuid::parse_str(project.as_str())?)?,
@@ -214,7 +215,7 @@ async fn an_expired_project_still_returns_the_read_and_never_allocates_a_mark()
                 started,
             )
             .await?;
-        clock.set(started.after(std::time::Duration::from_secs(120)));
+        clock.advance_to(started.after(std::time::Duration::from_secs(120)))?;
         assert!(matches!(
             database.writer_state().await?,
             fleet_sync_lease::WriterState::Paused { .. }
@@ -255,7 +256,6 @@ async fn an_expired_project_still_returns_the_read_and_never_allocates_a_mark()
     reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
 )]
 async fn superseded_project_reads_are_unavailable_and_allocate_no_mark() -> Result<(), TestError> {
-    use runtime_primitives::Clock;
     let fixture = BoardFixture::start().await?;
     let (project, _) = fixture.project().await?;
     let store = fixture
@@ -276,7 +276,7 @@ async fn superseded_project_reads_are_unavailable_and_allocate_no_mark() -> Resu
                     current: Some(fleet_sync_protocol::Epoch::new(2)?),
                 },
             ),
-            runtime_primitives::SystemClock.now(),
+            runtime_primitives::SyncTime::from_unix_millis(1_800_000_000_000),
         )
         .await?;
     for (route, request) in [

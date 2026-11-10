@@ -214,6 +214,7 @@ async fn bounded_wake_expires_without_reinjection_and_retains_evidence_after_his
         .with_interaction_store(Arc::clone(&interactions))
         .with_session_delivery(delivery);
     let sender = WakeDeliverySender::new(
+        Arc::new(runtime_primitives::SystemClock),
         Arc::clone(&interactions),
         identity
             .session_message_delivery()

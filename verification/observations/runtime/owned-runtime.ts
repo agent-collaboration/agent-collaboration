@@ -122,6 +122,7 @@ async function prepareRuntime(
   requireTrustedNativeCwd(plan.codex_config, plan.native_cwd);
   const hostEnvironment = operations.hostEnvironment();
   delete hostEnvironment.CLAUDE_CODE_EXECUTABLE;
+  delete hostEnvironment.CODEX_ROUTER_HOST_INHERITED_LOCK;
   const claudeBinding = operations.qualifyClaude(plan.claude_executable, hostEnvironment.PATH);
   operations.checkConsumers(plan.router_root);
   await operations.assertPortAvailable(plan.port);

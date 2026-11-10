@@ -97,7 +97,7 @@ impl FleetCache {
     /// Forget learned Fleet data while preserving every non-cache table.
     pub async fn clear_central_derived_cache(&self) -> Result<(), RouterLocalStorageError> {
         let _writer = self.database.writer.lock().await;
-        let mut transaction = self.database.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self.database.write_transaction().await?;
         let result = async {
             for statement in CENTRAL_CACHE_DELETIONS {
                 sqlx::query(statement).execute(&mut *transaction).await?;
@@ -123,7 +123,7 @@ impl FleetCache {
         snapshot: &FleetRecordSnapshot,
     ) -> Result<(), RouterLocalStorageError> {
         let _guard = self.database.writer.lock().await;
-        let mut transaction = self.database.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self.database.write_transaction().await?;
         let result = async {
             sqlx_turso::query!("DELETE FROM cached_fleet_records")
                 .execute(&mut *transaction)
@@ -165,7 +165,7 @@ impl FleetCache {
         entries: &[FleetFeedEntry],
     ) -> Result<(), RouterLocalStorageError> {
         let _guard = self.database.writer.lock().await;
-        let mut transaction = self.database.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self.database.write_transaction().await?;
         let result = async {
             let current = cache_checkpoint(&mut transaction).await?;
             if current != after {

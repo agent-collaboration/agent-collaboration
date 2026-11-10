@@ -5,7 +5,7 @@ use super::super::{
     takeover_controls::{BOUND, EndPrefix},
     takeover_follows::{native_state, only_item},
     takeover_readbacks as readbacks,
-    takeover_recipients::Recipients,
+    takeover_recipients::AcpRecipients,
 };
 use super::{FrontierCut, HeldFollow, RemoteEndPrefix, assert_end_groups};
 use codex_router_test_support::FixtureResult;
@@ -23,7 +23,7 @@ struct SeededHandoffFrontier {
 pub(super) async fn assert_remote_successor(
     fixture: &BoardFixture,
     second: &mut SecondHost,
-    peers: &mut Recipients,
+    peers: &mut AcpRecipients,
     remote_prefix: RemoteEndPrefix,
     seed: &HeldFollow,
     expansions: Vec<Value>,
@@ -122,7 +122,7 @@ pub(super) async fn assert_remote_successor(
     )
     .await?;
     assert_eq!(
-        peers.second()?.count_after_barrier().await?,
+        peers.second()?.count()?,
         u64::from(matches!(prefix, EndPrefix::Discarded))
     );
     Ok(())

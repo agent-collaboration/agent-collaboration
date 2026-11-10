@@ -1,4 +1,16 @@
-//! Shared incremental auto-vacuum preparation for Router-owned SQLite files.
+//! Shared incremental auto-vacuum preparation and commit signalling for Router-owned SQLite files.
+
+mod calendar_retention;
+pub use calendar_retention::{first_deletable_at, months_before};
+mod commit_signal;
+mod failed_pass_backoff;
+#[cfg(feature = "test-support")]
+pub use commit_signal::CommitPause;
+pub use commit_signal::{
+    ChangeCounter, CommitPoint, CommitSignal, PendingCommit, SignaledTransaction, TransactionStart,
+    sqlite_total_changes,
+};
+pub use failed_pass_backoff::{FAILED_PASS_BACKOFF, FailedPassBackoff, FailureRetry};
 
 use std::{
     ffi::OsString,

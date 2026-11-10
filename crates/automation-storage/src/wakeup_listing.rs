@@ -2,7 +2,7 @@
 use crate::{AutomationStore, StorageError};
 use agent_automation::{WakeRecord, WakeupId};
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use sqlx::{Connection, Row};
+use sqlx::Row;
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct WakeListPosition {
     pub upper_created_at_ms: i64,
@@ -23,7 +23,9 @@ impl AutomationStore {
         if !(1..=100).contains(&limit) {
             return Err(StorageError::InvalidRecord);
         }
-        let mut transaction = self.connection.begin().await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Deferred)
+            .await?;
         let upper = if let Some(position) = &after {
             Some((
                 position.upper_created_at_ms,

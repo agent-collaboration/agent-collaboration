@@ -26,7 +26,7 @@ use message_board::{
 use sqlx::Row;
 use std::{
     collections::{HashMap, VecDeque},
-    sync::{Mutex, atomic::Ordering},
+    sync::Mutex,
 };
 
 type Database = <TursoScope<'static, ProjectionHost> as TransactionScope>::Database;
@@ -134,15 +134,6 @@ impl TargetPresenceProbe for Running {
         Box::pin(async { Ok(TargetPresence::Running) })
     }
 }
-struct Clock(Arc<std::sync::atomic::AtomicI64>);
-impl SubscriptionClock for Clock {
-    fn now(&self) -> chrono::DateTime<chrono::Utc> {
-        chrono::DateTime::from_timestamp_millis(self.0.load(Ordering::SeqCst)).unwrap()
-    }
-    fn monotonic_now(&self) -> tokio::time::Instant {
-        tokio::time::Instant::now()
-    }
-}
 pub(super) struct Runtime {
     pub(super) fixture: Fixture,
     pub(super) actors: SubscriptionDeliveryService,
@@ -159,7 +150,7 @@ impl Runtime {
             actors: self.actors.clone(),
             presence: Arc::new(Running),
             machine: machine(),
-            clock: Arc::new(Clock(self.fixture.host.clock.clone())),
+            clock: self.fixture.host.clock.clone(),
         }
     }
     pub(super) fn local_mail_runtime(&self) -> crate::MailDeliveryRuntime {
@@ -219,14 +210,14 @@ impl Runtime {
             delivery: client.clone(),
             presence: Arc::new(Running),
             machine_identity: machine(),
-            clock: Arc::new(crate::SystemSubscriptionClock),
+            clock: fixture.host.clock.clone(),
         });
         // This recipient has no sender project. Its real check must establish
         // that absence before dispatch, instead of omitting the check port.
         let registry = Arc::new(collaboration_runtime::ProjectStoreRegistry::new(
             directory,
             Some(fixture.host.config.local.owner),
-            Arc::new(runtime_primitives::SystemClock),
+            fixture.host.clock.clone(),
             message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
                 .expect("32-byte fixture cursor key"),
         ));
@@ -253,6 +244,7 @@ impl Runtime {
         fleet.synchronize().await.unwrap();
         let admission = Arc::new(
             crate::ProjectAdmission::new(crate::ProjectAdmissionProps {
+                clock: fixture.host.clock.clone(),
                 registry,
                 fleet,
                 identity: machine(),
@@ -285,17 +277,20 @@ impl Runtime {
                 actors: actors.clone(),
                 presence,
                 machine: machine(),
-                clock: Arc::new(Clock(fixture.host.clock.clone())),
+                clock: fixture.host.clock.clone(),
             })));
     }
     pub(super) fn engine(&self) -> Engine<ProjectionStore, ProjectionHost> {
         self.fixture.engine()
     }
     pub(super) fn set_time(&self, milliseconds_after_start: i64) {
-        self.fixture.host.clock.store(
-            recorded_at().timestamp_millis() + milliseconds_after_start,
-            Ordering::SeqCst,
-        );
+        self.fixture
+            .host
+            .clock
+            .advance_to(runtime_primitives::SyncTime::from_unix_millis(
+                recorded_at().timestamp_millis() + milliseconds_after_start,
+            ))
+            .unwrap();
     }
     pub(super) async fn count(&self, item: ItemId) -> u32 {
         self.fixture

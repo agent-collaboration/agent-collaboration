@@ -1,7 +1,7 @@
 //! Exact native addresses belong exclusively to one schedule; binding identity is local UUIDv7.
 use crate::{AutomationStore, StorageError};
 use agent_automation::{ScheduleId, ThreadBindingId};
-use sqlx::{Connection, Row, SqliteConnection};
+use sqlx::{Row, SqliteConnection};
 pub struct ThreadBindingClaim {
     pub schedule_id: ScheduleId,
     pub service_id: String,
@@ -14,7 +14,9 @@ impl AutomationStore {
         &mut self,
         claim: &ThreadBindingClaim,
     ) -> Result<ThreadBindingId, StorageError> {
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         let binding = claim_in_transaction(&mut transaction, claim).await?;
         transaction.commit().await?;
         Ok(binding)

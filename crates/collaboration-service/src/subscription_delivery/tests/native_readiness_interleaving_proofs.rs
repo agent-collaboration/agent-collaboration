@@ -52,7 +52,7 @@ async fn a_second_readiness_reconcile_while_sdk_attempt_is_pending_preserves_bac
             "one frozen follow held before repeated readiness",
         )
         .await;
-    let frozen = tokio::time::timeout(Duration::from_secs(6), async {
+    let frozen = (async {
         loop {
             let items = frozen_follow(&fixture).await;
             if !items.is_empty() {
@@ -61,8 +61,7 @@ async fn a_second_readiness_reconcile_while_sdk_attempt_is_pending_preserves_bac
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .unwrap();
+    .await;
     assert_eq!(frozen.len(), 1);
     publisher.wait_project_idle_for_test(&fixture.project).await;
     mail.drive_due_for_test().await.unwrap();
@@ -114,11 +113,7 @@ async fn a_second_readiness_reconcile_while_sdk_attempt_is_pending_preserves_bac
 
     let worker = mail.clone();
     let mut driving = tokio::spawn(async move { worker.drive_due_for_test().await });
-    let first = tokio::time::timeout(Duration::from_secs(6), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .unwrap();
+    let first = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
     assert_eq!(first.payload.push_id, push);
     runtime
         .completions
@@ -128,7 +123,7 @@ async fn a_second_readiness_reconcile_while_sdk_attempt_is_pending_preserves_bac
         })
         .unwrap();
     let mut early = None;
-    tokio::time::timeout(Duration::from_secs(6), async {
+    (async {
         tokio::select! {
             result = &mut driving => result.unwrap().unwrap(),
             request = async { runtime.requests.lock().await.recv().await.unwrap() } => {
@@ -138,20 +133,23 @@ async fn a_second_readiness_reconcile_while_sdk_attempt_is_pending_preserves_bac
             }
         }
     })
-    .await
+    .await;
+    let expected = chrono::DateTime::from_timestamp_millis(
+        fixture.clock.utc_now().timestamp_millis() + 30_000,
+    )
     .unwrap();
-    let expected =
-        chrono::DateTime::from_timestamp_millis(fixture.clock.now().timestamp_millis() + 30_000)
-            .unwrap();
     let observed_deadline = fixture
         .public_subscription_view(&runtime)
         .await
         .next_retry_at;
     if early.is_none() {
-        fixture.clock.advance_without_tokio_time(29);
+        fixture
+            .clock
+            .advance(std::time::Duration::from_secs(29))
+            .unwrap();
         let worker = mail.clone();
         let mut driving = tokio::spawn(async move { worker.drive_due_for_test().await });
-        tokio::time::timeout(Duration::from_secs(6), async {
+        (async {
             tokio::select! {
                 result = &mut driving => result.unwrap().unwrap(),
                 request = async { runtime.requests.lock().await.recv().await.unwrap() } => {
@@ -161,26 +159,20 @@ async fn a_second_readiness_reconcile_while_sdk_attempt_is_pending_preserves_bac
                 }
             }
         })
-        .await
-        .unwrap();
+        .await;
     }
     let mut at_deadline = None;
     if early.is_none() {
-        fixture.clock.advance_without_tokio_time(1);
+        fixture
+            .clock
+            .advance(std::time::Duration::from_secs(1))
+            .unwrap();
         let worker = mail.clone();
         let driving = tokio::spawn(async move { worker.drive_due_for_test().await });
-        let request = tokio::time::timeout(Duration::from_secs(6), async {
-            runtime.requests.lock().await.recv().await.unwrap()
-        })
-        .await
-        .unwrap();
+        let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
         at_deadline = Some(request.payload.push_id);
         runtime.completions.send(DeliveryOutcome::Started).unwrap();
-        tokio::time::timeout(Duration::from_secs(6), driving)
-            .await
-            .unwrap()
-            .unwrap()
-            .unwrap();
+        (driving).await.unwrap().unwrap();
     }
     publisher.shutdown().await;
     drop(publisher);

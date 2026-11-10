@@ -66,7 +66,7 @@ async fn persisted_expiry_is_not_revived_by_the_start_epoch_filename() -> Result
     let target = BoardFixture::start().await?;
     let (inherited, epoch) =
         accepted_snapshot::bootstrap_project(&source, &target, &project).await?;
-    let started = SystemClock.now();
+    let started = target.clock.now();
     let expired_at = started;
     target
         ._registry

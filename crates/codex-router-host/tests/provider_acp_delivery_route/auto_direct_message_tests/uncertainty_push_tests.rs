@@ -94,7 +94,12 @@ async fn same_generation_unknown_holds_push_with_blocking_operation_id() {
             Some("uncertainty proof"),
         )
         .expect("machine"),
-        clock: Arc::new(SystemSubscriptionClock),
+        clock: Arc::new(
+            router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+                1792432800000,
+            ))
+            .unwrap(),
+        ),
     });
     owner.start().await.expect("owner starts");
 

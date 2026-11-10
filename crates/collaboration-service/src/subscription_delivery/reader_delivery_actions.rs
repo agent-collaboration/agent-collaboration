@@ -30,7 +30,7 @@ impl ReaderDeliveryOwner {
                     &self.reader,
                     prior.scope(),
                     project,
-                    self.clock.now(),
+                    self.clock.utc_now(),
                 )
                 .await;
             let Ok(Some(expired)) = expired else {
@@ -95,7 +95,7 @@ impl ReaderDeliveryOwner {
             .select_project_subscription_notice(
                 &self.reader,
                 roots,
-                self.clock.now(),
+                self.clock.utc_now(),
                 maximum_root_notice_bytes,
                 &self.pass_projects,
                 &self.pass_preventions,

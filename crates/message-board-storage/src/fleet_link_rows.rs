@@ -141,7 +141,7 @@ impl FleetCache {
             return Err(invalid("fleetLink"));
         }
         let _writer = self.database.writer.lock().await;
-        let mut transaction = self.database.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self.database.write_transaction().await?;
         let previous = read_link(&mut transaction).await?;
         let now = Utc::now().to_rfc3339();
         let (id, created_at) = previous.map_or_else(

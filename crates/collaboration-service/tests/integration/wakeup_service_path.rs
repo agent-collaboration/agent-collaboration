@@ -20,6 +20,7 @@ async fn real_control_client_preserves_wake_identity_timing_and_message()
     )
     .map_err(std::io::Error::other)?
     .with_automation_store(store.clone());
+    let clock = identity.runtime_clock();
     let served = served_api::ServedApi::start(identity)?;
     let client = served.client("wake-test").await?;
     let target = json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"fixture-only-thread"});
@@ -88,7 +89,7 @@ async fn real_control_client_preserves_wake_identity_timing_and_message()
     if cancelled.wakeup.state != collaboration_protocol::WakeState::Cancelled {
         return Err("cancel did not reach storage".into());
     }
-    let past = (chrono::Utc::now() - chrono::Duration::seconds(1))
+    let past = (clock.utc_now() - chrono::Duration::seconds(1))
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let immediate: WakeSendRequest = serde_json::from_value(
         json!({"operationId":OperationId::generate(),"message":current.definition.message,"timing":{"kind":"at","at":past},"requestedBy":{"kind":"owner"},"replace":false,"expiry":{"kind":"none"}}),
@@ -99,7 +100,7 @@ async fn real_control_client_preserves_wake_identity_timing_and_message()
         .await
         .evaluate_wakeup::<collaboration_protocol::SavedMessage>(
             &immediate.definition.wakeup_id,
-            chrono::Utc::now().timestamp_millis(),
+            clock.utc_now().timestamp_millis(),
             wake_push_test_support::build_test_wake_push_draft,
         )
         .await?
@@ -117,7 +118,7 @@ async fn real_control_client_preserves_wake_identity_timing_and_message()
     if !empty.records.is_empty() || empty.coverage.latest_attempt_included {
         return Err("empty attempt history invented submission evidence".into());
     }
-    let claimed = store.lock().await.claim_delivery::<collaboration_protocol::SessionRef,collaboration_protocol::MessageContent,collaboration_protocol::CodexGeneration>(&delivery, chrono::Utc::now().timestamp_millis()).await?.ok_or("fixture claim missing")?;
+    let claimed = store.lock().await.claim_delivery::<collaboration_protocol::SessionRef,collaboration_protocol::MessageContent,collaboration_protocol::CodexGeneration>(&delivery, clock.utc_now().timestamp_millis()).await?.ok_or("fixture claim missing")?;
     let attempts = client
         .read_delivery_attempts(collaboration_protocol::DeliveryAttemptsRequest {
             delivery_id: delivery.clone(),
@@ -194,7 +195,7 @@ async fn real_control_client_preserves_wake_identity_timing_and_message()
                 effect: agent_automation::AcceptedDeliveryEffect::Queued,
                 receipt: receipt.clone(),
             },
-            now_ms: chrono::Utc::now().timestamp_millis(),
+            now_ms: clock.utc_now().timestamp_millis(),
         })
         .await?;
     let cancellation_request = collaboration_protocol::WakeMutationRequest {

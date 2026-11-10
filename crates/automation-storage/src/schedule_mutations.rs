@@ -3,7 +3,6 @@ use crate::local_operation_receipts::{self, CompletedLocalOperation, LocalOperat
 use crate::{AutomationStore, StorageError};
 use agent_automation::{ChangeId, OperationId, ScheduleDefinition, ScheduleId, ScheduleRecord};
 use serde::{Serialize, de::DeserializeOwned};
-use sqlx::Connection;
 #[derive(Serialize)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ScheduleEdit<TTarget, TEndpoint> {
@@ -39,7 +38,9 @@ impl AutomationStore {
         };
         let canonical = serde_json::to_vec(&(&request.schedule_id, &request.edit))
             .map_err(|_| StorageError::InvalidRecord)?;
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         if let Some(record) = local_operation_receipts::replay(
             &mut transaction,
             LocalOperation {

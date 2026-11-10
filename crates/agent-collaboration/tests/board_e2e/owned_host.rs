@@ -72,7 +72,14 @@ impl StoppedHost {
         use std::os::unix::fs::{FileTypeExt, MetadataExt};
 
         let mut failures = Vec::new();
-        for name in ["control.sock", "codex-native.sock", "codex-acp.sock"] {
+        // The same listener paths the Host clears at start, provider endpoints included.
+        for name in [
+            "control.sock",
+            "codex-native.sock",
+            "codex-acp.sock",
+            "router-sessions/claude-local.sock",
+            "router-sessions/cursor-local.sock",
+        ] {
             let path = self.directory.join(name);
             let removed: FixtureResult = async {
                 let before = match std::fs::symlink_metadata(&path) {

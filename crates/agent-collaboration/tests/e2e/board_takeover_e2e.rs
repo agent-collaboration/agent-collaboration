@@ -15,7 +15,12 @@ mod takeover_controls;
 mod takeover_follows;
 #[path = "../board_e2e/takeover_prefixes.rs"]
 mod takeover_prefixes;
+use super::acp_recipient;
 use crate::takeover_readbacks;
+#[expect(
+    dead_code,
+    reason = "Each e2e journey file uses a different part of the shared recipient fixtures."
+)]
 #[path = "../board_e2e/takeover_recipients.rs"]
 mod takeover_recipients;
 use codex_router_test_support::FixtureResult;

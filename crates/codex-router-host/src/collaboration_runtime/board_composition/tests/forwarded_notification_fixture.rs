@@ -9,7 +9,7 @@ use collaboration_service::MailPushDeliveryProps;
 use collaboration_service::NotificationPublisher;
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
-use collaboration_service::SystemSubscriptionClock;
+
 use durable_steps::{AtomicStore, CallFailure, StoreError};
 use fleet_sync_protocol::ItemId;
 use fleet_sync_tokio_runner::{CallEnvelope, CallRouter, TokioHost};
@@ -107,7 +107,7 @@ impl HolderNotifications {
             delivery: carrier.clone(),
             presence: carrier.clone(),
             machine_identity: machine.clone(),
-            clock: Arc::new(SystemSubscriptionClock),
+            clock: Arc::new(router_clock::SystemRuntimeClock::new()),
         });
         actors.start().await?;
         let identity = ApplicationFixture::new(
@@ -131,7 +131,7 @@ impl HolderNotifications {
                 actors: actors.clone(),
                 presence: carrier,
                 machine,
-                clock: Arc::new(SystemSubscriptionClock),
+                clock: actors.runtime_clock(),
             },
             Some(session),
         )?;

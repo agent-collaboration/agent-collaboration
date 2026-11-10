@@ -63,6 +63,7 @@ pub enum ProjectAdmissionError {
 }
 
 pub struct ProjectAdmission {
+    pub(crate) clock: Arc<dyn router_clock::RuntimeClock>,
     pub(crate) registry: Arc<ProjectStoreRegistry>,
     pub(crate) fleet: Arc<FleetClient>,
     pub(crate) installation: ServiceId,
@@ -70,6 +71,7 @@ pub struct ProjectAdmission {
 }
 
 pub struct ProjectAdmissionProps {
+    pub clock: Arc<dyn router_clock::RuntimeClock>,
     pub registry: Arc<ProjectStoreRegistry>,
     pub fleet: Arc<FleetClient>,
     pub identity: collaboration_contracts::MachineIdentity,
@@ -77,6 +79,7 @@ pub struct ProjectAdmissionProps {
 
 #[cfg(feature = "runtime-test-support")]
 pub struct ProjectAdmissionTestContext {
+    pub clock: Arc<dyn router_clock::RuntimeClock>,
     pub fleet: Arc<FleetClient>,
     pub registry: Arc<ProjectStoreRegistry>,
     pub origin: ActorOrigin,
@@ -91,6 +94,7 @@ impl ProjectAdmission {
     #[must_use]
     pub fn runtime_test_context(&self) -> ProjectAdmissionTestContext {
         ProjectAdmissionTestContext {
+            clock: self.clock.clone(),
             fleet: self.fleet.clone(),
             registry: self.registry.clone(),
             origin: self.record_origin(),
@@ -106,6 +110,7 @@ impl ProjectAdmission {
 
     pub fn new(props: ProjectAdmissionProps) -> Result<Self, ProjectAdmissionError> {
         Ok(Self {
+            clock: props.clock,
             registry: props.registry,
             fleet: props.fleet,
             installation: ServiceId::try_from(String::from(props.identity.service_id().clone()))
@@ -220,7 +225,7 @@ impl ProjectAdmission {
             request_gate::RequestGate::Ready(ready) => *ready,
             request_gate::RequestGate::Reply(reply) => return Ok(reply),
         };
-        let now = fixture_time.unwrap_or_else(Utc::now);
+        let now = fixture_time.unwrap_or_else(|| self.clock.utc_now());
         let mut context =
             OperationContext::load(self, request, &mut write, now, high_water).await?;
         let plan = context.plan(&mut write).await?;

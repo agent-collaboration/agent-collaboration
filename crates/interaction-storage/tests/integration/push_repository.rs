@@ -544,3 +544,66 @@ mod reply_references;
 
 #[path = "../push_repository/carrier_outcomes.rs"]
 mod carrier_outcomes;
+
+fn commit_bumped(commits: &mut tokio::sync::watch::Receiver<u64>) -> bool {
+    let changed = commits.has_changed().unwrap_or(false);
+    commits.borrow_and_update();
+    changed
+}
+
+/// Q2 for the push family: the former one-statement insert and read mark, and a
+/// transactional transition, each signal; reads don't. An UPDATE that matches a row
+/// counts as a change in SQLite's total_changes() even when it writes the same value,
+/// so the repeated read mark signals too.
+#[tokio::test]
+async fn push_writes_signal_their_commit_and_push_reads_do_not() {
+    let database = TestDatabase::new();
+    let store = InteractionStore::open(&database.path)
+        .await
+        .expect("interaction store migrates");
+    let mut commits = store.subscribe_commits();
+    let target = session("codex-local", "target-thread");
+    let push_id = push_id();
+
+    store
+        .insert_push_record(push_draft(
+            push_id.clone(),
+            target.clone(),
+            PushOrigin::Session(session("claude-local", "sender-thread")),
+            "body",
+            chrono::DateTime::UNIX_EPOCH,
+        ))
+        .await
+        .expect("insert");
+    let insert_bumped = commit_bumped(&mut commits);
+    store.get_push_record(&push_id).await.expect("read");
+    store
+        .list_pending_push_records(&target)
+        .await
+        .expect("pending read");
+    let reads_bumped = commit_bumped(&mut commits);
+    store
+        .mark_push_read(&push_id, &target, chrono::DateTime::UNIX_EPOCH)
+        .await
+        .expect("first read mark");
+    let first_mark_bumped = commit_bumped(&mut commits);
+    store
+        .mark_push_read(&push_id, &target, chrono::DateTime::UNIX_EPOCH)
+        .await
+        .expect("repeated read mark");
+    let repeated_mark_bumped = commit_bumped(&mut commits);
+    store
+        .mark_push_attempted(&push_id)
+        .await
+        .expect("attempted");
+    let transition_bumped = commit_bumped(&mut commits);
+
+    assert!(insert_bumped, "the push insert must signal");
+    assert!(!reads_bumped, "push reads must not signal");
+    assert!(first_mark_bumped, "setting read_at must signal");
+    assert!(
+        repeated_mark_bumped,
+        "a matched UPDATE counts in total_changes() even with an unchanged value"
+    );
+    assert!(transition_bumped, "a delivery transition must signal");
+}

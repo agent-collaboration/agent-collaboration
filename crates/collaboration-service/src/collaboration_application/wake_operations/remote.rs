@@ -31,7 +31,7 @@ impl WakeOperations {
         let fail = |reason| wake_failure(context.clone(), reason, LocalMutationState::None);
         let original =
             serde_json::to_vec(&request).map_err(|_| fail(WakeFailureReason::InvalidRecord))?;
-        let now = chrono::Utc::now();
+        let now = self.clock.utc_now();
         // Freeze relative times at the requester. Transit never extends a wake's deadline.
         let timing = match &request.timing {
             collaboration_protocol::TimingRequest::After { seconds } => {
@@ -239,8 +239,8 @@ impl WakeOperations {
             });
         }
         let bound = Duration::from_secs(u64::from(seconds));
-        let deadline = tokio::time::Instant::now() + bound;
-        let wall_deadline = chrono::Utc::now() + chrono::Duration::seconds(i64::from(seconds));
+        let deadline = self.clock.monotonic_now() + bound;
+        let wall_deadline = self.clock.utc_now() + chrono::Duration::seconds(i64::from(seconds));
         let work = async {
             let context = WakeFailureContext::wakeup(request.wakeup_id.clone());
             let target = self
@@ -262,7 +262,7 @@ impl WakeOperations {
                     target,
                     OperationId::generate(),
                     control,
-                    deadline.saturating_duration_since(tokio::time::Instant::now()),
+                    deadline.saturating_duration_since(self.clock.monotonic_now()),
                 )
                 .await
             {
@@ -280,7 +280,7 @@ impl WakeOperations {
                 _ => Err(fail()),
             }
         };
-        match tokio::time::timeout_at(deadline, work).await {
+        match router_clock::timeout_at(self.clock.as_ref(), deadline, work).await {
             Ok(result) => result,
             Err(_) => match request.after {
                 Some(cursor) => Ok(WakeWaitResult {
@@ -325,7 +325,7 @@ impl WakeOperations {
     ) -> Result<RemoteWakeResult, WakeFailure> {
         let deadline = match &request {
             RemoteWakeRequest::Wait { deadline, .. } => deadline.as_datetime(),
-            _ => chrono::Utc::now() + chrono::Duration::seconds(30),
+            _ => self.clock.utc_now() + chrono::Duration::seconds(30),
         };
         let body = WakeBody {
             request,
@@ -409,7 +409,7 @@ impl WakeOperations {
                 answer => Ok(answer),
             }
         };
-        tokio::time::timeout(bound, operation)
+        router_clock::timeout(self.clock.as_ref(), bound, operation)
             .await
             .map_err(|_| fail(WakeFailureReason::RemoteUnavailable, uncertainty(&context)))?
     }

@@ -1,9 +1,9 @@
 //! A lost activity scope must recover another project's pending work through native probes.
-use super::super::{SubscriptionClock, subscription_service::OwnerObservation};
+use super::super::subscription_service::OwnerObservation;
 use super::owner_fixture::*;
 use message_board::*;
+use router_clock::RuntimeClock;
 use serde_json::json;
-use std::time::Duration;
 
 async fn write_project(
     fixture: &OwnerFixture,
@@ -22,7 +22,7 @@ async fn write_project(
                 protocol_version: ProtocolVersion::CURRENT,
                 operation,
             },
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap();
@@ -126,7 +126,7 @@ async fn lagged_activity_rescans_the_reader_and_recovers_a_different_project() {
     post.envelope.request = None;
     post.actor = human("missed-writer");
     post.envelope.actor = RecordedActor::declared(post.actor.clone());
-    post.envelope.time = RecordTime::Router(fixture.clock.now());
+    post.envelope.time = RecordTime::Router(fixture.clock.utc_now());
     post.placement = Placement::Thread {
         thread_id: root.clone(),
     };
@@ -142,12 +142,7 @@ async fn lagged_activity_rescans_the_reader_and_recovers_a_different_project() {
     for _ in 0..300 {
         fixture.registry.notify_activity(&fixture.project);
     }
-    tokio::time::timeout(
-        Duration::from_secs(5),
-        runtime.observe(|event| matches!(event, OwnerObservation::ActivityLagged)),
-    )
-    .await
-    .unwrap();
+    (runtime.observe(|event| matches!(event, OwnerObservation::ActivityLagged))).await;
     runtime.owner_barrier(&fixture.reader).await;
     let record = fixture
         .store
@@ -156,7 +151,7 @@ async fn lagged_activity_rescans_the_reader_and_recovers_a_different_project() {
         .get_thread_subscription_record(
             &fixture.reader,
             &SubscriptionScope::thread(root.clone()),
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap()

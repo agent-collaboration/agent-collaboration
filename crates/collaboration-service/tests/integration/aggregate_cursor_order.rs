@@ -17,6 +17,10 @@ use std::{os::unix::fs::PermissionsExt, sync::Arc};
 )]
 async fn aggregate_continuation_keeps_every_post_when_router_wall_clock_moves_backwards()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let clock = std::sync::Arc::new(router_clock::ManualClock::new(
+        chrono::DateTime::UNIX_EPOCH + chrono::Duration::seconds(1_792_432_800),
+    ));
+
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
     let installation = ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?;
@@ -31,8 +35,10 @@ async fn aggregate_continuation_keeps_every_post_when_router_wall_clock_moves_ba
     )
     .await?;
     let fleet = Arc::new(fleet);
-    let registry = crate::native_registry::new_registry(directory.path()).await?;
+    let registry =
+        crate::native_registry::new_registry_with_clock(directory.path(), clock.clone()).await?;
     let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
+        clock: clock.clone(),
         registry: registry.clone(),
         fleet: fleet.clone(),
         identity: MachineIdentity::new(
