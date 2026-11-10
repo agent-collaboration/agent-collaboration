@@ -74,10 +74,7 @@ async fn call_registered_tool(
 
 #[tokio::test]
 async fn subscription_tools_roundtrip_through_mcp_api_native_projects_and_local_progress() {
-    let clock = std::sync::Arc::new(router_clock::ManualClock::new(
-        chrono::DateTime::from_timestamp_millis(1792432800000)
-            .ok_or_else(|| std::io::Error::other("fixed fixture time"))?,
-    ));
+    let clock = Arc::new(router_clock::SystemRuntimeClock::new());
 
     use std::os::unix::fs::PermissionsExt;
 
@@ -85,9 +82,10 @@ async fn subscription_tools_roundtrip_through_mcp_api_native_projects_and_local_
     std::fs::set_permissions(temporary.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private service permissions");
 
-    let registry = crate::native_board_test_fixture::new_registry(temporary.path())
-        .await
-        .expect("native project registry");
+    let registry =
+        crate::native_board_test_fixture::new_registry_with_clock(temporary.path(), clock.clone())
+            .await
+            .expect("native project registry");
     let origin = message_board::ActorOrigin {
         installation: message_board::ServiceId::try_from(SERVICE_ID.to_owned())
             .expect("fixture service"),
@@ -140,12 +138,7 @@ async fn subscription_tools_roundtrip_through_mcp_api_native_projects_and_local_
         presence: Arc::clone(&presence),
         machine_identity: MachineIdentity::new(service_id, Some("mcp-subscription-test"))
             .expect("machine identity"),
-        clock: Arc::new(
-            router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
-                1792432800000,
-            ))
-            .unwrap(),
-        ),
+        clock: clock.clone(),
     });
     let service_identity = ApplicationFixture::new(SERVICE_ID, SERVICE_EPOCH)
         .expect("service identity")
@@ -164,12 +157,7 @@ async fn subscription_tools_roundtrip_through_mcp_api_native_projects_and_local_
                 Some("mcp-subscription-test"),
             )
             .expect("machine"),
-            clock: Arc::new(
-                router_clock::ManualClock::starting_at(
-                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
-                )
-                .unwrap(),
-            ),
+            clock: clock.clone(),
         },
     )
     .expect("native mail owner");
@@ -565,7 +553,7 @@ async fn subscription_tools_roundtrip_through_mcp_api_native_projects_and_local_
         .get_thread_subscription_record(
             &actor,
             &message_board::SubscriptionScope::thread(root_message_id.clone()),
-            subscription_service.runtime_clock().now(),
+            subscription_service.runtime_clock().utc_now(),
         )
         .await
         .unwrap()

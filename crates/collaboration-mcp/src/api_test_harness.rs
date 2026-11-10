@@ -42,7 +42,9 @@ pub(crate) const TEST_PROTOCOL_VERSION: &str = "2025-11-25";
 
 /// A Router identity with no stores; tests add the stores their operations need.
 pub(crate) fn test_identity() -> ApplicationFixture {
-    ApplicationFixture::new(TEST_SERVICE_ID, TEST_SERVICE_EPOCH).expect("test service identity")
+    ApplicationFixture::new(TEST_SERVICE_ID, TEST_SERVICE_EPOCH)
+        .expect("test service identity")
+        .with_runtime_clock(std::sync::Arc::new(router_clock::SystemRuntimeClock::new()))
 }
 
 /// The configuration a Host would hand every listener, over `application`.

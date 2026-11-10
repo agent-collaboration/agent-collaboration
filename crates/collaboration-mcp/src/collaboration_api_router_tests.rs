@@ -29,14 +29,12 @@ async fn project_admission(
     Arc<collaboration_runtime::FleetClient>,
     board_central_test_support::FleetTestRuntime,
 ) {
-    let clock = std::sync::Arc::new(router_clock::ManualClock::new(
-        chrono::DateTime::from_timestamp_millis(1792432800000)
-            .ok_or_else(|| std::io::Error::other("fixed fixture time"))?,
-    ));
+    let clock = Arc::new(router_clock::SystemRuntimeClock::new());
 
-    let registry = crate::native_board_test_fixture::new_registry(directory)
-        .await
-        .expect("native project registry");
+    let registry =
+        crate::native_board_test_fixture::new_registry_with_clock(directory, clock.clone())
+            .await
+            .expect("native project registry");
     let origin = message_board::ActorOrigin {
         installation: TEST_SERVICE_ID
             .to_owned()

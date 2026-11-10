@@ -45,10 +45,7 @@ type TestResult<TValue> = Result<TValue, Box<dyn std::error::Error>>;
 
 impl SaturatedApi {
     async fn start() -> TestResult<Self> {
-        let clock = std::sync::Arc::new(router_clock::ManualClock::new(
-            chrono::DateTime::from_timestamp_millis(1792432800000)
-                .ok_or_else(|| std::io::Error::other("fixed fixture time"))?,
-        ));
+        let clock = Arc::new(router_clock::SystemRuntimeClock::new());
 
         use std::os::unix::fs::PermissionsExt;
         let directory = tempfile::Builder::new()

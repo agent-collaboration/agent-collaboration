@@ -12,7 +12,7 @@ use collaboration_contracts::{
     SessionMessageDelivery,
 };
 use collaboration_protocol::{DeliveryOutcome, DeliveryReceipt, SavedMessage, SessionReachability};
-use router_clock::ManualClock;
+use router_clock::{ClockInstant, ManualClock};
 use runtime_primitives::{Clock, SyncTime};
 use serde_json::json;
 use std::{
@@ -257,6 +257,12 @@ async fn a_wake_fires_at_its_time_on_one_timer_and_is_delivered_once() -> TestRe
     let wakes = fixture.start()?;
     settled(&wakes.observation).await?;
     let armed = wakes.observation.snapshot().armed_deadline;
+    assert!(
+        fixture
+            .clock
+            .has_not_due_check_now(ClockInstant::ZERO + Duration::from_secs(60)),
+        "wake worker must register its injected due timer"
+    );
 
     advance(&fixture.clock, Duration::from_secs(59)).await;
     settled(&wakes.observation).await?;

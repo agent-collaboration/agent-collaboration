@@ -10,7 +10,7 @@ use crate::{
 use agent_automation::{ExpiryRule, OperationId, TimingRule};
 use automation_storage::{AutomationStore, MAX_OWED_PUSH_OPERATION_BATCH, WakeCreate};
 use collaboration_protocol::SavedMessage;
-use router_clock::ManualClock;
+use router_clock::{ClockInstant, ManualClock};
 use runtime_primitives::{Clock, SyncTime};
 use serde_json::json;
 use std::{sync::Arc, time::Duration};
@@ -187,6 +187,12 @@ async fn a_failed_handoff_read_retries_on_the_backoff_with_one_warning() -> Test
     let evaluation = fixture.owe_one_push().await;
     settled(&fixture.observation).await?;
     let first_retry = fixture.observation.snapshot().armed_deadline;
+    assert!(
+        fixture
+            .clock
+            .has_not_due_check_now(ClockInstant::ZERO + Duration::from_secs(1)),
+        "handoff worker must register its injected retry timer"
+    );
     advance(&fixture.clock, Duration::from_secs(1)).await;
     settled(&fixture.observation).await?;
     let second_retry = fixture.observation.snapshot().armed_deadline;

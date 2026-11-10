@@ -362,6 +362,12 @@ async fn a_running_summary_is_interrupted_once_at_its_deadline() -> TestResult<(
 
     rig.answered(1).await?;
     let armed = rig.armed();
+    assert!(
+        rig.fixture
+            .clock
+            .has_not_due_check_now(ClockInstant::ZERO + Duration::from_secs(SUMMARY_SECONDS)),
+        "summary worker must register its injected deadline timer"
+    );
     advance(&rig.fixture.clock, Duration::from_secs(SUMMARY_SECONDS - 1)).await;
     settled(&rig.scheduler).await?;
     let before_deadline = rig.requests().len();
