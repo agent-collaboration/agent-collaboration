@@ -147,7 +147,7 @@ test("the S4 routes refuse outside the S4 allocation", async () => {
   }
 });
 
-test("S4 includes acfx and its dependents, excludes platform tables, and restores its exact image", async () => {
+test("S4 includes acfx, sqlitex and their dependents, excludes platform tables, and restores its exact image", async () => {
   const signer = await testSigner(),
     storage = await persistenceRoot();
   try {
@@ -158,9 +158,13 @@ test("S4 includes acfx and its dependents, excludes platform tables, and restore
           ...object,
           statements: [
             "CREATE TABLE acfx(value TEXT)",
+            "CREATE TABLE sqlitex(value TEXT)",
             "CREATE INDEX acfx_value ON acfx(value)",
             "CREATE TRIGGER acfx_trigger AFTER INSERT ON acfx BEGIN UPDATE acfx SET value = upper(value) WHERE rowid = new.rowid; END",
             "INSERT INTO acfx(rowid,value) VALUES (7,'retained')",
+            "CREATE INDEX sqlitex_value ON sqlitex(value)",
+            "CREATE TRIGGER sqlitex_trigger AFTER INSERT ON sqlitex BEGIN UPDATE sqlitex SET value = upper(value) WHERE rowid = new.rowid; END",
+            "INSERT INTO sqlitex(rowid,value) VALUES (9,'literal')",
           ],
         },
       ]);
@@ -170,6 +174,9 @@ test("S4 includes acfx and its dependents, excludes platform tables, and restore
         "acfx",
         "acfx_trigger",
         "acfx_value",
+        "sqlitex",
+        "sqlitex_trigger",
+        "sqlitex_value",
       ]);
       assert.equal(
         image.schema.some((row) => row.name.startsWith("_cf_") || row.tbl_name.startsWith("_cf_")),
@@ -178,7 +185,12 @@ test("S4 includes acfx and its dependents, excludes platform tables, and restore
       assert.deepEqual(image.tables.acfx?.rows, [
         { rowid: "7", cells: [{ kind: "text", value: "RETAINED" }] },
       ]);
-      await writeStatements(call, [{ ...object, statements: ["DROP TABLE acfx"] }]);
+      assert.deepEqual(image.tables.sqlitex?.rows, [
+        { rowid: "9", cells: [{ kind: "text", value: "LITERAL" }] },
+      ]);
+      await writeStatements(call, [
+        { ...object, statements: ["DROP TABLE acfx", "DROP TABLE sqlitex"] },
+      ]);
       await restoreObjects(call, [object], { [cohortKey(object)]: image });
       assert.deepEqual((await snapshotCohort(call, [object]))[cohortKey(object)], image);
     });

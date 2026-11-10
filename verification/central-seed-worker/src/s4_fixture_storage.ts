@@ -62,7 +62,7 @@ export interface ObjectImage {
 
 const quoted = (name: string) => `"${name.replaceAll('"', '""')}"`;
 const USER_OBJECTS =
-  "name NOT GLOB '_cf_*' AND name NOT LIKE 'sqlite_%' AND tbl_name NOT GLOB '_cf_*'";
+  "name NOT GLOB '_cf_*' AND name NOT GLOB 'sqlite_*' AND tbl_name NOT GLOB '_cf_*'";
 
 function schema(sql: SqlStorage): SchemaEntry[] {
   return sql

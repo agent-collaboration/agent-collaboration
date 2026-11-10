@@ -33,7 +33,7 @@ const quoted = (name: string): string => `"${name.replaceAll('"', '""')}"`;
 export function readObjectInventory(sql: SqlStorage): ObjectInventory {
   const tables = readOnly<{ name: string }>(
     sql,
-    "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT GLOB '_cf_*' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+    "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT GLOB '_cf_*' AND name NOT GLOB 'sqlite_*' ORDER BY name",
   ).map((row) => row.name);
   const rowCounts: Record<string, number> = {};
   for (const table of tables) {

@@ -4,13 +4,13 @@ import { test } from "node:test";
 import { readObjectInventory } from "../src/object_inventory.ts";
 import type { SqlRow, SqlValue } from "../src/platform.ts";
 
-test("inventory uses a literal platform prefix: acfx is user data and _cf_KV is excluded", () => {
+test("inventory uses literal prefixes: acfx and sqlitex are user data; reserved tables are excluded", () => {
   const database = new DatabaseSync(":memory:");
   try {
     // Workerd reserves platform table creation. This SQLite fixture supplies that
     // schema explicitly; the workerd refusal and snapshot journeys cover real DOs.
     database.exec(
-      "CREATE TABLE acfx(value TEXT); INSERT INTO acfx VALUES ('preserve'); CREATE TABLE _cf_KV(key TEXT,value BLOB)",
+      "CREATE TABLE acfx(id INTEGER PRIMARY KEY AUTOINCREMENT,value TEXT); INSERT INTO acfx(value) VALUES ('preserve'); CREATE TABLE sqlitex(value TEXT); INSERT INTO sqlitex VALUES ('preserve too'); CREATE TABLE _cf_KV(key TEXT,value BLOB)",
     );
     const inventory = readObjectInventory({
       exec<Row extends SqlRow>(query: string, ...bindings: SqlValue[]) {
@@ -27,8 +27,11 @@ test("inventory uses a literal platform prefix: acfx is user data and _cf_KV is 
         return { toArray: () => selected, [Symbol.iterator]: () => selected[Symbol.iterator]() };
       },
     });
-    assert.deepEqual(inventory.tables, ["acfx"]);
-    assert.deepEqual(inventory.rowCounts, { acfx: 1 });
+    assert.ok(
+      database.prepare("SELECT name FROM sqlite_schema WHERE name='sqlite_sequence'").get(),
+    );
+    assert.deepEqual(inventory.tables, ["acfx", "sqlitex"]);
+    assert.deepEqual(inventory.rowCounts, { acfx: 1, sqlitex: 1 });
   } finally {
     database.close();
   }

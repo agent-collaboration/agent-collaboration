@@ -115,10 +115,26 @@ async function withSeed(
     ) => Promise<{ status: number; body: Record<string, unknown> }>;
     dump: () => Promise<Record<string, { rows: Record<string, unknown[]> }>>;
   }) => Promise<void>,
+  existingCopyStatements: readonly string[] = [],
 ) {
   const signer: TestSigner = await testSigner();
   const storage = await persistenceRoot();
   try {
+    if (existingCopyStatements.length > 0) {
+      const standIn = await startWorker("old-central-stand-in", storage.path, signer.jwks);
+      try {
+        const response = await standIn.dispatchFetch(
+          `https://central.test/PROJECT_COPIES/${PROJECTS.headOnly}/run`,
+          {
+            method: "POST",
+            body: JSON.stringify(existingCopyStatements),
+          },
+        );
+        assert.equal(response.status, 200);
+      } finally {
+        await standIn.dispose();
+      }
+    }
     await body({
       async call(phase, request, target: string | null = STAGING_TARGET) {
         const worker = await startWorker("seed", storage.path, signer.jwks, target);
@@ -281,6 +297,31 @@ test("a copy whose manifest digest doesn't match is refused and nothing is writt
       assert.deepEqual(Object.keys(dump.rows), [], `${key} was written`);
     }
   });
+});
+
+test("seed freshness refuses legal user tables that resemble reserved prefixes", async () => {
+  for (const name of ["acfx", "sqlitex"])
+    await withSeed(
+      async (run) => {
+        const seed = await withNoteDigest(
+          await project(PROJECTS.headOnly, { epoch: "3", sequence: "17" }),
+        );
+        const before = await run.dump();
+        const refused = await run.call("copies", { target: STAGING_TARGET, projects: [seed] });
+        assert.equal(refused.status, 409);
+        assert.deepEqual(refused.body, {
+          kind: "refused",
+          results: {
+            [`copy ${PROJECTS.headOnly}`]: {
+              kind: "refused",
+              reason: `storage is not fresh: [${name}]`,
+            },
+          },
+        });
+        assert.deepEqual(await run.dump(), before);
+      },
+      [`CREATE TABLE ${name}(value TEXT)`],
+    );
 });
 
 test("the seed refuses a deployment that isn't a staging seed target, or a request for another target", async () => {
