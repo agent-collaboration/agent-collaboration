@@ -37,6 +37,8 @@ const planSchema = z
     peerId: z.uuidv7(),
     origin: z.literal("https://s1-migration.agent-collaboration.com"),
     serviceTokenFile: z.string(),
+    /** A Mac without the owner's browser sign-in reads an assertion minted on another Mac. */
+    ownerAssertionFile: z.string().startsWith("/").optional(),
     evidenceDirectory: z.string(),
     expectedFiles: z.number().int().positive(),
     files: z.array(original).min(1),
@@ -142,10 +144,8 @@ async function enroll(
   await mkdir(inputs, { mode: 0o700 });
   const secretInput = `${inputs}/access-client-secret`;
   await writeFile(secretInput, token.client_secret, { mode: 0o600, flag: "wx" });
-  const access = await command("cloudflared", ["access", "token", `--app=${plan.origin}`], {
-    timeoutSeconds: 60,
-  });
-  if (access.exit !== 0 || access.stdout.trim() === "")
+  const assertion = await ownerAssertion(plan);
+  if (assertion === "")
     throw new Error("owner Access assertion unavailable; no enrollment attempted");
   const invokedAt = new Date().toISOString();
   const result = await installation.runRouterCommand(
@@ -168,7 +168,7 @@ async function enroll(
       "STAGING_BASELINE_OWNER_ASSERTION",
       "--allow-plaintext-file-secrets",
     ],
-    { STAGING_BASELINE_OWNER_ASSERTION: access.stdout.trim() },
+    { STAGING_BASELINE_OWNER_ASSERTION: assertion },
   );
   await receipt.save("enrollment-receipt.json", { invokedAt, ...result });
   if (result.exit !== 0)
@@ -182,6 +182,14 @@ async function enroll(
     })
     .parse(decode(result.stdout));
   if (accepted.decision.kind !== "machineEnrolled") throw new Error("staging enrollment refused");
+}
+async function ownerAssertion(plan: BaselinePlan): Promise<string> {
+  if (plan.ownerAssertionFile !== undefined)
+    return (await readPrivateText(plan.ownerAssertionFile)).trim();
+  const access = await command("cloudflared", ["access", "token", `--app=${plan.origin}`], {
+    timeoutSeconds: 60,
+  });
+  return access.exit === 0 ? access.stdout.trim() : "";
 }
 /** Seconds a freshly started old125 Host may take to cache the staging Fleet directory. */
 const DIRECTORY_SYNC_DEADLINE_SECONDS = 180;
