@@ -37,10 +37,7 @@ jobs:
     permissions:
       contents: write
     runs-on: macos-15
-    # A cold dependency cache made "Build release binaries" exceed 45 minutes on
-    # 2026-11-09 (v0.1.141, run 42690178301), after the rmcp and sqlx updates.
-    # This covers a cold macOS build; CI's own 30-minute cap is separate.
-    timeout-minutes: 90
+    timeout-minutes: 45
     outputs:
       asset_sha256: ${{ steps.artifact.outputs.sha256 }}
       source_commit: ${{ steps.metadata.outputs.source_commit }}
