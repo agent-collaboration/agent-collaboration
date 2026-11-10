@@ -3,20 +3,28 @@ use crate::{
     oracle_receipt::validate_owner_private_output_path, read_sealed_copy,
 };
 use clap::Parser;
+use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
 use std::path::Path;
 
-fn create_empty_legacy_source_database(
+async fn create_empty_legacy_source_database(
     source_path: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let connection = rusqlite::Connection::open(source_path)?;
-    create_legacy_source_tables(&connection)?;
+    let mut connection = SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(source_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
+    create_legacy_source_tables(&mut connection).await?;
+    connection.close().await?;
     Ok(())
 }
 
-fn create_legacy_source_tables(
-    connection: &rusqlite::Connection,
+async fn create_legacy_source_tables(
+    connection: &mut SqliteConnection,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    connection.execute_batch(
+    sqlx::raw_sql(
         "CREATE TABLE board_identities(identity_key TEXT);
          CREATE TABLE board_topics(topic_id TEXT);
          CREATE TABLE board_activity(activity_sequence INTEGER, project_id TEXT,
@@ -27,32 +35,46 @@ fn create_legacy_source_tables(
          CREATE TABLE thread_watches(reader_key TEXT, root_id TEXT,
            starts_after_activity INTEGER, active INTEGER);
          CREATE TABLE topic_watches(reader_key TEXT, topic_id TEXT,
-           starts_after_activity INTEGER, active INTEGER);",
-    )?;
+           starts_after_activity INTEGER, active INTEGER);").execute(&mut *connection).await?;
     Ok(())
 }
 
-fn create_empty_cli_legacy_source_database(
+async fn create_empty_cli_legacy_source_database(
     source_path: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let connection = rusqlite::Connection::open(source_path)?;
-    create_legacy_source_tables(&connection)?;
-    connection.execute_batch(
+    let mut connection = SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(source_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
+    create_legacy_source_tables(&mut connection).await?;
+    sqlx::raw_sql(
         "INSERT INTO board_identities VALUES('human:legacy-owner');
          INSERT INTO board_topics VALUES('019a0000-0000-7000-8000-000000000015');
          INSERT INTO topic_watches VALUES(
            'human:legacy-owner', '019a0000-0000-7000-8000-000000000015', 0, 1
          );",
-    )?;
+    )
+    .execute(&mut connection)
+    .await?;
+    connection.close().await?;
     Ok(())
 }
 
-fn create_nonempty_cli_legacy_source_database(
+async fn create_nonempty_cli_legacy_source_database(
     source_path: &Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let connection = rusqlite::Connection::open(source_path)?;
-    create_legacy_source_tables(&connection)?;
-    connection.execute_batch(
+    let mut connection = SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(source_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
+    create_legacy_source_tables(&mut connection).await?;
+    sqlx::raw_sql(
         "INSERT INTO board_identities VALUES('human:legacy-owner');
          INSERT INTO board_topics VALUES('019a0000-0000-7000-8000-000000000015');
          INSERT INTO board_activity VALUES
@@ -82,7 +104,10 @@ fn create_nonempty_cli_legacy_source_database(
            VALUES('human:legacy-owner', 'root', 2);
          INSERT INTO thread_watches
            VALUES('human:legacy-owner', 'root', 4, 1);",
-    )?;
+    )
+    .execute(&mut connection)
+    .await?;
+    connection.close().await?;
     Ok(())
 }
 
@@ -101,24 +126,26 @@ fn private_cache_test_directory(
     Ok(private_directory)
 }
 
-#[test]
-fn cli_covers_state_free_reader_and_empty_topic() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::test]
+async fn cli_covers_state_free_reader_and_empty_topic() -> Result<(), Box<dyn std::error::Error>> {
     let private_directory = private_cache_test_directory("legacy-selection-oracle-test-")?;
     let source_path = private_directory.path().join("legacy.sqlite");
     let output_path = private_directory.path().join("oracle.json");
-    create_empty_cli_legacy_source_database(&source_path)?;
+    create_empty_cli_legacy_source_database(&source_path).await?;
 
     let status = execute_legacy_selection_oracle(cli_arguments(
         &source_path,
         private_directory.path(),
         &output_path,
-    )?)?;
+    )?)
+    .await?;
     assert_empty_cli_status_and_receipt(&status, &output_path)?;
     assert_empty_cli_output_is_create_new_and_source_is_sealed(
         &source_path,
         private_directory.path(),
         &output_path,
-    )?;
+    )
+    .await?;
     Ok(())
 }
 
@@ -209,7 +236,7 @@ fn assert_empty_cli_status_and_receipt(
     Ok(())
 }
 
-fn assert_empty_cli_output_is_create_new_and_source_is_sealed(
+async fn assert_empty_cli_output_is_create_new_and_source_is_sealed(
     source_path: &Path,
     copy_root: &Path,
     output_path: &Path,
@@ -219,6 +246,7 @@ fn assert_empty_cli_output_is_create_new_and_source_is_sealed(
     let retained_receipt = fs::read(output_path)?;
     let error =
         execute_legacy_selection_oracle(cli_arguments(source_path, copy_root, output_path)?)
+            .await
             .err()
             .ok_or("oracle overwrote its existing output")?;
     assert!(matches!(error, OracleError::OutputAlreadyExists));
@@ -229,24 +257,26 @@ fn assert_empty_cli_output_is_create_new_and_source_is_sealed(
     let sidecar_path = PathBuf::from(sidecar_path);
     fs::write(&sidecar_path, b"sidecar fixture")?;
     assert!(matches!(
-        read_sealed_copy(source_path, copy_root),
+        read_sealed_copy(source_path, copy_root).await,
         Err(OracleError::UnsealedLegacySource)
     ));
     Ok(())
 }
 
-#[test]
-fn cli_receipt_selects_nonempty_sealed_legacy_history() -> Result<(), Box<dyn std::error::Error>> {
+#[tokio::test]
+async fn cli_receipt_selects_nonempty_sealed_legacy_history()
+-> Result<(), Box<dyn std::error::Error>> {
     let private_directory = private_cache_test_directory("legacy-selection-oracle-nonempty-test-")?;
     let source_path = private_directory.path().join("legacy.sqlite");
     let output_path = private_directory.path().join("oracle.json");
-    create_nonempty_cli_legacy_source_database(&source_path)?;
+    create_nonempty_cli_legacy_source_database(&source_path).await?;
 
     let status = execute_legacy_selection_oracle(cli_arguments(
         &source_path,
         private_directory.path(),
         &output_path,
-    )?)?;
+    )?)
+    .await?;
 
     assert_eq!(status.kind, "legacyOracleOnly");
     assert_eq!(status.activity_count, 9);
@@ -328,8 +358,8 @@ fn assert_nonempty_cli_receipt(output_path: &Path) -> Result<(), Box<dyn std::er
     Ok(())
 }
 
-#[test]
-fn sealed_reader_rejects_outside_roots_and_normal_state_paths()
+#[tokio::test]
+async fn sealed_reader_rejects_outside_roots_and_normal_state_paths()
 -> Result<(), Box<dyn std::error::Error>> {
     use std::{fs, os::unix::fs::PermissionsExt};
 
@@ -341,13 +371,19 @@ fn sealed_reader_rejects_outside_roots_and_normal_state_paths()
         .tempdir_in(cache_root)?;
     fs::set_permissions(private_directory.path(), fs::Permissions::from_mode(0o700))?;
     let source_path = private_directory.path().join("legacy.sqlite");
-    let connection = rusqlite::Connection::open(&source_path)?;
-    drop(connection);
+    let connection = SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(&source_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
+    connection.close().await?;
 
     let unrelated_root = private_directory.path().join("other-copy-root");
     fs::create_dir(&unrelated_root)?;
     assert!(matches!(
-        read_sealed_copy(&source_path, &unrelated_root),
+        read_sealed_copy(&source_path, &unrelated_root).await,
         Err(OracleError::InvalidLegacySourcePath)
     ));
 
@@ -357,21 +393,21 @@ fn sealed_reader_rejects_outside_roots_and_normal_state_paths()
         let normal_state_copy = normal_state_root.join("legacy.sqlite");
         fs::write(&normal_state_copy, b"not opened by the oracle")?;
         assert!(matches!(
-            read_sealed_copy(&normal_state_copy, private_directory.path()),
+            read_sealed_copy(&normal_state_copy, private_directory.path()).await,
             Err(OracleError::NormalStateSourcePath)
         ));
     }
     Ok(())
 }
 
-#[test]
-fn sealed_reader_checks_ancestor_names_not_the_sqlite_file_name()
+#[tokio::test]
+async fn sealed_reader_checks_ancestor_names_not_the_sqlite_file_name()
 -> Result<(), Box<dyn std::error::Error>> {
     let source_root = tempfile::tempdir()?;
     let source_path = source_root.path().join(".codex-router");
-    create_empty_legacy_source_database(&source_path)?;
+    create_empty_legacy_source_database(&source_path).await?;
 
-    let sealed_copy = read_sealed_copy(&source_path, source_root.path())?;
+    let sealed_copy = read_sealed_copy(&source_path, source_root.path()).await?;
 
     assert!(sealed_copy.rows.activity.is_empty());
     Ok(())

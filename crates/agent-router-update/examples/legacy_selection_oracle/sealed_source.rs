@@ -56,7 +56,11 @@ pub(crate) struct LegacySourceRows {
     pub(crate) topic_ids: Vec<String>,
 }
 use crate::{oracle_errors::OracleError, oracle_hashes::sha256_file};
-use rusqlite::{Connection, OpenFlags, Row};
+use futures_util::TryStreamExt;
+use sqlx::{
+    Connection, Row, SqliteConnection,
+    sqlite::{SqliteConnectOptions, SqliteRow},
+};
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -68,7 +72,7 @@ pub(crate) struct SealedLegacyCopy {
     pub(crate) rows: LegacySourceRows,
 }
 
-pub(crate) fn read_sealed_copy(
+pub(crate) async fn read_sealed_copy(
     source_path: &Path,
     copy_root: &Path,
 ) -> Result<SealedLegacyCopy, OracleError> {
@@ -89,16 +93,29 @@ pub(crate) fn read_sealed_copy(
     }
 
     let source_sha256 = sha256_file(&canonical_source)?;
-    let sqlite_uri = immutable_sqlite_uri(&canonical_source)?;
-    let connection = Connection::open_with_flags(
-        sqlite_uri,
-        OpenFlags::SQLITE_OPEN_READ_ONLY
-            | OpenFlags::SQLITE_OPEN_URI
-            | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )?;
-    connection.execute_batch("PRAGMA query_only=ON; BEGIN;")?;
-    let rows = read_legacy_rows(&connection)?;
-    drop(connection);
+    canonical_source
+        .to_str()
+        .ok_or(OracleError::UnsupportedLegacySourcePath)?;
+    let mut connection = SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(&canonical_source)
+            .read_only(true)
+            .create_if_missing(false)
+            .immutable(true)
+            .foreign_keys(false)
+            .pragma("query_only", "ON"),
+    )
+    .await?;
+    let source_result = async {
+        sqlx::raw_sql("BEGIN;").execute(&mut connection).await?;
+        read_legacy_rows(&mut connection).await
+    }
+    .await;
+    let rollback_result = sqlx::raw_sql("ROLLBACK;").execute(&mut connection).await;
+    let close_result = connection.close().await;
+    let rows = source_result?;
+    rollback_result?;
+    close_result?;
 
     if has_sqlite_sidecar(&canonical_source)? || sha256_file(&canonical_source)? != source_sha256 {
         return Err(OracleError::LegacySourceChanged);
@@ -110,63 +127,71 @@ pub(crate) fn read_sealed_copy(
     })
 }
 
-fn read_legacy_rows(connection: &Connection) -> Result<LegacySourceRows, OracleError> {
+async fn read_legacy_rows(
+    connection: &mut SqliteConnection,
+) -> Result<LegacySourceRows, OracleError> {
     let reader_keys = query_rows(
         connection,
         "SELECT identity_key FROM board_identities ORDER BY identity_key",
-        |row| row.get::<_, String>(0),
-    )?;
+        |row| row.try_get::<String, _>("identity_key"),
+    )
+    .await?;
     let topic_ids = query_rows(
         connection,
         "SELECT topic_id FROM board_topics ORDER BY topic_id",
-        |row| row.get::<_, String>(0),
-    )?;
-    let activity = read_legacy_activity_rows(connection)?;
+        |row| row.try_get::<String, _>("topic_id"),
+    )
+    .await?;
+    let activity = read_legacy_activity_rows(connection).await?;
     let main_starts = query_rows(
         connection,
         "SELECT reader_key,project_id,main_start FROM project_reader_state",
         |row| {
             Ok(LegacyMainStart {
-                reader_key: row.get(0)?,
-                project_id: row.get(1)?,
-                main_start: row.get(2)?,
+                reader_key: row.try_get("reader_key")?,
+                project_id: row.try_get("project_id")?,
+                main_start: row.try_get("main_start")?,
             })
         },
-    )?;
+    )
+    .await?;
     let topic_marks = query_rows(
         connection,
         "SELECT reader_key,topic_id,through_activity FROM topic_read_bookmarks",
         |row| {
             Ok(LegacyTopicMark {
-                reader_key: row.get(0)?,
-                topic_id: row.get(1)?,
-                through_activity: row.get(2)?,
+                reader_key: row.try_get("reader_key")?,
+                topic_id: row.try_get("topic_id")?,
+                through_activity: row.try_get("through_activity")?,
             })
         },
-    )?;
+    )
+    .await?;
     let thread_marks = query_rows(
         connection,
         "SELECT reader_key,root_id,through_activity FROM thread_read_bookmarks",
         |row| {
             Ok(LegacyThreadMark {
-                reader_key: row.get(0)?,
-                root_id: row.get(1)?,
-                through_activity: row.get(2)?,
+                reader_key: row.try_get("reader_key")?,
+                root_id: row.try_get("root_id")?,
+                through_activity: row.try_get("through_activity")?,
             })
         },
-    )?;
+    )
+    .await?;
     let raw_thread_watches = query_rows(
         connection,
         "SELECT reader_key,root_id,starts_after_activity,active FROM thread_watches",
         |row| {
             Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, i64>(2)?,
-                row.get::<_, i64>(3)?,
+                row.try_get::<String, _>("reader_key")?,
+                row.try_get::<String, _>("root_id")?,
+                row.try_get::<i64, _>("starts_after_activity")?,
+                row.try_get::<i64, _>("active")?,
             ))
         },
-    )?;
+    )
+    .await?;
     let thread_watches = raw_thread_watches
         .into_iter()
         .map(
@@ -197,38 +222,44 @@ fn read_legacy_rows(connection: &Connection) -> Result<LegacySourceRows, OracleE
     })
 }
 
-fn read_legacy_activity_rows(connection: &Connection) -> Result<Vec<LegacyActivity>, OracleError> {
+async fn read_legacy_activity_rows(
+    connection: &mut SqliteConnection,
+) -> Result<Vec<LegacyActivity>, OracleError> {
     query_rows(
         connection,
         "SELECT activity_sequence,project_id,topic_id,root_id,kind,actor_key,message_id \
          FROM board_activity ORDER BY activity_sequence",
         |row| {
-            let kind = row.get::<_, String>(4)?;
+            let kind = row.try_get::<String, _>("kind")?;
             Ok(LegacyActivity {
-                activity_sequence: row.get(0)?,
-                project_id: row.get(1)?,
-                topic_id: row.get(2)?,
-                root_id: row.get(3)?,
+                activity_sequence: row.try_get("activity_sequence")?,
+                project_id: row.try_get("project_id")?,
+                topic_id: row.try_get("topic_id")?,
+                root_id: row.try_get("root_id")?,
                 kind: match kind.as_str() {
                     "mainMessageCreated" => LegacyActivityKind::MainMessageCreated,
                     "threadMessageCreated" => LegacyActivityKind::ThreadMessageCreated,
                     _ => LegacyActivityKind::Other,
                 },
-                actor_key: row.get(5)?,
-                message_id: row.get(6)?,
+                actor_key: row.try_get("actor_key")?,
+                message_id: row.try_get("message_id")?,
             })
         },
     )
+    .await
 }
 
-fn query_rows<T>(
-    connection: &Connection,
+async fn query_rows<T>(
+    connection: &mut SqliteConnection,
     query: &str,
-    decode_row: impl FnMut(&Row<'_>) -> rusqlite::Result<T>,
+    mut decode_row: impl FnMut(&SqliteRow) -> Result<T, sqlx::Error>,
 ) -> Result<Vec<T>, OracleError> {
-    let mut statement = connection.prepare(query)?;
-    let rows = statement.query_map([], decode_row)?;
-    Ok(rows.collect::<Result<Vec<_>, _>>()?)
+    let mut cursor = sqlx::query(sqlx::AssertSqlSafe(query)).fetch(connection);
+    let mut rows = Vec::new();
+    while let Some(row) = cursor.try_next().await? {
+        rows.push(decode_row(&row)?);
+    }
+    Ok(rows)
 }
 
 fn is_normal_codex_state_path(path: &Path) -> bool {
@@ -250,19 +281,4 @@ fn has_sqlite_sidecar(source_path: &Path) -> Result<bool, OracleError> {
         }
     }
     Ok(false)
-}
-
-fn immutable_sqlite_uri(source_path: &Path) -> Result<String, OracleError> {
-    let path = source_path
-        .to_str()
-        .ok_or(OracleError::UnsupportedLegacySourcePath)?;
-    let mut encoded_path = String::with_capacity(path.len());
-    for byte in path.bytes() {
-        if byte.is_ascii_alphanumeric() || matches!(byte, b'/' | b'-' | b'_' | b'.' | b'~') {
-            encoded_path.push(char::from(byte));
-        } else {
-            encoded_path.push_str(&format!("%{byte:02X}"));
-        }
-    }
-    Ok(format!("file:{encoded_path}?mode=ro&immutable=1"))
 }

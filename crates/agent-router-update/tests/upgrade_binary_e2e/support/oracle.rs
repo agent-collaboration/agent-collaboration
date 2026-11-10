@@ -11,13 +11,15 @@ pub struct LegacySelections {
     pub cutoffs: ReaderCutoffs,
 }
 
-pub fn read_legacy_selections(
+pub async fn read_legacy_selections(
     source: &Path,
     source_root: &Path,
     reader: &str,
     topic: &str,
 ) -> E2eResult<LegacySelections> {
-    let sealed = read_sealed_copy(source, source_root).map_err(promote_error)?;
+    let sealed = read_sealed_copy(source, source_root)
+        .await
+        .map_err(promote_error)?;
     Ok(LegacySelections {
         latest: selected_post_ids(&sealed.rows, reader, topic, SelectionMode::Latest),
         unread: selected_post_ids(&sealed.rows, reader, topic, SelectionMode::Unread),

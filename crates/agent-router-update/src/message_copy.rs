@@ -14,7 +14,7 @@ pub enum MessageUpgradeError {
     #[error("message file operation failed")]
     File(#[from] std::io::Error),
     #[error("legacy message database read failed")]
-    Legacy(#[from] rusqlite::Error),
+    Legacy(#[from] sqlx::Error),
     #[error("message row encoding failed")]
     Encoding(#[from] serde_json::Error),
     #[error("message source is invalid: {field}")]

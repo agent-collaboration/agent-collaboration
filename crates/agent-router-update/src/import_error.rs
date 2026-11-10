@@ -14,7 +14,7 @@ pub enum UpgradeError {
         detail: String,
     },
     #[error("legacy database read failed: {0}")]
-    LegacyDatabase(#[from] rusqlite::Error),
+    LegacyDatabase(#[from] sqlx::Error),
     #[error("import file operation failed: {0}")]
     File(#[from] std::io::Error),
     #[error("import encoding failed: {0}")]

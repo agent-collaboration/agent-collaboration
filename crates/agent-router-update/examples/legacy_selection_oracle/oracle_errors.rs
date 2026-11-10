@@ -25,7 +25,7 @@ pub(crate) enum OracleError {
     #[error("oracle filesystem operation failed")]
     Io(#[from] io::Error),
     #[error("legacy SQLite operation failed")]
-    Sqlite(#[from] rusqlite::Error),
+    Sqlite(#[from] sqlx::Error),
     #[error("oracle JSON serialization failed")]
     Json(#[from] serde_json::Error),
 }
