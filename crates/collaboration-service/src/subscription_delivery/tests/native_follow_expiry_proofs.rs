@@ -371,7 +371,6 @@ async fn prove_reader_expiry(cross_read: bool) {
     drop(app);
     runtime.close().await;
     fixture.close_native(native).await;
-    let ended = ended;
     assert_eq!(ended.reader(), original.reader());
     assert!(matches!(
         ended.envelope.actor,

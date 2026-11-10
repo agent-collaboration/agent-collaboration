@@ -199,12 +199,7 @@ async fn records_sequential_admission_costs_at_held_depths_and_the_real_capacity
         delivery: route.clone(),
         presence: route.clone(),
         machine_identity: machine.clone(),
-        clock: Arc::new(
-            router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
-                1792432800000,
-            ))
-            .unwrap(),
-        ),
+        clock: fixture.clock.clone(),
     });
     service.start().await?;
     let identity = ApplicationFixture::new(
@@ -221,12 +216,7 @@ async fn records_sequential_admission_costs_at_held_depths_and_the_real_capacity
             actors: service.clone(),
             presence: route.clone(),
             machine,
-            clock: Arc::new(
-                router_clock::ManualClock::starting_at(
-                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
-                )
-                .unwrap(),
-            ),
+            clock: fixture.clock.clone(),
         },
     )?;
     let app = (identity).build();

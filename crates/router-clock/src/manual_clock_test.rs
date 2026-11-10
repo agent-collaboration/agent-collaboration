@@ -6,6 +6,41 @@ fn clock() -> Arc<ManualClock> {
 }
 
 #[test]
+fn a_wall_deadline_keeps_its_elapsed_point_until_expiry() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let clock = clock();
+        let runtime_clock: &dyn RuntimeClock = clock.as_ref();
+        let wall_due = SyncTime::from_unix_millis(978_307_210_000);
+        let elapsed_due = ClockInstant::ZERO.after(Duration::from_secs(10));
+        assert_eq!(runtime_clock.wall_deadline(wall_due), elapsed_due);
+
+        for step in [5, 4] {
+            clock.advance(Duration::from_secs(step)).unwrap();
+            assert_eq!(runtime_clock.wall_deadline(wall_due), elapsed_due);
+        }
+        let sleeping = tokio::spawn({
+            let clock = clock.clone();
+            let deadline = runtime_clock.wall_deadline(wall_due);
+            async move { clock.sleep_until(deadline).await }
+        });
+        clock.not_due_check_now(elapsed_due).await;
+        assert!(!sleeping.is_finished());
+
+        clock.advance(Duration::from_secs(1)).unwrap();
+        sleeping.await.unwrap();
+        assert_eq!(runtime_clock.wall_deadline(wall_due), elapsed_due);
+        clock.advance(Duration::from_secs(1)).unwrap();
+        assert_eq!(
+            runtime_clock.wall_deadline(wall_due),
+            ClockInstant::ZERO.after(Duration::from_secs(11))
+        );
+    });
+}
+
+#[test]
 fn one_advance_moves_both_readings_and_wakes_all_due_sleepers_without_native_time() {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .build()

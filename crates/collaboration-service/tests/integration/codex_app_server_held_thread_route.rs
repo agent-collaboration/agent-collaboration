@@ -661,12 +661,7 @@ async fn exercise_held_empty_thread(
             delivery: Arc::clone(&delivery),
             presence: Arc::clone(&presence),
             machine_identity: machine_identity.clone(),
-            clock: Arc::new(
-                router_clock::ManualClock::starting_at(
-                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
-                )
-                .unwrap(),
-            ),
+            clock: runtime_clock.clone(),
         },
     );
     subscription_delivery.start().await?;
@@ -688,12 +683,7 @@ async fn exercise_held_empty_thread(
             actors: subscription_delivery.clone(),
             presence,
             machine: machine_identity,
-            clock: Arc::new(
-                router_clock::ManualClock::starting_at(
-                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
-                )
-                .unwrap(),
-            ),
+            clock: runtime_clock.clone(),
         },
     )?;
     let served = served_api::ServedApi::start(identity)?;

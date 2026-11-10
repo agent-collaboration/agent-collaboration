@@ -3,6 +3,10 @@ use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Literal IPC assertions fail the test while fixture setup errors propagate."
+)]
 fn a_journal_write_signal_releases_the_pending_prompt_read() -> FixtureResult {
     tokio::runtime::Builder::new_current_thread()
         .enable_io()
@@ -60,6 +64,10 @@ fn a_journal_write_signal_releases_the_pending_prompt_read() -> FixtureResult {
 }
 
 #[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Literal journal assertions fail the test while fixture setup errors propagate."
+)]
 fn an_already_written_prompt_needs_no_later_notification() -> FixtureResult {
     tokio::runtime::Builder::new_current_thread()
         .enable_io()

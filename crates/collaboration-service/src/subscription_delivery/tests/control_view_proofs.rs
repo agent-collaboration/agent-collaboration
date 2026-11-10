@@ -111,7 +111,7 @@ async fn reconcile_receipt_reports_the_failed_pass_instead_of_waiting_for_a_late
     .await
     .unwrap();
     assert!(
-        matches!(reconcile().await, Err(_)),
+        reconcile().await.is_err(),
         "a failed window scan must answer its reconciliation with the failure"
     );
     sqlx::query(
@@ -126,7 +126,7 @@ async fn reconcile_receipt_reports_the_failed_pass_instead_of_waiting_for_a_late
         .await
         .unwrap();
     assert!(
-        matches!(reconcile().await, Err(_)),
+        reconcile().await.is_err(),
         "a pass that ends before its scan must not leave reconciliation waiting"
     );
     sqlx::query("ALTER TABLE unavailable_router_pushes RENAME TO router_pushes")

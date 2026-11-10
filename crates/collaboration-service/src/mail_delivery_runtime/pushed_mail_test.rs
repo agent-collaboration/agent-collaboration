@@ -96,12 +96,7 @@ async fn full_push_inbox_returns_wire_capacity_refusal_without_admitting_custody
             actors: actors.clone(),
             presence: carrier,
             machine,
-            clock: Arc::new(
-                router_clock::ManualClock::starting_at(
-                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
-                )
-                .unwrap(),
-            ),
+            clock: actors.runtime_clock(),
         },
         limits,
         Some(session),

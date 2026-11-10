@@ -520,13 +520,23 @@ impl InteractionHistoryStore {
         .await
     }
 
-    /// The first moment the retention rule allows deleting a settled record held now, or
-    /// `None` when none could ever go. A record still pending is not counted; settling it
-    /// commits and wakes the worker.
-    pub async fn prune_due(&self, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
-        let state = self.data.lock().await;
-        let data = &state.cache;
-        data.created_at
+    /// The first moment retention allows deleting a durably settled record, or `None`
+    /// when no settled record has a representable due time. Pending records are not counted; settling one
+    /// commits and wakes the worker. Unreadable or invalid durable rows return an error.
+    pub async fn prune_due(
+        &self,
+        now: DateTime<Utc>,
+    ) -> Result<Option<DateTime<Utc>>, InteractionHistoryError> {
+        // Caller cancellation can leave durable history ahead of the acknowledged
+        // cache. Retention reads that history without publishing it to the cache.
+        let data = {
+            let mut connection = self.owner.writer.lock().await;
+            read_records(&mut connection)
+                .await
+                .map_err(|_| InteractionHistoryError::Unavailable)?
+        };
+        Ok(data
+            .created_at
             .iter()
             .filter(|(request_id, _)| {
                 data.records
@@ -541,7 +551,7 @@ impl InteractionHistoryStore {
                     crate::INTERACTION_RETENTION_MONTHS,
                     now,
                 )
-            })
+            }))
     }
 
     pub async fn prune_expired(

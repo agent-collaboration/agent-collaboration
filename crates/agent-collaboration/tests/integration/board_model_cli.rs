@@ -84,12 +84,7 @@ async fn renamed_command_groups_execute_real_board_journey_and_keep_caller_reque
                 )?,
                 Some("CLI native proof"),
             )?,
-            clock: Arc::new(
-                router_clock::ManualClock::starting_at(
-                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
-                )
-                .unwrap(),
-            ),
+            clock: clock.clone(),
         },
     );
     delivery.start().await?;

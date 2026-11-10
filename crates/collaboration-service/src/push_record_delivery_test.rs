@@ -76,12 +76,7 @@ async fn identity_without_native_work(
             actors: actors.clone(),
             presence: presence.clone(),
             machine,
-            clock: Arc::new(
-                router_clock::ManualClock::starting_at(
-                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
-                )
-                .unwrap(),
-            ),
+            clock: actors.runtime_clock(),
         },
         None,
     )

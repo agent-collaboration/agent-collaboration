@@ -305,10 +305,11 @@ impl RetentionPass {
                 None => Ok(None),
             },
             RetentionClass::InteractionHistory => match &self.interaction_broker {
-                Some(broker) => Ok(broker
+                Some(broker) => broker
                     .interaction_history_prune_due(now)
                     .await
-                    .map(|due| due.timestamp_millis())),
+                    .map(|due| due.map(|due| due.timestamp_millis()))
+                    .map_err(|error| error.to_string()),
                 None => Ok(None),
             },
         }

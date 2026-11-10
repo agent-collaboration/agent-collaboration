@@ -61,12 +61,7 @@ async fn fixture() -> (
                 actors: actors.clone(),
                 presence: router,
                 machine,
-                clock: Arc::new(
-                    router_clock::ManualClock::starting_at(
-                        runtime_primitives::SyncTime::from_unix_millis(1792432800000),
-                    )
-                    .unwrap(),
-                ),
+                clock: actors.runtime_clock(),
             },
             None,
         )
@@ -74,6 +69,7 @@ async fn fixture() -> (
     );
     let mut construction = ApplicationFixture::new(SERVICE, SERVICE)
         .expect("identity")
+        .with_runtime_clock(actors.runtime_clock())
         .with_installation_peer(peer)
         .expect("installation")
         .with_interaction_store(interactions)

@@ -47,11 +47,7 @@ struct NativeQueueObservation {
 
 /// Waits until the wake worker is asleep with no task running and its one timer armed
 /// for `due_ms`: nothing else is pending, so only that timer can fire the next delivery.
-/// The bound only stops a hang.
-#[expect(
-    clippy::expect_used,
-    reason = "A worker that never sleeps with its due time armed fails the journey here."
-)]
+/// The nextest profile supplies the outer hang bound.
 async fn asleep_with_timer_armed_for(
     observation: &collaboration_runtime::WorkerObservation,
     due_ms: i64,

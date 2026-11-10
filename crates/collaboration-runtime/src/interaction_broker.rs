@@ -249,7 +249,7 @@ impl ServiceInteractionBroker {
     pub(crate) async fn interaction_history_prune_due(
         &self,
         now: chrono::DateTime<chrono::Utc>,
-    ) -> Option<chrono::DateTime<chrono::Utc>> {
+    ) -> Result<Option<chrono::DateTime<chrono::Utc>>, InteractionHistoryError> {
         self.interaction_history.prune_due(now).await
     }
 

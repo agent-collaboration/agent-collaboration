@@ -119,6 +119,18 @@ impl RuntimeClock for ManualClock {
         self.reading.borrow().elapsed
     }
 
+    fn wall_deadline(&self, deadline: SyncTime) -> ClockInstant {
+        // One snapshot prevents an advance between the UTC and elapsed reads
+        // from adding that advance to the remaining delay.
+        let reading = *self.reading.borrow();
+        let remaining_ms = deadline
+            .unix_millis()
+            .saturating_sub(reading.utc.timestamp_millis());
+        reading.elapsed.after(Duration::from_millis(
+            u64::try_from(remaining_ms).unwrap_or(0),
+        ))
+    }
+
     fn sleep_until(&self, deadline: ClockInstant) -> Pin<Box<dyn Future<Output = ()> + Send + '_>> {
         Box::pin(async move {
             let mut changes = self.reading.subscribe();

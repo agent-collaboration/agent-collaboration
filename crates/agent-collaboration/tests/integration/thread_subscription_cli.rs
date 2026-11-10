@@ -87,12 +87,7 @@ async fn subscribe_join_wait_and_cancel_use_the_real_api_and_sqlite_paths() -> T
             delivery,
             presence: Arc::clone(&presence),
             machine_identity,
-            clock: Arc::new(
-                router_clock::ManualClock::starting_at(
-                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
-                )
-                .unwrap(),
-            ),
+            clock: clock.clone(),
         });
     let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_EPOCH)
         .map_err(std::io::Error::other)?
@@ -108,12 +103,7 @@ async fn subscribe_join_wait_and_cancel_use_the_real_api_and_sqlite_paths() -> T
             actors: subscription_delivery.clone(),
             presence,
             machine: MachineIdentity::new(SERVICE_ID.to_owned().try_into()?, None)?,
-            clock: Arc::new(
-                router_clock::ManualClock::starting_at(
-                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
-                )
-                .unwrap(),
-            ),
+            clock: clock.clone(),
         },
     )?;
     let publisher = Arc::new(collaboration_service::NotificationPublisher::new(

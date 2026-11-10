@@ -138,12 +138,7 @@ async fn explicit_intent_is_claimed_and_sent_as_a_stored_board_notification()
             )?,
             Some("intent proof"),
         )?,
-        clock: Arc::new(
-            router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
-                1792432800000,
-            ))
-            .unwrap(),
-        ),
+        clock: clock.clone(),
     });
     let identity = ApplicationFixture::new(
         "00000000-0000-4000-8000-000000000001",
@@ -165,12 +160,7 @@ async fn explicit_intent_is_claimed_and_sent_as_a_stored_board_notification()
                     .try_into()?,
                 Some("intent proof"),
             )?,
-            clock: Arc::new(
-                router_clock::ManualClock::starting_at(
-                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
-                )
-                .unwrap(),
-            ),
+            clock: clock.clone(),
         },
     )?;
     let publisher = Arc::new(NotificationPublisher::new(

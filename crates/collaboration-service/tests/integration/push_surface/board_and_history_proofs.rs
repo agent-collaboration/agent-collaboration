@@ -92,12 +92,7 @@ impl BoardControlFixture {
             delivery: delivery.clone(),
             presence: presence.clone(),
             machine_identity: machine.clone(),
-            clock: Arc::new(
-                router_clock::ManualClock::starting_at(
-                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
-                )
-                .unwrap(),
-            ),
+            clock: clock.clone(),
         });
         owner.start().await.expect("real reader owner starts");
         let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
@@ -114,12 +109,7 @@ impl BoardControlFixture {
                 actors: owner.clone(),
                 presence,
                 machine,
-                clock: Arc::new(
-                    router_clock::ManualClock::starting_at(
-                        runtime_primitives::SyncTime::from_unix_millis(1792432800000),
-                    )
-                    .unwrap(),
-                ),
+                clock: clock.clone(),
             },
         )
         .expect("compose native push owner");

@@ -316,12 +316,7 @@ async fn exercise_message(
         service_id.to_owned().try_into()?,
         Some("message-backend-fixture"),
     )?;
-    let clock: Arc<dyn router_clock::RuntimeClock> = Arc::new(
-        router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
-            1792432800000,
-        ))
-        .unwrap(),
-    );
+    let clock = identity.runtime_clock();
     let interactions = match &broker {
         Some(broker) => broker.interaction_store(),
         None => Arc::new(

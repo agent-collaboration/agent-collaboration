@@ -189,7 +189,6 @@ async fn assert_local_injection_prevention(discard_group: bool) {
         takeover_observed, discard_group,
         "the native tail rejection and successor file were not exercised"
     );
-    let terminal = terminal;
     assert_eq!(terminal.delivery_state, PushDeliveryState::Rejected);
     assert!(
         matches!(terminal.last_outcome.as_ref().map(|outcome| &outcome.outcome), Some(DeliveryOutcome::NotSubmitted { reason, .. }) if reason == "mail cancelled before local delivery"),
@@ -298,7 +297,6 @@ async fn a_follow_recipient_with_no_sender_project_file_can_still_inject_normall
     drop(app);
     (runtime.close()).await;
     (fixture.close_native(native)).await;
-    let received = received;
     assert_eq!(
         received.payload.push_id.as_str(),
         reference.item.as_uuid().to_string()

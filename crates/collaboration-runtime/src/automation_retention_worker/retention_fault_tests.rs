@@ -1,5 +1,5 @@
-//! Every retention class fails at its own DELETE, backs off on its own retry while another
-//! class succeeds, logs one warning for the run, and recovers with no new write.
+//! Retention read/delete failures back off independently while another class succeeds,
+//! log one warning for the run, and recover with no new owner mutation.
 use super::interaction_history_retention_tests::{history_value, load_broker};
 use super::retention_test_harness::*;
 use agent_automation::{InstructionText, OperationId};
@@ -25,6 +25,7 @@ enum FaultedClass {
     OldInstructionRevisions,
     InteractionRecords,
     InteractionHistory,
+    InteractionHistoryRead,
 }
 
 impl FaultedClass {
@@ -38,7 +39,7 @@ impl FaultedClass {
             Self::TerminalWakes => "expired or cancelled wakes",
             Self::OldInstructionRevisions => "old instruction revisions",
             Self::InteractionRecords => "interaction records",
-            Self::InteractionHistory => "interaction history",
+            Self::InteractionHistory | Self::InteractionHistoryRead => "interaction history",
         }
     }
 
@@ -52,12 +53,15 @@ impl FaultedClass {
             Self::TerminalWakes => "wakeup_definitions",
             Self::OldInstructionRevisions => "instruction_revisions",
             Self::InteractionRecords => "router_pushes",
-            Self::InteractionHistory => "typed_interaction_history",
+            Self::InteractionHistory | Self::InteractionHistoryRead => "typed_interaction_history",
         }
     }
 
     const fn in_interaction_store(self) -> bool {
-        matches!(self, Self::InteractionRecords | Self::InteractionHistory)
+        matches!(
+            self,
+            Self::InteractionRecords | Self::InteractionHistory | Self::InteractionHistoryRead
+        )
     }
 }
 
@@ -180,7 +184,7 @@ async fn seed_aged_row(
                 .unwrap();
             return Some(interactions);
         }
-        FaultedClass::InteractionHistory => {
+        FaultedClass::InteractionHistory | FaultedClass::InteractionHistoryRead => {
             let mut history = interaction_connection(directory).await;
             let record = history_value("faulted-history", "aged refusal", None).unwrap();
             let mut transaction = history.begin().await.unwrap();
@@ -224,7 +228,7 @@ async fn remaining_rows(
         }
         FaultedClass::OldInstructionRevisions => "SELECT COUNT(*) FROM instruction_revisions",
         FaultedClass::InteractionRecords => "SELECT COUNT(*) FROM router_pushes",
-        FaultedClass::InteractionHistory => {
+        FaultedClass::InteractionHistory | FaultedClass::InteractionHistoryRead => {
             "SELECT COUNT(*) FROM typed_interaction_history WHERE request_id='faulted-history'"
         }
     };
@@ -253,7 +257,14 @@ async fn set_fault(
     writer: &mut sqlx::SqliteConnection,
     present: bool,
 ) {
-    let statement = if present {
+    let statement = if matches!(class, FaultedClass::InteractionHistoryRead) {
+        if present {
+            "ALTER TABLE typed_interaction_history RENAME COLUMN record_json TO unavailable_record_json"
+        } else {
+            "ALTER TABLE typed_interaction_history RENAME COLUMN unavailable_record_json TO record_json"
+        }
+        .to_owned()
+    } else if present {
         format!(
             "CREATE TRIGGER fail_class_prune BEFORE DELETE ON {} BEGIN SELECT RAISE(FAIL, 'class prune failure'); END",
             class.table()
@@ -285,12 +296,18 @@ async fn assert_class_backs_off_and_recovers(class: FaultedClass) {
     let store = open_store(directory.path()).await;
     let mut writer = fixture_writer(directory.path()).await;
     let gate = crate::NativeGenerationGate::default();
-    if matches!(class, FaultedClass::InteractionHistory) {
+    if matches!(
+        class,
+        FaultedClass::InteractionHistory | FaultedClass::InteractionHistoryRead
+    ) {
         // Loading the broker once creates the history tables the fixture writes.
         drop(load_broker(directory.path(), &gate).await.unwrap());
     }
     let interactions = seed_aged_row(class, directory.path(), &store, &mut writer).await;
-    let broker = if matches!(class, FaultedClass::InteractionHistory) {
+    let broker = if matches!(
+        class,
+        FaultedClass::InteractionHistory | FaultedClass::InteractionHistoryRead
+    ) {
         Some(load_broker(directory.path(), &gate).await.unwrap())
     } else {
         None
@@ -362,6 +379,11 @@ async fn assert_class_backs_off_and_recovers(class: FaultedClass) {
     );
     assert_eq!(logged("retention prune recovered"), Some(1), "{context}");
     worker.stop().await;
+}
+
+#[tokio::test]
+async fn a_history_inventory_read_failure_backs_off_without_holding_other_retention_classes() {
+    assert_class_backs_off_and_recovers(FaultedClass::InteractionHistoryRead).await;
 }
 
 #[tokio::test]

@@ -186,13 +186,16 @@ async fn exercise_scheduled_run(
     let backend_scope = json!({"endpoint":target.endpoint,"generation":{"serviceEpoch":service_id,"generation":1},"observerId":"00000000-0000-4000-8000-000000000003"});
     let resume_uncertainty_observed = Arc::new(tokio::sync::Notify::new());
     let backend_resume_uncertainty_observed = Arc::clone(&resume_uncertainty_observed);
-    let backend = tokio::spawn(async move {
+    let mut backend = tokio::spawn(async move {
         for stage in 0..if busy_first || resume_rejected { 8 } else { 7 } {
             let logical_stage = if (busy_first || resume_rejected) && stage >= 2 {
                 stage - 1
             } else {
                 stage
             };
+            eprintln!(
+                "scheduled native fixture stage {stage}/{logical_stage}: waiting for connection"
+            );
             let (stream, _) = listener.accept().await?;
             let mut socket = tokio_tungstenite::accept_async(stream).await?;
             let init: Value =
@@ -205,6 +208,10 @@ async fn exercise_scheduled_run(
             let _initialized = socket.next().await.ok_or("missing initialized")??;
             let request: Value =
                 serde_json::from_str(socket.next().await.ok_or("missing request")??.to_text()?)?;
+            eprintln!(
+                "scheduled native fixture stage {stage}/{logical_stage}: request {:?}",
+                request.get("method")
+            );
             let expected = match logical_stage {
                 0 | 3 => "thread/start",
                 1 | 2 => "thread/read",
@@ -356,14 +363,20 @@ async fn exercise_scheduled_run(
                     Duration::from_secs(6),
                     backend_resume_uncertainty_observed.notified(),
                 )
-                .await?;
+                .await
+                .map_err(|error| format!("scheduled native stage {stage}: resume uncertainty signal timed out: {error}"))?;
                 socket.send(Message::Text(json!({"id":resume.get("id"),"error":{"code":-32602,"message":"known resume rejection"}}).to_string().into())).await?;
                 continue;
             }
             if busy_first && stage == 1 {
-                if let Some(Ok(message)) =
-                    tokio::time::timeout(Duration::from_secs(2), socket.next()).await?
-                    && !message.is_close()
+                if let Some(Ok(message)) = tokio::time::timeout(
+                    Duration::from_secs(2),
+                    socket.next(),
+                )
+                .await
+                .map_err(|error| {
+                    format!("scheduled native stage {stage}: busy socket wait timed out: {error}")
+                })? && !message.is_close()
                 {
                     return Err("busy target received native mutation".into());
                 }
@@ -479,7 +492,8 @@ async fn exercise_scheduled_run(
         old.close().await?;
     }
     let worker = tokio::spawn(schedule_worker.run(shutdown.clone()));
-    let record=tokio::time::timeout(Duration::from_secs(6),async{
+    let mut last_observed_phase = None;
+    let record_result=tokio::time::timeout(Duration::from_secs(6),async{
         let mut poll=tokio::time::interval(Duration::from_millis(20));
         let mut known_run=None;
         loop{
@@ -492,6 +506,7 @@ async fn exercise_scheduled_run(
             }
             if let Some(run_id)=&known_run{
                 let run=store.lock().await.read_run::<SessionRef,collaboration_protocol::EndpointRef,CodexGeneration,collaboration_protocol::DeliveryReceipt>(run_id).await?;
+                last_observed_phase = Some(run.phase);
                 if resume_rejected && run.phase == agent_automation::RunPhase::Uncertain {
                     resume_uncertainty_observed.notify_one();
                 }
@@ -508,7 +523,21 @@ async fn exercise_scheduled_run(
                 {return Ok::<_,automation_storage::StorageError>(run);}
             }
         }
-    }).await??;
+    }).await;
+    if record_result.is_err() {
+        eprintln!(
+            "scheduled outcome wait timed out: last phase {last_observed_phase:?}, worker finished {}, native fixture finished {}",
+            worker.is_finished(),
+            backend.is_finished()
+        );
+        if backend.is_finished() {
+            eprintln!(
+                "scheduled native fixture result: {:?}",
+                (&mut backend).await
+            );
+        }
+    }
+    let record = record_result??;
     if !matches!(preparation, PreparationOutcome::Accepted) {
         let expected = if matches!(preparation, PreparationOutcome::Rejected) {
             agent_automation::RunPhase::PreparationFailed
