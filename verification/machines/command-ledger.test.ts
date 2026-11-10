@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, chmod, appendFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, chmod, appendFile, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUIDv7 } from "node:crypto";
@@ -68,6 +68,75 @@ test("ledger refuses public permissions and truncated rows", async (): Promise<v
     await chmod(path, 0o600);
     await appendFile(path, "{");
     await assert.rejects(readCommandLedger(canonical), /complete/);
+  } finally {
+    release();
+    await rm(root, { recursive: true });
+  }
+});
+
+test("a long-run ledger above32MiB keeps every row and its original zero-enroll marker", async () => {
+  const root = await import("node:fs/promises").then(async (fs) =>
+    fs.realpath(await mkdtemp(join(tmpdir(), "2026-11-long-ledger-"))),
+  );
+  const release = await registerCommandRoot(root);
+  try {
+    const marker = await markCommandBaseline(root),
+      path = `${root}/verification-commands.jsonl`;
+    const at = "2026-11-10T05:00:00.000Z",
+      rows = [];
+    for (let index = 0; index < 8000; index += 1) {
+      const commandId = randomUUIDv7();
+      rows.push(
+        JSON.stringify({
+          kind: "started",
+          at,
+          commandId,
+          mode: "command",
+          executable: "/fixture/observation",
+          arguments: ["x".repeat(4096)],
+          cwd: root,
+          environmentKeys: [],
+        }),
+        JSON.stringify({
+          kind: "ended",
+          at,
+          commandId,
+          pid: 1000 + index,
+          exit: 0,
+          signal: null,
+          error: null,
+        }),
+      );
+    }
+    await appendFile(path, rows.join("\n") + "\n");
+    assert.ok((await readFile(path)).length > 32 * 1024 * 1024);
+    assert.equal((await readCommandLedger(root)).length, 16001);
+    assert.equal(await enrollInvocationsSince(root, marker), 0);
+    const commandId = randomUUIDv7();
+    await appendFile(
+      path,
+      [
+        {
+          kind: "started",
+          at,
+          commandId,
+          mode: "command",
+          executable: "/fixture",
+          arguments: ["fleet", "enroll"],
+          cwd: root,
+          environmentKeys: [],
+        },
+        { kind: "ended", at, commandId, pid: 99999, exit: 0, signal: null, error: null },
+      ]
+        .map((row) => JSON.stringify(row))
+        .join("\n") + "\n",
+    );
+    assert.equal(await enrollInvocationsSince(root, marker), 1);
+    await appendFile(path, "{");
+    await assert.rejects(readCommandLedger(root), /complete/);
+    await writeFile(path, "", { mode: 0o600 });
+    await truncate(path, 128 * 1024 * 1024 + 1);
+    await assert.rejects(readCommandLedger(root), /bounded/);
   } finally {
     release();
     await rm(root, { recursive: true });

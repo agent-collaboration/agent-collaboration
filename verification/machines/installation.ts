@@ -37,6 +37,11 @@ import {
   type UpgradeBaseline,
 } from "./installation-baseline.ts";
 import { observeInstallationStopWindow } from "./installation-stop-window.ts";
+import {
+  sanitizedInstallationFailure,
+  type InstallationStage,
+  type InstallationFailure,
+} from "./installation-failure.ts";
 import { qualifyRootUpdater, updateStoppedInstallationRoot } from "./installation-root-update.ts";
 import {
   loadStoppedOwnedRoot,
@@ -295,16 +300,28 @@ export class Installation {
     )
       await this.guard.endHostWindow(this.input.receipt);
   }
-  private async awaitReady(probe: () => Promise<void>): Promise<void> {
+  private async awaitReady(
+    probe: () => Promise<void>,
+    stage: () => InstallationStage,
+  ): Promise<void> {
     const deadline = Date.now() + 45_000;
+    let lastProbe: InstallationFailure | undefined,
+      attempts = 0;
     while (Date.now() < deadline) {
       try {
+        attempts += 1;
         await probe();
         return;
-      } catch {
+      } catch (error: unknown) {
+        lastProbe = sanitizedInstallationFailure(stage(), error);
         await setTimeout(250);
       }
     }
+    await this.input.receipt.record("installationReadinessFailed", {
+      budgetMilliseconds: 45_000,
+      attempts,
+      lastProbe: lastProbe ?? null,
+    });
     throw new Error("installation readiness deadline exceeded; no mutation replayed");
   }
   private async health(): Promise<void> {
@@ -373,7 +390,10 @@ export class Installation {
         "router",
       );
       this.state = { kind: "routerRunning", router };
-      await this.awaitReady((): Promise<void> => this.health());
+      await this.awaitReady(
+        (): Promise<void> => this.health(),
+        () => "routerHealth",
+      );
       await this.startHost();
       if (this.continuation !== undefined) {
         await assertStoppedFileIdentities(this.continuation.declaration);
@@ -439,35 +459,49 @@ export class Installation {
     });
     this.state = { kind: "hostStarting", router, host };
     let client: RouterMcp | undefined;
-    await this.awaitReady(async (): Promise<void> => {
-      const manifest = z
-        .object({
-          version: z.literal(3n),
-          serviceVersion: z.literal(this.input.productVersion),
-          routerProxyEndpoint: z.literal(`127.0.0.1:${this.machine.port}`),
-          mcp: z.object({ url: z.string() }),
-        })
-        .parse(decode(await this.read(`${this.machine.root}/agent-communication/service.json`)));
-      const candidate = new RouterMcp(manifest.mcp.url, this.remote);
-      const inventory = z
-        .object({
-          endpoints: z.array(
-            z.object({
-              endpoint: z.object({ endpointId: z.string() }),
-              availability: z.object({ state: z.string() }),
-            }),
-          ),
-        })
-        .parse(await candidate.call("endpoints_list", {}, 5));
-      if (
-        !inventory.endpoints.some(
-          (item): boolean =>
-            item.endpoint.endpointId === "codex-local" && item.availability.state === "available",
+    let stage: InstallationStage = "hostManifestRead";
+    await this.awaitReady(
+      async (): Promise<void> => {
+        stage = "hostManifestRead";
+        const manifestValue = decode(
+          await this.read(`${this.machine.root}/agent-communication/service.json`),
+        );
+        stage = "hostManifestShape";
+        const manifest = z
+          .object({
+            version: z.literal(3n),
+            serviceVersion: z.literal(this.input.productVersion),
+            routerProxyEndpoint: z.literal(`127.0.0.1:${this.machine.port}`),
+            mcp: z.object({ url: z.string() }),
+          })
+          .parse(manifestValue);
+        stage = "hostMcpTarget";
+        const candidate = new RouterMcp(manifest.mcp.url, this.remote);
+        stage = "hostEndpointRead";
+        const endpointReply = await candidate.call("endpoints_list", {}, 5);
+        stage = "hostEndpointShape";
+        const inventory = z
+          .object({
+            endpoints: z.array(
+              z.object({
+                endpoint: z.object({ endpointId: z.string() }),
+                availability: z.object({ state: z.string() }),
+              }),
+            ),
+          })
+          .parse(endpointReply);
+        stage = "hostNativeAvailability";
+        if (
+          !inventory.endpoints.some(
+            (item): boolean =>
+              item.endpoint.endpointId === "codex-local" && item.availability.state === "available",
+          )
         )
-      )
-        throw new Error("native endpoint not available yet");
-      client = candidate;
-    });
+          throw new Error("native endpoint not available yet");
+        client = candidate;
+      },
+      () => stage,
+    );
     if (client === undefined) throw new Error("ready Host omitted MCP client");
     this.state = { kind: "ready", router, host, mcp: client };
     await this.check();

@@ -24,6 +24,7 @@ import {
   stoppedFleetCheckpointPlan,
 } from "./stopped-fleet-checkpoint.ts";
 import { qualifyConnectedHost } from "./host-status.ts";
+import { recordInstallationFailure } from "../../../machines/installation-failure.ts";
 
 const original = z
   .object({
@@ -342,6 +343,18 @@ async function continueStopped(raw: unknown): Promise<void> {
   await privateDirectory(declaration.evidenceDirectory);
   const receipt = new Receipt(declaration.evidenceDirectory);
   await receipt.save("continuation-plan.json", declaration);
+  try {
+    await runStoppedContinuation(declaration, receipt);
+  } catch (error: unknown) {
+    await recordInstallationFailure(receipt, "continuationController", error);
+    throw error;
+  }
+}
+
+async function runStoppedContinuation(
+  declaration: z.infer<typeof stoppedOwnedRootSchema>,
+  receipt: Receipt,
+): Promise<void> {
   let installation = await Installation.continueStoppedOwned({ declaration, receipt });
   const originalBaseline = upgradeBaselineSchema.parse(
     decodeAuthoredJson(await readStoppedReference(declaration.original.baseline)),

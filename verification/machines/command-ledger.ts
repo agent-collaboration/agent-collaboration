@@ -7,6 +7,9 @@ import { z } from "zod";
 import { decodeAuthoredJson, encode } from "../exact-json.ts";
 
 const roots = new Map<string, { path: string; users: number }>();
+// The normal long-run Sunclaw ledger reached38.7MiB. Retain all history and its
+// original marker; this is a bounded full read, never rotation or truncation.
+const maximumLedgerBytes = 128 * 1024 * 1024;
 const base = z.object({ at: z.iso.datetime(), commandId: z.uuidv7() });
 const started = base
   .extend({
@@ -45,6 +48,7 @@ async function checkLedger(path: string): Promise<void> {
     (info.mode & 0o777) !== 0o600
   )
     throw new Error("owner-only mode0600 command ledger required");
+  if (info.size > maximumLedgerBytes) throw new Error("bounded complete command ledger required");
 }
 export async function registerCommandRoot(root: string): Promise<() => void> {
   if (resolve(root) !== root || /(^|\/)\.(codex|codex-router|claude)(\/|$)/.test(root))
@@ -131,7 +135,7 @@ export async function readCommandLedger(root: string): Promise<CommandLedgerEntr
   const path = `${root}/verification-commands.jsonl`;
   await checkLedger(path);
   const text = await readFile(path, "utf8");
-  if (text.length > 32 * 1024 * 1024 || (text !== "" && !text.endsWith("\n")))
+  if (Buffer.byteLength(text) > maximumLedgerBytes || (text !== "" && !text.endsWith("\n")))
     throw new Error("bounded complete command ledger required");
   return text
     .split("\n")

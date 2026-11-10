@@ -336,6 +336,54 @@ test("original journal reader hashes every byte while retaining exact stop obser
   }
 });
 
+test("existing native SQLite sidecars require known bases, regular private files and an exact inventory", async () => {
+  const f = await fixture();
+  try {
+    for (const base of ["goals_1", "logs_2", "memories_1", "queue_1", "state_5"])
+      for (const suffix of ["wal", "shm"])
+        await writeFile(
+          `${f.machine.codexHome}/${base}.sqlite-${suffix}`,
+          `synthetic ${base} ${suffix}`,
+          { mode: 0o600 },
+        );
+    const expected = await snapshotExistingStagingHomes({ machine: f.machine, home: f.home });
+    await validateExistingStagingHomes({ machine: f.machine, home: f.home, expected });
+    await assert.rejects(validateStagingCodexHome(f.machine), /state, sessions, auth/);
+    const sidecar = `${f.machine.codexHome}/state_5.sqlite-wal`;
+    const { chmod } = await import("node:fs/promises");
+    await chmod(sidecar, 0o644);
+    await assert.rejects(
+      snapshotExistingStagingHomes({ machine: f.machine, home: f.home }),
+      /private SQLite sidecar/,
+    );
+    await rm(sidecar);
+    await mkdir(sidecar, { mode: 0o700 });
+    await assert.rejects(
+      snapshotExistingStagingHomes({ machine: f.machine, home: f.home }),
+      /private SQLite sidecar/,
+    );
+    await rm(sidecar, { recursive: true });
+    await symlink(`${f.machine.codexHome}/state_5.sqlite`, sidecar);
+    await assert.rejects(
+      snapshotExistingStagingHomes({ machine: f.machine, home: f.home }),
+      /private SQLite sidecar/,
+    );
+    await rm(sidecar);
+    await writeFile(sidecar, "changed", { mode: 0o600 });
+    await assert.rejects(
+      validateExistingStagingHomes({ machine: f.machine, home: f.home, expected }),
+      /declaration changed/,
+    );
+    await writeFile(`${f.machine.codexHome}/unknown.sqlite-wal`, "bad", { mode: 0o600 });
+    await assert.rejects(
+      snapshotExistingStagingHomes({ machine: f.machine, home: f.home }),
+      /unknown/,
+    );
+  } finally {
+    await rm(f.parent, { recursive: true });
+  }
+});
+
 test("forward file identity and exact private-home declarations reject replacement and unapproved inputs", async () => {
   const f = await fixture();
   try {

@@ -58,14 +58,33 @@ const existingCodexEntries = [
   "goals_1.sqlite",
   "installation_id",
   "logs_2.sqlite",
-  "logs_2.sqlite-shm",
-  "logs_2.sqlite-wal",
   "memories_1.sqlite",
   "packages",
   "queue_1.sqlite",
   "skills",
   "state_5.sqlite",
 ] as const;
+const nativeSqliteSidecars = [
+  "goals_1.sqlite",
+  "logs_2.sqlite",
+  "memories_1.sqlite",
+  "queue_1.sqlite",
+  "state_5.sqlite",
+].flatMap((name) => [`${name}-wal`, `${name}-shm`]);
+async function validateNativeSqliteSidecars(directory: string): Promise<void> {
+  for (const name of await readdir(directory)) {
+    if (!nativeSqliteSidecars.includes(name)) continue;
+    const info = await lstat(`${directory}/${name}`);
+    if (
+      !info.isFile() ||
+      info.isSymbolicLink() ||
+      info.uid !== process.getuid?.() ||
+      (info.mode & 0o777) !== 0o600 ||
+      (await realpath(`${directory}/${name}`)) !== `${directory}/${name}`
+    )
+      throw new Error("known regular owner-private SQLite sidecar required");
+  }
+}
 function stagingConfiguration(machine: Machine): { config: string; profile: string } {
   const trust = `[projects.${JSON.stringify(machine.nativeCwd)}]\ntrust_level = "trusted"\n`;
   return {
@@ -130,10 +149,11 @@ export async function snapshotExistingStagingHomes(input: {
   await privateDirectory(input.machine.codexHome);
   await validateStagingConfigurationFiles(input.machine);
   const privateHomeTree = await snapshotExistingStagingUserHome(input);
-  const codexHomeTree = await snapshotExistingPrivateTree(
-    input.machine.codexHome,
-    existingCodexEntries,
-  );
+  await validateNativeSqliteSidecars(input.machine.codexHome);
+  const codexHomeTree = await snapshotExistingPrivateTree(input.machine.codexHome, [
+    ...existingCodexEntries,
+    ...nativeSqliteSidecars,
+  ]);
   return {
     home: input.home,
     codexHome: input.machine.codexHome,
