@@ -1,4 +1,5 @@
 use super::*;
+use sqlx::Connection as _;
 
 #[tokio::test]
 async fn mutation_only_store_requires_v12_and_roundtrips_set_then_delete() {
@@ -61,9 +62,15 @@ async fn mutation_only_store_requires_v12_and_roundtrips_set_then_delete() {
 async fn mutation_only_store_rejects_v10_and_v11_without_migrating() {
     let temp_dir = TestTempDir::new("weekly_floor_requires_v12");
     let database_path = temp_dir.path().join("state.sqlite");
-    let raw = Connection::open(&database_path)
-        .unwrap_or_else(|error| panic!("v10 fixture should open: {error}"));
-    raw.execute_batch(
+    let mut raw = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("v10 fixture should open: {error}"));
+    sqlx::raw_sql(
         "CREATE TABLE accounts (
                 account_id TEXT PRIMARY KEY NOT NULL,
                 label TEXT NOT NULL,
@@ -72,8 +79,10 @@ async fn mutation_only_store_rejects_v10_and_v11_without_migrating() {
              );
              PRAGMA user_version = 10;",
     )
+    .execute(&mut raw)
+    .await
     .unwrap_or_else(|error| panic!("v10 fixture should initialize: {error}"));
-    drop(raw);
+    raw.close().await.expect("fixture connection should close");
 
     let error = AsyncWeeklyQuotaFloorMutationStore::open(&database_path)
         .await
@@ -83,17 +92,26 @@ async fn mutation_only_store_rejects_v10_and_v11_without_migrating() {
         StateStoreError::WeeklyQuotaFloorSchemaUpgradeRequired
     );
 
-    let raw = Connection::open(&database_path)
-        .unwrap_or_else(|error| panic!("v10 fixture should reopen: {error}"));
-    let version: i64 = raw
-        .pragma_query_value(None, "user_version", |row| row.get(0))
+    let mut raw = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("v10 fixture should reopen: {error}"));
+    let version: i64 = sqlx::query_scalar("PRAGMA user_version")
+        .fetch_one(&mut raw)
+        .await
         .unwrap_or_else(|error| panic!("version should read: {error}"));
     assert_eq!(version, 10);
     assert!(
-        raw.prepare("SELECT 1 FROM account_routing_policies")
+        sqlx::query("SELECT 1 FROM account_routing_policies")
+            .fetch_optional(&mut raw)
+            .await
             .is_err()
     );
-    raw.execute_batch(
+    sqlx::raw_sql(
         "CREATE TABLE account_routing_policies (
                 account_id TEXT PRIMARY KEY NOT NULL,
                 weekly_quota_floor_basis_points INTEGER NOT NULL
@@ -104,8 +122,10 @@ async fn mutation_only_store_rejects_v10_and_v11_without_migrating() {
              );
              PRAGMA user_version = 11;",
     )
+    .execute(&mut raw)
+    .await
     .expect("v11 policy schema should initialize");
-    drop(raw);
+    raw.close().await.expect("fixture connection should close");
 
     let error = AsyncWeeklyQuotaFloorMutationStore::open(&database_path)
         .await
@@ -114,12 +134,20 @@ async fn mutation_only_store_rejects_v10_and_v11_without_migrating() {
         error,
         StateStoreError::WeeklyQuotaFloorSchemaUpgradeRequired
     );
-    let raw = Connection::open(&database_path)
-        .unwrap_or_else(|error| panic!("v11 fixture should reopen: {error}"));
-    let version: i64 = raw
-        .pragma_query_value(None, "user_version", |row| row.get(0))
+    let mut raw = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("v11 fixture should reopen: {error}"));
+    let version: i64 = sqlx::query_scalar("PRAGMA user_version")
+        .fetch_one(&mut raw)
+        .await
         .unwrap_or_else(|error| panic!("version should read: {error}"));
     assert_eq!(version, 11);
+    raw.close().await.expect("v11 inspection should close");
 }
 
 #[tokio::test]
@@ -151,7 +179,7 @@ async fn read_only_open_rejects_v11_without_migrating_policy_state() {
         .await
         .expect("policy should persist");
     mutation.close().await;
-    convert_current_fixture_to_v11(&database_path);
+    convert_current_fixture_to_v11(&database_path).await;
 
     assert_eq!(
         AsyncSqliteStateStore::open_read_only(&database_path)
@@ -159,7 +187,7 @@ async fn read_only_open_rejects_v11_without_migrating_policy_state() {
             .expect_err("read-only open must reject v11 without migrating"),
         StateStoreError::UnsupportedSchemaVersion { version: 11 }
     );
-    assert_intact_v11_policy_database(&database_path, account_id.as_str(), 800);
+    assert_intact_v11_policy_database(&database_path, account_id.as_str(), 800).await;
 }
 
 #[tokio::test]
@@ -170,13 +198,22 @@ async fn every_v12_open_rejects_malformed_policy_columns() {
         .await
         .expect("valid v12 should open");
     store.close().await.expect("valid v12 should close");
-    let raw = Connection::open(&database_path).expect("fixture should reopen");
-    raw.execute_batch(
+    let mut raw = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    .expect("fixture should reopen");
+    sqlx::raw_sql(
         "DROP TABLE account_routing_policies;
              CREATE TABLE account_routing_policies (account_id TEXT PRIMARY KEY NOT NULL);",
     )
+    .execute(&mut raw)
+    .await
     .expect("malformed policy table should install");
-    drop(raw);
+    raw.close().await.expect("fixture connection should close");
 
     assert_eq!(
         AsyncSqliteStateStore::open(&database_path)
@@ -201,19 +238,20 @@ async fn every_v12_open_rejects_malformed_policy_columns() {
             .expect_err("mutation open must reject malformed policy schema"),
         StateStoreError::WeeklyQuotaFloorSchemaUpgradeRequired
     );
-    assert_eq!(
-        SqliteStateStore::open(&database_path)
-            .expect_err("sync writable open must reject malformed policy schema"),
-        StateStoreError::MissingReadOnlySchemaObject {
-            object_kind: "column",
-            object_name: "weekly_quota_floor_basis_points",
-        }
-    );
 
-    let raw = Connection::open(&database_path).expect("fixture should reopen");
-    raw.execute_batch("DROP TABLE account_routing_policies;")
+    let mut raw = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    .expect("fixture should reopen");
+    sqlx::raw_sql("DROP TABLE account_routing_policies;")
+        .execute(&mut raw)
+        .await
         .expect("policy table should drop");
-    drop(raw);
+    raw.close().await.expect("fixture connection should close");
     assert_eq!(
         AsyncSqliteStateStore::open(&database_path)
             .await
@@ -237,14 +275,6 @@ async fn every_v12_open_rejects_malformed_policy_columns() {
             .expect_err("mutation open must reject missing policy table"),
         StateStoreError::WeeklyQuotaFloorSchemaUpgradeRequired
     );
-    assert_eq!(
-        SqliteStateStore::open(&database_path)
-            .expect_err("sync writable open must reject missing policy table"),
-        StateStoreError::MissingReadOnlySchemaObject {
-            object_kind: "table",
-            object_name: "account_routing_policies",
-        }
-    );
 }
 
 #[tokio::test]
@@ -257,22 +287,51 @@ async fn production_async_v12_migration_contention_is_atomic_and_retryable() {
         "migration-contention",
         AccountStatus::Enabled,
     );
-    let store = SqliteStateStore::open(&database_path).expect("fixture should open");
+    let store = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("fixture should open");
     store
         .upsert_account(&account)
+        .await
         .expect("account should persist");
-    drop(store);
-    let raw = Connection::open(&database_path).expect("fixture should reopen");
-    raw.execute(
-        "INSERT INTO account_routing_policies VALUES (?1, 800)",
-        [account.account_id().as_str()],
+    store.close().await.expect("seed store should close");
+    let mut raw = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true)
+            .foreign_keys(false)
+            .journal_mode(sqlx::sqlite::SqliteJournalMode::Delete),
     )
-    .expect("v11-compatible policy should persist");
-    drop(raw);
-    convert_current_fixture_to_v11(&database_path);
+    .await
+    .expect("fixture should reopen");
+    let journal_mode: String = sqlx::query_scalar("PRAGMA journal_mode")
+        .fetch_one(&mut raw)
+        .await
+        .expect("fixture journal mode should read");
+    assert_eq!(
+        journal_mode, "delete",
+        "keep the original held-writer fixture mode"
+    );
+    sqlx::query("INSERT INTO account_routing_policies VALUES (?1, 800)")
+        .bind(account.account_id().as_str())
+        .execute(&mut raw)
+        .await
+        .map(|result| result.rows_affected())
+        .expect("v11-compatible policy should persist");
+    raw.close().await.expect("fixture connection should close");
+    convert_current_fixture_to_v11(&database_path).await;
 
-    let lock = Connection::open(&database_path).expect("lock connection should open");
-    lock.execute_batch("PRAGMA busy_timeout = 0; BEGIN IMMEDIATE;")
+    let mut lock = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    .expect("lock connection should open");
+    sqlx::raw_sql("PRAGMA busy_timeout = 0; BEGIN IMMEDIATE;")
+        .execute(&mut lock)
+        .await
         .expect("writer lock should be held");
     let migration_attempt = tokio::time::timeout(
         std::time::Duration::from_millis(250),
@@ -288,35 +347,34 @@ async fn production_async_v12_migration_contention_is_atomic_and_retryable() {
         Ok(Ok(_)) => panic!("migration must not commit beneath a held writer"),
         Err(_) => panic!("production migration must return before the test timeout"),
     }
-    let version: i64 = lock
-        .pragma_query_value(None, "user_version", |row| row.get(0))
+    let version: i64 = sqlx::query_scalar("PRAGMA user_version")
+        .fetch_one(&mut lock)
+        .await
         .expect("version should read under lock");
     assert_eq!(version, 11);
-    let preserved_floor: i64 = lock
-            .query_row(
-                "SELECT weekly_quota_floor_basis_points FROM account_routing_policies WHERE account_id = ?1",
-                [account.account_id().as_str()],
-                |row| row.get(0),
-            )
+    let preserved_floor: i64 = sqlx::query_scalar("SELECT weekly_quota_floor_basis_points FROM account_routing_policies WHERE account_id = ?1").bind(account.account_id().as_str()).fetch_one(&mut lock).await
             .expect("v11 policy should remain readable");
     assert_eq!(preserved_floor, 800);
-    let replacement_exists: i64 = lock
-        .query_row(
-            "SELECT EXISTS(
+    let replacement_exists: i64 = sqlx::query_scalar(
+        "SELECT EXISTS(
                     SELECT 1 FROM sqlite_master
                      WHERE type = 'table' AND name = 'account_routing_policies_v12'
                  )",
-            [],
-            |row| row.get(0),
-        )
-        .expect("replacement-table state should read");
+    )
+    .fetch_one(&mut lock)
+    .await
+    .expect("replacement-table state should read");
     assert_eq!(replacement_exists, 0);
-    let preserved_accounts: i64 = lock
-        .query_row("SELECT COUNT(*) FROM accounts", [], |row| row.get(0))
+    let preserved_accounts: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM accounts")
+        .fetch_one(&mut lock)
+        .await
         .expect("preserved account count should read");
     assert_eq!(preserved_accounts, 1);
-    lock.execute_batch("ROLLBACK;")
+    sqlx::raw_sql("ROLLBACK;")
+        .execute(&mut lock)
+        .await
         .expect("lock should release");
+    lock.close().await.expect("lock connection should close");
 
     let migrated = AsyncSqliteStateStore::open(&database_path)
         .await
@@ -331,9 +389,18 @@ async fn production_async_v12_migration_contention_is_atomic_and_retryable() {
         )])
     );
     migrated.close().await.expect("migrated store should close");
-    let raw = Connection::open(&database_path).expect("migrated DB should inspect");
-    let integrity: String = raw
-        .pragma_query_value(None, "integrity_check", |row| row.get(0))
+    let mut raw = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    .expect("migrated DB should inspect");
+    let integrity: String = sqlx::query_scalar("PRAGMA integrity_check")
+        .fetch_one(&mut raw)
+        .await
         .expect("integrity check should run");
     assert_eq!(integrity, "ok");
+    raw.close().await.expect("migrated inspection should close");
 }
