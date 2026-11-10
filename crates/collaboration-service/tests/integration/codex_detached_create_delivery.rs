@@ -249,6 +249,7 @@ async fn detached_create_records_target_and_starts_first_message_without_resume(
     let serving_acp = tokio::spawn(serve_acp_connection(
         acp_server,
         AcpConnectionInputs {
+            scratch_scopes: std::sync::Arc::new(codex_acp_adapter::test_support::recording_scratch_scopes::RecordingScratchScopes::default()),
             backend_path: socket_path.clone(),
             generation,
             schemas,

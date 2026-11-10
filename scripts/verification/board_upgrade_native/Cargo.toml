@@ -15,7 +15,7 @@ name = "board-request-shapes"
 path = "src/request_shapes.rs"
 
 [dependencies]
-board-legacy-upgrade = { path = "../../../crates/board-legacy-upgrade" }
+agent-router-update = { path = "../../../crates/agent-router-update" }
 collaboration-protocol = { path = "../../../crates/collaboration-protocol" }
 message-board = { path = "../../../crates/message-board" }
 message-board-storage = { path = "../../../crates/message-board-storage" }

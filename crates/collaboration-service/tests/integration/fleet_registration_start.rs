@@ -137,6 +137,6 @@ async fn a_newly_decided_directory_starts_registration_without_another_recovery_
         vec![input.project_id]
     );
     runtime.shutdown().await?;
-    fleet.close().await;
+    drop(fleet);
     Ok(())
 }

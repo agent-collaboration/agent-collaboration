@@ -19,8 +19,11 @@ async fn decided_write_survives_refused_cache_refresh_and_same_key_replay() -> T
     };
     reader.ingress.controls.refuse_feed_reads();
     let returned = reader.fleet.submit(&offered, &origin).await;
-    let outbox =
-        message_board_storage::FleetOutbox::open(&router_root.join("fleet-outbox.sqlite")).await?;
+    let fleet_store = message_board_storage::FleetStore::open(
+        &router_root.join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?;
+    let outbox = fleet_store.outbox();
     let saved = outbox
         .request(&offered.request_id)
         .await?
@@ -43,8 +46,7 @@ async fn decided_write_survives_refused_cache_refresh_and_same_key_replay() -> T
         reader.ingress.controls.refused_feed_count() > 0,
         "remote feed refusal was not reached"
     );
-    let cache =
-        message_board_storage::FleetCache::open(&router_root.join("fleet-cache.sqlite")).await?;
+    let cache = fleet_store.cache();
     assert_eq!(cache.checkpoint().await?, FleetPosition::try_from(0)?);
     assert!(
         reader
@@ -59,8 +61,8 @@ async fn decided_write_survives_refused_cache_refresh_and_same_key_replay() -> T
         1,
         "keyed replay sent another write"
     );
-    cache.close().await;
-    outbox.close().await;
+    drop((cache, outbox));
+    fleet_store.close().await;
     reader.shutdown().await?;
     live.shutdown().await?;
     jwks.shutdown().await?;
@@ -82,7 +84,11 @@ async fn pending_request_replays_through_the_session_and_keeps_central_provenanc
         installation: ServiceId::try_from(WRITER_SERVICE.to_owned())?,
         machine: MachineLabel::try_from("caller supplied label must be ignored".to_owned())?,
     };
-    let offline = FleetClient::open(&router_root, Arc::new(NoRegistration), None).await?;
+    let offline_store = message_board_storage::FleetStore::open(
+        &router_root.join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?;
+    let offline = FleetClient::new(&offline_store, Arc::new(NoRegistration), None);
     assert_eq!(
         offline.submit(&offered, &forged_origin).await?.result,
         RequestResult::PendingUnreachable
@@ -93,8 +99,9 @@ async fn pending_request_replays_through_the_session_and_keeps_central_provenanc
         pending.first().ok_or("missing pending request")?.request,
         offered
     );
-    assert!(!router_root.join("fleet.sqlite").exists());
-    offline.close().await;
+    fixture::assert_no_local_fleet_authority(&router_root).await?;
+    drop(offline);
+    offline_store.close().await;
 
     let jwks = JwksFixtureServer::start().await?;
     let live = Live::start(&server_root, &jwks.url).await?;
@@ -144,7 +151,7 @@ async fn pending_request_replays_through_the_session_and_keeps_central_provenanc
         reader.fleet.request_effects(&effects_request).await?,
         receipt
     );
-    assert!(!router_root.join("fleet.sqlite").exists());
+    fixture::assert_no_local_fleet_authority(&router_root).await?;
     reader.shutdown().await?;
     live.shutdown().await?;
     jwks.shutdown().await?;

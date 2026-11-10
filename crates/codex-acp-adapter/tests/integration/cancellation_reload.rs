@@ -139,6 +139,9 @@ async fn rejected_interrupt_stays_blocked_through_active_reload_and_clears_after
     let serving = tokio::spawn(serve_acp_connection(
         server,
         AcpConnectionInputs {
+            scratch_scopes: std::sync::Arc::new(
+                crate::recording_scratch_scopes::RecordingScratchScopes::default(),
+            ),
             backend_path: socket.clone().into(),
             generation: serde_json::from_value(
                 json!({"serviceEpoch":"00000000-0000-4000-8000-000000000001","generation":1}),

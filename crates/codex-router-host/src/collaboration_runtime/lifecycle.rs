@@ -151,6 +151,11 @@ impl CollaborationRuntime {
         {
             failure.get_or_insert(io::Error::other("provider retention maintenance failed"));
         }
+        if let Some(task) = self.scratch_sweep.take()
+            && task.await.is_err()
+        {
+            failure.get_or_insert(io::Error::other("scratch sweep shutdown failed"));
+        }
         if let Some(store) = self.automation_store.take() {
             match std::sync::Arc::try_unwrap(store) {
                 Ok(store) => {
@@ -194,6 +199,11 @@ impl CollaborationRuntime {
                     ));
                 }
             }
+        }
+        // Last user gone: the link owner ended with the board session and the Fleet
+        // client with admission, so nothing can still write through a view.
+        if let Some(fleet_store) = self.fleet_store.take() {
+            fleet_store.close().await;
         }
         if let Some(journal) = self.journal.take() {
             match std::sync::Arc::try_unwrap(journal) {

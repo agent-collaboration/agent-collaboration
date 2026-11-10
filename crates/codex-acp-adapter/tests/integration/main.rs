@@ -4,6 +4,8 @@
 mod conversation_operation_recorder;
 #[path = "../../src/test_support/native_permission_echo.rs"]
 mod native_permission_echo;
+#[path = "../../src/test_support/recording_scratch_scopes.rs"]
+mod recording_scratch_scopes;
 
 mod acp_connection_dispatch;
 mod acp_connection_transport;

@@ -84,7 +84,7 @@ async fn seed_notification_for_recipient(
         .await??;
     }
     let admission = board.admission.clone();
-    let running = board.start().ok_or("session start")?;
+    let running = board.start().session.ok_or("session start")?;
     timeout(BOUND, central.auth.entered.notified()).await?;
     settle_fixture_directory(&fleet, &creating).await?;
     central.release()?;

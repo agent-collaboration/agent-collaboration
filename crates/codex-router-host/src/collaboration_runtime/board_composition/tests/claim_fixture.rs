@@ -60,7 +60,7 @@ impl ClaimFixture {
         };
         #[cfg(not(feature = "runtime-test-support"))]
         debug_assert!(!with_notifications);
-        let running = board.start().ok_or("session not started")?;
+        let running = board.start().session.ok_or("session not started")?;
         wait_welcome(welcomed).await?;
         Ok(Self {
             directory,

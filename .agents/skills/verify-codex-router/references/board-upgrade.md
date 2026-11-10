@@ -2,13 +2,13 @@
 
 ## Current entry
 
-The wrapper retired in 0.1.102. The retained Rust preparation, publication, replay and restart route is `crates/board-legacy-upgrade/tests/e2e/upgrade_binary_e2e.rs`. Prepare the real local entry points as CI does, then run:
+The wrapper retired in 0.1.102. The retained Rust preparation, publication, replay and restart route is `crates/agent-router-update/tests/e2e/upgrade_binary_e2e.rs`. Prepare the real local entry points as CI does, then run:
 
 ```sh
-cargo nextest run --locked --profile ci -p board-legacy-upgrade --test e2e --test-threads 1
+cargo nextest run --locked --profile ci -p agent-router-update --test e2e --test-threads 1
 ```
 
-The retained independent inbox oracle is `crates/board-legacy-upgrade/examples/legacy_selection_oracle.rs`; build/run that example with an explicitly supplied sealed copy, copy root and private output. Its owning tests remain in the example and upgrade suite.
+The retained independent inbox oracle is `crates/agent-router-update/examples/legacy_selection_oracle.rs`; build/run that example with an explicitly supplied sealed copy, copy root and private output. Its owning tests remain in the example and upgrade suite.
 
 A separately commissioned sealed-copy Mac observation uses `node verification/import-run.ts "$PRIVATE_DECLARATION"`; its current contract is `verification/import-declaration.ts`. It supports the declared local Tokio target and real copies on that Mac only.
 
@@ -22,7 +22,7 @@ HTTPS/owner Access and machine-credential inputs and qualifies locally before
 any staging run; the local route below remains fixture-authenticated evidence.
 
 This lasting journey drives the one-time upgrade through the actual
-`codex-router-board-upgrade` CLI and an isolated real Tokio central. The local
+`agent-router-update board-import` command and an isolated real Tokio central. The local
 route covers dry-run, publication, interruption on either side of publication,
 owning reopen and rerun. Retained observations use synthetic legacy fixtures;
 qualify the route on the declared target before crediting a new G3 run. Supplied
@@ -56,7 +56,7 @@ paired observer. Use the existing profile settings and keep evidence outside
 
 ```sh
 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=4 \
-  cargo build -p board-legacy-upgrade --bin codex-router-board-upgrade --locked --offline
+  cargo build -p agent-router-update --bin agent-router-update --locked --offline
 CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0 CARGO_INCREMENTAL=0 CARGO_BUILD_JOBS=4 \
   cargo build --manifest-path scripts/verification/board_upgrade_native/Cargo.toml \
   --bins --target-dir scripts/verification/board_upgrade_native/target --locked --offline
@@ -239,7 +239,7 @@ The later amendments require these additional observations:
   subscription coverage differently.
 
 On a tree containing A's watch correction, both native regression scenarios in
-`crates/board-legacy-upgrade/tests/native_inbox_fidelity.rs` must pass unchanged:
+`crates/agent-router-update/tests/integration/native_inbox_fidelity.rs` must pass unchanged:
 the topic-only watch fixture gives the owner's unread reply set `{}`, and the
 mixed topic/explicit-thread fixture gives `{reply 201}`, excluding reply 202 in
 the unwatched sibling. Compare against the independent legacy oracle, then
@@ -278,9 +278,8 @@ attempt and stays LoadedOnly.
 Use the permanent tests through their actual owners, from the repository root:
 
 ```sh
-cargo nextest run -p board-legacy-upgrade --locked --offline --test-threads 2 \
-  --test activity_range_cutover --test expiry_origin_cutover \
-  --test message_cutover --test message_cutover_crash --test message_cutover_cli
+cargo nextest run -p agent-router-update --locked --offline --test-threads 2 --test integration \
+  -E 'test(/^(activity_range_cutover|expiry_origin_cutover|message_cutover|message_cutover_crash|message_cutover_cli)::/)'
 cargo nextest run -p codex-router-host --lib --locked --offline --test-threads 2 \
   -E 'test(importer_claim)'
 cargo nextest run -p collaboration-service --lib --test message_delivery_paths \

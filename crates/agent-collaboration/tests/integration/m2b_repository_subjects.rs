@@ -6,7 +6,6 @@ use crate::board_fixture;
 use board_cli_execution::cli;
 use board_fixture::{BoardFixture, TestError, accepted};
 use message_board::*;
-use message_board_storage::FleetCache;
 use serde_json::{Value, json};
 
 const ROOT_BODY: &str = "Discussion body, deliberately different from every subject title";
@@ -266,7 +265,14 @@ async fn repository_and_default_lists_keep_unavailable_subjects_and_imported_mar
     write.commit().await?;
     expected.imported = true;
 
-    let cache = FleetCache::open(&fixture._directory.path().join("fleet-cache.sqlite")).await?;
+    let cache_store = message_board_storage::FleetStore::open(
+        &fixture
+            ._directory
+            .path()
+            .join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?;
+    let cache = cache_store.cache();
     let mut snapshot = cache.snapshot().await?;
     let before = snapshot.records.len();
     snapshot
@@ -279,7 +285,7 @@ async fn repository_and_default_lists_keep_unavailable_subjects_and_imported_mar
     );
     cache.replace_snapshot(&snapshot).await?;
     assert!(cache.record(&adr.into()).await?.is_none());
-    cache.close().await;
+    cache_store.close().await;
     assert_list_parity(&fixture, &expected, &[PRIVATE, "Protected ADR body"]).await?;
     fixture.stop().await
 }

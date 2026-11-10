@@ -16,6 +16,16 @@ use thiserror::Error;
 #[error("account credential lock unavailable")]
 pub struct AccountCredentialLockError;
 
+/// The folder of per-account lock files beside a state database:
+/// `<database file name>.credential-locks` in the same directory. It follows the
+/// database's name, so renaming the store means renaming this folder with it.
+#[must_use]
+pub fn account_credential_lock_directory(database_path: &Path) -> Option<PathBuf> {
+    let mut name = database_path.file_name()?.to_os_string();
+    name.push(".credential-locks");
+    Some(database_path.parent()?.join(name))
+}
+
 /// Held until provider use and any blocking secret write have actually ended.
 pub struct AccountCredentialLock {
     _file: File,
@@ -28,15 +38,8 @@ impl AccountCredentialLock {
     ) -> Result<Self, AccountCredentialLockError> {
         let canonical_database =
             fs::canonicalize(database_path).map_err(|_| AccountCredentialLockError)?;
-        let database_name = canonical_database
-            .file_name()
+        let lock_dir = account_credential_lock_directory(&canonical_database)
             .ok_or(AccountCredentialLockError)?;
-        let mut lock_dir_name = database_name.to_os_string();
-        lock_dir_name.push(".credential-locks");
-        let lock_dir = canonical_database
-            .parent()
-            .ok_or(AccountCredentialLockError)?
-            .join(lock_dir_name);
         ensure_private_lock_directory(&lock_dir)?;
 
         let digest = Sha256::digest(account_id.as_str().as_bytes());

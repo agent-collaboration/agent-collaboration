@@ -660,20 +660,13 @@ fn validate_conversation_create_request(
     Ok(())
 }
 
-fn create_private_scratch(path: &Path) -> Result<(), ClientError> {
-    use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
-    let mut builder = std::fs::DirBuilder::new();
-    builder.recursive(true).mode(0o700).create(path)?;
-    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700))?;
-    let metadata = std::fs::symlink_metadata(path)?;
-    if !metadata.is_dir()
-        || metadata.file_type().is_symlink()
-        || metadata.permissions().mode() & 0o077 != 0
-    {
-        return Err(ClientError::Protocol(
-            "scratch directory is not owner-private",
-        ));
-    }
+/// Creates the session's scratch folder if needed and records this use, holding
+/// the scope's lock shared so the Host's scratch sweep never removes it midway.
+async fn prepare_session_scratch(path: &Path) -> Result<(), ClientError> {
+    let path = path.to_owned();
+    tokio::task::spawn_blocking(move || codex_native_integration::prepare_scratch_scope(&path))
+        .await
+        .map_err(|_| ClientError::Protocol("scratch preparation did not complete"))??;
     Ok(())
 }
 

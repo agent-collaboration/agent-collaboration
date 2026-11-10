@@ -1,0 +1,10 @@
+{
+  "db_name": "Turso",
+  "query": "INSERT INTO fleet_project_creation_inputs(request_id, canonical_hash, input) VALUES (?, ?, ?)",
+  "describe": {
+    "columns": [],
+    "parameters": null,
+    "nullable": []
+  },
+  "hash": "e5037bfa6b77fadd64d95dd8dc7c186f8c8362b2486b131410a16458d0c9fb60"
+}

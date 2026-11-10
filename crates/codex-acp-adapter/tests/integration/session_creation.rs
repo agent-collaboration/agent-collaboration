@@ -143,7 +143,8 @@ async fn new_session_mints_scoped_configuration_receipt_and_checks_effective_cwd
             AcpSessionBinding::create(
                     &mut catalog,
                     SessionSetupInputs {
-                        operation_id: None,
+            scratch_scopes: std::sync::Arc::new(crate::recording_scratch_scopes::RecordingScratchScopes::default()),
+            operation_id: None,
                         recorder: Arc::new(AcceptingConversationRecorder),
                         connection,
                         schemas,
@@ -157,6 +158,9 @@ async fn new_session_mints_scoped_configuration_receipt_and_checks_effective_cwd
             AcpSessionBinding::load_existing(
                 &mut catalog,
                 SessionSetupInputs {
+                    scratch_scopes: std::sync::Arc::new(
+                        crate::recording_scratch_scopes::RecordingScratchScopes::default(),
+                    ),
                     operation_id: None,
                     recorder: Arc::new(AcceptingConversationRecorder),
                     connection,
@@ -282,9 +286,13 @@ async fn aggregate_cold_load_skips_history_larger_than_adapter_replay_capacity()
         }).to_string().into())).await.unwrap();
     });
 
+    let scratch_scopes =
+        Arc::new(crate::recording_scratch_scopes::RecordingScratchScopes::default());
     let result = AcpSessionBinding::load_existing(
         &mut catalog,
         SessionSetupInputs {
+            scratch_scopes: Arc::clone(&scratch_scopes)
+                as Arc<dyn codex_acp_adapter::ScratchScopeRegister>,
             operation_id: None,
             recorder: Arc::new(AcceptingConversationRecorder),
             connection,
@@ -296,7 +304,7 @@ async fn aggregate_cold_load_skips_history_larger_than_adapter_replay_capacity()
                 "mcpServers":[],
                 "_meta":{"codex-router/replayHistory":false}
             }),
-            approval_broker: Arc::new(codex_acp_adapter::RejectingApprovalBroker),
+            approval_broker: Arc::new(RecordedRouteBroker),
         },
     )
     .await;
@@ -304,6 +312,18 @@ async fn aggregate_cold_load_skips_history_larger_than_adapter_replay_capacity()
     let (session, history) = result.unwrap_or_else(|error| panic!("cold aggregate load: {error}"));
     assert_eq!(session.session_id(), "long-thread");
     assert!(history.is_empty());
+    use crate::recording_scratch_scopes::ScratchScopeEvent::{Closed, Opened};
+    let scope = std::path::PathBuf::from(TEST_SCRATCH);
+    assert_eq!(
+        scratch_scopes.events(),
+        vec![Opened(scope.clone())],
+        "a loaded session with a recorded route holds its scratch scope open"
+    );
+    drop(session);
+    assert_eq!(
+        scratch_scopes.events(),
+        vec![Opened(scope.clone()), Closed(scope)]
+    );
     fixture.await.unwrap();
 }
 
@@ -431,9 +451,12 @@ async fn fork_session_sends_exact_model_choice_to_native_runtime() {
             .unwrap_or_else(|error| panic!("send: {error}"));
         });
 
+        let scratch_scopes =
+            Arc::new(crate::recording_scratch_scopes::RecordingScratchScopes::default());
         let session = AcpSessionBinding::create(
         &mut catalog,
         SessionSetupInputs {
+            scratch_scopes: Arc::clone(&scratch_scopes) as Arc<dyn codex_acp_adapter::ScratchScopeRegister>,
             operation_id: None,
             recorder: Arc::new(AcceptingConversationRecorder),
             connection,
@@ -477,5 +500,80 @@ async fn fork_session_sends_exact_model_choice_to_native_runtime() {
             session.new_session_result()["_meta"]["codexRouter"]["permissionDifferences"],
             json!(["writableRoots"])
         );
+        use crate::recording_scratch_scopes::ScratchScopeEvent::{Closed, Opened};
+        let scope = std::path::PathBuf::from(TEST_SCRATCH);
+        assert_eq!(
+            scratch_scopes.events(),
+            vec![Opened(scope.clone())],
+            "a created session holds its scratch scope open"
+        );
+        drop(session);
+        assert_eq!(
+            scratch_scopes.events(),
+            vec![Opened(scope.clone()), Closed(scope)],
+            "dropping the binding closes its scratch scope"
+        );
+    }
+}
+
+/// Answers every thread with one recorded Router route whose scratch is TEST_SCRATCH.
+struct RecordedRouteBroker;
+
+#[expect(clippy::panic, reason = "A malformed fixed fixture fails the test.")]
+impl codex_acp_adapter::ApprovalBroker for RecordedRouteBroker {
+    fn register_route(
+        &self,
+        _route: codex_acp_adapter::ApprovalRoute,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<Output = Result<(), codex_acp_adapter::ApprovalBrokerError>>
+                + Send
+                + '_,
+        >,
+    > {
+        Box::pin(async { Ok(()) })
+    }
+
+    fn request(
+        &self,
+        _request: codex_acp_adapter::BrokeredApprovalRequest,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        codex_acp_adapter::BrokeredApprovalOutcome,
+                        codex_acp_adapter::ApprovalBrokerError,
+                    >,
+                > + Send
+                + '_,
+        >,
+    > {
+        Box::pin(async { Ok(codex_acp_adapter::BrokeredApprovalOutcome::Cancelled) })
+    }
+
+    fn route(
+        &self,
+        thread_id: &str,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<
+                        Option<codex_acp_adapter::ApprovalRoute>,
+                        codex_acp_adapter::ApprovalBrokerError,
+                    >,
+                > + Send
+                + '_,
+        >,
+    > {
+        let creator: collaboration_protocol::SessionRef = serde_json::from_value(json!({"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"creator"})).unwrap_or_else(|error| panic!("creator: {error}"));
+        let route = codex_acp_adapter::ApprovalRoute {
+            thread_id: thread_id.to_owned(),
+            created_by: creator.clone(),
+            approver: creator,
+            access: collaboration_protocol::RouterAccess::WorkspaceWrite,
+            scratch_path: TEST_SCRATCH.to_owned(),
+            root_message_id: None,
+        };
+        Box::pin(async move { Ok(Some(route)) })
     }
 }

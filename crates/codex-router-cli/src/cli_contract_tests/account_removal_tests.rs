@@ -14,10 +14,11 @@ fn account_remove_async_owner_refuses_a_mismatched_expected_record_without_delet
         let before = fixture.dependent_row_counts("acct_primary");
         let runtime = test_async_runtime();
         let result = runtime.block_on(async {
-            let state =
-                AsyncSqliteStateStore::open_read_only(&fixture.root.path().join("state.sqlite"))
-                    .await
-                    .unwrap();
+            let state = AsyncSqliteStateStore::open_read_only(
+                &codex_router_state::provider_proxy_database_path(fixture.root.path()),
+            )
+            .await
+            .unwrap();
             let actual = state
                 .load_account(&account_id("acct_primary"))
                 .await
@@ -123,7 +124,7 @@ fn account_remove_discards_in_flight_quota_writes() {
         );
         fixture.seed_dependents();
         let secondary_before = fixture.dependent_row_counts("acct_secondary");
-        let state_path = fixture.root.path().join("state.sqlite");
+        let state_path = codex_router_state::provider_proxy_database_path(fixture.root.path());
         let secret_root = fixture.root.path().join("secrets");
         let runtime = test_async_runtime();
         let entered = Arc::new(tokio::sync::Notify::new());
@@ -349,7 +350,7 @@ fn account_remove_rechecks_disabled_state_after_target_resolution() {
         let runtime = test_async_runtime();
         runtime.block_on(async {
             let state = must_ok(
-                AsyncSqliteStateStore::open(&fixture.root.path().join("state.sqlite")).await,
+                AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(fixture.root.path())).await,
             );
             let target =
                 must_ok(state.load_account(&account_id("acct_primary")).await).expect("account");
@@ -359,7 +360,7 @@ fn account_remove_rechecks_disabled_state_after_target_resolution() {
             must_ok(state.upsert_account(&reenabled).await);
             must_ok(state.close().await);
             let mutation = must_ok(
-                AsyncWeeklyQuotaFloorMutationStore::open(&fixture.root.path().join("state.sqlite"))
+                AsyncWeeklyQuotaFloorMutationStore::open(&codex_router_state::provider_proxy_database_path(fixture.root.path()))
                     .await,
             );
             let error = match mutation.begin_disabled_account_removal(&target).await {
@@ -412,7 +413,7 @@ impl RemovalFixture {
     fn login_account(&self, account_name: &str, label: &str) {
         let runtime = test_async_runtime();
         let state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(
-            &self.root.path().join("state.sqlite"),
+            &codex_router_state::provider_proxy_database_path(self.root.path()),
         )));
         let secrets = must_ok(open_encrypted_credential_store(
             self.root.path().join("secrets"),
@@ -457,7 +458,7 @@ impl RemovalFixture {
     fn account_exists(&self) -> bool {
         let runtime = test_async_runtime();
         let state = must_ok(runtime.block_on(AsyncSqliteStateStore::open_read_only(
-            &self.root.path().join("state.sqlite"),
+            &codex_router_state::provider_proxy_database_path(self.root.path()),
         )));
         let exists =
             must_ok(runtime.block_on(state.load_account(&account_id("acct_primary")))).is_some();
@@ -479,12 +480,16 @@ impl RemovalFixture {
     fn seed_dependents(&self) {
         let runtime = test_async_runtime();
         runtime.block_on(async {
-            let state =
-                must_ok(AsyncSqliteStateStore::open(&self.root.path().join("state.sqlite")).await);
+            let state = must_ok(
+                AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+                    self.root.path(),
+                ))
+                .await,
+            );
             let pool = must_ok(
                 sqlx::SqlitePool::connect(&format!(
                     "sqlite://{}",
-                    self.root.path().join("state.sqlite").display()
+                    codex_router_state::provider_proxy_database_path(self.root.path()).display()
                 ))
                 .await,
             );
@@ -516,7 +521,7 @@ impl RemovalFixture {
             let pool = must_ok(
                 sqlx::SqlitePool::connect(&format!(
                     "sqlite://{}",
-                    self.root.path().join("state.sqlite").display()
+                    codex_router_state::provider_proxy_database_path(self.root.path()).display()
                 ))
                 .await,
             );
@@ -546,7 +551,9 @@ impl RemovalFixture {
                 sqlx::sqlite::SqlitePoolOptions::new()
                     .connect_with(
                         sqlx::sqlite::SqliteConnectOptions::new()
-                            .filename(self.root.path().join("state.sqlite"))
+                            .filename(codex_router_state::provider_proxy_database_path(
+                                self.root.path(),
+                            ))
                             .read_only(true),
                     )
                     .await,

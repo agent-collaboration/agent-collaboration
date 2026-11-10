@@ -215,10 +215,10 @@ pub(crate) async fn compose_provider_startup(
                     Err(error) => {
                         let fix = match binding.provider {
                             ProviderKind::ClaudeCode => {
-                                "install claude-agent-acp or set the Claude executable in providers.json or --claude-acp-executable"
+                                "install claude-agent-acp or set the Claude executable in the settings.jsonc providers section or --claude-acp-executable"
                             }
                             ProviderKind::Cursor => {
-                                "install Cursor agent or set the Cursor executable in providers.json or --cursor-acp-executable"
+                                "install Cursor agent or set the Cursor executable in the settings.jsonc providers section or --cursor-acp-executable"
                             }
                         };
                         endpoints.push(unavailable_endpoint(

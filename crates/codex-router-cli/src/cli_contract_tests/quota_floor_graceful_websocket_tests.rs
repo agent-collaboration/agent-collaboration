@@ -17,7 +17,7 @@ fn saved_switch_band_refresh_keeps_active_socket_when_no_healthy_peer_exists() {
 fn run_saved_switch_band_websocket_case(with_healthy_peer: bool) {
     let test_root = TestRoot::new("joined-graceful-floor-websocket");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let state = must_ok(SqliteStateStore::open(&state_path));
     let secrets = must_ok(

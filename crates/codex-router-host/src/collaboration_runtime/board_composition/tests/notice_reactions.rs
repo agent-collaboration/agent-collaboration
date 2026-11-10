@@ -5,7 +5,7 @@ use board_fleet_sync::MachineNoticeProgressStore;
 use board_sync_protocol::{BoardConsumerProtocol, BoardNotice, NoticeRead, PositionedBoardNotice};
 use fleet_sync_protocol::{Epoch, NoticePosition};
 use fleet_sync_tokio_runner::SessionRequests;
-use message_board_storage::{FleetCache, FleetRecordSnapshot};
+use message_board_storage::FleetRecordSnapshot;
 
 #[path = "archive_sync_barrier.rs"]
 mod archive_sync_barrier;
@@ -60,14 +60,18 @@ impl Runtime {
         // Holding authentication while doing SQLite setup can outlive the real
         // transport's connection deadline and close the fixture's waiter.
         settle_fixture_directory(&fleet, &creation).await?;
-        let cache = FleetCache::open(&root.join("fleet-cache.sqlite")).await?;
+        let cache_store = message_board_storage::FleetStore::open(
+            &root.join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await?;
+        let cache = cache_store.cache();
         central
             .freeze_fleet_snapshot(FleetRecordSnapshot {
                 through: cache.checkpoint().await?,
                 records: fleet.records().await?,
             })
             .await?;
-        cache.close().await;
+        cache_store.close().await;
         assert_eq!(
             central
                 .auth
@@ -76,7 +80,7 @@ impl Runtime {
             0,
             "local fixture inputs must be prepared before authentication starts"
         );
-        let running = board.start().ok_or("session not started")?;
+        let running = board.start().session.ok_or("session not started")?;
         timeout(BOUND, central.auth.entered.notified()).await?;
         central.release()?;
         wait_welcome(ready).await?;
@@ -126,17 +130,46 @@ impl Runtime {
     }
     async fn reactions(&self) -> Result<MachineNoticeReactions, io::Error> {
         self.ensure_progress_session().await?;
-        MachineNoticeReactions::open(&self.progress_directory()).await
-    }
-    async fn ensure_progress_session(&self) -> io::Result<()> {
-        let component = board_fleet_sync::MachineSessionStore::open(&self.progress_directory())
+        // As at Host start: older runtime files are imported once before the
+        // reactions read their progress through a view of the Fleet database.
+        let cache = message_board_storage::FleetStore::open(
+            &self
+                .progress_directory()
+                .join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await
+        .map_err(io::Error::other)?
+        .cache();
+        cache
+            .import_legacy_runtime(&self.progress_directory())
             .await
             .map_err(io::Error::other)?;
+        MachineNoticeReactions::open(cache).await
+    }
+    async fn ensure_progress_session(&self) -> io::Result<()> {
+        let component = board_fleet_sync::MachineSessionStore::from_cache(std::sync::Arc::new(
+            message_board_storage::FleetStore::open(
+                &self
+                    .progress_directory()
+                    .join(message_board_storage::FleetStore::FILE_NAME),
+            )
+            .await
+            .map_err(io::Error::other)?
+            .cache(),
+        ));
         if component.load().await.map_err(io::Error::other)?.is_none() {
-            let native =
-                board_fleet_sync::MachineSessionStore::open(&self.directory.path().join("router"))
-                    .await
-                    .map_err(io::Error::other)?;
+            let native = board_fleet_sync::MachineSessionStore::from_cache(std::sync::Arc::new(
+                message_board_storage::FleetStore::open(
+                    &self
+                        .directory
+                        .path()
+                        .join("router")
+                        .join(message_board_storage::FleetStore::FILE_NAME),
+                )
+                .await
+                .map_err(io::Error::other)?
+                .cache(),
+            ));
             let state = native
                 .load()
                 .await
@@ -148,17 +181,31 @@ impl Runtime {
     }
     async fn set_progress(&self, position: u64) -> TestResult {
         self.ensure_progress_session().await?;
-        MachineNoticeProgressStore::open(&self.progress_directory())
+        MachineNoticeProgressStore::from_cache(
+            message_board_storage::FleetStore::open(
+                &self
+                    .progress_directory()
+                    .join(message_board_storage::FleetStore::FILE_NAME),
+            )
             .await?
-            .save(NoticePosition::new(position))
-            .await?;
+            .cache(),
+        )
+        .save(NoticePosition::new(position))
+        .await?;
         Ok(())
     }
     async fn progress(&self) -> Result<NoticePosition, Box<dyn std::error::Error + Send + Sync>> {
-        Ok(MachineNoticeProgressStore::open(&self.progress_directory())
+        Ok(MachineNoticeProgressStore::from_cache(
+            message_board_storage::FleetStore::open(
+                &self
+                    .progress_directory()
+                    .join(message_board_storage::FleetStore::FILE_NAME),
+            )
             .await?
-            .load()
-            .await?)
+            .cache(),
+        )
+        .load()
+        .await?)
     }
     #[expect(
         clippy::panic_in_result_fn,
@@ -196,14 +243,22 @@ impl Runtime {
         }
     }
     async fn clear_cache(&self) -> TestResult {
-        let cache =
-            FleetCache::open(&self.directory.path().join("router/fleet-cache.sqlite")).await?;
-        cache
+        let store = message_board_storage::FleetStore::open(
+            &self
+                .directory
+                .path()
+                .join("router")
+                .join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await?;
+        store
+            .cache()
             .replace_snapshot(&FleetRecordSnapshot {
                 through: FleetPosition::ZERO,
                 records: Vec::new(),
             })
             .await?;
+        store.close().await;
         assert!(self.fleet.records().await?.is_empty());
         Ok(())
     }

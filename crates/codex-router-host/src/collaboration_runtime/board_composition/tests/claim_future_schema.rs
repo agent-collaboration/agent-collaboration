@@ -91,17 +91,17 @@ async fn future_schema_public_posts_keep_the_typed_refusal_without_forwarding() 
         directory.path(),
         Some(peer),
         Arc::new(SystemClock),
+        message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
+            .expect("32-byte fixture cursor key"),
     ));
-    let fleet = Arc::new(
-        FleetClient::open(
-            directory.path(),
-            Arc::new(
-                crate::collaboration_runtime::board_composition::UnattachedProjectRegistration,
-            ),
-            None,
+    let fleet = Arc::new(FleetClient::new(
+        &message_board_storage::FleetStore::open(
+            &(directory.path()).join(message_board_storage::FleetStore::FILE_NAME),
         )
         .await?,
-    );
+        Arc::new(crate::collaboration_runtime::board_composition::UnattachedProjectRegistration),
+        None,
+    ));
     let admission = Arc::new(ProjectAdmission::new(
         collaboration_service::ProjectAdmissionProps {
             registry,

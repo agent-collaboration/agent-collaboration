@@ -39,7 +39,7 @@ async fn interactive_weekly_floor_saver_persists_by_stable_account_id() {
         std::process::id()
     ));
     std::fs::create_dir_all(&root).expect("temporary router root should be created");
-    let database_path = root.join("state.sqlite");
+    let database_path = codex_router_state::provider_proxy_database_path(&root);
     let account_id = AccountId::new("tui-floor-account").expect("account id should be valid");
     let state = AsyncSqliteStateStore::open(&database_path)
         .await
@@ -87,7 +87,7 @@ async fn interactive_credit_policy_saver_reads_back_and_rejects_replaced_generat
         std::process::id()
     ));
     std::fs::create_dir_all(&root).expect("temporary router root should be created");
-    let database_path = root.join("state.sqlite");
+    let database_path = codex_router_state::provider_proxy_database_path(&root);
     let account_id = AccountId::new("tui-credit-policy").expect("account id should be valid");
     let state = AsyncSqliteStateStore::open(&database_path)
         .await

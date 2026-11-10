@@ -185,7 +185,7 @@ impl QuotaRefreshProvider for SupersededResponsesQuotaProvider {
 async fn superseded_responses_completion_notifies_from_latest_committed_weekly_window() {
     let test_root = TestRoot::new("quota-refresh-superseded-floor-intent");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let account_id = account_id("acct_superseded_floor_intent");
     must_ok(
@@ -371,7 +371,7 @@ const SUPERSEDED_REFRESH_CYCLE_NOW_UNIX_SECONDS: u64 = 1_100;
 async fn run_superseded_floor_commit_case(test_case: SupersededFloorCommitCase) {
     let test_root = TestRoot::new(test_case.test_root_name);
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let account_id = account_id(test_case.account_name);
     must_ok(

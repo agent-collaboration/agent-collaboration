@@ -337,8 +337,8 @@ pub fn run_host(plan: &HostPlan) -> DriverResult<()> {
         &driver_binding(plan)?,
     )?;
     save_record(
-        &plan.router_root.join("providers.json"),
-        &json!({"version":1,"providers":{"claude":{"enabled":false,"executable":null,"arguments":[]},"cursor":{"enabled":false,"executable":null,"arguments":[]}}}),
+        &plan.router_root.join("settings.jsonc"),
+        &json!({"providers":{"version":1,"providers":{"claude":{"enabled":false,"executable":null,"arguments":[]},"cursor":{"enabled":false,"executable":null,"arguments":[]}}}}),
     )?;
     save_record(&plan.evidence().join("serve-before.json"), &before)?;
     let profile = normal_home.join(".codex/codex-router-debug.config.toml");

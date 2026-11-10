@@ -139,7 +139,7 @@ fn is_quota_provider_request(request: &str) -> (bool, bool) {
 async fn generation_renewal_between_account_snapshot_and_resolution_refreshes_current_generation() {
     let test_root = TestRoot::new("quota-refresh-resolve-after-snapshot");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let trigger_account_id = account_id("acct_a_generation_renewal_trigger");
     let renewed_account_id = account_id("acct_b_generation_renewed");
@@ -261,7 +261,7 @@ async fn generation_renewal_between_account_snapshot_and_resolution_refreshes_cu
 async fn generation_replacement_during_provider_read_rejects_stale_commit_and_remaining_bands() {
     let test_root = TestRoot::new("quota-refresh-generation-replaced-inflight");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let account_id = account_id("acct_inflight_generation_replacement");
     must_ok(

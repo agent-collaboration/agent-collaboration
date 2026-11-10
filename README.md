@@ -103,10 +103,11 @@ cargo run -p codex-router-cli -- host
 The host starts `codex-router serve` when a compatible router is absent, starts
 the managed Codex app-server and enabled ACP providers, and answers its lifecycle
 commands (`host status`, `host restart`, `host stop`) on a separate owner-only operator socket.
-On first start it creates owner-editable
-`<router-root>/providers.json` with Claude and Cursor enabled. The default
-executables are `claude-agent-acp` and `agent acp`; explicit Host provider flags
-override the file for that start. If one provider is unavailable, the endpoint
+On first start it creates owner-editable `<router-root>/settings.jsonc` whose
+`providers` section enables Claude and Cursor. The default executables are
+`claude-agent-acp` and `agent acp`; explicit Host provider flags override the
+section for that start. A broken `providers` section leaves both providers
+unavailable, naming the file and section, while the rest of the Host starts. If one provider is unavailable, the endpoint
 catalog reports its reason and fix while the other endpoints remain available.
 
 The Host serves one set of collaboration tools over MCP (Streamable HTTP) on two

@@ -9,7 +9,7 @@ pub(super) fn resolve_login_account_id_at_router_root(
     label: &str,
     provider: Provider,
 ) -> Result<AccountId, AccountCommandError> {
-    let state_database_path = router_root.join("state.sqlite");
+    let state_database_path = codex_router_state::provider_proxy_database_path(router_root);
     if !state_database_path.exists() {
         return account_id_from_label(label);
     }

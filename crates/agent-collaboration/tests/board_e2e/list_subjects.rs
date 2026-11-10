@@ -393,7 +393,7 @@ async fn remove_cached_adr_offline(fixture: &mut BoardFixture, adr: &str) -> Fix
     // Stop the actual central, so startup cannot refill this one omitted cache row.
     let path = stopped
         .directory()
-        .join("fleet-cache.sqlite")
+        .join(message_board_storage::FleetStore::FILE_NAME)
         .canonicalize()?;
     if !path.starts_with(stopped.directory()) {
         return Err("ADR cache escaped the owned directory".into());

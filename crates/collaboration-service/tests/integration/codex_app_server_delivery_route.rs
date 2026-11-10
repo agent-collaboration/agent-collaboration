@@ -352,6 +352,7 @@ async fn exercise_held_empty_thread(
     let serving = tokio::spawn(serve_acp_connection(
         server,
         AcpConnectionInputs {
+            scratch_scopes: std::sync::Arc::new(codex_acp_adapter::test_support::recording_scratch_scopes::RecordingScratchScopes::default()),
             backend_path: socket_path.clone(),
             generation,
             schemas: Arc::clone(&schemas),

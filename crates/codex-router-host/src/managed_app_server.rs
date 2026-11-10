@@ -148,11 +148,16 @@ impl AppServerLaunchPlan {
                     "schema export directory must be private and absolute",
                 ));
             }
+            remove_abandoned_schema_exports(directory);
             let suffix = String::from(collaboration_runtime::new_service_uuid()?);
-            let output = directory.join(format!("native-schema-export-{suffix}"));
-            codex_native_integration::NativeSchemaExport::generate(&self.identity, &output)
-                .await
-                .map_err(std::io::Error::other)
+            let output = directory.join(format!("{SCHEMA_EXPORT_PREFIX}{suffix}"));
+            let export =
+                codex_native_integration::NativeSchemaExport::generate(&self.identity, &output)
+                    .await
+                    .map_err(std::io::Error::other);
+            // The export holds the bundle in memory; the folder is not read again.
+            remove_schema_export_folder(&output);
+            export
         }
         .await;
         match prepared {
@@ -348,6 +353,38 @@ pub enum AppServerReadinessError {
     Protocol(#[source] codex_native_integration::CodexProtocolError),
 }
 
+/// Each schema export is written to a fresh `native-schema-export-<UUIDv7>` folder.
+const SCHEMA_EXPORT_PREFIX: &str = "native-schema-export-";
+
+/// Removes export folders a crashed or interrupted start left behind. Only this
+/// Host prepares exports in its directory, so none of them is in use now.
+fn remove_abandoned_schema_exports(directory: &Path) {
+    let Ok(entries) = std::fs::read_dir(directory) else {
+        return;
+    };
+    for entry in entries.filter_map(Result::ok) {
+        let is_export = entry
+            .file_name()
+            .to_str()
+            .is_some_and(|name| name.starts_with(SCHEMA_EXPORT_PREFIX));
+        if is_export {
+            remove_schema_export_folder(&entry.path());
+        }
+    }
+}
+
+fn remove_schema_export_folder(folder: &Path) {
+    match std::fs::remove_dir_all(folder) {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => tracing::warn!(
+            folder = %folder.display(),
+            %error,
+            "schema export folder could not be removed; the next start retries"
+        ),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::os::unix::fs::PermissionsExt;
@@ -427,6 +464,10 @@ mod tests {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "managed_app_server_schema_test.rs"]
+mod schema_tests;
 
 #[cfg(test)]
 mod remote_control_server_name_tests {

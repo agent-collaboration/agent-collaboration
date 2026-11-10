@@ -66,6 +66,9 @@ async fn assert_early_cancellation(cancellation_point: CancellationPoint) -> Tes
         turn_start_sender,
     ));
     let setup_inputs = SessionSetupInputs {
+        scratch_scopes: std::sync::Arc::new(
+            crate::recording_scratch_scopes::RecordingScratchScopes::default(),
+        ),
         operation_id: None,
         recorder: Arc::new(AcceptingConversationRecorder),
         connection,

@@ -12,15 +12,27 @@ async fn install_attempt_reloads_the_same_choice_and_uses_a_fresh_choice_for_ano
     let root = tempfile::tempdir()?;
     let project = ProjectId::generate();
     let epoch = Epoch::new(2)?;
-    let cache = FleetCache::open(&root.path().join("fleet-cache.sqlite")).await?;
+    let cache_store = message_board_storage::FleetStore::open(
+        &root
+            .path()
+            .join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?;
+    let cache = cache_store.cache();
     let original = recorded_attempt(&cache, &project, epoch).await?;
     assert_eq!(recorded_attempt(&cache, &project, epoch).await?, original);
     assert_ne!(
         recorded_attempt(&cache, &project, Epoch::new(3)?).await?,
         original
     );
-    cache.close().await;
-    let cache = FleetCache::open(&root.path().join("fleet-cache.sqlite")).await?;
+    cache_store.close().await;
+    let cache_store = message_board_storage::FleetStore::open(
+        &root
+            .path()
+            .join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?;
+    let cache = cache_store.cache();
     assert_eq!(recorded_attempt(&cache, &project, epoch).await?, original);
     assert!(!root.path().join("snapshot-install-attempts").exists());
     Ok(())
@@ -35,7 +47,15 @@ async fn concurrent_install_attempt_creators_all_observe_the_same_committed_choi
     let root = tempfile::tempdir()?;
     let project = ProjectId::generate();
     let epoch = Epoch::new(2)?;
-    let cache = Arc::new(FleetCache::open(&root.path().join("fleet-cache.sqlite")).await?);
+    let cache = Arc::new(
+        message_board_storage::FleetStore::open(
+            &root
+                .path()
+                .join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await?
+        .cache(),
+    );
     let barrier = Arc::new(tokio::sync::Barrier::new(6));
     let mut tasks = tokio::task::JoinSet::new();
     for _ in 0..6 {
@@ -75,7 +95,13 @@ async fn corrupt_legacy_attempt_refuses_startup_without_replacement() -> TestRes
         corrupt["project"] = serde_json::to_value(&project)?;
         let bytes = serde_json::to_vec(&corrupt)?;
         tokio::fs::write(&path, &bytes).await?;
-        let cache = FleetCache::open(&root.path().join("fleet-cache.sqlite")).await?;
+        let cache_store = message_board_storage::FleetStore::open(
+            &root
+                .path()
+                .join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await?;
+        let cache = cache_store.cache();
         assert!(cache.import_legacy_runtime(root.path()).await.is_err());
         assert_eq!(tokio::fs::read(&path).await?, bytes);
     }

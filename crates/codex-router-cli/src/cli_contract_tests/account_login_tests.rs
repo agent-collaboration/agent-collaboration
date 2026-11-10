@@ -193,7 +193,9 @@ pub(super) fn openai_device_login_activates_fake_issuer_tokens_without_plaintext
         "login must atomically publish the encrypted credential generation"
     );
 
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     let account = must_ok(AccountStateRepository::load_account(
         &state,
         &account_id("acct_device_primary"),
@@ -247,7 +249,7 @@ fn exercise_openai_relogin(stored_id: &str) {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state_path = router_root.join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(&router_root);
     let secret_root = router_root.join("secrets");
     let account = AccountRecord::new(
         Provider::Openai,
@@ -383,7 +385,7 @@ fn openai_login_label_guard_runs_before_device_authorization() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state_path = router_root.join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(&router_root);
     let state = must_ok(test_async_runtime().block_on(AsyncSqliteStateStore::open(&state_path)));
     must_ok(
         test_async_runtime().block_on(state.upsert_account(&AccountRecord::new(
@@ -426,7 +428,7 @@ fn claude_login_label_guard_runs_before_prompt_or_oauth() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state_path = router_root.join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(&router_root);
     let state = must_ok(test_async_runtime().block_on(AsyncSqliteStateStore::open(&state_path)));
     must_ok(
         test_async_runtime().block_on(state.upsert_account(&AccountRecord::new(

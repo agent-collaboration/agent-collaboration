@@ -65,7 +65,10 @@ async fn max_bound_escaped_locators_page_fully_below_the_frame_limit() -> Result
 )]
 async fn oversized_stored_locator_is_rejected_by_domain_decoding() -> Result<(), TestError> {
     let fixture = BoardFixture::start().await?;
-    let path = fixture._directory.path().join("fleet-cache.sqlite");
+    let path = fixture
+        ._directory
+        .path()
+        .join(message_board_storage::FleetStore::FILE_NAME);
     let mut connection = sqlx_turso::TursoConnectOptions::new()
         .filename(path)
         .connect()

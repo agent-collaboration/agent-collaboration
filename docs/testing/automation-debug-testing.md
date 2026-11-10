@@ -73,7 +73,7 @@ Stop the foreground debug Host with Ctrl-C when finished. It shuts down its reta
 
 ## Run the recipient-observed delivery matrix
 
-This matrix uses the foreground CLI Host with an isolated `HOME`, `CODEX_HOME`, Router root, sockets, and workspace. It never reads the owner's Codex or Claude session registry. The setup test creates a fresh owner-private direct child of `/tmp`, a non-secret debug profile, a symlink to the installed Codex executable, and `providers.json` pointing at the repository's scripted Cursor ACP fixture. It copies no credentials. The CLI Host reads `providers.json` through its normal provider configuration path. Announce the shared 43127 port before starting; stop only this foreground Host with Ctrl-C and release both ports when done.
+This matrix uses the foreground CLI Host with an isolated `HOME`, `CODEX_HOME`, Router root, sockets, and workspace. It never reads the owner's Codex or Claude session registry. The setup test creates a fresh owner-private direct child of `/tmp`, a non-secret debug profile, a symlink to the installed Codex executable, and a `settings.jsonc` whose `providers` section points at the repository's scripted Cursor ACP fixture. It copies no credentials. The CLI Host reads that section through its normal provider settings path. Announce the shared 43127 port before starting; stop only this foreground Host with Ctrl-C and release both ports when done.
 
 ```sh
 CODEX_AUTOMATION_PROOF_ROOT="$proof_root" \

@@ -128,6 +128,7 @@ async fn run_importer_cli_process(
     let mut command = Command::new(invocation.signing_runner);
     command
         .arg(invocation.cli_binary)
+        .arg("board-import")
         .arg("--router-directory")
         .arg(invocation.router_directory)
         .arg("--report")

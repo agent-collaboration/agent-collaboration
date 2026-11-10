@@ -5,9 +5,10 @@ use super::*;
 async fn a_failed_cache_clear_rolls_back_every_table_and_can_retry() {
     // Arrange real cache rows and a failure after the first table's deletion.
     let directory = tempfile::tempdir().unwrap();
-    let cache = FleetCache::open(&directory.path().join("link.sqlite"))
+    let store = crate::FleetStore::open(&directory.path().join("link.sqlite"))
         .await
         .unwrap();
+    let cache = store.cache();
     let key = message_board::ProjectId::generate();
     let mut connection = cache.database.pool.acquire().await.unwrap();
     sqlx::query("INSERT INTO cached_fleet_records(kind,id,payload) VALUES('project',?,'{}')")
@@ -48,5 +49,5 @@ async fn a_failed_cache_clear_rolls_back_every_table_and_can_retry() {
     assert_eq!(cache.checkpoint().await.unwrap().get(), 9);
     cache.clear_central_derived_cache().await.unwrap();
     assert_eq!(cache.checkpoint().await.unwrap(), FleetPosition::ZERO);
-    cache.close().await;
+    store.close().await;
 }

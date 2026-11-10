@@ -151,7 +151,15 @@ async fn stop_held_install(
             .parse()?,
     );
     let installed = timeout(BOUND, database.wait_bootstrap_published()).await??;
-    let session_store = board_fleet_sync::MachineSessionStore::open(&inputs.root).await?;
+    let session_store = board_fleet_sync::MachineSessionStore::from_cache(std::sync::Arc::new(
+        message_board_storage::FleetStore::open(
+            &inputs
+                .root
+                .join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await?
+        .cache(),
+    ));
     timeout(BOUND, async {
         loop {
             if session_store

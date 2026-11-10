@@ -12,7 +12,7 @@ use sqlx::{Connection, Row};
 async fn newer_live_session_is_retained_as_refused_by_host_and_installation_status() -> TestResult {
     let fixture = ProductionEnrollmentFixture::start(EnrollmentLocation::RouterRoot).await?;
     fixture
-        .run(async |fixture| {
+        .run_then_read_stopped(async |fixture| {
             fixture.host.await_ready().await?;
             let client =
                 CollaborationClient::connect(&fixture.directory, "duplicate-link-test", "1")
@@ -83,13 +83,16 @@ async fn newer_live_session_is_retained_as_refused_by_host_and_installation_stat
                 host_link == &refused,
                 "Host and installation status differ after replacement",
             )?;
-            require_persisted_duplicate_refusal(&fixture.directory, &refused).await?;
             require(
                 refused.peer == fixture.peer,
                 "replacement changed the installation peer",
             )?;
             replacement.close(CloseReason::ClientClosed).await;
-            Ok(())
+            Ok(refused)
+        }, async |directory: &Path, refused: FleetLinkRecord| {
+            // The Host holds its one Fleet database open while it runs; once it has
+            // stopped and released it, the committed row is read from the file.
+            require_persisted_duplicate_refusal(directory, &refused).await
         })
         .await
 }
@@ -119,11 +122,11 @@ async fn require_persisted_duplicate_refusal(
     directory: &Path,
     expected: &FleetLinkRecord,
 ) -> TestResult {
-    // The live Host owns Turso's writer. Inspect the committed file through the
-    // same independent read-only SQLite boundary this process fixture used before.
+    // Read after the Host stopped, through an independent read-only SQLite
+    // connection, so the row is the one the Host committed.
     let mut database = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(directory.join("fleet-cache.sqlite"))
+            .filename(directory.join(message_board_storage::FleetStore::FILE_NAME))
             .read_only(true),
     )
     .await?;

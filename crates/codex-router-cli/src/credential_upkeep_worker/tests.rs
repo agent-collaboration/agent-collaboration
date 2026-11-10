@@ -32,9 +32,11 @@ async fn unavailable_credential_stores_skip_upkeep_without_health_changes() {
         ),
     ] {
         let root = tempfile::tempdir().expect("fixture root");
-        let state = AsyncSqliteStateStore::open(&root.path().join("state.sqlite"))
-            .await
-            .expect("fixture state");
+        let state = AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            root.path(),
+        ))
+        .await
+        .expect("fixture state");
         let account_id = AccountId::new(format!("upkeep-store-{suffix}")).expect("account id");
         state
             .upsert_account(
@@ -162,9 +164,10 @@ async fn terminal_and_cooldown_states_do_not_become_local_worker_failures() {
         crate::credential_upkeep_worker::current_unix_seconds().unwrap_or(0),
     ));
     std::fs::create_dir(&root).expect("fixture root");
-    let state = AsyncSqliteStateStore::open(&root.join("state.sqlite"))
-        .await
-        .expect("fixture state");
+    let state =
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(&root))
+            .await
+            .expect("fixture state");
     let secrets = codex_router_secret_store::test_support::open_encrypted_credential_store(
         root.join("secrets"),
     )
@@ -316,9 +319,11 @@ async fn terminal_and_cooldown_states_do_not_become_local_worker_failures() {
     );
 
     state.close().await.expect("fixture state close");
-    let read_only_state = AsyncSqliteStateStore::open_read_only(&root.join("state.sqlite"))
-        .await
-        .expect("read-only fixture state");
+    let read_only_state = AsyncSqliteStateStore::open_read_only(
+        &codex_router_state::provider_proxy_database_path(&root),
+    )
+    .await
+    .expect("read-only fixture state");
     let overdue_retry = run_upkeep_cycle(
         &read_only_state,
         &secrets.clone().into(),
@@ -349,9 +354,10 @@ async fn terminal_and_cooldown_states_do_not_become_local_worker_failures() {
         bounded_upkeep_wait(unavailable_cycle, 1_000, Duration::from_secs(200)),
         Duration::from_secs(60)
     );
-    let claim_state = AsyncSqliteStateStore::open(&root.join("state.sqlite"))
-        .await
-        .expect("claim fixture state");
+    let claim_state =
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(&root))
+            .await
+            .expect("claim fixture state");
     for (account_id, label) in [
         (&terminal_id, "terminal"),
         (&cooldown_id, "cooldown"),

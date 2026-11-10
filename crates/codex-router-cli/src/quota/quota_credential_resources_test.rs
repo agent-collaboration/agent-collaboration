@@ -80,9 +80,11 @@ async fn quota_status_reload_and_reset_session_reuse_the_process_credential_stor
     let test_root = TempDir::new().expect("quota status root");
     let router_root = test_root.path().join("router");
     std::fs::create_dir_all(&router_root).expect("router root");
-    let state = AsyncSqliteStateStore::open(&router_root.join("state.sqlite"))
-        .await
-        .expect("state store");
+    let state = AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+        &router_root,
+    ))
+    .await
+    .expect("state store");
     state.close().await.expect("state close");
 
     let secret_root = router_root.join("secrets");

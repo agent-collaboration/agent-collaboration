@@ -51,9 +51,11 @@ async fn refresh_outcome_case(
     QuotaStatusReport,
 ) {
     let root = tempfile::tempdir().unwrap();
-    let state = AsyncSqliteStateStore::open(&root.path().join("state.sqlite"))
-        .await
-        .unwrap();
+    let state = AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+        root.path(),
+    ))
+    .await
+    .unwrap();
     for label in accounts {
         state
             .upsert_account(

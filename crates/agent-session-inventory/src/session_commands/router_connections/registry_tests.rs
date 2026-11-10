@@ -151,7 +151,7 @@ fn registry_reader_keeps_missing_empty_and_invalid_distinct_without_writing() {
         read_router_registry(root.path()),
         RouterRegistryRead::Missing
     );
-    let path = root.path().join("routers.jsonc");
+    let path = root.path().join("agent-sessions.jsonc");
     let content = b"{ /* owner note */ \"version\":1,\"routers\":[], }\n";
     std::fs::write(&path, content).unwrap();
     assert_eq!(
@@ -233,4 +233,81 @@ fn registry_rejects_source_ssh_option_injection_and_nonabsolute_source_paths() {
         RouterConnectionRegistry::parse(&document.to_string()).is_err(),
         "SSH and HTTP locator fields must not mix"
     );
+}
+
+fn machine_list(name: &str, service_id: &str) -> String {
+    json!({"version":1,"routers":[{
+        "name":name, "connection":{"kind":"remote", "serviceId":service_id,
+            "mcpUrl":"https://machine.example.invalid:443/mcp"}
+    }]})
+    .to_string()
+}
+
+fn ready_machine_names(read: RouterRegistryRead) -> Vec<String> {
+    let RouterRegistryRead::Ready(registry) = read else {
+        panic!("expected a readable machine list, got {read:?}")
+    };
+    registry
+        .routers
+        .iter()
+        .map(|profile| profile.name.as_str().to_owned())
+        .collect()
+}
+
+#[test]
+fn picker_lists_machines_from_agent_sessions_jsonc() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(
+        root.path().join("agent-sessions.jsonc"),
+        machine_list("New machine", "00000000-0000-4000-8000-000000000002"),
+    )
+    .unwrap();
+
+    assert_eq!(
+        ready_machine_names(read_router_registry(root.path())),
+        vec!["New machine".to_owned()]
+    );
+}
+
+#[test]
+fn picker_does_not_read_the_old_routers_jsonc_and_names_the_update() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(
+        root.path().join("routers.jsonc"),
+        machine_list("Old machine", "00000000-0000-4000-8000-000000000001"),
+    )
+    .unwrap();
+
+    let read = read_router_registry(root.path());
+
+    let RouterRegistryRead::Rejected(error) = read else {
+        panic!("the old file must not supply machines: {read:?}")
+    };
+    let notice = error.to_string();
+    assert!(notice.contains("routers.jsonc"), "{notice}");
+    assert!(notice.contains("agent-router-update"), "{notice}");
+}
+
+#[test]
+fn picker_uses_neither_file_when_both_are_present_and_names_both() {
+    let root = tempfile::tempdir().unwrap();
+    std::fs::write(
+        root.path().join("routers.jsonc"),
+        machine_list("Old machine", "00000000-0000-4000-8000-000000000001"),
+    )
+    .unwrap();
+    std::fs::write(
+        root.path().join("agent-sessions.jsonc"),
+        machine_list("New machine", "00000000-0000-4000-8000-000000000002"),
+    )
+    .unwrap();
+
+    let read = read_router_registry(root.path());
+
+    let RouterRegistryRead::Rejected(error) = read else {
+        panic!("both files present must list no machines: {read:?}")
+    };
+    let notice = error.to_string();
+    assert!(notice.contains("routers.jsonc"), "{notice}");
+    assert!(notice.contains("agent-sessions.jsonc"), "{notice}");
 }

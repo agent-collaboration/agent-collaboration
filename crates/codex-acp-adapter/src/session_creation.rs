@@ -71,6 +71,12 @@ pub struct AcpSessionBinding {
     /// The reasoning effort the resumed thread already carried, when the native
     /// resume reported one. Absent for a thread this connection created.
     pub(crate) persisted_effort: Option<String>,
+    /// Keeps the binding's scratch scope open in the Host until the binding drops.
+    #[expect(
+        dead_code,
+        reason = "Held for its drop, which reports the close to the Host."
+    )]
+    pub(crate) scratch_lease: Option<crate::ScratchScopeLease>,
 }
 
 struct RouterModelChoice<'a> {
@@ -206,6 +212,8 @@ pub struct SessionSetupInputs {
     pub approval_broker: std::sync::Arc<dyn crate::ApprovalBroker>,
     pub operation_id: Option<OperationId>,
     pub recorder: std::sync::Arc<dyn crate::ConversationOperationRecorder>,
+    /// Told when the binding opens and later drops its scratch scope.
+    pub scratch_scopes: std::sync::Arc<dyn crate::ScratchScopeRegister>,
 }
 impl AcpSessionBinding {
     pub async fn create(
@@ -424,6 +432,10 @@ impl AcpSessionBinding {
             access_route: Some(access_route),
             approval_broker: inputs.approval_broker,
             persisted_effort: None,
+            scratch_lease: Some(crate::ScratchScopeLease::open(
+                &inputs.scratch_scopes,
+                Path::new(choice.scratch_path),
+            )),
         })
     }
     #[must_use]
@@ -528,6 +540,12 @@ impl AcpSessionBinding {
                 SettingsUnavailableReason::NotObservedBeforeResume
             } else {
                 SettingsUnavailableReason::NoRecordedAccessRoute
+            }),
+            scratch_lease: route.as_ref().map(|route| {
+                crate::ScratchScopeLease::open(
+                    &inputs.scratch_scopes,
+                    Path::new(&route.scratch_path),
+                )
             }),
             access_route: route,
             approval_broker: inputs.approval_broker,

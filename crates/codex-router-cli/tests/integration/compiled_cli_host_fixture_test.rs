@@ -68,7 +68,7 @@ async fn signed_serve(directory: &TestDirectory) -> Result<Child, Box<dyn std::e
     let stderr = directory.path().join("serve-stderr.log");
     let mut child = Command::new(&binary)
         .args(["serve", "--port", &port.to_string(), "--state-db"])
-        .arg(root.join("state.sqlite"))
+        .arg(codex_router_state::provider_proxy_database_path(&root))
         .arg("--secret-root")
         .arg(root.join("secrets"))
         .arg("--require-debug-isolation")

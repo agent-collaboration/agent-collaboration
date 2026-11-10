@@ -42,14 +42,14 @@ impl SubscriptionFixture {
             board_central_test_support::machine_session(directory.path(), &origin).await?;
         let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
             registry: registry.clone(),
-            fleet: Arc::new(
-                FleetClient::open(
-                    directory.path(),
-                    Arc::new(crate::test_project_runtime::PendingRegistration),
-                    Some(requests),
+            fleet: Arc::new(FleetClient::new(
+                &message_board_storage::FleetStore::open(
+                    &(directory.path()).join(message_board_storage::FleetStore::FILE_NAME),
                 )
                 .await?,
-            ),
+                Arc::new(crate::test_project_runtime::PendingRegistration),
+                Some(requests),
+            )),
             identity: MachineIdentity::new(
                 collaboration_protocol::UuidIdentity::try_from(
                     "00000000-0000-4000-8000-000000000001".to_owned(),

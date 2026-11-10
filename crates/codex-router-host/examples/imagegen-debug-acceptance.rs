@@ -92,7 +92,9 @@ async fn run(options: Options) -> Result<(), Box<dyn std::error::Error>> {
         return Err("Normal Codex home is required; alternate CODEX_HOME is forbidden.".into());
     }
     let debug_root = home.join(".codex-router-debug");
-    if !debug_root.join("state.sqlite").is_file() || !debug_root.join("secrets").is_dir() {
+    if !codex_router_state::provider_proxy_database_path(&debug_root).is_file()
+        || !debug_root.join("secrets").is_dir()
+    {
         return Err("Existing debug Router state and secrets are required.".into());
     }
     prepare_artifact_directory(&options.artifact_directory)?;
@@ -107,7 +109,9 @@ async fn run(options: Options) -> Result<(), Box<dyn std::error::Error>> {
     let mut router_command = Command::new(&options.router_binary);
     router_command
         .args(["serve", "--port", &options.port.to_string(), "--state-db"])
-        .arg(debug_root.join("state.sqlite"))
+        .arg(codex_router_state::provider_proxy_database_path(
+            &debug_root,
+        ))
         .arg("--secret-root")
         .arg(debug_root.join("secrets"))
         .arg("--audit-file")

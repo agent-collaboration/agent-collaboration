@@ -37,7 +37,10 @@ jobs:
     permissions:
       contents: write
     runs-on: macos-15
-    timeout-minutes: 45
+    # A cold dependency cache made "Build release binaries" exceed 45 minutes on
+    # 2026-11-09 (v0.1.141, run 42690178301), after the rmcp and sqlx updates.
+    # This covers a cold macOS build; CI's own 30-minute cap is separate.
+    timeout-minutes: 90
     outputs:
       asset_sha256: ${{ steps.artifact.outputs.sha256 }}
       source_commit: ${{ steps.metadata.outputs.source_commit }}
@@ -150,7 +153,7 @@ jobs:
         id: release_binaries
         background: true
         working-directory: release-source
-        run: cargo build --locked --release -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade --bins --timings
+        run: cargo build --locked --release -p codex-router-cli -p agent-collaboration -p agent-router-update --bins --timings
 
       # Optimized macOS code generation reproduces the FuturesUnordered
       # waker-identity regression; a development-profile test cannot replace it.
@@ -193,12 +196,12 @@ jobs:
         working-directory: release-source
         run: |
           set -euo pipefail
-          dependency_features="$(cargo tree --locked -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade -e normal,build,features -i codex-router-secret-store)"
+          dependency_features="$(cargo tree --locked -p codex-router-cli -p agent-collaboration -p agent-router-update -e normal,build,features -i codex-router-secret-store)"
           if grep -q 'keychain-test-guard' <<< "$dependency_features"; then
             echo 'release dependency graph includes keychain-test-guard' >&2
             exit 1
           fi
-          production_graph="$(cargo tree --locked --color never -p codex-router-cli -p agent-collaboration -p board-legacy-upgrade -e normal,build,features)"
+          production_graph="$(cargo tree --locked --color never -p codex-router-cli -p agent-collaboration -p agent-router-update -e normal,build,features)"
           if grep -Eq -- '-test-support v[0-9]|feature "test-support"' <<< "$production_graph"; then
             echo 'production dependency graph includes a test-support crate or feature' >&2
             exit 1
@@ -244,7 +247,7 @@ jobs:
             echo "no Developer ID Application identity for team ${DEVELOPER_ID_TEAM}" >&2
             exit 1
           fi
-          for executable in codex-router agent-collaboration agent-sessions codex-router-board-upgrade; do
+          for executable in codex-router agent-collaboration agent-sessions agent-router-update; do
             codesign --force --sign "${signing_identity}" \
               --identifier "${CODE_IDENTIFIER_PREFIX}.${executable}" \
               --options runtime --timestamp \
@@ -306,14 +309,14 @@ jobs:
             exit 1
           fi
 
-          upgrade_binary="target/release/codex-router-board-upgrade"
-          if [[ "$(file "${upgrade_binary}")" != *"Mach-O 64-bit executable arm64"* ]]; then
-            echo "codex-router-board-upgrade binary is not Mach-O arm64" >&2
+          update_binary="target/release/agent-router-update"
+          if [[ "$(file "${update_binary}")" != *"Mach-O 64-bit executable arm64"* ]]; then
+            echo "agent-router-update binary is not Mach-O arm64" >&2
             exit 1
           fi
-          verify_release_signature "${upgrade_binary}"
-          if [[ "$("${upgrade_binary}" --version)" != "codex-router-board-upgrade ${RELEASE_VERSION}" ]]; then
-            echo "codex-router-board-upgrade version does not match release tag" >&2
+          verify_release_signature "${update_binary}"
+          if [[ "$("${update_binary}" --version)" != "agent-router-update ${RELEASE_VERSION}" ]]; then
+            echo "agent-router-update version does not match release tag" >&2
             exit 1
           fi
 
@@ -324,13 +327,13 @@ jobs:
           install -m 0755 "${release_binary}" "${payload_directory}/codex-router"
           install -m 0755 "${collaboration_binary}" "${payload_directory}/agent-collaboration"
           install -m 0755 "${session_binary}" "${payload_directory}/agent-sessions"
-          install -m 0755 "${upgrade_binary}" "${payload_directory}/codex-router-board-upgrade"
+          install -m 0755 "${update_binary}" "${payload_directory}/agent-router-update"
           cp -R target/protocol-schemas "${payload_directory}/protocol-schemas"
           install -m 0644 docs/agent-guidance/agent-collaboration.md "${payload_directory}/agent-collaboration-guide.md"
           COPYFILE_DISABLE=1 tar \
             -C "${payload_directory}" \
             -czf "${release_directory}/${asset_name}" \
-            codex-router agent-collaboration agent-sessions codex-router-board-upgrade \
+            codex-router agent-collaboration agent-sessions agent-router-update \
             protocol-schemas agent-collaboration-guide.md
           asset_sha256="$(shasum -a 256 "${release_directory}/${asset_name}" | cut -d ' ' -f 1)"
 
@@ -551,7 +554,7 @@ jobs:
             exit 1
           fi
 
-          for executable in agent-collaboration agent-sessions codex-router-board-upgrade; do
+          for executable in agent-collaboration agent-sessions agent-router-update; do
             installed_executable="$(brew --prefix codex-router)/bin/${executable}"
             if [[ ! -x "${installed_executable}" ]]; then
               echo "Homebrew did not install ${executable}" >&2
