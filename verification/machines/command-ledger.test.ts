@@ -74,7 +74,7 @@ test("ledger refuses public permissions and truncated rows", async (): Promise<v
   }
 });
 
-test("a long-run ledger above32MiB keeps every row and its original zero-enroll marker", async () => {
+test("a long-run ledger above128MiB keeps every row and its original zero-enroll marker", async () => {
   const root = await import("node:fs/promises").then(async (fs) =>
     fs.realpath(await mkdtemp(join(tmpdir(), "2026-11-long-ledger-"))),
   );
@@ -84,7 +84,7 @@ test("a long-run ledger above32MiB keeps every row and its original zero-enroll 
       path = `${root}/verification-commands.jsonl`;
     const at = "2026-11-10T05:00:00.000Z",
       rows = [];
-    for (let index = 0; index < 8000; index += 1) {
+    for (let index = 0; index < 33000; index += 1) {
       const commandId = randomUUIDv7();
       rows.push(
         JSON.stringify({
@@ -109,8 +109,8 @@ test("a long-run ledger above32MiB keeps every row and its original zero-enroll 
       );
     }
     await appendFile(path, rows.join("\n") + "\n");
-    assert.ok((await readFile(path)).length > 32 * 1024 * 1024);
-    assert.equal((await readCommandLedger(root)).length, 16001);
+    assert.ok((await readFile(path)).length > 128 * 1024 * 1024);
+    assert.equal((await readCommandLedger(root)).length, 66001);
     assert.equal(await enrollInvocationsSince(root, marker), 0);
     const commandId = randomUUIDv7();
     await appendFile(
@@ -135,7 +135,7 @@ test("a long-run ledger above32MiB keeps every row and its original zero-enroll 
     await appendFile(path, "{");
     await assert.rejects(readCommandLedger(root), /complete/);
     await writeFile(path, "", { mode: 0o600 });
-    await truncate(path, 128 * 1024 * 1024 + 1);
+    await truncate(path, 512 * 1024 * 1024 + 1);
     await assert.rejects(readCommandLedger(root), /bounded/);
   } finally {
     release();
