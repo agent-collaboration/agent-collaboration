@@ -36,7 +36,13 @@ async fn write_project(
 async fn lagged_activity_rescans_the_reader_and_recovers_a_different_project() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
-        .policy(&fixture.root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
+        .policy(
+            &fixture.root,
+            SubscriptionMode::Poll,
+            WhenIdle::Hold,
+            0,
+            900,
+        )
         .await;
     let original = fixture
         .registry

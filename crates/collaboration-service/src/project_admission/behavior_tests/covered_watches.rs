@@ -8,7 +8,7 @@ fn project_subscribe(project: &ProjectId) -> BoardOperation {
             mode: Some(SubscriptionMode::Poll),
             timing: SubscriptionTimingPatch {
                 quiet_seconds: Some(0),
-                cap_seconds: Some(0),
+                cap_seconds: Some(900),
             },
             ..SubscriptionPolicyPatch::default()
         },

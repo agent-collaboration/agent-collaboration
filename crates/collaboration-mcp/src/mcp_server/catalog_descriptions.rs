@@ -219,7 +219,7 @@ pub(super) fn operation_description(name: &str) -> &'static str {
             "Lists current participants and roles for one thread. Read-only and not an authentication result."
         }
         "thread_subscribe" => {
-            "Creates, updates or reactivates the supplied reader's thread or project subscription and its watch. Thread scope requires an open participant; project scope does not. New session subscriptions default to deliver/hold, 120-second quiet, 600-second cap and 24-hour lifetime; new human subscriptions default off. Unspecified fields keep their current values. Human readers cannot use deliver mode. Inspect thread_subscriptions for stored policy and current delivery observations; it does not prove an agent processed activity."
+            "Creates, updates or reactivates the supplied reader's thread or project subscription and its watch. Thread scope requires an open participant; project scope does not. New session subscriptions default to deliver/hold, 120-second quiet, 900-second cap and 24-hour lifetime; new human subscriptions default off. A cap you set must be 900 to 3300 seconds (15 to 55 minutes) and at least the quiet period. Unspecified fields keep their current values, including a stored cap set before that range. Human readers cannot use deliver mode. Inspect thread_subscriptions for stored policy and current delivery observations; it does not prove an agent processed activity."
         }
         "thread_unsubscribe" => {
             "Ends the supplied reader's thread or project subscription as cancelled. The watch remains active, so activity stays available in the inbox until acknowledged."

@@ -39,7 +39,7 @@ impl FollowMembership {
                     json!({
             "scope":{"kind":"thread","thread":{"project":fixture.project,"thread":thread}},
             "policy":{"mode":"deliver","whenIdle":"hold","quietSeconds":0,
-                "capSeconds":0,"lifetimeSeconds":86400}}),
+                "capSeconds":900,"lifetimeSeconds":86400}}),
                 )?,
             )
             .await?;

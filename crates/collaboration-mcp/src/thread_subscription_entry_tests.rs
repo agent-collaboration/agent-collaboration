@@ -373,7 +373,7 @@ async fn subscription_tools_roundtrip_through_mcp_api_native_projects_and_local_
         json!({
             "actor":actor,
             "scope":{"kind":"thread","thread":{"thread":root_message_id}},
-            "policy":{"mode":"poll","whenIdle":"hold","quietSeconds":0,"capSeconds":0,"lifetimeSeconds":600}
+            "policy":{"mode":"poll","whenIdle":"hold","quietSeconds":0,"capSeconds":900,"lifetimeSeconds":600}
         }),
     )
     .await;
@@ -486,7 +486,7 @@ async fn subscription_tools_roundtrip_through_mcp_api_native_projects_and_local_
         json!({
             "actor":actor,
             "scope":{"kind":"thread","thread":{"thread":root_message_id}},
-            "policy":{"mode":"off","quietSeconds":0,"capSeconds":60,"lifetimeSeconds":600}
+            "policy":{"mode":"off","quietSeconds":0,"capSeconds":900,"lifetimeSeconds":600}
         }),
     )
     .await;

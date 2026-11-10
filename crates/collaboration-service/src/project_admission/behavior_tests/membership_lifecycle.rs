@@ -139,7 +139,7 @@ async fn rejoin_reactivates_ended_subscription_and_keeps_policy() -> Result<(), 
         mode: Some(SubscriptionMode::Poll),
         timing: SubscriptionTimingPatch {
             quiet_seconds: Some(60),
-            cap_seconds: Some(600),
+            cap_seconds: Some(900),
         },
         lifetime_seconds: Some(3600),
         ..SubscriptionPolicyPatch::default()
@@ -251,7 +251,8 @@ async fn thread_subscribe_checks_participant_validates_patch_and_activates_watch
         .ok_or("record missing")?;
     assert_eq!(record.policy().mode(), SubscriptionMode::Poll);
     assert_eq!(record.policy().timing().quiet_seconds(), 60);
-    assert_eq!(record.policy().timing().cap_seconds(), 600);
+    // The cap was left out, so the new subscription takes the 15 minute default.
+    assert_eq!(record.policy().timing().cap_seconds(), 900);
     let mut read = fixture.project_store().await?.snapshot().await?;
     assert!(
         read.effective_thread_watch(&fixture.root, &fixture.reader)
@@ -261,8 +262,9 @@ async fn thread_subscribe_checks_participant_validates_patch_and_activates_watch
     read.finish().await?;
     let invalid = SubscriptionPolicyPatch {
         timing: SubscriptionTimingPatch {
-            quiet_seconds: Some(300),
-            cap_seconds: Some(120),
+            // A cap inside 15 to 55 minutes, but shorter than the quiet period.
+            quiet_seconds: Some(1200),
+            cap_seconds: Some(900),
         },
         ..SubscriptionPolicyPatch::default()
     };

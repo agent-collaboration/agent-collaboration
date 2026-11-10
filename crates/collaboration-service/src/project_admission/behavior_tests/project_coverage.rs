@@ -107,7 +107,7 @@ async fn project_subscription_keeps_off_activity_unread_and_thread_rows_take_pre
                     mode: Some(SubscriptionMode::Poll),
                     timing: SubscriptionTimingPatch {
                         quiet_seconds: Some(0),
-                        cap_seconds: Some(0),
+                        cap_seconds: Some(900),
                     },
                     ..SubscriptionPolicyPatch::default()
                 },

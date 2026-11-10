@@ -36,7 +36,13 @@ async fn mode_change_during_flight_settles_original_push_and_polls_released_back
             .unwrap()
             .generation();
         fixture
-            .policy(&fixture.root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
+            .policy(
+                &fixture.root,
+                SubscriptionMode::Poll,
+                WhenIdle::Hold,
+                0,
+                900,
+            )
             .await;
         let later_post = fixture.post(&fixture.root, "Later poll activity").await;
         assert!(runtime.requests.lock().await.try_recv().is_err());
@@ -187,7 +193,7 @@ async fn one_owner_serializes_push_and_wait_and_does_not_hold_the_board_lock() {
         let fixture = Box::pin(OwnerFixture::new()).await;
         let poll_root = fixture.add_root().await;
         fixture
-            .policy(&poll_root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
+            .policy(&poll_root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 900)
             .await;
         let runtime = fixture.native_runtime().await;
         let push_position = fixture.post(&fixture.root, "Push").await;
@@ -260,7 +266,7 @@ async fn arrival_during_flight_gets_its_own_quiet_window_and_elapsed_cap() {
             SubscriptionMode::Deliver,
             WhenIdle::Hold,
             120,
-            600,
+            900,
         )
         .await;
     let runtime = fixture.native_runtime().await;
@@ -269,16 +275,16 @@ async fn arrival_during_flight_gets_its_own_quiet_window_and_elapsed_cap() {
     fixture.clock.advance(120).await;
     let first = runtime.requests.lock().await.recv().await.unwrap();
     fixture.post(&fixture.root, "First residual").await;
-    for _ in 0..6 {
+    for _ in 0..9 {
         fixture.clock.advance(90).await;
         fixture.post(&fixture.root, "Residual extends quiet").await;
     }
-    fixture.clock.advance(60).await; // Cap from the first residual has elapsed while the first push was in flight.
+    fixture.clock.advance(90).await; // The 900 s cap from the first residual has elapsed while the first push was in flight.
     assert!(runtime.requests.lock().await.try_recv().is_err());
     runtime.await_settled().await;
     let second = runtime.requests.lock().await.recv().await.unwrap();
     assert_ne!(first.payload.push_id, second.payload.push_id);
-    assert!(second.payload.line.as_str().contains("7 messages"));
+    assert!(second.payload.line.as_str().contains("10 messages"));
     runtime.await_settled().await;
     runtime.close().await;
 }
@@ -326,7 +332,7 @@ async fn restart_mid_quiet_preserves_the_original_arrival_deadline() {
             SubscriptionMode::Deliver,
             WhenIdle::Hold,
             120,
-            600,
+            900,
         )
         .await;
     let runtime = fixture.native_runtime().await;
@@ -355,21 +361,22 @@ async fn restart_after_cap_delivers_immediately_with_downtime_arrivals_included(
             SubscriptionMode::Deliver,
             WhenIdle::Hold,
             120,
-            600,
+            900,
         )
         .await;
     let runtime = fixture.native_runtime().await;
     fixture.post(&fixture.root, "Before downtime").await;
     runtime.owner_barrier(&fixture.reader).await;
     runtime.close().await;
-    for _ in 0..7 {
+    // 990 s of downtime arrivals: past the 900 s cap, with the last one just posted.
+    for _ in 0..11 {
         fixture.clock.advance(90).await;
         fixture.post(&fixture.root, "During downtime").await;
     }
     let fixture = reopen_board(fixture).await;
     let runtime = fixture.native_runtime().await;
     let request = runtime.requests.lock().await.recv().await.unwrap();
-    assert!(request.payload.line.as_str().contains("8 messages"));
+    assert!(request.payload.line.as_str().contains("12 messages"));
     runtime.await_settled().await;
     runtime.close().await;
 }

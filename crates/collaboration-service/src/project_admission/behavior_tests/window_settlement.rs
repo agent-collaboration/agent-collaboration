@@ -47,16 +47,17 @@ async fn arrivals_after_release_do_not_restart_the_original_window_cap() -> Resu
         .post_at(
             human("hold-cap-author")?,
             "continuous activity while held",
-            fixture.now + Duration::seconds(550),
+            // Activity keeps the 120 s quiet period open past the 900 s default cap.
+            fixture.now + Duration::seconds(850),
         )
         .await?;
     fixture
-        .rescan(&reader, fixture.now + Duration::seconds(550))
+        .rescan(&reader, fixture.now + Duration::seconds(850))
         .await?;
     assert_eq!(
         fixture
             .windows
-            .due_subscription_roots(&reader, first + Duration::seconds(600))
+            .due_subscription_roots(&reader, first + Duration::seconds(900))
             .await?,
         vec![fixture.root.clone()]
     );

@@ -12,7 +12,7 @@ async fn quiet_period_restarts_from_the_second_arrival() {
             SubscriptionMode::Deliver,
             WhenIdle::Hold,
             120,
-            600,
+            900,
         )
         .await;
     let runtime = fixture.native_runtime().await;
@@ -33,7 +33,7 @@ async fn quiet_period_restarts_from_the_second_arrival() {
 }
 
 #[tokio::test(start_paused = true)]
-async fn repeated_ninety_second_arrivals_are_passed_at_the_ten_minute_cap() {
+async fn repeated_ninety_second_arrivals_are_passed_at_the_fifteen_minute_cap() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
         .policy(
@@ -41,23 +41,24 @@ async fn repeated_ninety_second_arrivals_are_passed_at_the_ten_minute_cap() {
             SubscriptionMode::Deliver,
             WhenIdle::Hold,
             120,
-            600,
+            900,
         )
         .await;
     let runtime = fixture.native_runtime().await;
     fixture.post(&fixture.root, "Opening").await;
     runtime.owner_barrier(&fixture.reader).await;
-    for _ in 0..6 {
+    // Arrivals every 90 s keep the 120 s quiet period from ending; the 900 s cap passes them.
+    for _ in 0..9 {
         fixture.clock.advance(90).await;
         fixture.post(&fixture.root, "Continuing").await;
         runtime.owner_barrier(&fixture.reader).await;
     }
-    fixture.clock.advance(59).await;
+    fixture.clock.advance(89).await;
     runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
     fixture.clock.advance(1).await;
     let request = runtime.requests.lock().await.recv().await.unwrap();
-    assert!(request.payload.line.as_str().contains("7 messages"));
+    assert!(request.payload.line.as_str().contains("10 messages"));
     runtime.await_settled().await;
     runtime.close().await;
 }
@@ -68,7 +69,7 @@ async fn activity_in_one_root_never_delays_another_root() {
     let other = fixture.add_root().await;
     for root in [&fixture.root, &other] {
         fixture
-            .policy(root, SubscriptionMode::Deliver, WhenIdle::Hold, 120, 600)
+            .policy(root, SubscriptionMode::Deliver, WhenIdle::Hold, 120, 900)
             .await;
     }
     let runtime = fixture.native_runtime().await;

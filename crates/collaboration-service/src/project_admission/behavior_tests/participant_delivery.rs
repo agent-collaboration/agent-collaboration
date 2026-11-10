@@ -33,7 +33,7 @@ async fn subscription_handoff_keeps_last_seen_monotonic_and_participant_changes_
                     when_idle: Some(WhenIdle::Hold),
                     timing: SubscriptionTimingPatch {
                         quiet_seconds: Some(0),
-                        cap_seconds: Some(0),
+                        cap_seconds: Some(900),
                     },
                     ..Default::default()
                 },
