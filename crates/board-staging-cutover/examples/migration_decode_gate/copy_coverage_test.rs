@@ -47,6 +47,73 @@ async fn a_published_copy_summary_is_decoded_and_accepted() {
 }
 
 #[tokio::test]
+async fn copy_summary_json_values_must_not_normalize_but_formatting_may_differ() {
+    // Arrange: main's decode_json compares JSON values, not stored bytes.
+    let mut offset = summary();
+    offset["summary"]["value"]["latestRecordAt"] =
+        json!({"kind": "router", "value": "2026-11-10T13:00:00+01:00"});
+    let decoded: collaboration_central_core::CopyDirectorySummary =
+        serde_json::from_value(offset.clone()).expect("Serde accepts the offset time");
+    assert_ne!(serde_json::to_value(decoded).expect("serializes"), offset);
+    let inventory = edited(|candidate| {
+        with_summary(candidate);
+        candidate["copies"][LIVE]["tables"]["_copy_summary"]["rows"][0][1] =
+            text(&offset.to_string());
+    });
+    let formatted = edited(|candidate| {
+        with_summary(candidate);
+        candidate["copies"][LIVE]["tables"]["_copy_summary"]["rows"][0][1] = text(&format!(
+            "\n{}\n",
+            serde_json::to_string_pretty(&summary()).expect("serializes")
+        ));
+    });
+
+    // Act / Assert
+    let refused = run_gate(&inventory).await;
+    assert!(
+        refused
+            .refusals
+            .iter()
+            .any(|refusal| refusal.row == "_copy_summary"
+                && refusal.reason.contains("would be normalized")),
+        "{refused:?}"
+    );
+    let accepted = run_gate(&formatted).await;
+    assert_eq!(accepted.outcome, Outcome::Pass, "{accepted:?}");
+}
+
+#[tokio::test]
+async fn a_missing_summary_table_requires_the_hook_to_actually_create_it() {
+    // Arrange: a receipt for an already-applied hook does not prove its table remains.
+    let missing = edited(|candidate| {
+        with_summary(candidate);
+        let copy = &mut candidate["copies"][LIVE];
+        copy["schema"]
+            .as_array_mut()
+            .expect("schema")
+            .retain(|entry| entry["name"] != "_copy_summary");
+        copy["tables"]
+            .as_object_mut()
+            .expect("tables")
+            .remove("_copy_summary");
+    });
+    let fresh = edited(|_| {});
+
+    // Act / Assert: the SQL read must run after initialize_hook in both cases.
+    let refused = run_gate(&missing).await;
+    assert!(
+        refused
+            .refusals
+            .iter()
+            .any(|refusal| refusal.row == "_copy_summary"
+                && refusal.reason.contains("_copy_summary")),
+        "{refused:?}"
+    );
+    let accepted = run_gate(&fresh).await;
+    assert_eq!(accepted.outcome, Outcome::Pass, "{accepted:?}");
+}
+
+#[tokio::test]
 async fn malformed_or_mismatched_copy_summaries_are_refused_by_the_reader() {
     let cases: [(&str, fn(&mut Value)); 6] = [
         ("extra field", |summary| summary["unexpected"] = json!(true)),

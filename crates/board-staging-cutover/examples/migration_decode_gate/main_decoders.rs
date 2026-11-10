@@ -20,7 +20,7 @@ use fleet_sync_protocol::{CopyStatusAnswer, DatabaseId};
 use fleet_sync_receiver::RetainedFamily;
 use message_board::{RecordId, RecordKind, RecordRef};
 use serde::Serialize;
-use sqlx_core::connection::Connection;
+use sqlx_core::{connection::Connection, query::query, row::Row};
 use sqlx_turso::{Turso, TursoConnection};
 
 struct TursoScope<'connection>(&'connection mut TursoConnection);
@@ -221,12 +221,6 @@ pub async fn decode_copy(
         });
     };
     let mut transaction = connection.begin().await?;
-    if let Err(error) = decode_copy_summary(project, image) {
-        refuse(
-            "_copy_summary",
-            format!("main's Copy summary reader refuses: {error}"),
-        );
-    }
     // As main's post-deploy Copy migration does before main reads it: the
     // pinned receiver corpus, recorded in central's own set (its checksum
     // check also validates the candidate's recorded versions), then the Copy's
@@ -260,6 +254,12 @@ pub async fn decode_copy(
             }
         }
         Err(error) => refuse("_fleet_sync_hook_migrations", error.to_string()),
+    }
+    if let Err(error) = decode_copy_summary(project, image, &mut transaction).await {
+        refuse(
+            "_copy_summary",
+            format!("main's Copy summary reader refuses: {error}"),
+        );
     }
     let status = fleet_sync_receiver::copy_status(&mut TursoScope(&mut transaction)).await;
     let inspection = fleet_sync_receiver::inspect_copy(&mut TursoScope(&mut transaction)).await;
@@ -349,25 +349,44 @@ pub async fn decode_copy(
     Ok(DecodedCopy { refusals, status })
 }
 
-/// ReadCopySummary's SQL cardinality and identity rules, followed by its public
-/// Serde decoder. Read every raw row so missing columns and non-text cells
-/// cannot disappear through the image's text-only convenience readers.
-fn decode_copy_summary(project: &str, image: &ObjectImage) -> Result<(), String> {
-    let Some(table) = image.tables.get("_copy_summary") else {
-        // Main's initialize_hook creates an empty summary table when absent.
-        return Ok(());
-    };
-    let column = |name: &str| {
-        table
-            .columns
-            .iter()
-            .position(|column| column == name)
-            .ok_or_else(|| format!("missing {name} column"))
-    };
-    let database_column = column("database_id")?;
-    let record_column = column("record")?;
-    if table.rows.len() > 1 {
+/// ReadCopySummary's actual SQL after hook initialization, its public Serde
+/// decoder and decode_json's JSON-value roundtrip. Raw row checks additionally
+/// keep SQLite affinity from hiding a candidate cell's original storage class.
+async fn decode_copy_summary(
+    project: &str,
+    image: &ObjectImage,
+    connection: &mut TursoConnection,
+) -> Result<(), String> {
+    let rows = query::<Turso>(include_str!(
+        "../../../collaboration-central-core/sql/copy_summary/read_copy_summary.sql"
+    ))
+    .fetch_all(connection)
+    .await
+    .map_err(|error| error.to_string())?;
+    if rows.len() > 1 {
         return Err("copy contains multiple summaries".into());
+    }
+    if rows.len() != image.row_count("_copy_summary") {
+        return Err("summary SQL row count differs from the candidate".into());
+    }
+    if let Some(table) = image.tables.get("_copy_summary") {
+        let column = |name: &str| {
+            table
+                .columns
+                .iter()
+                .position(|column| column == name)
+                .ok_or_else(|| format!("missing {name} column"))
+        };
+        let database_column = column("database_id")?;
+        let record_column = column("record")?;
+        for row in &table.rows {
+            if !matches!(row.get(database_column), Some(TypedValue::Text(_))) {
+                return Err("copy.summary.database is missing or is not text".into());
+            }
+            if !matches!(row.get(record_column), Some(TypedValue::Text(_))) {
+                return Err("copy.summary is missing or is not text".into());
+            }
+        }
     }
     let database = DatabaseId::new(
         project
@@ -375,16 +394,22 @@ fn decode_copy_summary(project: &str, image: &ObjectImage) -> Result<(), String>
             .map_err(|error| error.to_string())?,
     )
     .map_err(|error| error.to_string())?;
-    for row in &table.rows {
-        let Some(TypedValue::Text(stored_database)) = row.get(database_column) else {
-            return Err("copy.summary.database is missing or is not text".into());
+    for row in rows {
+        let required = |column: &str| {
+            row.try_get::<Option<String>, _>(column)
+                .map_err(|error| error.to_string())?
+                .ok_or_else(|| format!("missing {column}"))
         };
-        let Some(TypedValue::Text(record)) = row.get(record_column) else {
-            return Err("copy.summary is missing or is not text".into());
-        };
+        let stored_database = required("database_id")?;
+        let record = required("record")?;
         let summary: collaboration_central_core::CopyDirectorySummary =
-            serde_json::from_str(record).map_err(|error| error.to_string())?;
-        if stored_database != &database.as_uuid().to_string() || summary.database != database {
+            serde_json::from_str(&record).map_err(|error| error.to_string())?;
+        let original: serde_json::Value =
+            serde_json::from_str(&record).map_err(|error| error.to_string())?;
+        if serde_json::to_value(&summary).map_err(|error| error.to_string())? != original {
+            return Err("stored value would be normalized".into());
+        }
+        if stored_database != database.as_uuid().to_string() || summary.database != database {
             return Err("stored copy summary database differs".into());
         }
     }
