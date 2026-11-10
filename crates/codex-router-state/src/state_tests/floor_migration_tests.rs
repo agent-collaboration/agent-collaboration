@@ -1,15 +1,9 @@
 use super::*;
+use sqlx::Connection as _;
 
 #[tokio::test]
 async fn v10_v11_v12_native_upgrades_create_credit_tables_and_preserve_account_policy() {
-    type LegacyFixtureConverter = fn(&Path);
-    let legacy_fixtures: [(&str, LegacyFixtureConverter); 3] = [
-        ("v10", convert_current_fixture_to_v10),
-        ("v11", convert_current_fixture_to_v11),
-        ("v12", convert_current_fixture_to_v12),
-    ];
-
-    for (version, convert_fixture) in legacy_fixtures {
+    for version in ["v10", "v11", "v12"] {
         let temp_dir = TestTempDir::new(&format!("credit_tables_{version}_upgrade"));
         let database_path = temp_dir.path().join("state.sqlite");
         let account_id = account_id(&format!("acct_credit_tables_{version}"));
@@ -47,8 +41,13 @@ async fn v10_v11_v12_native_upgrades_create_credit_tables_and_preserve_account_p
             mutation.close().await;
         }
 
-        convert_fixture(&database_path);
-        assert_credit_migration_tables(&database_path, false);
+        match version {
+            "v10" => convert_current_fixture_to_v10(&database_path).await,
+            "v11" => convert_current_fixture_to_v11(&database_path).await,
+            "v12" => convert_current_fixture_to_v12(&database_path).await,
+            _ => panic!("unknown legacy fixture version"),
+        }
+        assert_credit_migration_tables(&database_path, false).await;
 
         let migrated = AsyncSqliteStateStore::open(&database_path)
             .await
@@ -69,7 +68,7 @@ async fn v10_v11_v12_native_upgrades_create_credit_tables_and_preserve_account_p
             .close()
             .await
             .unwrap_or_else(|error| panic!("upgraded {version} database should close: {error}"));
-        assert_credit_migration_tables(&database_path, true);
+        assert_credit_migration_tables(&database_path, true).await;
     }
 }
 
@@ -91,7 +90,8 @@ fn weekly_floor_accepts_only_integer_percent_basis_points() {
 async fn v10_migrates_through_v11_to_v12_and_exposes_policy_read_only() {
     let temp_dir = TestTempDir::new("v10_to_v12_policy_migration");
     let database_path = temp_dir.path().join("state.sqlite");
-    let v10 = SqliteStateStore::open(&database_path)
+    let v10 = AsyncSqliteStateStore::open(&database_path)
+        .await
         .unwrap_or_else(|error| panic!("v10 fixture should open: {error}"));
     let account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
@@ -100,10 +100,18 @@ async fn v10_migrates_through_v11_to_v12_and_exposes_policy_read_only() {
         AccountStatus::Enabled,
     );
     v10.upsert_account(&account)
+        .await
         .unwrap_or_else(|error| panic!("v10 account should persist: {error}"));
-    drop(v10);
-    let raw = Connection::open(&database_path).expect("fixture should reopen for seeding");
-    raw.execute_batch(
+    v10.close().await.expect("current fixture should close");
+    let mut raw = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    .expect("fixture should reopen for seeding");
+    sqlx::raw_sql(
         "INSERT INTO quota_snapshots VALUES (
                 'acct_v11_preserved', 'mock_endpoint', 100, 'responses', 5000,
                 1000, NULL, 0
@@ -130,9 +138,11 @@ async fn v10_migrates_through_v11_to_v12_and_exposes_policy_read_only() {
              CREATE TABLE unrelated_v10_sentinel (value TEXT NOT NULL);
              INSERT INTO unrelated_v10_sentinel VALUES ('preserved');",
     )
+    .execute(&mut raw)
+    .await
     .expect("canonical v10 rows should seed");
-    drop(raw);
-    convert_current_fixture_to_v10(&database_path);
+    raw.close().await.expect("fixture connection should close");
+    convert_current_fixture_to_v10(&database_path).await;
 
     let migrated = AsyncSqliteStateStore::open(&database_path)
         .await
@@ -145,7 +155,14 @@ async fn v10_migrates_through_v11_to_v12_and_exposes_policy_read_only() {
     );
     migrated.close().await.expect("migrated store should close");
 
-    let raw = Connection::open(&database_path).expect("migrated database should inspect");
+    let mut raw = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    .expect("migrated database should inspect");
     for table_name in [
         "quota_snapshots",
         "selector_quota_windows",
@@ -154,32 +171,34 @@ async fn v10_migrates_through_v11_to_v12_and_exposes_policy_read_only() {
         "active_session_rollups",
         "unrelated_v10_sentinel",
     ] {
-        let count: i64 = raw
-            .query_row(&format!("SELECT COUNT(*) FROM {table_name}"), [], |row| {
-                row.get(0)
-            })
-            .unwrap_or_else(|error| panic!("{table_name} should survive: {error}"));
+        let count: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(format!(
+            "SELECT COUNT(*) FROM {table_name}"
+        )))
+        .fetch_one(&mut raw)
+        .await
+        .unwrap_or_else(|error| panic!("{table_name} should survive: {error}"));
         assert_eq!(count, 1, "{table_name} row should survive migration");
     }
-    let integrity: String = raw
-        .pragma_query_value(None, "integrity_check", |row| row.get(0))
+    let integrity: String = sqlx::query_scalar("PRAGMA integrity_check")
+        .fetch_one(&mut raw)
+        .await
         .expect("integrity check should run");
     assert_eq!(integrity, "ok");
     assert!(
-        raw.execute(
-            "INSERT INTO account_routing_policies VALUES ('acct_v11_preserved', 50)",
-            [],
-        )
-        .is_err()
+        sqlx::query("INSERT INTO account_routing_policies VALUES ('acct_v11_preserved', 50)")
+            .execute(&mut raw)
+            .await
+            .map(|result| result.rows_affected())
+            .is_err()
     );
     assert!(
-        raw.execute(
-            "INSERT INTO account_routing_policies VALUES ('acct_v11_preserved', 1501)",
-            [],
-        )
-        .is_err()
+        sqlx::query("INSERT INTO account_routing_policies VALUES ('acct_v11_preserved', 1501)")
+            .execute(&mut raw)
+            .await
+            .map(|result| result.rows_affected())
+            .is_err()
     );
-    drop(raw);
+    raw.close().await.expect("fixture connection should close");
 
     let read_only = AsyncSqliteStateStore::open_read_only(&database_path)
         .await
@@ -188,6 +207,7 @@ async fn v10_migrates_through_v11_to_v12_and_exposes_policy_read_only() {
         read_only.list_account_routing_policies().await,
         Ok(Vec::new())
     );
+    read_only.close().await.expect("read_only should close");
 }
 
 #[tokio::test]
@@ -217,7 +237,7 @@ async fn v12_migration_preserves_v11_policy_and_expands_integer_percent_check() 
         .await
         .expect("v11-compatible floor should persist");
     mutation.close().await;
-    convert_current_fixture_to_v11(&database_path);
+    convert_current_fixture_to_v11(&database_path).await;
 
     let migrated = AsyncSqliteStateStore::open(&database_path)
         .await
@@ -232,73 +252,110 @@ async fn v12_migration_preserves_v11_policy_and_expands_integer_percent_check() 
     );
     migrated.close().await.expect("migrated store should close");
 
-    let raw = Connection::open(&database_path).expect("v12 database should inspect");
-    let table_sql: String = raw
-            .query_row(
-                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'account_routing_policies'",
-                [],
-                |row| row.get(0),
-            )
-            .expect("policy table SQL should read");
+    let mut raw = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    .expect("v12 database should inspect");
+    let table_sql: String = sqlx::query_scalar(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'account_routing_policies'",
+    )
+    .fetch_one(&mut raw)
+    .await
+    .expect("policy table SQL should read");
     assert!(table_sql.contains("BETWEEN 100 AND 1500"));
     assert_eq!(
-        raw.execute(
-            "INSERT INTO account_routing_policies VALUES ('acct_v12_fifteen', 1500)",
-            [],
-        ),
-        Ok(1)
+        sqlx::query("INSERT INTO account_routing_policies VALUES ('acct_v12_fifteen', 1500)")
+            .execute(&mut raw)
+            .await
+            .expect("valid fifteen-percent floor should insert")
+            .rows_affected(),
+        1
     );
     for invalid_basis_points in [1_501, 1_550, 1_600] {
         assert!(
-            raw.execute(
-                "INSERT INTO account_routing_policies VALUES (?1, ?2)",
-                (
-                    format!("acct_invalid_{invalid_basis_points}"),
-                    invalid_basis_points,
-                ),
-            )
-            .is_err(),
+            sqlx::query("INSERT INTO account_routing_policies VALUES (?1, ?2)")
+                .bind(format!("acct_invalid_{invalid_basis_points}"))
+                .bind(invalid_basis_points)
+                .execute(&mut raw)
+                .await
+                .map(|result| result.rows_affected())
+                .is_err(),
             "{invalid_basis_points} basis points must be rejected"
         );
     }
-    let integrity: String = raw
-        .pragma_query_value(None, "integrity_check", |row| row.get(0))
+    let integrity: String = sqlx::query_scalar("PRAGMA integrity_check")
+        .fetch_one(&mut raw)
+        .await
         .expect("integrity check should run");
     assert_eq!(integrity, "ok");
+    raw.close().await.expect("raw should close");
 }
 
-#[test]
-fn v10_to_v11_sync_migration_rolls_back_atomically_and_retries_to_v12() {
+#[tokio::test]
+async fn v10_native_migration_rolls_back_atomically_and_retries() {
     let temp_dir = TestTempDir::new("v11_sync_rollback_retry");
     let database_path = temp_dir.path().join("state.sqlite");
-    let store = SqliteStateStore::open(&database_path).expect("fixture should open");
-    drop(store);
-    convert_current_fixture_to_v10(&database_path);
+    let store = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("fixture should open");
+    store.close().await.expect("state store should close");
+    convert_current_fixture_to_v10(&database_path).await;
 
-    SqliteStateStore::inject_v11_migration_rollback_for_test(&database_path)
-        .expect_err("sync migration failure should be injected");
-    let connection = Connection::open(&database_path).expect("fixture should reopen");
-    let version: i64 = connection
-        .pragma_query_value(None, "user_version", |row| row.get(0))
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(&database_path)
+                .create_if_missing(false),
+        )
+        .await
+        .expect("migration rollback pool should open");
+    crate::account_migrations::migrate_and_rollback_for_test(&pool)
+        .await
+        .expect("native migration transaction should roll back");
+    pool.close().await;
+    let mut connection = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    .expect("fixture should reopen");
+    let version: i64 = sqlx::query_scalar("PRAGMA user_version")
+        .fetch_one(&mut connection)
+        .await
         .expect("version should read");
     assert_eq!(version, 10);
     assert!(
-        connection
-            .prepare("SELECT 1 FROM account_routing_policies")
+        sqlx::query("SELECT 1 FROM account_routing_policies")
+            .fetch_optional(&mut connection)
+            .await
             .is_err()
     );
-    drop(connection);
+    connection
+        .close()
+        .await
+        .expect("fixture connection should close");
 
-    let migrated =
-        SqliteStateStore::open(&database_path).expect("sync migration retry should succeed");
-    assert_eq!(migrated.schema_version(), 13);
+    let migrated = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("native migration retry should succeed");
+    assert_eq!(migrated.schema_version().await, Ok(13));
+    migrated.close().await.expect("migrated should close");
 }
 
-#[test]
-fn v12_sync_migration_rolls_back_to_intact_v11_and_retries() {
+#[tokio::test]
+async fn v11_native_migration_rolls_back_to_intact_policy_and_retries() {
     let temp_dir = TestTempDir::new("v12_sync_rollback_retry");
     let database_path = temp_dir.path().join("state.sqlite");
-    let store = SqliteStateStore::open(&database_path).expect("current fixture should open");
+    let store = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("current fixture should open");
     let account_id = account_id("acct_v12_sync_rollback");
     store
         .upsert_account(&AccountRecord::new(
@@ -307,32 +364,56 @@ fn v12_sync_migration_rolls_back_to_intact_v11_and_retries() {
             "v12-sync-rollback",
             AccountStatus::Enabled,
         ))
+        .await
         .expect("account should persist");
-    drop(store);
-    let raw = Connection::open(&database_path).expect("fixture should reopen");
-    raw.execute(
-        "INSERT INTO account_routing_policies VALUES (?1, 900)",
-        [account_id.as_str()],
+    store.close().await.expect("state store should close");
+    let mut raw = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
     )
-    .expect("policy should persist");
-    drop(raw);
-    convert_current_fixture_to_v11(&database_path);
+    .await
+    .expect("fixture should reopen");
+    sqlx::query("INSERT INTO account_routing_policies VALUES (?1, 900)")
+        .bind(account_id.as_str())
+        .execute(&mut raw)
+        .await
+        .map(|result| result.rows_affected())
+        .expect("policy should persist");
+    raw.close().await.expect("fixture connection should close");
+    convert_current_fixture_to_v11(&database_path).await;
 
-    SqliteStateStore::inject_v12_migration_rollback_for_test(&database_path)
-        .expect_err("v12 migration failure should be injected");
-    assert_intact_v11_policy_database(&database_path, account_id.as_str(), 900);
+    let pool = sqlx::sqlite::SqlitePoolOptions::new()
+        .max_connections(1)
+        .connect_with(
+            sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(&database_path)
+                .create_if_missing(false),
+        )
+        .await
+        .expect("migration rollback pool should open");
+    crate::account_migrations::migrate_and_rollback_for_test(&pool)
+        .await
+        .expect("native migration transaction should roll back");
+    pool.close().await;
+    assert_intact_v11_policy_database(&database_path, account_id.as_str(), 900).await;
 
-    let migrated =
-        SqliteStateStore::open(&database_path).expect("sync v12 migration retry should succeed");
-    assert_eq!(migrated.schema_version(), 13);
-    drop(migrated);
-    let raw = Connection::open(&database_path).expect("migrated database should reopen");
-    let preserved_floor: i64 = raw
-            .query_row(
-                "SELECT weekly_quota_floor_basis_points FROM account_routing_policies WHERE account_id = ?1",
-                [account_id.as_str()],
-                |row| row.get(0),
-            )
-            .expect("sync migration should preserve policy");
+    let migrated = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("native v12 migration retry should succeed");
+    assert_eq!(migrated.schema_version().await, Ok(13));
+    migrated.close().await.expect("state store should close");
+    let mut raw = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    .expect("migrated database should reopen");
+    let preserved_floor: i64 = sqlx::query_scalar("SELECT weekly_quota_floor_basis_points FROM account_routing_policies WHERE account_id = ?1").bind(account_id.as_str()).fetch_one(&mut raw).await
+            .expect("native migration should preserve policy");
     assert_eq!(preserved_floor, 900);
+    raw.close().await.expect("raw should close");
 }

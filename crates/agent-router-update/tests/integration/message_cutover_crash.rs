@@ -16,15 +16,17 @@ async fn process_exit_after_copy_retries_the_same_ids_before_real_drop() -> Test
     let source = directory.path().join("automation.sqlite");
     let destination = directory.path().join("interaction.sqlite");
     seeded_source(&source).await?;
-    activity_push(&source, RANGE_ROOT, 3, 9)?;
+    activity_push(&source, RANGE_ROOT, 3, 9).await?;
     expiry_push(
         &source,
         serde_json::json!({"kind":"thread","rootMessageId":RANGE_ROOT}),
-    )?;
+    )
+    .await?;
     expiry_push(
         &source,
         serde_json::json!({"kind":"topic","topicId":RANGE_PROJECT}),
-    )?;
+    )
+    .await?;
     let board = directory.path().join("board.sqlite");
     std::fs::copy(
         std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -52,24 +54,24 @@ async fn process_exit_after_copy_retries_the_same_ids_before_real_drop() -> Test
         String::from_utf8_lossy(&output.stderr)
     );
     assert_eq!(std::fs::read(&source)?, original);
-    assert_eq!(source_tables(&source)?.len(), 5);
-    let first_ids = text_rows(&destination, IDS)?;
-    let first_ranges = text_rows(&destination, RANGES)?;
-    let first_origins = text_rows(&destination, ORIGINS)?;
+    assert_eq!(source_tables(&source).await?.len(), 5);
+    let first_ids = text_rows(&destination, IDS).await?;
+    let first_ranges = text_rows(&destination, RANGES).await?;
+    let first_origins = text_rows(&destination, ORIGINS).await?;
     assert_eq!(first_origins.len(), 3);
     assert_eq!(first_ranges.len(), 1);
     assert_eq!(first_ids.len(), 2);
     let prepared = support::prepare_path(&board).await?;
     let retry = MessageUpgrade::prepare(&source, &prepared.message_activity).await?;
     retry.copy_to(&destination).await?;
-    assert_eq!(text_rows(&destination, IDS)?, first_ids);
-    assert_eq!(text_rows(&destination, RANGES)?, first_ranges);
-    assert_eq!(text_rows(&destination, ORIGINS)?, first_origins);
+    assert_eq!(text_rows(&destination, IDS).await?, first_ids);
+    assert_eq!(text_rows(&destination, RANGES).await?, first_ranges);
+    assert_eq!(text_rows(&destination, ORIGINS).await?, first_origins);
     retry.apply_drop(&destination).await?;
-    assert!(source_tables(&source)?.is_empty());
-    assert_eq!(text_rows(&destination, IDS)?, first_ids);
-    assert_eq!(text_rows(&destination, RANGES)?, first_ranges);
-    assert_eq!(text_rows(&destination, ORIGINS)?, first_origins);
+    assert!(source_tables(&source).await?.is_empty());
+    assert_eq!(text_rows(&destination, IDS).await?, first_ids);
+    assert_eq!(text_rows(&destination, RANGES).await?, first_ranges);
+    assert_eq!(text_rows(&destination, ORIGINS).await?, first_origins);
     prepared.close().await;
     Ok(())
 }

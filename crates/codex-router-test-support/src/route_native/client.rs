@@ -23,7 +23,7 @@ pub(super) fn send_http_request(
         .set_read_timeout(Some(Duration::from_secs(5)))
         .map_err(|error| format!("route-native client failed to set timeout: {error}"))?;
     let request = format!(
-        "{method} {path} HTTP/1.1\r\nhost: 127.0.0.1\r\nauthorization: Bearer {LOCAL_TOKEN}\r\naccept: */*\r\ncontent-length: {}\r\n\r\n",
+        "{method} {path} HTTP/1.1\r\nhost: 127.0.0.1\r\nauthorization: Bearer {LOCAL_TOKEN}\r\naccept: */*\r\nconnection: close\r\ncontent-length: {}\r\n\r\n",
         body.len()
     );
     stream

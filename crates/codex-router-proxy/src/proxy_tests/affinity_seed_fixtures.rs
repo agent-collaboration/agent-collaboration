@@ -1,15 +1,11 @@
 use super::*;
 
-pub(super) fn wait_for_session_affinity(
+pub(super) async fn wait_for_session_affinity(
     database_path: &Path,
     session_id: &str,
     predicate: impl Fn(&SessionAccountAffinity) -> bool,
 ) -> SessionAccountAffinity {
-    let observation_runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("observation runtime should build");
-    observation_runtime.block_on(async {
+    (async {
         let state = AsyncSqliteStateStore::open(database_path)
             .await
             .expect("async state should open");
@@ -29,20 +25,17 @@ pub(super) fn wait_for_session_affinity(
         .await
         .expect("session affinity observation should arrive")
     })
+    .await
 }
 
-pub(super) fn seed_completed_active_session(
+pub(super) async fn seed_completed_active_session(
     database_path: &Path,
     account_id: &AccountId,
     reservation_id: &str,
     started_unix_seconds: u64,
     ended_unix_seconds: u64,
 ) {
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("active-session fixture runtime should build");
-    runtime.block_on(async {
+    (async {
         let state = AsyncSqliteStateStore::open(database_path)
             .await
             .expect("active-session fixture state should open");
@@ -68,7 +61,8 @@ pub(super) fn seed_completed_active_session(
             .await
             .expect("active-session release should persist");
         state.close().await.expect("fixture state should close");
-    });
+    })
+    .await;
 }
 
 pub(super) fn wait_for_responses_history_compaction(
@@ -90,11 +84,10 @@ pub(super) fn wait_for_responses_history_compaction(
     }
 }
 
-pub(super) fn observed_active_session_reservation_ids(
-    runtime: &tokio::runtime::Runtime,
+pub(super) async fn observed_active_session_reservation_ids(
     state: &AsyncSqliteStateStore,
 ) -> Vec<String> {
-    runtime.block_on(async {
+    (async {
         state
             .active_session_events_for_route_band("responses")
             .await
@@ -103,32 +96,33 @@ pub(super) fn observed_active_session_reservation_ids(
             .map(|event| event.reservation_id().as_str().to_owned())
             .collect()
     })
+    .await
 }
 
-pub(super) fn assert_active_session_absent(
-    runtime: &tokio::runtime::Runtime,
+pub(super) async fn assert_active_session_absent(
     state: &AsyncSqliteStateStore,
     reservation_id: &str,
 ) {
     assert!(
-        !observed_active_session_reservation_ids(runtime, state)
+        !observed_active_session_reservation_ids(state)
+            .await
             .iter()
             .any(|candidate| candidate == reservation_id),
         "maintenance should delete completed session {reservation_id}"
     );
 }
 
-pub(super) fn wait_for_previous_response_owner(
-    state: &SqliteStateStore,
+pub(super) async fn wait_for_previous_response_owner(
+    state: &AsyncSqliteStateStore,
     owner_hash: &AffinityKeyHash,
 ) -> PreviousResponseAffinityOwnerLookup {
     let deadline = Instant::now() + Duration::from_secs(1);
     loop {
-        let owner_lookup = must_ok(AffinityRepository::load_previous_response_owner(
-            state,
-            owner_hash,
-            RouteBand::Responses.as_str(),
-        ));
+        let owner_lookup = must_ok(
+            state
+                .load_previous_response_owner(owner_hash, RouteBand::Responses.as_str())
+                .await,
+        );
         if !matches!(owner_lookup, PreviousResponseAffinityOwnerLookup::Missing)
             || Instant::now() >= deadline
         {
@@ -144,7 +138,7 @@ pub(super) async fn selected_account_after_provider_error_observation(
 ) -> AccountId {
     let temp_dir = ProxyTestTempDir::new(temp_name);
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -165,13 +159,15 @@ pub(super) async fn selected_account_after_provider_error_observation(
         &observed,
         "responses",
         &[(18_000, 90, true), (604_800, 90, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &fallback,
         "responses",
         &[(18_000, 80, true), (604_800, 80, false)],
-    );
+    )
+    .await;
     let async_state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("async state store should open: {error}"),
@@ -211,8 +207,8 @@ pub(super) async fn selected_account_after_provider_error_observation(
     selected.account_id().clone()
 }
 
-pub(super) fn persist_previous_response_owner(
-    state: &SqliteStateStore,
+pub(super) async fn persist_previous_response_owner(
+    state: &AsyncSqliteStateStore,
     previous_response_id: &str,
     affinity_secret: &RouterAffinityHashSecret,
     account_id: &codex_router_core::ids::AccountId,
@@ -224,14 +220,11 @@ pub(super) fn persist_previous_response_owner(
         account_id,
         RouteBand::Responses,
     )
+    .await
 }
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Assertions must fail this test while fixture errors propagate through Result."
-)]
-pub(super) fn persist_previous_response_owner_for_route(
-    state: &SqliteStateStore,
+pub(super) async fn persist_previous_response_owner_for_route(
+    state: &AsyncSqliteStateStore,
     previous_response_id: &str,
     affinity_secret: &RouterAffinityHashSecret,
     account_id: &codex_router_core::ids::AccountId,
@@ -255,7 +248,7 @@ pub(super) fn persist_previous_response_owner_for_route(
         test_unix_seconds(),
     );
 
-    AffinityRepository::write_previous_response_owner(state, &owner)
+    state.write_previous_response_owner(&owner).await
 }
 
 pub(super) fn test_affinity_secret() -> RouterAffinityHashSecret {
@@ -276,19 +269,20 @@ pub(super) fn replacement_affinity_secret() -> RouterAffinityHashSecret {
     }
 }
 
-pub(super) fn wait_for_repository_selected_account(
-    state: &SqliteStateStore,
+pub(super) async fn wait_for_repository_selected_account(
+    state: &AsyncSqliteStateStore,
     expected_account_id: &AccountId,
     context: &str,
 ) {
     let mut last_selected = None;
     for _attempt in 0..50 {
-        let selected = RepositoryBackedAccountSelector::new(state)
+        let selected = AsyncRepositoryBackedAccountSelector::new(state)
             .select_upstream_account(
                 &HttpProxyRequest::new(Method::Post, "/v1/responses"),
                 TokenGeneration::new(1),
                 None,
             )
+            .await
             .unwrap_or_else(|error| panic!("{context}: {error}"));
         if selected.account_id() == expected_account_id {
             return;
@@ -304,17 +298,21 @@ pub(super) fn wait_for_repository_selected_account(
     );
 }
 
-pub(super) fn wait_for_durable_quota_exhaustion(state: &SqliteStateStore, accounts: &[&AccountId]) {
+pub(super) async fn wait_for_durable_quota_exhaustion(
+    state: &AsyncSqliteStateStore,
+    accounts: &[&AccountId],
+) {
     let mut last_snapshots = Vec::new();
     for _attempt in 0..50 {
-        let snapshots = accounts
-            .iter()
-            .map(|account_id| {
+        let mut snapshots = Vec::new();
+        for account_id in accounts {
+            snapshots.push(
                 state
                     .load_quota_snapshot_for_route_band(account_id, "responses")
-                    .unwrap_or_else(|error| panic!("quota snapshot should load: {error}"))
-            })
-            .collect::<Vec<_>>();
+                    .await
+                    .unwrap_or_else(|error| panic!("quota snapshot should load: {error}")),
+            );
+        }
         if snapshots.iter().all(|snapshot| {
             snapshot.as_ref().is_some_and(|snapshot| {
                 snapshot.source() == QuotaSnapshotSource::OpenAiEndpoint

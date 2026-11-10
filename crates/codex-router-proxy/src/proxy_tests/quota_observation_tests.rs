@@ -4,7 +4,7 @@ use super::*;
 async fn usage_limit_observation_quarantines_account_before_next_selection() {
     let temp_dir = ProxyTestTempDir::new("usage_limit_observation_quarantine");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -25,13 +25,15 @@ async fn usage_limit_observation_quarantines_account_before_next_selection() {
         &limited,
         "responses",
         &[(18_000, 90, true), (604_800, 90, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &fallback,
         "responses",
         &[(18_000, 80, true), (604_800, 80, false)],
-    );
+    )
+    .await;
     let async_state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("async state store should open: {error}"),

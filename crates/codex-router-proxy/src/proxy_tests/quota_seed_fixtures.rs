@@ -12,15 +12,15 @@ pub(super) fn quota_account(
     QuotaAwareAccountState::new(account_id, remaining_headroom, freshness)
 }
 
-pub(super) fn persist_account_with_snapshot_and_token(
-    state: &SqliteStateStore,
+pub(super) async fn persist_account_with_snapshot_and_token(
+    state: &AsyncSqliteStateStore,
     secrets: &EncryptedCredentialStore,
     account: &AccountRecord,
     remaining_headroom: u32,
     upstream_token: &str,
 ) {
     let account_with_generation = account.clone().with_active_credential_generation(1);
-    if let Err(error) = AccountStateRepository::upsert_account(state, &account_with_generation) {
+    if let Err(error) = state.upsert_account(&account_with_generation).await {
         panic!("account should persist: {error}");
     }
     let snapshot = PersistedQuotaSnapshot::new(
@@ -30,7 +30,7 @@ pub(super) fn persist_account_with_snapshot_and_token(
     .with_observed_unix_seconds(1_000)
     .with_route_band("responses", remaining_headroom)
     .with_stale_penalty(false);
-    if let Err(error) = QuotaSnapshotRepository::upsert_snapshot(state, &snapshot) {
+    if let Err(error) = state.upsert_quota_snapshot(&snapshot).await {
         panic!("quota snapshot should persist: {error}");
     }
     let selector_window = PersistedSelectorQuotaWindow::new(
@@ -47,7 +47,7 @@ pub(super) fn persist_account_with_snapshot_and_token(
     .with_effective(true)
     .with_observed_unix_seconds(test_unix_seconds())
     .with_reset_unix_seconds(selector_reset_seconds(18_000));
-    if let Err(error) = SelectorQuotaRepository::upsert_selector_window(state, &selector_window) {
+    if let Err(error) = state.upsert_selector_quota_window(&selector_window).await {
         panic!("selector quota window should persist: {error}");
     }
     let weekly_selector_window = PersistedSelectorQuotaWindow::new(
@@ -64,8 +64,9 @@ pub(super) fn persist_account_with_snapshot_and_token(
     .with_effective(false)
     .with_observed_unix_seconds(test_unix_seconds())
     .with_reset_unix_seconds(selector_reset_seconds(604_800));
-    if let Err(error) =
-        SelectorQuotaRepository::upsert_selector_window(state, &weekly_selector_window)
+    if let Err(error) = state
+        .upsert_selector_quota_window(&weekly_selector_window)
+        .await
     {
         panic!("weekly selector quota window should persist: {error}");
     }
@@ -87,16 +88,12 @@ pub(super) fn persist_account_with_snapshot_and_token(
     }
 }
 
-pub(super) fn set_weekly_floor_for_test(
+pub(super) async fn set_weekly_floor_for_test(
     database_path: &Path,
     account_label: &str,
     floor_basis_points: u16,
 ) {
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("weekly-floor test runtime should build");
-    runtime.block_on(async {
+    (async {
         let mutation = AsyncWeeklyQuotaFloorMutationStore::open(database_path)
             .await
             .expect("weekly-floor mutation store should open");
@@ -111,10 +108,11 @@ pub(super) fn set_weekly_floor_for_test(
             .await
             .expect("weekly floor should commit");
         mutation.close().await;
-    });
+    })
+    .await;
 }
 
-pub(super) fn seed_computable_weekly_margin_for_test(
+pub(super) async fn seed_computable_weekly_margin_for_test(
     database_path: &Path,
     account_id: &AccountId,
     now_unix_seconds: u64,
@@ -126,7 +124,9 @@ pub(super) fn seed_computable_weekly_margin_for_test(
     let history_start = now_unix_seconds.saturating_sub(history_span_seconds);
     let history_middle = history_start + history_span_seconds / 2;
     let weekly_reset = now_unix_seconds + weekly_reset_seconds;
-    let state = SqliteStateStore::open(database_path).expect("state should reopen for windows");
+    let state = AsyncSqliteStateStore::open(database_path)
+        .await
+        .expect("state should reopen for windows");
     let windows = [
         PersistedSelectorQuotaWindow::new(
             account_id.clone(),
@@ -149,22 +149,19 @@ pub(super) fn seed_computable_weekly_margin_for_test(
         .with_observed_unix_seconds(now_unix_seconds)
         .with_reset_unix_seconds(weekly_reset),
     ];
-    SelectorQuotaRepository::record_refresh_success_and_replace_selector_windows(
-        &state,
-        account_id,
-        "responses",
-        &windows,
-        now_unix_seconds,
-        now_unix_seconds + 300,
-    )
-    .expect("fresh selector windows should persist atomically");
-    drop(state);
+    state
+        .record_refresh_success_and_replace_selector_windows(
+            account_id,
+            "responses",
+            &windows,
+            now_unix_seconds,
+            now_unix_seconds + 300,
+        )
+        .await
+        .expect("fresh selector windows should persist atomically");
+    state.close().await.expect("fixture state should close");
 
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("weekly-margin test runtime should build");
-    runtime.block_on(async {
+    (async {
         let state = AsyncSqliteStateStore::open(database_path)
             .await
             .expect("async state should open for history");
@@ -200,20 +197,17 @@ pub(super) fn seed_computable_weekly_margin_for_test(
             .await
             .expect("active-session rollups should refresh");
         state.close().await.expect("async state should close");
-    });
+    })
+    .await;
 }
 
-pub(super) fn assert_bad_projected_margin_does_not_floor_block_for_test(
+pub(super) async fn assert_bad_projected_margin_does_not_floor_block_for_test(
     database_path: &Path,
     account_id: &AccountId,
     now_unix_seconds: u64,
     floor_basis_points: i64,
 ) {
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("weekly-margin assertion runtime should build");
-    runtime.block_on(async {
+    (async {
         let state = AsyncSqliteStateStore::open(database_path)
             .await
             .expect("async state should open for margin assertion");
@@ -250,7 +244,8 @@ pub(super) fn assert_bad_projected_margin_does_not_floor_block_for_test(
         );
         assert_eq!(assessment.preferred_next(), Some(account.account_id()));
         state.close().await.expect("assertion state should close");
-    });
+    })
+    .await;
 }
 
 pub(super) async fn append_history_series_with_reset(
@@ -321,14 +316,14 @@ pub(super) const fn hours_minutes(hours: u64, minutes: u64) -> u64 {
     hours * 3_600 + minutes * 60
 }
 
-pub(super) fn persist_account_with_selector_window_reset_specs(
-    state: &SqliteStateStore,
+pub(super) async fn persist_account_with_selector_window_reset_specs(
+    state: &AsyncSqliteStateStore,
     account: &AccountRecord,
     route_band: &str,
     windows: &[(u64, u32, bool, u64)],
 ) {
     let account_with_generation = account.clone().with_active_credential_generation(1);
-    if let Err(error) = AccountStateRepository::upsert_account(state, &account_with_generation) {
+    if let Err(error) = state.upsert_account(&account_with_generation).await {
         panic!("account should persist: {error}");
     }
     for (limit_window_seconds, remaining_headroom, effective, reset_unix_seconds) in windows {
@@ -342,21 +337,20 @@ pub(super) fn persist_account_with_selector_window_reset_specs(
         .with_effective(*effective)
         .with_observed_unix_seconds(test_unix_seconds())
         .with_reset_unix_seconds(*reset_unix_seconds);
-        if let Err(error) = SelectorQuotaRepository::upsert_selector_window(state, &selector_window)
-        {
+        if let Err(error) = state.upsert_selector_quota_window(&selector_window).await {
             panic!("selector quota window should persist: {error}");
         }
     }
 }
 
-pub(super) fn persist_account_with_selector_windows(
-    state: &SqliteStateStore,
+pub(super) async fn persist_account_with_selector_windows(
+    state: &AsyncSqliteStateStore,
     account: &AccountRecord,
     route_bands: &[&str],
     remaining_headroom: u32,
 ) {
     let account_with_generation = account.clone().with_active_credential_generation(1);
-    if let Err(error) = AccountStateRepository::upsert_account(state, &account_with_generation) {
+    if let Err(error) = state.upsert_account(&account_with_generation).await {
         panic!("account should persist: {error}");
     }
     for route_band in route_bands {
@@ -370,8 +364,7 @@ pub(super) fn persist_account_with_selector_windows(
         .with_effective(true)
         .with_observed_unix_seconds(test_unix_seconds())
         .with_reset_unix_seconds(selector_reset_seconds(18_000));
-        if let Err(error) = SelectorQuotaRepository::upsert_selector_window(state, &selector_window)
-        {
+        if let Err(error) = state.upsert_selector_quota_window(&selector_window).await {
             panic!("selector quota window should persist: {error}");
         }
         let weekly_selector_window = PersistedSelectorQuotaWindow::new(
@@ -384,22 +377,23 @@ pub(super) fn persist_account_with_selector_windows(
         .with_effective(false)
         .with_observed_unix_seconds(test_unix_seconds())
         .with_reset_unix_seconds(selector_reset_seconds(604_800));
-        if let Err(error) =
-            SelectorQuotaRepository::upsert_selector_window(state, &weekly_selector_window)
+        if let Err(error) = state
+            .upsert_selector_quota_window(&weekly_selector_window)
+            .await
         {
             panic!("weekly selector quota window should persist: {error}");
         }
     }
 }
 
-pub(super) fn persist_account_with_selector_window_specs(
-    state: &SqliteStateStore,
+pub(super) async fn persist_account_with_selector_window_specs(
+    state: &AsyncSqliteStateStore,
     account: &AccountRecord,
     route_band: &str,
     windows: &[(u64, u32, bool)],
 ) {
     let account_with_generation = account.clone().with_active_credential_generation(1);
-    if let Err(error) = AccountStateRepository::upsert_account(state, &account_with_generation) {
+    if let Err(error) = state.upsert_account(&account_with_generation).await {
         panic!("account should persist: {error}");
     }
     for (limit_window_seconds, remaining_headroom, effective) in windows {
@@ -413,15 +407,14 @@ pub(super) fn persist_account_with_selector_window_specs(
         .with_effective(*effective)
         .with_observed_unix_seconds(test_unix_seconds())
         .with_reset_unix_seconds(selector_reset_seconds(*limit_window_seconds));
-        if let Err(error) = SelectorQuotaRepository::upsert_selector_window(state, &selector_window)
-        {
+        if let Err(error) = state.upsert_selector_quota_window(&selector_window).await {
             panic!("selector quota window should persist: {error}");
         }
     }
 }
 
-pub(super) fn refresh_served_floor_windows_for_test(
-    state: &SqliteStateStore,
+pub(super) async fn refresh_served_floor_windows_for_test(
+    state: &AsyncSqliteStateStore,
     account: &AccountRecord,
     observed_unix_seconds: u64,
     remaining_headroom: u32,
@@ -448,25 +441,26 @@ pub(super) fn refresh_served_floor_windows_for_test(
         .with_observed_unix_seconds(observed_unix_seconds)
         .with_reset_unix_seconds(observed_unix_seconds + 604_800),
     ];
-    SelectorQuotaRepository::record_refresh_success_and_replace_selector_windows(
-        state,
-        account.account_id(),
-        "responses",
-        &windows,
-        observed_unix_seconds,
-        observed_unix_seconds + 300,
-    )
-    .expect("served floor windows should be fresh");
+    state
+        .record_refresh_success_and_replace_selector_windows(
+            account.account_id(),
+            "responses",
+            &windows,
+            observed_unix_seconds,
+            observed_unix_seconds + 300,
+        )
+        .await
+        .expect("served floor windows should be fresh");
 }
 
-pub(super) fn persist_fresh_account_with_selector_window_specs(
-    state: &SqliteStateStore,
+pub(super) async fn persist_fresh_account_with_selector_window_specs(
+    state: &AsyncSqliteStateStore,
     account: &AccountRecord,
     route_band: &str,
     windows: &[(u64, u32, bool)],
 ) {
     let account_with_generation = account.clone().with_active_credential_generation(1);
-    if let Err(error) = AccountStateRepository::upsert_account(state, &account_with_generation) {
+    if let Err(error) = state.upsert_account(&account_with_generation).await {
         panic!("account should persist: {error}");
     }
     let observed_unix_seconds = test_unix_seconds();
@@ -485,26 +479,28 @@ pub(super) fn persist_fresh_account_with_selector_window_specs(
             .with_reset_unix_seconds(observed_unix_seconds.saturating_add(*limit_window_seconds))
         })
         .collect::<Vec<_>>();
-    if let Err(error) = SelectorQuotaRepository::record_refresh_success_and_replace_selector_windows(
-        state,
-        account.account_id(),
-        route_band,
-        &selector_windows,
-        observed_unix_seconds,
-        observed_unix_seconds.saturating_add(300),
-    ) {
+    if let Err(error) = state
+        .record_refresh_success_and_replace_selector_windows(
+            account.account_id(),
+            route_band,
+            &selector_windows,
+            observed_unix_seconds,
+            observed_unix_seconds.saturating_add(300),
+        )
+        .await
+    {
         panic!("fresh selector quota windows should persist: {error}");
     }
 }
 
-pub(super) fn persist_account_with_selector_window_status_specs(
-    state: &SqliteStateStore,
+pub(super) async fn persist_account_with_selector_window_status_specs(
+    state: &AsyncSqliteStateStore,
     account: &AccountRecord,
     route_band: &str,
     windows: &[(u64, u32, bool, SelectorQuotaWindowStatus)],
 ) {
     let account_with_generation = account.clone().with_active_credential_generation(1);
-    if let Err(error) = AccountStateRepository::upsert_account(state, &account_with_generation) {
+    if let Err(error) = state.upsert_account(&account_with_generation).await {
         panic!("account should persist: {error}");
     }
     for (limit_window_seconds, remaining_headroom, effective, status) in windows {
@@ -518,8 +514,7 @@ pub(super) fn persist_account_with_selector_window_status_specs(
         .with_effective(*effective)
         .with_observed_unix_seconds(test_unix_seconds())
         .with_reset_unix_seconds(selector_reset_seconds(*limit_window_seconds));
-        if let Err(error) = SelectorQuotaRepository::upsert_selector_window(state, &selector_window)
-        {
+        if let Err(error) = state.upsert_selector_quota_window(&selector_window).await {
             panic!("selector quota window should persist: {error}");
         }
     }

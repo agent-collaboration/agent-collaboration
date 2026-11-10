@@ -1,41 +1,44 @@
 use super::*;
 
-#[test]
-fn saved_switch_band_refresh_waits_for_active_turn_then_reconnects_to_healthy_peer() {
-    run_saved_switch_band_websocket_case(true);
+#[tokio::test]
+async fn saved_switch_band_refresh_waits_for_active_turn_then_reconnects_to_healthy_peer() {
+    run_saved_switch_band_websocket_case(true).await;
 }
 
-#[test]
-fn saved_switch_band_refresh_keeps_active_socket_when_no_healthy_peer_exists() {
-    run_saved_switch_band_websocket_case(false);
+#[tokio::test]
+async fn saved_switch_band_refresh_keeps_active_socket_when_no_healthy_peer_exists() {
+    run_saved_switch_band_websocket_case(false).await;
 }
 
 #[expect(
     clippy::result_large_err,
     reason = "The existing callback contract requires the unboxed error value."
 )]
-fn run_saved_switch_band_websocket_case(with_healthy_peer: bool) {
+async fn run_saved_switch_band_websocket_case(with_healthy_peer: bool) {
     let test_root = TestRoot::new("joined-graceful-floor-websocket");
     must_ok(fs::create_dir(test_root.path()));
     let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
-    let state = must_ok(SqliteStateStore::open(&state_path));
+    let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_root),
     );
     let floor_account_id = account_id("acct_a_graceful_floor");
     let healthy_account_id = account_id("acct_b_graceful_peer");
-    let seed_account = |account_id: &AccountId, label: &str, remaining: u32, access: &str| {
-        must_ok(AccountStateRepository::upsert_account(
-            &state,
-            &AccountRecord::new(
-                codex_router_core::provider::Provider::Openai,
-                account_id.clone(),
-                label,
-                AccountStatus::Enabled,
-            )
-            .with_active_credential_generation(1),
-        ));
+    let seed_account = async |account_id: &AccountId, label: &str, remaining: u32, access: &str| {
+        must_ok(
+            state
+                .upsert_account(
+                    &AccountRecord::new(
+                        codex_router_core::provider::Provider::Openai,
+                        account_id.clone(),
+                        label,
+                        AccountStatus::Enabled,
+                    )
+                    .with_active_credential_generation(1),
+                )
+                .await,
+        );
         let key = must_ok(openai_account_credential_bundle_key(account_id, 1));
         let bundle = AccountCredentialBundle::imported_codex_auth(
             access,
@@ -65,14 +68,15 @@ fn run_saved_switch_band_websocket_case(with_healthy_peer: bool) {
             .with_observed_unix_seconds(1_000),
         ];
         must_ok(
-            SelectorQuotaRepository::record_refresh_success_and_replace_selector_windows(
-                &state,
-                account_id,
-                "responses",
-                &windows,
-                1_000,
-                2_000,
-            ),
+            state
+                .record_refresh_success_and_replace_selector_windows(
+                    account_id,
+                    "responses",
+                    &windows,
+                    1_000,
+                    2_000,
+                )
+                .await,
         );
     };
     seed_account(
@@ -80,8 +84,9 @@ fn run_saved_switch_band_websocket_case(with_healthy_peer: bool) {
         "graceful-floor",
         9,
         "graceful-floor-access",
-    );
-    test_async_runtime().block_on(async {
+    )
+    .await;
+    (async {
         let mutation = must_ok(AsyncWeeklyQuotaFloorMutationStore::open(&state_path).await);
         must_ok(
             mutation
@@ -92,7 +97,8 @@ fn run_saved_switch_band_websocket_case(with_healthy_peer: bool) {
                 .await,
         );
         mutation.close().await;
-    });
+    })
+    .await;
 
     let upstream_listener = must_ok(TcpListener::bind("127.0.0.1:0"));
     let upstream_address = must_ok(upstream_listener.local_addr());
@@ -158,7 +164,19 @@ fn run_saved_switch_band_websocket_case(with_healthy_peer: bool) {
         secret_root.clone(),
     )
     .with_quota_clock(1_100, 300);
-    let router = must_ok(LoopbackRouterRuntime::start(config, secrets.clone().into()));
+    let router = must_ok({
+        let fixture_config = config;
+        let fixture_secrets = secrets.clone().into();
+        let fixture_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        must_ok(
+            tokio::task::spawn_blocking(move || {
+                tracing::dispatcher::with_default(&fixture_dispatcher, || {
+                    LoopbackRouterRuntime::start(fixture_config, fixture_secrets)
+                })
+            })
+            .await,
+        )
+    });
     let router_port = router.local_addr().port();
     let floor_notifier = router.websocket_quota_floor_notifier();
     let router_thread = thread::spawn(move || {
@@ -181,25 +199,29 @@ fn run_saved_switch_band_websocket_case(with_healthy_peer: bool) {
             "graceful-peer",
             80,
             "graceful-peer-access",
-        );
+        )
+        .await;
     }
     let resolver =
         contract_credential_resolver(&state, &secrets, NoopCredentialRefreshClient, 1_100);
     let provider = JoinedFloorCrossingProvider { floor_account_id };
     let mut output = Vec::new();
-    must_ok(refresh_quota_store_paths_with_floor_observer(
-        &mut output,
-        &state_path,
-        &secret_root,
-        "https://chatgpt.com/backend-api".to_owned(),
-        &resolver,
-        &provider,
-        QuotaRefreshObservationContext {
-            observed_unix_seconds: 1_200,
-            schedule: codex_router_quota_service::quota::QuotaRefreshSchedule::Manual,
-            weekly_floor_observer: Some(&floor_notifier),
-        },
-    ));
+    must_ok(
+        refresh_quota_store_paths_with_floor_observer(
+            &mut output,
+            &state_path,
+            &secret_root,
+            "https://chatgpt.com/backend-api".to_owned(),
+            &resolver,
+            &provider,
+            QuotaRefreshObservationContext {
+                observed_unix_seconds: 1_200,
+                schedule: codex_router_quota_service::quota::QuotaRefreshSchedule::Manual,
+                weekly_floor_observer: Some(&floor_notifier),
+            },
+        )
+        .await,
+    );
     must_ok(first_client.send(Message::text(r#"{"type":"response.create","turn":2}"#)));
     must_ok(finish_turn_sender.send(()));
     assert_eq!(

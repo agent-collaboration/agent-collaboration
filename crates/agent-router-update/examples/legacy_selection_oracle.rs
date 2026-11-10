@@ -32,8 +32,9 @@ use std::{
     process::ExitCode,
 };
 
-fn main() -> ExitCode {
-    match execute_legacy_selection_oracle(OracleArguments::parse()) {
+#[tokio::main]
+async fn main() -> ExitCode {
+    match execute_legacy_selection_oracle(OracleArguments::parse()).await {
         Ok(status) => match serde_json::to_string(&status) {
             Ok(status_json) => match writeln!(io::stdout().lock(), "{status_json}") {
                 Ok(()) => ExitCode::SUCCESS,
@@ -57,11 +58,11 @@ fn main() -> ExitCode {
     }
 }
 
-fn execute_legacy_selection_oracle(
+async fn execute_legacy_selection_oracle(
     arguments: OracleArguments,
 ) -> Result<OracleStatus, OracleError> {
     let output_path = validate_owner_private_output_path(&arguments.output)?;
-    let source = read_sealed_copy(&arguments.legacy_copy, &arguments.copy_root)?;
+    let source = read_sealed_copy(&arguments.legacy_copy, &arguments.copy_root).await?;
     let receipt = build_legacy_oracle_receipt(&source, hash_running_oracle_binary()?)?;
     let status = build_cli_status(&receipt)?;
     write_new_private_receipt(output_path, &receipt)?;

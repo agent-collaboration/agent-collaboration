@@ -1,10 +1,10 @@
 use super::*;
 
-#[test]
-fn state_repository_lists_accounts_in_selector_stable_order() {
+#[tokio::test]
+async fn state_repository_lists_accounts_in_selector_stable_order() {
     let temp_dir = TestTempDir::new("list_accounts");
     let database_path = temp_dir.path().join("state.sqlite");
-    let store = match SqliteStateStore::open(&database_path) {
+    let store = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(store) => store,
         Err(error) => panic!("state store should open and migrate: {error}"),
     };
@@ -30,20 +30,22 @@ fn state_repository_lists_accounts_in_selector_stable_order() {
         AccountStatus::Disabled,
     );
 
-    if let Err(error) = AccountStateRepository::upsert_account(&store, &beta) {
+    if let Err(error) = store.upsert_account(&beta).await {
         panic!("beta account should persist: {error}");
     }
-    if let Err(error) = AccountStateRepository::upsert_account(&store, &alpha) {
+    if let Err(error) = store.upsert_account(&alpha).await {
         panic!("alpha account should persist: {error}");
     }
-    if let Err(error) = AccountStateRepository::upsert_account(&store, &disabled) {
+    if let Err(error) = store.upsert_account(&disabled).await {
         panic!("disabled account should persist: {error}");
     }
 
-    let accounts = match AccountStateRepository::list_accounts(&store) {
+    let accounts = match store.list_accounts().await {
         Ok(accounts) => accounts,
         Err(error) => panic!("account repository should list accounts: {error}"),
     };
 
     assert_eq!(accounts, vec![alpha, beta, disabled]);
+
+    store.close().await.expect("state store should close");
 }

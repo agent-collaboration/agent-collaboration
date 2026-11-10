@@ -32,7 +32,7 @@ impl AsyncSqliteStateStore {
     }
 
     /// Saves a fixture policy using the async SQLite pool.
-    #[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
+    #[cfg(any(test, feature = "test-support"))]
     pub async fn save_account_credit_usage_policy(
         &self,
         account_id: &AccountId,

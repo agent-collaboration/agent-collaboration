@@ -4,6 +4,7 @@ use crate::support;
 use agent_router_update::{MessageUpgrade, MessageUpgradeError};
 use interaction_storage::InteractionStore;
 use message_support::*;
+use sqlx::Connection as _;
 
 #[tokio::test]
 #[expect(
@@ -16,7 +17,7 @@ async fn shipped_activity_range_reads_through_the_current_message_owner() -> Tes
     let source = directory.path().join("automation.sqlite");
     let destination = directory.path().join("interaction.sqlite");
     message_support::source(&source, 20_260_930_000_000).await?;
-    let id = activity_push(&source, RANGE_ROOT, 3, 9)?;
+    let id = activity_push(&source, RANGE_ROOT, 3, 9).await?;
     let prepared = support::prepare_path(&board).await?;
     // Act: source admission and the real InteractionStore copy, not a JSON-only probe.
     let messages = MessageUpgrade::prepare(&source, &prepared.message_activity).await?;
@@ -94,9 +95,9 @@ async fn all_unmapped_or_empty_ranges_are_counted_and_refuse_without_mutation() 
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("automation.sqlite");
     message_support::source(&path, 20_260_930_000_000).await?;
-    activity_push(&path, "019a0000-0000-7000-8000-00000000ffff", 3, 9)?;
-    activity_push(&path, RANGE_ROOT, 3, 6)?;
-    activity_push(&path, RANGE_ROOT, 12, 13)?; // Same project, different thread.
+    activity_push(&path, "019a0000-0000-7000-8000-00000000ffff", 3, 9).await?;
+    activity_push(&path, RANGE_ROOT, 3, 6).await?;
+    activity_push(&path, RANGE_ROOT, 12, 13).await?; // Same project, different thread.
     let before = std::fs::read(&path)?;
     let prepared = support::prepare("legacy-complete.sqlite").await?;
     let result = MessageUpgrade::prepare(&path, &prepared.message_activity).await;
@@ -122,7 +123,7 @@ async fn legacy_admission_rejects_malformed_and_already_translated_range_shapes(
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("automation.sqlite");
     message_support::source(&path, 20_260_930_000_000).await?;
-    activity_push(&path, RANGE_ROOT, 3, 9)?;
+    activity_push(&path, RANGE_ROOT, 3, 9).await?;
     let prepared = support::prepare("legacy-complete.sqlite").await?;
     let valid = serde_json::json!({"rootMessageId":RANGE_ROOT,"fromActivitySequence":3,"throughActivitySequence":9});
     for ranges in [
@@ -132,11 +133,21 @@ async fn legacy_admission_rejects_malformed_and_already_translated_range_shapes(
         serde_json::json!([{"threadId":RANGE_ROOT,"projectId":RANGE_PROJECT,"from":{"epoch":1,"position":4},"through":{"epoch":1,"position":5}}]),
     ] {
         {
-            let connection = rusqlite::Connection::open(&path)?;
-            connection.execute(
-                "UPDATE router_pushes SET ranges_json=?",
-                [serde_json::json!({"ranges":ranges,"held":false,"draining":false}).to_string()],
-            )?;
+            let mut connection = sqlx::SqliteConnection::connect_with(
+                &sqlx::sqlite::SqliteConnectOptions::new()
+                    .filename(&path)
+                    .create_if_missing(true)
+                    .foreign_keys(false),
+            )
+            .await?;
+            sqlx::query("UPDATE router_pushes SET ranges_json=?")
+                .bind(
+                    serde_json::json!({"ranges":ranges,"held":false,"draining":false}).to_string(),
+                )
+                .execute(&mut connection)
+                .await
+                .map(|result| result.rows_affected())?;
+            connection.close().await?;
         }
         let before = std::fs::read(&path)?;
         assert!(matches!(

@@ -6,6 +6,7 @@ use collaboration_protocol::RouterOriginRef;
 use interaction_storage::InteractionStore;
 use message_board::SubscriptionScope;
 use message_support::*;
+use sqlx::Connection as _;
 
 async fn copied_expiry(
     scope: serde_json::Value,
@@ -16,10 +17,10 @@ async fn copied_expiry(
     let path = directory.path().join("automation.sqlite");
     let destination = directory.path().join("interaction.sqlite");
     source(&path, 20_260_930_000_000).await?;
-    let id = expiry_push(&path, scope)?;
+    let id = expiry_push(&path, scope).await?;
     let text =
         "SELECT json_object('header',header_facts_json,'body',body) AS value FROM router_pushes";
-    let frozen = text_rows(&path, text)?;
+    let frozen = text_rows(&path, text).await?;
     let original = std::fs::read(&path)?;
     let prepared = support::prepare(fixture).await?;
     if let SubscriptionScope::Project { project_id } = &expected {
@@ -54,7 +55,7 @@ async fn copied_expiry(
     assert_eq!(u64::from(subscription_generation), 1);
     assert_eq!(String::from(target.session_id), "legacy-recipient");
     owner.close().await?;
-    assert_eq!(text_rows(&destination, text)?, frozen);
+    assert_eq!(text_rows(&destination, text).await?, frozen);
     assert_eq!(std::fs::read(&path)?, original);
     prepared.close().await;
     Ok(())
@@ -99,11 +100,13 @@ async fn missing_scope_identities_refuse_with_counts_without_creating_a_destinat
     expiry_push(
         &path,
         serde_json::json!({"kind":"thread","rootMessageId":"019a0000-0000-7000-8000-00000000ffff"}),
-    )?;
+    )
+    .await?;
     expiry_push(
         &path,
         serde_json::json!({"kind":"topic","topicId":"019a0000-0000-7000-8000-00000000ffff"}),
-    )?;
+    )
+    .await?;
     let original = std::fs::read(&path)?;
     let prepared = support::prepare("legacy-complete.sqlite").await?;
     assert!(matches!(
@@ -132,8 +135,10 @@ async fn origin_translation_keeps_strict_legacy_shape_and_canonical_identity_adm
     expiry_push(
         &path,
         serde_json::json!({"kind":"thread","rootMessageId":RANGE_ROOT}),
-    )?;
-    let original = text_rows(&path, ORIGINS)?
+    )
+    .await?;
+    let original = text_rows(&path, ORIGINS)
+        .await?
         .pop()
         .ok_or("fixture origin missing")?;
     let prepared = support::prepare("legacy-complete.sqlite").await?;
@@ -143,8 +148,19 @@ async fn origin_translation_keeps_strict_legacy_shape_and_canonical_identity_adm
         original.replace("rootMessageId", "unknownField"),
     ] {
         {
-            let connection = rusqlite::Connection::open(&path)?;
-            connection.execute("UPDATE router_pushes SET origin_router_ref=?", [malformed])?;
+            let mut connection = sqlx::SqliteConnection::connect_with(
+                &sqlx::sqlite::SqliteConnectOptions::new()
+                    .filename(&path)
+                    .create_if_missing(true)
+                    .foreign_keys(false),
+            )
+            .await?;
+            sqlx::query("UPDATE router_pushes SET origin_router_ref=?")
+                .bind(&malformed)
+                .execute(&mut connection)
+                .await
+                .map(|result| result.rows_affected())?;
+            connection.close().await?;
         }
         let before = std::fs::read(&path)?;
         assert!(

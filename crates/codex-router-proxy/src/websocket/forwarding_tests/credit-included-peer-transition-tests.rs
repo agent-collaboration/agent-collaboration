@@ -25,10 +25,7 @@ use codex_router_state::quota_snapshot::PersistedQuotaSnapshot;
 use codex_router_state::quota_snapshot::PersistedSelectorQuotaWindow;
 use codex_router_state::quota_snapshot::QuotaSnapshotSource;
 use codex_router_state::quota_snapshot::SelectorQuotaWindowStatus;
-use codex_router_state::repositories::AccountStateRepository;
-use codex_router_state::repositories::QuotaSnapshotRepository;
-use codex_router_state::repositories::SelectorQuotaRepository;
-use codex_router_state::sqlite::SqliteStateStore;
+use codex_router_state::sqlite::AsyncSqliteStateStore;
 use std::net::SocketAddr;
 use std::net::TcpListener;
 use std::net::TcpStream;
@@ -295,7 +292,8 @@ async fn assembled_websocket_credit_source_yields_after_terminal_to_included_pee
         &secrets,
         &peer_id,
         INCLUDED_PEER_TOKEN,
-    );
+    )
+    .await;
     send_second_create_sender
         .send(())
         .unwrap_or_else(|error| panic!("active client should send the next create: {error}"));
@@ -464,13 +462,14 @@ fn exhausted_credit_windows(account_id: &AccountId) -> Vec<PersistedSelectorQuot
         .collect()
 }
 
-fn persist_included_peer(
+async fn persist_included_peer(
     database_path: &std::path::Path,
     secrets: &EncryptedCredentialStore,
     peer_id: &AccountId,
     access_token: &str,
 ) {
-    let state = SqliteStateStore::open(database_path)
+    let state = AsyncSqliteStateStore::open(database_path)
+        .await
         .unwrap_or_else(|error| panic!("included peer state should open: {error}"));
     let peer = AccountRecord::new(
         Provider::Openai,
@@ -479,7 +478,9 @@ fn persist_included_peer(
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    AccountStateRepository::upsert_account(&state, &peer)
+    state
+        .upsert_account(&peer)
+        .await
         .unwrap_or_else(|error| panic!("included peer account should persist: {error}"));
     let windows = [18_000_u64, 604_800]
         .into_iter()
@@ -497,22 +498,25 @@ fn persist_included_peer(
             .with_observed_unix_seconds(CREDIT_TURN_FIXTURE_TIME)
         })
         .collect::<Vec<_>>();
-    SelectorQuotaRepository::record_refresh_success_and_replace_selector_windows(
-        &state,
-        peer_id,
-        RouteBand::Responses.as_str(),
-        &windows,
-        CREDIT_TURN_FIXTURE_TIME,
-        CREDIT_TURN_FIXTURE_TIME + 300,
-    )
-    .unwrap_or_else(|error| panic!("included peer windows should persist: {error}"));
+    state
+        .record_refresh_success_and_replace_selector_windows(
+            peer_id,
+            RouteBand::Responses.as_str(),
+            &windows,
+            CREDIT_TURN_FIXTURE_TIME,
+            CREDIT_TURN_FIXTURE_TIME + 300,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("included peer windows should persist: {error}"));
     let snapshot =
         PersistedQuotaSnapshot::new(peer_id.clone(), QuotaSnapshotSource::OpenAiEndpoint)
             .with_observed_unix_seconds(CREDIT_TURN_FIXTURE_TIME)
             .with_route_band(RouteBand::Responses.as_str(), 90)
             .with_reset_unix_seconds(CREDIT_TURN_FIXTURE_TIME + 18_000)
             .with_stale_penalty(false);
-    QuotaSnapshotRepository::upsert_snapshot(&state, &snapshot)
+    state
+        .upsert_quota_snapshot(&snapshot)
+        .await
         .unwrap_or_else(|error| panic!("included peer snapshot should persist: {error}"));
     let key = openai_account_credential_bundle_key(peer_id, 1)
         .unwrap_or_else(|error| panic!("included peer credential key should build: {error}"));
@@ -526,6 +530,10 @@ fn persist_included_peer(
     secrets
         .write_secret(&key, &bundle)
         .unwrap_or_else(|error| panic!("included peer credential should persist: {error}"));
+    state
+        .close()
+        .await
+        .expect("included peer fixture state should close");
 }
 
 fn persist_websocket_credential(

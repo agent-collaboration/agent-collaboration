@@ -1,9 +1,8 @@
 use super::{
-    AccountCredentialBundle, AccountRecord, AccountStateRepository, AccountStatus, CliContext,
+    AccountCredentialBundle, AccountRecord, AccountStatus, AsyncSqliteStateStore, CliContext,
     Command, Duration, EncryptedCredentialStore, LocalRouterTokenService, MockNoConnectionUpstream,
-    OsString, Path, PersistedQuotaSnapshot, PersistedSelectorQuotaWindow, QuotaSnapshotRepository,
-    QuotaSnapshotSource, SecretStore, SecretString, SelectorQuotaRepository,
-    SelectorQuotaWindowStatus, Shell, SmokeTempRoot, SqliteStateStore, Value, account_id,
+    OsString, Path, PersistedQuotaSnapshot, PersistedSelectorQuotaWindow, QuotaSnapshotSource,
+    SecretStore, SecretString, SelectorQuotaWindowStatus, Shell, SmokeTempRoot, Value, account_id,
     export_token_assignment, fs, openai_account_credential_bundle_key,
     parse_posix_token_assignment, reserve_loopback_port, run_with_io_async,
     send_hostile_no_token_websocket, start_router_process, timestamp_seconds,
@@ -11,7 +10,7 @@ use super::{
 };
 
 /// Runs a hostile local no-token smoke and verifies upstream remains untouched.
-pub fn run_hostile_no_token_smoke() -> Result<(), String> {
+pub async fn run_hostile_no_token_smoke() -> Result<(), String> {
     let smoke_root = SmokeTempRoot::new("hostile-no-token")?;
     let router_root = smoke_root.path().join("router");
     let state_path = codex_router_state::provider_proxy_database_path(&router_root);
@@ -24,7 +23,7 @@ pub fn run_hostile_no_token_smoke() -> Result<(), String> {
     })?;
 
     let upstream = MockNoConnectionUpstream::start(Duration::from_secs(3))?;
-    let seed = seed_router_state(&state_path, &secret_root)?;
+    let seed = seed_router_state(&state_path, &secret_root).await?;
     let router_port = reserve_loopback_port()?;
     let audit_path = router_root.join("audit").join("events.jsonl");
     let router_process = start_router_process(
@@ -143,11 +142,12 @@ pub(super) const QUOTA_RECONNECT_PRIMARY_FOR_INITIAL_ADMISSION: SmokeAccountFixt
 
 pub(super) const SMOKE_SELECTOR_STALE_AFTER_SECONDS: u64 = 300;
 
-pub(super) fn seed_router_state(
+pub(super) async fn seed_router_state(
     state_path: &Path,
     secret_root: &Path,
 ) -> Result<SmokeSeed, String> {
-    let state = SqliteStateStore::open(state_path)
+    let state = AsyncSqliteStateStore::open(state_path)
+        .await
         .map_err(|error| format!("failed to open smoke SQLite state: {error}"))?;
     let secrets =
         codex_router_secret_store::test_support::open_encrypted_credential_store(secret_root)
@@ -163,13 +163,17 @@ pub(super) fn seed_router_state(
     );
     let exported_token = parse_posix_token_assignment(&local_token_assignment)?;
 
-    disable_accounts_outside_fixtures(&state, SMOKE_ACCOUNT_FIXTURES, "three-websocket")?;
+    disable_accounts_outside_fixtures(&state, SMOKE_ACCOUNT_FIXTURES, "three-websocket").await?;
     reset_fixture_route_band_state(state_path, SMOKE_ACCOUNT_FIXTURES, "three-websocket")?;
     for fixture in SMOKE_ACCOUNT_FIXTURES {
-        seed_smoke_account(&state, &secrets, *fixture)?;
+        seed_smoke_account(&state, &secrets, *fixture).await?;
     }
 
-    let quota_status = capture_quota_status(state_path)?;
+    state
+        .close()
+        .await
+        .map_err(|error| format!("fixture state close failed: {error}"))?;
+    let quota_status = capture_quota_status(state_path).await?;
     let selected_account = selected_account_from_status_json(&quota_status.json)?;
     let selected_fixture = SMOKE_ACCOUNT_FIXTURES
         .iter()
@@ -196,12 +200,13 @@ pub(super) fn seed_router_state(
     })
 }
 
-pub(super) fn seed_quota_reconnect_router_state(
+pub(super) async fn seed_quota_reconnect_router_state(
     state_path: &Path,
     secret_root: &Path,
     primary_fixture: SmokeAccountFixture,
 ) -> Result<(), String> {
-    let state = SqliteStateStore::open(state_path)
+    let state = AsyncSqliteStateStore::open(state_path)
+        .await
         .map_err(|error| format!("failed to open quota reconnect SQLite state: {error}"))?;
     let secrets =
         codex_router_secret_store::test_support::open_encrypted_credential_store(secret_root)
@@ -210,22 +215,27 @@ pub(super) fn seed_quota_reconnect_router_state(
         &state,
         &[primary_fixture, QUOTA_RECONNECT_FALLBACK],
         "quota reconnect",
-    )?;
+    )
+    .await?;
     reset_fixture_route_band_state(
         state_path,
         &[primary_fixture, QUOTA_RECONNECT_FALLBACK],
         "quota reconnect",
     )?;
-    seed_smoke_account(&state, &secrets, primary_fixture)?;
-    seed_smoke_account(&state, &secrets, QUOTA_RECONNECT_FALLBACK)?;
+    seed_smoke_account(&state, &secrets, primary_fixture).await?;
+    seed_smoke_account(&state, &secrets, QUOTA_RECONNECT_FALLBACK).await?;
+    state
+        .close()
+        .await
+        .map_err(|error| format!("fixture state close failed: {error}"))?;
     Ok(())
 }
 
-pub(super) fn seed_s8_overlap_quota_router_state(
+pub(super) async fn seed_s8_overlap_quota_router_state(
     state_path: &Path,
     secret_root: &Path,
 ) -> Result<SmokeSeed, String> {
-    seed_quota_reconnect_router_state(state_path, secret_root, QUOTA_RECONNECT_PRIMARY)?;
+    seed_quota_reconnect_router_state(state_path, secret_root, QUOTA_RECONNECT_PRIMARY).await?;
     let secrets =
         codex_router_secret_store::test_support::open_encrypted_credential_store(secret_root)
             .map_err(|error| format!("failed to open S8 overlap quota secret store: {error}"))?;
@@ -239,7 +249,7 @@ pub(super) fn seed_s8_overlap_quota_router_state(
         Shell::Posix,
     );
     let exported_token = parse_posix_token_assignment(&local_token_assignment)?;
-    let quota_status = capture_quota_status(state_path)?;
+    let quota_status = capture_quota_status(state_path).await?;
     let selected_account = selected_account_from_status_json(&quota_status.json)?;
 
     Ok(SmokeSeed {
@@ -285,12 +295,14 @@ pub(super) fn reset_fixture_route_band_state(
     Ok(())
 }
 
-pub(super) fn disable_accounts_outside_fixtures(
-    state: &SqliteStateStore,
+pub(super) async fn disable_accounts_outside_fixtures(
+    state: &AsyncSqliteStateStore,
     allowed_fixtures: &[SmokeAccountFixture],
     scenario_label: &str,
 ) -> Result<(), String> {
-    for account in AccountStateRepository::list_accounts(state)
+    for account in state
+        .list_accounts()
+        .await
         .map_err(|error| format!("failed to list accounts for {scenario_label} fixture: {error}"))?
     {
         if allowed_fixtures
@@ -309,18 +321,21 @@ pub(super) fn disable_accounts_outside_fixtures(
             disabled_account =
                 disabled_account.with_active_credential_generation(active_generation);
         }
-        AccountStateRepository::upsert_account(state, &disabled_account).map_err(|error| {
-            format!(
-                "failed to disable non-{scenario_label} account {}: {error}",
-                account.label()
-            )
-        })?;
+        state
+            .upsert_account(&disabled_account)
+            .await
+            .map_err(|error| {
+                format!(
+                    "failed to disable non-{scenario_label} account {}: {error}",
+                    account.label()
+                )
+            })?;
     }
     Ok(())
 }
 
-pub(super) fn seed_smoke_account(
-    state: &SqliteStateStore,
+pub(super) async fn seed_smoke_account(
+    state: &AsyncSqliteStateStore,
     secrets: &EncryptedCredentialStore,
     fixture: SmokeAccountFixture,
 ) -> Result<(), String> {
@@ -337,19 +352,24 @@ pub(super) fn seed_smoke_account(
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    AccountStateRepository::upsert_account(state, &account)
+    state
+        .upsert_account(&account)
+        .await
         .map_err(|error| format!("failed to seed smoke account {}: {error}", fixture.label))?;
     let snapshot =
         PersistedQuotaSnapshot::new(account_id.clone(), QuotaSnapshotSource::MockEndpoint)
             .with_observed_unix_seconds(observed_unix_seconds)
             .with_route_band("responses", fixture.short_remaining)
             .with_reset_unix_seconds(short_reset_unix_seconds);
-    QuotaSnapshotRepository::upsert_snapshot(state, &snapshot).map_err(|error| {
-        format!(
-            "failed to seed smoke quota snapshot for {}: {error}",
-            fixture.label
-        )
-    })?;
+    state
+        .upsert_quota_snapshot(&snapshot)
+        .await
+        .map_err(|error| {
+            format!(
+                "failed to seed smoke quota snapshot for {}: {error}",
+                fixture.label
+            )
+        })?;
     let short_window = PersistedSelectorQuotaWindow::new(
         account_id.clone(),
         "responses",
@@ -369,20 +389,21 @@ pub(super) fn seed_smoke_account(
     .with_remaining_headroom(fixture.weekly_remaining)
     .with_reset_unix_seconds(weekly_reset_unix_seconds)
     .with_observed_unix_seconds(observed_unix_seconds);
-    SelectorQuotaRepository::record_refresh_success_and_replace_selector_windows(
-        state,
-        &account_id,
-        "responses",
-        &[short_window, weekly_window],
-        observed_unix_seconds,
-        stale_after_unix_seconds,
-    )
-    .map_err(|error| {
-        format!(
-            "failed to seed fresh smoke selector windows for {}: {error}",
-            fixture.label
+    state
+        .record_refresh_success_and_replace_selector_windows(
+            &account_id,
+            "responses",
+            &[short_window, weekly_window],
+            observed_unix_seconds,
+            stale_after_unix_seconds,
         )
-    })?;
+        .await
+        .map_err(|error| {
+            format!(
+                "failed to seed fresh smoke selector windows for {}: {error}",
+                fixture.label
+            )
+        })?;
     let credential_key = openai_account_credential_bundle_key(&account_id, 1)
         .map_err(|error| format!("failed to build account credential key: {error}"))?;
     let credential_bundle =
@@ -404,52 +425,44 @@ pub(super) fn seed_smoke_account(
     Ok(())
 }
 
-pub(super) fn capture_quota_status(state_path: &Path) -> Result<SmokeQuotaStatus, String> {
+pub(super) async fn capture_quota_status(state_path: &Path) -> Result<SmokeQuotaStatus, String> {
     let router_root = state_path
         .parent()
         .ok_or_else(|| "state path had no router root parent".to_owned())?;
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|error| format!("quota status runtime unavailable: {error}"))?;
     Ok(SmokeQuotaStatus {
-        table: run_quota_status(&runtime, router_root, "table")?,
-        plain: run_quota_status(&runtime, router_root, "plain")?,
-        json: run_quota_status(&runtime, router_root, "json")?,
+        table: run_quota_status(router_root, "table").await?,
+        plain: run_quota_status(router_root, "plain").await?,
+        json: run_quota_status(router_root, "json").await?,
     })
 }
 
-pub(super) fn run_quota_status(
-    runtime: &tokio::runtime::Runtime,
-    router_root: &Path,
-    format: &str,
-) -> Result<String, String> {
+pub(super) async fn run_quota_status(router_root: &Path, format: &str) -> Result<String, String> {
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
-    runtime
-        .block_on(run_with_io_async(
-            vec![
-                OsString::from("codex-router"),
-                OsString::from("quota"),
-                OsString::from("status"),
-                OsString::from("--router-root"),
-                router_root.as_os_str().to_owned(),
-                OsString::from("--no-refresh"),
-                OsString::from("--format"),
-                OsString::from(format),
-                OsString::from("--now-unix-seconds"),
-                OsString::from("1030"),
-            ],
-            &CliContext::new(Vec::new()),
-            &mut stdout,
-            &mut stderr,
-        ))
-        .map_err(|error| {
-            format!(
-                "quota status {format} failed: {error}; stderr={}",
-                String::from_utf8_lossy(&stderr)
-            )
-        })?;
+    (run_with_io_async(
+        vec![
+            OsString::from("codex-router"),
+            OsString::from("quota"),
+            OsString::from("status"),
+            OsString::from("--router-root"),
+            router_root.as_os_str().to_owned(),
+            OsString::from("--no-refresh"),
+            OsString::from("--format"),
+            OsString::from(format),
+            OsString::from("--now-unix-seconds"),
+            OsString::from("1030"),
+        ],
+        &CliContext::new(Vec::new()),
+        &mut stdout,
+        &mut stderr,
+    ))
+    .await
+    .map_err(|error| {
+        format!(
+            "quota status {format} failed: {error}; stderr={}",
+            String::from_utf8_lossy(&stderr)
+        )
+    })?;
     if !stderr.is_empty() {
         return Err(format!(
             "quota status {format} wrote stderr: {}",

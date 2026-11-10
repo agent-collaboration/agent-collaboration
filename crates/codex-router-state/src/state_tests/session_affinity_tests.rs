@@ -1,4 +1,5 @@
 use super::*;
+use sqlx::Connection as _;
 
 #[tokio::test]
 async fn session_account_affinity_v12_migrates_to_provider_scoped_rows() {
@@ -8,7 +9,7 @@ async fn session_account_affinity_v12_migrates_to_provider_scoped_rows() {
         .await
         .expect("current fixture should open");
     store.close().await.expect("fixture should close");
-    convert_current_fixture_to_v12(&database_path);
+    convert_current_fixture_to_v12(&database_path).await;
 
     let migrated = AsyncSqliteStateStore::open(&database_path)
         .await
@@ -16,15 +17,20 @@ async fn session_account_affinity_v12_migrates_to_provider_scoped_rows() {
 
     assert_eq!(migrated.schema_version().await, Ok(13));
     migrated.close().await.expect("migrated store should close");
-    let raw = Connection::open(&database_path).expect("migrated database should inspect");
-    let mut statement = raw
-        .prepare("PRAGMA table_info(session_account_affinities)")
-        .expect("session affinity schema should prepare");
-    let columns = statement
-        .query_map([], |row| row.get::<_, String>(1))
-        .expect("session affinity columns should query")
-        .collect::<Result<Vec<_>, _>>()
-        .expect("session affinity columns should load");
+    let mut raw = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    .expect("migrated database should inspect");
+    let columns: Vec<String> = sqlx::query_scalar(
+        "SELECT name FROM pragma_table_info('session_account_affinities') ORDER BY cid",
+    )
+    .fetch_all(&mut raw)
+    .await
+    .expect("session affinity columns should load");
     assert_eq!(
         columns,
         vec![
@@ -35,6 +41,7 @@ async fn session_account_affinity_v12_migrates_to_provider_scoped_rows() {
             "pin_version"
         ]
     );
+    raw.close().await.expect("schema inspection should close");
 }
 
 #[tokio::test]
@@ -404,15 +411,22 @@ async fn session_account_affinity_purge_deletes_only_rows_before_cutoff() {
     assert_eq!(store.schema_version().await, Ok(13));
     store.close().await.expect("state store should close");
 
-    let raw = Connection::open(&database_path).expect("database should inspect");
-    let index_count: i64 = raw
-        .query_row(
-            "SELECT COUNT(*)
+    let mut raw = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    .expect("database should inspect");
+    let index_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)
                    FROM pragma_index_list('session_account_affinities')
                   WHERE name = 'session_account_affinities_last_seen_lookup'",
-            [],
-            |row| row.get(0),
-        )
-        .expect("session affinity indexes should query");
+    )
+    .fetch_one(&mut raw)
+    .await
+    .expect("session affinity indexes should query");
     assert_eq!(index_count, 1);
+    raw.close().await.expect("index inspection should close");
 }

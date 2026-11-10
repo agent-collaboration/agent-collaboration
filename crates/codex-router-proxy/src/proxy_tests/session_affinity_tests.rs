@@ -4,7 +4,9 @@ use super::*;
 async fn prompt_cache_account_affinity_reuses_mapped_account_inside_two_hours() {
     let temp_dir = ProxyTestTempDir::new("prompt_cache_account_affinity_reuses_inside_ttl");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = SqliteStateStore::open(&database_path).expect("state store should open");
+    let state = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("state store should open");
     let preferred = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_preferred"),
@@ -22,14 +24,16 @@ async fn prompt_cache_account_affinity_reuses_mapped_account_inside_two_hours() 
         &preferred,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &mapped,
         "responses",
         &[(18_000, 50, true), (604_800, 50, false)],
-    );
-    drop(state);
+    )
+    .await;
+    state.close().await.expect("fixture state should close");
     let async_state = AsyncSqliteStateStore::open(&database_path)
         .await
         .expect("async state should open");
@@ -68,7 +72,9 @@ async fn prompt_cache_account_affinity_reuses_mapped_account_inside_two_hours() 
 async fn prompt_cache_account_affinity_expires_at_exactly_two_hours() {
     let temp_dir = ProxyTestTempDir::new("prompt_cache_account_affinity_expires_at_ttl");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = SqliteStateStore::open(&database_path).expect("state store should open");
+    let state = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("state store should open");
     let preferred = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_preferred"),
@@ -86,14 +92,16 @@ async fn prompt_cache_account_affinity_expires_at_exactly_two_hours() {
         &preferred,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &mapped,
         "responses",
         &[(18_000, 50, true), (604_800, 50, false)],
-    );
-    drop(state);
+    )
+    .await;
+    state.close().await.expect("fixture state should close");
     let async_state = AsyncSqliteStateStore::open(&database_path)
         .await
         .expect("async state should open");
@@ -132,7 +140,9 @@ async fn prompt_cache_account_affinity_expires_at_exactly_two_hours() {
 async fn unavailable_prompt_cache_account_affinity_falls_back_to_normal_selection() {
     let temp_dir = ProxyTestTempDir::new("prompt_cache_account_affinity_unavailable_fallback");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = SqliteStateStore::open(&database_path).expect("state store should open");
+    let state = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("state store should open");
     let available = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_available"),
@@ -144,8 +154,9 @@ async fn unavailable_prompt_cache_account_affinity_falls_back_to_normal_selectio
         &available,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
-    drop(state);
+    )
+    .await;
+    state.close().await.expect("fixture state should close");
     let async_state = AsyncSqliteStateStore::open(&database_path)
         .await
         .expect("async state should open");
@@ -184,7 +195,9 @@ async fn unavailable_prompt_cache_account_affinity_falls_back_to_normal_selectio
 async fn first_normal_selection_persists_prompt_cache_account_affinity() {
     let temp_dir = ProxyTestTempDir::new("first_selection_persists_session_affinity");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = SqliteStateStore::open(&database_path).expect("state store should open");
+    let state = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("state store should open");
     let selected_account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_first_selection"),
@@ -196,8 +209,9 @@ async fn first_normal_selection_persists_prompt_cache_account_affinity() {
         &selected_account,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
-    drop(state);
+    )
+    .await;
+    state.close().await.expect("fixture state should close");
     let async_state = AsyncSqliteStateStore::open(&database_path)
         .await
         .expect("async state should open");
@@ -252,7 +266,9 @@ async fn first_normal_selection_persists_prompt_cache_account_affinity() {
 async fn previous_response_affinity_wins_and_refreshes_prompt_cache_account_affinity() {
     let temp_dir = ProxyTestTempDir::new("previous_response_refreshes_session_affinity");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = SqliteStateStore::open(&database_path).expect("state store should open");
+    let state = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("state store should open");
     let session_owner = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_session_owner"),
@@ -270,13 +286,15 @@ async fn previous_response_affinity_wins_and_refreshes_prompt_cache_account_affi
         &session_owner,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &response_owner,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     let affinity_secret = test_affinity_secret();
     persist_previous_response_owner(
         &state,
@@ -284,8 +302,9 @@ async fn previous_response_affinity_wins_and_refreshes_prompt_cache_account_affi
         &affinity_secret,
         response_owner.account_id(),
     )
+    .await
     .expect("previous response owner should persist");
-    drop(state);
+    state.close().await.expect("fixture state should close");
     let async_state = AsyncSqliteStateStore::open(&database_path)
         .await
         .expect("async state should open");

@@ -2,6 +2,7 @@ use crate::support;
 use actual_cli::{ImporterCliInvocation, run_importer_cli};
 use legacy_upgrade_test_support::actual_cli;
 use owned_process_test_support::owned_cli_process::run_cli_output;
+use sqlx::Connection as _;
 use std::{
     path::{Path, PathBuf},
     process::{Output, Stdio},
@@ -538,12 +539,20 @@ fn promote_test_error(error: Box<dyn std::error::Error>) -> std::io::Error {
 async fn invalid_legacy_description_reports_its_topic_through_the_real_cli() -> TestResult {
     let (directory, source) = fixture_copy("role-history.sqlite")?;
     let topic = "019a0000-0000-7000-8000-000000000016";
-    let connection = rusqlite::Connection::open(&source)?;
-    connection.execute(
-        "UPDATE board_topics SET description=? WHERE topic_id=?",
-        [&"x".repeat(message_board::MAX_DESCRIPTION_BYTES + 1), topic],
-    )?;
-    connection.close().map_err(|(_, error)| error)?;
+    let mut connection = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&source)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
+    sqlx::query("UPDATE board_topics SET description=? WHERE topic_id=?")
+        .bind("x".repeat(message_board::MAX_DESCRIPTION_BYTES + 1))
+        .bind(topic)
+        .execute(&mut connection)
+        .await
+        .map(|result| result.rows_affected())?;
+    connection.close().await?;
     let bytes = std::fs::read(&source)?;
     let root = identity(directory.path())?;
     let report = directory.path().join("refusal.json");

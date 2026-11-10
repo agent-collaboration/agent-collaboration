@@ -1,19 +1,18 @@
 use super::*;
 
-#[test]
-fn credential_diagnostics_identify_local_failures_without_private_payloads_or_egress() {
+#[tokio::test]
+async fn async_server_credential_diagnostics_identify_local_failures_without_private_payloads_or_egress()
+ {
     for (scenario, malformed_bundle, expected_class) in [
         ("private_path_canary", false, "file_missing"),
         ("private_payload_canary", true, "invalid_payload"),
     ] {
         let temp_dir = ProxyTestTempDir::new(scenario);
-        let state = must_ok(SqliteStateStore::open(
-            &temp_dir.path().join("state.sqlite"),
-        ));
+        let database_path = temp_dir.path().join("state.sqlite");
+        let secret_path = temp_dir.path().join("secrets");
+        let state = must_ok(AsyncSqliteStateStore::open(&database_path).await);
         let secrets = must_ok(
-            codex_router_secret_store::test_support::open_encrypted_credential_store(
-                temp_dir.path().join("secrets"),
-            ),
+            codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_path),
         );
         let selected_account = account_id("acct_selected");
         let account = AccountRecord::new(
@@ -23,43 +22,89 @@ fn credential_diagnostics_identify_local_failures_without_private_payloads_or_eg
             AccountStatus::Enabled,
         )
         .with_active_credential_generation(1);
-        must_ok(AccountStateRepository::upsert_account(&state, &account));
+        // The old fixed selector always chose this account; the real dispatcher needs selectable quota inputs.
+        persist_account_with_selector_windows(&state, &account, &["models"], 90).await;
+        must_ok(state.close().await);
+        let credential_key = must_ok(openai_account_credential_bundle_key(&selected_account, 1));
+        let malformed_payload =
+            r#"{"version":"private_payload_canary","access_token":"private_token_canary"}"#;
         if malformed_bundle {
-            let key = must_ok(openai_account_credential_bundle_key(&selected_account, 1));
-            must_ok(secrets.write_secret(
-                &key,
-                &SecretString::new(
-                    r#"{"version":"private_payload_canary","access_token":"private_token_canary"}"#,
-                ),
-            ));
+            must_ok(secrets.write_secret(&credential_key, &SecretString::new(malformed_payload)));
         }
-        let resolver =
-            RouterCredentialResolver::new(&state, &secrets, NoopCredentialRefreshClient, 1_000);
-        let upstream = RecordingUpstream::new(HttpProxyResponse::new(
-            200,
-            HeaderCollection::default(),
-            b"must-not-forward".to_vec(),
-        ));
-        let selector = RecordingSelector::new();
-        let auth_gate = local_auth_gate();
-        let service =
-            AuthenticatedHttpProxyService::new(&auth_gate, &selector, &resolver, &upstream)
-                .with_affinity_secret_provider(&TEST_AFFINITY_SECRET_PROVIDER);
-
-        let captured = crate::test_log_capture::capture_log_output(|| {
-            let result = service.handle_request(
-                HttpProxyRequest::new(Method::Get, "/v1/models")
-                    .with_header(Header::new("X-Codex-Router-Token", "current-token")),
-            );
-            assert!(matches!(
-                result,
-                Err(HttpProxyError::ProviderCredential { .. })
-            ));
+        let upstream = must_ok(tokio::net::TcpListener::bind("127.0.0.1:0").await);
+        let upstream_address = must_ok(upstream.local_addr());
+        let stop_upstream = tokio_util::sync::CancellationToken::new();
+        let upstream_stop = stop_upstream.clone();
+        let upstream_task = tokio::spawn(async move {
+            let mut accepted_connections = 0;
+            loop {
+                tokio::select! {
+                    biased;
+                    accepted = upstream.accept() => {
+                        let (mut stream, _) = must_ok(accepted);
+                        accepted_connections += 1;
+                        // A regression that sends upstream gets a response and fails the zero-egress assertion promptly.
+                        must_ok(tokio::io::AsyncWriteExt::write_all(&mut stream,
+                            b"HTTP/1.1 500 Unexpected Egress\r\nContent-Length: 0\r\nConnection: close\r\n\r\n").await);
+                        must_ok(tokio::io::AsyncWriteExt::shutdown(&mut stream).await);
+                    }
+                    () = upstream_stop.cancelled() => break,
+                }
+            }
+            accepted_connections
         });
-
+        let config = LoopbackRouterRuntimeConfig::new(
+            must_ok(LoopbackBindAddress::new("127.0.0.1", 0)),
+            must_ok(UpstreamEndpoint::new(format!(
+                "http://{upstream_address}/v1"
+            ))),
+            database_path,
+            secret_path,
+            LocalRouterTokenRecord::new(
+                SecretString::new("current-token"),
+                TokenGeneration::new(1),
+            ),
+        )
+        .with_quota_clock(test_unix_seconds(), 60);
+        let (captured, response) = crate::test_log_capture::capture_log_output_async(async {
+            let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+            let runtime_secrets = secrets.clone();
+            let runtime = must_ok(must_ok(
+                tokio::task::spawn_blocking(move || {
+                    tracing::dispatcher::with_default(&startup_dispatcher, || {
+                        LoopbackRouterRuntime::start(config, runtime_secrets.into())
+                    })
+                })
+                .await,
+            ));
+            // Startup must not repair either deliberately missing or malformed active credential.
+            let stored = secrets.read_secret(&credential_key);
+            if malformed_bundle {
+                assert_eq!(must_ok(stored).expose_secret(), malformed_payload);
+            } else {
+                assert!(stored.is_err());
+            }
+            let address = runtime.local_addr();
+            let client = tokio::task::spawn_blocking(move || {
+                send_loopback_request(address, "GET /v1/models HTTP/1.1\r\n", b"")
+            });
+            let handled = must_ok(must_ok(
+                tokio::task::spawn_blocking(move || runtime.serve_http_connections(1)).await,
+            ));
+            assert_eq!(handled, 1);
+            must_ok(client.await)
+        })
+        .await;
+        stop_upstream.cancel();
+        let accepted_connections = must_ok(upstream_task.await);
+        assert_eq!(accepted_connections, 0);
+        assert!(
+            response.starts_with("HTTP/1.1 502 Bad Gateway\r\n"),
+            "{response}"
+        );
         assert!(
             captured.contains(expected_class),
-            "missing fixed diagnostic category"
+            "missing fixed diagnostic category {expected_class}; captured: {captured}"
         );
         for private_value in [
             "private_path_canary",
@@ -73,7 +118,6 @@ fn credential_diagnostics_identify_local_failures_without_private_payloads_or_eg
                 "private data reached diagnostics"
             );
         }
-        assert!(upstream.take_recorded().is_empty());
     }
 }
 

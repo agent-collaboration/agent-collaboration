@@ -20,8 +20,6 @@ use codex_router_state::account::AccountStatus;
 use codex_router_state::credential_maintenance::ClaimPurpose;
 use codex_router_state::credential_maintenance::LOGIN_CREDENTIAL_CLAIM_TIMEOUT_SECONDS;
 use codex_router_state::sqlite::AsyncSqliteStateStore;
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-use codex_router_state::sqlite::SqliteStateStore;
 use codex_router_state::sqlite::StateStoreError;
 use serde::Deserialize;
 use serde::Serialize;
@@ -228,16 +226,6 @@ impl CredentialRefreshFailure {
             retry_after_seconds: None,
         }
     }
-}
-
-/// Test-only refresh commit failpoints for cancellation-safety coverage.
-#[cfg(test)]
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum RefreshCommitFailpoint {
-    /// Fail after writing the next-generation secret and before state commit.
-    AfterSecretWrite,
-    /// Fail after state commit and before returning to the caller.
-    AfterStateCommit,
 }
 
 /// Refresh client used when runtime refresh is intentionally unavailable.
@@ -497,34 +485,6 @@ struct RefreshTokenErrorResponse {
     error: Option<String>,
 }
 
-/// Shared per-account refresh leases for resolver single-flight behavior.
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-#[derive(Clone, Debug, Default)]
-pub struct RefreshLeaseRegistry {
-    leases: Arc<Mutex<HashMap<AccountId, Arc<Mutex<()>>>>>,
-}
-
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-impl RefreshLeaseRegistry {
-    /// Creates an empty refresh lease registry.
-    #[must_use]
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    fn lease_for(&self, account_id: &AccountId) -> Arc<Mutex<()>> {
-        let mut leases = self
-            .leases
-            .lock()
-            .unwrap_or_else(std::sync::PoisonError::into_inner);
-        Arc::clone(
-            leases
-                .entry(account_id.clone())
-                .or_insert_with(|| Arc::new(Mutex::new(()))),
-        )
-    }
-}
-
 /// Shared per-account async refresh leases for resolver single-flight behavior.
 #[derive(Clone, Debug, Default)]
 pub struct AsyncRefreshLeaseRegistry {
@@ -548,216 +508,6 @@ impl AsyncRefreshLeaseRegistry {
                 .entry(account_id.clone())
                 .or_insert_with(|| Arc::new(tokio::sync::Mutex::new(()))),
         )
-    }
-}
-
-/// Resolves provider credentials through router-owned state and secret stores.
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-#[derive(Debug)]
-pub struct RouterCredentialResolver<'a, S, C>
-where
-    S: SecretStore,
-    C: CredentialRefreshClient,
-{
-    state_repository: &'a SqliteStateStore,
-    secret_store: &'a S,
-    refresh_client: C,
-    now_unix_seconds: u64,
-    refresh_leases: RefreshLeaseRegistry,
-    #[cfg(test)]
-    refresh_commit_failpoint: Option<RefreshCommitFailpoint>,
-}
-
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-impl<'a, S, C> RouterCredentialResolver<'a, S, C>
-where
-    S: SecretStore,
-    C: CredentialRefreshClient,
-{
-    /// Creates a credential resolver.
-    #[must_use]
-    pub fn new(
-        state_repository: &'a SqliteStateStore,
-        secret_store: &'a S,
-        refresh_client: C,
-        now_unix_seconds: u64,
-    ) -> Self {
-        Self {
-            state_repository,
-            secret_store,
-            refresh_client,
-            now_unix_seconds,
-            refresh_leases: RefreshLeaseRegistry::new(),
-            #[cfg(test)]
-            refresh_commit_failpoint: None,
-        }
-    }
-
-    /// Creates a credential resolver with shared refresh leases.
-    #[must_use]
-    pub fn new_with_refresh_leases(
-        state_repository: &'a SqliteStateStore,
-        secret_store: &'a S,
-        refresh_client: C,
-        now_unix_seconds: u64,
-        refresh_leases: RefreshLeaseRegistry,
-    ) -> Self {
-        Self {
-            state_repository,
-            secret_store,
-            refresh_client,
-            now_unix_seconds,
-            refresh_leases,
-            #[cfg(test)]
-            refresh_commit_failpoint: None,
-        }
-    }
-
-    /// Adds a test-only failpoint for credential refresh commit windows.
-    #[cfg(test)]
-    #[must_use]
-    pub fn with_refresh_commit_failpoint(mut self, failpoint: RefreshCommitFailpoint) -> Self {
-        self.refresh_commit_failpoint = Some(failpoint);
-        self
-    }
-
-    fn read_active_bundle(
-        &self,
-        account_id: &AccountId,
-        expected_provider: Provider,
-    ) -> Result<(u64, AccountCredentialBundle), CredentialResolverError> {
-        let account = self
-            .state_repository
-            .load_account(account_id)
-            .map_err(map_state_error)?
-            .ok_or(CredentialResolverError::AccountUnavailable)?;
-        if account.provider() != expected_provider {
-            return Err(CredentialResolverError::AccountProviderMismatch);
-        }
-        if account.status() != AccountStatus::Enabled {
-            return Err(CredentialResolverError::AccountIneligible);
-        }
-        if expected_provider != Provider::Openai {
-            return Err(CredentialResolverError::AccountIneligible);
-        }
-        let active_generation = account
-            .active_credential_generation()
-            .ok_or(CredentialResolverError::AccountIneligible)?;
-        let bundle_key =
-            provider_credential_bundle_key(account.provider(), account_id, active_generation)
-                .map_err(map_secret_error)?;
-
-        let bundle = AccountCredentialBundle::from_secret_string(
-            self.secret_store
-                .read_secret(&bundle_key)
-                .map_err(map_secret_error)?,
-        )
-        .map_err(map_secret_error)?;
-
-        Ok((active_generation, bundle))
-    }
-
-    fn bundle_is_expired(&self, bundle: &AccountCredentialBundle) -> bool {
-        bundle
-            .expires_unix_seconds()
-            .is_some_and(|expires| expires <= self.now_unix_seconds)
-    }
-
-    fn refresh_expired_bundle(
-        &self,
-        account_id: &AccountId,
-        current_generation: u64,
-        bundle: &AccountCredentialBundle,
-    ) -> Result<(u64, AccountCredentialBundle), CredentialResolverError> {
-        let refresh_token = bundle
-            .refresh_token()
-            .ok_or(CredentialResolverError::RefreshUnavailable)?;
-        let refreshed_bundle = self
-            .refresh_client
-            .refresh_provider_credentials(Provider::Openai, account_id, refresh_token)
-            .map_err(|_| CredentialResolverError::RefreshUnavailable)?;
-        let mut refreshed = match refreshed_bundle {
-            CredentialBundle::OpenAi(bundle) => bundle,
-            CredentialBundle::Claude { .. } => {
-                return Err(CredentialResolverError::RefreshUnavailable);
-            }
-        };
-        if refreshed.chatgpt_account_id().is_none()
-            && let Some(chatgpt_account_id) = bundle.chatgpt_account_id()
-        {
-            refreshed = refreshed.with_chatgpt_account_id(chatgpt_account_id);
-        }
-        let refreshed_generation = current_generation
-            .checked_add(1)
-            .ok_or(CredentialResolverError::RefreshUnavailable)?;
-        let refreshed_key =
-            provider_credential_bundle_key(Provider::Openai, account_id, refreshed_generation)
-                .map_err(map_secret_error)?;
-        self.secret_store
-            .write_staged(
-                &refreshed_key,
-                &refreshed.to_secret_string().map_err(map_secret_error)?,
-            )
-            .map_err(map_secret_error)?;
-        #[cfg(test)]
-        if self.refresh_commit_failpoint == Some(RefreshCommitFailpoint::AfterSecretWrite) {
-            return Err(CredentialResolverError::RefreshUnavailable);
-        }
-        self.state_repository
-            .activate_account_credential_generation_if_current_and_invalidate_quota(
-                account_id,
-                current_generation,
-                refreshed_generation,
-                AccountStatus::Enabled,
-            )
-            .map_err(map_state_error)?;
-        #[cfg(test)]
-        if self.refresh_commit_failpoint == Some(RefreshCommitFailpoint::AfterStateCommit) {
-            return Err(CredentialResolverError::RefreshUnavailable);
-        }
-
-        Ok((refreshed_generation, refreshed))
-    }
-}
-
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-impl<S, C> ProviderCredentialResolver for RouterCredentialResolver<'_, S, C>
-where
-    S: SecretStore,
-    C: CredentialRefreshClient,
-{
-    fn resolve_provider_credentials(
-        &self,
-        account_id: &AccountId,
-        expected_provider: Provider,
-    ) -> Result<ResolvedProviderCredential, CredentialResolverError> {
-        let (active_generation, bundle) = self.read_active_bundle(account_id, expected_provider)?;
-        if self.bundle_is_expired(&bundle) {
-            let lease = self.refresh_leases.lease_for(account_id);
-            let _guard = lease
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            let (current_generation, current_bundle) =
-                self.read_active_bundle(account_id, expected_provider)?;
-            let (resolved_generation, refreshed) = if self.bundle_is_expired(&current_bundle) {
-                self.refresh_expired_bundle(account_id, current_generation, &current_bundle)?
-            } else {
-                (current_generation, current_bundle)
-            };
-            return Ok(ResolvedProviderCredential::new(
-                account_id.clone(),
-                refreshed.access_token().clone(),
-                resolved_generation,
-            )
-            .with_chatgpt_account_id(refreshed.chatgpt_account_id()));
-        }
-
-        Ok(ResolvedProviderCredential::new(
-            account_id.clone(),
-            bundle.access_token().clone(),
-            active_generation,
-        )
-        .with_chatgpt_account_id(bundle.chatgpt_account_id()))
     }
 }
 

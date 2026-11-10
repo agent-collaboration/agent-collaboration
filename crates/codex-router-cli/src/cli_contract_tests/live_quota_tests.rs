@@ -1,7 +1,7 @@
 use super::*;
 
-#[test]
-fn live_quota_command_rejects_api_key_auth_without_printing_key() {
+#[tokio::test]
+async fn live_quota_command_rejects_api_key_auth_without_printing_key() {
     let test_root = TestRoot::new("live-quota-api-key");
     must_ok(fs::create_dir(test_root.path()));
     let profiles_root = test_root.path().join("profiles");
@@ -23,7 +23,8 @@ fn live_quota_command_rejects_api_key_auth_without_printing_key() {
             "--approve-network-account-use",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
 
     assert!(output.stdout.contains("profile: api-key-profile\n"));
     assert!(output.stdout.contains("status: error\n"));
@@ -114,8 +115,8 @@ fn live_quota_rejects_non_provider_base_url_before_token_egress() {
     assert!(stderr.is_empty());
 }
 
-#[test]
-fn live_quota_dry_run_discovers_profiles_without_provider_io_or_token_output() {
+#[tokio::test]
+async fn live_quota_dry_run_discovers_profiles_without_provider_io_or_token_output() {
     let test_root = TestRoot::new("live-quota-dry-run");
     must_ok(fs::create_dir(test_root.path()));
     let profiles_root = test_root.path().join("profiles");
@@ -136,7 +137,8 @@ fn live_quota_dry_run_discovers_profiles_without_provider_io_or_token_output() {
             "--dry-run",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
 
     assert!(output.stdout.contains("profile: main\n"));
     assert!(output.stdout.contains("status: dry-run\n"));
@@ -146,8 +148,8 @@ fn live_quota_dry_run_discovers_profiles_without_provider_io_or_token_output() {
     assert!(output.stderr.is_empty());
 }
 
-#[test]
-fn live_quota_profiles_root_fetches_oauth_usage_without_printing_token() {
+#[tokio::test]
+async fn live_quota_profiles_root_fetches_oauth_usage_without_printing_token() {
     let test_root = TestRoot::new("live-quota-profiles");
     must_ok(fs::create_dir(test_root.path()));
     let profiles_root = test_root.path().join("profiles");
@@ -206,7 +208,8 @@ fn live_quota_profiles_root_fetches_oauth_usage_without_printing_token() {
             "--approve-network-account-use",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
 
     assert!(output.stdout.contains("profile: main\n"));
     assert!(output.stdout.contains("status: ok\n"));

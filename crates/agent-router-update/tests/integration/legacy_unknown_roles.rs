@@ -1,5 +1,6 @@
 use crate::support;
 use message_board::*;
+use sqlx::Connection as _;
 use support::*;
 
 #[tokio::test]
@@ -12,15 +13,21 @@ async fn shipped_history_with_an_unrecoverable_earlier_join_role_is_importable()
     // 202610020001 migration's Step 3 can recover only the surviving join at 4;
     // the earlier join at 3 legitimately keeps a NULL role after that migration.
     let (_directory, path) = fixture_copy("role-history.sqlite")?;
-    let source = rusqlite::Connection::open(&path)?;
+    let mut source = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
     assert_eq!(
-        source.execute(
-            "UPDATE board_activity SET participant_role=NULL WHERE activity_sequence=3",
-            [],
-        )?,
+        sqlx::query("UPDATE board_activity SET participant_role=NULL WHERE activity_sequence=3")
+            .execute(&mut source)
+            .await
+            .map(|result| result.rows_affected())?,
         1
     );
-    source.close().map_err(|(_, error)| error)?;
+    source.close().await?;
     let before = std::fs::read(&path)?;
 
     // Act: call the real importer on the legal shipped shape, without inferring
@@ -76,12 +83,18 @@ async fn shipped_history_with_an_unrecoverable_earlier_join_role_is_importable()
 )]
 async fn open_interval_uses_only_its_current_participant_rows_role() -> TestResult {
     let (_directory, path) = fixture_copy("role-history.sqlite")?;
-    let source = rusqlite::Connection::open(&path)?;
-    source.execute(
-        "UPDATE board_activity SET participant_role=NULL WHERE activity_sequence=7",
-        [],
-    )?;
-    source.close().map_err(|(_, error)| error)?;
+    let mut source = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
+    sqlx::query("UPDATE board_activity SET participant_role=NULL WHERE activity_sequence=7")
+        .execute(&mut source)
+        .await
+        .map(|result| result.rows_affected())?;
+    source.close().await?;
     let prepared = prepare_path(&path).await?;
     let project = prepared
         .projects
@@ -110,9 +123,15 @@ async fn open_interval_uses_only_its_current_participant_rows_role() -> TestResu
 )]
 async fn open_interval_without_a_current_role_is_refused_without_source_repair() -> TestResult {
     let (_directory, path) = fixture_copy("role-history.sqlite")?;
-    let source = rusqlite::Connection::open(&path)?;
-    source.execute_batch("UPDATE board_activity SET participant_role=NULL WHERE activity_sequence=7; DELETE FROM thread_participants WHERE joined_at_activity=7;")?;
-    source.close().map_err(|(_, error)| error)?;
+    let mut source = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
+    sqlx::raw_sql("UPDATE board_activity SET participant_role=NULL WHERE activity_sequence=7; DELETE FROM thread_participants WHERE joined_at_activity=7;").execute(&mut source).await?;
+    source.close().await?;
     let before = std::fs::read(&path)?;
     let result = prepare_path(&path).await;
     match result {

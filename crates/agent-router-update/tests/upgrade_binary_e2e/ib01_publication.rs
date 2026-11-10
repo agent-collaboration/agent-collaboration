@@ -23,7 +23,8 @@ async fn actual_cli_publishes_literal_history_and_selection_state() -> E2eResult
         fixture.directory.path(),
         "human:legacy-owner",
         "019a0000-0000-7000-8000-000000000015",
-    )?;
+    )
+    .await?;
     assert_legacy_cutoffs(&selections)?;
     let central = CentralHarness::start().await?;
 

@@ -1,4 +1,5 @@
 use super::*;
+use tracing::instrument::WithSubscriber;
 
 use codex_router_core::provider::Provider;
 use codex_router_core::route_profile::WindowKind;
@@ -218,8 +219,8 @@ impl Visit for StructuredFieldVisitor {
     }
 }
 
-#[test]
-fn claude_usage_401_after_renewal_preserves_account_for_upkeep_and_records_failure() {
+#[tokio::test]
+async fn claude_usage_401_after_renewal_preserves_account_for_upkeep_and_records_failure() {
     let test_root = TestRoot::new("claude-usage-401-after-renewal");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
@@ -227,11 +228,11 @@ fn claude_usage_401_after_renewal_preserves_account_for_upkeep_and_records_failu
     let state_path = codex_router_state::provider_proxy_database_path(&router_root);
     let secret_root = router_root.join("secrets");
     let account_id = account_id("acct_claude_usage_401");
-    let runtime = test_async_runtime();
-    let state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(&state_path)));
+
+    let state = must_ok((AsyncSqliteStateStore::open(&state_path)).await);
     must_ok(
-        runtime.block_on(
-            state.upsert_account(
+        state
+            .upsert_account(
                 &AccountRecord::new(
                     Provider::Claude,
                     account_id.clone(),
@@ -239,8 +240,8 @@ fn claude_usage_401_after_renewal_preserves_account_for_upkeep_and_records_failu
                     AccountStatus::Enabled,
                 )
                 .with_active_credential_generation(1),
-            ),
-        ),
+            )
+            .await,
     );
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_root),
@@ -263,8 +264,8 @@ fn claude_usage_401_after_renewal_preserves_account_for_upkeep_and_records_failu
             .with_reset_unix_seconds(20_000)
             .with_fresh_until_unix_seconds(2_100),
     ));
-    must_ok(runtime.block_on(state.record_window_observation(&existing_window, || 2_000)));
-    must_ok(runtime.block_on(state.close()));
+    must_ok((state.record_window_observation(&existing_window, || 2_000)).await);
+    must_ok((state.close()).await);
 
     let resolver = PersistingRecoveringClaudeCredentialResolver {
         state_path: state_path.clone(),
@@ -276,8 +277,8 @@ fn claude_usage_401_after_renewal_preserves_account_for_upkeep_and_records_failu
     let captured = StructuredEventCapture::default();
     let subscriber = tracing_subscriber::registry().with(captured.clone());
     let mut stdout = Vec::new();
-    let refresh_result = tracing::subscriber::with_default(subscriber, || {
-        runtime.block_on(refresh_quota_store_paths_with_dependencies_async(
+    let refresh_result = (async {
+        (refresh_quota_store_paths_with_dependencies_async(
             &mut stdout,
             &state_path,
             &secret_root,
@@ -286,7 +287,10 @@ fn claude_usage_401_after_renewal_preserves_account_for_upkeep_and_records_failu
             &quota_provider,
             2_000,
         ))
-    });
+        .await
+    })
+    .with_subscriber(subscriber)
+    .await;
     assert!(
         refresh_result.is_err(),
         "the quota refresh should report the repeated provider 401"
@@ -302,23 +306,21 @@ fn claude_usage_401_after_renewal_preserves_account_for_upkeep_and_records_failu
             "claude-recovered-access-canary".to_owned(),
         ]
     );
-    let read_state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(&state_path)));
-    let account = must_ok(runtime.block_on(read_state.load_account(&account_id)))
+    let read_state = must_ok((AsyncSqliteStateStore::open(&state_path)).await);
+    let account = must_ok(read_state.load_account(&account_id).await)
         .expect("renewed account should remain stored");
     assert_eq!(account.status(), AccountStatus::Enabled);
     assert_eq!(account.active_credential_generation(), Some(2));
-    let refresh_status = must_ok(
-        runtime.block_on(read_state.quota_refresh_statuses_for_route_band("claude_messages")),
-    )
-    .into_iter()
-    .find(|status| status.account_id() == &account_id)
-    .expect("Claude quota refresh failure should be recorded");
+    let refresh_status =
+        must_ok((read_state.quota_refresh_statuses_for_route_band("claude_messages")).await)
+            .into_iter()
+            .find(|status| status.account_id() == &account_id)
+            .expect("Claude quota refresh failure should be recorded");
     assert_eq!(
         refresh_status.last_error_class(),
         Some(QuotaRefreshErrorClass::AuthError)
     );
-    let windows =
-        must_ok(runtime.block_on(read_state.window_observations_for_account(&account_id)));
+    let windows = must_ok((read_state.window_observations_for_account(&account_id)).await);
     assert_eq!(windows.len(), 1);
     assert_eq!(windows[0].remaining_basis_points(), 6_000);
 
@@ -358,19 +360,30 @@ fn claude_usage_401_after_renewal_preserves_account_for_upkeep_and_records_failu
     assert!(!captured_fields.contains(account_id.as_str()));
     assert!(!captured_fields.contains("claude-old-access-canary"));
     assert!(!captured_fields.contains("claude-recovered-access-canary"));
-    must_ok(runtime.block_on(read_state.close()));
+    must_ok((read_state.close()).await);
 
     let (observed_sender, observed_receiver) = mpsc::channel();
-    let upkeep_worker = must_ok(
-        crate::credential_upkeep_worker::start_background_credential_upkeep_worker_with_client_and_clock(
-            &state_path,
-            secrets.into(),
-            RecordingClaudeUpkeepRefreshClient {
-                observed_account_ids: observed_sender,
-            },
-            || 2_000,
-        ),
-    );
+    let upkeep_worker_result = {
+        let fixture_state_path = (state_path).clone();
+        let fixture_secrets = secrets.into();
+        let fixture_client = RecordingClaudeUpkeepRefreshClient {
+            observed_account_ids: observed_sender,
+        };
+        let fixture_clock = || 2_000;
+        let fixture_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        let upkeep_task = tokio::task::spawn_blocking(move || {
+            tracing::dispatcher::with_default(&fixture_dispatcher, || {
+                crate::credential_upkeep_worker::start_background_credential_upkeep_worker_with_client_and_clock(
+                    &fixture_state_path,
+                    fixture_secrets,
+                    fixture_client,
+                    fixture_clock,
+                )
+            })
+        });
+        must_ok(upkeep_task.await)
+    };
+    let upkeep_worker = must_ok(upkeep_worker_result);
     assert_eq!(
         must_ok(observed_receiver.recv_timeout(std::time::Duration::from_secs(2))),
         account_id

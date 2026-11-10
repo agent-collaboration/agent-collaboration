@@ -4,6 +4,7 @@ use crate::e2e_support::{
 };
 use owned_process_test_support::scenario_finalization::run_scenario;
 use serde_json::json;
+use sqlx::Connection as _;
 use std::path::Path;
 
 const PROJECTS: [&str; 3] = [
@@ -57,7 +58,7 @@ async fn actual_cli_replay_ignores_relabel_but_conflicts_on_changed_description(
             central.stop_owner().await?;
             assert_eq!(snapshots(central.root()).await?, published);
 
-            change_topic_description(&fixture.source)?;
+            change_topic_description(&fixture.source).await?;
             let changed = SourceSnapshot::capture(&fixture.source)?;
             let conflict_url = central.reopen_owner().await?;
             let conflict = run_cli(
@@ -101,8 +102,8 @@ async fn actual_cli_replay_ignores_relabel_but_conflicts_on_changed_description(
 )]
 async fn actual_cli_publishes_a_zero_post_project_with_only_its_project_state() -> E2eResult {
     let fixture = CliImportFixture::new("legacy-complete.sqlite")?;
-    set_description_variants(&fixture.source)?;
-    insert_empty_topic(&fixture.source)?;
+    set_description_variants(&fixture.source).await?;
+    insert_empty_topic(&fixture.source).await?;
     let source = SourceSnapshot::capture(&fixture.source)?;
     let central = CentralHarness::start().await?;
 
@@ -268,14 +269,16 @@ async fn assert_project_description(
     Ok(())
 }
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract asserts; setup may fail."
-)]
-fn set_description_variants(source: &Path) -> E2eResult {
+async fn set_description_variants(source: &Path) -> E2eResult {
     let maximum = "λ\0\n".repeat(4096);
     assert_eq!(maximum.len(), message_board::MAX_DESCRIPTION_BYTES);
-    let connection = rusqlite::Connection::open(source)?;
+    let mut connection = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(source)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
     for (topic, description) in [
         ("019a0000-0000-7000-8000-000000000015", String::new()),
         (
@@ -284,39 +287,51 @@ fn set_description_variants(source: &Path) -> E2eResult {
         ),
         ("019a0000-0000-7000-8000-000000000017", maximum),
     ] {
-        connection.execute(
-            "UPDATE board_topics SET description=? WHERE topic_id=?",
-            rusqlite::params![description, topic],
-        )?;
+        sqlx::query("UPDATE board_topics SET description=? WHERE topic_id=?")
+            .bind(&description)
+            .bind(topic)
+            .execute(&mut connection)
+            .await
+            .map(|result| result.rows_affected())?;
     }
-    connection.close().map_err(|(_, error)| error)?;
+    connection.close().await?;
     Ok(())
 }
 
-fn change_topic_description(source: &Path) -> E2eResult {
-    let connection = rusqlite::Connection::open(source)?;
-    connection.execute(
-        "UPDATE board_topics SET description=? WHERE topic_id=?",
-        [
-            "Changed semantic description",
-            "019a0000-0000-7000-8000-000000000015",
-        ],
-    )?;
-    connection.close().map_err(|(_, error)| error)?;
+async fn change_topic_description(source: &Path) -> E2eResult {
+    let mut connection = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(source)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
+    sqlx::query("UPDATE board_topics SET description=? WHERE topic_id=?")
+        .bind("Changed semantic description")
+        .bind("019a0000-0000-7000-8000-000000000015")
+        .execute(&mut connection)
+        .await
+        .map(|result| result.rows_affected())?;
+    connection.close().await?;
     Ok(())
 }
 
-fn insert_empty_topic(source: &Path) -> E2eResult {
-    let connection = rusqlite::Connection::open(source)?;
-    connection.execute(
-        "INSERT INTO board_topics(topic_id,board_id,name,description) VALUES(?,?,?,?)",
-        [
-            "019a0000-0000-7000-8000-000000000019",
-            "019a0000-0000-7000-8000-00000000000b",
-            "ProjectState only",
-            "A project without posts or activity",
-        ],
-    )?;
-    connection.close().map_err(|(_, error)| error)?;
+async fn insert_empty_topic(source: &Path) -> E2eResult {
+    let mut connection = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(source)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
+    sqlx::query("INSERT INTO board_topics(topic_id,board_id,name,description) VALUES(?,?,?,?)")
+        .bind("019a0000-0000-7000-8000-000000000019")
+        .bind("019a0000-0000-7000-8000-00000000000b")
+        .bind("ProjectState only")
+        .bind("A project without posts or activity")
+        .execute(&mut connection)
+        .await
+        .map(|result| result.rows_affected())?;
+    connection.close().await?;
     Ok(())
 }

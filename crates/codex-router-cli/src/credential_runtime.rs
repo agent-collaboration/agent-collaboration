@@ -152,6 +152,31 @@ impl AsyncCliCredentialResolver<ProviderCredentialRefreshClients> {
     }
 }
 
+#[cfg(test)]
+impl<C> AsyncCliCredentialResolver<C>
+where
+    C: CredentialRefreshClient + Clone,
+{
+    pub(crate) async fn open_with_refresh_client(
+        state_db_path: &Path,
+        secret_root: &Path,
+        refresh_client: C,
+    ) -> Result<Self, CliCredentialResolverOpenError> {
+        let state_store = AsyncSqliteStateStore::open(state_db_path).await?;
+        let secret_root = secret_root.to_path_buf();
+        let secret_store = tokio::task::spawn_blocking(move || {
+            codex_router_secret_store::test_support::open_encrypted_credential_store(secret_root)
+        })
+        .await??;
+        Ok(Self {
+            state_store,
+            secret_store: secret_store.into(),
+            refresh_client,
+            refresh_leases: AsyncRefreshLeaseRegistry::new(),
+        })
+    }
+}
+
 impl<C> AsyncProviderCredentialResolver for AsyncCliCredentialResolver<C>
 where
     C: CredentialRefreshClient + Clone + Send + Sync + 'static,

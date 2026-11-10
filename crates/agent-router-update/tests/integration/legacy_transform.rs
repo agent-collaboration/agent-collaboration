@@ -1,5 +1,6 @@
 use crate::support;
 use message_board::*;
+use sqlx::Connection as _;
 use support::*;
 
 #[tokio::test]
@@ -10,12 +11,21 @@ use support::*;
 async fn retained_post_without_creation_activity_refuses_without_changing_source() -> TestResult {
     // Arrange: activity 8 is an unreferenced reply creation in the shipped fixture.
     let (_directory, path) = fixture_copy("legacy-complete.sqlite")?;
-    let connection = rusqlite::Connection::open(&path)?;
+    let mut connection = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
     assert_eq!(
-        connection.execute("DELETE FROM board_activity WHERE activity_sequence=8", [])?,
+        sqlx::query("DELETE FROM board_activity WHERE activity_sequence=8")
+            .execute(&mut connection)
+            .await
+            .map(|result| result.rows_affected())?,
         1
     );
-    connection.close().map_err(|(_, error)| error)?;
+    connection.close().await?;
     let bytes = std::fs::read(&path)?;
     let modified = path.metadata()?.modified()?;
     // Act: exercise the actual reader, transform and batch preparation.

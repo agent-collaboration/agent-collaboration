@@ -48,8 +48,8 @@ fn profile_writer_dry_run_and_approval_gate_do_not_touch_real_codex_home() {
     assert_eq!(must_ok(fs::read_to_string(&written_path)), profile.render());
 }
 
-#[test]
-fn profile_print_command_renders_profile_without_writing() {
+#[tokio::test]
+async fn profile_print_command_renders_profile_without_writing() {
     let test_root = TestRoot::new("profile-print");
     must_ok(fs::create_dir(test_root.path()));
     let codex_home = test_root.path().join("codex-home");
@@ -65,7 +65,8 @@ fn profile_print_command_renders_profile_without_writing() {
             path_to_str(&codex_home),
         ],
         CliContext::new(vec![("CODEX_ROUTER_FORCE_TTY".to_owned(), "1".to_owned())]),
-    );
+    )
+    .await;
 
     assert!(!output.stdout.contains("[profiles.codex-router]\n"));
     assert!(
@@ -88,8 +89,8 @@ fn profile_print_command_renders_profile_without_writing() {
     assert!(output.stderr.is_empty());
 }
 
-#[test]
-fn profile_print_emits_router_custom_provider_without_home_mutation() {
+#[tokio::test]
+async fn profile_print_emits_router_custom_provider_without_home_mutation() {
     let test_root = TestRoot::new("profile-print-plan-row");
     must_ok(fs::create_dir(test_root.path()));
     let codex_home = test_root.path().join("codex-home");
@@ -105,15 +106,16 @@ fn profile_print_emits_router_custom_provider_without_home_mutation() {
             path_to_str(&codex_home),
         ],
         CliContext::new(vec![("CODEX_ROUTER_FORCE_TTY".to_owned(), "1".to_owned())]),
-    );
+    )
+    .await;
 
     assert_router_profile_contract(&output.stdout, 9876);
     assert!(!codex_home.join("codex-router.config.toml").exists());
     assert!(output.stderr.is_empty());
 }
 
-#[test]
-fn profile_print_uses_default_production_port_without_writing() {
+#[tokio::test]
+async fn profile_print_uses_default_production_port_without_writing() {
     let test_root = TestRoot::new("profile-print-default-port");
     must_ok(fs::create_dir(test_root.path()));
     let codex_home = test_root.path().join("codex-home");
@@ -127,30 +129,32 @@ fn profile_print_uses_default_production_port_without_writing() {
             path_to_str(&codex_home),
         ],
         CliContext::new(vec![("CODEX_ROUTER_FORCE_TTY".to_owned(), "1".to_owned())]),
-    );
+    )
+    .await;
 
     assert_router_profile_contract(&output.stdout, 19741);
     assert!(!codex_home.join("codex-router.config.toml").exists());
     assert!(output.stderr.is_empty());
 }
 
-#[test]
-fn profile_doctor_reports_tokenless_auth_without_token_value() {
+#[tokio::test]
+async fn profile_doctor_reports_tokenless_auth_without_token_value() {
     let output = run_cli(
         ["codex-router", "profile", "doctor"],
         CliContext::new(vec![(
             "CODEX_ROUTER_TOKEN".to_owned(),
             "local-secret-token-canary".to_owned(),
         )]),
-    );
+    )
+    .await;
 
     assert!(output.stdout.contains("local router token: not required\n"));
     assert!(!output.stdout.contains("local-secret-token-canary"));
     assert!(output.stderr.is_empty());
 }
 
-#[test]
-fn profile_write_dry_run_previews_target_without_writing() {
+#[tokio::test]
+async fn profile_write_dry_run_previews_target_without_writing() {
     let test_root = TestRoot::new("profile-dry-run");
     must_ok(fs::create_dir(test_root.path()));
     let codex_home = test_root.path().join("codex-home");
@@ -167,7 +171,8 @@ fn profile_write_dry_run_previews_target_without_writing() {
             "--dry-run",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
 
     assert!(
         output.stdout.contains(
@@ -190,8 +195,8 @@ fn profile_write_dry_run_previews_target_without_writing() {
     assert!(output.stderr.is_empty());
 }
 
-#[test]
-fn profile_write_dry_run_previews_named_profile_without_mutation() {
+#[tokio::test]
+async fn profile_write_dry_run_previews_named_profile_without_mutation() {
     let test_root = TestRoot::new("profile-dry-run-plan-row");
     must_ok(fs::create_dir(test_root.path()));
     let codex_home = test_root.path().join("codex-home");
@@ -208,7 +213,8 @@ fn profile_write_dry_run_previews_named_profile_without_mutation() {
             "--dry-run",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
 
     let target_path = codex_home.join("codex-router.config.toml");
     assert!(
@@ -224,8 +230,8 @@ fn profile_write_dry_run_previews_named_profile_without_mutation() {
     assert!(output.stderr.is_empty());
 }
 
-#[test]
-fn profile_write_dry_run_previews_existing_file_delta_without_writing() {
+#[tokio::test]
+async fn profile_write_dry_run_previews_existing_file_delta_without_writing() {
     let test_root = TestRoot::new("profile-existing-dry-run");
     must_ok(fs::create_dir(test_root.path()));
     let codex_home = test_root.path().join("codex-home");
@@ -248,7 +254,8 @@ fn profile_write_dry_run_previews_existing_file_delta_without_writing() {
             "--dry-run",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
 
     assert!(
         output
@@ -276,8 +283,8 @@ fn profile_write_dry_run_previews_existing_file_delta_without_writing() {
     assert!(output.stderr.is_empty());
 }
 
-#[test]
-fn profile_write_dry_run_redacts_existing_secret_values() {
+#[tokio::test]
+async fn profile_write_dry_run_redacts_existing_secret_values() {
     let test_root = TestRoot::new("profile-redacted-dry-run");
     must_ok(fs::create_dir(test_root.path()));
     let codex_home = test_root.path().join("codex-home");
@@ -298,7 +305,8 @@ fn profile_write_dry_run_redacts_existing_secret_values() {
             "--dry-run",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
 
     assert!(!output.stdout.contains("local-secret-canary"));
     assert!(output.stdout.contains("< api_key = \"<redacted>\"\n"));
@@ -367,8 +375,8 @@ fn profile_write_command_requires_approval_flag() {
     assert!(stderr.is_empty());
 }
 
-#[test]
-fn profile_write_command_with_approval_writes_only_temp_codex_home() {
+#[tokio::test]
+async fn profile_write_command_with_approval_writes_only_temp_codex_home() {
     let test_root = TestRoot::new("profile-write-approved");
     must_ok(fs::create_dir(test_root.path()));
     let codex_home = test_root.path().join("codex-home");
@@ -383,7 +391,8 @@ fn profile_write_command_with_approval_writes_only_temp_codex_home() {
             "--approve-codex-home-write",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
 
     let target_path = codex_home.join("codex-router.config.toml");
     assert!(
@@ -431,8 +440,8 @@ fn profile_write_command_rejects_removed_preview_token_option() {
     assert!(stderr.is_empty());
 }
 
-#[test]
-fn profile_write_approved_writes_only_named_temp_profile_file() {
+#[tokio::test]
+async fn profile_write_approved_writes_only_named_temp_profile_file() {
     let test_root = TestRoot::new("profile-write-plan-row");
     must_ok(fs::create_dir(test_root.path()));
     let codex_home = test_root.path().join("codex-home");
@@ -449,7 +458,8 @@ fn profile_write_approved_writes_only_named_temp_profile_file() {
             "--approve-codex-home-write",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
 
     let target_path = codex_home.join("codex-router.config.toml");
     assert!(

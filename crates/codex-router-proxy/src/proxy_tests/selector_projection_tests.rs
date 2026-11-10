@@ -47,12 +47,12 @@ fn quota_aware_selector_fails_closed_when_no_account_has_headroom() {
     );
 }
 
-#[test]
-fn repository_backed_selector_hydrates_enabled_accounts_from_state_quota_and_secret_store() {
+#[tokio::test]
+async fn repository_backed_selector_hydrates_enabled_accounts_from_state_quota_and_secret_store() {
     let temp_dir = ProxyTestTempDir::new("repository_selector");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -81,16 +81,20 @@ fn repository_backed_selector_hydrates_enabled_accounts_from_state_quota_and_sec
         AccountStatus::Disabled,
     );
 
-    persist_account_with_snapshot_and_token(&state, &secrets, &beta, 40, "beta-token");
-    persist_account_with_snapshot_and_token(&state, &secrets, &alpha, 80, "alpha-token");
-    persist_account_with_snapshot_and_token(&state, &secrets, &disabled, 500, "disabled-token");
+    persist_account_with_snapshot_and_token(&state, &secrets, &beta, 40, "beta-token").await;
+    persist_account_with_snapshot_and_token(&state, &secrets, &alpha, 80, "alpha-token").await;
+    persist_account_with_snapshot_and_token(&state, &secrets, &disabled, 500, "disabled-token")
+        .await;
 
-    let selector = RepositoryBackedAccountSelector::new(&state);
-    let selected = match selector.select_upstream_account(
-        &HttpProxyRequest::new(Method::Post, "/v1/responses"),
-        TokenGeneration::new(1),
-        None,
-    ) {
+    let selector = AsyncRepositoryBackedAccountSelector::new(&state);
+    let selected = match selector
+        .select_upstream_account(
+            &HttpProxyRequest::new(Method::Post, "/v1/responses"),
+            TokenGeneration::new(1),
+            None,
+        )
+        .await
+    {
         Ok(selected) => selected,
         Err(error) => panic!("repository-backed selector should select account: {error}"),
     };
@@ -99,12 +103,12 @@ fn repository_backed_selector_hydrates_enabled_accounts_from_state_quota_and_sec
     assert_eq!(selected.selection_reason(), "preferred_weekly_healthier");
 }
 
-#[test]
-fn repository_backed_selector_uses_route_specific_quota_snapshots() {
+#[tokio::test]
+async fn repository_backed_selector_uses_route_specific_quota_snapshots() {
     let temp_dir = ProxyTestTempDir::new("repository_selector_route_band");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -120,10 +124,10 @@ fn repository_backed_selector_uses_route_specific_quota_snapshots() {
         "route-specific",
         AccountStatus::Enabled,
     );
-    if let Err(error) = AccountStateRepository::upsert_account(
-        &state,
-        &account.clone().with_active_credential_generation(1),
-    ) {
+    if let Err(error) = state
+        .upsert_account(&account.clone().with_active_credential_generation(1))
+        .await
+    {
         panic!("account should persist: {error}");
     }
     let responses_snapshot = PersistedQuotaSnapshot::new(
@@ -140,10 +144,10 @@ fn repository_backed_selector_uses_route_specific_quota_snapshots() {
     .with_observed_unix_seconds(1_000)
     .with_route_band("models", 10)
     .with_stale_penalty(false);
-    if let Err(error) = QuotaSnapshotRepository::upsert_snapshot(&state, &responses_snapshot) {
+    if let Err(error) = state.upsert_quota_snapshot(&responses_snapshot).await {
         panic!("responses quota should persist: {error}");
     }
-    if let Err(error) = QuotaSnapshotRepository::upsert_snapshot(&state, &models_snapshot) {
+    if let Err(error) = state.upsert_quota_snapshot(&models_snapshot).await {
         panic!("models quota should persist: {error}");
     }
     let responses_window = PersistedSelectorQuotaWindow::new(
@@ -186,19 +190,21 @@ fn repository_backed_selector_uses_route_specific_quota_snapshots() {
     .with_effective(false)
     .with_observed_unix_seconds(test_unix_seconds())
     .with_reset_unix_seconds(selector_reset_seconds(604_800));
-    if let Err(error) = SelectorQuotaRepository::upsert_selector_window(&state, &responses_window) {
+    if let Err(error) = state.upsert_selector_quota_window(&responses_window).await {
         panic!("responses selector window should persist: {error}");
     }
-    if let Err(error) =
-        SelectorQuotaRepository::upsert_selector_window(&state, &responses_weekly_window)
+    if let Err(error) = state
+        .upsert_selector_quota_window(&responses_weekly_window)
+        .await
     {
         panic!("responses weekly selector window should persist: {error}");
     }
-    if let Err(error) = SelectorQuotaRepository::upsert_selector_window(&state, &models_window) {
+    if let Err(error) = state.upsert_selector_quota_window(&models_window).await {
         panic!("models selector window should persist: {error}");
     }
-    if let Err(error) =
-        SelectorQuotaRepository::upsert_selector_window(&state, &models_weekly_window)
+    if let Err(error) = state
+        .upsert_selector_quota_window(&models_weekly_window)
+        .await
     {
         panic!("models weekly selector window should persist: {error}");
     }
@@ -219,23 +225,28 @@ fn repository_backed_selector_uses_route_specific_quota_snapshots() {
         panic!("upstream token should persist: {error}");
     }
 
-    let selector = RepositoryBackedAccountSelector::new(&state);
-    let selected = match selector.select_upstream_account(
-        &HttpProxyRequest::new(Method::Get, "/v1/models"),
-        TokenGeneration::new(1),
-        None,
-    ) {
+    let selector = AsyncRepositoryBackedAccountSelector::new(&state);
+    let selected = match selector
+        .select_upstream_account(
+            &HttpProxyRequest::new(Method::Get, "/v1/models"),
+            TokenGeneration::new(1),
+            None,
+        )
+        .await
+    {
         Ok(selected) => selected,
         Err(error) => panic!("models request should select from models quota: {error}"),
     };
     assert_eq!(selected.account_id(), account.account_id());
 
     assert_eq!(
-        selector.select_upstream_account(
-            &HttpProxyRequest::new(Method::Post, "/v1/responses"),
-            TokenGeneration::new(1),
-            None,
-        ),
+        selector
+            .select_upstream_account(
+                &HttpProxyRequest::new(Method::Post, "/v1/responses"),
+                TokenGeneration::new(1),
+                None,
+            )
+            .await,
         Err(HttpProxyError::Selection {
             reason: QuotaAwareAccountSelectorError::NoEligibleAccounts
         })
@@ -246,7 +257,7 @@ fn repository_backed_selector_uses_route_specific_quota_snapshots() {
 async fn async_repository_backed_selector_uses_route_specific_quota_snapshots() {
     let temp_dir = ProxyTestTempDir::new("async_repository_selector_route_band");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -264,13 +275,15 @@ async fn async_repository_backed_selector_uses_route_specific_quota_snapshots() 
             (18_000, 0, true, SelectorQuotaWindowStatus::Ineligible),
             (604_800, 0, false, SelectorQuotaWindowStatus::Ineligible),
         ],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &account,
         "models",
         &[(18_000, 10, true), (604_800, 10, false)],
-    );
+    )
+    .await;
     let async_state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("async state store should open: {error}"),
@@ -307,7 +320,8 @@ async fn async_repository_backed_selector_uses_route_specific_quota_snapshots() 
 async fn async_repository_selector_reports_stale_authority_as_unavailable() {
     let temp_dir = ProxyTestTempDir::new("async_repository_selector_stale_authority");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = SqliteStateStore::open(&database_path)
+    let state = AsyncSqliteStateStore::open(&database_path)
+        .await
         .unwrap_or_else(|error| panic!("state store should open: {error}"));
     let stale_account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
@@ -329,7 +343,8 @@ async fn async_repository_selector_reports_stale_authority_as_unavailable() {
             (18_000, 90, true, SelectorQuotaWindowStatus::Stale),
             (604_800, 90, false, SelectorQuotaWindowStatus::Stale),
         ],
-    );
+    )
+    .await;
     persist_account_with_selector_window_status_specs(
         &state,
         &exhausted_account,
@@ -338,8 +353,9 @@ async fn async_repository_selector_reports_stale_authority_as_unavailable() {
             (18_000, 0, true, SelectorQuotaWindowStatus::Ineligible),
             (604_800, 0, false, SelectorQuotaWindowStatus::Ineligible),
         ],
-    );
-    drop(state);
+    )
+    .await;
+    state.close().await.expect("fixture state should close");
     let mutation = AsyncWeeklyQuotaFloorMutationStore::open(&database_path)
         .await
         .unwrap_or_else(|error| panic!("weekly-floor store should open: {error}"));
@@ -380,7 +396,7 @@ async fn async_repository_selector_reports_stale_authority_as_unavailable() {
 async fn async_repository_backed_selector_prefers_slower_projected_burn_history() {
     let temp_dir = ProxyTestTempDir::new("async_repository_selector_history_burn");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -404,7 +420,8 @@ async fn async_repository_backed_selector_prefers_slower_projected_burn_history(
             (18_000, 70, true, 9_900 + 18_000),
             (604_800, 70, false, 9_900 + 604_800),
         ],
-    );
+    )
+    .await;
     persist_account_with_selector_window_reset_specs(
         &state,
         &slow_burn,
@@ -413,7 +430,8 @@ async fn async_repository_backed_selector_prefers_slower_projected_burn_history(
             (18_000, 70, true, 9_900 + 18_000),
             (604_800, 70, false, 9_900 + 604_800),
         ],
-    );
+    )
+    .await;
     let async_state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("async state store should open: {error}"),

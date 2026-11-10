@@ -1,11 +1,11 @@
 use super::*;
 
-#[test]
-fn assembled_loopback_router_runtime_retries_http_quota_error_on_fallback_account() {
+#[tokio::test]
+async fn assembled_loopback_router_runtime_retries_http_quota_error_on_fallback_account() {
     let temp_dir = ProxyTestTempDir::new("assembled_runtime_http_quota_retry");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -27,8 +27,9 @@ fn assembled_loopback_router_runtime_retries_http_quota_error_on_fallback_accoun
         "fallback-quota",
         AccountStatus::Enabled,
     );
-    persist_account_with_snapshot_and_token(&state, &secrets, &primary, 90, "primary-token");
-    persist_account_with_snapshot_and_token(&state, &secrets, &fallback, 80, "fallback-token");
+    persist_account_with_snapshot_and_token(&state, &secrets, &primary, 90, "primary-token").await;
+    persist_account_with_snapshot_and_token(&state, &secrets, &fallback, 80, "fallback-token")
+        .await;
 
     let upstream_listener = match TcpListener::bind("127.0.0.1:0") {
         Ok(listener) => listener,
@@ -89,7 +90,17 @@ fn assembled_loopback_router_runtime_retries_http_quota_error_on_fallback_accoun
         LocalRouterTokenRecord::new(SecretString::new("current-token"), TokenGeneration::new(1)),
     )
     .with_quota_clock(1_030, 60);
-    let runtime = match LoopbackRouterRuntime::start_for_test(config) {
+    let runtime = match tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test(config)
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    {
         Ok(runtime) => runtime,
         Err(error) => panic!("router runtime should start: {error}"),
     };
@@ -102,7 +113,10 @@ fn assembled_loopback_router_runtime_retries_http_quota_error_on_fallback_accoun
         )
     });
 
-    let handled = match runtime.serve_http_connections(1) {
+    let handled = match tokio::task::spawn_blocking(move || runtime.serve_http_connections(1))
+        .await
+        .expect("blocking product serving should join")
+    {
         Ok(handled) => handled,
         Err(error) => panic!("router runtime should serve one client connection: {error}"),
     };
@@ -137,21 +151,23 @@ fn assembled_loopback_router_runtime_retries_http_quota_error_on_fallback_accoun
     // The retry excludes the primary in process before its queued SQLite
     // exhaustion write completes. Establish the durable row before asking
     // a new repository selector to make the post-retry decision.
-    wait_for_durable_quota_exhaustion(&state, &[primary.account_id()]);
-    let runtime_state = must_ok(SqliteStateStore::open(&database_path));
+    wait_for_durable_quota_exhaustion(&state, &[primary.account_id()]).await;
+    let runtime_state = must_ok(AsyncSqliteStateStore::open(&database_path).await);
     wait_for_repository_selected_account(
         &runtime_state,
         fallback.account_id(),
         "fallback should remain selectable after quota retry",
-    );
+    )
+    .await;
 }
 
-#[test]
-fn assembled_loopback_router_runtime_retries_large_http_json_quota_error_on_fallback_account() {
+#[tokio::test]
+async fn assembled_loopback_router_runtime_retries_large_http_json_quota_error_on_fallback_account()
+{
     let temp_dir = ProxyTestTempDir::new("assembled_runtime_large_http_quota_retry");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -173,8 +189,9 @@ fn assembled_loopback_router_runtime_retries_large_http_json_quota_error_on_fall
         "fallback-large-quota",
         AccountStatus::Enabled,
     );
-    persist_account_with_snapshot_and_token(&state, &secrets, &primary, 90, "primary-token");
-    persist_account_with_snapshot_and_token(&state, &secrets, &fallback, 80, "fallback-token");
+    persist_account_with_snapshot_and_token(&state, &secrets, &primary, 90, "primary-token").await;
+    persist_account_with_snapshot_and_token(&state, &secrets, &fallback, 80, "fallback-token")
+        .await;
 
     let upstream_listener = match TcpListener::bind("127.0.0.1:0") {
         Ok(listener) => listener,
@@ -237,19 +254,25 @@ fn assembled_loopback_router_runtime_retries_large_http_json_quota_error_on_fall
         LocalRouterTokenRecord::new(SecretString::new("current-token"), TokenGeneration::new(1)),
     )
     .with_quota_clock(1_030, 60);
-    let runtime = match LoopbackRouterRuntime::start_for_test(config) {
+    let runtime = match tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test(config)
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    {
         Ok(runtime) => runtime,
         Err(error) => panic!("router runtime should start: {error}"),
     };
     let router_address = runtime.local_addr();
-    let lock_runtime = must_ok(
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build(),
-    );
-    let lock_state = must_ok(lock_runtime.block_on(AsyncSqliteStateStore::open(&database_path)));
-    let mut write_lock = must_ok(lock_runtime.block_on(lock_state.acquire_connection_for_test()));
-    must_ok(lock_runtime.block_on(sqlx::query("BEGIN IMMEDIATE").execute(&mut *write_lock)));
+
+    let lock_state = must_ok((AsyncSqliteStateStore::open(&database_path)).await);
+    let mut write_lock = must_ok((lock_state.acquire_connection_for_test()).await);
+    must_ok((sqlx::query("BEGIN IMMEDIATE").execute(&mut *write_lock)).await);
     let large_body = format!(
         r#"{{"model":"gpt-5","large_padding":"{}"}}"#,
         "x".repeat(17 * 1024)
@@ -297,21 +320,26 @@ fn assembled_loopback_router_runtime_retries_large_http_json_quota_error_on_fall
         Err(error) => panic!("mock upstream thread panicked: {error:?}"),
     }
 
-    let before_commit =
-        must_ok(state.load_quota_snapshot_for_route_band(primary.account_id(), "responses"))
-            .expect("initial snapshot should remain readable");
+    let before_commit = must_ok(
+        state
+            .load_quota_snapshot_for_route_band(primary.account_id(), "responses")
+            .await,
+    )
+    .expect("initial snapshot should remain readable");
     assert_eq!(before_commit.source(), QuotaSnapshotSource::MockEndpoint);
     assert_eq!(before_commit.remaining_headroom(), 90);
-    lock_runtime.block_on(async move {
+    (async move {
         must_ok(sqlx::query("COMMIT").execute(&mut *write_lock).await);
         drop(write_lock);
-    });
-    wait_for_durable_quota_exhaustion(&state, &[primary.account_id()]);
+    })
+    .await;
+    wait_for_durable_quota_exhaustion(&state, &[primary.account_id()]).await;
     wait_for_repository_selected_account(
         &state,
         fallback.account_id(),
         "durable quota state should select the fallback while serving",
-    );
+    )
+    .await;
     shutdown.cancel();
     match server_thread.join() {
         Ok(Ok(handled)) => assert_eq!(handled, 1),
@@ -319,20 +347,21 @@ fn assembled_loopback_router_runtime_retries_large_http_json_quota_error_on_fall
         Err(error) => panic!("router server thread panicked: {error:?}"),
     }
 
-    let runtime_state = must_ok(SqliteStateStore::open(&database_path));
+    let runtime_state = must_ok(AsyncSqliteStateStore::open(&database_path).await);
     wait_for_repository_selected_account(
         &runtime_state,
         fallback.account_id(),
         "fallback should remain selectable after large quota retry",
-    );
+    )
+    .await;
 }
 
-#[test]
-fn selection_diagnostics_unreplayable_http_quota_error_uses_real_handler() {
+#[tokio::test]
+async fn selection_diagnostics_unreplayable_http_quota_error_uses_real_handler() {
     let temp_dir = ProxyTestTempDir::new("assembled_runtime_unreplayable_http_quota");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -354,8 +383,9 @@ fn selection_diagnostics_unreplayable_http_quota_error_uses_real_handler() {
         "fallback-unreplayable-quota",
         AccountStatus::Enabled,
     );
-    persist_account_with_snapshot_and_token(&state, &secrets, &primary, 90, "primary-token");
-    persist_account_with_snapshot_and_token(&state, &secrets, &fallback, 80, "fallback-token");
+    persist_account_with_snapshot_and_token(&state, &secrets, &primary, 90, "primary-token").await;
+    persist_account_with_snapshot_and_token(&state, &secrets, &fallback, 80, "fallback-token")
+        .await;
 
     let upstream_listener = match TcpListener::bind("127.0.0.1:0") {
         Ok(listener) => listener,
@@ -411,8 +441,18 @@ fn selection_diagnostics_unreplayable_http_quota_error_uses_real_handler() {
     )
     .with_quota_clock(1_030, 60);
     let mut response = None;
-    let captured_logs = crate::test_log_capture::capture_log_output(|| {
-        let runtime = match LoopbackRouterRuntime::start_for_test(config) {
+    let (captured_logs, ()) = crate::test_log_capture::capture_log_output_async(async {
+        let runtime = match tokio::task::spawn_blocking({
+            let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+            move || {
+                tracing::dispatcher::with_default(&startup_dispatcher, || {
+                    LoopbackRouterRuntime::start_for_test(config)
+                })
+            }
+        })
+        .await
+        .expect("blocking runtime startup should join")
+        {
             Ok(runtime) => runtime,
             Err(error) => panic!("router runtime should start: {error}"),
         };
@@ -452,12 +492,13 @@ fn selection_diagnostics_unreplayable_http_quota_error_uses_real_handler() {
             Ok(()) => {}
             Err(error) => panic!("mock upstream thread panicked: {error:?}"),
         }
-        wait_for_durable_quota_exhaustion(&state, &[primary.account_id()]);
+        wait_for_durable_quota_exhaustion(&state, &[primary.account_id()]).await;
         wait_for_repository_selected_account(
             &state,
             fallback.account_id(),
             "durable quota state should select the fallback while serving",
-        );
+        )
+        .await;
         shutdown.cancel();
         match server_thread.join() {
             Ok(Ok(handled)) => assert_eq!(handled, 1),
@@ -465,7 +506,8 @@ fn selection_diagnostics_unreplayable_http_quota_error_uses_real_handler() {
             Err(error) => panic!("router server thread panicked: {error:?}"),
         }
         response = Some(observed_response);
-    });
+    })
+    .await;
     let response = response.unwrap_or_else(|| panic!("the real handler should return a response"));
 
     assert!(response.starts_with("HTTP/1.1 503 Service Unavailable\r\n"));
@@ -499,16 +541,17 @@ fn selection_diagnostics_unreplayable_http_quota_error_uses_real_handler() {
     assert!(!captured_logs.contains("primary-token"));
     assert!(!captured_logs.contains("fallback-token"));
 
-    let runtime_state = must_ok(SqliteStateStore::open(&database_path));
+    let runtime_state = must_ok(AsyncSqliteStateStore::open(&database_path).await);
     wait_for_repository_selected_account(
         &runtime_state,
         fallback.account_id(),
         "fallback should remain selectable after unreplayable quota error",
-    );
+    )
+    .await;
 }
 
-#[test]
-fn selection_diagnostics_http_attempt_limit_failure_reaches_real_handler_and_503() {
+#[tokio::test]
+async fn selection_diagnostics_http_attempt_limit_failure_reaches_real_handler_and_503() {
     use sqlx::Connection;
 
     let temp_dir = ProxyTestTempDir::new("selection_diagnostics_attempt_limit_failure");
@@ -535,17 +578,23 @@ fn selection_diagnostics_http_attempt_limit_failure_reaches_real_handler_and_503
         secret_path,
     );
     let mut response = None;
-    let captured_logs = crate::test_log_capture::capture_log_output(|| {
-        let runtime = LoopbackRouterRuntime::start_for_test(config)
-            .unwrap_or_else(|error| panic!("test router runtime should start: {error}"));
+    let (captured_logs, ()) = crate::test_log_capture::capture_log_output_async(async {
+        let runtime = tokio::task::spawn_blocking({
+            let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+            move || {
+                tracing::dispatcher::with_default(&startup_dispatcher, || {
+                    LoopbackRouterRuntime::start_for_test(config)
+                })
+            }
+        })
+        .await
+        .expect("blocking runtime startup should join")
+        .unwrap_or_else(|error| panic!("test router runtime should start: {error}"));
         let sqlite_options = sqlx::sqlite::SqliteConnectOptions::new()
             .filename(&database_path)
             .create_if_missing(true);
-        let fixture_runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap_or_else(|error| panic!("fixture SQLite runtime should build: {error}"));
-        fixture_runtime.block_on(async {
+
+        (async {
             let mut connection = sqlx::SqliteConnection::connect_with(&sqlite_options)
                 .await
                 .unwrap_or_else(|error| panic!("fixture SQLite connection should open: {error}"));
@@ -557,7 +606,8 @@ fn selection_diagnostics_http_attempt_limit_failure_reaches_real_handler_and_503
                 .close()
                 .await
                 .unwrap_or_else(|error| panic!("fixture SQLite connection should close: {error}"));
-        });
+        })
+        .await;
 
         let router_address = runtime.local_addr();
         let client_thread = thread::spawn(move || {
@@ -567,9 +617,12 @@ fn selection_diagnostics_http_attempt_limit_failure_reaches_real_handler_and_503
                 br#"{"model":"gpt-5","body_private_marker":"offline-test"}"#,
             )
         });
-        let handled = runtime.serve_http_connections(1).unwrap_or_else(|error| {
-            panic!("router should serve the read-failure request: {error}")
-        });
+        let handled = tokio::task::spawn_blocking(move || runtime.serve_http_connections(1))
+            .await
+            .expect("blocking product serving should join")
+            .unwrap_or_else(|error| {
+                panic!("router should serve the read-failure request: {error}")
+            });
         assert_eq!(handled, 1);
         response = Some(
             client_thread
@@ -581,7 +634,8 @@ fn selection_diagnostics_http_attempt_limit_failure_reaches_real_handler_and_503
             Ok((_stream, _peer)) => panic!("attempt-limit failure must stop before upstream"),
             Err(error) => panic!("upstream listener should remain unused: {error}"),
         }
-    });
+    })
+    .await;
     let response =
         response.unwrap_or_else(|| panic!("real handler should return its 503 response"));
 

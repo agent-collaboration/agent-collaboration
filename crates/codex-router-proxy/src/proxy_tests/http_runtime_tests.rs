@@ -1,11 +1,11 @@
 use super::*;
 
-#[test]
-fn assembled_loopback_router_runtime_forwards_with_repository_state_and_secrets() {
+#[tokio::test]
+async fn assembled_loopback_router_runtime_forwards_with_repository_state_and_secrets() {
     let temp_dir = ProxyTestTempDir::new("assembled_runtime");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -27,7 +27,8 @@ fn assembled_loopback_router_runtime_forwards_with_repository_state_and_secrets(
         &account,
         70,
         "runtime-upstream-token",
-    );
+    )
+    .await;
     let affinity_secret = must_ok(load_or_create_router_affinity_hash_secret(&secrets))
         .secret()
         .clone();
@@ -78,7 +79,17 @@ fn assembled_loopback_router_runtime_forwards_with_repository_state_and_secrets(
         LocalRouterTokenRecord::new(SecretString::new("current-token"), TokenGeneration::new(1)),
     )
     .with_quota_clock(1_030, 60);
-    let runtime = match LoopbackRouterRuntime::start_for_test(config) {
+    let runtime = match tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test(config)
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    {
         Ok(runtime) => runtime,
         Err(error) => panic!("router runtime should start: {error}"),
     };
@@ -91,7 +102,10 @@ fn assembled_loopback_router_runtime_forwards_with_repository_state_and_secrets(
         )
     });
 
-    let handled = match runtime.serve_http_connections(1) {
+    let handled = match tokio::task::spawn_blocking(move || runtime.serve_http_connections(1))
+        .await
+        .expect("blocking product serving should join")
+    {
         Ok(handled) => handled,
         Err(error) => panic!("router runtime should serve one connection: {error}"),
     };
@@ -122,8 +136,8 @@ fn assembled_loopback_router_runtime_forwards_with_repository_state_and_secrets(
         &affinity_secret,
         &must_ok(PreviousResponseId::new("resp_runtime")),
     ));
-    let runtime_state = must_ok(SqliteStateStore::open(&database_path));
-    let owner_lookup = wait_for_previous_response_owner(&runtime_state, &owner_hash);
+    let runtime_state = must_ok(AsyncSqliteStateStore::open(&database_path).await);
+    let owner_lookup = wait_for_previous_response_owner(&runtime_state, &owner_hash).await;
     let PreviousResponseAffinityOwnerLookup::Found(owner) = owner_lookup else {
         panic!("runtime should persist response owner row: {owner_lookup:?}");
     };
@@ -131,13 +145,15 @@ fn assembled_loopback_router_runtime_forwards_with_repository_state_and_secrets(
     assert_eq!(owner.credential_generation(), 1);
 }
 
-#[test]
-fn served_http_weekly_floor_at_threshold_routes_only_to_eligible_peer() {
+#[tokio::test]
+async fn served_http_weekly_floor_at_threshold_routes_only_to_eligible_peer() {
     const NOW: u64 = 1_030;
     let temp_dir = ProxyTestTempDir::new("served_http_weekly_floor");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = SqliteStateStore::open(&database_path).expect("state should open");
+    let state = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("state should open");
     let secrets =
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_path)
             .expect("secrets should open");
@@ -159,13 +175,15 @@ fn served_http_weekly_floor_at_threshold_routes_only_to_eligible_peer() {
         &protected,
         8,
         "protected-http-token",
-    );
-    persist_account_with_snapshot_and_token(&state, &secrets, &peer, 80, "peer-http-token");
-    refresh_served_floor_windows_for_test(&state, &protected, NOW, 8);
-    refresh_served_floor_windows_for_test(&state, &peer, NOW, 80);
-    let selector_inputs =
-        SelectorQuotaRepository::selector_inputs_for_route_band(&state, "responses", NOW)
-            .expect("served floor quota rows should load");
+    )
+    .await;
+    persist_account_with_snapshot_and_token(&state, &secrets, &peer, 80, "peer-http-token").await;
+    refresh_served_floor_windows_for_test(&state, &protected, NOW, 8).await;
+    refresh_served_floor_windows_for_test(&state, &peer, NOW, 80).await;
+    let selector_inputs = state
+        .selector_inputs_for_route_band("responses", NOW)
+        .await
+        .expect("served floor quota rows should load");
     assert!(
         selector_inputs.iter().all(|input| input
             .windows()
@@ -173,8 +191,8 @@ fn served_http_weekly_floor_at_threshold_routes_only_to_eligible_peer() {
             .all(|window| { window.status() == SelectorQuotaWindowStatus::Eligible })),
         "served floor fixture must have fresh eligible quota windows"
     );
-    drop(state);
-    set_weekly_floor_for_test(&database_path, protected.label(), 500);
+    state.close().await.expect("fixture state should close");
+    set_weekly_floor_for_test(&database_path, protected.label(), 500).await;
 
     let upstream_listener = TcpListener::bind("127.0.0.1:0").expect("upstream should bind");
     let upstream_address = upstream_listener.local_addr().expect("address should read");
@@ -197,7 +215,17 @@ fn served_http_weekly_floor_at_threshold_routes_only_to_eligible_peer() {
         secret_path,
     )
     .with_quota_clock(NOW, 60);
-    let runtime = LoopbackRouterRuntime::start_for_test(config).expect("runtime should start");
+    let runtime = tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test(config)
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    .expect("runtime should start");
     let router_address = runtime.local_addr();
     let client_thread = thread::spawn(move || {
         send_loopback_request(
@@ -207,8 +235,9 @@ fn served_http_weekly_floor_at_threshold_routes_only_to_eligible_peer() {
         )
     });
     assert_eq!(
-        runtime
-            .serve_http_connections(1)
+        tokio::task::spawn_blocking(move || runtime.serve_http_connections(1))
+            .await
+            .expect("blocking product serving should join")
             .expect("runtime should serve HTTP"),
         1
     );
@@ -220,13 +249,15 @@ fn served_http_weekly_floor_at_threshold_routes_only_to_eligible_peer() {
     upstream_thread.join().expect("upstream should join");
 }
 
-#[test]
-fn served_http_weekly_floor_ignores_bad_forecast_above_current_threshold() {
+#[tokio::test]
+async fn served_http_weekly_floor_ignores_bad_forecast_above_current_threshold() {
     const NOW: u64 = 1_030;
     let temp_dir = ProxyTestTempDir::new("served_http_weekly_floor_bad_forecast");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = SqliteStateStore::open(&database_path).expect("state should open");
+    let state = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("state should open");
     let secrets =
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_path)
             .expect("secrets should open");
@@ -242,8 +273,9 @@ fn served_http_weekly_floor_ignores_bad_forecast_above_current_threshold() {
         &protected,
         48,
         "protected-forecast-http-token",
-    );
-    drop(state);
+    )
+    .await;
+    state.close().await.expect("fixture state should close");
     seed_computable_weekly_margin_for_test(
         &database_path,
         protected.account_id(),
@@ -252,14 +284,16 @@ fn served_http_weekly_floor_ignores_bad_forecast_above_current_threshold() {
         100,
         48,
         5 * 86_400,
-    );
-    set_weekly_floor_for_test(&database_path, protected.label(), 1_000);
+    )
+    .await;
+    set_weekly_floor_for_test(&database_path, protected.label(), 1_000).await;
     assert_bad_projected_margin_does_not_floor_block_for_test(
         &database_path,
         protected.account_id(),
         NOW,
         1_000,
-    );
+    )
+    .await;
 
     let upstream_listener = TcpListener::bind("127.0.0.1:0").expect("upstream should bind");
     let upstream_address = upstream_listener.local_addr().expect("address should read");
@@ -282,7 +316,17 @@ fn served_http_weekly_floor_ignores_bad_forecast_above_current_threshold() {
         secret_path,
     )
     .with_quota_clock(NOW, 60);
-    let runtime = LoopbackRouterRuntime::start_for_test(config).expect("runtime should start");
+    let runtime = tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test(config)
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    .expect("runtime should start");
     let router_address = runtime.local_addr();
     let client_thread = thread::spawn(move || {
         send_loopback_request(
@@ -292,8 +336,9 @@ fn served_http_weekly_floor_ignores_bad_forecast_above_current_threshold() {
         )
     });
     assert_eq!(
-        runtime
-            .serve_http_connections(1)
+        tokio::task::spawn_blocking(move || runtime.serve_http_connections(1))
+            .await
+            .expect("blocking product serving should join")
             .expect("runtime should serve HTTP"),
         1
     );
@@ -309,12 +354,14 @@ fn served_http_weekly_floor_ignores_bad_forecast_above_current_threshold() {
     upstream_thread.join().expect("upstream should join");
 }
 
-#[test]
-fn served_http_all_weekly_floor_blocked_is_scrubbed_and_sends_zero_upstream_requests() {
+#[tokio::test]
+async fn served_http_all_weekly_floor_blocked_is_scrubbed_and_sends_zero_upstream_requests() {
     let temp_dir = ProxyTestTempDir::new("served_http_all_weekly_floor_blocked");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = SqliteStateStore::open(&database_path).expect("state should open");
+    let state = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("state should open");
     let secrets =
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_path)
             .expect("secrets should open");
@@ -330,23 +377,27 @@ fn served_http_all_weekly_floor_blocked_is_scrubbed_and_sends_zero_upstream_requ
         "sensitive-second-label",
         AccountStatus::Enabled,
     );
-    persist_account_with_snapshot_and_token(&state, &secrets, &first, 100, "first-secret-token");
-    persist_account_with_snapshot_and_token(&state, &secrets, &second, 4, "second-secret-token");
+    persist_account_with_snapshot_and_token(&state, &secrets, &first, 100, "first-secret-token")
+        .await;
+    persist_account_with_snapshot_and_token(&state, &secrets, &second, 4, "second-secret-token")
+        .await;
     persist_fresh_account_with_selector_window_specs(
         &state,
         &first,
         "responses",
         &[(18_000, 5, true), (604_800, 5, false)],
-    );
+    )
+    .await;
     persist_fresh_account_with_selector_window_specs(
         &state,
         &second,
         "responses",
         &[(18_000, 4, true), (604_800, 4, false)],
-    );
-    drop(state);
-    set_weekly_floor_for_test(&database_path, first.label(), 500);
-    set_weekly_floor_for_test(&database_path, second.label(), 500);
+    )
+    .await;
+    state.close().await.expect("fixture state should close");
+    set_weekly_floor_for_test(&database_path, first.label(), 500).await;
+    set_weekly_floor_for_test(&database_path, second.label(), 500).await;
 
     let upstream_listener = TcpListener::bind("127.0.0.1:0").expect("upstream should bind");
     upstream_listener
@@ -361,7 +412,17 @@ fn served_http_all_weekly_floor_blocked_is_scrubbed_and_sends_zero_upstream_requ
         secret_path,
     )
     .with_quota_clock(1_030, 60);
-    let runtime = LoopbackRouterRuntime::start_for_test(config).expect("runtime should start");
+    let runtime = tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test(config)
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    .expect("runtime should start");
     let router_address = runtime.local_addr();
     let client_thread = thread::spawn(move || {
         send_loopback_request(
@@ -371,8 +432,9 @@ fn served_http_all_weekly_floor_blocked_is_scrubbed_and_sends_zero_upstream_requ
         )
     });
     assert_eq!(
-        runtime
-            .serve_http_connections(1)
+        tokio::task::spawn_blocking(move || runtime.serve_http_connections(1))
+            .await
+            .expect("blocking product serving should join")
             .expect("runtime should serve HTTP"),
         1
     );

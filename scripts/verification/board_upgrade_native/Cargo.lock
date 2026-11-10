@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "acp-client-runtime"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "agent-client-protocol",
  "futures-util",
@@ -21,7 +21,7 @@ dependencies = [
 
 [[package]]
 name = "acp-provider-adapters"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "acp-client-runtime",
  "serde",
@@ -115,7 +115,7 @@ dependencies = [
 
 [[package]]
 name = "agent-automation"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -180,7 +180,7 @@ dependencies = [
 
 [[package]]
 name = "agent-router-update"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "automation-storage",
  "board-fleet-sync",
@@ -202,13 +202,13 @@ dependencies = [
  "fleet-sync-lease",
  "fleet-sync-protocol",
  "fleet-sync-writer",
+ "futures-util",
  "interaction-storage",
  "message-board",
  "message-board-storage",
  "nix",
  "reqwest",
  "runtime-primitives",
- "rusqlite",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -517,7 +517,7 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "automation-storage"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "agent-automation",
  "chrono",
@@ -733,7 +733,7 @@ dependencies = [
 
 [[package]]
 name = "board-fleet-sync"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "board-sync-protocol",
  "chrono",
@@ -758,7 +758,7 @@ dependencies = [
 
 [[package]]
 name = "board-sync-protocol"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "chrono",
  "collaboration-mail-protocol",
@@ -1011,7 +1011,7 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "claude-code-peer-messaging"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "agent-automation",
  "collaboration-protocol",
@@ -1040,7 +1040,7 @@ checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 
 [[package]]
 name = "codex-acp-adapter"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -1060,7 +1060,7 @@ dependencies = [
 
 [[package]]
 name = "codex-native-integration"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "futures-util",
  "jsonschema",
@@ -1079,7 +1079,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-core"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "hmac 0.12.1",
  "serde",
@@ -1091,7 +1091,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-host"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "acp-client-runtime",
  "acp-provider-adapters",
@@ -1130,6 +1130,7 @@ dependencies = [
  "nix",
  "opentelemetry",
  "reqwest",
+ "router-clock",
  "runtime-primitives",
  "rustix 1.1.4",
  "serde",
@@ -1147,7 +1148,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-quota"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "codex-router-core",
  "thiserror",
@@ -1155,7 +1156,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-secret-store"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "aes-gcm 0.11.1",
  "apple-native-keyring-store",
@@ -1177,7 +1178,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-selection"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "base64 0.22.1",
  "codex-router-core",
@@ -1191,7 +1192,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-state"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "codex-router-core",
  "codex-router-selection",
@@ -1204,7 +1205,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-admin-protocol"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "board-sync-protocol",
  "chrono",
@@ -1216,7 +1217,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-conformance"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1242,7 +1243,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-core"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1276,7 +1277,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-tokio"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "aws-lc-rs",
  "axum",
@@ -1306,7 +1307,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-client"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "board-sync-protocol",
  "codex-native-integration",
@@ -1330,7 +1331,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-contracts"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -1352,7 +1353,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-mail-protocol"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "chrono",
  "message-board",
@@ -1365,7 +1366,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-mcp"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "axum",
  "board-sync-protocol",
@@ -1389,7 +1390,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-protocol"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "agent-automation",
  "board-sync-protocol",
@@ -1410,7 +1411,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-runtime"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -1437,6 +1438,7 @@ dependencies = [
  "message-board",
  "message-board-storage",
  "nix",
+ "router-clock",
  "runtime-primitives",
  "serde",
  "serde_json",
@@ -1453,7 +1455,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-service"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -1483,6 +1485,7 @@ dependencies = [
  "message-board-storage",
  "nix",
  "petgraph",
+ "router-clock",
  "runtime-primitives",
  "serde",
  "serde_json",
@@ -2048,12 +2051,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2acce4a10f12dc2fb14a218589d4f1f62ef011b2d0cc4b3cb1bba8e94da14649"
 
 [[package]]
-name = "fallible-streaming-iterator"
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
-
-[[package]]
 name = "fancy-regex"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2095,7 +2092,7 @@ checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
 
 [[package]]
 name = "fleet-admission"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "chrono",
  "fleet-sync-protocol",
@@ -2108,7 +2105,7 @@ dependencies = [
 
 [[package]]
 name = "fleet-identity-protocol"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "chrono",
  "message-board",
@@ -2611,15 +2608,6 @@ dependencies = [
 
 [[package]]
 name = "hashlink"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7382cf6263419f2d8df38c55d7da83da5c18aef87fc7a7fc1fb1e344edfe14c1"
-dependencies = [
- "hashbrown 0.15.5",
-]
-
-[[package]]
-name = "hashlink"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "824e001ac4f3012dd16a264bec811403a67ca9deb6c102fc5049b32c4574b35f"
@@ -3023,7 +3011,7 @@ dependencies = [
 
 [[package]]
 name = "interaction-storage"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "chrono",
  "collaboration-mail-protocol",
@@ -3035,6 +3023,7 @@ dependencies = [
  "serde",
  "serde_json",
  "session-event-model",
+ "sqlite-storage-maintenance",
  "sqlx",
  "sqlx-turso",
  "thiserror",
@@ -3283,12 +3272,14 @@ dependencies = [
 
 [[package]]
 name = "lifecycle-observation"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "base64 0.22.1",
  "chrono",
  "codex-native-integration",
  "collaboration-protocol",
+ "router-clock",
+ "runtime-primitives",
  "serde",
  "serde_json",
  "sqlite-storage-maintenance",
@@ -3413,7 +3404,7 @@ dependencies = [
 
 [[package]]
 name = "message-board"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "chrono",
  "petgraph",
@@ -3428,7 +3419,7 @@ dependencies = [
 
 [[package]]
 name = "message-board-storage"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "base64 0.22.1",
  "board-sync-protocol",
@@ -3446,6 +3437,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sqlite-storage-maintenance",
  "sqlx",
  "sqlx-turso",
  "thiserror",
@@ -4310,6 +4302,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "router-clock"
+version = "0.1.146"
+dependencies = [
+ "chrono",
+ "runtime-primitives",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "runtime-primitives"
 version = "0.4.0"
 source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
@@ -4318,20 +4320,6 @@ dependencies = [
  "thiserror",
  "tokio",
  "uuid",
-]
-
-[[package]]
-name = "rusqlite"
-version = "0.37.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "165ca6e57b20e1351573e3729b958bc62f0e48025386970b6e4d29e7a7e71f3f"
-dependencies = [
- "bitflags 2.13.0",
- "fallible-iterator",
- "fallible-streaming-iterator",
- "hashlink 0.10.0",
- "libsqlite3-sys",
- "smallvec",
 ]
 
 [[package]]
@@ -4665,7 +4653,7 @@ dependencies = [
 
 [[package]]
 name = "session-event-model"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
  "base64 0.22.1",
  "message-board",
@@ -4845,11 +4833,14 @@ dependencies = [
 
 [[package]]
 name = "sqlite-storage-maintenance"
-version = "0.1.142"
+version = "0.1.146"
 dependencies = [
+ "chrono",
  "fs2",
+ "runtime-primitives",
  "sqlx",
  "thiserror",
+ "tokio",
  "tracing",
 ]
 
@@ -4885,7 +4876,7 @@ dependencies = [
  "futures-io",
  "futures-util",
  "hashbrown 0.16.1",
- "hashlink 0.11.1",
+ "hashlink",
  "indexmap 2.14.0",
  "log",
  "memchr",

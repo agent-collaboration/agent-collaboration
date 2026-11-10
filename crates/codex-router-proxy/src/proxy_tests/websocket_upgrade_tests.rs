@@ -1,15 +1,15 @@
 use super::*;
 
-#[test]
+#[tokio::test]
 #[expect(
     clippy::result_large_err,
     reason = "The existing error contract preserves the complete diagnostic payload."
 )]
-fn loopback_router_runtime_accepts_fragmented_websocket_upgrade() {
+async fn loopback_router_runtime_accepts_fragmented_websocket_upgrade() {
     let temp_dir = ProxyTestTempDir::new("runtime_websocket_fragmented_upgrade");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -31,7 +31,8 @@ fn loopback_router_runtime_accepts_fragmented_websocket_upgrade() {
         &account,
         90,
         "fragmented-ws-upstream-token",
-    );
+    )
+    .await;
 
     let upstream_listener = match TcpListener::bind("127.0.0.1:0") {
         Ok(listener) => listener,
@@ -89,7 +90,17 @@ fn loopback_router_runtime_accepts_fragmented_websocket_upgrade() {
         secret_path,
     )
     .with_quota_clock(1_030, 60);
-    let runtime = match LoopbackRouterRuntime::start_for_test(config) {
+    let runtime = match tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test(config)
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    {
         Ok(runtime) => runtime,
         Err(error) => panic!("router runtime should start: {error}"),
     };
@@ -129,7 +140,10 @@ fn loopback_router_runtime_accepts_fragmented_websocket_upgrade() {
         }
     });
 
-    let handled = match runtime.serve_protocol_connections(1) {
+    let handled = match tokio::task::spawn_blocking(move || runtime.serve_protocol_connections(1))
+        .await
+        .expect("blocking product serving should join")
+    {
         Ok(handled) => handled,
         Err(error) => panic!("router runtime should serve fragmented websocket: {error}"),
     };
@@ -159,17 +173,19 @@ fn loopback_router_runtime_accepts_fragmented_websocket_upgrade() {
     }
 }
 
-#[test]
+#[tokio::test]
 #[expect(
     clippy::result_large_err,
     reason = "The existing error contract preserves the complete diagnostic payload."
 )]
-fn served_new_websocket_weekly_floor_routes_only_to_eligible_peer() {
+async fn served_new_websocket_weekly_floor_routes_only_to_eligible_peer() {
     const NOW: u64 = 1_030;
     let temp_dir = ProxyTestTempDir::new("served_new_websocket_weekly_floor");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = SqliteStateStore::open(&database_path).expect("state should open");
+    let state = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("state should open");
     let secrets =
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_path)
             .expect("secrets should open");
@@ -185,12 +201,13 @@ fn served_new_websocket_weekly_floor_routes_only_to_eligible_peer() {
         "peer",
         AccountStatus::Enabled,
     );
-    persist_account_with_snapshot_and_token(&state, &secrets, &protected, 5, "protected-ws-token");
-    persist_account_with_snapshot_and_token(&state, &secrets, &peer, 80, "peer-ws-token");
-    refresh_served_floor_windows_for_test(&state, &protected, NOW, 5);
-    refresh_served_floor_windows_for_test(&state, &peer, NOW, 80);
-    drop(state);
-    set_weekly_floor_for_test(&database_path, protected.label(), 500);
+    persist_account_with_snapshot_and_token(&state, &secrets, &protected, 5, "protected-ws-token")
+        .await;
+    persist_account_with_snapshot_and_token(&state, &secrets, &peer, 80, "peer-ws-token").await;
+    refresh_served_floor_windows_for_test(&state, &protected, NOW, 5).await;
+    refresh_served_floor_windows_for_test(&state, &peer, NOW, 80).await;
+    state.close().await.expect("fixture state should close");
+    set_weekly_floor_for_test(&database_path, protected.label(), 500).await;
 
     let upstream_listener = TcpListener::bind("127.0.0.1:0").expect("upstream should bind");
     let upstream_address = upstream_listener.local_addr().expect("address should read");
@@ -229,7 +246,17 @@ fn served_new_websocket_weekly_floor_routes_only_to_eligible_peer() {
         secret_path,
     )
     .with_quota_clock(NOW, 60);
-    let runtime = LoopbackRouterRuntime::start_for_test(config).expect("runtime should start");
+    let runtime = tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test(config)
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    .expect("runtime should start");
     let router_address = runtime.local_addr();
     let client_thread = thread::spawn(move || {
         let mut websocket =
@@ -244,8 +271,9 @@ fn served_new_websocket_weekly_floor_routes_only_to_eligible_peer() {
     });
 
     assert_eq!(
-        runtime
-            .serve_protocol_connections(1)
+        tokio::task::spawn_blocking(move || runtime.serve_protocol_connections(1))
+            .await
+            .expect("blocking product serving should join")
             .expect("runtime should serve websocket"),
         1
     );
@@ -265,16 +293,16 @@ fn served_new_websocket_weekly_floor_routes_only_to_eligible_peer() {
     upstream_thread.join().expect("upstream should join");
 }
 
-#[test]
+#[tokio::test]
 #[expect(
     clippy::result_large_err,
     reason = "The existing error contract preserves the complete diagnostic payload."
 )]
-fn loopback_router_runtime_accepts_http_while_websocket_is_blocked() {
+async fn loopback_router_runtime_accepts_http_while_websocket_is_blocked() {
     let temp_dir = ProxyTestTempDir::new("runtime_websocket_concurrent_accept");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -296,7 +324,8 @@ fn loopback_router_runtime_accepts_http_while_websocket_is_blocked() {
         &account,
         90,
         "concurrent-upstream-token",
-    );
+    )
+    .await;
 
     let upstream_listener = match TcpListener::bind("127.0.0.1:0") {
         Ok(listener) => listener,
@@ -388,7 +417,17 @@ fn loopback_router_runtime_accepts_http_while_websocket_is_blocked() {
         secret_path,
     )
     .with_quota_clock(1_030, 60);
-    let runtime = match LoopbackRouterRuntime::start_for_test(config) {
+    let runtime = match tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test(config)
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    {
         Ok(runtime) => runtime,
         Err(error) => panic!("router runtime should start: {error}"),
     };

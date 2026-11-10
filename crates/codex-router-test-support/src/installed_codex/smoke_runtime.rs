@@ -14,7 +14,7 @@ use super::{
     wait_for_concurrent_session_barrier, write_redacted_three_websocket_transcript,
 };
 
-pub(super) fn run_installed_codex_three_websocket_mock_e2e_inner(
+pub(super) async fn run_installed_codex_three_websocket_mock_e2e_inner(
     config: ConcurrentWebSocketHarnessConfig,
 ) -> Result<InstalledCodexSmokeReport, String> {
     let smoke_root = SmokeTempRoot::new("installed-codex-three-websocket")?;
@@ -31,9 +31,10 @@ pub(super) fn run_installed_codex_three_websocket_mock_e2e_inner(
         .then(|| QuotaReconnectSqlitePressureConfig::new(runtime_roots.state_path.clone()));
     let upstream = MockConcurrentWebSocketUpstream::start(config.upstream, sqlite_pressure)?;
     let seed = if config.quota_reconnect {
-        seed_s8_overlap_quota_router_state(&runtime_roots.state_path, &runtime_roots.secret_root)?
+        seed_s8_overlap_quota_router_state(&runtime_roots.state_path, &runtime_roots.secret_root)
+            .await?
     } else {
-        seed_router_state(&runtime_roots.state_path, &runtime_roots.secret_root)?
+        seed_router_state(&runtime_roots.state_path, &runtime_roots.secret_root).await?
     };
     let router_port = reserve_loopback_port()?;
     let audit_path = smoke_root

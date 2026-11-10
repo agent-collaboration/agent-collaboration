@@ -29,20 +29,17 @@ fn expected_pool_error(pool: ConfiguredPool) -> serde_json::Value {
     }
 }
 
-fn check_pool_error(pool: ConfiguredPool, websocket: bool) {
+async fn check_pool_error(pool: ConfiguredPool, websocket: bool) {
     let directory = ProxyTestTempDir::new("no_openai_accounts_error");
     let database = directory.path().join("state.sqlite");
     let secret_root = directory.path().join("secrets");
-    let setup = must_ok(
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build(),
-    );
-    setup.block_on(async {
+
+    (async {
         must_ok(AsyncSqliteStateStore::open(&database).await);
-    });
-    drop(setup);
-    let state = must_ok(SqliteStateStore::open(&database));
+    })
+    .await;
+
+    let state = must_ok(AsyncSqliteStateStore::open(&database).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_root),
     );
@@ -50,15 +47,17 @@ fn check_pool_error(pool: ConfiguredPool, websocket: bool) {
         ConfiguredPool::Empty => {}
         ConfiguredPool::ClaudeOnly => {
             must_ok(
-                state.upsert_account(
-                    &AccountRecord::new(
-                        Provider::Claude,
-                        account_id("claude_pool_account"),
-                        "claude-pool-canary",
-                        AccountStatus::Enabled,
+                state
+                    .upsert_account(
+                        &AccountRecord::new(
+                            Provider::Claude,
+                            account_id("claude_pool_account"),
+                            "claude-pool-canary",
+                            AccountStatus::Enabled,
+                        )
+                        .with_active_credential_generation(1),
                     )
-                    .with_active_credential_generation(1),
-                ),
+                    .await,
             );
         }
         ConfiguredPool::ExhaustedOpenai => {
@@ -74,15 +73,20 @@ fn check_pool_error(pool: ConfiguredPool, websocket: bool) {
                 &account,
                 0,
                 "pool-error-token-canary",
-            );
+            )
+            .await;
         }
         ConfiguredPool::DisabledOpenai => {
-            must_ok(state.upsert_account(&AccountRecord::new(
-                Provider::Openai,
-                account_id("disabled_pool_account"),
-                "disabled-pool-canary",
-                AccountStatus::Disabled,
-            )));
+            must_ok(
+                state
+                    .upsert_account(&AccountRecord::new(
+                        Provider::Openai,
+                        account_id("disabled_pool_account"),
+                        "disabled-pool-canary",
+                        AccountStatus::Disabled,
+                    ))
+                    .await,
+            );
         }
     }
     let upstream = must_ok(TcpListener::bind("127.0.0.1:0"));
@@ -91,19 +95,30 @@ fn check_pool_error(pool: ConfiguredPool, websocket: bool) {
         "http://{}/v1",
         must_ok(upstream.local_addr()),
     )));
-    let runtime = must_ok(LoopbackRouterRuntime::start_for_test(
-        LoopbackRouterRuntimeConfig::new(
-            must_ok(LoopbackBindAddress::new("127.0.0.1", 0)),
-            endpoint,
-            database,
-            secret_root,
-            LocalRouterTokenRecord::new(
-                SecretString::new("current-token"),
-                TokenGeneration::new(1),
-            ),
-        )
-        .with_quota_clock(1_030, 60),
-    ));
+    let runtime = must_ok(
+        tokio::task::spawn_blocking({
+            let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+            move || {
+                tracing::dispatcher::with_default(&startup_dispatcher, || {
+                    LoopbackRouterRuntime::start_for_test(
+                        LoopbackRouterRuntimeConfig::new(
+                            must_ok(LoopbackBindAddress::new("127.0.0.1", 0)),
+                            endpoint,
+                            database,
+                            secret_root,
+                            LocalRouterTokenRecord::new(
+                                SecretString::new("current-token"),
+                                TokenGeneration::new(1),
+                            ),
+                        )
+                        .with_quota_clock(1_030, 60),
+                    )
+                })
+            }
+        })
+        .await
+        .expect("blocking runtime startup should join"),
+    );
     let address = runtime.local_addr();
     let client = thread::spawn(move || {
         if websocket {
@@ -137,7 +152,11 @@ fn check_pool_error(pool: ConfiguredPool, websocket: bool) {
                 .to_owned()
         }
     });
-    must_ok(runtime.serve_protocol_connections(1));
+    must_ok(
+        tokio::task::spawn_blocking(move || runtime.serve_protocol_connections(1))
+            .await
+            .expect("blocking product serving should join"),
+    );
     let body = client.join().expect("pool-error client should settle");
     let observed: serde_json::Value = must_ok(serde_json::from_str(&body));
     assert_eq!(observed, expected_pool_error(pool));
@@ -147,34 +166,34 @@ fn check_pool_error(pool: ConfiguredPool, websocket: bool) {
     );
 }
 
-#[test]
-fn http_zero_openai_accounts_reports_configuration_instead_of_quota() {
-    check_pool_error(ConfiguredPool::Empty, false);
+#[tokio::test]
+async fn http_zero_openai_accounts_reports_configuration_instead_of_quota() {
+    check_pool_error(ConfiguredPool::Empty, false).await;
 }
 
-#[test]
-fn websocket_zero_openai_accounts_reports_configuration_instead_of_quota() {
-    check_pool_error(ConfiguredPool::Empty, true);
+#[tokio::test]
+async fn websocket_zero_openai_accounts_reports_configuration_instead_of_quota() {
+    check_pool_error(ConfiguredPool::Empty, true).await;
 }
 
-#[test]
-fn http_claude_only_pool_reports_missing_openai_configuration() {
-    check_pool_error(ConfiguredPool::ClaudeOnly, false);
+#[tokio::test]
+async fn http_claude_only_pool_reports_missing_openai_configuration() {
+    check_pool_error(ConfiguredPool::ClaudeOnly, false).await;
 }
 
-#[test]
-fn websocket_claude_only_pool_reports_missing_openai_configuration() {
-    check_pool_error(ConfiguredPool::ClaudeOnly, true);
+#[tokio::test]
+async fn websocket_claude_only_pool_reports_missing_openai_configuration() {
+    check_pool_error(ConfiguredPool::ClaudeOnly, true).await;
 }
 
-#[test]
-fn configured_disabled_or_exhausted_openai_accounts_keep_existing_error() {
+#[tokio::test]
+async fn configured_disabled_or_exhausted_openai_accounts_keep_existing_error() {
     for pool in [
         ConfiguredPool::DisabledOpenai,
         ConfiguredPool::ExhaustedOpenai,
     ] {
-        check_pool_error(pool, false);
-        check_pool_error(pool, true);
+        check_pool_error(pool, false).await;
+        check_pool_error(pool, true).await;
     }
 }
 

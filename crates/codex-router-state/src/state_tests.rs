@@ -9,7 +9,6 @@ use codex_router_core::provider::Provider;
 use codex_router_core::routes::RouteBand;
 use codex_router_selection::burn_down::V1_WEEKLY_WINDOW_SECONDS;
 use codex_router_selection::run_rate::QuotaRunRateConfidence;
-use rusqlite::Connection;
 use sqlx::Row;
 
 use super::package_name;
@@ -30,10 +29,6 @@ use crate::quota_snapshot::QuotaRefreshErrorClass;
 use crate::quota_snapshot::QuotaRefreshStatusSource;
 use crate::quota_snapshot::QuotaSnapshotSource;
 use crate::quota_snapshot::SelectorQuotaWindowStatus;
-use crate::repositories::AccountStateRepository;
-use crate::repositories::AffinityRepository;
-use crate::repositories::QuotaSnapshotRepository;
-use crate::repositories::SelectorQuotaRepository;
 use crate::selection_projection::project_route_band_selection_inputs;
 use crate::selection_projection::project_route_band_selection_inputs_with_active_counts;
 use crate::session_account_affinity::PinObservation;
@@ -45,7 +40,6 @@ use crate::sqlite::AsyncSelectorQuotaRepository;
 use crate::sqlite::AsyncSessionAccountAffinityRepository;
 use crate::sqlite::AsyncSqliteStateStore;
 use crate::sqlite::AsyncWeeklyQuotaFloorMutationStore;
-use crate::sqlite::SqliteStateStore;
 use crate::sqlite::StateStoreError;
 use crate::sqlite::WeeklyQuotaFloorMutationResult;
 

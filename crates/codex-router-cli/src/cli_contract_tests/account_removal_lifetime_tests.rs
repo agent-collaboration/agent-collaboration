@@ -54,25 +54,27 @@ fn ctrl_c() -> TerminalEvent {
     TerminalEvent::Key(event)
 }
 
-#[test]
-fn quota_ctrl_c_after_credential_deletion_drains_the_real_removal_commit_before_return() {
-    let fixture = RemovalFixture::new("quota-held-removal", AccountStatus::Disabled);
-    fixture.login_account("acct_secondary", "secondary");
-    fixture.seed_dependents();
-    let runtime = test_async_runtime();
-    let result = runtime.block_on(held_removal_scenario(&fixture));
+#[tokio::test]
+async fn quota_ctrl_c_after_credential_deletion_drains_the_real_removal_commit_before_return() {
+    let fixture = RemovalFixture::new("quota-held-removal", AccountStatus::Disabled).await;
+    fixture.login_account("acct_secondary", "secondary").await;
+    fixture.seed_dependents().await;
+
+    let result = (held_removal_scenario(&fixture)).await;
     result.unwrap();
-    assert!(!fixture.account_exists());
+    assert!(!fixture.account_exists().await);
     assert!(!fixture.credential_exists(1));
     assert!(
         fixture
             .dependent_row_counts("acct_primary")
+            .await
             .iter()
             .all(|count| *count == 0)
     );
     assert!(
         fixture
             .dependent_row_counts("acct_secondary")
+            .await
             .iter()
             .any(|count| *count > 0)
     );

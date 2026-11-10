@@ -194,42 +194,48 @@ pub(super) struct UpstreamClientSessionObservation {
 }
 
 /// Runs the installed Codex mock smoke.
-pub fn run_installed_codex_mock_smoke() -> Result<InstalledCodexSmokeReport, String> {
-    run_installed_codex_mock_smoke_with_mode(InstalledCodexSmokeMode::Combined)
+pub async fn run_installed_codex_mock_smoke() -> Result<InstalledCodexSmokeReport, String> {
+    run_installed_codex_mock_smoke_with_mode(InstalledCodexSmokeMode::Combined).await
 }
 
 /// Runs the installed Codex HTTP/SSE mock smoke.
-pub fn run_installed_codex_http_sse_mock_smoke() -> Result<InstalledCodexSmokeReport, String> {
-    run_installed_codex_mock_smoke_with_mode(InstalledCodexSmokeMode::HttpSse)
+pub async fn run_installed_codex_http_sse_mock_smoke() -> Result<InstalledCodexSmokeReport, String>
+{
+    run_installed_codex_mock_smoke_with_mode(InstalledCodexSmokeMode::HttpSse).await
 }
 
 /// Runs the installed Codex WebSocket mock smoke.
-pub fn run_installed_codex_websocket_mock_smoke() -> Result<InstalledCodexSmokeReport, String> {
-    run_installed_codex_mock_smoke_with_mode(InstalledCodexSmokeMode::WebSocket)
+pub async fn run_installed_codex_websocket_mock_smoke() -> Result<InstalledCodexSmokeReport, String>
+{
+    run_installed_codex_mock_smoke_with_mode(InstalledCodexSmokeMode::WebSocket).await
 }
 
 /// Runs three installed Codex WebSocket clients through one router child process.
-pub fn run_installed_codex_three_websocket_mock_e2e() -> Result<InstalledCodexSmokeReport, String> {
+pub async fn run_installed_codex_three_websocket_mock_e2e()
+-> Result<InstalledCodexSmokeReport, String> {
     run_installed_codex_three_websocket_mock_e2e_inner(ConcurrentWebSocketHarnessConfig::quick())
+        .await
 }
 
 /// Runs three installed Codex WebSocket clients through one router for a sustained soak.
-pub fn run_installed_codex_three_websocket_mock_soak() -> Result<InstalledCodexSmokeReport, String>
-{
+pub async fn run_installed_codex_three_websocket_mock_soak()
+-> Result<InstalledCodexSmokeReport, String> {
     run_installed_codex_three_websocket_mock_e2e_inner(ConcurrentWebSocketHarnessConfig::soak())
+        .await
 }
 
 /// Runs three installed Codex WebSocket clients while one reconnects after quota exhaustion.
-pub fn run_installed_codex_s8_overlap_quota_websocket_mock_smoke()
+pub async fn run_installed_codex_s8_overlap_quota_websocket_mock_smoke()
 -> Result<InstalledCodexSmokeReport, String> {
     run_installed_codex_three_websocket_mock_e2e_inner(
         ConcurrentWebSocketHarnessConfig::s8_overlap_quota(),
     )
+    .await
 }
 
 /// Runs one installed Codex WebSocket client through provider quota exhaustion,
 /// then proves Codex reconnects and completes on the next router account.
-pub fn run_installed_codex_quota_reconnect_websocket_mock_smoke()
+pub async fn run_installed_codex_quota_reconnect_websocket_mock_smoke()
 -> Result<InstalledCodexSmokeReport, String> {
     let smoke_root = SmokeTempRoot::new("installed-codex-quota-reconnect")?;
     let runtime_roots = installed_codex_runtime_roots(&smoke_root)?;
@@ -263,7 +269,8 @@ pub fn run_installed_codex_quota_reconnect_websocket_mock_smoke()
         &runtime_roots.state_path,
         &runtime_roots.secret_root,
         QUOTA_RECONNECT_PRIMARY_FOR_INITIAL_ADMISSION,
-    )?;
+    )
+    .await?;
     let sqlite_pressure = (runtime_roots.mode == "copied-dev-state")
         .then(|| QuotaReconnectSqlitePressureConfig::new(runtime_roots.state_path.clone()));
     let upstream = MockQuotaReconnectWebSocketUpstream::start(sqlite_pressure)?;
@@ -345,7 +352,7 @@ pub fn run_installed_codex_quota_reconnect_websocket_mock_smoke()
     Ok(InstalledCodexSmokeReport { transcript_path })
 }
 
-pub(super) fn run_installed_codex_mock_smoke_with_mode(
+pub(super) async fn run_installed_codex_mock_smoke_with_mode(
     mode: InstalledCodexSmokeMode,
 ) -> Result<InstalledCodexSmokeReport, String> {
     let smoke_root = SmokeTempRoot::new("installed-codex")?;
@@ -392,7 +399,7 @@ pub(super) fn run_installed_codex_mock_smoke_with_mode(
 
     let codex_version = command_output_text(Command::new("codex").arg("--version"))?;
     let upstream = MockWebSocketUpstream::start(mode)?;
-    let seed = seed_router_state(&state_path, &secret_root)?;
+    let seed = seed_router_state(&state_path, &secret_root).await?;
     let router_port = reserve_loopback_port()?;
     let audit_path = router_root.join("audit").join("events.jsonl");
     let profile_writer = CodexRouterProfileWriter::new(&codex_home);

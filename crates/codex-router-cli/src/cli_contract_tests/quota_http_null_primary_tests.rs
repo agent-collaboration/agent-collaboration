@@ -1,14 +1,17 @@
 use super::*;
 
-#[test]
-fn quota_refresh_http_provider_projects_weekly_window_when_primary_is_null() {
+#[tokio::test]
+async fn quota_refresh_http_provider_projects_weekly_window_when_primary_is_null() {
     let test_root = TestRoot::new("quota-http-null-primary-window");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    ));
+    let state = must_ok(
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        ))
+        .await,
+    );
     let account_id = account_id("acct_quota_http_null_primary");
     let account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
@@ -17,7 +20,7 @@ fn quota_refresh_http_provider_projects_weekly_window_when_primary_is_null() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(&state, &account));
+    must_ok(state.upsert_account(&account).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(
             router_root.join("secrets"),
@@ -106,32 +109,35 @@ fn quota_refresh_http_provider_projects_weekly_window_when_primary_is_null() {
     let provider = must_ok(HttpQuotaRefreshProvider::new());
     let mut stdout = Vec::new();
 
-    must_ok(refresh_quota_with_dependencies(
-        &mut stdout,
-        router_root,
-        format!("http://{address}"),
-        &resolver,
-        &provider,
-        1_100,
-    ));
+    must_ok(
+        refresh_quota_with_dependencies(
+            &mut stdout,
+            router_root,
+            format!("http://{address}"),
+            &resolver,
+            &provider,
+            1_100,
+        )
+        .await,
+    );
 
     for route_band in ["responses", "models"] {
-        let snapshot = must_ok(QuotaSnapshotRepository::load_snapshot_for_route_band(
-            &state,
-            &account_id,
-            route_band,
-        ))
+        let snapshot = must_ok(
+            state
+                .load_quota_snapshot_for_route_band(&account_id, route_band)
+                .await,
+        )
         .unwrap_or_else(|| panic!("{route_band} quota snapshot should be persisted"));
         assert_eq!(snapshot.remaining_headroom(), 20);
         assert_eq!(snapshot.reset_unix_seconds(), Some(9_000));
         assert_eq!(snapshot.reset_credits_available(), Some(1));
         assert_eq!(snapshot.source(), QuotaSnapshotSource::OpenAiEndpoint);
     }
-    let selector_inputs = must_ok(SelectorQuotaRepository::selector_inputs_for_route_band(
-        &state,
-        "responses",
-        1_100,
-    ));
+    let selector_inputs = must_ok(
+        state
+            .selector_inputs_for_route_band("responses", 1_100)
+            .await,
+    );
     assert_eq!(selector_inputs.len(), 1);
     let windows = selector_inputs[0].windows();
     assert_eq!(windows.len(), 1);

@@ -20,9 +20,7 @@ use codex_router_state::account::AccountRecord;
 use codex_router_state::account::AccountStatus;
 use codex_router_state::quota_snapshot::PersistedSelectorQuotaWindow;
 use codex_router_state::quota_snapshot::SelectorQuotaWindowStatus;
-use codex_router_state::repositories::AccountStateRepository;
-use codex_router_state::repositories::SelectorQuotaRepository;
-use codex_router_state::sqlite::SqliteStateStore;
+use codex_router_state::sqlite::AsyncSqliteStateStore;
 use serde_json::Value;
 use sqlx::sqlite::SqliteConnectOptions;
 use sqlx::sqlite::SqlitePoolOptions;
@@ -81,7 +79,7 @@ impl RouterTestProcess {
         let registry_report_path = temporary_root.path().join("websocket-registry.json");
 
         let account_ids = FAKE_ACCOUNT_IDS.map(str::to_owned);
-        seed_fixture_accounts(&state_path, &secret_root, &account_ids)?;
+        seed_fixture_accounts(&state_path, &secret_root, &account_ids).await?;
 
         let upstream_listener = TcpListener::bind("127.0.0.1:0")
             .await
@@ -356,12 +354,13 @@ impl RouterTestProcess {
     }
 }
 
-fn seed_fixture_accounts(
+async fn seed_fixture_accounts(
     state_path: &Path,
     secret_root: &Path,
     account_ids: &[String; 2],
 ) -> Result<(), String> {
-    let state = SqliteStateStore::open(state_path)
+    let state = AsyncSqliteStateStore::open(state_path)
+        .await
         .map_err(|error| format!("open isolated fixture state database: {error}"))?;
     let secrets = open_encrypted_credential_store(secret_root)
         .map_err(|error| format!("open isolated fixture secret store: {error}"))?;
@@ -381,7 +380,9 @@ fn seed_fixture_accounts(
             AccountStatus::Enabled,
         )
         .with_active_credential_generation(1);
-        AccountStateRepository::upsert_account(&state, &account)
+        state
+            .upsert_account(&account)
+            .await
             .map_err(|error| format!("seed enabled fixture account: {error}"))?;
 
         let short_window = PersistedSelectorQuotaWindow::new(
@@ -403,15 +404,16 @@ fn seed_fixture_accounts(
         .with_remaining_headroom(100)
         .with_reset_unix_seconds(now_unix_seconds.saturating_add(604_800))
         .with_observed_unix_seconds(now_unix_seconds);
-        SelectorQuotaRepository::record_refresh_success_and_replace_selector_windows(
-            &state,
-            &account_id,
-            "responses",
-            &[short_window, weekly_window],
-            now_unix_seconds,
-            now_unix_seconds.saturating_add(86_400),
-        )
-        .map_err(|error| format!("seed eligible fixture quota windows: {error}"))?;
+        state
+            .record_refresh_success_and_replace_selector_windows(
+                &account_id,
+                "responses",
+                &[short_window, weekly_window],
+                now_unix_seconds,
+                now_unix_seconds.saturating_add(86_400),
+            )
+            .await
+            .map_err(|error| format!("seed eligible fixture quota windows: {error}"))?;
 
         let bundle_key = openai_account_credential_bundle_key(&account_id, 1)
             .map_err(|error| format!("build fixture credential key: {error}"))?;
@@ -426,6 +428,10 @@ fn seed_fixture_accounts(
             .map_err(|error| format!("write fixture credential bundle: {error}"))?;
     }
 
+    state
+        .close()
+        .await
+        .map_err(|error| format!("close seeded fixture state: {error}"))?;
     Ok(())
 }
 

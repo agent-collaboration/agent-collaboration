@@ -1,5 +1,6 @@
 use crate::support;
 use agent_router_update::UpgradeError;
+use sqlx::Connection as _;
 use support::*;
 
 #[tokio::test]
@@ -41,9 +42,17 @@ async fn corrupt_stored_attribution_never_becomes_an_inferred_role() -> TestResu
         ),
     ] {
         let (_directory, path) = fixture_copy("watch-scope.sqlite")?;
-        let source = rusqlite::Connection::open(&path)?;
-        source.execute_batch(mutation)?;
-        source.close().map_err(|(_, error)| error)?;
+        let mut source = sqlx::SqliteConnection::connect_with(
+            &sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(&path)
+                .create_if_missing(true)
+                .foreign_keys(false),
+        )
+        .await?;
+        sqlx::raw_sql(sqlx::AssertSqlSafe(mutation))
+            .execute(&mut source)
+            .await?;
+        source.close().await?;
         let bytes = std::fs::read(&path)?;
         match prepare_path(&path).await {
             Ok(prepared) => {

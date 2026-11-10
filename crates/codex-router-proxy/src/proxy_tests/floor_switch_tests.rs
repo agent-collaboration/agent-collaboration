@@ -4,7 +4,9 @@ use super::*;
 async fn weekly_floor_switch_preserves_hard_affinity_until_configured_stop() {
     let temp_dir = ProxyTestTempDir::new("async_repository_selector_weekly_floor");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = SqliteStateStore::open(&database_path).expect("state store should open");
+    let state = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("state store should open");
     let eligible = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_floor_eligible"),
@@ -22,13 +24,15 @@ async fn weekly_floor_switch_preserves_hard_affinity_until_configured_stop() {
         &eligible,
         "responses",
         &[(18_000, 80, true), (604_800, 8, false)],
-    );
+    )
+    .await;
     persist_fresh_account_with_selector_window_specs(
         &state,
         &protected,
         "responses",
         &[(18_000, 100, true), (604_800, 8, false)],
-    );
+    )
+    .await;
     let affinity_secret = test_affinity_secret();
     persist_previous_response_owner(
         &state,
@@ -36,8 +40,9 @@ async fn weekly_floor_switch_preserves_hard_affinity_until_configured_stop() {
         &affinity_secret,
         protected.account_id(),
     )
+    .await
     .expect("protected affinity owner should persist");
-    drop(state);
+    state.close().await.expect("fixture state should close");
 
     let async_state = AsyncSqliteStateStore::open(&database_path)
         .await
@@ -92,16 +97,19 @@ async fn weekly_floor_switch_preserves_hard_affinity_until_configured_stop() {
         fallback.account_id() == eligible.account_id()
             || fallback.account_id() == protected.account_id()
     );
-    let state = SqliteStateStore::open(&database_path).expect("fresh state should reopen");
+    let state = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("fresh state should reopen");
     for account in [&eligible, &protected] {
         persist_fresh_account_with_selector_window_specs(
             &state,
             account,
             "responses",
             &[(18_000, 100, true), (604_800, 5, false)],
-        );
+        )
+        .await;
     }
-    drop(state);
+    state.close().await.expect("fixture state should close");
     assert_eq!(
         selector
             .select_upstream_account(
@@ -126,14 +134,17 @@ async fn weekly_floor_switch_preserves_hard_affinity_until_configured_stop() {
             reason: QuotaAwareAccountSelectorError::NoEligibleAccounts
         })
     );
-    let state = SqliteStateStore::open(&database_path).expect("fresh state should reopen");
+    let state = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("fresh state should reopen");
     persist_fresh_account_with_selector_window_specs(
         &state,
         &protected,
         "responses",
         &[(18_000, 100, true), (604_800, 9, false)],
-    );
-    drop(state);
+    )
+    .await;
+    state.close().await.expect("fixture state should close");
 
     let continued = selector
         .select_upstream_account(
@@ -169,7 +180,9 @@ async fn weekly_floor_switch_preserves_hard_affinity_until_configured_stop() {
 async fn live_floor_switch_peer_assessment_is_read_only_and_respects_runtime_quarantine() {
     let temp_dir = ProxyTestTempDir::new("live-floor-switch-peer");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = SqliteStateStore::open(&database_path).expect("state store should open");
+    let state = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("state store should open");
     let protected = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_floor_source"),
@@ -188,9 +201,10 @@ async fn live_floor_switch_peer_assessment_is_read_only_and_respects_runtime_qua
             account,
             "responses",
             &[(18_000, 100, true), (604_800, remaining, false)],
-        );
+        )
+        .await;
     }
-    drop(state);
+    state.close().await.expect("fixture state should close");
     let mutation = AsyncWeeklyQuotaFloorMutationStore::open(&database_path)
         .await
         .expect("floor mutation store should open");

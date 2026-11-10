@@ -1,13 +1,15 @@
 use super::*;
 
-#[test]
-fn assembled_http_runtime_reuses_live_session_affinity_and_persists_timestamp() {
+#[tokio::test]
+async fn assembled_http_runtime_reuses_live_session_affinity_and_persists_timestamp() {
     const RETENTION_NOW: u64 = 10 * 86_400;
     const EVENT_RETENTION: u64 = 7 * 86_400;
     let temp_dir = ProxyTestTempDir::new("runtime_http_session_affinity");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = SqliteStateStore::open(&database_path).expect("state store should open");
+    let state = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("state store should open");
     let secrets =
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_path)
             .expect("secret store should open");
@@ -23,32 +25,32 @@ fn assembled_http_runtime_reuses_live_session_affinity_and_persists_timestamp() 
         "beta",
         AccountStatus::Enabled,
     );
-    persist_account_with_snapshot_and_token(&state, &secrets, &alpha, 50, "http-alpha-token");
-    persist_account_with_snapshot_and_token(&state, &secrets, &beta, 50, "http-beta-token");
-    drop(state);
+    persist_account_with_snapshot_and_token(&state, &secrets, &alpha, 50, "http-alpha-token").await;
+    persist_account_with_snapshot_and_token(&state, &secrets, &beta, 50, "http-beta-token").await;
+    state.close().await.expect("fixture state should close");
     seed_completed_active_session(
         &database_path,
         alpha.account_id(),
         "startup-expired",
         1,
         RETENTION_NOW - EVENT_RETENTION - 1,
-    );
+    )
+    .await;
     seed_completed_active_session(
         &database_path,
         alpha.account_id(),
         "startup-exact-cutoff",
         2,
         RETENTION_NOW - EVENT_RETENTION,
-    );
-    let observation_runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("observation runtime should build");
-    let observation_state = observation_runtime.block_on(async {
+    )
+    .await;
+
+    let observation_state = (async {
         AsyncSqliteStateStore::open_read_only(&database_path)
             .await
             .expect("observation state should open")
-    });
+    })
+    .await;
 
     let upstream_listener = TcpListener::bind("127.0.0.1:0").expect("mock upstream should bind");
     let upstream_address = upstream_listener
@@ -95,15 +97,25 @@ fn assembled_http_runtime_reuses_live_session_affinity_and_persists_timestamp() 
     )
     .with_quota_clock(RETENTION_NOW, 60);
     let (maintenance_completion_sender, maintenance_completion_receiver) = mpsc::channel();
-    let runtime = LoopbackRouterRuntime::start_for_test_with_maintenance_completion_sender(
-        config,
-        maintenance_completion_sender,
-    )
+    let runtime = tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test_with_maintenance_completion_sender(
+                    config,
+                    maintenance_completion_sender,
+                )
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
     .expect("router runtime should start");
     wait_for_responses_history_compaction(&maintenance_completion_receiver);
-    assert_active_session_absent(&observation_runtime, &observation_state, "startup-expired");
+    assert_active_session_absent(&observation_state, "startup-expired").await;
     assert!(
-        observed_active_session_reservation_ids(&observation_runtime, &observation_state)
+        observed_active_session_reservation_ids(&observation_state)
+            .await
             .iter()
             .any(|reservation_id| reservation_id == "startup-exact-cutoff"),
         "startup maintenance must preserve the exact-cutoff completed session"
@@ -114,7 +126,8 @@ fn assembled_http_runtime_reuses_live_session_affinity_and_persists_timestamp() 
         "first-accepted-expired",
         3,
         RETENTION_NOW - EVENT_RETENTION - 1,
-    );
+    )
+    .await;
     let router_address = runtime.local_addr();
     let runtime_thread = thread::spawn(move || runtime.serve_protocol_connections(2));
     let first_client = thread::spawn(move || {
@@ -128,18 +141,15 @@ fn assembled_http_runtime_reuses_live_session_affinity_and_persists_timestamp() 
         .recv()
         .expect("first upstream request should record");
     wait_for_responses_history_compaction(&maintenance_completion_receiver);
-    assert_active_session_absent(
-        &observation_runtime,
-        &observation_state,
-        "first-accepted-expired",
-    );
+    assert_active_session_absent(&observation_state, "first-accepted-expired").await;
     seed_completed_active_session(
         &database_path,
         alpha.account_id(),
         "accepted-expired",
         4,
         RETENTION_NOW - EVENT_RETENTION - 1,
-    );
+    )
+    .await;
     let second_client = thread::spawn(move || {
         send_loopback_request_with_session(
             router_address,
@@ -179,13 +189,15 @@ fn assembled_http_runtime_reuses_live_session_affinity_and_persists_timestamp() 
     }
     assert!(!second_request.contains("http-beta-token"));
     assert!(
-        !observed_active_session_reservation_ids(&observation_runtime, &observation_state)
+        !observed_active_session_reservation_ids(&observation_state)
+            .await
             .iter()
             .any(|reservation_id| reservation_id == "accepted-expired"),
         "accepted-connection maintenance must delete newly eligible completed sessions"
     );
     assert!(
-        observed_active_session_reservation_ids(&observation_runtime, &observation_state)
+        observed_active_session_reservation_ids(&observation_state)
+            .await
             .iter()
             .any(|reservation_id| reservation_id == "startup-exact-cutoff"),
         "accepted-connection maintenance must preserve exact-cutoff sessions"
@@ -194,12 +206,13 @@ fn assembled_http_runtime_reuses_live_session_affinity_and_persists_timestamp() 
     upstream_thread
         .join()
         .expect("upstream thread should not panic");
-    let persisted = observation_runtime.block_on(async {
+    let persisted = (async {
         observation_state
             .load_session_account_affinity(Provider::Openai, "assembled-http-session")
             .await
             .expect("session affinity should load")
-    });
+    })
+    .await;
     assert_eq!(
         persisted,
         Some(SessionAccountAffinity::new(

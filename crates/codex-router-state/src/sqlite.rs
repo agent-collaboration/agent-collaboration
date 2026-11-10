@@ -4,10 +4,6 @@ mod account_removal;
 mod account_store;
 mod active_leases;
 mod affinity_store;
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-mod legacy_schema_v1to5;
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-mod legacy_schema_v6to10;
 mod policy_mutation;
 pub use account_removal::{AccountRemovalError, PendingAccountRemoval};
 mod quota_history;
@@ -18,24 +14,8 @@ mod selector_windows;
 mod session_history;
 mod session_records;
 mod session_rollups;
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-mod sync_accounts;
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-mod sync_affinity;
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-mod sync_migrations;
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-mod sync_selectors;
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-mod sync_snapshots;
 pub(crate) use account_store::invalidate_credential_mutation_quota_async;
 use account_store::parse_account_row;
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-use legacy_schema_v6to10::{
-    ASYNC_ACTIVE_CLIENT_SCHEMA_STATEMENTS, ASYNC_ACTIVE_SESSION_HISTORY_INDEX_STATEMENTS,
-    ASYNC_ACTIVE_SESSION_HISTORY_TABLE_STATEMENTS, ASYNC_CREDIT_USAGE_SCHEMA_STATEMENTS,
-    ASYNC_QUOTA_HISTORY_SCHEMA_STATEMENTS, ASYNC_ROUTE_BAND_ACCOUNT_STATE_SCHEMA_STATEMENTS,
-};
 pub(crate) use quota_history::insert_quota_history_observation_in_async_transaction;
 pub(crate) use quota_snapshots::upsert_quota_snapshot_in_async_transaction;
 pub use repository_contracts::{
@@ -47,12 +27,8 @@ use selector_windows::{DEFAULT_SELECTOR_LIMIT_WINDOW_SECONDS, SELECTOR_INVALIDAT
 pub use session_records::{
     ActiveClientCount, ActiveSessionEvent, ActiveSessionEventKind, ActiveSessionRollup,
 };
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-use sync_selectors::invalidate_credential_mutation_quota_sync;
 
 use std::collections::BTreeMap;
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-use std::fmt;
 use std::path::Path;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -60,18 +36,10 @@ use std::time::Instant;
 
 use codex_router_core::affinity::AffinityKeyHash;
 use codex_router_core::ids::AccountId;
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-use codex_router_core::ids::AffinityKey;
 use codex_router_core::ids::ReservationId;
 use codex_router_core::provider::Provider;
 use codex_router_core::routes::RouteBand;
 use futures_util::future::BoxFuture;
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-use rusqlite::Connection;
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-use rusqlite::OptionalExtension;
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-use rusqlite::params;
 use sqlx::Row;
 use sqlx::SqliteConnection;
 use sqlx::sqlite::SqliteConnectOptions;
@@ -97,14 +65,6 @@ use crate::quota_snapshot::QuotaSnapshotSource;
 use crate::quota_snapshot::SelectorCredentialMaintenance;
 use crate::quota_snapshot::SelectorQuotaInput;
 use crate::quota_snapshot::SelectorQuotaWindowStatus;
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-use crate::repositories::AccountStateRepository;
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-use crate::repositories::AffinityRepository;
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-use crate::repositories::QuotaSnapshotRepository;
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-use crate::repositories::SelectorQuotaRepository;
 use crate::session_account_affinity::PinObservation;
 use crate::session_account_affinity::SessionAccountAffinity;
 
@@ -245,23 +205,6 @@ pub enum StateStoreError {
     /// Claude quota windows may only be stored for Claude accounts.
     #[error("Claude window state requires a Claude account")]
     AccountWindowStateRequiresClaudeAccount,
-}
-
-/// SQLite-backed metadata repository.
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-pub struct SqliteStateStore {
-    database_path: PathBuf,
-    connection: Connection,
-}
-
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-impl fmt::Debug for SqliteStateStore {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        formatter
-            .debug_struct("SqliteStateStore")
-            .field("database_path", &self.database_path)
-            .finish_non_exhaustive()
-    }
 }
 
 /// Async SQLite state store backed by SQLx.
@@ -414,7 +357,7 @@ impl AsyncSqliteStateStore {
     }
 
     /// Acquires and holds one connection from this store's pool for isolation tests.
-    #[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
+    #[cfg(any(test, feature = "test-support"))]
     pub async fn acquire_connection_for_test(
         &self,
     ) -> Result<sqlx::pool::PoolConnection<sqlx::Sqlite>, StateStoreError> {
@@ -446,13 +389,6 @@ pub(crate) async fn prepare_writable_sqlite_database(
 fn sqlite_storage_maintenance_error(
     error: sqlite_storage_maintenance::SqliteStorageMaintenanceError,
 ) -> StateStoreError {
-    StateStoreError::Sqlite {
-        message: error.to_string(),
-    }
-}
-
-#[cfg(any(test, feature = "sync-rusqlite-fixtures"))]
-fn sqlite_error(error: rusqlite::Error) -> StateStoreError {
     StateStoreError::Sqlite {
         message: error.to_string(),
     }

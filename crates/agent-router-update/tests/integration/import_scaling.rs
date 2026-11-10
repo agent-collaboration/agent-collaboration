@@ -1,8 +1,8 @@
 //! Retained, synthetic-only measurements for the offline import's actual CLI path.
 use crate::support;
+use sqlx::Connection as _;
 
 use message_board::PostId;
-use rusqlite::params;
 use std::{
     path::Path,
     process::Stdio,
@@ -10,58 +10,56 @@ use std::{
 };
 use support::*;
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract asserts; setup may fail."
-)]
-fn grow_fixture(source: &Path, posts: usize) -> TestResult {
-    let mut connection = rusqlite::Connection::open(source)?;
-    connection.execute_batch("PRAGMA foreign_keys=ON")?;
-    let original = usize::try_from(connection.query_row(
-        "SELECT COUNT(*) FROM board_messages",
-        [],
-        |row| row.get::<_, i64>(0),
-    )?)?;
-    let mut sequence: i64 = connection.query_row(
-        "SELECT MAX(activity_sequence) FROM board_activity",
-        [],
-        |row| row.get(0),
+async fn grow_fixture(source: &Path, posts: usize) -> TestResult {
+    let mut connection = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(source)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
+    sqlx::raw_sql("PRAGMA foreign_keys=ON")
+        .execute(&mut connection)
+        .await?;
+    let original = usize::try_from(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM board_messages")
+            .fetch_one(&mut connection)
+            .await?,
     )?;
-    let transaction = connection.transaction()?;
+    let mut sequence: i64 = sqlx::query_scalar("SELECT MAX(activity_sequence) FROM board_activity")
+        .fetch_one(&mut connection)
+        .await?;
+    let mut transaction = connection.begin().await?;
     for _ in original..posts {
         let id = PostId::generate();
         sequence += 1;
-        transaction.execute(
-            "INSERT INTO board_messages(message_id,topic_id,board_id,root_id,actor_key,acting_for_key,text,posted_from_activity) SELECT ?,topic_id,board_id,NULL,actor_key,NULL,'Synthetic scaling post.',NULL FROM board_messages WHERE root_id IS NULL ORDER BY message_id LIMIT 1",
-            [id.as_str()],
-        )?;
-        transaction.execute(
-            "INSERT INTO board_threads(root_id,state) VALUES (?,'unresolved')",
-            [id.as_str()],
-        )?;
-        transaction.execute(
-            "INSERT INTO board_activity(activity_sequence,project_id,board_id,topic_id,root_id,kind,actor_key,message_id,participant_key,participant_role,replaced_participant_key) SELECT ?,b.project_id,m.board_id,m.topic_id,NULL,'mainMessageCreated',m.actor_key,m.message_id,NULL,NULL,NULL FROM board_messages m JOIN project_boards b ON b.board_id=m.board_id WHERE m.message_id=?",
-            params![sequence,id.as_str()],
-        )?;
+        sqlx::query("INSERT INTO board_messages(message_id,topic_id,board_id,root_id,actor_key,acting_for_key,text,posted_from_activity) SELECT ?,topic_id,board_id,NULL,actor_key,NULL,'Synthetic scaling post.',NULL FROM board_messages WHERE root_id IS NULL ORDER BY message_id LIMIT 1").bind(id.as_str()).execute(&mut *transaction).await.map(|result|result.rows_affected())?;
+        sqlx::query("INSERT INTO board_threads(root_id,state) VALUES (?,'unresolved')")
+            .bind(id.as_str())
+            .execute(&mut *transaction)
+            .await
+            .map(|result| result.rows_affected())?;
+        sqlx::query("INSERT INTO board_activity(activity_sequence,project_id,board_id,topic_id,root_id,kind,actor_key,message_id,participant_key,participant_role,replaced_participant_key) SELECT ?,b.project_id,m.board_id,m.topic_id,NULL,'mainMessageCreated',m.actor_key,m.message_id,NULL,NULL,NULL FROM board_messages m JOIN project_boards b ON b.board_id=m.board_id WHERE m.message_id=?").bind(sequence).bind(id.as_str()).execute(&mut *transaction).await.map(|result|result.rows_affected())?;
     }
-    transaction.execute(
-        "UPDATE activity_checkpoint SET last_sequence=? WHERE singleton=1",
-        [sequence],
-    )?;
-    transaction.commit()?;
+    sqlx::query("UPDATE activity_checkpoint SET last_sequence=? WHERE singleton=1")
+        .bind(sequence)
+        .execute(&mut *transaction)
+        .await
+        .map(|result| result.rows_affected())?;
+    transaction.commit().await?;
     assert_eq!(
-        connection.query_row("SELECT COUNT(*) FROM board_messages", [], |row| row
-            .get::<_, i64>(0))?,
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM board_messages")
+            .fetch_one(&mut connection)
+            .await?,
         i64::try_from(posts)?
     );
     assert!(
-        connection
-            .prepare("PRAGMA foreign_key_check")?
-            .query([])?
-            .next()?
+        sqlx::query("PRAGMA foreign_key_check")
+            .fetch_optional(&mut connection)
+            .await?
             .is_none()
     );
-    connection.close().map_err(|(_, error)| error)?;
+    connection.close().await?;
     Ok(())
 }
 
@@ -75,7 +73,7 @@ async fn offline_import_phase_growth_at_three_synthetic_sizes() -> TestResult {
     for posts in [1000, 5000, 10000] {
         // Arrange: only retained synthetic data is enlarged, in an isolated copy.
         let (directory, source) = fixture_copy("legacy-complete.sqlite")?;
-        grow_fixture(&source, posts)?;
+        grow_fixture(&source, posts).await?;
         let before = std::fs::read(&source)?;
         create_host_identity(directory.path())?;
         let report = directory.path().join("report.json");

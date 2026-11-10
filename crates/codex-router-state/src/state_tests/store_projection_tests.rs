@@ -1,15 +1,21 @@
 use super::*;
 
-#[test]
-fn sqlite_migration_roundtrips_account_and_quota_snapshot() {
+#[tokio::test]
+async fn sqlite_migration_roundtrips_account_and_quota_snapshot() {
     let temp_dir = TestTempDir::new("migration_roundtrip");
     let database_path = temp_dir.path().join("state.sqlite");
-    let store = match SqliteStateStore::open(&database_path) {
+    let store = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(store) => store,
         Err(error) => panic!("state store should open and migrate: {error}"),
     };
 
-    assert_eq!(store.schema_version(), 13);
+    assert_eq!(
+        store
+            .schema_version()
+            .await
+            .expect("schema version should read"),
+        13
+    );
 
     let account_id = match AccountId::new("acct_primary") {
         Ok(account_id) => account_id,
@@ -21,7 +27,7 @@ fn sqlite_migration_roundtrips_account_and_quota_snapshot() {
         "primary",
         AccountStatus::Enabled,
     );
-    if let Err(error) = store.upsert_account(&account) {
+    if let Err(error) = store.upsert_account(&account).await {
         panic!("account should persist: {error}");
     }
 
@@ -32,23 +38,31 @@ fn sqlite_migration_roundtrips_account_and_quota_snapshot() {
             .with_reset_unix_seconds(160)
             .with_reset_credits_available(1)
             .with_stale_penalty(false);
-    if let Err(error) = store.upsert_quota_snapshot(&snapshot) {
+    if let Err(error) = store.upsert_quota_snapshot(&snapshot).await {
         panic!("quota snapshot should persist: {error}");
     }
 
-    assert_eq!(store.load_account(&account_id), Ok(Some(account)));
-    assert_eq!(store.load_quota_snapshot(&account_id), Ok(Some(snapshot)));
+    assert_eq!(store.load_account(&account_id).await, Ok(Some(account)));
+    assert_eq!(
+        store
+            .load_quota_snapshot_for_route_band(&account_id, "responses")
+            .await,
+        Ok(Some(snapshot))
+    );
+
+    store.close().await.expect("state store should close");
 }
 
-#[test]
-fn quota_snapshots_are_partitioned_by_route_band_for_one_account() {
+#[tokio::test]
+async fn quota_snapshots_are_partitioned_by_route_band_for_one_account() {
     let temp_dir = TestTempDir::new("quota_route_band_partition");
     let database_path = temp_dir.path().join("state.sqlite");
-    let store = match SqliteStateStore::open(&database_path) {
+    let store = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(store) => store,
         Err(error) => panic!("state store should open and migrate: {error}"),
     };
     let account_id = account_id("acct_route_partition");
+    seed_account_records(&store, Provider::Openai, &["acct_route_partition"]).await;
     let responses_snapshot =
         PersistedQuotaSnapshot::new(account_id.clone(), QuotaSnapshotSource::MockEndpoint)
             .with_observed_unix_seconds(1_000)
@@ -58,28 +72,34 @@ fn quota_snapshots_are_partitioned_by_route_band_for_one_account() {
             .with_observed_unix_seconds(1_010)
             .with_route_band("models", 7);
 
-    if let Err(error) = QuotaSnapshotRepository::upsert_snapshot(&store, &responses_snapshot) {
+    if let Err(error) = store.upsert_quota_snapshot(&responses_snapshot).await {
         panic!("responses quota snapshot should persist: {error}");
     }
-    if let Err(error) = QuotaSnapshotRepository::upsert_snapshot(&store, &models_snapshot) {
+    if let Err(error) = store.upsert_quota_snapshot(&models_snapshot).await {
         panic!("models quota snapshot should persist: {error}");
     }
 
     assert_eq!(
-        QuotaSnapshotRepository::load_snapshot_for_route_band(&store, &account_id, "responses"),
+        store
+            .load_quota_snapshot_for_route_band(&account_id, "responses")
+            .await,
         Ok(Some(responses_snapshot))
     );
     assert_eq!(
-        QuotaSnapshotRepository::load_snapshot_for_route_band(&store, &account_id, "models"),
+        store
+            .load_quota_snapshot_for_route_band(&account_id, "models")
+            .await,
         Ok(Some(models_snapshot))
     );
+
+    store.close().await.expect("state store should close");
 }
 
-#[test]
-fn selector_input_reads_durable_per_window_rows_without_status_renderer() {
+#[tokio::test]
+async fn selector_input_reads_durable_per_window_rows_without_status_renderer() {
     let temp_dir = TestTempDir::new("selector_input_windows");
     let database_path = temp_dir.path().join("state.sqlite");
-    let store = match SqliteStateStore::open(&database_path) {
+    let store = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(store) => store,
         Err(error) => panic!("state store should open and migrate: {error}"),
     };
@@ -91,7 +111,7 @@ fn selector_input_reads_durable_per_window_rows_without_status_renderer() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(3);
-    if let Err(error) = AccountStateRepository::upsert_account(&store, &account) {
+    if let Err(error) = store.upsert_account(&account).await {
         panic!("account should persist: {error}");
     }
     let short_window = PersistedSelectorQuotaWindow::new(
@@ -113,18 +133,20 @@ fn selector_input_reads_durable_per_window_rows_without_status_renderer() {
     .with_reset_unix_seconds(700_000)
     .with_effective(true)
     .with_observed_unix_seconds(1_000);
-    if let Err(error) = SelectorQuotaRepository::upsert_selector_window(&store, &short_window) {
+    if let Err(error) = store.upsert_selector_quota_window(&short_window).await {
         panic!("short window should persist: {error}");
     }
-    if let Err(error) = SelectorQuotaRepository::upsert_selector_window(&store, &weekly_window) {
+    if let Err(error) = store.upsert_selector_quota_window(&weekly_window).await {
         panic!("weekly window should persist: {error}");
     }
 
-    let selector_inputs =
-        match SelectorQuotaRepository::selector_inputs_for_route_band(&store, "responses", 1_000) {
-            Ok(inputs) => inputs,
-            Err(error) => panic!("selector input should load: {error}"),
-        };
+    let selector_inputs = match store
+        .selector_inputs_for_route_band("responses", 1_000)
+        .await
+    {
+        Ok(inputs) => inputs,
+        Err(error) => panic!("selector input should load: {error}"),
+    };
 
     assert_eq!(selector_inputs.len(), 1);
     let input = &selector_inputs[0];
@@ -143,15 +165,17 @@ fn selector_input_reads_durable_per_window_rows_without_status_renderer() {
     assert_eq!(effective.status(), SelectorQuotaWindowStatus::Stale);
     assert_eq!(effective.remaining_headroom(), 41);
     assert_eq!(effective.reset_unix_seconds(), Some(700_000));
+
+    store.close().await.expect("state store should close");
 }
 
 #[tokio::test]
-async fn async_selector_input_matches_sync_repository_projection() {
+async fn async_selector_input_preserves_expected_projection_after_reopen() {
     let temp_dir = TestTempDir::new("async_selector_input_windows");
     let database_path = temp_dir.path().join("state.sqlite");
-    let sync_store = match SqliteStateStore::open(&database_path) {
+    let seed_store = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(store) => store,
-        Err(error) => panic!("sync state store should open and migrate: {error}"),
+        Err(error) => panic!("seed state store should open and migrate: {error}"),
     };
     let account_id = account_id("acct_async_selector_windows");
     let account = AccountRecord::new(
@@ -161,7 +185,7 @@ async fn async_selector_input_matches_sync_repository_projection() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(9);
-    if let Err(error) = AccountStateRepository::upsert_account(&sync_store, &account) {
+    if let Err(error) = seed_store.upsert_account(&account).await {
         panic!("account should persist: {error}");
     }
     let short_window = PersistedSelectorQuotaWindow::new(
@@ -183,27 +207,52 @@ async fn async_selector_input_matches_sync_repository_projection() {
     .with_reset_unix_seconds(700_000)
     .with_effective(true)
     .with_observed_unix_seconds(1_000);
-    if let Err(error) = SelectorQuotaRepository::upsert_selector_window(&sync_store, &short_window)
-    {
+    if let Err(error) = seed_store.upsert_selector_quota_window(&short_window).await {
         panic!("short window should persist: {error}");
     }
-    if let Err(error) = SelectorQuotaRepository::upsert_selector_window(&sync_store, &weekly_window)
+    if let Err(error) = seed_store
+        .upsert_selector_quota_window(&weekly_window)
+        .await
     {
         panic!("weekly window should persist: {error}");
     }
 
+    seed_store
+        .close()
+        .await
+        .expect("seed store should close before reopen");
     let async_store = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(store) => store,
         Err(error) => panic!("async state store should open and migrate: {error}"),
     };
-    let sync_inputs = match SelectorQuotaRepository::selector_inputs_for_route_band(
-        &sync_store,
+    let expected_weekly_window = PersistedSelectorQuotaWindow::new(
+        account_id.clone(),
         "responses",
-        1_000,
-    ) {
-        Ok(inputs) => inputs,
-        Err(error) => panic!("sync selector input should load: {error}"),
-    };
+        604_800,
+        SelectorQuotaWindowStatus::Stale,
+    )
+    .with_remaining_headroom(55)
+    .with_reset_unix_seconds(700_000)
+    .with_effective(true)
+    .with_observed_unix_seconds(1_000);
+    let expected_short_window = PersistedSelectorQuotaWindow::new(
+        account_id.clone(),
+        "responses",
+        18_000,
+        SelectorQuotaWindowStatus::Stale,
+    )
+    .with_remaining_headroom(88)
+    .with_reset_unix_seconds(20_000)
+    .with_observed_unix_seconds(1_000);
+    let expected_inputs = vec![crate::quota_snapshot::SelectorQuotaInput::new(
+        account_id,
+        "async-selector",
+        Provider::Openai,
+        AccountStatus::Enabled,
+        Some(9),
+        "responses",
+        vec![expected_weekly_window, expected_short_window],
+    )];
     let async_inputs = match AsyncSelectorQuotaRepository::selector_inputs_for_route_band(
         &async_store,
         "responses",
@@ -215,5 +264,7 @@ async fn async_selector_input_matches_sync_repository_projection() {
         Err(error) => panic!("async selector input should load: {error}"),
     };
 
-    assert_eq!(async_inputs, sync_inputs);
+    assert_eq!(async_inputs, expected_inputs);
+
+    async_store.close().await.expect("state store should close");
 }

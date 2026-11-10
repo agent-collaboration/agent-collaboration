@@ -1,6 +1,7 @@
 use crate::support;
 use agent_router_update::prepare_sources;
 use message_board::*;
+use sqlx::Connection as _;
 use support::*;
 
 #[tokio::test]
@@ -72,9 +73,15 @@ async fn changed_legacy_description_changes_the_semantic_import_identity() -> Te
         .map(|project| project.digest.clone())
         .collect::<Vec<_>>();
     first.close().await;
-    let connection = rusqlite::Connection::open(&path)?;
-    connection.execute("UPDATE board_topics SET description='Changed legacy description' WHERE topic_id='019a0000-0000-7000-8000-000000000015'",[])?;
-    connection.close().map_err(|(_, error)| error)?;
+    let mut connection = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
+    sqlx::query("UPDATE board_topics SET description='Changed legacy description' WHERE topic_id='019a0000-0000-7000-8000-000000000015'").execute(&mut connection).await.map(|result|result.rows_affected())?;
+    connection.close().await?;
     let changed = prepare_path(&path).await?;
     assert_ne!(
         original,

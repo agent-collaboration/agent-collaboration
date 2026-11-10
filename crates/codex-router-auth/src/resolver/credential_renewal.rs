@@ -346,11 +346,14 @@ where
         let bundle_key = provider_credential_bundle_key(provider, account_id, active_generation)
             .map_err(map_secret_error)?;
         let secret_store = self.secret_store.clone();
+        let credential_dispatcher = tracing::dispatcher::get_default(Clone::clone);
         let bundle_join = tokio::task::spawn_blocking(move || {
-            let secret = secret_store
-                .read_secret(&bundle_key)
-                .map_err(map_secret_error)?;
-            CredentialBundle::from_secret_string(provider, secret).map_err(map_secret_error)
+            tracing::dispatcher::with_default(&credential_dispatcher, || {
+                let secret = secret_store
+                    .read_secret(&bundle_key)
+                    .map_err(map_secret_error)?;
+                CredentialBundle::from_secret_string(provider, secret).map_err(map_secret_error)
+            })
         })
         .await;
         let bundle_result = match bundle_join {

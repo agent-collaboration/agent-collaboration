@@ -56,29 +56,36 @@ fn account_set_weekly_floor_parses_exact_contract() {
     assert!(help.contains("--percent <0-15>"));
 }
 
-#[test]
-fn account_status_commands_parse_and_preserve_credential_generation() {
+#[tokio::test]
+async fn account_status_commands_parse_and_preserve_credential_generation() {
     let test_root = TestRoot::new("account-status");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir(&router_root));
-    let state = must_ok(SqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    ));
-    must_ok(AccountStateRepository::upsert_account(
-        &state,
-        &AccountRecord::new(
-            codex_router_core::provider::Provider::Openai,
-            account_id("acct_primary"),
-            "primary".to_owned(),
-            AccountStatus::Enabled,
-        )
-        .with_active_credential_generation(7),
-    ));
-    drop(state);
+    let state = must_ok(
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        ))
+        .await,
+    );
+    must_ok(
+        state
+            .upsert_account(
+                &AccountRecord::new(
+                    codex_router_core::provider::Provider::Openai,
+                    account_id("acct_primary"),
+                    "primary".to_owned(),
+                    AccountStatus::Enabled,
+                )
+                .with_active_credential_generation(7),
+            )
+            .await,
+    );
+    state.close().await.expect("fixture state should close");
     migrate_test_state_database(&codex_router_state::provider_proxy_database_path(
         &router_root,
-    ));
+    ))
+    .await;
 
     for (command, expected_status) in [
         ("disable", AccountStatus::Disabled),
@@ -94,7 +101,8 @@ fn account_status_commands_parse_and_preserve_credential_generation() {
                 path_to_str(&router_root),
             ],
             CliContext::new(Vec::new()),
-        );
+        )
+        .await;
         assert_eq!(
             output.stdout,
             format!(
@@ -104,11 +112,13 @@ fn account_status_commands_parse_and_preserve_credential_generation() {
         );
         assert!(output.stderr.is_empty());
 
-        let runtime = test_async_runtime();
-        let state = must_ok(runtime.block_on(AsyncSqliteStateStore::open_read_only(
-            &codex_router_state::provider_proxy_database_path(&router_root),
-        )));
-        let account = must_ok(runtime.block_on(state.load_account(&account_id("acct_primary"))))
+        let state = must_ok(
+            (AsyncSqliteStateStore::open_read_only(
+                &codex_router_state::provider_proxy_database_path(&router_root),
+            ))
+            .await,
+        );
+        let account = must_ok(state.load_account(&account_id("acct_primary")).await)
             .unwrap_or_else(|| panic!("status command must retain account metadata"));
         assert_eq!(account.status(), expected_status);
         assert_eq!(account.active_credential_generation(), Some(7));
@@ -209,28 +219,33 @@ fn account_set_weekly_floor_busy_error_is_exact_and_redacted() {
     }
 }
 
-#[test]
-fn account_set_weekly_floor_updates_disables_and_lists_policy() {
+#[tokio::test]
+async fn account_set_weekly_floor_updates_disables_and_lists_policy() {
     let test_root = TestRoot::new("account-weekly-floor");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir(&router_root));
-    let state = must_ok(SqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    ));
-    must_ok(AccountStateRepository::upsert_account(
-        &state,
-        &AccountRecord::new(
-            codex_router_core::provider::Provider::Openai,
-            account_id("acct_primary"),
-            "primary".to_owned(),
-            AccountStatus::Enabled,
-        ),
-    ));
-    drop(state);
+    let state = must_ok(
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        ))
+        .await,
+    );
+    must_ok(
+        state
+            .upsert_account(&AccountRecord::new(
+                codex_router_core::provider::Provider::Openai,
+                account_id("acct_primary"),
+                "primary".to_owned(),
+                AccountStatus::Enabled,
+            ))
+            .await,
+    );
+    state.close().await.expect("fixture state should close");
     migrate_test_state_database(&codex_router_state::provider_proxy_database_path(
         &router_root,
-    ));
+    ))
+    .await;
 
     let enabled = run_cli(
         [
@@ -244,7 +259,8 @@ fn account_set_weekly_floor_updates_disables_and_lists_policy() {
             path_to_str(&router_root),
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
     assert_eq!(enabled.stdout, "updated weekly floor: primary = 5%\n");
     assert!(enabled.stderr.is_empty());
 
@@ -256,7 +272,8 @@ fn account_set_weekly_floor_updates_disables_and_lists_policy() {
             path_to_str(&router_root),
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
     assert!(listed.stdout.contains("weekly floor"));
     assert!(listed.stdout.contains("5%"));
     assert!(!listed.stdout.contains("acct_primary"));
@@ -273,7 +290,8 @@ fn account_set_weekly_floor_updates_disables_and_lists_policy() {
             path_to_str(&router_root),
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
     assert_eq!(
         disabled.stdout,
         "updated weekly floor: primary = disabled (0%)\n"
@@ -281,39 +299,44 @@ fn account_set_weekly_floor_updates_disables_and_lists_policy() {
     assert!(disabled.stderr.is_empty());
 }
 
-#[test]
-fn account_set_weekly_floor_label_failures_are_redacted_and_do_not_mutate() {
+#[tokio::test]
+async fn account_set_weekly_floor_label_failures_are_redacted_and_do_not_mutate() {
     let test_root = TestRoot::new("account-weekly-floor-labels");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir(&router_root));
-    let state = must_ok(SqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    ));
+    let state = must_ok(
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        ))
+        .await,
+    );
     for (account_id_value, label) in [
         ("acct_duplicate_a", "duplicate"),
         ("acct_duplicate_b", "duplicate"),
     ] {
-        must_ok(AccountStateRepository::upsert_account(
-            &state,
-            &AccountRecord::new(
-                codex_router_core::provider::Provider::Openai,
-                account_id(account_id_value),
-                label.to_owned(),
-                AccountStatus::Enabled,
-            ),
-        ));
+        must_ok(
+            state
+                .upsert_account(&AccountRecord::new(
+                    codex_router_core::provider::Provider::Openai,
+                    account_id(account_id_value),
+                    label.to_owned(),
+                    AccountStatus::Enabled,
+                ))
+                .await,
+        );
     }
-    drop(state);
+    state.close().await.expect("fixture state should close");
     migrate_test_state_database(&codex_router_state::provider_proxy_database_path(
         &router_root,
-    ));
+    ))
+    .await;
 
     for supplied_label in ["missing-sensitive-label", "duplicate"] {
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
-        let result = run_with_io(
-            [
+        let result = {
+            let command_arguments = ([
                 "account",
                 "set-weekly-floor",
                 "--account",
@@ -324,11 +347,30 @@ fn account_set_weekly_floor_label_failures_are_redacted_and_do_not_mutate() {
                 path_to_str(&router_root),
             ]
             .into_iter()
-            .map(OsString::from),
-            &CliContext::new(Vec::new()),
-            &mut stdout,
-            &mut stderr,
-        );
+            .map(OsString::from))
+            .collect::<Vec<OsString>>();
+            let command_context = (CliContext::new(Vec::new())).clone();
+            let command_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+            let (command_result, command_stdout, command_stderr) = must_ok(
+                tokio::task::spawn_blocking(move || {
+                    tracing::dispatcher::with_default(&command_dispatcher, || {
+                        let mut stdout = stdout;
+                        let mut stderr = stderr;
+                        let command_result = run_with_io(
+                            command_arguments,
+                            &command_context,
+                            &mut stdout,
+                            &mut stderr,
+                        );
+                        (command_result, stdout, stderr)
+                    })
+                })
+                .await,
+            );
+            stdout = command_stdout;
+            stderr = command_stderr;
+            command_result
+        };
         let error = result.expect_err("missing or ambiguous label must fail");
         let rendered = error.to_string();
         assert!(stdout.is_empty());
@@ -337,36 +379,43 @@ fn account_set_weekly_floor_label_failures_are_redacted_and_do_not_mutate() {
         assert!(!rendered.contains("acct_duplicate"));
     }
 
-    let runtime = test_async_runtime();
-    let state = must_ok(runtime.block_on(AsyncSqliteStateStore::open_read_only(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    )));
-    let policies = must_ok(runtime.block_on(state.list_account_routing_policies()));
+    let state = must_ok(
+        (AsyncSqliteStateStore::open_read_only(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        )))
+        .await,
+    );
+    let policies = must_ok((state.list_account_routing_policies()).await);
     assert!(policies.is_empty(), "failed label lookup must not mutate");
 }
 
-#[test]
-fn account_list_renders_friendly_table_without_account_ids() {
+#[tokio::test]
+async fn account_list_renders_friendly_table_without_account_ids() {
     let test_root = TestRoot::new("account-list-table");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir(&router_root));
-    let state = must_ok(SqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    ));
-    must_ok(AccountStateRepository::upsert_account(
-        &state,
-        &AccountRecord::new(
-            codex_router_core::provider::Provider::Openai,
-            account_id("acct_primary"),
-            "primary".to_owned(),
-            AccountStatus::Enabled,
-        ),
-    ));
-    drop(state);
+    let state = must_ok(
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        ))
+        .await,
+    );
+    must_ok(
+        state
+            .upsert_account(&AccountRecord::new(
+                codex_router_core::provider::Provider::Openai,
+                account_id("acct_primary"),
+                "primary".to_owned(),
+                AccountStatus::Enabled,
+            ))
+            .await,
+    );
+    state.close().await.expect("fixture state should close");
     migrate_test_state_database(&codex_router_state::provider_proxy_database_path(
         &router_root,
-    ));
+    ))
+    .await;
 
     let output = run_cli(
         [
@@ -376,7 +425,8 @@ fn account_list_renders_friendly_table_without_account_ids() {
             path_to_str(&router_root),
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
 
     assert!(output.stdout.contains("account"));
     assert!(output.stdout.contains("provider"));

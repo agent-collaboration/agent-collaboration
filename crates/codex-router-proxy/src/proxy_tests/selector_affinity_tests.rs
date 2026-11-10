@@ -1,10 +1,10 @@
 use super::*;
 
-#[test]
-fn repository_backed_selector_skips_ineligible_account_for_next_normal_request() {
+#[tokio::test]
+async fn repository_backed_selector_skips_ineligible_account_for_next_normal_request() {
     let temp_dir = ProxyTestTempDir::new("repository_selector_next_normal");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -25,20 +25,25 @@ fn repository_backed_selector_skips_ineligible_account_for_next_normal_request()
         &exhausted,
         "responses",
         &[(18_000, 0, true), (604_800, 0, false)],
-    );
+    )
+    .await;
     persist_fresh_account_with_selector_window_specs(
         &state,
         &eligible,
         "responses",
         &[(18_000, 42, true), (604_800, 42, false)],
-    );
+    )
+    .await;
 
-    let selector = RepositoryBackedAccountSelector::new(&state);
-    let selected = match selector.select_upstream_account(
-        &HttpProxyRequest::new(Method::Post, "/v1/responses"),
-        TokenGeneration::new(1),
-        None,
-    ) {
+    let selector = AsyncRepositoryBackedAccountSelector::new(&state);
+    let selected = match selector
+        .select_upstream_account(
+            &HttpProxyRequest::new(Method::Post, "/v1/responses"),
+            TokenGeneration::new(1),
+            None,
+        )
+        .await
+    {
         Ok(selected) => selected,
         Err(error) => panic!("next normal request should select eligible account: {error}"),
     };
@@ -47,11 +52,11 @@ fn repository_backed_selector_skips_ineligible_account_for_next_normal_request()
     assert_eq!(selected.selection_reason(), "preferred_idle_far_reset");
 }
 
-#[test]
-fn repository_backed_selector_uses_unknown_fallback_when_all_accounts_need_probe() {
+#[tokio::test]
+async fn repository_backed_selector_uses_unknown_fallback_when_all_accounts_need_probe() {
     let temp_dir = ProxyTestTempDir::new("repository_selector_all_unknown_fallback");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -69,15 +74,19 @@ fn repository_backed_selector_uses_unknown_fallback_when_all_accounts_need_probe
             (18_000, 100, true, SelectorQuotaWindowStatus::Unknown),
             (604_800, 100, false, SelectorQuotaWindowStatus::Unknown),
         ],
-    );
+    )
+    .await;
 
-    let selector = RepositoryBackedAccountSelector::new(&state);
+    let selector = AsyncRepositoryBackedAccountSelector::new(&state);
 
-    let selected = match selector.select_upstream_account(
-        &HttpProxyRequest::new(Method::Post, "/v1/responses"),
-        TokenGeneration::new(1),
-        None,
-    ) {
+    let selected = match selector
+        .select_upstream_account(
+            &HttpProxyRequest::new(Method::Post, "/v1/responses"),
+            TokenGeneration::new(1),
+            None,
+        )
+        .await
+    {
         Ok(selected) => selected,
         Err(error) => panic!("unknown fallback account should be selected: {error}"),
     };
@@ -86,11 +95,11 @@ fn repository_backed_selector_uses_unknown_fallback_when_all_accounts_need_probe
     assert_eq!(selected.selection_reason(), "unknown_fallback_preferred");
 }
 
-#[test]
-fn repository_backed_selector_affinity_owner_bypasses_hold_and_weighted_choice() {
+#[tokio::test]
+async fn repository_backed_selector_affinity_owner_bypasses_hold_and_weighted_choice() {
     let temp_dir = ProxyTestTempDir::new("repository_selector_affinity_owner_hit");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -111,27 +120,33 @@ fn repository_backed_selector_affinity_owner_bypasses_hold_and_weighted_choice()
         &alpha,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &beta,
         "responses",
         &[(18_000, 50, true), (604_800, 50, false)],
-    );
+    )
+    .await;
     let affinity_secret = test_affinity_secret();
     if let Err(error) =
         persist_previous_response_owner(&state, "resp_beta", &affinity_secret, beta.account_id())
+            .await
     {
         panic!("affinity owner should persist: {error}");
     }
 
-    let selector = RepositoryBackedAccountSelector::new(&state);
-    let selected = match selector.select_upstream_account(
-        &HttpProxyRequest::new(Method::Post, "/v1/responses")
-            .with_body(br#"{"previous_response_id":"resp_beta"}"#.to_vec()),
-        TokenGeneration::new(1),
-        Some(&affinity_secret),
-    ) {
+    let selector = AsyncRepositoryBackedAccountSelector::new(&state);
+    let selected = match selector
+        .select_upstream_account(
+            &HttpProxyRequest::new(Method::Post, "/v1/responses")
+                .with_body(br#"{"previous_response_id":"resp_beta"}"#.to_vec()),
+            TokenGeneration::new(1),
+            Some(&affinity_secret),
+        )
+        .await
+    {
         Ok(selected) => selected,
         Err(error) => panic!("affinity owner should select: {error}"),
     };
@@ -144,7 +159,7 @@ fn repository_backed_selector_affinity_owner_bypasses_hold_and_weighted_choice()
 async fn async_repository_backed_selector_preserves_healthy_previous_response_affinity() {
     let temp_dir = ProxyTestTempDir::new("async_repository_selector_healthy_affinity_owner");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -165,16 +180,19 @@ async fn async_repository_backed_selector_preserves_healthy_previous_response_af
         &alpha,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &beta,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     let affinity_secret = test_affinity_secret();
     if let Err(error) =
         persist_previous_response_owner(&state, "resp_beta", &affinity_secret, beta.account_id())
+            .await
     {
         panic!("affinity owner should persist: {error}");
     }
@@ -206,7 +224,7 @@ async fn async_repository_backed_selector_preserves_healthy_previous_response_af
 async fn async_repository_backed_selector_preserves_credit_backed_previous_response_affinity() {
     let temp_dir = ProxyTestTempDir::new("async_repository_selector_affinity_owner_hit");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -227,7 +245,7 @@ async fn async_repository_backed_selector_preserves_credit_backed_previous_respo
     )
     .expect("affinity credential store should open");
     let now_unix_seconds = test_unix_seconds();
-    persist_credit_backed_account_with_token_async(
+    persist_credit_backed_account_with_token(
         &database_path,
         &secrets,
         &alpha,
@@ -236,7 +254,7 @@ async fn async_repository_backed_selector_preserves_credit_backed_previous_respo
         true,
     )
     .await;
-    persist_credit_backed_account_with_token_async(
+    persist_credit_backed_account_with_token(
         &database_path,
         &secrets,
         &beta,
@@ -248,6 +266,7 @@ async fn async_repository_backed_selector_preserves_credit_backed_previous_respo
     let affinity_secret = test_affinity_secret();
     if let Err(error) =
         persist_previous_response_owner(&state, "resp_beta", &affinity_secret, beta.account_id())
+            .await
     {
         panic!("affinity owner should persist: {error}");
     }
@@ -300,11 +319,11 @@ async fn async_repository_backed_selector_preserves_credit_backed_previous_respo
     assert!(selected.credit_backed_at_selection());
 }
 
-#[test]
-fn repository_backed_selector_allows_reserve_affinity_owner_outside_selected_pool() {
+#[tokio::test]
+async fn repository_backed_selector_allows_reserve_affinity_owner_outside_selected_pool() {
     let temp_dir = ProxyTestTempDir::new("repository_selector_reserve_affinity_owner");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -325,27 +344,33 @@ fn repository_backed_selector_allows_reserve_affinity_owner_outside_selected_poo
         &alpha,
         "responses",
         &[(18_000, 5, true), (604_800, 80, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &beta,
         "responses",
         &[(18_000, 90, true), (604_800, 20, false)],
-    );
+    )
+    .await;
     let affinity_secret = test_affinity_secret();
     if let Err(error) =
         persist_previous_response_owner(&state, "resp_beta", &affinity_secret, beta.account_id())
+            .await
     {
         panic!("affinity owner should persist: {error}");
     }
 
-    let selector = RepositoryBackedAccountSelector::new(&state);
-    let selected = match selector.select_upstream_account(
-        &HttpProxyRequest::new(Method::Post, "/v1/responses")
-            .with_body(br#"{"previous_response_id":"resp_beta"}"#.to_vec()),
-        TokenGeneration::new(1),
-        Some(&affinity_secret),
-    ) {
+    let selector = AsyncRepositoryBackedAccountSelector::new(&state);
+    let selected = match selector
+        .select_upstream_account(
+            &HttpProxyRequest::new(Method::Post, "/v1/responses")
+                .with_body(br#"{"previous_response_id":"resp_beta"}"#.to_vec()),
+            TokenGeneration::new(1),
+            Some(&affinity_secret),
+        )
+        .await
+    {
         Ok(selected) => selected,
         Err(error) => panic!("reserve affinity owner should remain usable: {error}"),
     };
@@ -354,11 +379,11 @@ fn repository_backed_selector_allows_reserve_affinity_owner_outside_selected_poo
     assert_eq!(selected.selection_reason(), "previous_response_affinity");
 }
 
-#[test]
-fn repository_backed_selector_keeps_low_balance_affinity_owner() {
+#[tokio::test]
+async fn repository_backed_selector_keeps_low_balance_affinity_owner() {
     let temp_dir = ProxyTestTempDir::new("repository_selector_low_balance_affinity_owner");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -379,30 +404,37 @@ fn repository_backed_selector_keeps_low_balance_affinity_owner() {
         &preferred,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &retiring,
         "responses",
         &[(18_000, 4, true), (604_800, 80, false)],
-    );
+    )
+    .await;
     let affinity_secret = test_affinity_secret();
     if let Err(error) = persist_previous_response_owner(
         &state,
         "resp_retiring",
         &affinity_secret,
         retiring.account_id(),
-    ) {
+    )
+    .await
+    {
         panic!("affinity owner should persist: {error}");
     }
 
-    let selector = RepositoryBackedAccountSelector::new(&state);
-    let selected = match selector.select_upstream_account(
-        &HttpProxyRequest::new(Method::Post, "/v1/responses")
-            .with_body(br#"{"previous_response_id":"resp_retiring"}"#.to_vec()),
-        TokenGeneration::new(1),
-        Some(&affinity_secret),
-    ) {
+    let selector = AsyncRepositoryBackedAccountSelector::new(&state);
+    let selected = match selector
+        .select_upstream_account(
+            &HttpProxyRequest::new(Method::Post, "/v1/responses")
+                .with_body(br#"{"previous_response_id":"resp_retiring"}"#.to_vec()),
+            TokenGeneration::new(1),
+            Some(&affinity_secret),
+        )
+        .await
+    {
         Ok(selected) => selected,
         Err(error) => panic!("retiring affinity owner should remain usable: {error}"),
     };
@@ -411,11 +443,11 @@ fn repository_backed_selector_keeps_low_balance_affinity_owner() {
     assert_eq!(selected.selection_reason(), "previous_response_affinity");
 }
 
-#[test]
-fn repository_backed_selector_ignores_previous_response_id_for_non_capable_routes() {
+#[tokio::test]
+async fn repository_backed_selector_ignores_previous_response_id_for_non_capable_routes() {
     let temp_dir = ProxyTestTempDir::new("repository_selector_non_capable_previous_response");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -436,13 +468,15 @@ fn repository_backed_selector_ignores_previous_response_id_for_non_capable_route
         &preferred,
         "responses_compact",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &affinity_owner,
         "responses_compact",
         &[(18_000, 40, true), (604_800, 40, false)],
-    );
+    )
+    .await;
     let affinity_secret = test_affinity_secret();
     if let Err(error) = persist_previous_response_owner_for_route(
         &state,
@@ -450,17 +484,22 @@ fn repository_backed_selector_ignores_previous_response_id_for_non_capable_route
         &affinity_secret,
         affinity_owner.account_id(),
         RouteBand::ResponsesCompact,
-    ) {
+    )
+    .await
+    {
         panic!("compact affinity owner should persist: {error}");
     }
 
-    let selector = RepositoryBackedAccountSelector::new(&state);
-    let selected = match selector.select_upstream_account(
-        &HttpProxyRequest::new(Method::Post, "/v1/responses/compact")
-            .with_body(br#"{"previous_response_id":"resp_passthrough"}"#.to_vec()),
-        TokenGeneration::new(1),
-        Some(&affinity_secret),
-    ) {
+    let selector = AsyncRepositoryBackedAccountSelector::new(&state);
+    let selected = match selector
+        .select_upstream_account(
+            &HttpProxyRequest::new(Method::Post, "/v1/responses/compact")
+                .with_body(br#"{"previous_response_id":"resp_passthrough"}"#.to_vec()),
+            TokenGeneration::new(1),
+            Some(&affinity_secret),
+        )
+        .await
+    {
         Ok(selected) => selected,
         Err(error) => panic!("non-capable route should ignore affinity field: {error}"),
     };
@@ -469,11 +508,11 @@ fn repository_backed_selector_ignores_previous_response_id_for_non_capable_route
     assert_ne!(selected.selection_reason(), "previous_response_affinity");
 }
 
-#[test]
-fn repository_backed_selector_affinity_missing_owner_fails_closed() {
+#[tokio::test]
+async fn repository_backed_selector_affinity_missing_owner_fails_closed() {
     let temp_dir = ProxyTestTempDir::new("repository_selector_affinity_missing_owner");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -488,28 +527,31 @@ fn repository_backed_selector_affinity_missing_owner_fails_closed() {
         &alpha,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
 
-    let selector = RepositoryBackedAccountSelector::new(&state);
+    let selector = AsyncRepositoryBackedAccountSelector::new(&state);
 
     assert_eq!(
-        selector.select_upstream_account(
-            &HttpProxyRequest::new(Method::Post, "/v1/responses")
-                .with_body(br#"{"previous_response_id":"resp_missing"}"#.to_vec()),
-            TokenGeneration::new(1),
-            Some(&test_affinity_secret()),
-        ),
+        selector
+            .select_upstream_account(
+                &HttpProxyRequest::new(Method::Post, "/v1/responses")
+                    .with_body(br#"{"previous_response_id":"resp_missing"}"#.to_vec()),
+                TokenGeneration::new(1),
+                Some(&test_affinity_secret()),
+            )
+            .await,
         Err(HttpProxyError::Selection {
             reason: QuotaAwareAccountSelectorError::AffinityOwnerMissing
         })
     );
 }
 
-#[test]
-fn repository_backed_selector_affinity_replaced_secret_ignores_stale_owner() {
+#[tokio::test]
+async fn repository_backed_selector_affinity_replaced_secret_ignores_stale_owner() {
     let temp_dir = ProxyTestTempDir::new("repository_selector_affinity_replaced_secret");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -524,37 +566,42 @@ fn repository_backed_selector_affinity_replaced_secret_ignores_stale_owner() {
         &alpha,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     let original_secret = test_affinity_secret();
     if let Err(error) = persist_previous_response_owner(
         &state,
         "resp_old_secret",
         &original_secret,
         alpha.account_id(),
-    ) {
+    )
+    .await
+    {
         panic!("affinity owner should persist with original secret: {error}");
     }
 
-    let selector = RepositoryBackedAccountSelector::new(&state);
+    let selector = AsyncRepositoryBackedAccountSelector::new(&state);
 
     assert_eq!(
-        selector.select_upstream_account(
-            &HttpProxyRequest::new(Method::Post, "/v1/responses")
-                .with_body(br#"{"previous_response_id":"resp_old_secret"}"#.to_vec()),
-            TokenGeneration::new(1),
-            Some(&replacement_affinity_secret()),
-        ),
+        selector
+            .select_upstream_account(
+                &HttpProxyRequest::new(Method::Post, "/v1/responses")
+                    .with_body(br#"{"previous_response_id":"resp_old_secret"}"#.to_vec()),
+                TokenGeneration::new(1),
+                Some(&replacement_affinity_secret()),
+            )
+            .await,
         Err(HttpProxyError::Selection {
             reason: QuotaAwareAccountSelectorError::AffinityOwnerMissing
         })
     );
 }
 
-#[test]
-fn repository_backed_selector_affinity_ineligible_owner_fails_closed() {
+#[tokio::test]
+async fn repository_backed_selector_affinity_ineligible_owner_fails_closed() {
     let temp_dir = ProxyTestTempDir::new("repository_selector_affinity_owner_ineligible");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -575,32 +622,38 @@ fn repository_backed_selector_affinity_ineligible_owner_fails_closed() {
         &exhausted,
         "responses",
         &[(18_000, 0, true), (604_800, 0, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &eligible,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     let affinity_secret = test_affinity_secret();
     if let Err(error) = persist_previous_response_owner(
         &state,
         "resp_exhausted",
         &affinity_secret,
         exhausted.account_id(),
-    ) {
+    )
+    .await
+    {
         panic!("affinity owner should persist: {error}");
     }
 
-    let selector = RepositoryBackedAccountSelector::new(&state);
+    let selector = AsyncRepositoryBackedAccountSelector::new(&state);
 
     assert_eq!(
-        selector.select_upstream_account(
-            &HttpProxyRequest::new(Method::Post, "/v1/responses")
-                .with_body(br#"{"previous_response_id":"resp_exhausted"}"#.to_vec()),
-            TokenGeneration::new(1),
-            Some(&affinity_secret),
-        ),
+        selector
+            .select_upstream_account(
+                &HttpProxyRequest::new(Method::Post, "/v1/responses")
+                    .with_body(br#"{"previous_response_id":"resp_exhausted"}"#.to_vec()),
+                TokenGeneration::new(1),
+                Some(&affinity_secret),
+            )
+            .await,
         Err(HttpProxyError::Selection {
             reason: QuotaAwareAccountSelectorError::AffinityOwnerUnavailable
         })
@@ -611,7 +664,7 @@ fn repository_backed_selector_affinity_ineligible_owner_fails_closed() {
 async fn async_repository_backed_selector_affinity_ineligible_owner_fails_closed() {
     let temp_dir = ProxyTestTempDir::new("async_repository_selector_affinity_ineligible");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -632,20 +685,24 @@ async fn async_repository_backed_selector_affinity_ineligible_owner_fails_closed
         &exhausted,
         "responses",
         &[(18_000, 0, true), (604_800, 0, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &eligible,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     let affinity_secret = test_affinity_secret();
     if let Err(error) = persist_previous_response_owner(
         &state,
         "resp_exhausted",
         &affinity_secret,
         exhausted.account_id(),
-    ) {
+    )
+    .await
+    {
         panic!("affinity owner should persist: {error}");
     }
     let async_state = match AsyncSqliteStateStore::open(&database_path).await {

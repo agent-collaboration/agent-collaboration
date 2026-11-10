@@ -236,16 +236,16 @@ fn loopback_router_runtime_keeps_websocket_preconnect_open_until_client_close() 
     }
 }
 
-#[test]
+#[tokio::test]
 #[expect(
     clippy::result_large_err,
     reason = "The existing error contract preserves the complete diagnostic payload."
 )]
-fn loopback_router_runtime_drains_affinity_tasks_after_handler_error() {
+async fn loopback_router_runtime_drains_affinity_tasks_after_handler_error() {
     let temp_dir = ProxyTestTempDir::new("runtime_error_drains_affinity_tasks");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -261,7 +261,8 @@ fn loopback_router_runtime_drains_affinity_tasks_after_handler_error() {
         "ws-error-drain",
         AccountStatus::Enabled,
     );
-    persist_account_with_snapshot_and_token(&state, &secrets, &account, 90, "error-drain-token");
+    persist_account_with_snapshot_and_token(&state, &secrets, &account, 90, "error-drain-token")
+        .await;
 
     let upstream_listener = match TcpListener::bind("127.0.0.1:0") {
         Ok(listener) => listener,
@@ -317,7 +318,17 @@ fn loopback_router_runtime_drains_affinity_tasks_after_handler_error() {
         LocalRouterTokenRecord::new(SecretString::new("current-token"), TokenGeneration::new(1)),
     )
     .with_quota_clock(1_030, 60);
-    let runtime = match LoopbackRouterRuntime::start_for_test(config) {
+    let runtime = match tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test(config)
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    {
         Ok(runtime) => runtime.with_affinity_owner_recorder(recorder.clone()),
         Err(error) => panic!("router runtime should start: {error}"),
     };

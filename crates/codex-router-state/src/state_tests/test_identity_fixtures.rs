@@ -10,7 +10,7 @@ use crate::quota_snapshot::QuotaSnapshotSource;
 use crate::quota_snapshot::SelectorQuotaWindowStatus;
 use codex_router_core::affinity::AffinityKeyHash;
 use codex_router_core::ids::AccountId;
-use rusqlite::Connection;
+use sqlx::Connection as _;
 
 pub(super) async fn seed_account_records(
     store: &crate::sqlite::AsyncSqliteStateStore,
@@ -119,26 +119,32 @@ pub(super) fn affinity_hash(character: char) -> AffinityKeyHash {
     }
 }
 
-pub(super) fn assert_no_previous_response_id_in_affinity_owner_rows(
+pub(super) async fn assert_no_previous_response_id_in_affinity_owner_rows(
     database_path: &Path,
     raw_previous_response_id: &str,
 ) {
-    let connection = match Connection::open(database_path) {
-        Ok(connection) => connection,
-        Err(error) => panic!("raw sqlite should open: {error}"),
-    };
-    let count: i64 = match connection.query_row(
+    let mut connection = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(database_path)
+            .read_only(true),
+    )
+    .await
+    .expect("raw affinity inspection should open");
+    let count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*)
                FROM previous_response_affinity_owners
               WHERE affinity_key_hash = ?1
                  OR route_band = ?1
                  OR account_id = ?1
                  OR source_transport = ?1",
-        [raw_previous_response_id],
-        |row| row.get(0),
-    ) {
-        Ok(count) => count,
-        Err(error) => panic!("raw sqlite count should query: {error}"),
-    };
+    )
+    .bind(raw_previous_response_id)
+    .fetch_one(&mut connection)
+    .await
+    .expect("raw affinity count should query");
     assert_eq!(count, 0);
+    connection
+        .close()
+        .await
+        .expect("affinity inspection should close");
 }

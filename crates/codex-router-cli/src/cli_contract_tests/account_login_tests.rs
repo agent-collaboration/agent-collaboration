@@ -79,8 +79,12 @@ fn account_login_rejects_legacy_codex_child_options() {
     }
 }
 
-#[test]
-pub(super) fn openai_device_login_activates_fake_issuer_tokens_without_plaintext_files() {
+#[tokio::test]
+pub(super) async fn openai_device_login_activates_fake_issuer_tokens_without_plaintext_files() {
+    openai_device_login_activation_journey().await;
+}
+
+pub(super) async fn openai_device_login_activation_journey() {
     let test_root = TestRoot::new("openai-device-login-activation");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
@@ -99,15 +103,31 @@ pub(super) fn openai_device_login_activates_fake_issuer_tokens_without_plaintext
     let mut stdout = Vec::new();
     let mut reader = Cursor::new(Vec::<u8>::new());
 
-    must_ok(
-        crate::account::run_account_command_with_input_and_openai_client_and_secret_store(
-            &mut stdout,
-            &mut reader,
-            command,
-            &client,
-            traced_secret_store.into(),
-        ),
-    );
+    let login_result = {
+        let login_command = command;
+        let issuer_client = (client).clone();
+        let credential_store = traced_secret_store.into();
+        let command_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        let login_task = tokio::task::spawn_blocking(move || {
+            tracing::dispatcher::with_default(&command_dispatcher, || {
+                let mut stdout = stdout;
+                let mut reader = reader;
+                let command_result = crate::account::run_account_command_with_input_and_openai_client_and_secret_store(
+                    &mut stdout,
+                    &mut reader,
+                    login_command,
+                    &issuer_client,
+                    credential_store,
+                );
+                (command_result, stdout, reader)
+            })
+        });
+        let (command_result, command_stdout, command_reader) = must_ok(login_task.await);
+        stdout = command_stdout;
+        reader = command_reader;
+        command_result
+    };
+    must_ok(login_result);
 
     let requests = issuer.finish();
     let read_events = read_trace.events();
@@ -193,14 +213,14 @@ pub(super) fn openai_device_login_activates_fake_issuer_tokens_without_plaintext
         "login must atomically publish the encrypted credential generation"
     );
 
-    let state = must_ok(SqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    ));
-    let account = must_ok(AccountStateRepository::load_account(
-        &state,
-        &account_id("acct_device_primary"),
-    ))
-    .expect("device login should activate an account");
+    let state = must_ok(
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        ))
+        .await,
+    );
+    let account = must_ok(state.load_account(&account_id("acct_device_primary")).await)
+        .expect("device login should activate an account");
     assert_eq!(account.provider(), Provider::Openai);
     assert_eq!(account.status(), AccountStatus::Enabled);
     assert_eq!(account.active_credential_generation(), Some(1));
@@ -234,17 +254,17 @@ pub(super) fn openai_device_login_activates_fake_issuer_tokens_without_plaintext
     assert!(!router_root.join("auth.json").exists());
 }
 
-#[test]
-fn openai_device_login_reauthenticates_the_same_account() {
-    exercise_openai_relogin("acct_device_primary");
+#[tokio::test]
+async fn openai_device_login_reauthenticates_the_same_account() {
+    exercise_openai_relogin("acct_device_primary").await;
 }
 
-#[test]
-fn openai_device_login_reauthenticates_account_with_non_derived_id() {
-    exercise_openai_relogin("acct_imported_stable_identity");
+#[tokio::test]
+async fn openai_device_login_reauthenticates_account_with_non_derived_id() {
+    exercise_openai_relogin("acct_imported_stable_identity").await;
 }
 
-fn exercise_openai_relogin(stored_id: &str) {
+async fn exercise_openai_relogin(stored_id: &str) {
     let test_root = TestRoot::new("openai-device-login-same-account");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
@@ -258,9 +278,9 @@ fn exercise_openai_relogin(stored_id: &str) {
         AccountStatus::Disabled,
     )
     .with_active_credential_generation(1);
-    let runtime = test_async_runtime();
-    let state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(&state_path)));
-    must_ok(runtime.block_on(state.upsert_account(&account)));
+
+    let state = must_ok((AsyncSqliteStateStore::open(&state_path)).await);
+    must_ok(state.upsert_account(&account).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_root),
     );
@@ -276,7 +296,7 @@ fn exercise_openai_relogin(stored_id: &str) {
         .to_secret_string(),
     );
     must_ok(secrets.write_secret(&active_key, &active_bundle));
-    must_ok(runtime.block_on(state.close()));
+    must_ok((state.close()).await);
 
     let issuer = FakeDeviceIssuer::spawn("replacement-access-canary", "replacement-refresh-canary");
     let client = OpenAiOAuthDeviceLoginClient::with_test_issuer(
@@ -285,15 +305,30 @@ fn exercise_openai_relogin(stored_id: &str) {
     );
     let command = parse_openai_login(&router_root, "device primary");
     let mut stdout = Vec::new();
-    must_ok(
-        crate::account::run_account_command_with_input_and_openai_client_and_secret_store(
-            &mut stdout,
-            &mut Cursor::new(Vec::<u8>::new()),
-            command,
-            &client,
-            secrets.into(),
-        ),
-    );
+    let login_result = {
+        let mut login_input = Cursor::new(Vec::<u8>::new());
+        let login_command = command;
+        let issuer_client = (client).clone();
+        let credential_store = secrets.into();
+        let command_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        let login_task = tokio::task::spawn_blocking(move || {
+            tracing::dispatcher::with_default(&command_dispatcher, || {
+                let mut stdout = stdout;
+                let command_result = crate::account::run_account_command_with_input_and_openai_client_and_secret_store(
+                    &mut stdout,
+                    &mut login_input,
+                    login_command,
+                    &issuer_client,
+                    credential_store,
+                );
+                (command_result, stdout)
+            })
+        });
+        let (command_result, command_stdout) = must_ok(login_task.await);
+        stdout = command_stdout;
+        command_result
+    };
+    must_ok(login_result);
     assert_eq!(
         issuer.finish().len(),
         3,
@@ -305,10 +340,10 @@ fn exercise_openai_relogin(stored_id: &str) {
             .contains(&format!("account_id: {stored_id}"))
     );
 
-    let reopened = must_ok(runtime.block_on(AsyncSqliteStateStore::open(&state_path)));
-    let account = must_ok(runtime.block_on(reopened.load_account(&account_id(stored_id))))
+    let reopened = must_ok((AsyncSqliteStateStore::open(&state_path)).await);
+    let account = must_ok(reopened.load_account(&account_id(stored_id)).await)
         .expect("same-account login should keep the account");
-    assert_eq!(must_ok(runtime.block_on(reopened.list_accounts())).len(), 1);
+    assert_eq!(must_ok(reopened.list_accounts().await).len(), 1);
     assert_eq!(account.account_id(), &account_id(stored_id));
     assert_eq!(account.status(), AccountStatus::Enabled);
     assert_eq!(account.active_credential_generation(), Some(2));
@@ -379,23 +414,25 @@ fn openai_device_login_does_not_spawn_a_codex_child() {
     );
 }
 
-#[test]
-fn openai_login_label_guard_runs_before_device_authorization() {
+#[tokio::test]
+async fn openai_login_label_guard_runs_before_device_authorization() {
     let test_root = TestRoot::new("openai-login-label-guard");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
     let state_path = codex_router_state::provider_proxy_database_path(&router_root);
-    let state = must_ok(test_async_runtime().block_on(AsyncSqliteStateStore::open(&state_path)));
+    let state = must_ok((AsyncSqliteStateStore::open(&state_path)).await);
     must_ok(
-        test_async_runtime().block_on(state.upsert_account(&AccountRecord::new(
-            Provider::Claude,
-            account_id("openai-login-label-owner"),
-            "shared-label",
-            AccountStatus::Enabled,
-        ))),
+        state
+            .upsert_account(&AccountRecord::new(
+                Provider::Claude,
+                account_id("openai-login-label-owner"),
+                "shared-label",
+                AccountStatus::Enabled,
+            ))
+            .await,
     );
-    must_ok(test_async_runtime().block_on(state.close()));
+    must_ok((state.close()).await);
 
     let issuer = FakeDeviceIssuer::spawn("unused-access-canary", "unused-refresh-canary");
     let client = OpenAiOAuthDeviceLoginClient::with_test_issuer(
@@ -403,12 +440,30 @@ fn openai_login_label_guard_runs_before_device_authorization() {
         std::time::Duration::from_secs(60),
     );
     let mut stdout = Vec::new();
-    let error = crate::account::run_account_command_with_input_and_openai_client(
-        &mut stdout,
-        &mut Cursor::new(Vec::<u8>::new()),
-        parse_openai_login(&router_root, "shared-label"),
-        &client,
-    )
+    let error = {
+        let mut login_input = Cursor::new(Vec::<u8>::new());
+        let login_command = parse_openai_login(&router_root, "shared-label");
+        let issuer_client = (client).clone();
+        let command_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        let (command_result, command_stdout) = must_ok(
+            tokio::task::spawn_blocking(move || {
+                tracing::dispatcher::with_default(&command_dispatcher, || {
+                    let mut stdout = stdout;
+                    let command_result =
+                        crate::account::run_account_command_with_input_and_openai_client(
+                            &mut stdout,
+                            &mut login_input,
+                            login_command,
+                            &issuer_client,
+                        );
+                    (command_result, stdout)
+                })
+            })
+            .await,
+        );
+        stdout = command_stdout;
+        command_result
+    }
     .expect_err("OpenAI login must reject a label owned by Claude before authorization");
 
     assert!(matches!(
@@ -422,23 +477,25 @@ fn openai_login_label_guard_runs_before_device_authorization() {
     );
 }
 
-#[test]
-fn claude_login_label_guard_runs_before_prompt_or_oauth() {
+#[tokio::test]
+async fn claude_login_label_guard_runs_before_prompt_or_oauth() {
     let test_root = TestRoot::new("claude-login-label-guard");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
     let state_path = codex_router_state::provider_proxy_database_path(&router_root);
-    let state = must_ok(test_async_runtime().block_on(AsyncSqliteStateStore::open(&state_path)));
+    let state = must_ok((AsyncSqliteStateStore::open(&state_path)).await);
     must_ok(
-        test_async_runtime().block_on(state.upsert_account(&AccountRecord::new(
-            Provider::Openai,
-            account_id("claude-login-label-owner"),
-            "shared-label",
-            AccountStatus::Enabled,
-        ))),
+        state
+            .upsert_account(&AccountRecord::new(
+                Provider::Openai,
+                account_id("claude-login-label-owner"),
+                "shared-label",
+                AccountStatus::Enabled,
+            ))
+            .await,
     );
-    must_ok(test_async_runtime().block_on(state.close()));
+    must_ok((state.close()).await);
 
     let command = CliCommand::parse([
         OsString::from("account"),
@@ -457,8 +514,29 @@ fn claude_login_label_guard_runs_before_prompt_or_oauth() {
     let mut stdout = Vec::new();
     let mut reader = Cursor::new(b"callback-must-not-be-read".to_vec());
 
-    let error = crate::account::run_account_command_with_input(&mut stdout, &mut reader, command)
-        .expect_err("globally duplicate labels must be rejected before OAuth starts");
+    let error = {
+        let login_command = command;
+        let command_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        let (command_result, command_stdout, command_reader) = must_ok(
+            tokio::task::spawn_blocking(move || {
+                tracing::dispatcher::with_default(&command_dispatcher, || {
+                    let mut stdout = stdout;
+                    let mut reader = reader;
+                    let command_result = crate::account::run_account_command_with_input(
+                        &mut stdout,
+                        &mut reader,
+                        login_command,
+                    );
+                    (command_result, stdout, reader)
+                })
+            })
+            .await,
+        );
+        stdout = command_stdout;
+        reader = command_reader;
+        command_result
+    }
+    .expect_err("globally duplicate labels must be rejected before OAuth starts");
 
     assert!(matches!(
         error,

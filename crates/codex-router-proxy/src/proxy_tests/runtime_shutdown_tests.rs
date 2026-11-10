@@ -54,16 +54,16 @@ fn loopback_router_runtime_cancels_unbounded_websocket_before_first_frame_timeou
     }
 }
 
-#[test]
+#[tokio::test]
 #[expect(
     clippy::result_large_err,
     reason = "The existing error contract preserves the complete diagnostic payload."
 )]
-fn loopback_router_runtime_shutdown_drains_active_websocket_sessions() {
+async fn loopback_router_runtime_shutdown_drains_active_websocket_sessions() {
     let temp_dir = ProxyTestTempDir::new("runtime_shutdown_drains_websocket");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -85,7 +85,8 @@ fn loopback_router_runtime_shutdown_drains_active_websocket_sessions() {
         &account,
         90,
         "runtime-shutdown-token",
-    );
+    )
+    .await;
     let upstream_listener = match TcpListener::bind("127.0.0.1:0") {
         Ok(listener) => listener,
         Err(error) => panic!("mock websocket upstream should bind: {error}"),
@@ -133,7 +134,17 @@ fn loopback_router_runtime_shutdown_drains_active_websocket_sessions() {
         LocalRouterTokenRecord::new(SecretString::new("current-token"), TokenGeneration::new(1)),
     )
     .with_quota_clock(1_030, 60);
-    let runtime = match LoopbackRouterRuntime::start_for_test(config) {
+    let runtime = match tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test(config)
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    {
         Ok(runtime) => Arc::new(runtime),
         Err(error) => panic!("router runtime should start: {error}"),
     };
@@ -183,16 +194,16 @@ fn loopback_router_runtime_shutdown_drains_active_websocket_sessions() {
     assert_eq!(snapshot.closed_sessions, 1);
 }
 
-#[test]
+#[tokio::test]
 #[expect(
     clippy::result_large_err,
     reason = "The existing error contract preserves the complete diagnostic payload."
 )]
-fn loopback_router_runtime_continues_after_rejected_connection() {
+async fn loopback_router_runtime_continues_after_rejected_connection() {
     let temp_dir = ProxyTestTempDir::new("runtime_rejected_then_websocket");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -214,7 +225,8 @@ fn loopback_router_runtime_continues_after_rejected_connection() {
         &account,
         90,
         "runtime-after-reject-token",
-    );
+    )
+    .await;
 
     let upstream_listener = match TcpListener::bind("127.0.0.1:0") {
         Ok(listener) => listener,
@@ -273,7 +285,17 @@ fn loopback_router_runtime_continues_after_rejected_connection() {
         LocalRouterTokenRecord::new(SecretString::new("current-token"), TokenGeneration::new(1)),
     )
     .with_quota_clock(1_030, 60);
-    let runtime = match LoopbackRouterRuntime::start_for_test(config) {
+    let runtime = match tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test(config)
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    {
         Ok(runtime) => runtime,
         Err(error) => panic!("router runtime should start: {error}"),
     };
@@ -323,7 +345,10 @@ fn loopback_router_runtime_continues_after_rejected_connection() {
         }
     });
 
-    let handled = match runtime.serve_protocol_connections(2) {
+    let handled = match tokio::task::spawn_blocking(move || runtime.serve_protocol_connections(2))
+        .await
+        .expect("blocking product serving should join")
+    {
         Ok(handled) => handled,
         Err(error) => {
             panic!("router runtime should continue after rejected connection: {error}")

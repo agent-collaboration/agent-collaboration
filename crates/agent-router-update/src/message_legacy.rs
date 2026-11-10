@@ -4,9 +4,10 @@ use crate::{
     message_copy::MessageUpgradeError,
     message_rows::{MessageRows, invalid},
 };
-use rusqlite::{Connection, OpenFlags};
+use futures_util::TryStreamExt;
 use serde::de::DeserializeOwned;
 use sha2::{Digest, Sha384};
+use sqlx::{Connection, Row, SqliteConnection, sqlite::SqliteConnectOptions};
 use std::path::Path;
 
 pub(crate) enum MessageSource {
@@ -98,78 +99,83 @@ pub(crate) async fn read(
     path: &Path,
     mapping: &MessageActivityMap,
 ) -> Result<MessageSource, MessageUpgradeError> {
-    let path = path.to_owned();
-    let mapping = mapping.clone();
-    tokio::task::spawn_blocking(move || read_closed(&path, &mapping)).await?
-}
-
-fn read_closed(
-    path: &Path,
-    mapping: &MessageActivityMap,
-) -> Result<MessageSource, MessageUpgradeError> {
-    if !path.try_exists()? {
+    let inspected_path = path.to_owned();
+    if !tokio::task::spawn_blocking(move || inspected_path.try_exists()).await?? {
         return Ok(MessageSource::Absent);
     }
-    crate::legacy_reader::refuse_open_file(path).map_err(|_| MessageUpgradeError::OpenOwner)?;
-    let connection = Connection::open_with_flags(
-        path,
-        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
-    )?;
-    connection.execute_batch("PRAGMA query_only=ON; BEGIN;")?;
-    let version = admit(&connection)?;
+    crate::legacy_reader::refuse_open_file(path)
+        .await
+        .map_err(|_| MessageUpgradeError::OpenOwner)?;
+    let mut connection = SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(path)
+            .read_only(true)
+            .create_if_missing(false)
+            .foreign_keys(false)
+            .pragma("query_only", "ON"),
+    )
+    .await?;
+    let source_result = read_snapshot(&mut connection, mapping).await;
+    let rollback_result = sqlx::raw_sql("ROLLBACK;").execute(&mut connection).await;
+    let close_result = connection.close().await;
+    let source = source_result?;
+    rollback_result?;
+    close_result?;
+    Ok(source)
+}
+
+async fn read_snapshot(
+    connection: &mut SqliteConnection,
+    mapping: &MessageActivityMap,
+) -> Result<MessageSource, MessageUpgradeError> {
+    sqlx::raw_sql("BEGIN;").execute(&mut *connection).await?;
+    let version = admit(connection).await?;
     if version >= DROP_VERSION {
         return Ok(MessageSource::Moved);
     }
-    let has = |name: &str| {
-        connection.query_row(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name=?)",
-            [name],
-            |row| row.get::<_, bool>(0),
-        )
-    };
-    if has("mail_items")? {
-        let count: i64 =
-            connection.query_row("SELECT count(*) FROM mail_items", [], |row| row.get(0))?;
+    if has_table(connection, "mail_items").await? {
+        let count: i64 = sqlx::query_scalar("SELECT count(*) FROM mail_items")
+            .fetch_one(&mut *connection)
+            .await?;
         if count != 0 {
             return Err(invalid("nonempty pre-release mail_items"));
         }
     }
     let mut result = MessageRows::default();
-    if has("router_pushes")? {
+    if has_table(connection, "router_pushes").await? {
         if version >= 20_261_016_000_200 {
-            let invalid_retention: bool = connection.query_row("SELECT EXISTS(SELECT 1 FROM router_pushes WHERE retention NOT IN ('creationAge','mailTerminalAge'))", [], |row| row.get(0))?;
+            let invalid_retention: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM router_pushes WHERE retention NOT IN ('creationAge','mailTerminalAge'))").fetch_one(&mut *connection).await?;
             if invalid_retention {
                 return Err(invalid("push.retention"));
             }
         }
-        result.pushes = rows(&connection, PUSH_READ)?;
+        result.pushes = rows(connection, PUSH_READ).await?;
         crate::message_origin_map::translate(&mut result, mapping)?;
         mapping.translate(&mut result)?;
     }
-    if has("subscription_delivery_progress")? {
-        result.subscriptions = rows(&connection, SUBSCRIPTION_READ)?;
+    if has_table(connection, "subscription_delivery_progress").await? {
+        result.subscriptions = rows(connection, SUBSCRIPTION_READ).await?;
         for progress in &mut result.subscriptions {
             progress.project_payload()?;
         }
     }
-    if has("board_intent_progress")? {
+    if has_table(connection, "board_intent_progress").await? {
         if version < VERSIONED_INTENTS {
-            let count: i64 =
-                connection.query_row("SELECT count(*) FROM board_intent_progress", [], |row| {
-                    row.get(0)
-                })?;
+            let count: i64 = sqlx::query_scalar("SELECT count(*) FROM board_intent_progress")
+                .fetch_one(&mut *connection)
+                .await?;
             if count != 0 {
                 return Err(invalid("unversioned intent progress"));
             }
         } else {
-            result.intents = rows(&connection, INTENT_READ)?;
+            result.intents = rows(connection, INTENT_READ).await?;
             for intent in &result.intents {
                 intent.validate()?;
             }
         }
     }
-    if has("board_intent_scan_cursors")? {
-        result.cursors = rows(&connection, CURSOR_READ)?;
+    if has_table(connection, "board_intent_scan_cursors").await? {
+        result.cursors = rows(connection, CURSOR_READ).await?;
         for cursor in &result.cursors {
             cursor.validate()?;
         }
@@ -177,71 +183,100 @@ fn read_closed(
     Ok(MessageSource::Legacy(result))
 }
 
-fn admit(source: &Connection) -> Result<i64, MessageUpgradeError> {
-    let mut statement = source.prepare(
+async fn has_table(connection: &mut SqliteConnection, name: &str) -> Result<bool, sqlx::Error> {
+    sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name=?)")
+        .bind(name)
+        .fetch_one(connection)
+        .await
+}
+
+async fn admit(source: &mut SqliteConnection) -> Result<i64, MessageUpgradeError> {
+    let records = sqlx::query(
         "SELECT version, description, success, checksum FROM _sqlx_migrations ORDER BY version",
-    )?;
-    let applied = statement
-        .query_map([], |row| {
+    )
+    .fetch_all(&mut *source)
+    .await?;
+    let applied = records
+        .into_iter()
+        .map(|row| {
             Ok((
-                row.get::<_, i64>("version")?,
-                row.get::<_, String>("description")?,
-                row.get::<_, i64>("success")?,
-                row.get::<_, Vec<u8>>("checksum")?,
+                row.try_get::<i64, _>("version")?,
+                row.try_get::<String, _>("description")?,
+                row.try_get::<i64, _>("success")?,
+                row.try_get::<Vec<u8>, _>("checksum")?,
             ))
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
     if applied.is_empty() || applied.len() > MIGRATIONS.len() {
         return Err(invalid("automation migration history"));
     }
-    let expected = Connection::open_in_memory()?;
-    for (index, (version, description, success, checksum)) in applied.iter().enumerate() {
-        let (known_version, known_description, sql) = MIGRATIONS
-            .get(index)
-            .ok_or_else(|| invalid("automation migration history"))?;
-        let expected_checksum = Sha384::digest(sql.as_bytes());
-        let expected_bytes: &[u8] = expected_checksum.as_ref();
-        if version != known_version
-            || description != known_description
-            || *success != 1
-            || checksum.as_slice() != expected_bytes
-        {
-            return Err(invalid("automation migration identity"));
+    let mut expected = SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .in_memory(true)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
+    let admission = async {
+        for (index, (version, description, success, checksum)) in applied.iter().enumerate() {
+            let (known_version, known_description, sql) = MIGRATIONS
+                .get(index)
+                .ok_or_else(|| invalid("automation migration history"))?;
+            let expected_checksum = Sha384::digest(sql.as_bytes());
+            let expected_bytes: &[u8] = expected_checksum.as_ref();
+            if version != known_version
+                || description != known_description
+                || *success != 1
+                || checksum.as_slice() != expected_bytes
+            {
+                return Err(invalid("automation migration identity"));
+            }
+            sqlx::raw_sql(sqlx::AssertSqlSafe(*sql))
+                .execute(&mut expected)
+                .await?;
         }
-        expected.execute_batch(sql)?;
+        if objects(source).await? != objects(&mut expected).await? {
+            return Err(invalid("automation schema for migration prefix"));
+        }
+        applied
+            .last()
+            .map(|record| record.0)
+            .ok_or_else(|| invalid("automation migration history"))
     }
-    if objects(source)? != objects(&expected)? {
-        return Err(invalid("automation schema for migration prefix"));
-    }
-    applied
-        .last()
-        .map(|record| record.0)
-        .ok_or_else(|| invalid("automation migration history"))
+    .await;
+    let close_result = expected.close().await;
+    let version = admission?;
+    close_result?;
+    Ok(version)
 }
-fn objects(connection: &Connection) -> Result<Vec<(String, String)>, MessageUpgradeError> {
-    let mut statement = connection.prepare("SELECT name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' AND name != '_sqlx_migrations' ORDER BY name")?;
-    Ok(statement
-        .query_map([], |row| {
-            let sql: String = row.get("sql")?;
+
+async fn objects(
+    connection: &mut SqliteConnection,
+) -> Result<Vec<(String, String)>, MessageUpgradeError> {
+    let records = sqlx::query("SELECT name,sql FROM sqlite_schema WHERE name NOT LIKE 'sqlite_%' AND name != '_sqlx_migrations' ORDER BY name").fetch_all(connection).await?;
+    records
+        .into_iter()
+        .map(|row| {
+            let sql: String = row.try_get("sql")?;
             Ok((
-                row.get("name")?,
+                row.try_get("name")?,
                 sql.split_whitespace().collect::<Vec<_>>().join(" "),
             ))
-        })?
-        .collect::<Result<Vec<_>, _>>()?)
+        })
+        .collect()
 }
-fn rows<T: DeserializeOwned>(
-    connection: &Connection,
+
+async fn rows<T: DeserializeOwned>(
+    connection: &mut SqliteConnection,
     sql: &str,
 ) -> Result<Vec<T>, MessageUpgradeError> {
-    let mut statement = connection.prepare(sql)?;
-    let encoded = statement
-        .query_map([], |row| row.get::<_, String>("payload"))?
-        .collect::<Result<Vec<_>, _>>()?;
-    encoded
-        .into_iter()
-        .map(|value| serde_json::from_str(&value).map_err(|_| invalid("message columns")))
-        .collect()
+    let mut cursor = sqlx::query(sqlx::AssertSqlSafe(sql)).fetch(connection);
+    let mut result = Vec::new();
+    while let Some(row) = cursor.try_next().await? {
+        let value: String = row.try_get("payload")?;
+        result.push(serde_json::from_str(&value).map_err(|_| invalid("message columns"))?);
+    }
+    Ok(result)
 }
 
 const PUSH_READ: &str = "SELECT json_object('push_id',push_id,'kind',kind,'origin_kind',origin_kind,'origin_service_id',origin_service_id,'origin_endpoint_id',origin_endpoint_id,'origin_session_id',origin_session_id,'origin_router_ref',origin_router_ref,'target_service_id',target_service_id,'target_endpoint_id',target_endpoint_id,'target_session_id',target_session_id,'dm_delivery_mode',dm_delivery_mode,'dm_generation_guard_json',dm_generation_guard_json,'reply_to_push_id',reply_to_push_id,'header_facts_json',header_facts_json,'body',body,'ranges_json',ranges_json,'delivery_state',delivery_state,'last_outcome_json',last_outcome_json,'created_at',created_at,'settled_at',settled_at,'read_at',read_at) AS payload FROM router_pushes ORDER BY push_id";

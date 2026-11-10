@@ -1,6 +1,7 @@
 use crate::e2e_support::{CliImportFixture, E2eResult, SourceSnapshot, read_report, run_cli};
 use message_board::MAX_DESCRIPTION_BYTES;
 use serde_json::{Value, json};
+use sqlx::Connection as _;
 
 #[tokio::test]
 #[expect(
@@ -9,7 +10,7 @@ use serde_json::{Value, json};
 )]
 async fn actual_cli_dry_run_reports_literal_history_and_keeps_inputs_unchanged() -> E2eResult {
     let fixture = CliImportFixture::new("legacy-complete.sqlite")?;
-    let descriptions = set_description_variants(&fixture.source)?;
+    let descriptions = set_description_variants(&fixture.source).await?;
     let source = SourceSnapshot::capture(&fixture.source)?;
     let identity = std::fs::read(&fixture.identity_file)?;
     let output = run_cli(
@@ -65,27 +66,31 @@ async fn actual_cli_dry_run_reports_literal_history_and_keeps_inputs_unchanged()
     Ok(())
 }
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract asserts; setup may fail."
-)]
-fn set_description_variants(path: &std::path::Path) -> E2eResult<Vec<String>> {
+async fn set_description_variants(path: &std::path::Path) -> E2eResult<Vec<String>> {
     let empty = String::new();
     let control = "  first\r\nsecond\0\tline\n ".to_owned();
     let maximum = "λ\0\n".repeat(4096);
     assert_eq!(maximum.len(), MAX_DESCRIPTION_BYTES);
-    let connection = rusqlite::Connection::open(path)?;
+    let mut connection = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
     for (topic, description) in [
         ("019a0000-0000-7000-8000-000000000015", &empty),
         ("019a0000-0000-7000-8000-000000000016", &control),
         ("019a0000-0000-7000-8000-000000000017", &maximum),
     ] {
-        connection.execute(
-            "UPDATE board_topics SET description=? WHERE topic_id=?",
-            rusqlite::params![description, topic],
-        )?;
+        sqlx::query("UPDATE board_topics SET description=? WHERE topic_id=?")
+            .bind(description)
+            .bind(topic)
+            .execute(&mut connection)
+            .await
+            .map(|result| result.rows_affected())?;
     }
-    connection.close().map_err(|(_, error)| error)?;
+    connection.close().await?;
     Ok(vec![empty, control, maximum])
 }
 

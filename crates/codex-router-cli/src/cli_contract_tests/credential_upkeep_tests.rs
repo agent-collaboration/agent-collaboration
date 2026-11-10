@@ -1,6 +1,5 @@
 use super::*;
 
-use crate::credential_upkeep_worker::start_background_credential_upkeep_worker_with_client_and_clock;
 use codex_router_core::provider::Provider;
 use codex_router_secret_store::credential_bundle::CredentialBundle;
 
@@ -42,13 +41,13 @@ impl CredentialRefreshClient for RecordingUpkeepRefreshClient {
     }
 }
 
-#[test]
-fn enabled_exhausted_idle_account_renews_across_simulated_days_without_quota_probe() {
+#[tokio::test]
+async fn enabled_exhausted_idle_account_renews_across_simulated_days_without_quota_probe() {
     let test_root = TestRoot::new("credential-upkeep-idle");
     must_ok(fs::create_dir(test_root.path()));
     let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
-    let state = must_ok(SqliteStateStore::open(&state_path));
+    let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_root),
     );
@@ -58,16 +57,19 @@ fn enabled_exhausted_idle_account_renews_across_simulated_days_without_quota_pro
         (enabled_id.clone(), AccountStatus::Enabled),
         (disabled_id.clone(), AccountStatus::Disabled),
     ] {
-        must_ok(AccountStateRepository::upsert_account(
-            &state,
-            &AccountRecord::new(
-                codex_router_core::provider::Provider::Openai,
-                account_id.clone(),
-                "upkeep",
-                status,
-            )
-            .with_active_credential_generation(1),
-        ));
+        must_ok(
+            state
+                .upsert_account(
+                    &AccountRecord::new(
+                        codex_router_core::provider::Provider::Openai,
+                        account_id.clone(),
+                        "upkeep",
+                        status,
+                    )
+                    .with_active_credential_generation(1),
+                )
+                .await,
+        );
         let key = must_ok(openai_account_credential_bundle_key(&account_id, 1));
         must_ok(
             secrets.write_secret(
@@ -83,13 +85,16 @@ fn enabled_exhausted_idle_account_renews_across_simulated_days_without_quota_pro
             ),
         );
     }
-    must_ok(QuotaSnapshotRepository::upsert_snapshot(
-        &state,
-        &PersistedQuotaSnapshot::new(enabled_id.clone(), QuotaSnapshotSource::MockEndpoint)
-            .with_observed_unix_seconds(1_000)
-            .with_route_band("responses", 0),
-    ));
-    drop(state);
+    must_ok(
+        state
+            .upsert_quota_snapshot(
+                &PersistedQuotaSnapshot::new(enabled_id.clone(), QuotaSnapshotSource::MockEndpoint)
+                    .with_observed_unix_seconds(1_000)
+                    .with_route_band("responses", 0),
+            )
+            .await,
+    );
+    state.close().await.expect("fixture state should close");
 
     let now = Arc::new(AtomicU64::new(1_000));
     let (call_sender, call_receiver) = mpsc::channel();
@@ -99,36 +104,42 @@ fn enabled_exhausted_idle_account_renews_across_simulated_days_without_quota_pro
         observed_calls: call_sender,
     };
     let clock = Arc::clone(&now);
-    let worker = must_ok(
-        start_background_credential_upkeep_worker_with_client_and_clock(
-            &state_path,
-            secrets.into(),
-            client,
-            move || clock.load(Ordering::SeqCst),
-        ),
-    );
+    let worker_result = {
+        let fixture_state_path = (state_path).clone();
+        let fixture_secrets = secrets.into();
+        let fixture_client = client;
+        let fixture_clock = move || clock.load(Ordering::SeqCst);
+        let fixture_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        let upkeep_task = tokio::task::spawn_blocking(move || {
+            tracing::dispatcher::with_default(&fixture_dispatcher, || {
+                crate::credential_upkeep_worker::start_background_credential_upkeep_worker_with_client_and_clock(
+                    &fixture_state_path,
+                    fixture_secrets,
+                    fixture_client,
+                    fixture_clock,
+                )
+            })
+        });
+        must_ok(upkeep_task.await)
+    };
+    let worker = must_ok(worker_result);
     assert_eq!(
         must_ok(call_receiver.recv_timeout(Duration::from_secs(2))),
         1
     );
-    wait_for_upkeep_generation(&state_path, &enabled_id, 2);
+    wait_for_upkeep_generation(&state_path, &enabled_id, 2).await;
     now.store(1_000 + 2 * 86_400, Ordering::SeqCst);
     worker.wake_for_test();
     assert_eq!(
         must_ok(call_receiver.recv_timeout(Duration::from_secs(2))),
         2
     );
-    wait_for_upkeep_generation(&state_path, &enabled_id, 3);
+    wait_for_upkeep_generation(&state_path, &enabled_id, 3).await;
     drop(worker);
     assert_eq!(calls.load(Ordering::SeqCst), 2);
-    let read_runtime = must_ok(
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build(),
-    );
-    let read_state =
-        must_ok(read_runtime.block_on(AsyncSqliteStateStore::open_read_only(&state_path)));
-    let disabled = must_ok(read_runtime.block_on(read_state.load_account(&disabled_id)))
+
+    let read_state = must_ok((AsyncSqliteStateStore::open_read_only(&state_path)).await);
+    let disabled = must_ok(read_state.load_account(&disabled_id).await)
         .expect("disabled account should remain");
     assert_eq!(disabled.status(), AccountStatus::Disabled);
     assert_eq!(disabled.active_credential_generation(), Some(1));
@@ -182,16 +193,16 @@ impl CredentialRefreshClient for RecordingClaudeUpkeepRefreshClient {
     }
 }
 
-#[test]
-fn credential_upkeep_refreshes_exhausted_and_idle_claude_accounts() {
+#[tokio::test]
+async fn credential_upkeep_refreshes_exhausted_and_idle_claude_accounts() {
     let test_root = TestRoot::new("credential-upkeep-exhausted-idle-claude");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir(&router_root));
-    ensure_async_state_schema(&router_root);
+    ensure_async_state_schema(&router_root).await;
     let state_path = codex_router_state::provider_proxy_database_path(&router_root);
     let secret_root = router_root.join("secrets");
-    let state = must_ok(SqliteStateStore::open(&state_path));
+    let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_root),
     );
@@ -202,16 +213,19 @@ fn credential_upkeep_refreshes_exhausted_and_idle_claude_accounts() {
         (&exhausted_id, "exhausted Claude"),
         (&idle_id, "idle Claude"),
     ] {
-        must_ok(AccountStateRepository::upsert_account(
-            &state,
-            &AccountRecord::new(
-                Provider::Claude,
-                account_id.clone(),
-                label,
-                AccountStatus::Enabled,
-            )
-            .with_active_credential_generation(1),
-        ));
+        must_ok(
+            state
+                .upsert_account(
+                    &AccountRecord::new(
+                        Provider::Claude,
+                        account_id.clone(),
+                        label,
+                        AccountStatus::Enabled,
+                    )
+                    .with_active_credential_generation(1),
+                )
+                .await,
+        );
         let credential_key = must_ok(
             codex_router_secret_store::account_tokens::provider_credential_bundle_key(
                 Provider::Claude,
@@ -226,25 +240,42 @@ fn credential_upkeep_refreshes_exhausted_and_idle_claude_accounts() {
         ));
         must_ok(secrets.write_secret(&credential_key, &must_ok(bundle.to_secret_string())));
     }
-    must_ok(QuotaSnapshotRepository::upsert_snapshot(
-        &state,
-        &PersistedQuotaSnapshot::new(exhausted_id.clone(), QuotaSnapshotSource::MockEndpoint)
-            .with_observed_unix_seconds(1_000)
-            .with_route_band("claude_messages", 0),
-    ));
-    drop(state);
+    must_ok(
+        state
+            .upsert_quota_snapshot(
+                &PersistedQuotaSnapshot::new(
+                    exhausted_id.clone(),
+                    QuotaSnapshotSource::MockEndpoint,
+                )
+                .with_observed_unix_seconds(1_000)
+                .with_route_band("claude_messages", 0),
+            )
+            .await,
+    );
+    state.close().await.expect("fixture state should close");
 
     let (observed_sender, observed_receiver) = mpsc::channel();
-    let worker = must_ok(
-        start_background_credential_upkeep_worker_with_client_and_clock(
-            &state_path,
-            secrets.clone().into(),
-            RecordingClaudeUpkeepRefreshClient {
-                observed_account_ids: observed_sender,
-            },
-            || 1_000,
-        ),
-    );
+    let worker_result = {
+        let fixture_state_path = (state_path).clone();
+        let fixture_secrets = secrets.clone().into();
+        let fixture_client = RecordingClaudeUpkeepRefreshClient {
+            observed_account_ids: observed_sender,
+        };
+        let fixture_clock = || 1_000;
+        let fixture_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        let upkeep_task = tokio::task::spawn_blocking(move || {
+            tracing::dispatcher::with_default(&fixture_dispatcher, || {
+                crate::credential_upkeep_worker::start_background_credential_upkeep_worker_with_client_and_clock(
+                    &fixture_state_path,
+                    fixture_secrets,
+                    fixture_client,
+                    fixture_clock,
+                )
+            })
+        });
+        must_ok(upkeep_task.await)
+    };
+    let worker = must_ok(worker_result);
     let mut observed_accounts = [
         must_ok(observed_receiver.recv_timeout(Duration::from_secs(2)))
             .as_str()
@@ -260,8 +291,8 @@ fn credential_upkeep_refreshes_exhausted_and_idle_claude_accounts() {
     ];
     expected_accounts.sort();
     assert_eq!(observed_accounts, expected_accounts);
-    wait_for_upkeep_generation(&state_path, &exhausted_id, 2);
-    wait_for_upkeep_generation(&state_path, &idle_id, 2);
+    wait_for_upkeep_generation(&state_path, &exhausted_id, 2).await;
+    wait_for_upkeep_generation(&state_path, &idle_id, 2).await;
     drop(worker);
 
     for account_id in [&exhausted_id, &idle_id] {
@@ -321,27 +352,30 @@ impl CredentialRefreshClient for HeldUpkeepRefreshClient {
     }
 }
 
-#[test]
-fn upkeep_shutdown_drains_in_flight_rotation_before_returning() {
+#[tokio::test]
+async fn upkeep_shutdown_drains_in_flight_rotation_before_returning() {
     let test_root = TestRoot::new("credential-upkeep-shutdown");
     must_ok(fs::create_dir(test_root.path()));
     let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
-    let state = must_ok(SqliteStateStore::open(&state_path));
+    let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_root),
     );
     let account_id = account_id("upkeep-shutdown");
-    must_ok(AccountStateRepository::upsert_account(
-        &state,
-        &AccountRecord::new(
-            codex_router_core::provider::Provider::Openai,
-            account_id.clone(),
-            "shutdown",
-            AccountStatus::Enabled,
-        )
-        .with_active_credential_generation(1),
-    ));
+    must_ok(
+        state
+            .upsert_account(
+                &AccountRecord::new(
+                    codex_router_core::provider::Provider::Openai,
+                    account_id.clone(),
+                    "shutdown",
+                    AccountStatus::Enabled,
+                )
+                .with_active_credential_generation(1),
+            )
+            .await,
+    );
     let active_key = must_ok(openai_account_credential_bundle_key(&account_id, 1));
     must_ok(
         secrets.write_secret(
@@ -356,20 +390,31 @@ fn upkeep_shutdown_drains_in_flight_rotation_before_returning() {
             ),
         ),
     );
-    drop(state);
+    state.close().await.expect("fixture state should close");
     let (entered_sender, entered_receiver) = mpsc::channel();
     let (release_sender, release_receiver) = mpsc::channel();
-    let worker = must_ok(
-        start_background_credential_upkeep_worker_with_client_and_clock(
-            &state_path,
-            secrets.into(),
-            HeldUpkeepRefreshClient {
-                entered_sender,
-                release_receiver: Arc::new(Mutex::new(release_receiver)),
-            },
-            || 1_000,
-        ),
-    );
+    let worker_result = {
+        let fixture_state_path = (state_path).clone();
+        let fixture_secrets = secrets.into();
+        let fixture_client = HeldUpkeepRefreshClient {
+            entered_sender,
+            release_receiver: Arc::new(Mutex::new(release_receiver)),
+        };
+        let fixture_clock = || 1_000;
+        let fixture_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        let upkeep_task = tokio::task::spawn_blocking(move || {
+            tracing::dispatcher::with_default(&fixture_dispatcher, || {
+                crate::credential_upkeep_worker::start_background_credential_upkeep_worker_with_client_and_clock(
+                    &fixture_state_path,
+                    fixture_secrets,
+                    fixture_client,
+                    fixture_clock,
+                )
+            })
+        });
+        must_ok(upkeep_task.await)
+    };
+    let worker = must_ok(worker_result);
     must_ok(entered_receiver.recv_timeout(Duration::from_secs(2)));
     let (stopped_sender, stopped_receiver) = mpsc::channel();
     let shutdown = thread::spawn(move || {
@@ -383,7 +428,7 @@ fn upkeep_shutdown_drains_in_flight_rotation_before_returning() {
     must_ok(release_sender.send(()));
     must_ok(stopped_receiver.recv_timeout(Duration::from_secs(2)));
     must_ok(shutdown.join().map_err(|_| "shutdown thread failed"));
-    wait_for_upkeep_generation(&state_path, &account_id, 2);
+    wait_for_upkeep_generation(&state_path, &account_id, 2).await;
 }
 
 #[derive(Clone)]
@@ -419,13 +464,13 @@ impl CredentialRefreshClient for HeldQueuedUpkeepRefreshClient {
     }
 }
 
-#[test]
-fn upkeep_shutdown_does_not_admit_a_queued_account_after_stop() {
+#[tokio::test]
+async fn upkeep_shutdown_does_not_admit_a_queued_account_after_stop() {
     let test_root = TestRoot::new("credential-upkeep-queued-stop");
     must_ok(fs::create_dir(test_root.path()));
     let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
-    let state = must_ok(SqliteStateStore::open(&state_path));
+    let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_root),
     );
@@ -433,16 +478,19 @@ fn upkeep_shutdown_does_not_admit_a_queued_account_after_stop() {
         .map(|index| account_id(&format!("queued-upkeep-{index}")))
         .collect::<Vec<_>>();
     for (index, account_id) in account_ids.iter().enumerate() {
-        must_ok(AccountStateRepository::upsert_account(
-            &state,
-            &AccountRecord::new(
-                codex_router_core::provider::Provider::Openai,
-                account_id.clone(),
-                format!("queued-{index}"),
-                AccountStatus::Enabled,
-            )
-            .with_active_credential_generation(1),
-        ));
+        must_ok(
+            state
+                .upsert_account(
+                    &AccountRecord::new(
+                        codex_router_core::provider::Provider::Openai,
+                        account_id.clone(),
+                        format!("queued-{index}"),
+                        AccountStatus::Enabled,
+                    )
+                    .with_active_credential_generation(1),
+                )
+                .await,
+        );
         let active_key = must_ok(openai_account_credential_bundle_key(account_id, 1));
         must_ok(
             secrets.write_secret(
@@ -458,23 +506,34 @@ fn upkeep_shutdown_does_not_admit_a_queued_account_after_stop() {
             ),
         );
     }
-    drop(state);
+    state.close().await.expect("fixture state should close");
     let credential_store = secrets.clone();
     drop(secrets);
 
     let (entered_sender, entered_receiver) = mpsc::channel();
     let (release_sender, release_receiver) = mpsc::channel();
-    let worker = must_ok(
-        start_background_credential_upkeep_worker_with_client_and_clock(
-            &state_path,
-            credential_store.into(),
-            HeldQueuedUpkeepRefreshClient {
-                entered_sender,
-                release_receiver: Arc::new(Mutex::new(release_receiver)),
-            },
-            || 1_000,
-        ),
-    );
+    let worker_result = {
+        let fixture_state_path = (state_path).clone();
+        let fixture_secrets = credential_store.into();
+        let fixture_client = HeldQueuedUpkeepRefreshClient {
+            entered_sender,
+            release_receiver: Arc::new(Mutex::new(release_receiver)),
+        };
+        let fixture_clock = || 1_000;
+        let fixture_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        let upkeep_task = tokio::task::spawn_blocking(move || {
+            tracing::dispatcher::with_default(&fixture_dispatcher, || {
+                crate::credential_upkeep_worker::start_background_credential_upkeep_worker_with_client_and_clock(
+                    &fixture_state_path,
+                    fixture_secrets,
+                    fixture_client,
+                    fixture_clock,
+                )
+            })
+        });
+        must_ok(upkeep_task.await)
+    };
+    let worker = must_ok(worker_result);
     let admitted = (0..4)
         .map(|_| must_ok(entered_receiver.recv_timeout(Duration::from_secs(3))))
         .collect::<Vec<_>>();
@@ -501,27 +560,26 @@ fn upkeep_shutdown_does_not_admit_a_queued_account_after_stop() {
         "queued account reached provider after Stop: {post_stop_entry:?}"
     );
     for account_id in &admitted {
-        wait_for_upkeep_generation(&state_path, account_id, 2);
+        wait_for_upkeep_generation(&state_path, account_id, 2).await;
     }
     let queued_id = account_ids
         .iter()
         .find(|account_id| !admitted.contains(account_id))
         .expect("one account should remain queued");
-    let state = must_ok(SqliteStateStore::open(&state_path));
-    let queued = must_ok(AccountStateRepository::load_account(&state, queued_id))
-        .expect("queued account should remain");
+    let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
+    let queued =
+        must_ok(state.load_account(queued_id).await).expect("queued account should remain");
     assert_eq!(queued.active_credential_generation(), Some(1));
 }
 
-pub(super) fn wait_for_upkeep_generation(state_path: &Path, account_id: &AccountId, expected: u64) {
-    let runtime = must_ok(
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build(),
-    );
+pub(super) async fn wait_for_upkeep_generation(
+    state_path: &Path,
+    account_id: &AccountId,
+    expected: u64,
+) {
     let deadline = Instant::now() + Duration::from_secs(2);
     let state = loop {
-        match runtime.block_on(AsyncSqliteStateStore::open_read_only(state_path)) {
+        match (AsyncSqliteStateStore::open_read_only(state_path)).await {
             Ok(state) => break state,
             Err(error) if format!("{error}").contains("locked") && Instant::now() < deadline => {
                 thread::yield_now();
@@ -530,9 +588,9 @@ pub(super) fn wait_for_upkeep_generation(state_path: &Path, account_id: &Account
         }
     };
     loop {
-        match runtime.block_on(state.load_account(account_id)) {
+        match state.load_account(account_id).await {
             Ok(Some(account)) if account.active_credential_generation() == Some(expected) => {
-                must_ok(runtime.block_on(state.close()));
+                must_ok((state.close()).await);
                 return;
             }
             Ok(_) => {}

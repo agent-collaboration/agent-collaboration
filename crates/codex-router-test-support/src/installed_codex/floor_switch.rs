@@ -20,8 +20,8 @@ use codex_router_proxy::upstream::UpstreamEndpoint;
 use codex_router_proxy::websocket::WebSocketQuotaFloorNotifier;
 use codex_router_state::account_routing_policy::WeeklyQuotaFloorBasisPoints;
 use codex_router_state::quota_snapshot::SelectorQuotaWindowStatus;
+use codex_router_state::sqlite::AsyncSqliteStateStore;
 use codex_router_state::sqlite::AsyncWeeklyQuotaFloorMutationStore;
-use codex_router_state::sqlite::SqliteStateStore;
 use tokio_util::sync::CancellationToken;
 
 use super::CODEX_COMMAND_TIMEOUT;
@@ -73,46 +73,60 @@ struct FloorRouter {
 }
 
 impl FloorRouter {
-    pub(super) fn start(
+    pub(super) async fn start(
         state_path: &Path,
         secret_root: &Path,
         upstream_address: &str,
     ) -> Result<Self, String> {
-        let bind_address = LoopbackBindAddress::new("127.0.0.1", 0)
-            .map_err(|error| format!("invalid floor fixture bind address: {error}"))?;
-        let endpoint = UpstreamEndpoint::new(format!("http://{upstream_address}/v1"))
-            .map_err(|error| format!("invalid floor fixture upstream: {error}"))?;
-        let credential_store =
-            codex_router_secret_store::test_support::open_encrypted_credential_store(secret_root)
-                .map_err(|error| format!("floor fixture credential store failed to open: {error}"))?;
-        let runtime = LoopbackRouterRuntime::start(
-            LoopbackRouterRuntimeConfig::new_tokenless(
-                bind_address,
-                endpoint,
-                state_path.to_path_buf(),
-                secret_root.to_path_buf(),
-            ),
-            credential_store.into(),
-        )
-        .map_err(|error| format!("floor fixture router failed to start: {error}"))?;
-        let port = runtime.local_addr().port();
-        let notifier = runtime.websocket_quota_floor_notifier();
-        let shutdown = CancellationToken::new();
-        let serve_shutdown = shutdown.clone();
-        let serve_thread = thread::Builder::new()
-            .name("codex-router-installed-floor-fixture".to_owned())
-            .spawn(move || {
-                runtime
-                    .serve_protocol_connections_until_cancelled(usize::MAX, serve_shutdown)
-                    .map_err(|error| format!("floor fixture router serve failed: {error}"))
+        let owned_state_path = state_path.to_path_buf();
+        let owned_secret_root = secret_root.to_path_buf();
+        let owned_upstream_address = upstream_address.to_owned();
+        tokio::task::spawn_blocking(move || {
+            let state_path = owned_state_path.as_path();
+            let secret_root = owned_secret_root.as_path();
+            let upstream_address = owned_upstream_address.as_str();
+            let bind_address = LoopbackBindAddress::new("127.0.0.1", 0)
+                .map_err(|error| format!("invalid floor fixture bind address: {error}"))?;
+            let endpoint = UpstreamEndpoint::new(format!("http://{upstream_address}/v1"))
+                .map_err(|error| format!("invalid floor fixture upstream: {error}"))?;
+            let credential_store =
+                codex_router_secret_store::test_support::open_encrypted_credential_store(
+                    secret_root,
+                )
+                .map_err(|error| {
+                    format!("floor fixture credential store failed to open: {error}")
+                })?;
+            let runtime = LoopbackRouterRuntime::start(
+                LoopbackRouterRuntimeConfig::new_tokenless(
+                    bind_address,
+                    endpoint,
+                    state_path.to_path_buf(),
+                    secret_root.to_path_buf(),
+                ),
+                credential_store.into(),
+            )
+            .map_err(|error| format!("floor fixture router failed to start: {error}"))?;
+            let port = runtime.local_addr().port();
+            let notifier = runtime.websocket_quota_floor_notifier();
+            let shutdown = CancellationToken::new();
+            let serve_shutdown = shutdown.clone();
+            let serve_thread = thread::Builder::new()
+                .name("codex-router-installed-floor-fixture".to_owned())
+                .spawn(move || {
+                    runtime
+                        .serve_protocol_connections_until_cancelled(usize::MAX, serve_shutdown)
+                        .map_err(|error| format!("floor fixture router serve failed: {error}"))
+                })
+                .map_err(|error| format!("floor fixture router thread failed: {error}"))?;
+            Ok(Self {
+                notifier,
+                shutdown,
+                serve_thread: Some(serve_thread),
+                port,
             })
-            .map_err(|error| format!("floor fixture router thread failed: {error}"))?;
-        Ok(Self {
-            notifier,
-            shutdown,
-            serve_thread: Some(serve_thread),
-            port,
         })
+        .await
+        .map_err(|error| format!("fixture router startup task failed: {error}"))?
     }
 
     pub(super) fn stop(mut self) -> Result<(), String> {
@@ -137,8 +151,9 @@ impl Drop for FloorRouter {
     }
 }
 
-fn seed_floor_fixture(state_path: &Path, secret_root: &Path) -> Result<(), String> {
-    let state = SqliteStateStore::open(state_path)
+async fn seed_floor_fixture(state_path: &Path, secret_root: &Path) -> Result<(), String> {
+    let state = AsyncSqliteStateStore::open(state_path)
+        .await
         .map_err(|error| format!("floor fixture state open failed: {error}"))?;
     let secrets =
         codex_router_secret_store::test_support::open_encrypted_credential_store(secret_root)
@@ -155,30 +170,31 @@ fn seed_floor_fixture(state_path: &Path, secret_root: &Path) -> Result<(), Strin
         &state,
         &secrets,
         QUOTA_RECONNECT_PRIMARY_FOR_INITIAL_ADMISSION,
-    )?;
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .map_err(|error| format!("floor policy runtime failed: {error}"))?;
-    let mutation = runtime
-        .block_on(AsyncWeeklyQuotaFloorMutationStore::open(state_path))
+    )
+    .await?;
+    let mutation = (AsyncWeeklyQuotaFloorMutationStore::open(state_path))
+        .await
         .map_err(|error| format!("floor policy store failed: {error}"))?;
     let floor = WeeklyQuotaFloorBasisPoints::new(500)
         .map_err(|error| format!("floor policy invalid: {error}"))?;
-    runtime
-        .block_on(
-            mutation.set_weekly_quota_floor_by_label(QUOTA_RECONNECT_PRIMARY.label, Some(floor)),
-        )
+    (mutation.set_weekly_quota_floor_by_label(QUOTA_RECONNECT_PRIMARY.label, Some(floor)))
+        .await
         .map_err(|error| format!("floor policy write failed: {error}"))?;
+    mutation.close().await;
+    state
+        .close()
+        .await
+        .map_err(|error| format!("fixture state close failed: {error}"))?;
     Ok(())
 }
 
-fn save_floor_observation(
+async fn save_floor_observation(
     state_path: &Path,
     secret_root: &Path,
     journey: FloorJourney,
 ) -> Result<(), String> {
-    let state = SqliteStateStore::open(state_path)
+    let state = AsyncSqliteStateStore::open(state_path)
+        .await
         .map_err(|error| format!("floor observation state open failed: {error}"))?;
     let secrets =
         codex_router_secret_store::test_support::open_encrypted_credential_store(secret_root)
@@ -187,7 +203,7 @@ fn save_floor_observation(
         weekly_remaining: journey.new_remaining(),
         ..QUOTA_RECONNECT_PRIMARY_FOR_INITIAL_ADMISSION
     };
-    seed_smoke_account(&state, &secrets, primary)?;
+    seed_smoke_account(&state, &secrets, primary).await?;
     let fallback = if matches!(journey, FloorJourney::NoPeer) {
         SmokeAccountFixture {
             weekly_remaining: 0,
@@ -197,11 +213,17 @@ fn save_floor_observation(
     } else {
         QUOTA_RECONNECT_FALLBACK
     };
-    seed_smoke_account(&state, &secrets, fallback)?;
+    seed_smoke_account(&state, &secrets, fallback).await?;
+    state
+        .close()
+        .await
+        .map_err(|error| format!("fixture state close failed: {error}"))?;
     Ok(())
 }
 
-fn run_floor_journey(journey: FloorJourney) -> Result<(Output, FloorUpstreamObservation), String> {
+async fn run_floor_journey(
+    journey: FloorJourney,
+) -> Result<(Output, FloorUpstreamObservation), String> {
     let smoke_root = SmokeTempRoot::new(&format!("installed-codex-floor-{}", journey.name()))?;
     let codex_home = smoke_root.path().join("codex-home");
     let process_home = smoke_root.path().join("home");
@@ -223,9 +245,9 @@ fn run_floor_journey(journey: FloorJourney) -> Result<(Output, FloorUpstreamObse
         fs::create_dir_all(path)
             .map_err(|error| format!("floor fixture directory creation failed: {error}"))?;
     }
-    seed_floor_fixture(&state_path, &secret_root)?;
+    seed_floor_fixture(&state_path, &secret_root).await?;
     let upstream = FloorUpstream::start(journey)?;
-    let router = FloorRouter::start(&state_path, &secret_root, &upstream.address)?;
+    let router = FloorRouter::start(&state_path, &secret_root, &upstream.address).await?;
     let profile = CodexRouterProfile::new(router.port);
     CodexRouterProfileWriter::new(&codex_home)
         .write(&profile, true)
@@ -244,12 +266,12 @@ fn run_floor_journey(journey: FloorJourney) -> Result<(Output, FloorUpstreamObse
             CODEX_COMMAND_TIMEOUT,
         )
     });
-    let controller_result: Result<(), String> = (|| {
+    let controller_result: Result<(), String> = (async {
         upstream
             .first_turn_started
             .recv_timeout(FIXTURE_WAIT)
             .map_err(|_| "installed Codex did not begin the fixture turn".to_owned())?;
-        save_floor_observation(&state_path, &secret_root, journey)?;
+        save_floor_observation(&state_path, &secret_root, journey).await?;
         let primary_id = account_id(QUOTA_RECONNECT_PRIMARY.account_id)?;
         match journey {
             FloorJourney::HealthyPeer | FloorJourney::NoPeer => router
@@ -264,7 +286,8 @@ fn run_floor_journey(journey: FloorJourney) -> Result<(Output, FloorUpstreamObse
             .send(())
             .map_err(|_| "floor upstream ended before first turn release".to_owned())?;
         Ok(())
-    })();
+    })
+    .await;
     let child_output = codex_child
         .join()
         .map_err(|_| "installed Codex floor child thread panicked".to_owned())?;
@@ -312,27 +335,28 @@ fn run_floor_journey(journey: FloorJourney) -> Result<(Output, FloorUpstreamObse
     Ok((child_output, observation))
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "real installed Codex floor fixture; run the named ignored test deliberately"]
-fn installed_codex_websocket_floor_switch_e2e_healthy_peer() {
-    assert_installed_floor_journey(FloorJourney::HealthyPeer);
+async fn installed_codex_websocket_floor_switch_e2e_healthy_peer() {
+    assert_installed_floor_journey(FloorJourney::HealthyPeer).await;
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "real installed Codex floor fixture; run the named ignored test deliberately"]
-fn installed_codex_websocket_floor_switch_e2e_no_peer() {
-    assert_installed_floor_journey(FloorJourney::NoPeer);
+async fn installed_codex_websocket_floor_switch_e2e_no_peer() {
+    assert_installed_floor_journey(FloorJourney::NoPeer).await;
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "real installed Codex floor fixture; run the named ignored test deliberately"]
-fn installed_codex_websocket_floor_switch_e2e_hard_floor() {
-    assert_installed_floor_journey(FloorJourney::HardFloor);
+async fn installed_codex_websocket_floor_switch_e2e_hard_floor() {
+    assert_installed_floor_journey(FloorJourney::HardFloor).await;
 }
 
-fn assert_installed_floor_journey(journey: FloorJourney) {
-    let (_output, observation) =
-        run_floor_journey(journey).unwrap_or_else(|error| panic!("{}: {error}", journey.name()));
+async fn assert_installed_floor_journey(journey: FloorJourney) {
+    let (_output, observation) = run_floor_journey(journey)
+        .await
+        .unwrap_or_else(|error| panic!("{}: {error}", journey.name()));
     assert_eq!(observation.first_account, "primary", "{}", journey.name());
     let expected_peer = if matches!(journey, FloorJourney::NoPeer) {
         "primary"

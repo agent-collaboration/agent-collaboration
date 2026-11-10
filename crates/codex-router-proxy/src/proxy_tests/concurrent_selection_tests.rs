@@ -4,7 +4,7 @@ use super::*;
 async fn async_repository_backed_selector_six_concurrent_sessions_use_active_load() {
     let temp_dir = ProxyTestTempDir::new("async_repository_selector_six_session_load");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -35,7 +35,8 @@ async fn async_repository_backed_selector_six_concurrent_sessions_use_active_loa
             (18_000, 100, true, now + 4 * 3_600),
             (604_800, 18, false, now + 24 * 3_600),
         ],
-    );
+    )
+    .await;
     persist_account_with_selector_window_reset_specs(
         &state,
         &matches,
@@ -44,7 +45,8 @@ async fn async_repository_backed_selector_six_concurrent_sessions_use_active_loa
             (18_000, 100, true, now + 4 * 3_600),
             (604_800, 19, false, now + 24 * 3_600),
         ],
-    );
+    )
+    .await;
     persist_account_with_selector_window_reset_specs(
         &state,
         &ssdev,
@@ -53,7 +55,8 @@ async fn async_repository_backed_selector_six_concurrent_sessions_use_active_loa
             (18_000, 100, true, now + 4 * 3_600),
             (604_800, 20, false, now + 24 * 3_600),
         ],
-    );
+    )
+    .await;
     let async_state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("async state store should open: {error}"),
@@ -135,7 +138,7 @@ async fn async_repository_backed_selector_six_concurrent_sessions_use_active_loa
 async fn async_repository_backed_selector_concurrent_starts_reserve_atomically() {
     let temp_dir = ProxyTestTempDir::new("async_repository_selector_atomic_reserve");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -159,7 +162,8 @@ async fn async_repository_backed_selector_concurrent_starts_reserve_atomically()
             (18_000, 50, true, test_unix_seconds() + 4 * 3_600),
             (604_800, 50, false, test_unix_seconds() + 3 * 86_400),
         ],
-    );
+    )
+    .await;
     persist_account_with_selector_window_reset_specs(
         &state,
         &beta,
@@ -168,7 +172,8 @@ async fn async_repository_backed_selector_concurrent_starts_reserve_atomically()
             (18_000, 50, true, test_unix_seconds() + 4 * 3_600),
             (604_800, 50, false, test_unix_seconds() + 3 * 86_400),
         ],
-    );
+    )
+    .await;
     let async_state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("async state store should open: {error}"),
@@ -223,7 +228,7 @@ async fn async_repository_backed_selector_concurrent_starts_reserve_atomically()
 async fn async_repository_backed_selector_drains_near_reset_pool_then_far_reset_reserve_s4() {
     let temp_dir = ProxyTestTempDir::new("async_repository_selector_s4_drain_pool");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -254,7 +259,8 @@ async fn async_repository_backed_selector_drains_near_reset_pool_then_far_reset_
             (18_000, 99, true, now + hours_minutes(4, 46)),
             (604_800, 4, false, now + hours_minutes(22, 49)),
         ],
-    );
+    )
+    .await;
     persist_account_with_selector_window_reset_specs(
         &state,
         &matches,
@@ -263,7 +269,8 @@ async fn async_repository_backed_selector_drains_near_reset_pool_then_far_reset_
             (18_000, 100, true, now + hours_minutes(4, 59)),
             (604_800, 8, false, now + hours_minutes(23, 56)),
         ],
-    );
+    )
+    .await;
     persist_account_with_selector_window_reset_specs(
         &state,
         &ssdev,
@@ -272,7 +279,8 @@ async fn async_repository_backed_selector_drains_near_reset_pool_then_far_reset_
             (18_000, 97, true, now + hours_minutes(4, 36)),
             (604_800, 26, false, now + 84 * 3_600),
         ],
-    );
+    )
+    .await;
     let async_state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("async state store should open: {error}"),

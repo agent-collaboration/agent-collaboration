@@ -204,7 +204,7 @@ pub(super) async fn assert_preserved_account_routes_through_cli_serve(
         });
         let router_port_text = router_port.to_string();
         let upstream_base_url = format!("http://{upstream_address}/v1");
-        let output = run_cli(
+        let output = run_cli_in_blocking_context(
             [
                 "codex-router",
                 "serve",
@@ -225,7 +225,10 @@ pub(super) async fn assert_preserved_account_routes_through_cli_serve(
                 "--disable-background-quota-refresh",
                 "--max-connections",
                 "1",
-            ],
+            ]
+            .into_iter()
+            .map(OsString::from)
+            .collect(),
             CliContext::new(Vec::new()),
         );
         assert!(output.stderr.is_empty(), "serve stderr: {}", output.stderr);

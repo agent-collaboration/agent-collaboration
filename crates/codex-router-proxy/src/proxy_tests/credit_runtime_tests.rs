@@ -1,11 +1,11 @@
 use super::*;
 
-#[test]
-fn assembled_loopback_http_routes_known_exhaustion_to_opted_in_credit_account() {
+#[tokio::test]
+async fn assembled_loopback_http_routes_known_exhaustion_to_opted_in_credit_account() {
     let temp_dir = ProxyTestTempDir::new("assembled_runtime_http_credit_backing");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -33,7 +33,8 @@ fn assembled_loopback_http_routes_known_exhaustion_to_opted_in_credit_account() 
         &included_exhausted,
         0,
         "included-exhausted-token",
-    );
+    )
+    .await;
     persist_credit_backed_account_with_token(
         &database_path,
         &secrets,
@@ -41,7 +42,8 @@ fn assembled_loopback_http_routes_known_exhaustion_to_opted_in_credit_account() 
         "credit-backed-token",
         1_030,
         true,
-    );
+    )
+    .await;
 
     let upstream_listener = TcpListener::bind("127.0.0.1:0")
         .unwrap_or_else(|error| panic!("credit mock upstream should bind: {error}"));
@@ -78,8 +80,17 @@ fn assembled_loopback_http_routes_known_exhaustion_to_opted_in_credit_account() 
         LocalRouterTokenRecord::new(SecretString::new("current-token"), TokenGeneration::new(1)),
     )
     .with_quota_clock(1_030, 60);
-    let runtime = LoopbackRouterRuntime::start(config, secrets.into())
-        .unwrap_or_else(|error| panic!("credit proxy runtime should start: {error}"));
+    let runtime = tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start(config, secrets.into())
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    .unwrap_or_else(|error| panic!("credit proxy runtime should start: {error}"));
     let router_address = runtime.local_addr();
     let client_thread = thread::spawn(move || {
         send_loopback_request(
@@ -89,8 +100,9 @@ fn assembled_loopback_http_routes_known_exhaustion_to_opted_in_credit_account() 
         )
     });
     assert_eq!(
-        runtime
-            .serve_http_connections(1)
+        tokio::task::spawn_blocking(move || runtime.serve_http_connections(1))
+            .await
+            .expect("blocking product serving should join")
             .unwrap_or_else(|error| panic!("credit runtime should serve request: {error}")),
         1
     );

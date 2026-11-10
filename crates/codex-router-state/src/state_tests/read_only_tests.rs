@@ -1,4 +1,5 @@
 use super::*;
+use sqlx::Connection as _;
 
 #[tokio::test]
 async fn async_read_only_store_reads_without_allowing_writes() {
@@ -44,17 +45,30 @@ async fn async_read_only_store_reads_without_allowing_writes() {
         write_error.is_err(),
         "read-only async store must reject writes"
     );
+    read_only_store
+        .close()
+        .await
+        .expect("read-only store should close");
 }
 
 #[tokio::test]
 async fn async_read_only_store_reports_missing_current_schema_without_writes() {
     let temp_dir = TestTempDir::new("async_read_only_missing_schema");
     let database_path = temp_dir.path().join("state.sqlite");
-    create_v10_database_missing_async_projection_tables(&database_path);
-    let raw = Connection::open(&database_path).expect("fixture should reopen");
-    raw.pragma_update(None, "user_version", 13_i64)
+    create_v10_database_missing_async_projection_tables(&database_path).await;
+    let mut raw = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    .expect("fixture should reopen");
+    sqlx::query("PRAGMA user_version = 13")
+        .execute(&mut raw)
+        .await
         .expect("fixture should claim current schema");
-    drop(raw);
+    raw.close().await.expect("fixture connection should close");
 
     let error = expect_error(
         AsyncSqliteStateStore::open_read_only(&database_path).await,
@@ -80,10 +94,19 @@ async fn async_read_only_store_requires_both_credit_tables_in_native_schema() {
             .expect("current native state should initialize");
         store.close().await.expect("state should close");
 
-        let raw = Connection::open(&database_path).expect("native fixture should reopen");
-        raw.execute_batch(&format!("DROP TABLE {table_name};"))
+        let mut raw = sqlx::SqliteConnection::connect_with(
+            &sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(&database_path)
+                .create_if_missing(true)
+                .foreign_keys(false),
+        )
+        .await
+        .expect("native fixture should reopen");
+        sqlx::raw_sql(sqlx::AssertSqlSafe(format!("DROP TABLE {table_name};")))
+            .execute(&mut raw)
+            .await
             .expect("test should remove one required credit table");
-        drop(raw);
+        raw.close().await.expect("fixture connection should close");
 
         assert_eq!(
             AsyncSqliteStateStore::open_read_only(&database_path)
@@ -102,16 +125,25 @@ async fn async_read_only_store_requires_both_credit_tables_in_native_schema() {
         .await
         .expect("current native state should initialize");
     store.close().await.expect("state should close");
-    let raw = Connection::open(&database_path).expect("native fixture should reopen");
-    raw.execute_batch(
+    let mut raw = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    .expect("native fixture should reopen");
+    sqlx::raw_sql(
         "DROP TABLE account_credit_observations;
              CREATE TABLE account_credit_observations (
                  account_id TEXT PRIMARY KEY NOT NULL,
                  credential_generation INTEGER NOT NULL
              );",
     )
+    .execute(&mut raw)
+    .await
     .expect("test should replace the credit table with a missing column");
-    drop(raw);
+    raw.close().await.expect("fixture connection should close");
 
     assert_eq!(
         AsyncSqliteStateStore::open_read_only(&database_path)
@@ -125,23 +157,23 @@ async fn async_read_only_store_requires_both_credit_tables_in_native_schema() {
 }
 
 #[tokio::test]
-async fn sync_seeded_state_store_is_accepted_by_quota_status_read_only_schema() {
+async fn legacy_seeded_state_store_is_accepted_by_quota_status_read_only_schema() {
     let temp_dir = TestTempDir::new("sync_seeded_read_only_quota_status");
     let database_path = temp_dir.path().join("state.sqlite");
-    let sync_store = match SqliteStateStore::open(&database_path) {
+    let seed_store = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(store) => store,
-        Err(error) => panic!("sync state store should open and migrate: {error}"),
+        Err(error) => panic!("seed state store should open and migrate: {error}"),
     };
     let account_id = account_id("acct_sync_seeded_quota_status");
     let account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id.clone(),
-        "sync-seeded",
+        "legacy-seeded",
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    if let Err(error) = AccountStateRepository::upsert_account(&sync_store, &account) {
-        panic!("sync seed should persist account: {error}");
+    if let Err(error) = seed_store.upsert_account(&account).await {
+        panic!("legacy seed should persist account: {error}");
     }
     let short_window = PersistedSelectorQuotaWindow::new(
         account_id.clone(),
@@ -162,28 +194,62 @@ async fn sync_seeded_state_store_is_accepted_by_quota_status_read_only_schema() 
     .with_remaining_headroom(54)
     .with_reset_unix_seconds(604_800)
     .with_observed_unix_seconds(1_000);
-    if let Err(error) = SelectorQuotaRepository::upsert_selector_window(&sync_store, &short_window)
-    {
-        panic!("sync seed should persist short selector window: {error}");
+    if let Err(error) = seed_store.upsert_selector_quota_window(&short_window).await {
+        panic!("legacy seed should persist short selector window: {error}");
     }
-    if let Err(error) = SelectorQuotaRepository::upsert_selector_window(&sync_store, &weekly_window)
+    if let Err(error) = seed_store
+        .upsert_selector_quota_window(&weekly_window)
+        .await
     {
-        panic!("sync seed should persist weekly selector window: {error}");
+        panic!("legacy seed should persist weekly selector window: {error}");
     }
-    drop(sync_store);
+    seed_store.close().await.expect("seed store should close");
+
+    convert_current_fixture_to_v12(&database_path).await;
+    let mut legacy = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(false)
+            .foreign_keys(false),
+    )
+    .await
+    .expect("legacy seed should reopen");
+    sqlx::raw_sql(
+        "CREATE TABLE session_account_affinities (
+        session_id TEXT PRIMARY KEY NOT NULL,
+        account_id TEXT NOT NULL,
+        last_seen_unix_seconds INTEGER NOT NULL
+    ); PRAGMA user_version = 13;",
+    )
+    .execute(&mut legacy)
+    .await
+    .expect("legacy v13 session schema should seed");
+    let history_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM sqlite_master WHERE name = '_sqlx_migrations'")
+            .fetch_one(&mut legacy)
+            .await
+            .expect("legacy history absence should query");
+    assert_eq!(history_count, 0);
+    assert!(
+        sqlx::query("SELECT provider FROM accounts")
+            .fetch_optional(&mut legacy)
+            .await
+            .is_err()
+    );
+    legacy.close().await.expect("legacy seed should close");
 
     let migrated_store = AsyncSqliteStateStore::open(&database_path)
         .await
-        .expect("sync-seeded legacy state should migrate to provider schema");
+        .expect("legacy-seeded legacy state should migrate to provider schema");
     migrated_store
         .close()
         .await
-        .expect("migrated sync-seeded state should close");
+        .expect("migrated legacy-seeded state should close");
     let read_only_store = match AsyncSqliteStateStore::open_read_only(&database_path).await {
         Ok(store) => store,
         Err(error) => {
             panic!(
-                "sync-seeded state database should satisfy read-only quota status schema: {error}"
+                "legacy-seeded state database should satisfy read-only quota status schema: {error}"
             )
         }
     };
@@ -205,8 +271,12 @@ async fn sync_seeded_state_store_is_accepted_by_quota_status_read_only_schema() 
 
     assert!(
         observations.is_empty(),
-        "sync-seeded state should start with no quota history observations"
+        "legacy-seeded state should start with no quota history observations"
     );
+    read_only_store
+        .close()
+        .await
+        .expect("read-only quota store should close");
 }
 
 #[tokio::test]
@@ -222,16 +292,28 @@ async fn async_writable_store_enables_wal_journal_mode() {
     }
     drop(store);
 
-    let connection = match Connection::open(&database_path) {
+    let mut connection = match sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .read_only(true),
+    )
+    .await
+    {
         Ok(connection) => connection,
         Err(error) => panic!("sqlite database should open for journal inspection: {error}"),
     };
-    let journal_mode: String =
-        match connection.query_row("PRAGMA journal_mode", [], |row| row.get(0)) {
-            Ok(journal_mode) => journal_mode,
-            Err(error) => panic!("journal mode should be readable: {error}"),
-        };
+    let journal_mode: String = match sqlx::query_scalar("PRAGMA journal_mode")
+        .fetch_one(&mut connection)
+        .await
+    {
+        Ok(journal_mode) => journal_mode,
+        Err(error) => panic!("journal mode should be readable: {error}"),
+    };
     assert_eq!(journal_mode.to_ascii_lowercase(), "wal");
+    connection
+        .close()
+        .await
+        .expect("journal inspection should close");
 }
 
 #[tokio::test]
@@ -246,45 +328,66 @@ async fn existing_delete_mode_state_file_reopens_in_wal_for_each_writable_store(
         .await
         .expect("state store should close before switching the fixture");
 
-    set_journal_mode(&database_path, "DELETE");
+    set_journal_mode(&database_path, "DELETE").await;
     let store = AsyncSqliteStateStore::open(&database_path)
         .await
         .expect("state store should reopen a DELETE database");
     store.close().await.expect("state store should close");
-    assert_eq!(journal_mode(&database_path).as_deref(), Some("wal"));
+    assert_eq!(journal_mode(&database_path).await.as_deref(), Some("wal"));
 
-    set_journal_mode(&database_path, "DELETE");
+    set_journal_mode(&database_path, "DELETE").await;
     let weekly_floor = AsyncWeeklyQuotaFloorMutationStore::open(&database_path)
         .await
         .expect("weekly-floor mutation store should reopen a DELETE database");
     weekly_floor.close().await;
-    assert_eq!(journal_mode(&database_path).as_deref(), Some("wal"));
+    assert_eq!(journal_mode(&database_path).await.as_deref(), Some("wal"));
 
-    set_journal_mode(&database_path, "DELETE");
+    set_journal_mode(&database_path, "DELETE").await;
     let credit_policy =
         crate::credit_store::AsyncCreditUsagePolicyMutationStore::open(&database_path)
             .await
             .expect("credit-policy mutation store should reopen a DELETE database");
     credit_policy.close().await;
-    assert_eq!(journal_mode(&database_path).as_deref(), Some("wal"));
+    assert_eq!(journal_mode(&database_path).await.as_deref(), Some("wal"));
 }
 
-fn set_journal_mode(database_path: &Path, requested_mode: &str) {
-    let connection = Connection::open(database_path).expect("state database should open");
-    connection
-        .pragma_update(None, "journal_mode", requested_mode)
-        .expect("fixture journal mode should change");
-    let actual_mode: String = connection
-        .query_row("PRAGMA journal_mode", [], |row| row.get(0))
-        .expect("fixture journal mode should be readable");
+async fn set_journal_mode(database_path: &Path, requested_mode: &str) {
+    use sqlx::Connection as _;
+    let mut connection = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(database_path)
+            .create_if_missing(false)
+            .pragma("journal_mode", requested_mode.to_owned()),
+    )
+    .await
+    .expect("state database should open in requested journal mode");
+    let actual_mode: String = sqlx::query_scalar("PRAGMA journal_mode")
+        .fetch_one(&mut connection)
+        .await
+        .expect("fixture journal mode should read");
     assert_eq!(
         actual_mode.to_ascii_lowercase(),
         requested_mode.to_ascii_lowercase()
     );
+    connection
+        .close()
+        .await
+        .expect("journal fixture should close");
 }
 
-fn journal_mode(database_path: &Path) -> Option<String> {
-    Connection::open(database_path)
-        .and_then(|connection| connection.query_row("PRAGMA journal_mode", [], |row| row.get(0)))
-        .ok()
+async fn journal_mode(database_path: &Path) -> Option<String> {
+    use sqlx::Connection as _;
+    let mut connection = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(database_path)
+            .read_only(true),
+    )
+    .await
+    .ok()?;
+    let mode = sqlx::query_scalar("PRAGMA journal_mode")
+        .fetch_one(&mut connection)
+        .await
+        .ok();
+    connection.close().await.ok()?;
+    mode
 }

@@ -264,7 +264,9 @@ async fn async_authenticated_websocket_router_selects_after_local_auth_and_first
 async fn async_websocket_router_reuses_and_refreshes_prompt_cache_account_affinity() {
     let temp_dir = ProxyTestTempDir::new("websocket_prompt_cache_account_affinity");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = SqliteStateStore::open(&database_path).expect("state store should open");
+    let state = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("state store should open");
     let preferred = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_websocket_preferred"),
@@ -282,14 +284,16 @@ async fn async_websocket_router_reuses_and_refreshes_prompt_cache_account_affini
         &preferred,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &mapped,
         "responses",
         &[(18_000, 50, true), (604_800, 50, false)],
-    );
-    drop(state);
+    )
+    .await;
+    state.close().await.expect("fixture state should close");
     let async_state = AsyncSqliteStateStore::open(&database_path)
         .await
         .expect("async state should open");

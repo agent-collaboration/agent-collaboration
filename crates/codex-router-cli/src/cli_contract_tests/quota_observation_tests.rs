@@ -1,29 +1,32 @@
 use super::*;
 
-#[test]
-fn quota_status_projects_held_switch_and_distinct_saved_floor_thresholds() {
+#[tokio::test]
+async fn quota_status_projects_held_switch_and_distinct_saved_floor_thresholds() {
     let test_root = TestRoot::new("quota-status-floor-switch");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
     let state_path = codex_router_state::provider_proxy_database_path(&router_root);
-    let state = must_ok(SqliteStateStore::open(&state_path));
+    let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let protected_id = account_id("acct_status_floor_source");
     let peer_id = account_id("acct_status_floor_peer");
     for (account_id, label, remaining, weekly_reset) in [
         (&protected_id, "source", 8, 10_000),
         (&peer_id, "peer", 80, 400_000),
     ] {
-        must_ok(AccountStateRepository::upsert_account(
-            &state,
-            &AccountRecord::new(
-                codex_router_core::provider::Provider::Openai,
-                account_id.clone(),
-                label,
-                AccountStatus::Enabled,
-            )
-            .with_active_credential_generation(1),
-        ));
+        must_ok(
+            state
+                .upsert_account(
+                    &AccountRecord::new(
+                        codex_router_core::provider::Provider::Openai,
+                        account_id.clone(),
+                        label,
+                        AccountStatus::Enabled,
+                    )
+                    .with_active_credential_generation(1),
+                )
+                .await,
+        );
         let windows = [
             PersistedSelectorQuotaWindow::new(
                 account_id.clone(),
@@ -46,20 +49,21 @@ fn quota_status_projects_held_switch_and_distinct_saved_floor_thresholds() {
             .with_observed_unix_seconds(1_000),
         ];
         must_ok(
-            SelectorQuotaRepository::record_refresh_success_and_replace_selector_windows(
-                &state,
-                account_id,
-                "responses",
-                &windows,
-                1_000,
-                2_000,
-            ),
+            state
+                .record_refresh_success_and_replace_selector_windows(
+                    account_id,
+                    "responses",
+                    &windows,
+                    1_000,
+                    2_000,
+                )
+                .await,
         );
     }
-    drop(state);
-    migrate_test_state_database(&state_path);
+    state.close().await.expect("fixture state should close");
+    migrate_test_state_database(&state_path).await;
     // Keep SQLx connection-return tasks alive through the whole fixture mutation.
-    test_async_runtime().block_on(async {
+    (async {
         let mutation = must_ok(AsyncWeeklyQuotaFloorMutationStore::open(&state_path).await);
         must_ok(
             mutation
@@ -70,7 +74,8 @@ fn quota_status_projects_held_switch_and_distinct_saved_floor_thresholds() {
                 .await,
         );
         mutation.close().await;
-    });
+    })
+    .await;
     let status = run_cli(
         [
             "codex-router",
@@ -85,7 +90,8 @@ fn quota_status_projects_held_switch_and_distinct_saved_floor_thresholds() {
             "1100",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
     let json: serde_json::Value = must_ok(serde_json::from_str(&status.stdout));
     let accounts = json["accounts"]
         .as_array()
@@ -107,15 +113,18 @@ fn quota_status_projects_held_switch_and_distinct_saved_floor_thresholds() {
     assert!(source.get("weekly_quota_effective_stop_percent").is_none());
 }
 
-#[test]
-fn quota_status_json_exposes_burndown_debug_fields_without_secret_material() {
+#[tokio::test]
+async fn quota_status_json_exposes_burndown_debug_fields_without_secret_material() {
     let test_root = TestRoot::new("quota-status-json");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    ));
+    let state = must_ok(
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        ))
+        .await,
+    );
     let primary_account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_primary"),
@@ -123,10 +132,7 @@ fn quota_status_json_exposes_burndown_debug_fields_without_secret_material() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(
-        &state,
-        &primary_account,
-    ));
+    must_ok(state.upsert_account(&primary_account).await);
     let five_hour_window = PersistedSelectorQuotaWindow::new(
         account_id("acct_primary"),
         "responses",
@@ -147,37 +153,43 @@ fn quota_status_json_exposes_burndown_debug_fields_without_secret_material() {
     .with_reset_unix_seconds(614_800)
     .with_observed_unix_seconds(10_000);
     must_ok(
-        SelectorQuotaRepository::record_refresh_success_and_replace_selector_windows(
-            &state,
-            primary_account.account_id(),
-            "responses",
-            &[five_hour_window, weekly_window],
-            10_000,
-            20_000,
-        ),
+        state
+            .record_refresh_success_and_replace_selector_windows(
+                primary_account.account_id(),
+                "responses",
+                &[five_hour_window, weekly_window],
+                10_000,
+                20_000,
+            )
+            .await,
     );
-    must_ok(QuotaSnapshotRepository::upsert_snapshot(
-        &state,
-        &PersistedQuotaSnapshot::new(
-            account_id("acct_primary"),
-            QuotaSnapshotSource::MockEndpoint,
-        )
-        .with_observed_unix_seconds(10_000)
-        .with_route_band("responses", 25)
-        .with_reset_unix_seconds(20_000)
-        .with_reset_credits_available(1)
-        .with_stale_penalty(false),
-    ));
-    ensure_async_state_schema(&router_root);
-    drop(state);
-    let runtime = test_async_runtime();
+    must_ok(
+        state
+            .upsert_quota_snapshot(
+                &PersistedQuotaSnapshot::new(
+                    account_id("acct_primary"),
+                    QuotaSnapshotSource::MockEndpoint,
+                )
+                .with_observed_unix_seconds(10_000)
+                .with_route_band("responses", 25)
+                .with_reset_unix_seconds(20_000)
+                .with_reset_credits_available(1)
+                .with_stale_penalty(false),
+            )
+            .await,
+    );
+    ensure_async_state_schema(&router_root).await;
+    state.close().await.expect("fixture state should close");
+
     let primary_account_id = primary_account.account_id().clone();
-    let native_state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    )));
-    let credit_attempt = must_ok(
-        runtime.block_on(native_state.begin_credit_refresh_attempt(&primary_account_id, 1)),
+    let native_state = must_ok(
+        (AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        )))
+        .await,
     );
+    let credit_attempt =
+        must_ok((native_state.begin_credit_refresh_attempt(&primary_account_id, 1)).await);
     let credit_windows = [
         PersistedSelectorQuotaWindow::new(
             primary_account_id.clone(),
@@ -235,8 +247,8 @@ fn quota_status_json_exposes_burndown_debug_fields_without_secret_material() {
             codex_router_core::credit_usage::CreditSpendControl::Clear,
             Some(codex_router_core::credit_usage::CreditProviderLimitReason::RateLimitReached),
         );
-    assert!(must_ok(runtime.block_on(
-        native_state.record_responses_refresh_success(
+    assert!(must_ok(
+        (native_state.record_responses_refresh_success(
             codex_router_state::credit_store::ResponsesRefreshSuccessCommit {
                 attempt: &credit_attempt,
                 selector_windows: &credit_windows,
@@ -246,32 +258,36 @@ fn quota_status_json_exposes_burndown_debug_fields_without_secret_material() {
                 history_observations: &credit_history,
                 snapshot: &credit_snapshot,
             },
-        )
-    )));
-    assert!(must_ok(runtime.block_on(
-        native_state.claim_credential_refresh(
+        ))
+        .await
+    ));
+    assert!(must_ok(
+        (native_state.claim_credential_refresh(
             &primary_account_id,
             codex_router_core::provider::Provider::Openai,
             codex_router_state::credential_maintenance::ClaimPurpose::Refresh,
             1,
             2,
             1_000
-        )
-    )));
-    must_ok(runtime.block_on(native_state.close()));
-    let policy_mutation = must_ok(runtime.block_on(
-        codex_router_state::credit_store::AsyncCreditUsagePolicyMutationStore::open(
-            &codex_router_state::provider_proxy_database_path(&router_root),
-        ),
+        ))
+        .await
     ));
+    must_ok((native_state.close()).await);
+    let policy_mutation = must_ok(
+        (codex_router_state::credit_store::AsyncCreditUsagePolicyMutationStore::open(
+            &codex_router_state::provider_proxy_database_path(&router_root),
+        ))
+        .await,
+    );
     must_ok(
-        runtime.block_on(policy_mutation.save_account_credit_usage_policy(
+        (policy_mutation.save_account_credit_usage_policy(
             &primary_account_id,
             Some(1),
             codex_router_core::credit_usage::CreditUsagePolicy::Allow,
-        )),
+        ))
+        .await,
     );
-    runtime.block_on(policy_mutation.close());
+    (policy_mutation.close()).await;
     let in_progress = run_cli(
         [
             "codex-router",
@@ -286,7 +302,8 @@ fn quota_status_json_exposes_burndown_debug_fields_without_secret_material() {
             "11000",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
     let in_progress_json: serde_json::Value = must_ok(serde_json::from_str(&in_progress.stdout));
     assert_eq!(
         in_progress_json["accounts"][0]["oauth_maintenance_state"],
@@ -302,14 +319,17 @@ fn quota_status_json_exposes_burndown_debug_fields_without_secret_material() {
             path_to_str(&router_root),
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
     assert!(account_list.stdout.contains("unknown"));
     assert!(!account_list.stdout.contains("re-login required"));
-    let maintenance_store = must_ok(runtime.block_on(AsyncSqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    )));
-    assert!(must_ok(runtime.block_on(
-        maintenance_store.finish_credential_refresh_claim(
+    let maintenance_store = must_ok(
+        (AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        )))
+        .await,
+    );
+    assert!(must_ok((maintenance_store.finish_credential_refresh_claim(
             primary_account.account_id(),
             codex_router_core::provider::Provider::Openai,
             1,
@@ -318,9 +338,8 @@ fn quota_status_json_exposes_burndown_debug_fields_without_secret_material() {
                 failure_class: codex_router_state::credential_maintenance::CredentialFailureClass::RateLimited,
                 next_attempt_unix_seconds: 11_500,
             },
-        )
-    )));
-    must_ok(runtime.block_on(maintenance_store.close()));
+        )).await));
+    must_ok((maintenance_store.close()).await);
 
     let output = run_cli(
         [
@@ -336,7 +355,8 @@ fn quota_status_json_exposes_burndown_debug_fields_without_secret_material() {
             "11000",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
 
     let parsed: serde_json::Value = must_ok(serde_json::from_str(&output.stdout));
     assert_eq!(parsed["route_result"], "ok");
@@ -449,7 +469,8 @@ fn quota_status_json_exposes_burndown_debug_fields_without_secret_material() {
             "11000",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
     let auto_parsed: serde_json::Value = must_ok(serde_json::from_str(&auto_output.stdout));
     assert_eq!(auto_parsed["route_result"], "ok");
     assert_eq!(auto_parsed["route_band"], "responses");
@@ -460,14 +481,14 @@ fn quota_status_json_exposes_burndown_debug_fields_without_secret_material() {
     assert!(!auto_output.stdout.contains("acct_primary"));
 }
 
-#[test]
-fn quota_status_selection_uses_active_session_count() {
+#[tokio::test]
+async fn quota_status_selection_uses_active_session_count() {
     let test_root = TestRoot::new("quota-status-active-session-count");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
     let state_path = codex_router_state::provider_proxy_database_path(&router_root);
-    let state = must_ok(SqliteStateStore::open(&state_path));
+    let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let busy_account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_busy"),
@@ -482,14 +503,8 @@ fn quota_status_selection_uses_active_session_count() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(
-        &state,
-        &busy_account,
-    ));
-    must_ok(AccountStateRepository::upsert_account(
-        &state,
-        &idle_account,
-    ));
+    must_ok(state.upsert_account(&busy_account).await);
+    must_ok(state.upsert_account(&idle_account).await);
     for account in [&busy_account, &idle_account] {
         let five_hour_window = PersistedSelectorQuotaWindow::new(
             account.account_id().clone(),
@@ -511,31 +526,31 @@ fn quota_status_selection_uses_active_session_count() {
         .with_reset_unix_seconds(614_800)
         .with_observed_unix_seconds(10_000);
         must_ok(
-            SelectorQuotaRepository::record_refresh_success_and_replace_selector_windows(
-                &state,
-                account.account_id(),
-                "responses",
-                &[five_hour_window, weekly_window],
-                10_000,
-                20_000,
-            ),
+            state
+                .record_refresh_success_and_replace_selector_windows(
+                    account.account_id(),
+                    "responses",
+                    &[five_hour_window, weekly_window],
+                    10_000,
+                    20_000,
+                )
+                .await,
         );
     }
-    let runtime = must_ok(
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build(),
+
+    let async_state = must_ok((AsyncSqliteStateStore::open(&state_path)).await);
+    must_ok(
+        (async_state.record_active_client_acquired(
+            "responses",
+            "test-process",
+            &ReservationId::new("reservation_busy"),
+            busy_account.account_id(),
+            10_900,
+            8,
+        ))
+        .await,
     );
-    let async_state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(&state_path)));
-    must_ok(runtime.block_on(async_state.record_active_client_acquired(
-        "responses",
-        "test-process",
-        &ReservationId::new("reservation_busy"),
-        busy_account.account_id(),
-        10_900,
-        8,
-    )));
-    must_ok(runtime.block_on(async_state.close()));
+    must_ok((async_state.close()).await);
 
     let output = run_cli(
         [
@@ -551,7 +566,8 @@ fn quota_status_selection_uses_active_session_count() {
             "11000",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
 
     let parsed: serde_json::Value = must_ok(serde_json::from_str(&output.stdout));
     assert_eq!(
@@ -577,14 +593,14 @@ fn quota_status_selection_uses_active_session_count() {
     assert!(output.stderr.is_empty());
 }
 
-#[test]
-fn quota_status_marks_active_client_mirror_unavailable_when_rows_are_corrupt() {
+#[tokio::test]
+async fn quota_status_marks_active_client_mirror_unavailable_when_rows_are_corrupt() {
     let test_root = TestRoot::new("quota-status-active-unavailable");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
     let state_path = codex_router_state::provider_proxy_database_path(&router_root);
-    let state = must_ok(SqliteStateStore::open(&state_path));
+    let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_primary"),
@@ -592,7 +608,7 @@ fn quota_status_marks_active_client_mirror_unavailable_when_rows_are_corrupt() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(&state, &account));
+    must_ok(state.upsert_account(&account).await);
     let five_hour_window = PersistedSelectorQuotaWindow::new(
         account.account_id().clone(),
         "responses",
@@ -613,29 +629,29 @@ fn quota_status_marks_active_client_mirror_unavailable_when_rows_are_corrupt() {
     .with_reset_unix_seconds(97_400)
     .with_observed_unix_seconds(10_000);
     must_ok(
-        SelectorQuotaRepository::record_refresh_success_and_replace_selector_windows(
-            &state,
-            account.account_id(),
-            "responses",
-            &[five_hour_window, weekly_window],
-            10_000,
-            20_000,
-        ),
+        state
+            .record_refresh_success_and_replace_selector_windows(
+                account.account_id(),
+                "responses",
+                &[five_hour_window, weekly_window],
+                10_000,
+                20_000,
+            )
+            .await,
     );
-    let runtime = must_ok(
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build(),
+
+    let async_state = must_ok((AsyncSqliteStateStore::open(&state_path)).await);
+    must_ok((async_state.close()).await);
+    let mutation = must_ok((AsyncWeeklyQuotaFloorMutationStore::open(&state_path)).await);
+    must_ok(
+        (mutation.set_weekly_quota_floor_by_label(
+            "primary",
+            Some(must_ok(WeeklyQuotaFloorBasisPoints::new(500))),
+        ))
+        .await,
     );
-    let async_state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(&state_path)));
-    must_ok(runtime.block_on(async_state.close()));
-    let mutation = must_ok(runtime.block_on(AsyncWeeklyQuotaFloorMutationStore::open(&state_path)));
-    must_ok(runtime.block_on(mutation.set_weekly_quota_floor_by_label(
-        "primary",
-        Some(must_ok(WeeklyQuotaFloorBasisPoints::new(500))),
-    )));
-    runtime.block_on(mutation.close());
-    runtime.block_on(async {
+    (mutation.close()).await;
+    (async {
         let pool = must_ok(
             sqlx::sqlite::SqlitePoolOptions::new()
                 .max_connections(1)
@@ -660,7 +676,8 @@ fn quota_status_marks_active_client_mirror_unavailable_when_rows_are_corrupt() {
             .await,
         );
         pool.close().await;
-    });
+    })
+    .await;
     let state_bytes_before_status = must_ok(fs::read(&state_path));
 
     let output = run_cli(
@@ -677,7 +694,8 @@ fn quota_status_marks_active_client_mirror_unavailable_when_rows_are_corrupt() {
             "11000",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
 
     let parsed: serde_json::Value = must_ok(serde_json::from_str(&output.stdout));
     assert_eq!(parsed["route_result"], "degraded");
@@ -734,14 +752,14 @@ fn quota_status_marks_active_client_mirror_unavailable_when_rows_are_corrupt() {
     assert!(output.stderr.is_empty());
 }
 
-#[test]
-fn quota_status_plain_uses_persisted_history_for_run_rate() {
+#[tokio::test]
+async fn quota_status_plain_uses_persisted_history_for_run_rate() {
     let test_root = TestRoot::new("quota-status-history");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
     let state_path = codex_router_state::provider_proxy_database_path(&router_root);
-    let state = must_ok(SqliteStateStore::open(&state_path));
+    let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let primary_account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_primary_history"),
@@ -749,10 +767,7 @@ fn quota_status_plain_uses_persisted_history_for_run_rate() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(
-        &state,
-        &primary_account,
-    ));
+    must_ok(state.upsert_account(&primary_account).await);
     let five_hour_reset = 20_000;
     let five_hour_window = PersistedSelectorQuotaWindow::new(
         account_id("acct_primary_history"),
@@ -774,21 +789,18 @@ fn quota_status_plain_uses_persisted_history_for_run_rate() {
     .with_reset_unix_seconds(614_800)
     .with_observed_unix_seconds(11_000);
     must_ok(
-        SelectorQuotaRepository::record_refresh_success_and_replace_selector_windows(
-            &state,
-            primary_account.account_id(),
-            "responses",
-            &[five_hour_window, weekly_window],
-            11_000,
-            five_hour_reset,
-        ),
+        state
+            .record_refresh_success_and_replace_selector_windows(
+                primary_account.account_id(),
+                "responses",
+                &[five_hour_window, weekly_window],
+                11_000,
+                five_hour_reset,
+            )
+            .await,
     );
-    let runtime = must_ok(
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build(),
-    );
-    let async_state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(&state_path)));
+
+    let async_state = must_ok((AsyncSqliteStateStore::open(&state_path)).await);
     for (observed_unix_seconds, remaining_headroom) in [
         (10_000_u64, 90_u32),
         (10_500_u64, 85_u32),
@@ -804,9 +816,9 @@ fn quota_status_plain_uses_persisted_history_for_run_rate() {
         )
         .with_reset_unix_seconds(five_hour_reset)
         .with_effective(true);
-        must_ok(runtime.block_on(async_state.append_quota_history_observation(&observation)));
+        must_ok((async_state.append_quota_history_observation(&observation)).await);
     }
-    must_ok(runtime.block_on(async_state.close()));
+    must_ok((async_state.close()).await);
 
     let output = run_cli(
         [
@@ -822,7 +834,8 @@ fn quota_status_plain_uses_persisted_history_for_run_rate() {
             "11000",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
 
     assert!(
         output.stdout.contains("reset pace") || output.stdout.contains("burn unavailable"),

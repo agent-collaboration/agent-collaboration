@@ -2,17 +2,17 @@ use super::quota_snapshot_tests::FaultingFloorRefreshProvider;
 use super::*;
 use sqlx::Connection;
 
-#[test]
+#[tokio::test]
 #[expect(
     clippy::result_large_err,
     reason = "The existing callback contract requires the unboxed error value."
 )]
-fn saved_floor_refresh_reconnects_established_websocket_before_later_response_create() {
+async fn saved_floor_refresh_reconnects_established_websocket_before_later_response_create() {
     let test_root = TestRoot::new("joined-floor-websocket");
     must_ok(fs::create_dir(test_root.path()));
     let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
-    let state = must_ok(SqliteStateStore::open(&state_path));
+    let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_root),
     );
@@ -20,17 +20,20 @@ fn saved_floor_refresh_reconnects_established_websocket_before_later_response_cr
     let healthy_account_id = account_id("acct_b_healthy_socket");
     let excluded_cli_account_id = account_id("acct_c_floor_excluded_cli");
     let seed_account =
-        |account_id: &AccountId, label: &str, weekly_remaining: u32, access_token: &str| {
-            must_ok(AccountStateRepository::upsert_account(
-                &state,
-                &AccountRecord::new(
-                    codex_router_core::provider::Provider::Openai,
-                    account_id.clone(),
-                    label,
-                    AccountStatus::Enabled,
-                )
-                .with_active_credential_generation(1),
-            ));
+        async |account_id: &AccountId, label: &str, weekly_remaining: u32, access_token: &str| {
+            must_ok(
+                state
+                    .upsert_account(
+                        &AccountRecord::new(
+                            codex_router_core::provider::Provider::Openai,
+                            account_id.clone(),
+                            label,
+                            AccountStatus::Enabled,
+                        )
+                        .with_active_credential_generation(1),
+                    )
+                    .await,
+            );
             let key = must_ok(openai_account_credential_bundle_key(account_id, 1));
             must_ok(
                 secrets.write_secret(
@@ -67,30 +70,38 @@ fn saved_floor_refresh_reconnects_established_websocket_before_later_response_cr
                 .with_observed_unix_seconds(1_000),
             ];
             must_ok(
-                SelectorQuotaRepository::record_refresh_success_and_replace_selector_windows(
-                    &state,
-                    account_id,
-                    "responses",
-                    &windows,
-                    1_000,
-                    2_000,
-                ),
+                state
+                    .record_refresh_success_and_replace_selector_windows(
+                        account_id,
+                        "responses",
+                        &windows,
+                        1_000,
+                        2_000,
+                    )
+                    .await,
             );
-            must_ok(QuotaSnapshotRepository::upsert_snapshot(
-                &state,
-                &PersistedQuotaSnapshot::new(account_id.clone(), QuotaSnapshotSource::MockEndpoint)
-                    .with_observed_unix_seconds(1_000)
-                    .with_route_band("responses", 100)
-                    .with_reset_unix_seconds(18_000),
-            ));
+            must_ok(
+                state
+                    .upsert_quota_snapshot(
+                        &PersistedQuotaSnapshot::new(
+                            account_id.clone(),
+                            QuotaSnapshotSource::MockEndpoint,
+                        )
+                        .with_observed_unix_seconds(1_000)
+                        .with_route_band("responses", 100)
+                        .with_reset_unix_seconds(18_000),
+                    )
+                    .await,
+            );
         };
     seed_account(
         &floor_account_id,
         "floor-socket",
         9,
         "floor-socket-access-canary",
-    );
-    migrate_test_state_database(&state_path);
+    )
+    .await;
+    migrate_test_state_database(&state_path).await;
 
     let initial_status = run_cli(
         [
@@ -106,7 +117,8 @@ fn saved_floor_refresh_reconnects_established_websocket_before_later_response_cr
             "1100",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
     let initial_json: serde_json::Value = must_ok(serde_json::from_str(&initial_status.stdout));
     assert!(
         initial_json["accounts"]
@@ -202,7 +214,19 @@ fn saved_floor_refresh_reconnects_established_websocket_before_later_response_cr
         secret_root.clone(),
     )
     .with_quota_clock(1_201, 300);
-    let router = must_ok(LoopbackRouterRuntime::start(config, secrets.clone().into()));
+    let router = must_ok({
+        let fixture_config = config;
+        let fixture_secrets = secrets.clone().into();
+        let fixture_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        must_ok(
+            tokio::task::spawn_blocking(move || {
+                tracing::dispatcher::with_default(&fixture_dispatcher, || {
+                    LoopbackRouterRuntime::start(fixture_config, fixture_secrets)
+                })
+            })
+            .await,
+        )
+    });
     let router_port = router.local_addr().port();
     let floor_notifier = router.websocket_quota_floor_notifier();
     let router_thread = thread::spawn(move || router.serve_protocol_connections(2));
@@ -241,14 +265,16 @@ fn saved_floor_refresh_reconnects_established_websocket_before_later_response_cr
         "healthy-socket",
         80,
         "healthy-socket-access-canary",
-    );
+    )
+    .await;
     seed_account(
         &excluded_cli_account_id,
         "floor-excluded-cli",
         9,
         "floor-excluded-cli-access-canary",
-    );
-    test_async_runtime().block_on(async {
+    )
+    .await;
+    (async {
         let mutation = must_ok(AsyncWeeklyQuotaFloorMutationStore::open(&state_path).await);
         must_ok(
             mutation
@@ -267,7 +293,8 @@ fn saved_floor_refresh_reconnects_established_websocket_before_later_response_cr
                 .await,
         );
         mutation.close().await;
-    });
+    })
+    .await;
     let edited_status = run_cli(
         [
             "codex-router",
@@ -282,7 +309,8 @@ fn saved_floor_refresh_reconnects_established_websocket_before_later_response_cr
             "1100",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
     let edited_json: serde_json::Value = must_ok(serde_json::from_str(&edited_status.stdout));
     assert!(
         edited_json["accounts"]
@@ -329,22 +357,27 @@ fn saved_floor_refresh_reconnects_established_websocket_before_later_response_cr
         failure_stage: "history",
     };
     let mut failed_output = Vec::new();
-    let failed = must_err(refresh_quota_store_paths_with_floor_observer(
-        &mut failed_output,
-        &state_path,
-        &secret_root,
-        "https://chatgpt.com/backend-api".to_owned(),
-        &resolver,
-        &failed_provider,
-        QuotaRefreshObservationContext {
-            observed_unix_seconds: 1_200,
-            schedule: codex_router_quota_service::quota::QuotaRefreshSchedule::Manual,
-            weekly_floor_observer: Some(&floor_notifier),
-        },
-    ));
+    let failed = must_err(
+        refresh_quota_store_paths_with_floor_observer(
+            &mut failed_output,
+            &state_path,
+            &secret_root,
+            "https://chatgpt.com/backend-api".to_owned(),
+            &resolver,
+            &failed_provider,
+            QuotaRefreshObservationContext {
+                observed_unix_seconds: 1_200,
+                schedule: codex_router_quota_service::quota::QuotaRefreshSchedule::Manual,
+                weekly_floor_observer: Some(&floor_notifier),
+            },
+        )
+        .await,
+    );
     assert!(failed.to_string().contains("sqlite state store failed"));
     let retained_after_failed_refresh = must_ok(
-        SelectorQuotaRepository::selector_inputs_for_route_band(&state, "responses", 1_200),
+        state
+            .selector_inputs_for_route_band("responses", 1_200)
+            .await,
     );
     assert!(retained_after_failed_refresh.iter().any(|account| {
         account.account_id() == &floor_account_id
@@ -384,35 +417,37 @@ fn saved_floor_refresh_reconnects_established_websocket_before_later_response_cr
     let options = sqlx::sqlite::SqliteConnectOptions::new()
         .filename(&state_path)
         .create_if_missing(false);
-    let mut fault_connection =
-        must_ok(test_async_runtime().block_on(sqlx::SqliteConnection::connect_with(&options)));
-    must_ok(test_async_runtime().block_on(
-        sqlx::query("DROP TRIGGER injected_history_failure").execute(&mut fault_connection),
-    ));
-    must_ok(test_async_runtime().block_on(fault_connection.close()));
+    let mut fault_connection = must_ok((sqlx::SqliteConnection::connect_with(&options)).await);
+    must_ok(
+        (sqlx::query("DROP TRIGGER injected_history_failure").execute(&mut fault_connection)).await,
+    );
+    must_ok((fault_connection.close()).await);
 
     let provider = JoinedFloorCrossingProvider {
         floor_account_id: floor_account_id.clone(),
     };
     let mut output = Vec::new();
-    must_ok(refresh_quota_store_paths_with_floor_observer(
-        &mut output,
-        &state_path,
-        &secret_root,
-        "https://chatgpt.com/backend-api".to_owned(),
-        &resolver,
-        &provider,
-        QuotaRefreshObservationContext {
-            observed_unix_seconds: 1_200,
-            schedule: codex_router_quota_service::quota::QuotaRefreshSchedule::Manual,
-            weekly_floor_observer: Some(&floor_notifier),
-        },
-    ));
-    let saved = must_ok(SelectorQuotaRepository::selector_inputs_for_route_band(
-        &state,
-        "responses",
-        1_200,
-    ));
+    must_ok(
+        refresh_quota_store_paths_with_floor_observer(
+            &mut output,
+            &state_path,
+            &secret_root,
+            "https://chatgpt.com/backend-api".to_owned(),
+            &resolver,
+            &provider,
+            QuotaRefreshObservationContext {
+                observed_unix_seconds: 1_200,
+                schedule: codex_router_quota_service::quota::QuotaRefreshSchedule::Manual,
+                weekly_floor_observer: Some(&floor_notifier),
+            },
+        )
+        .await,
+    );
+    let saved = must_ok(
+        state
+            .selector_inputs_for_route_band("responses", 1_200)
+            .await,
+    );
     assert!(saved.iter().any(|account| {
         account.account_id() == &floor_account_id
             && account.windows().iter().any(|window| {

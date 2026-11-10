@@ -10,11 +10,11 @@ pub(super) struct AuthRejectionFixture {
 }
 
 impl AuthRejectionFixture {
-    pub(super) fn new(label: &str) -> Self {
+    pub(super) async fn new(label: &str) -> Self {
         let temp_dir = ProxyTestTempDir::new(label);
         let database_path = temp_dir.path().join("state.sqlite");
         let secret_path = temp_dir.path().join("secrets");
-        let state = must_ok(SqliteStateStore::open(&database_path));
+        let state = must_ok(AsyncSqliteStateStore::open(&database_path).await);
         let secrets = must_ok(
             codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_path),
         );
@@ -30,8 +30,10 @@ impl AuthRejectionFixture {
             "fallback",
             AccountStatus::Enabled,
         );
-        persist_account_with_snapshot_and_token(&state, &secrets, &primary, 90, "primary-token");
-        persist_account_with_snapshot_and_token(&state, &secrets, &fallback, 80, "fallback-token");
+        persist_account_with_snapshot_and_token(&state, &secrets, &primary, 90, "primary-token")
+            .await;
+        persist_account_with_snapshot_and_token(&state, &secrets, &fallback, 80, "fallback-token")
+            .await;
         for (account, token, account_header) in [
             (&primary, "primary-token", "synthetic-openai-primary"),
             (&fallback, "fallback-token", "synthetic-openai-fallback"),
@@ -56,7 +58,10 @@ impl AuthRejectionFixture {
         }
     }
 
-    pub(super) fn start(&self, upstream_address: std::net::SocketAddr) -> LoopbackRouterRuntime {
+    pub(super) async fn start(
+        &self,
+        upstream_address: std::net::SocketAddr,
+    ) -> LoopbackRouterRuntime {
         let config = LoopbackRouterRuntimeConfig::new(
             must_ok(LoopbackBindAddress::new("127.0.0.1", 0)),
             must_ok(UpstreamEndpoint::new(format!(
@@ -70,16 +75,22 @@ impl AuthRejectionFixture {
             ),
         )
         .with_quota_clock(1_030, 60);
-        must_ok(LoopbackRouterRuntime::start_for_test(config))
+        must_ok(
+            tokio::task::spawn_blocking({
+                let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+                move || {
+                    tracing::dispatcher::with_default(&startup_dispatcher, || {
+                        LoopbackRouterRuntime::start_for_test(config)
+                    })
+                }
+            })
+            .await
+            .expect("blocking runtime startup should join"),
+        )
     }
 
-    pub(super) fn maintenance(&self) -> Option<CredentialMaintenanceRecord> {
-        let runtime = must_ok(
-            tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build(),
-        );
-        runtime.block_on(async {
+    pub(super) async fn maintenance(&self) -> Option<CredentialMaintenanceRecord> {
+        (async {
             let state = must_ok(AsyncSqliteStateStore::open(&self.database_path).await);
             let record = must_ok(
                 state
@@ -89,17 +100,13 @@ impl AuthRejectionFixture {
             must_ok(state.close().await);
             record
         })
+        .await
     }
 
-    pub(super) fn credential_metadata(
+    pub(super) async fn credential_metadata(
         &self,
     ) -> Vec<(AccountRecord, Option<CredentialMaintenanceRecord>)> {
-        let runtime = must_ok(
-            tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build(),
-        );
-        runtime.block_on(async {
+        (async {
             let state = must_ok(AsyncSqliteStateStore::open(&self.database_path).await);
             let mut metadata = Vec::new();
             for account in must_ok(state.list_accounts().await) {
@@ -113,22 +120,19 @@ impl AuthRejectionFixture {
             must_ok(state.close().await);
             metadata
         })
+        .await
     }
 
-    pub(super) fn claim_successor(&self) -> CredentialMaintenanceRecord {
+    pub(super) async fn claim_successor(&self) -> CredentialMaintenanceRecord {
         self.claim_account_successor(self.primary.account_id())
+            .await
     }
 
-    pub(super) fn claim_account_successor(
+    pub(super) async fn claim_account_successor(
         &self,
         account_id: &AccountId,
     ) -> CredentialMaintenanceRecord {
-        let runtime = must_ok(
-            tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build(),
-        );
-        runtime.block_on(async {
+        (async {
             let state = must_ok(AsyncSqliteStateStore::open(&self.database_path).await);
             assert!(must_ok(
                 state
@@ -147,22 +151,26 @@ impl AuthRejectionFixture {
             must_ok(state.close().await);
             record
         })
+        .await
     }
 
-    pub(super) fn persist_hard_owner(&self, response_id: &str) {
-        let state = must_ok(SqliteStateStore::open(&self.database_path));
+    pub(super) async fn persist_hard_owner(&self, response_id: &str) {
+        let state = must_ok(AsyncSqliteStateStore::open(&self.database_path).await);
         let secrets = must_ok(
             codex_router_secret_store::test_support::open_encrypted_credential_store(
                 &self.secret_path,
             ),
         );
         let affinity_secret = must_ok(load_or_create_router_affinity_hash_secret(&secrets));
-        must_ok(persist_previous_response_owner(
-            &state,
-            response_id,
-            affinity_secret.secret(),
-            self.primary.account_id(),
-        ));
+        must_ok(
+            persist_previous_response_owner(
+                &state,
+                response_id,
+                affinity_secret.secret(),
+                self.primary.account_id(),
+            )
+            .await,
+        );
     }
 }
 

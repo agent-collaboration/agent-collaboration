@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn persist_credit_backed_account_with_token(
+pub(super) async fn persist_credit_backed_account_with_token(
     database_path: &Path,
     secrets: &EncryptedCredentialStore,
     account: &AccountRecord,
@@ -8,29 +8,7 @@ pub(super) fn persist_credit_backed_account_with_token(
     observed_unix_seconds: u64,
     allow_credit_usage: bool,
 ) {
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap_or_else(|error| panic!("credit fixture runtime should build: {error}"));
-    runtime.block_on(persist_credit_backed_account_with_token_async(
-        database_path,
-        secrets,
-        account,
-        upstream_token,
-        observed_unix_seconds,
-        allow_credit_usage,
-    ));
-}
-
-pub(super) async fn persist_credit_backed_account_with_token_async(
-    database_path: &Path,
-    secrets: &EncryptedCredentialStore,
-    account: &AccountRecord,
-    upstream_token: &str,
-    observed_unix_seconds: u64,
-    allow_credit_usage: bool,
-) {
-    persist_credit_account_with_availability_async(
+    persist_credit_account_with_availability(
         database_path,
         secrets,
         account,
@@ -47,31 +25,7 @@ pub(super) async fn persist_credit_backed_account_with_token_async(
     .await;
 }
 
-pub(super) fn persist_credit_account_with_availability(
-    database_path: &Path,
-    secrets: &EncryptedCredentialStore,
-    account: &AccountRecord,
-    upstream_token: &str,
-    observed_unix_seconds: u64,
-    allow_credit_usage: bool,
-    availability: codex_router_core::credit_usage::CreditAvailability,
-) {
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap_or_else(|error| panic!("credit fixture runtime should build: {error}"));
-    runtime.block_on(persist_credit_account_with_availability_async(
-        database_path,
-        secrets,
-        account,
-        upstream_token,
-        observed_unix_seconds,
-        allow_credit_usage,
-        availability,
-    ));
-}
-
-async fn persist_credit_account_with_availability_async(
+pub(super) async fn persist_credit_account_with_availability(
     database_path: &Path,
     secrets: &EncryptedCredentialStore,
     account: &AccountRecord,
@@ -81,14 +35,13 @@ async fn persist_credit_account_with_availability_async(
     availability: codex_router_core::credit_usage::CreditAvailability,
 ) {
     let account_with_generation = account.clone().with_active_credential_generation(1);
-    let sync_state = SqliteStateStore::open(database_path)
-        .unwrap_or_else(|error| panic!("state should open for credit account: {error}"));
-    AccountStateRepository::upsert_account(&sync_state, &account_with_generation)
-        .unwrap_or_else(|error| panic!("credit account should persist: {error}"));
-
     let async_state = AsyncSqliteStateStore::open(database_path)
         .await
         .unwrap_or_else(|error| panic!("credit state should open: {error}"));
+    async_state
+        .upsert_account(&account_with_generation)
+        .await
+        .unwrap_or_else(|error| panic!("credit account should persist: {error}"));
     async_state
         .save_account_credit_usage_policy(
             account.account_id(),

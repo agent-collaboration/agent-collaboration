@@ -25,9 +25,7 @@ use codex_router_state::quota_snapshot::PersistedSelectorQuotaWindow;
 use codex_router_state::quota_snapshot::QuotaHistoryRefreshOutcome;
 use codex_router_state::quota_snapshot::QuotaSnapshotSource;
 use codex_router_state::quota_snapshot::SelectorQuotaWindowStatus;
-use codex_router_state::repositories::AccountStateRepository;
 use codex_router_state::sqlite::AsyncSqliteStateStore;
-use codex_router_state::sqlite::SqliteStateStore;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
@@ -91,15 +89,13 @@ impl CreditTurnFixture {
             AccountStatus::Enabled,
         )
         .with_active_credential_generation(1);
-        let synchronous_state =
-            SqliteStateStore::open(&database_path).expect("credit-turn SQLite state should open");
-        AccountStateRepository::upsert_account(&synchronous_state, &account)
-            .expect("credit-turn account should persist");
-        drop(synchronous_state);
-
         let writer = AsyncSqliteStateStore::open(&database_path)
             .await
             .expect("credit-turn async writer should open");
+        writer
+            .upsert_account(&account)
+            .await
+            .expect("credit-turn account should persist");
         writer
             .save_account_credit_usage_policy(&account_id, CreditUsagePolicy::Allow)
             .await

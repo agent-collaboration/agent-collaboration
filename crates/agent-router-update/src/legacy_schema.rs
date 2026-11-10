@@ -2,8 +2,8 @@
 //! records normalized sqlite_master definitions and SQLx SHA-384 migration hashes
 //! from that commit's public BoardStore fixture; no legacy DDL is executed here.
 use crate::{UpgradeError, import_error::invalid};
-use rusqlite::Connection;
 use serde::Deserialize;
+use sqlx::{Row, SqliteConnection};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -27,60 +27,74 @@ struct MigrationIdentity {
     checksum: String,
 }
 
-pub(crate) fn validate_supported_schema(connection: &Connection) -> Result<(), UpgradeError> {
+pub(crate) async fn validate_supported_schema(
+    connection: &mut SqliteConnection,
+) -> Result<(), UpgradeError> {
     let expected: SchemaIdentity =
         serde_json::from_str(include_str!("legacy_schema_identity.json"))?;
-    let matches =
-        matches_identity(connection, &expected).map_err(|error| invalid("schema", error))?;
+    let matches = matches_identity(connection, &expected)
+        .await
+        .map_err(|error| invalid("schema", error))?;
     if !matches {
         return Err(invalid(
             "schema",
             format!(
                 "not the complete shipped {} schema, migration history and checkpoint",
-                expected.source_commit
+                expected.source_commit,
             ),
         ));
     }
     Ok(())
 }
 
-fn matches_identity(connection: &Connection, expected: &SchemaIdentity) -> rusqlite::Result<bool> {
-    let mut statement = connection.prepare(
+async fn matches_identity(
+    connection: &mut SqliteConnection,
+    expected: &SchemaIdentity,
+) -> Result<bool, sqlx::Error> {
+    let rows = sqlx::query(
         "SELECT name,sql FROM sqlite_master WHERE name NOT LIKE 'sqlite_%' ORDER BY name",
-    )?;
-    let objects = statement
-        .query_map([], |row| {
-            let sql: String = row.get("sql")?;
+    )
+    .fetch_all(&mut *connection)
+    .await?;
+    let objects = rows
+        .into_iter()
+        .map(|row| {
+            let sql: String = row.try_get("sql")?;
             Ok(SchemaObject {
-                name: row.get("name")?,
+                name: row.try_get("name")?,
                 sql: sql.split_whitespace().collect::<Vec<_>>().join(" "),
             })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
     if objects != expected.objects {
         return Ok(false);
     }
-    let mut statement = connection.prepare(
+    let rows = sqlx::query(
         "SELECT version,description,success,hex(checksum) AS checksum FROM _sqlx_migrations ORDER BY version",
-    )?;
-    let migrations = statement
-        .query_map([], |row| {
+    )
+    .fetch_all(&mut *connection)
+    .await?;
+    let migrations = rows
+        .into_iter()
+        .map(|row| {
             Ok(MigrationIdentity {
-                version: row.get("version")?,
-                description: row.get("description")?,
-                success: row.get("success")?,
-                checksum: row.get("checksum")?,
+                version: row.try_get("version")?,
+                description: row.try_get("description")?,
+                success: row.try_get("success")?,
+                checksum: row.try_get("checksum")?,
             })
-        })?
-        .collect::<Result<Vec<_>, _>>()?;
+        })
+        .collect::<Result<Vec<_>, sqlx::Error>>()?;
     if migrations != expected.migrations {
         return Ok(false);
     }
-    let valid_checkpoint: bool = connection.query_row(
+    let valid_checkpoint: bool = sqlx::query_scalar(
         "SELECT count(*)=1 FROM activity_checkpoint WHERE singleton=1 AND last_sequence>=0 AND length(cursor_key)=32 AND (SELECT count(*) FROM activity_checkpoint)=1",
-        [],
-        |row| row.get(0),
-    )?;
-    let mut foreign_keys = connection.prepare("PRAGMA foreign_key_check")?;
-    Ok(valid_checkpoint && foreign_keys.query([])?.next()?.is_none())
+    )
+    .fetch_one(&mut *connection)
+    .await?;
+    let foreign_key_violation = sqlx::query("PRAGMA foreign_key_check")
+        .fetch_optional(connection)
+        .await?;
+    Ok(valid_checkpoint && foreign_key_violation.is_none())
 }

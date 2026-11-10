@@ -1,8 +1,6 @@
 //! Runtime credential resolver factory for the loopback proxy.
 
 #[cfg(test)]
-use std::path::Path;
-#[cfg(test)]
 use std::sync::Arc;
 
 use codex_router_auth::resolver::AsyncRefreshLeaseRegistry;
@@ -15,18 +13,8 @@ use codex_router_auth::resolver::CredentialResolverError;
 #[cfg(not(test))]
 use codex_router_auth::resolver::DefaultAsyncRouterCredentialResolver;
 #[cfg(test)]
-use codex_router_auth::resolver::OpenAiOAuthRefreshClient;
-#[cfg(test)]
 use codex_router_auth::resolver::ProviderCredentialRefreshClients;
-#[cfg(test)]
-use codex_router_auth::resolver::ProviderCredentialResolver;
-#[cfg(test)]
-use codex_router_auth::resolver::RefreshLeaseRegistry;
 use codex_router_auth::resolver::ResolvedProviderCredential;
-#[cfg(test)]
-use codex_router_auth::resolver::RouterCredentialResolver;
-#[cfg(test)]
-use codex_router_auth::resolver::current_unix_seconds;
 use codex_router_core::affinity::RouterAffinityHashSecret;
 use codex_router_core::ids::AccountId;
 #[cfg(test)]
@@ -35,86 +23,12 @@ use codex_router_secret_store::affinity_secret::load_or_create_router_affinity_h
 use codex_router_secret_store::model::SecretStoreError;
 use codex_router_secret_store::runtime_credential_store::RuntimeCredentialStore;
 use codex_router_state::sqlite::AsyncSqliteStateStore;
-#[cfg(test)]
-use codex_router_state::sqlite::SqliteStateStore;
-#[cfg(test)]
-use codex_router_state::sqlite::StateStoreError;
 use futures_util::future::BoxFuture;
 
 use crate::http_sse::AsyncProviderCredentialResolver;
 use crate::http_sse::HttpAffinitySecretProvider;
 use crate::http_sse::HttpProxyError;
 use crate::secret_store_factory::ProxyRuntimeSecretStore;
-#[cfg(test)]
-use crate::secret_store_factory::open_proxy_secret_store;
-
-/// Credential resolver used by proxy runtime entrypoints.
-#[cfg(test)]
-#[derive(Debug)]
-pub(crate) struct ProxyCredentialResolver<C = OpenAiOAuthRefreshClient>
-where
-    C: CredentialRefreshClient + Clone,
-{
-    state_store: SqliteStateStore,
-    secret_store: ProxyRuntimeSecretStore,
-    fallback_now_unix_seconds: u64,
-    refresh_client: C,
-    refresh_leases: RefreshLeaseRegistry,
-}
-
-#[cfg(test)]
-impl<C> ProxyCredentialResolver<C>
-where
-    C: CredentialRefreshClient + Clone,
-{
-    pub(crate) fn open_with_refresh_client(
-        state_database_path: &Path,
-        secret_store_root: &Path,
-        now_unix_seconds: u64,
-        refresh_client: C,
-    ) -> Result<Self, ProxyCredentialResolverOpenError> {
-        Ok(Self {
-            state_store: SqliteStateStore::open(state_database_path)?,
-            secret_store: open_proxy_secret_store(secret_store_root)?,
-            fallback_now_unix_seconds: now_unix_seconds,
-            refresh_client,
-            refresh_leases: RefreshLeaseRegistry::new(),
-        })
-    }
-}
-
-#[cfg(test)]
-impl<C> ProviderCredentialResolver for ProxyCredentialResolver<C>
-where
-    C: CredentialRefreshClient + Clone,
-{
-    fn resolve_provider_credentials(
-        &self,
-        account_id: &AccountId,
-        expected_provider: codex_router_core::provider::Provider,
-    ) -> Result<ResolvedProviderCredential, CredentialResolverError> {
-        RouterCredentialResolver::new_with_refresh_leases(
-            &self.state_store,
-            &self.secret_store,
-            self.refresh_client.clone(),
-            current_unix_seconds().unwrap_or(self.fallback_now_unix_seconds),
-            self.refresh_leases.clone(),
-        )
-        .resolve_provider_credentials(account_id, expected_provider)
-    }
-}
-
-/// Failure opening runtime credential state.
-#[cfg(test)]
-#[derive(Debug, thiserror::Error)]
-pub enum ProxyCredentialResolverOpenError {
-    /// State store failed.
-    #[error(transparent)]
-    State(#[from] StateStoreError),
-    /// Secret store failed.
-    #[error(transparent)]
-    Secret(#[from] SecretStoreError),
-}
 
 /// Runtime credential and affinity providers opened outside request handling.
 #[derive(Clone, Debug)]
@@ -347,7 +261,26 @@ pub(crate) type AsyncProxyCredentialResolver =
 pub(crate) type AsyncProxyCredentialResolver =
     AsyncRouterCredentialResolver<ProxyRuntimeSecretStore, TestCredentialRefreshClient>;
 
+#[cfg(not(test))]
 impl AsyncProviderCredentialResolver for AsyncProxyCredentialResolver {
+    fn resolve_provider_credentials<'a>(
+        &'a self,
+        account_id: &'a AccountId,
+        expected_provider: codex_router_core::provider::Provider,
+    ) -> BoxFuture<'a, Result<ResolvedProviderCredential, CredentialResolverError>> {
+        Box::pin(async move {
+            self.resolve_provider_credentials(account_id, expected_provider)
+                .await
+        })
+    }
+}
+
+#[cfg(test)]
+impl<S, C> AsyncProviderCredentialResolver for AsyncRouterCredentialResolver<S, C>
+where
+    S: SecretStore + Clone + Send + Sync + 'static,
+    C: CredentialRefreshClient + Clone + Send + Sync + 'static,
+{
     fn resolve_provider_credentials<'a>(
         &'a self,
         account_id: &'a AccountId,

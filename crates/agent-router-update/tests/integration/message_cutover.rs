@@ -3,7 +3,7 @@ use crate::message_support;
 use agent_router_update::{MessageCopyCounts, MessageUpgrade, MessageUpgradeReport};
 use interaction_storage::InteractionStore;
 use message_support::*;
-use rusqlite::{Connection, params};
+use sqlx::Connection as _;
 
 #[tokio::test]
 #[expect(
@@ -35,7 +35,7 @@ async fn copy_cold_reopen_retry_keeps_first_ids_and_history_then_owning_drop_is_
     let prepared = MessageUpgrade::prepare(&source, &Default::default()).await?;
     assert_eq!(prepared.copy_to(&destination).await?, expected);
     assert_eq!(std::fs::read(&source)?, original);
-    let ids = text_rows(&destination, IDS)?;
+    let ids = text_rows(&destination, IDS).await?;
     assert_eq!(ids.len(), 2);
     assert!(
         ids.iter()
@@ -60,20 +60,23 @@ async fn copy_cold_reopen_retry_keeps_first_ids_and_history_then_owning_drop_is_
         text_rows(
             &destination,
             "SELECT retention AS value FROM router_pushes ORDER BY push_id"
-        )?,
+        )
+        .await?,
         vec!["creationAge", "creationAge"]
     );
     assert_eq!(
         text_rows(
             &destination,
             "SELECT header_facts_json AS value FROM router_pushes ORDER BY push_id"
-        )?,
+        )
+        .await?,
         vec![" {\"kind\": \"directMessage\", \"senderDisplayName\":null} "; 2]
     );
     let payload = text_rows(
         &destination,
         "SELECT payload AS value FROM subscription_delivery_progress",
-    )?
+    )
+    .await?
     .pop()
     .ok_or("subscription missing")?;
     let payload: serde_json::Value = serde_json::from_str(&payload)?;
@@ -84,17 +87,17 @@ async fn copy_cold_reopen_retry_keeps_first_ids_and_history_then_owning_drop_is_
     assert_eq!(window.get("postCount"), Some(&serde_json::json!(2)));
     let retry = MessageUpgrade::prepare(&source, &Default::default()).await?;
     assert_eq!(retry.copy_to(&destination).await?, expected);
-    assert_eq!(text_rows(&destination, IDS)?, ids);
-    assert_eq!(text_rows(&destination, HISTORY)?, original_history);
+    assert_eq!(text_rows(&destination, IDS).await?, ids);
+    assert_eq!(text_rows(&destination, HISTORY).await?, original_history);
     assert_eq!(retry.apply_drop(&destination).await?, expected);
-    assert!(source_tables(&source)?.is_empty());
+    assert!(source_tables(&source).await?.is_empty());
     assert_eq!(
         text_rows(
             &source,
             &format!(
                 "SELECT CAST(count(*) AS TEXT) AS value FROM _sqlx_migrations WHERE version={DROP_VERSION} AND success=1"
             )
-        )?,
+        ).await?,
         vec!["1"]
     );
     let completed = MessageUpgrade::prepare(&source, &Default::default()).await?;
@@ -110,8 +113,8 @@ async fn copy_cold_reopen_retry_keeps_first_ids_and_history_then_owning_drop_is_
         .await?
         .close()
         .await?;
-    assert_eq!(text_rows(&destination, IDS)?, ids);
-    assert_eq!(text_rows(&destination, HISTORY)?, original_history);
+    assert_eq!(text_rows(&destination, IDS).await?, ids);
+    assert_eq!(text_rows(&destination, HISTORY).await?, original_history);
     Ok(())
 }
 
@@ -158,21 +161,29 @@ async fn changed_destination_refuses_drop_and_retry_never_overwrites_it() -> Tes
     prepared.copy_to(&destination).await?;
     let original = std::fs::read(&source)?;
     {
-        let connection = Connection::open(&destination)?;
-        connection.execute(
-            "UPDATE router_pushes SET body='different destination body'",
-            [],
-        )?;
+        let mut connection = sqlx::SqliteConnection::connect_with(
+            &sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(&destination)
+                .create_if_missing(true)
+                .foreign_keys(false),
+        )
+        .await?;
+        sqlx::query("UPDATE router_pushes SET body='different destination body'")
+            .execute(&mut connection)
+            .await
+            .map(|result| result.rows_affected())?;
+        connection.close().await?;
     }
     assert!(prepared.apply_drop(&destination).await.is_err());
     assert!(prepared.copy_to(&destination).await.is_err());
     assert_eq!(std::fs::read(&source)?, original);
-    assert_eq!(source_tables(&source)?.len(), 5);
+    assert_eq!(source_tables(&source).await?.len(), 5);
     assert_eq!(
         text_rows(
             &destination,
             "SELECT body AS value FROM router_pushes ORDER BY push_id"
-        )?,
+        )
+        .await?,
         vec!["different destination body"; 2]
     );
     Ok(())
@@ -203,17 +214,24 @@ async fn released_native_receipt_extensions_copy_exactly_and_read_through_the_st
             "reachability":"codexAppServer","client":null}),
     ];
     {
-        let connection = Connection::open(&source)?;
+        let mut connection = sqlx::SqliteConnection::connect_with(
+            &sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(&source)
+                .create_if_missing(true)
+                .foreign_keys(false),
+        )
+        .await?;
         for (index, receipt) in receipts.iter().enumerate() {
-            connection.execute("UPDATE router_pushes SET delivery_state=?,last_outcome_json=?,settled_at='2026-10-21T12:35:00Z' WHERE push_id=?", params![if index==0 {"delivered"} else {"rejected"}, serde_json::to_string_pretty(receipt)?, ids[index]])?;
+            sqlx::query("UPDATE router_pushes SET delivery_state=?,last_outcome_json=?,settled_at='2026-10-21T12:35:00Z' WHERE push_id=?").bind(if index==0 {"delivered"} else {"rejected"}).bind(&serde_json::to_string_pretty(receipt)?).bind(&ids[index]).execute(&mut connection).await.map(|result|result.rows_affected())?;
         }
+        connection.close().await?;
     }
     let original = std::fs::read(&source)?;
     let query = "SELECT last_outcome_json AS value FROM router_pushes ORDER BY push_id";
-    let encoded = text_rows(&source, query)?;
+    let encoded = text_rows(&source, query).await?;
     let upgrade = MessageUpgrade::prepare(&source, &Default::default()).await?;
     upgrade.copy_to(&destination).await?;
-    assert_eq!(text_rows(&destination, query)?, encoded);
+    assert_eq!(text_rows(&destination, query).await?, encoded);
     let owner = InteractionStore::open(&destination).await?;
     for (id, expected) in ids.iter().zip(&receipts) {
         let record = owner
@@ -227,11 +245,11 @@ async fn released_native_receipt_extensions_copy_exactly_and_read_through_the_st
     }
     owner.close().await?;
     upgrade.copy_to(&destination).await?;
-    assert_eq!(text_rows(&destination, query)?, encoded);
+    assert_eq!(text_rows(&destination, query).await?, encoded);
     assert_eq!(std::fs::read(&source)?, original);
     upgrade.apply_drop(&destination).await?;
-    assert!(source_tables(&source)?.is_empty());
-    assert_eq!(text_rows(&destination, query)?, encoded);
+    assert!(source_tables(&source).await?.is_empty());
+    assert_eq!(text_rows(&destination, query).await?, encoded);
     Ok(())
 }
 
@@ -248,13 +266,23 @@ async fn changed_source_refuses_drop_after_destination_commit() -> TestResult {
     let prepared = MessageUpgrade::prepare(&source, &Default::default()).await?;
     prepared.copy_to(&destination).await?;
     {
-        let connection = Connection::open(&source)?;
-        connection.execute("UPDATE router_pushes SET body='new source contents'", [])?;
+        let mut connection = sqlx::SqliteConnection::connect_with(
+            &sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(&source)
+                .create_if_missing(true)
+                .foreign_keys(false),
+        )
+        .await?;
+        sqlx::query("UPDATE router_pushes SET body='new source contents'")
+            .execute(&mut connection)
+            .await
+            .map(|result| result.rows_affected())?;
+        connection.close().await?;
     }
     let changed = std::fs::read(&source)?;
     assert!(prepared.apply_drop(&destination).await.is_err());
     assert_eq!(std::fs::read(&source)?, changed);
-    assert_eq!(source_tables(&source)?.len(), 5);
+    assert_eq!(source_tables(&source).await?.len(), 5);
     Ok(())
 }
 
@@ -273,20 +301,29 @@ async fn invalid_destination_additions_or_changed_worker_payload_never_authorize
         let prepared = MessageUpgrade::prepare(&source, &Default::default()).await?;
         prepared.copy_to(&destination).await?;
         {
-            let connection = Connection::open(&destination)?;
+            let mut connection = sqlx::SqliteConnection::connect_with(
+                &sqlx::sqlite::SqliteConnectOptions::new()
+                    .filename(&destination)
+                    .create_if_missing(true)
+                    .foreign_keys(false),
+            )
+            .await?;
             match defect {
                 "worker-id" => {
-                    connection.execute("UPDATE subscription_delivery_progress SET progress_id='550e8400-e29b-41d4-a716-446655440000'", [])?;
+                    sqlx::query("UPDATE subscription_delivery_progress SET progress_id='550e8400-e29b-41d4-a716-446655440000'").execute(&mut connection).await.map(|result|result.rows_affected())?;
                 }
                 "retention" => {
-                    connection
-                        .execute("UPDATE router_pushes SET retention='mailTerminalAge'", [])?;
+                    sqlx::query("UPDATE router_pushes SET retention='mailTerminalAge'")
+                        .execute(&mut connection)
+                        .await
+                        .map(|result| result.rows_affected())?;
                 }
                 "worker-payload" => {
-                    connection.execute("UPDATE subscription_delivery_progress SET payload=json_set(payload,'$.generation',2)", [])?;
+                    sqlx::query("UPDATE subscription_delivery_progress SET payload=json_set(payload,'$.generation',2)").execute(&mut connection).await.map(|result|result.rows_affected())?;
                 }
                 _ => return Err("unexpected destination fixture defect".into()),
             }
+            connection.close().await?;
         }
         let source_before = std::fs::read(&source)?;
         assert!(
@@ -294,7 +331,7 @@ async fn invalid_destination_additions_or_changed_worker_payload_never_authorize
             "{defect} authorized the drop"
         );
         assert_eq!(std::fs::read(&source)?, source_before);
-        assert_eq!(source_tables(&source)?.len(), 5);
+        assert_eq!(source_tables(&source).await?.len(), 5);
     }
     Ok(())
 }
@@ -341,41 +378,57 @@ async fn incomplete_or_foreign_source_profiles_refuse_without_mutation() -> Test
         let source = directory.path().join("automation.sqlite");
         seeded_source(&source).await?;
         {
-            let connection = Connection::open(&source)?;
+            let mut connection = sqlx::SqliteConnection::connect_with(
+                &sqlx::sqlite::SqliteConnectOptions::new()
+                    .filename(&source)
+                    .create_if_missing(true)
+                    .foreign_keys(false),
+            )
+            .await?;
             match defect {
                 "missing-table" => {
-                    connection.execute("DROP TABLE subscription_delivery_progress", [])?;
+                    sqlx::query("DROP TABLE subscription_delivery_progress")
+                        .execute(&mut connection)
+                        .await
+                        .map(|result| result.rows_affected())?;
                 }
                 "checksum" => {
-                    connection.execute("UPDATE _sqlx_migrations SET checksum=x'00' WHERE version=(SELECT max(version) FROM _sqlx_migrations)",[])?;
+                    sqlx::query("UPDATE _sqlx_migrations SET checksum=x'00' WHERE version=(SELECT max(version) FROM _sqlx_migrations)").execute(&mut connection).await.map(|result|result.rows_affected())?;
                 }
                 "future" => {
-                    connection.execute("INSERT INTO _sqlx_migrations(version,description,success,checksum,execution_time) VALUES (99999999999999,'future',1,x'00',0)",[])?;
+                    sqlx::query("INSERT INTO _sqlx_migrations(version,description,success,checksum,execution_time) VALUES (99999999999999,'future',1,x'00',0)").execute(&mut connection).await.map(|result|result.rows_affected())?;
                 }
                 "unknown-table" => {
-                    connection.execute("CREATE TABLE unowned_state(value TEXT)", [])?;
+                    sqlx::query("CREATE TABLE unowned_state(value TEXT)")
+                        .execute(&mut connection)
+                        .await
+                        .map(|result| result.rows_affected())?;
                 }
                 "invalid-state" => {
-                    connection.execute(
-                        "UPDATE router_pushes SET delivery_state='unknown-state'",
-                        [],
-                    )?;
+                    sqlx::query("UPDATE router_pushes SET delivery_state='unknown-state'")
+                        .execute(&mut connection)
+                        .await
+                        .map(|result| result.rows_affected())?;
                 }
                 "invalid-retention" => {
-                    connection
-                        .execute("UPDATE router_pushes SET retention='unknown-retention'", [])?;
+                    sqlx::query("UPDATE router_pushes SET retention='unknown-retention'")
+                        .execute(&mut connection)
+                        .await
+                        .map(|result| result.rows_affected())?;
                 }
                 "bad-natural-key" => {
-                    connection.execute(
-                        "UPDATE subscription_delivery_progress SET membership_id=?",
-                        params![uuid::Uuid::now_v7().to_string()],
-                    )?;
+                    sqlx::query("UPDATE subscription_delivery_progress SET membership_id=?")
+                        .bind(uuid::Uuid::now_v7().to_string())
+                        .execute(&mut connection)
+                        .await
+                        .map(|result| result.rows_affected())?;
                 }
                 "nonempty-mail" => {
-                    connection.execute("INSERT INTO mail_items(item_id,digest,direction,status_json,status_version,payload_bytes,created_at) VALUES (?,'digest','local','{}',1,0,'2026-10-21T00:00:00Z')",params![uuid::Uuid::now_v7().to_string()])?;
+                    sqlx::query("INSERT INTO mail_items(item_id,digest,direction,status_json,status_version,payload_bytes,created_at) VALUES (?,'digest','local','{}',1,0,'2026-10-21T00:00:00Z')").bind(uuid::Uuid::now_v7().to_string()).execute(&mut connection).await.map(|result|result.rows_affected())?;
                 }
                 _ => return Err("unexpected fixture defect".into()),
             }
+            connection.close().await?;
         }
         let before = std::fs::read(&source)?;
         assert!(
@@ -411,15 +464,20 @@ async fn known_empty_prefixes_are_supported_but_unversioned_nonempty_intents_ref
             .copy_to(&destination)
             .await?;
         if version == 20_261_013_000_100 {
-            let connection = Connection::open(&source_path)?;
-            connection.execute(
-                "INSERT INTO board_intent_progress(project_id,intent_id) VALUES (?,?)",
-                params![
-                    uuid::Uuid::now_v7().to_string(),
-                    uuid::Uuid::now_v7().to_string()
-                ],
-            )?;
-            drop(connection);
+            let mut connection = sqlx::SqliteConnection::connect_with(
+                &sqlx::sqlite::SqliteConnectOptions::new()
+                    .filename(&source_path)
+                    .create_if_missing(true)
+                    .foreign_keys(false),
+            )
+            .await?;
+            sqlx::query("INSERT INTO board_intent_progress(project_id,intent_id) VALUES (?,?)")
+                .bind(uuid::Uuid::now_v7().to_string())
+                .bind(uuid::Uuid::now_v7().to_string())
+                .execute(&mut connection)
+                .await
+                .map(|result| result.rows_affected())?;
+            connection.close().await?;
             assert!(
                 MessageUpgrade::prepare(&source_path, &Default::default())
                     .await

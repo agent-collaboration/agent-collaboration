@@ -96,15 +96,17 @@ async fn selection_projection_downgrades_partial_active_session_history() {
         QuotaRunRateConfidence::Low,
         "partial active-session history must not keep normal confidence"
     );
+
+    store.close().await.expect("state store should close");
 }
 
 #[tokio::test]
 async fn async_quota_exhaustion_marks_route_band_windows_ineligible() {
     let temp_dir = TestTempDir::new("async_quota_exhaustion");
     let database_path = temp_dir.path().join("state.sqlite");
-    let sync_store = match SqliteStateStore::open(&database_path) {
+    let seed_store = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(store) => store,
-        Err(error) => panic!("sync state store should open and migrate: {error}"),
+        Err(error) => panic!("seed state store should open and migrate: {error}"),
     };
     let account_id = account_id("acct_quota_exhausted");
     let account = AccountRecord::new(
@@ -114,7 +116,7 @@ async fn async_quota_exhaustion_marks_route_band_windows_ineligible() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    if let Err(error) = AccountStateRepository::upsert_account(&sync_store, &account) {
+    if let Err(error) = seed_store.upsert_account(&account).await {
         panic!("account should persist: {error}");
     }
     for (limit_window_seconds, remaining_headroom, effective) in
@@ -130,7 +132,7 @@ async fn async_quota_exhaustion_marks_route_band_windows_ineligible() {
         .with_effective(effective)
         .with_observed_unix_seconds(1_000)
         .with_reset_unix_seconds(10_000 + limit_window_seconds);
-        if let Err(error) = SelectorQuotaRepository::upsert_selector_window(&sync_store, &window) {
+        if let Err(error) = seed_store.upsert_selector_quota_window(&window).await {
             panic!("selector window should persist: {error}");
         }
     }
@@ -150,12 +152,9 @@ async fn async_quota_exhaustion_marks_route_band_windows_ineligible() {
         panic!("quota exhaustion should persist: {error}");
     }
 
-    let inputs = match AsyncSelectorQuotaRepository::selector_inputs_for_route_band(
-        &async_store,
-        "responses",
-        2_000,
-    )
-    .await
+    let inputs = match async_store
+        .selector_inputs_for_route_band("responses", 2_000)
+        .await
     {
         Ok(inputs) => inputs,
         Err(error) => panic!("selector input should load: {error}"),
@@ -183,15 +182,18 @@ async fn async_quota_exhaustion_marks_route_band_windows_ineligible() {
             .iter()
             .all(|window| window.observed_unix_seconds() == 2_000)
     );
+
+    seed_store.close().await.expect("state store should close");
+    async_store.close().await.expect("state store should close");
 }
 
 #[tokio::test]
 async fn async_quota_exhaustion_without_existing_windows_blocks_expected_windows() {
     let temp_dir = TestTempDir::new("async_quota_exhaustion_no_windows");
     let database_path = temp_dir.path().join("state.sqlite");
-    let sync_store = match SqliteStateStore::open(&database_path) {
+    let seed_store = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(store) => store,
-        Err(error) => panic!("sync state store should open and migrate: {error}"),
+        Err(error) => panic!("seed state store should open and migrate: {error}"),
     };
     let account_id = account_id("acct_unknown_exhausted");
     let account = AccountRecord::new(
@@ -201,7 +203,7 @@ async fn async_quota_exhaustion_without_existing_windows_blocks_expected_windows
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    if let Err(error) = AccountStateRepository::upsert_account(&sync_store, &account) {
+    if let Err(error) = seed_store.upsert_account(&account).await {
         panic!("account should persist: {error}");
     }
     let async_store = match AsyncSqliteStateStore::open(&database_path).await {
@@ -220,12 +222,9 @@ async fn async_quota_exhaustion_without_existing_windows_blocks_expected_windows
         panic!("quota exhaustion should persist: {error}");
     }
 
-    let inputs = match AsyncSelectorQuotaRepository::selector_inputs_for_route_band(
-        &async_store,
-        "responses",
-        2_000,
-    )
-    .await
+    let inputs = match async_store
+        .selector_inputs_for_route_band("responses", 2_000)
+        .await
     {
         Ok(inputs) => inputs,
         Err(error) => panic!("selector input should load: {error}"),
@@ -249,15 +248,18 @@ async fn async_quota_exhaustion_without_existing_windows_blocks_expected_windows
             .all(|window| window.status() == SelectorQuotaWindowStatus::Ineligible),
         "suspect-exhausted accounts without prior quota windows must not degrade to unknown fallback"
     );
+
+    seed_store.close().await.expect("state store should close");
+    async_store.close().await.expect("state store should close");
 }
 
 #[tokio::test]
 async fn async_quota_exhaustion_expires_back_to_probe_candidate() {
     let temp_dir = TestTempDir::new("async_quota_exhaustion_ttl");
     let database_path = temp_dir.path().join("state.sqlite");
-    let sync_store = match SqliteStateStore::open(&database_path) {
+    let seed_store = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(store) => store,
-        Err(error) => panic!("sync state store should open and migrate: {error}"),
+        Err(error) => panic!("seed state store should open and migrate: {error}"),
     };
     let account_id = account_id("acct_exhausted_ttl");
     let account = AccountRecord::new(
@@ -267,7 +269,7 @@ async fn async_quota_exhaustion_expires_back_to_probe_candidate() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    if let Err(error) = AccountStateRepository::upsert_account(&sync_store, &account) {
+    if let Err(error) = seed_store.upsert_account(&account).await {
         panic!("account should persist: {error}");
     }
     let async_store = match AsyncSqliteStateStore::open(&database_path).await {
@@ -286,12 +288,9 @@ async fn async_quota_exhaustion_expires_back_to_probe_candidate() {
         panic!("quota exhaustion should persist: {error}");
     }
 
-    let expired_inputs = match AsyncSelectorQuotaRepository::selector_inputs_for_route_band(
-        &async_store,
-        "responses",
-        2_301,
-    )
-    .await
+    let expired_inputs = match async_store
+        .selector_inputs_for_route_band("responses", 2_301)
+        .await
     {
         Ok(inputs) => inputs,
         Err(error) => panic!("selector input should load after suspect TTL expiry: {error}"),
@@ -304,4 +303,7 @@ async fn async_quota_exhaustion_expires_back_to_probe_candidate() {
         expired_input.windows().is_empty(),
         "expired suspect-exhausted state should return to unknown probe behavior"
     );
+
+    seed_store.close().await.expect("state store should close");
+    async_store.close().await.expect("state store should close");
 }

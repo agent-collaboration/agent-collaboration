@@ -1,12 +1,12 @@
 use super::*;
 
-#[test]
-fn served_router_http_uses_persisted_quota_while_background_refresh_is_blocked() {
+#[tokio::test]
+async fn served_router_http_uses_persisted_quota_while_background_refresh_is_blocked() {
     let test_root = TestRoot::new("serve-background-refresh-blocked");
     must_ok(fs::create_dir(test_root.path()));
     let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
-    let state = must_ok(SqliteStateStore::open(&state_path));
+    let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_root),
     );
@@ -20,13 +20,13 @@ fn served_router_http_uses_persisted_quota_while_background_refresh_is_blocked()
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(&state, &account));
+    must_ok(state.upsert_account(&account).await);
     let snapshot =
         PersistedQuotaSnapshot::new(account_id.clone(), QuotaSnapshotSource::MockEndpoint)
             .with_observed_unix_seconds(1_000)
             .with_route_band("responses", 91);
-    must_ok(QuotaSnapshotRepository::upsert_snapshot(&state, &snapshot));
-    persist_effective_selector_window(&state, &account_id, "responses", 91);
+    must_ok(state.upsert_quota_snapshot(&snapshot).await);
+    persist_effective_selector_window(&state, &account_id, "responses", 91).await;
     let upstream_token_key = must_ok(openai_account_credential_bundle_key(&account_id, 1));
     let upstream_credential_bundle = must_ok(
         AccountCredentialBundle::imported_codex_auth(
@@ -75,7 +75,19 @@ fn served_router_http_uses_persisted_quota_while_background_refresh_is_blocked()
         local_token.clone(),
     )
     .with_quota_clock(1_030, 60);
-    let runtime = must_ok(LoopbackRouterRuntime::start(runtime_config, secrets.into()));
+    let runtime = must_ok({
+        let fixture_config = runtime_config;
+        let fixture_secrets = secrets.into();
+        let fixture_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        must_ok(
+            tokio::task::spawn_blocking(move || {
+                tracing::dispatcher::with_default(&fixture_dispatcher, || {
+                    LoopbackRouterRuntime::start(fixture_config, fixture_secrets)
+                })
+            })
+            .await,
+        )
+    });
     let runtime_address = runtime.local_addr();
     assert_eq!(runtime_address.port(), router_port);
     let router_thread = thread::spawn(move || {
@@ -84,11 +96,14 @@ fn served_router_http_uses_persisted_quota_while_background_refresh_is_blocked()
         }
     });
 
-    let resolver = must_ok(CliCredentialResolver::open_with_refresh_client(
-        &state_path,
-        &secret_root,
-        NoopCredentialRefreshClient,
-    ));
+    let resolver = must_ok(
+        crate::credential_runtime::AsyncCliCredentialResolver::open_with_refresh_client(
+            &state_path,
+            &secret_root,
+            NoopCredentialRefreshClient,
+        )
+        .await,
+    );
     let (refresh_started_sender, refresh_started_receiver) = mpsc::channel();
     let (release_refresh_sender, release_refresh_receiver) = mpsc::channel();
     let provider =
@@ -101,61 +116,67 @@ fn served_router_http_uses_persisted_quota_while_background_refresh_is_blocked()
         provider,
         Duration::from_secs(0),
     );
-    if let Err(error) = refresh_started_receiver.recv_timeout(Duration::from_secs(2)) {
-        panic!("background refresh should start and block in provider: {error}");
-    }
+    must_ok(
+        tokio::task::spawn_blocking(move || {
+            if let Err(error) = refresh_started_receiver.recv_timeout(Duration::from_secs(2)) {
+                panic!("background refresh should start and block in provider: {error}");
+            }
 
-    let http_response = send_loopback_request_with_retry(
-        router_port,
-        local_token.token().expose_secret(),
-        br#"{"model":"gpt-5","served_http":true}"#,
-    );
-    if let Err(error) = release_refresh_sender.send(()) {
-        panic!("test should release blocked quota refresh: {error}");
-    }
-    drop(worker);
-    let (kind, http_request) = match upstream_receiver.recv_timeout(Duration::from_secs(2)) {
-        Ok(recorded) => recorded,
-        Err(error) => panic!("HTTP upstream request should be recorded: {error}"),
-    };
+            let http_response = send_loopback_request_with_retry(
+                router_port,
+                local_token.token().expose_secret(),
+                br#"{"model":"gpt-5","served_http":true}"#,
+            );
+            if let Err(error) = release_refresh_sender.send(()) {
+                panic!("test should release blocked quota refresh: {error}");
+            }
+            drop(worker);
+            let (kind, http_request) = match upstream_receiver.recv_timeout(Duration::from_secs(2))
+            {
+                Ok(recorded) => recorded,
+                Err(error) => panic!("HTTP upstream request should be recorded: {error}"),
+            };
 
-    assert!(
-        http_response.starts_with("HTTP/1.1 200 OK\r\n"),
-        "unexpected HTTP response: {http_response:?}"
-    );
-    assert!(http_response.ends_with("\r\ndata: ok\n\n"));
-    assert_eq!(kind, "http");
-    assert!(
-        http_request.starts_with("POST /v1/responses HTTP/1.1\r\n"),
-        "unexpected HTTP upstream request: {http_request:?}"
-    );
-    assert!(
-        http_request.contains("authorization: Bearer served-upstream-token\r\n"),
-        "unexpected HTTP upstream request: {http_request:?}"
-    );
-    assert!(!http_request.contains("current-token"));
+            assert!(
+                http_response.starts_with("HTTP/1.1 200 OK\r\n"),
+                "unexpected HTTP response: {http_response:?}"
+            );
+            assert!(http_response.ends_with("\r\ndata: ok\n\n"));
+            assert_eq!(kind, "http");
+            assert!(
+                http_request.starts_with("POST /v1/responses HTTP/1.1\r\n"),
+                "unexpected HTTP upstream request: {http_request:?}"
+            );
+            assert!(
+                http_request.contains("authorization: Bearer served-upstream-token\r\n"),
+                "unexpected HTTP upstream request: {http_request:?}"
+            );
+            assert!(!http_request.contains("current-token"));
 
-    match router_thread.join() {
-        Ok(()) => {}
-        Err(error) => panic!("router thread panicked: {error:?}"),
-    }
-    match upstream_thread.join() {
-        Ok(()) => {}
-        Err(error) => panic!("mock upstream thread panicked: {error:?}"),
-    }
+            match router_thread.join() {
+                Ok(()) => {}
+                Err(error) => panic!("router thread panicked: {error:?}"),
+            }
+            match upstream_thread.join() {
+                Ok(()) => {}
+                Err(error) => panic!("mock upstream thread panicked: {error:?}"),
+            }
+        })
+        .await,
+    );
 }
 
-#[test]
+#[tokio::test]
 #[expect(
     clippy::result_large_err,
     reason = "The existing callback contract requires the unboxed error value."
 )]
-fn served_router_websocket_uses_persisted_quota_while_background_refresh_is_blocked() {
+async fn served_router_websocket_uses_persisted_quota_while_background_refresh_is_blocked() {
     let test_root = TestRoot::new("serve-websocket-background-refresh-blocked");
     must_ok(fs::create_dir(test_root.path()));
     let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
-    let state = must_ok(SqliteStateStore::open(&state_path));
+    let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_root),
     );
@@ -169,13 +190,13 @@ fn served_router_websocket_uses_persisted_quota_while_background_refresh_is_bloc
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(&state, &account));
+    must_ok(state.upsert_account(&account).await);
     let snapshot =
         PersistedQuotaSnapshot::new(account_id.clone(), QuotaSnapshotSource::MockEndpoint)
             .with_observed_unix_seconds(1_000)
             .with_route_band("responses", 91);
-    must_ok(QuotaSnapshotRepository::upsert_snapshot(&state, &snapshot));
-    persist_effective_selector_window(&state, &account_id, "responses", 91);
+    must_ok(state.upsert_quota_snapshot(&snapshot).await);
+    persist_effective_selector_window(&state, &account_id, "responses", 91).await;
     let upstream_token_key = must_ok(openai_account_credential_bundle_key(&account_id, 1));
     let upstream_credential_bundle = must_ok(
         AccountCredentialBundle::imported_codex_auth(
@@ -234,7 +255,19 @@ fn served_router_websocket_uses_persisted_quota_while_background_refresh_is_bloc
         local_token.clone(),
     )
     .with_quota_clock(1_030, 60);
-    let runtime = must_ok(LoopbackRouterRuntime::start(runtime_config, secrets.into()));
+    let runtime = must_ok({
+        let fixture_config = runtime_config;
+        let fixture_secrets = secrets.into();
+        let fixture_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        must_ok(
+            tokio::task::spawn_blocking(move || {
+                tracing::dispatcher::with_default(&fixture_dispatcher, || {
+                    LoopbackRouterRuntime::start(fixture_config, fixture_secrets)
+                })
+            })
+            .await,
+        )
+    });
     assert_eq!(runtime.local_addr().port(), router_port);
     let router_thread = thread::spawn(move || {
         if let Err(error) = runtime.serve_protocol_connections(1) {
@@ -242,11 +275,14 @@ fn served_router_websocket_uses_persisted_quota_while_background_refresh_is_bloc
         }
     });
 
-    let resolver = must_ok(CliCredentialResolver::open_with_refresh_client(
-        &state_path,
-        &secret_root,
-        NoopCredentialRefreshClient,
-    ));
+    let resolver = must_ok(
+        crate::credential_runtime::AsyncCliCredentialResolver::open_with_refresh_client(
+            &state_path,
+            &secret_root,
+            NoopCredentialRefreshClient,
+        )
+        .await,
+    );
     let (refresh_started_sender, refresh_started_receiver) = mpsc::channel();
     let (release_refresh_sender, release_refresh_receiver) = mpsc::channel();
     let provider =
@@ -259,51 +295,57 @@ fn served_router_websocket_uses_persisted_quota_while_background_refresh_is_bloc
         provider,
         Duration::from_secs(0),
     );
-    if let Err(error) = refresh_started_receiver.recv_timeout(Duration::from_secs(2)) {
-        panic!("background refresh should start and block in provider: {error}");
-    }
+    must_ok(
+        tokio::task::spawn_blocking(move || {
+            if let Err(error) = refresh_started_receiver.recv_timeout(Duration::from_secs(2)) {
+                panic!("background refresh should start and block in provider: {error}");
+            }
 
-    let mut client = connect_websocket_with_retry(router_port, local_token.token().expose_secret());
-    let first_frame = r#"{"type":"response.create","served_ws":true}"#;
-    if let Err(error) = client.send(Message::text(first_frame)) {
-        panic!("local WebSocket client should send first frame: {error}");
-    }
-    let websocket_response = match client.read() {
-        Ok(message) => message.to_string(),
-        Err(error) => panic!("local WebSocket client should read response: {error}"),
-    };
-    assert_eq!(websocket_response, r#"{"type":"response.completed"}"#);
+            let mut client =
+                connect_websocket_with_retry(router_port, local_token.token().expose_secret());
+            let first_frame = r#"{"type":"response.create","served_ws":true}"#;
+            if let Err(error) = client.send(Message::text(first_frame)) {
+                panic!("local WebSocket client should send first frame: {error}");
+            }
+            let websocket_response = match client.read() {
+                Ok(message) => message.to_string(),
+                Err(error) => panic!("local WebSocket client should read response: {error}"),
+            };
+            assert_eq!(websocket_response, r#"{"type":"response.completed"}"#);
 
-    if let Err(error) = release_refresh_sender.send(()) {
-        panic!("test should release blocked quota refresh: {error}");
-    }
-    drop(worker);
-    assert_eq!(
-        upstream_receiver
-            .recv_timeout(Duration::from_secs(2))
-            .unwrap_or_else(|error| {
-                panic!("WebSocket upstream auth should be recorded: {error}");
-            }),
-        (
-            "ws-auth".to_owned(),
-            "Bearer served-ws-upstream-token".to_owned()
-        )
+            if let Err(error) = release_refresh_sender.send(()) {
+                panic!("test should release blocked quota refresh: {error}");
+            }
+            drop(worker);
+            assert_eq!(
+                upstream_receiver
+                    .recv_timeout(Duration::from_secs(2))
+                    .unwrap_or_else(|error| {
+                        panic!("WebSocket upstream auth should be recorded: {error}");
+                    }),
+                (
+                    "ws-auth".to_owned(),
+                    "Bearer served-ws-upstream-token".to_owned()
+                )
+            );
+            assert_eq!(
+                upstream_receiver
+                    .recv_timeout(Duration::from_secs(2))
+                    .unwrap_or_else(|error| {
+                        panic!("WebSocket upstream first frame should be recorded: {error}");
+                    }),
+                ("ws-frame".to_owned(), first_frame.to_owned())
+            );
+
+            match router_thread.join() {
+                Ok(()) => {}
+                Err(error) => panic!("router thread panicked: {error:?}"),
+            }
+            match upstream_thread.join() {
+                Ok(()) => {}
+                Err(error) => panic!("mock upstream thread panicked: {error:?}"),
+            }
+        })
+        .await,
     );
-    assert_eq!(
-        upstream_receiver
-            .recv_timeout(Duration::from_secs(2))
-            .unwrap_or_else(|error| {
-                panic!("WebSocket upstream first frame should be recorded: {error}");
-            }),
-        ("ws-frame".to_owned(), first_frame.to_owned())
-    );
-
-    match router_thread.join() {
-        Ok(()) => {}
-        Err(error) => panic!("router thread panicked: {error:?}"),
-    }
-    match upstream_thread.join() {
-        Ok(()) => {}
-        Err(error) => panic!("mock upstream thread panicked: {error:?}"),
-    }
 }

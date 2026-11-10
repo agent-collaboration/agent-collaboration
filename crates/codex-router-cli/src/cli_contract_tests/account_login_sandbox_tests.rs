@@ -1,4 +1,4 @@
-use super::account_login_tests::openai_device_login_activates_fake_issuer_tokens_without_plaintext_files;
+use super::account_login_tests::openai_device_login_activation_journey;
 use super::account_login_tests::request_body_json;
 use super::cli_test_support::TestRoot;
 use super::cli_test_support::must_ok;
@@ -40,14 +40,14 @@ const CLAUDE_SANDBOX_LOGIN_CHILD_ENV: &str = "CODEX_ROUTER_CLAUDE_LOGIN_SANDBOX_
 const CLAUDE_SANDBOX_PROBE_PATH_ENV: &str = "CODEX_ROUTER_CLAUDE_LOGIN_SANDBOX_PROBE_PATH";
 const SANDBOX_CHILD_PROCESS_MARKER_ENV: &str = "CODEX_ROUTER_CLAUDE_LOGIN_CHILD_PROCESS_MARKER";
 
-#[test]
-fn openai_device_login_succeeds_when_native_auth_reads_are_denied() {
+#[tokio::test]
+async fn openai_device_login_succeeds_when_native_auth_reads_are_denied() {
     if run_sandbox_file_read_canary_if_requested(OPENAI_SANDBOX_PROBE_PATH_ENV) {
         return;
     }
 
     if std::env::var_os(OPENAI_SANDBOX_LOGIN_CHILD_ENV).is_some() {
-        openai_device_login_activates_fake_issuer_tokens_without_plaintext_files();
+        openai_device_login_activation_journey().await;
         return;
     }
 
@@ -61,14 +61,14 @@ fn openai_device_login_succeeds_when_native_auth_reads_are_denied() {
     );
 }
 
-#[test]
-fn claude_login_and_refresh_succeed_when_native_auth_reads_are_denied() {
+#[tokio::test]
+async fn claude_login_and_refresh_succeed_when_native_auth_reads_are_denied() {
     if run_sandbox_file_read_canary_if_requested(CLAUDE_SANDBOX_PROBE_PATH_ENV) {
         return;
     }
 
     if std::env::var_os(CLAUDE_SANDBOX_LOGIN_CHILD_ENV).is_some() {
-        claude_login_and_refresh_use_only_router_owned_credentials();
+        claude_login_and_refresh_use_only_router_owned_credentials().await;
         return;
     }
 
@@ -226,7 +226,7 @@ fn escape_predicate_string(path: &Path) -> String {
         .replace('"', "\\\"")
 }
 
-fn claude_login_and_refresh_use_only_router_owned_credentials() {
+async fn claude_login_and_refresh_use_only_router_owned_credentials() {
     let test_root = TestRoot::new("claude-login-refresh-native-auth-denial");
     must_ok(fs::create_dir_all(test_root.path()));
     let router_root = test_root.path().join("router");
@@ -239,7 +239,7 @@ fn claude_login_and_refresh_use_only_router_owned_credentials() {
         r#"{"access_token":"claude-refreshed-access-canary","refresh_token":"claude-refreshed-refresh-canary","expires_in":7200}"#.to_owned(),
     ]);
     let observed_state = Arc::new(Mutex::new(None));
-    let login_flow = StateRecordingClaudeOAuthLoginFlow {
+    let mut login_flow = StateRecordingClaudeOAuthLoginFlow {
         inner: ClaudeOAuthLoginFlow::with_test_issuer(issuer.endpoint(), "test-claude-client"),
         observed_state: observed_state.clone(),
     };
@@ -247,17 +247,35 @@ fn claude_login_and_refresh_use_only_router_owned_credentials() {
         ClaudeOAuthRefreshClient::with_test_issuer(issuer.endpoint(), "test-claude-client");
     let command = parse_claude_login(&router_root, "Claude R18");
     let mut output = Vec::new();
-    let mut reader = StateDrivenClaudeCallbackReader::new(observed_state);
+    let reader = StateDrivenClaudeCallbackReader::new(observed_state);
 
-    must_ok(
-        crate::account::run_account_command_with_input_and_claude_flow_and_secret_store(
-            &mut output,
-            &mut reader,
-            command,
-            &login_flow,
-            secret_store.clone().into(),
-        ),
-    );
+    let login_result = {
+        let login_command = command;
+        let claude_login_flow = login_flow;
+        let credential_store = secret_store.clone().into();
+        let command_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        let login_task = tokio::task::spawn_blocking(move || {
+            tracing::dispatcher::with_default(&command_dispatcher, || {
+                let mut output = output;
+                let mut reader = reader;
+                let command_result =
+                    crate::account::run_account_command_with_input_and_claude_flow_and_secret_store(
+                        &mut output,
+                        &mut reader,
+                        login_command,
+                        &claude_login_flow,
+                        credential_store,
+                    );
+                (command_result, output, reader, claude_login_flow)
+            })
+        });
+        let (command_result, command_output, _command_reader, returned_login_flow) =
+            must_ok(login_task.await);
+        output = command_output;
+        login_flow = returned_login_flow;
+        command_result
+    };
+    must_ok(login_result);
 
     let login_output = String::from_utf8(output).expect("login output should be UTF-8");
     assert!(login_output.contains("https://claude.ai/oauth/authorize"));
@@ -278,12 +296,14 @@ fn claude_login_and_refresh_use_only_router_owned_credentials() {
     );
     assert_trace_contains_only_router_secret_reads(&login_read_events, &secret_root, "login");
 
-    let runtime = super::cli_test_support::test_async_runtime();
-    let state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    )));
+    let state = must_ok(
+        (AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        )))
+        .await,
+    );
     let account_id = AccountId::new("acct_claude_r18").expect("account id should be valid");
-    let account = must_ok(runtime.block_on(state.load_account(&account_id)))
+    let account = must_ok(state.load_account(&account_id).await)
         .expect("Claude login should activate the account");
     assert_eq!(account.provider(), Provider::Claude);
     assert_eq!(account.status(), AccountStatus::Enabled);
@@ -309,7 +329,7 @@ fn claude_login_and_refresh_use_only_router_owned_credentials() {
         refresh_client,
         Some(resolver_fixed_now),
     );
-    must_ok(runtime.block_on(resolver.maintain_account_credentials(&account_id)));
+    must_ok((resolver.maintain_account_credentials(&account_id)).await);
     let refresh_read_events = read_trace.events();
     assert!(refresh_read_events.len() > login_event_count);
     let refresh_only_events = &refresh_read_events[login_event_count..];
@@ -323,7 +343,7 @@ fn claude_login_and_refresh_use_only_router_owned_credentials() {
     );
     assert_trace_contains_only_router_secret_reads(refresh_only_events, &secret_root, "refresh");
 
-    let refreshed_account = must_ok(runtime.block_on(state.load_account(&account_id)))
+    let refreshed_account = must_ok(state.load_account(&account_id).await)
         .expect("refreshed Claude account should remain active");
     assert_eq!(refreshed_account.active_credential_generation(), Some(2));
     let refreshed_key = must_ok(provider_credential_bundle_key(
@@ -375,7 +395,7 @@ fn claude_login_and_refresh_use_only_router_owned_credentials() {
     );
 
     drop(resolver);
-    must_ok(runtime.block_on(state.close()));
+    must_ok((state.close()).await);
 }
 
 fn parse_claude_login(router_root: &Path, label: &str) -> crate::account::AccountCommand {

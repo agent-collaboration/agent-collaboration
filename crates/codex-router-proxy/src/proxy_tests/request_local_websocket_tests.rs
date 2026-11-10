@@ -17,11 +17,13 @@ enum UpstreamHandshakeScenario {
     clippy::result_large_err,
     reason = "The existing error contract preserves the complete diagnostic payload."
 )]
-fn prove_websocket_recovery(scenario: UpstreamHandshakeScenario) {
-    let fixture = AuthRejectionFixture::new("request_local_websocket_recovery");
-    let original_credential_metadata = fixture.credential_metadata();
+async fn prove_websocket_recovery(scenario: UpstreamHandshakeScenario) {
+    let fixture = AuthRejectionFixture::new("request_local_websocket_recovery").await;
+    let original_credential_metadata = fixture.credential_metadata().await;
     let listener = TcpListener::bind("127.0.0.1:0").expect("provider should bind");
-    let runtime = fixture.start(listener.local_addr().expect("address should read"));
+    let runtime = fixture
+        .start(listener.local_addr().expect("address should read"))
+        .await;
     let router_address = runtime.local_addr();
     let upstream_thread = thread::spawn(move || {
         let mut authorizations = Vec::new();
@@ -149,13 +151,12 @@ fn prove_websocket_recovery(scenario: UpstreamHandshakeScenario) {
         must_ok(runtime_thread.join().expect("runtime should join")),
         1
     );
-    assert_eq!(fixture.credential_metadata(), original_credential_metadata);
-    let observation_runtime = must_ok(
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build(),
+    assert_eq!(
+        fixture.credential_metadata().await,
+        original_credential_metadata
     );
-    observation_runtime.block_on(async {
+
+    (async {
         let state = must_ok(AsyncSqliteStateStore::open(&fixture.database_path).await);
         let counts = must_ok(
             state
@@ -171,29 +172,34 @@ fn prove_websocket_recovery(scenario: UpstreamHandshakeScenario) {
             "failed and successful socket/load ownership must all release"
         );
         must_ok(state.close().await);
-    });
+    })
+    .await;
 }
 
-#[test]
-fn request_local_websocket_token_revoked_retries_original_frame_once_and_releases_load() {
-    prove_websocket_recovery(UpstreamHandshakeScenario::RejectThenAccept);
+#[tokio::test]
+async fn request_local_websocket_token_revoked_retries_original_frame_once_and_releases_load() {
+    prove_websocket_recovery(UpstreamHandshakeScenario::RejectThenAccept).await;
 }
 
-#[test]
-fn request_local_websocket_accepted_auth_error_is_forwarded_without_replay() {
-    prove_websocket_recovery(UpstreamHandshakeScenario::AcceptThenAuthError);
+#[tokio::test]
+async fn request_local_websocket_accepted_auth_error_is_forwarded_without_replay() {
+    prove_websocket_recovery(UpstreamHandshakeScenario::AcceptThenAuthError).await;
 }
 
-#[test]
+#[tokio::test]
 #[expect(
     clippy::result_large_err,
     reason = "The existing error contract preserves the complete diagnostic payload."
 )]
-fn request_local_websocket_auth_rejection_preserves_hard_previous_response_owner() {
-    let fixture = AuthRejectionFixture::new("request_local_websocket_hard_owner");
-    fixture.persist_hard_owner("resp_request_local_ws_owner");
+async fn request_local_websocket_auth_rejection_preserves_hard_previous_response_owner() {
+    let fixture = AuthRejectionFixture::new("request_local_websocket_hard_owner").await;
+    fixture
+        .persist_hard_owner("resp_request_local_ws_owner")
+        .await;
     let listener = TcpListener::bind("127.0.0.1:0").expect("provider should bind");
-    let runtime = fixture.start(listener.local_addr().expect("address should read"));
+    let runtime = fixture
+        .start(listener.local_addr().expect("address should read"))
+        .await;
     let router_address = runtime.local_addr();
     let upstream_thread = thread::spawn(move || {
         let (stream, _) = listener.accept().expect("owner should connect");
