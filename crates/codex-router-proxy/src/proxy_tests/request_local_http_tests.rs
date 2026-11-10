@@ -16,16 +16,18 @@ struct ObservedHttpRecovery {
     upstream_requests: Vec<(String, Vec<u8>)>,
 }
 
-fn run_http_recovery_scenario(
+async fn run_http_recovery_scenario(
     fixture: &AuthRejectionFixture,
     scenario: HttpRecoveryScenario,
 ) -> ObservedHttpRecovery {
-    let original_credential_metadata = fixture.credential_metadata();
+    let original_credential_metadata = fixture.credential_metadata().await;
     let listener = TcpListener::bind("127.0.0.1:0").expect("synthetic provider should bind");
     listener
         .set_nonblocking(true)
         .expect("async provider listener should be nonblocking");
-    let runtime = fixture.start(listener.local_addr().expect("provider address should read"));
+    let runtime = fixture
+        .start(listener.local_addr().expect("provider address should read"))
+        .await;
     let router_address = runtime.local_addr();
     let provider_shutdown = tokio_util::sync::CancellationToken::new();
     let provider_stop = provider_shutdown.clone();
@@ -110,12 +112,19 @@ fn run_http_recovery_scenario(
             .expect("client response should finish");
         response
     });
-    assert_eq!(must_ok(runtime.serve_http_connections(1)), 1);
+    assert_eq!(
+        must_ok(
+            tokio::task::spawn_blocking(move || runtime.serve_http_connections(1))
+                .await
+                .expect("blocking product serving should join")
+        ),
+        1
+    );
     let client_response = client_thread.join().expect("client should join");
     provider_shutdown.cancel();
     provider_thread.join().expect("provider should join");
     assert_eq!(
-        fixture.credential_metadata(),
+        fixture.credential_metadata().await,
         original_credential_metadata,
         "request-local failover must preserve generations, lifecycle and refresh claims"
     );
@@ -141,9 +150,9 @@ fn responses_scenario(
     }
 }
 
-#[test]
-fn request_local_http_token_revoked_retries_complete_body_without_persistence() {
-    let fixture = AuthRejectionFixture::new("request_local_http_complete_body");
+#[tokio::test]
+async fn request_local_http_token_revoked_retries_complete_body_without_persistence() {
+    let fixture = AuthRejectionFixture::new("request_local_http_complete_body").await;
     let original_body = format!(
         r#"{{"model":"gpt-5","input":"{}"}}"#,
         "complete-body-".repeat(3_000)
@@ -156,7 +165,8 @@ fn request_local_http_token_revoked_retries_complete_body_without_persistence() 
                 original_body.clone(),
                 vec![(401, AUTH_REJECTION), (200, b"healthy-account-success")],
             ),
-        );
+        )
+        .await;
         assert!(observed.client_response.starts_with("HTTP/1.1 200"));
         assert!(
             observed
@@ -176,22 +186,23 @@ fn request_local_http_token_revoked_retries_complete_body_without_persistence() 
             ]
         );
         assert!(
-            fixture.maintenance().is_none(),
+            fixture.maintenance().await.is_none(),
             "this independent frontier must not park credentials"
         );
     }
 }
 
-#[test]
-fn request_local_http_auth_exhaustion_uses_existing_502_without_quota_signal() {
-    let fixture = AuthRejectionFixture::new("request_local_http_auth_exhaustion");
+#[tokio::test]
+async fn request_local_http_auth_exhaustion_uses_existing_502_without_quota_signal() {
+    let fixture = AuthRejectionFixture::new("request_local_http_auth_exhaustion").await;
     let observed = run_http_recovery_scenario(
         &fixture,
         responses_scenario(
             br#"{"model":"gpt-5"}"#.to_vec(),
             vec![(401, AUTH_REJECTION), (401, AUTH_REJECTION)],
         ),
-    );
+    )
+    .await;
     assert!(
         observed.client_response.starts_with("HTTP/1.1 502"),
         "all auth attempts should use credential failure: {}",
@@ -209,15 +220,17 @@ fn request_local_http_auth_exhaustion_uses_existing_502_without_quota_signal() {
             .collect::<Vec<_>>(),
         ["Bearer primary-token", "Bearer fallback-token"]
     );
-    assert!(fixture.maintenance().is_none());
+    assert!(fixture.maintenance().await.is_none());
 }
 
-#[test]
-fn request_local_http_token_revoked_accumulates_exclusions_across_two_claims() {
-    let fixture = AuthRejectionFixture::new("request_local_http_three_accounts");
-    let primary_claim = fixture.claim_successor();
-    let fallback_claim = fixture.claim_account_successor(fixture.fallback.account_id());
-    let state = must_ok(SqliteStateStore::open(&fixture.database_path));
+#[tokio::test]
+async fn request_local_http_token_revoked_accumulates_exclusions_across_two_claims() {
+    let fixture = AuthRejectionFixture::new("request_local_http_three_accounts").await;
+    let primary_claim = fixture.claim_successor().await;
+    let fallback_claim = fixture
+        .claim_account_successor(fixture.fallback.account_id())
+        .await;
+    let state = must_ok(AsyncSqliteStateStore::open(&fixture.database_path).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(
             &fixture.secret_path,
@@ -229,7 +242,7 @@ fn request_local_http_token_revoked_accumulates_exclusions_across_two_claims() {
         "third",
         AccountStatus::Enabled,
     );
-    persist_account_with_snapshot_and_token(&state, &secrets, &healthy, 70, "third-token");
+    persist_account_with_snapshot_and_token(&state, &secrets, &healthy, 70, "third-token").await;
     let healthy_bundle = AccountCredentialBundle::imported_codex_auth("third-token", None)
         .with_expires_unix_seconds(4_000_000_000)
         .with_chatgpt_account_id("synthetic-openai-third");
@@ -240,7 +253,7 @@ fn request_local_http_token_revoked_accumulates_exclusions_across_two_claims() {
         )),
         &must_ok(healthy_bundle.to_secret_string()),
     ));
-    drop(state);
+    state.close().await.expect("fixture state should close");
     let original_body =
         br#"{"model":"gpt-5","input":"same complete three-account request"}"#.to_vec();
     let observed = run_http_recovery_scenario(
@@ -253,7 +266,8 @@ fn request_local_http_token_revoked_accumulates_exclusions_across_two_claims() {
                 (200, b"third-account-result"),
             ],
         ),
-    );
+    )
+    .await;
     assert!(observed.client_response.starts_with("HTTP/1.1 200"));
     assert!(observed.client_response.ends_with("third-account-result"));
     assert_eq!(
@@ -264,7 +278,7 @@ fn request_local_http_token_revoked_accumulates_exclusions_across_two_claims() {
             ("Bearer third-token".to_owned(), original_body),
         ]
     );
-    let metadata = fixture.credential_metadata();
+    let metadata = fixture.credential_metadata().await;
     assert!(metadata.contains(&(
         fixture.primary.with_active_credential_generation(1),
         Some(primary_claim),
@@ -275,14 +289,15 @@ fn request_local_http_token_revoked_accumulates_exclusions_across_two_claims() {
     )));
 }
 
-#[test]
-fn request_local_http_incomplete_json_auth_failure_uses_502_without_fallback() {
-    let fixture = AuthRejectionFixture::new("request_local_http_incomplete_json");
+#[tokio::test]
+async fn request_local_http_incomplete_json_auth_failure_uses_502_without_fallback() {
+    let fixture = AuthRejectionFixture::new("request_local_http_incomplete_json").await;
     let original_body = br#"{"model":"gpt-5","input": "#.to_vec();
     let observed = run_http_recovery_scenario(
         &fixture,
         responses_scenario(original_body.clone(), vec![(401, AUTH_REJECTION)]),
-    );
+    )
+    .await;
     assert!(observed.client_response.starts_with("HTTP/1.1 502"));
     assert_eq!(
         observed.upstream_requests,
@@ -290,9 +305,9 @@ fn request_local_http_incomplete_json_auth_failure_uses_502_without_fallback() {
     );
 }
 
-#[test]
-fn request_local_http_accepted_sse_auth_text_is_forwarded_without_replay() {
-    let fixture = AuthRejectionFixture::new("request_local_http_accepted_auth_text");
+#[tokio::test]
+async fn request_local_http_accepted_sse_auth_text_is_forwarded_without_replay() {
+    let fixture = AuthRejectionFixture::new("request_local_http_accepted_auth_text").await;
     let original_body = br#"{"model":"gpt-5","stream":true}"#.to_vec();
     let accepted_body = br#"event: response.created
 data: {"type":"response.created","response":{"id":"resp_accepted"}}
@@ -304,7 +319,8 @@ data: {"type":"error","status":401,"error":{"code":"token_revoked"}}
     let observed = run_http_recovery_scenario(
         &fixture,
         responses_scenario(original_body.clone(), vec![(200, accepted_body)]),
-    );
+    )
+    .await;
     assert!(observed.client_response.starts_with("HTTP/1.1 200"));
     assert!(
         observed
@@ -322,9 +338,9 @@ data: {"type":"error","status":401,"error":{"code":"token_revoked"}}
     );
 }
 
-#[test]
-fn request_local_http_unreplayable_auth_failure_uses_502_without_fallback() {
-    let fixture = AuthRejectionFixture::new("request_local_http_oversize");
+#[tokio::test]
+async fn request_local_http_unreplayable_auth_failure_uses_502_without_fallback() {
+    let fixture = AuthRejectionFixture::new("request_local_http_oversize").await;
     let original_body = format!(
         r#"{{"model":"gpt-5","input":"{}"}}"#,
         "x".repeat(2 * 1024 * 1024)
@@ -333,25 +349,27 @@ fn request_local_http_unreplayable_auth_failure_uses_502_without_fallback() {
     let observed = run_http_recovery_scenario(
         &fixture,
         responses_scenario(original_body.clone(), vec![(401, AUTH_REJECTION)]),
-    );
+    )
+    .await;
     assert!(observed.client_response.starts_with("HTTP/1.1 502"));
     assert_eq!(
         observed.upstream_requests,
         vec![("Bearer primary-token".to_owned(), original_body)]
     );
-    assert!(fixture.maintenance().is_none());
+    assert!(fixture.maintenance().await.is_none());
 }
 
-#[test]
-fn request_local_http_hard_owner_failure_never_moves_to_fallback() {
-    let fixture = AuthRejectionFixture::new("request_local_http_hard_owner");
-    fixture.persist_hard_owner("resp_request_local_owner");
+#[tokio::test]
+async fn request_local_http_hard_owner_failure_never_moves_to_fallback() {
+    let fixture = AuthRejectionFixture::new("request_local_http_hard_owner").await;
+    fixture.persist_hard_owner("resp_request_local_owner").await;
     let original_body =
         br#"{"model":"gpt-5","previous_response_id":"resp_request_local_owner"}"#.to_vec();
     let observed = run_http_recovery_scenario(
         &fixture,
         responses_scenario(original_body.clone(), vec![(401, AUTH_REJECTION)]),
-    );
+    )
+    .await;
     assert!(
         observed.client_response.starts_with("HTTP/1.1 503"),
         "existing unavailable-owner mapping should remain: {}",
@@ -363,24 +381,24 @@ fn request_local_http_hard_owner_failure_never_moves_to_fallback() {
     );
 }
 
-#[test]
-fn request_local_http_local_auth_rejection_never_reaches_provider() {
-    let fixture = AuthRejectionFixture::new("request_local_http_local_token");
+#[tokio::test]
+async fn request_local_http_local_auth_rejection_never_reaches_provider() {
+    let fixture = AuthRejectionFixture::new("request_local_http_local_token").await;
     let mut scenario = responses_scenario(br#"{"model":"gpt-5"}"#.to_vec(), Vec::new());
     scenario.local_token = "invalid-local-token";
-    let observed = run_http_recovery_scenario(&fixture, scenario);
+    let observed = run_http_recovery_scenario(&fixture, scenario).await;
     assert!(observed.client_response.starts_with("HTTP/1.1 401"));
     assert!(observed.upstream_requests.is_empty());
 }
 
-#[test]
-fn request_local_http_models_401_preserves_existing_pass_through() {
-    let fixture = AuthRejectionFixture::new("request_local_http_models_characterization");
-    let state = must_ok(SqliteStateStore::open(&fixture.database_path));
+#[tokio::test]
+async fn request_local_http_models_401_preserves_existing_pass_through() {
+    let fixture = AuthRejectionFixture::new("request_local_http_models_characterization").await;
+    let state = must_ok(AsyncSqliteStateStore::open(&fixture.database_path).await);
     for account in [&fixture.primary, &fixture.fallback] {
-        persist_account_with_selector_windows(&state, account, &["models"], 80);
+        persist_account_with_selector_windows(&state, account, &["models"], 80).await;
     }
-    drop(state);
+    state.close().await.expect("fixture state should close");
     let observed = run_http_recovery_scenario(
         &fixture,
         HttpRecoveryScenario {
@@ -389,7 +407,8 @@ fn request_local_http_models_401_preserves_existing_pass_through() {
             request_body: Vec::new(),
             upstream_replies: vec![(401, AUTH_REJECTION)],
         },
-    );
+    )
+    .await;
     assert!(
         observed.client_response.starts_with("HTTP/1.1 401"),
         "Models must not inherit Responses auth retry: {}",
@@ -401,19 +420,20 @@ fn request_local_http_models_401_preserves_existing_pass_through() {
             .ends_with(std::str::from_utf8(AUTH_REJECTION).expect("fixture body should be utf8"))
     );
     assert_eq!(observed.upstream_requests.len(), 1);
-    assert!(fixture.maintenance().is_none());
+    assert!(fixture.maintenance().await.is_none());
 }
 
-#[test]
-fn request_local_http_auth_then_quota_preserves_true_quota_observation() {
-    let fixture = AuthRejectionFixture::new("request_local_http_mixed_quota");
+#[tokio::test]
+async fn request_local_http_auth_then_quota_preserves_true_quota_observation() {
+    let fixture = AuthRejectionFixture::new("request_local_http_mixed_quota").await;
     let observed = run_http_recovery_scenario(
         &fixture,
         responses_scenario(
             br#"{"model":"gpt-5"}"#.to_vec(),
             vec![(401, AUTH_REJECTION), (429, QUOTA_REJECTION)],
         ),
-    );
+    )
+    .await;
     assert!(
         observed.client_response.starts_with("HTTP/1.1 502"),
         "auth exhaustion must not claim the whole pool has quota exhaustion: {}",
@@ -427,24 +447,25 @@ fn request_local_http_auth_then_quota_preserves_true_quota_observation() {
             .collect::<Vec<_>>(),
         ["Bearer primary-token", "Bearer fallback-token"]
     );
-    let state = must_ok(SqliteStateStore::open(&fixture.database_path));
-    wait_for_durable_quota_exhaustion(&state, &[fixture.fallback.account_id()]);
+    let state = must_ok(AsyncSqliteStateStore::open(&fixture.database_path).await);
+    wait_for_durable_quota_exhaustion(&state, &[fixture.fallback.account_id()]).await;
     assert!(
-        fixture.maintenance().is_none(),
+        fixture.maintenance().await.is_none(),
         "true quota observation must not become auth maintenance"
     );
 }
 
-#[test]
-fn request_local_http_quota_only_exhaustion_preserves_existing_signal() {
-    let fixture = AuthRejectionFixture::new("request_local_http_true_quota");
+#[tokio::test]
+async fn request_local_http_quota_only_exhaustion_preserves_existing_signal() {
+    let fixture = AuthRejectionFixture::new("request_local_http_true_quota").await;
     let observed = run_http_recovery_scenario(
         &fixture,
         responses_scenario(
             br#"{"model":"gpt-5"}"#.to_vec(),
             vec![(429, QUOTA_REJECTION), (429, QUOTA_REJECTION)],
         ),
-    );
+    )
+    .await;
     assert!(observed.client_response.starts_with("HTTP/1.1 503"));
     assert!(
         observed
@@ -453,9 +474,10 @@ fn request_local_http_quota_only_exhaustion_preserves_existing_signal() {
             && observed.client_response.contains("usage_limit_reached")
     );
     assert_eq!(observed.upstream_requests.len(), 2);
-    let state = must_ok(SqliteStateStore::open(&fixture.database_path));
+    let state = must_ok(AsyncSqliteStateStore::open(&fixture.database_path).await);
     wait_for_durable_quota_exhaustion(
         &state,
         &[fixture.primary.account_id(), fixture.fallback.account_id()],
-    );
+    )
+    .await;
 }

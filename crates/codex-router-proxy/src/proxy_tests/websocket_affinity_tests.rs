@@ -153,11 +153,11 @@ fn authenticated_websocket_router_requires_affinity_secret_before_selection() {
     assert!(resolver.take_recorded().is_empty());
 }
 
-#[test]
-fn authenticated_websocket_router_routes_previous_response_affinity_owner() {
+#[tokio::test]
+async fn authenticated_websocket_router_routes_previous_response_affinity_owner() {
     let temp_dir = ProxyTestTempDir::new("websocket-router-affinity");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = must_ok(SqliteStateStore::open(&database_path));
+    let state = must_ok(AsyncSqliteStateStore::open(&database_path).await);
     let alpha = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_alpha"),
@@ -175,35 +175,41 @@ fn authenticated_websocket_router_routes_previous_response_affinity_owner() {
         &alpha,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &beta,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     let affinity_secret = test_affinity_secret();
     if let Err(error) =
         persist_previous_response_owner(&state, "resp_beta", &affinity_secret, beta.account_id())
+            .await
     {
         panic!("affinity owner should persist: {error}");
     }
 
     let protocol_router = WebSocketProtocolRouter::new();
-    let selector = RepositoryBackedAccountSelector::new(&state);
-    let resolver = RecordingProviderCredentialResolver::new("selected-upstream-token");
+    let selector = AsyncRepositoryBackedAccountSelector::new(&state);
+    let resolver = RecordingAsyncProviderCredentialResolver::new("selected-upstream-token");
     let auth_gate = local_auth_gate();
     let router =
-        AuthenticatedWebSocketRouter::new(&auth_gate, &selector, &resolver, &protocol_router)
+        AsyncAuthenticatedWebSocketRouter::new(&auth_gate, &selector, &resolver, &protocol_router)
             .with_affinity_secret_provider(&TEST_AFFINITY_SECRET_PROVIDER);
 
-    let decision = match router.route_first_frame(
-        WebSocketHandshakeRequest::new()
-            .with_header(Header::new("X-Codex-Router-Token", "current-token")),
-        WebSocketFrame::Text(
-            br#"{"type":"response.create","previous_response_id":"resp_beta"}"#.to_vec(),
-        ),
-    ) {
+    let decision = match router
+        .route_first_frame(
+            WebSocketHandshakeRequest::new()
+                .with_header(Header::new("X-Codex-Router-Token", "current-token")),
+            WebSocketFrame::Text(
+                br#"{"type":"response.create","previous_response_id":"resp_beta"}"#.to_vec(),
+            ),
+        )
+        .await
+    {
         Ok(decision) => decision,
         Err(error) => panic!("websocket affinity owner should route: {error:?}"),
     };
@@ -216,11 +222,11 @@ fn authenticated_websocket_router_routes_previous_response_affinity_owner() {
     );
 }
 
-#[test]
-fn authenticated_websocket_router_replaced_affinity_secret_fails_continuation_closed() {
+#[tokio::test]
+async fn authenticated_websocket_router_replaced_affinity_secret_fails_continuation_closed() {
     let temp_dir = ProxyTestTempDir::new("websocket-router-replaced-affinity-secret");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = must_ok(SqliteStateStore::open(&database_path));
+    let state = must_ok(AsyncSqliteStateStore::open(&database_path).await);
     let alpha = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_alpha"),
@@ -232,35 +238,41 @@ fn authenticated_websocket_router_replaced_affinity_secret_fails_continuation_cl
         &alpha,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     let original_secret = test_affinity_secret();
     if let Err(error) = persist_previous_response_owner(
         &state,
         "resp_old_secret",
         &original_secret,
         alpha.account_id(),
-    ) {
+    )
+    .await
+    {
         panic!("affinity owner should persist with original secret: {error}");
     }
 
     let protocol_router = WebSocketProtocolRouter::new();
-    let selector = RepositoryBackedAccountSelector::new(&state);
-    let resolver = RecordingProviderCredentialResolver::new("selected-upstream-token");
+    let selector = AsyncRepositoryBackedAccountSelector::new(&state);
+    let resolver = RecordingAsyncProviderCredentialResolver::new("selected-upstream-token");
     let replacement_secret_provider =
         FixedAffinitySecretProvider::new(replacement_affinity_secret());
     let auth_gate = local_auth_gate();
     let router =
-        AuthenticatedWebSocketRouter::new(&auth_gate, &selector, &resolver, &protocol_router)
+        AsyncAuthenticatedWebSocketRouter::new(&auth_gate, &selector, &resolver, &protocol_router)
             .with_affinity_secret_provider(&replacement_secret_provider);
 
     assert_eq!(
-        router.route_first_frame(
-            WebSocketHandshakeRequest::new()
-                .with_header(Header::new("X-Codex-Router-Token", "current-token")),
-            WebSocketFrame::Text(
-                br#"{"type":"response.create","previous_response_id":"resp_old_secret"}"#.to_vec(),
-            ),
-        ),
+        router
+            .route_first_frame(
+                WebSocketHandshakeRequest::new()
+                    .with_header(Header::new("X-Codex-Router-Token", "current-token")),
+                WebSocketFrame::Text(
+                    br#"{"type":"response.create","previous_response_id":"resp_old_secret"}"#
+                        .to_vec(),
+                ),
+            )
+            .await,
         Err(WebSocketCloseReason::Selection {
             reason: QuotaAwareAccountSelectorError::AffinityOwnerMissing
         })
@@ -268,12 +280,10 @@ fn authenticated_websocket_router_replaced_affinity_secret_fails_continuation_cl
     assert!(resolver.take_recorded().is_empty());
 }
 
-#[test]
-fn authenticated_websocket_router_refreshes_expired_access_token_before_upstream_open() {
+#[tokio::test]
+async fn authenticated_websocket_router_refreshes_expired_access_token_before_upstream_open() {
     let temp_dir = ProxyTestTempDir::new("websocket-router-refresh");
-    let state = must_ok(SqliteStateStore::open(
-        &temp_dir.path().join("state.sqlite"),
-    ));
+    let state = must_ok(AsyncSqliteStateStore::open(&temp_dir.path().join("state.sqlite")).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(
             temp_dir.path().join("secrets"),
@@ -287,7 +297,7 @@ fn authenticated_websocket_router_refreshes_expired_access_token_before_upstream
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(&state, &account));
+    must_ok(state.upsert_account(&account).await);
     let expired_key = must_ok(openai_account_credential_bundle_key(&account_id, 1));
     must_ok(
         secrets.write_secret(
@@ -311,21 +321,29 @@ fn authenticated_websocket_router_refreshes_expired_access_token_before_upstream
         )
         .with_expires_unix_seconds(2_000),
     );
-    let resolver = RouterCredentialResolver::new(&state, &secrets, refresh_client.clone(), 1_000);
+    let resolver = codex_router_auth::resolver::AsyncRouterCredentialResolver::new(
+        state.clone(),
+        secrets.clone(),
+        refresh_client.clone(),
+        Some(1_000),
+    );
     let protocol_router = WebSocketProtocolRouter::new();
-    let selector = RecordingSelector::new();
+    let selector = RecordingAsyncSelector::default();
     let auth_gate = local_auth_gate();
     let router =
-        AuthenticatedWebSocketRouter::new(&auth_gate, &selector, &resolver, &protocol_router)
+        AsyncAuthenticatedWebSocketRouter::new(&auth_gate, &selector, &resolver, &protocol_router)
             .with_affinity_secret_provider(&TEST_AFFINITY_SECRET_PROVIDER);
     let frame = WebSocketFrame::Text(br#"{"type":"response.create"}"#.to_vec());
 
-    let decision = match router.route_first_frame(
-        WebSocketHandshakeRequest::new()
-            .with_header(Header::new("X-Codex-Router-Token", "current-token"))
-            .with_header(Header::new("Authorization", "Bearer current-token")),
-        frame,
-    ) {
+    let decision = match router
+        .route_first_frame(
+            WebSocketHandshakeRequest::new()
+                .with_header(Header::new("X-Codex-Router-Token", "current-token"))
+                .with_header(Header::new("Authorization", "Bearer current-token")),
+            frame,
+        )
+        .await
+    {
         Ok(decision) => decision,
         Err(error) => panic!("expired websocket credential should refresh: {error:?}"),
     };
@@ -336,17 +354,17 @@ fn authenticated_websocket_router_refreshes_expired_access_token_before_upstream
         vec!["Bearer refreshed-websocket-access-token"]
     );
     assert_eq!(refresh_client.calls(), 1);
-    let loaded_account = must_ok(AccountStateRepository::load_account(&state, &account_id))
+    let loaded_account = must_ok(state.load_account(&account_id).await)
         .unwrap_or_else(|| panic!("account should remain registered"));
     assert_eq!(loaded_account.active_credential_generation(), Some(2));
 }
 
-#[test]
-fn proxy_credential_resolver_refreshes_expired_bundle_through_runtime_wrapper() {
+#[tokio::test]
+async fn proxy_credential_resolver_refreshes_expired_bundle_through_runtime_wrapper() {
     let temp_dir = ProxyTestTempDir::new("proxy-runtime-resolver-refresh");
     let state_database_path = temp_dir.path().join("state.sqlite");
     let secret_store_root = temp_dir.path().join("secrets");
-    let state = must_ok(SqliteStateStore::open(&state_database_path));
+    let state = must_ok(AsyncSqliteStateStore::open(&state_database_path).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(
             &secret_store_root,
@@ -360,7 +378,7 @@ fn proxy_credential_resolver_refreshes_expired_bundle_through_runtime_wrapper() 
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(&state, &account));
+    must_ok(state.upsert_account(&account).await);
     let expired_key = must_ok(openai_account_credential_bundle_key(&account_id, 1));
     must_ok(
         secrets.write_secret(
@@ -384,35 +402,38 @@ fn proxy_credential_resolver_refreshes_expired_bundle_through_runtime_wrapper() 
         )
         .with_expires_unix_seconds(2_000),
     );
-    let resolver = must_ok(ProxyCredentialResolver::open_with_refresh_client(
-        &state_database_path,
-        &secret_store_root,
-        1_000,
-        refresh_client.clone(),
-    ));
+    let resolver = must_ok(
+        crate::credential_runtime::ProxyRuntimeCredentialResources::open(
+            secrets.clone().into(),
+            Some(1_000),
+        ),
+    )
+    .credential_factory()
+    .resolver_for_state_with_refresh_client(state.clone(), refresh_client.clone());
 
-    let resolved =
-        must_ok(resolver.resolve_provider_credentials(
-            &account_id,
-            codex_router_core::provider::Provider::Openai,
-        ));
+    let resolved = must_ok(
+        resolver
+            .resolve_provider_credentials(
+                &account_id,
+                codex_router_core::provider::Provider::Openai,
+            )
+            .await,
+    );
 
     assert_eq!(
         resolved.access_token().expose_secret(),
         "refreshed-proxy-runtime-access-token"
     );
     assert_eq!(refresh_client.calls(), 1);
-    let loaded_account = must_ok(AccountStateRepository::load_account(&state, &account_id))
+    let loaded_account = must_ok(state.load_account(&account_id).await)
         .unwrap_or_else(|| panic!("account should remain registered"));
     assert_eq!(loaded_account.active_credential_generation(), Some(2));
 }
 
-#[test]
-fn authenticated_websocket_router_missing_refresh_token_fails_closed_before_upstream_open() {
+#[tokio::test]
+async fn authenticated_websocket_router_missing_refresh_token_fails_closed_before_upstream_open() {
     let temp_dir = ProxyTestTempDir::new("websocket-router-missing-refresh");
-    let state = must_ok(SqliteStateStore::open(
-        &temp_dir.path().join("state.sqlite"),
-    ));
+    let state = must_ok(AsyncSqliteStateStore::open(&temp_dir.path().join("state.sqlite")).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(
             temp_dir.path().join("secrets"),
@@ -426,7 +447,7 @@ fn authenticated_websocket_router_missing_refresh_token_fails_closed_before_upst
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(&state, &account));
+    must_ok(state.upsert_account(&account).await);
     let expired_key = must_ok(openai_account_credential_bundle_key(&account_id, 1));
     must_ok(
         secrets.write_secret(
@@ -438,21 +459,27 @@ fn authenticated_websocket_router_missing_refresh_token_fails_closed_before_upst
             ),
         ),
     );
-    let resolver =
-        RouterCredentialResolver::new(&state, &secrets, NoopCredentialRefreshClient, 1_000);
+    let resolver = codex_router_auth::resolver::AsyncRouterCredentialResolver::new(
+        state.clone(),
+        secrets.clone(),
+        NoopCredentialRefreshClient,
+        Some(1_000),
+    );
     let protocol_router = WebSocketProtocolRouter::new();
-    let selector = RecordingSelector::new();
+    let selector = RecordingAsyncSelector::default();
     let auth_gate = local_auth_gate();
     let router =
-        AuthenticatedWebSocketRouter::new(&auth_gate, &selector, &resolver, &protocol_router)
+        AsyncAuthenticatedWebSocketRouter::new(&auth_gate, &selector, &resolver, &protocol_router)
             .with_affinity_secret_provider(&TEST_AFFINITY_SECRET_PROVIDER);
 
     assert_eq!(
-        router.route_first_frame(
-            WebSocketHandshakeRequest::new()
-                .with_header(Header::new("X-Codex-Router-Token", "current-token")),
-            WebSocketFrame::Text(br#"{"type":"response.create"}"#.to_vec()),
-        ),
+        router
+            .route_first_frame(
+                WebSocketHandshakeRequest::new()
+                    .with_header(Header::new("X-Codex-Router-Token", "current-token")),
+                WebSocketFrame::Text(br#"{"type":"response.create"}"#.to_vec()),
+            )
+            .await,
         Err(WebSocketCloseReason::ProviderCredential)
     );
     assert_eq!(

@@ -85,16 +85,16 @@ fn legacy_single_lane_accept_loop_reproducer_blocks_second_client_until_first_fi
     }
 }
 
-#[test]
+#[tokio::test]
 #[expect(
     clippy::result_large_err,
     reason = "The existing error contract preserves the complete diagnostic payload."
 )]
-fn loopback_router_runtime_accepts_second_websocket_while_first_is_blocked() {
+async fn loopback_router_runtime_accepts_second_websocket_while_first_is_blocked() {
     let temp_dir = ProxyTestTempDir::new("runtime_websocket_concurrent_websockets");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -116,7 +116,8 @@ fn loopback_router_runtime_accepts_second_websocket_while_first_is_blocked() {
         &account,
         90,
         "paired-websocket-upstream-token",
-    );
+    )
+    .await;
 
     let upstream_listener = match TcpListener::bind("127.0.0.1:0") {
         Ok(listener) => listener,
@@ -215,7 +216,17 @@ fn loopback_router_runtime_accepts_second_websocket_while_first_is_blocked() {
         secret_path,
     )
     .with_quota_clock(1_030, 60);
-    let runtime = match LoopbackRouterRuntime::start_for_test(config) {
+    let runtime = match tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test(config)
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    {
         Ok(runtime) => runtime,
         Err(error) => panic!("router runtime should start: {error}"),
     };

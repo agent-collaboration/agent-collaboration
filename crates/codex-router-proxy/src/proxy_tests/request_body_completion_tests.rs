@@ -34,14 +34,16 @@ struct ObservedProviderRequest {
     trailer: Option<String>,
 }
 
-fn prove_request_body_completion(framing: RequestFraming, outcome: ProviderOutcome) {
-    let fixture = AuthRejectionFixture::new("request_body_completion");
-    let metadata_before = fixture.credential_metadata();
+async fn prove_request_body_completion(framing: RequestFraming, outcome: ProviderOutcome) {
+    let fixture = AuthRejectionFixture::new("request_body_completion").await;
+    let metadata_before = fixture.credential_metadata().await;
     let listener = TcpListener::bind("127.0.0.1:0").expect("provider should bind");
     listener
         .set_nonblocking(true)
         .expect("provider should be async");
-    let runtime = fixture.start(listener.local_addr().expect("provider address should read"));
+    let runtime = fixture
+        .start(listener.local_addr().expect("provider address should read"))
+        .await;
     let router_address = runtime.local_addr();
     let records = Arc::new(Mutex::new(Vec::new()));
     let provider_records = Arc::clone(&records);
@@ -236,7 +238,7 @@ fn prove_request_body_completion(framing: RequestFraming, outcome: ProviderOutco
     );
     provider_shutdown.cancel();
     provider_thread.join().expect("provider should join");
-    assert_eq!(fixture.credential_metadata(), metadata_before);
+    assert_eq!(fixture.credential_metadata().await, metadata_before);
     let records = records.lock().expect("provider records should lock");
     assert!(
         !dispatched_before_eof,
@@ -292,34 +294,38 @@ fn prove_request_body_completion(framing: RequestFraming, outcome: ProviderOutco
     }
 }
 
-#[test]
-fn request_body_completion_content_length_auth_retry_preserves_exact_bytes() {
+#[tokio::test]
+async fn request_body_completion_content_length_auth_retry_preserves_exact_bytes() {
     prove_request_body_completion(
         RequestFraming::ContentLength,
         ProviderOutcome::AuthRejectThenSuccess,
-    );
+    )
+    .await;
 }
 
-#[test]
-fn request_body_completion_chunked_auth_retry_preserves_exact_bytes() {
+#[tokio::test]
+async fn request_body_completion_chunked_auth_retry_preserves_exact_bytes() {
     prove_request_body_completion(
         RequestFraming::Chunked,
         ProviderOutcome::AuthRejectThenSuccess,
-    );
+    )
+    .await;
 }
 
-#[test]
-fn request_body_completion_complete_data_disables_auth_replay_when_trailers_are_present() {
+#[tokio::test]
+async fn request_body_completion_complete_data_disables_auth_replay_when_trailers_are_present() {
     prove_request_body_completion(
         RequestFraming::ChunkedWithTrailers,
         ProviderOutcome::AuthRejectThenSuccess,
-    );
+    )
+    .await;
 }
 
-#[test]
-fn request_local_http_unknown_effect_disconnect_does_not_replay_complete_body() {
+#[tokio::test]
+async fn request_local_http_unknown_effect_disconnect_does_not_replay_complete_body() {
     prove_request_body_completion(
         RequestFraming::Chunked,
         ProviderOutcome::DisconnectAfterBody,
-    );
+    )
+    .await;
 }

@@ -42,19 +42,7 @@ use codex_router_selection::reservation::ReservationBook;
 use codex_router_selection::reservation::ReservationHandle;
 use codex_router_selection::selection_outcome::SelectionOutcome;
 use codex_router_selection::weighted_deficit::WeightedDeficitSelector;
-#[cfg(test)]
-use codex_router_state::account::AccountStatus;
 use codex_router_state::affinity_owner::PreviousResponseAffinityOwnerLookup;
-#[cfg(test)]
-use codex_router_state::quota_snapshot::PersistedSelectorQuotaWindow;
-#[cfg(test)]
-use codex_router_state::quota_snapshot::SelectorQuotaInput;
-#[cfg(test)]
-use codex_router_state::quota_snapshot::SelectorQuotaWindowStatus;
-#[cfg(test)]
-use codex_router_state::repositories::AffinityRepository;
-#[cfg(test)]
-use codex_router_state::repositories::SelectorQuotaRepository;
 use codex_router_state::selection_projection::AsyncSelectionProjectionRepository;
 use codex_router_state::selection_projection::project_route_band_selection_inputs_with_active_counts_read_only;
 use codex_router_state::session_account_affinity::PinObservation;
@@ -93,8 +81,6 @@ pub(crate) use account_admission::RuntimeAccountAdmissionAssessor;
 mod active_reservations;
 mod affinity_admission;
 mod assessment_selection;
-#[cfg(test)]
-mod fixture_selection;
 mod post_exhaustion;
 mod repository_selection;
 mod request_metadata;
@@ -113,8 +99,6 @@ pub(crate) use selection_diagnostics::{
 pub use active_reservations::{
     ActiveClientLeaseReporter, SqliteActiveClientLeaseReporter, release_account_reservation,
 };
-#[cfg(test)]
-pub use fixture_selection::RepositoryBackedAccountSelector;
 pub use post_exhaustion::{
     RouteBandPostExhaustionOutcomeInput, route_band_post_exhaustion_outcome,
 };

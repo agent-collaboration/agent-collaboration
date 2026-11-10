@@ -20,8 +20,7 @@ pub(super) use codex_router_secret_store::encrypted_credential_store::EncryptedC
 pub(super) use codex_router_secret_store::model::SecretKey;
 pub(super) use codex_router_secret_store::model::SecretStoreError;
 pub(super) use codex_router_state::credential_maintenance::CredentialMaintenanceState;
-pub(super) use codex_router_state::repositories::AccountStateRepository;
-pub(super) use codex_router_state::sqlite::SqliteStateStore;
+pub(super) use codex_router_state::sqlite::AsyncSqliteStateStore;
 pub(super) use tokio::io::AsyncWriteExt;
 
 pub(super) static TEMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -211,7 +210,7 @@ impl CredentialRefreshClient for HeldProxyRefreshClient {
     }
 }
 
-pub(super) fn proxy_refresh_fixture(
+pub(super) async fn proxy_refresh_fixture(
     case: &str,
     drain_limit: Duration,
 ) -> (
@@ -223,18 +222,21 @@ pub(super) fn proxy_refresh_fixture(
     let database_path = test_database_path(case);
     let secret_root = database_path.with_extension("secrets");
     let account_id = AccountId::new("proxy-shutdown-account").expect("account id");
-    let state = SqliteStateStore::open(&database_path).expect("fixture state");
-    AccountStateRepository::upsert_account(
-        &state,
-        &AccountRecord::new(
-            codex_router_core::provider::Provider::Openai,
-            account_id.clone(),
-            "shutdown",
-            AccountStatus::Enabled,
+    let state = AsyncSqliteStateStore::open(&database_path)
+        .await
+        .expect("fixture state");
+    state
+        .upsert_account(
+            &AccountRecord::new(
+                codex_router_core::provider::Provider::Openai,
+                account_id.clone(),
+                "shutdown",
+                AccountStatus::Enabled,
+            )
+            .with_active_credential_generation(1),
         )
-        .with_active_credential_generation(1),
-    )
-    .expect("fixture account");
+        .await
+        .expect("fixture account");
     let secrets =
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_root)
             .expect("fixture secrets");
@@ -249,7 +251,7 @@ pub(super) fn proxy_refresh_fixture(
     secrets
         .write_secret(&active_key, &active_bundle)
         .expect("active secret");
-    drop(state);
+    state.close().await.expect("fixture state should close");
     let config = LoopbackRouterRuntimeConfig::new_tokenless(
         LoopbackBindAddress::new("127.0.0.1", 0).expect("loopback bind"),
         UpstreamEndpoint::new("http://127.0.0.1:1/v1").expect("fixture upstream"),
@@ -257,8 +259,16 @@ pub(super) fn proxy_refresh_fixture(
         secret_root,
     )
     .with_quota_clock(1_000, 300);
-    let router = LoopbackRouterRuntime::start(config, secrets.clone().into())
-        .expect("fixture router should start")
-        .with_credential_refresh_shutdown_drain(drain_limit);
+    let startup_secrets = secrets.clone();
+    let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+    let router = tokio::task::spawn_blocking(move || {
+        tracing::dispatcher::with_default(&startup_dispatcher, || {
+            LoopbackRouterRuntime::start(config, startup_secrets.into())
+        })
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    .expect("fixture router should start")
+    .with_credential_refresh_shutdown_drain(drain_limit);
     (router, account_id, database_path, secrets)
 }

@@ -1,12 +1,16 @@
 use super::*;
 
-#[test]
-fn assembled_loopback_router_runtime_writes_redacted_private_audit_events() {
+#[tokio::test]
+async fn assembled_loopback_router_runtime_writes_redacted_private_audit_events() {
+    assembled_loopback_router_runtime_writes_redacted_private_audit_events_journey().await;
+}
+
+async fn assembled_loopback_router_runtime_writes_redacted_private_audit_events_journey() {
     let temp_dir = ProxyTestTempDir::new("assembled_runtime_audit");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
     let audit_path = temp_dir.path().join("audit").join("events.jsonl");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -28,7 +32,8 @@ fn assembled_loopback_router_runtime_writes_redacted_private_audit_events() {
         &account,
         70,
         "audit-upstream-token-canary",
-    );
+    )
+    .await;
 
     let upstream_listener = match TcpListener::bind("127.0.0.1:0") {
         Ok(listener) => listener,
@@ -72,7 +77,17 @@ fn assembled_loopback_router_runtime_writes_redacted_private_audit_events() {
     )
     .with_quota_clock(1_030, 60)
     .with_audit_file(audit_path.clone());
-    let runtime = match LoopbackRouterRuntime::start_for_test(config) {
+    let runtime = match tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test(config)
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    {
         Ok(runtime) => runtime,
         Err(error) => panic!("router runtime should start: {error}"),
     };
@@ -134,23 +149,27 @@ fn assembled_loopback_router_runtime_writes_redacted_private_audit_events() {
     }
 }
 
-#[test]
-fn assembled_loopback_router_runtime_redacts_http_and_websocket_audit_events() {
-    assembled_loopback_router_runtime_writes_redacted_private_audit_events();
-    loopback_router_runtime_dispatches_websocket_upgrade_to_tunnel();
+#[tokio::test]
+async fn assembled_loopback_router_runtime_redacts_http_and_websocket_audit_events() {
+    assembled_loopback_router_runtime_writes_redacted_private_audit_events_journey().await;
+    loopback_router_runtime_dispatches_websocket_upgrade_to_tunnel_journey().await;
 }
 
-#[test]
+#[tokio::test]
+async fn loopback_router_runtime_dispatches_websocket_upgrade_to_tunnel() {
+    loopback_router_runtime_dispatches_websocket_upgrade_to_tunnel_journey().await;
+}
+
 #[expect(
     clippy::result_large_err,
     reason = "The existing error contract preserves the complete diagnostic payload."
 )]
-fn loopback_router_runtime_dispatches_websocket_upgrade_to_tunnel() {
+async fn loopback_router_runtime_dispatches_websocket_upgrade_to_tunnel_journey() {
     let temp_dir = ProxyTestTempDir::new("runtime_websocket");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
     let audit_path = temp_dir.path().join("audit").join("events.jsonl");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -172,7 +191,8 @@ fn loopback_router_runtime_dispatches_websocket_upgrade_to_tunnel() {
         &account,
         90,
         "runtime-ws-upstream-token-canary",
-    );
+    )
+    .await;
 
     let upstream_listener = match TcpListener::bind("127.0.0.1:0") {
         Ok(listener) => listener,
@@ -248,7 +268,17 @@ fn loopback_router_runtime_dispatches_websocket_upgrade_to_tunnel() {
         LocalRouterTokenRecord::new(SecretString::new("current-token"), TokenGeneration::new(1)),
     )
     .with_audit_file(audit_path.clone());
-    let runtime = match LoopbackRouterRuntime::start_for_test(config) {
+    let runtime = match tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test(config)
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    {
         Ok(runtime) => runtime,
         Err(error) => panic!("router runtime should start: {error}"),
     };
@@ -311,7 +341,8 @@ fn loopback_router_runtime_dispatches_websocket_upgrade_to_tunnel() {
             affinity
                 .account_id()
                 .is_some_and(|account_id| account_id.as_str() == "acct_ws_runtime")
-        });
+        })
+        .await;
     let advance_deadline = std::time::Instant::now() + Duration::from_secs(2);
     while test_unix_seconds() <= initial_affinity.last_seen_unix_seconds() {
         assert!(
@@ -364,7 +395,8 @@ fn loopback_router_runtime_dispatches_websocket_upgrade_to_tunnel() {
     let renewed_affinity =
         wait_for_session_affinity(&database_path, "assembled-websocket-session", |affinity| {
             affinity.last_seen_unix_seconds() > initial_affinity.last_seen_unix_seconds()
-        });
+        })
+        .await;
     assert_eq!(
         renewed_affinity
             .account_id()

@@ -34,7 +34,7 @@ impl CompactFixture {
         }
     }
 
-    pub(super) fn add_credit_account(
+    pub(super) async fn add_credit_account(
         &self,
         account_id_value: &str,
         label: &str,
@@ -56,11 +56,12 @@ impl CompactFixture {
             self.now_unix_seconds,
             allow_credit_usage,
             availability,
-        );
+        )
+        .await;
         account
     }
 
-    pub(super) fn assert_route(
+    pub(super) async fn assert_route(
         self,
         scenario: &str,
         expected_upstream_token: Option<&str>,
@@ -81,7 +82,8 @@ impl CompactFixture {
             now_unix_seconds,
             expected_upstream_token,
             expected_selection_reason,
-        );
+        )
+        .await;
     }
 }
 
@@ -96,7 +98,7 @@ pub(super) fn compact_available_credits(
     }
 }
 
-pub(super) fn replace_selector_windows(
+pub(super) async fn replace_selector_windows(
     database_path: &Path,
     account_id: &AccountId,
     route_band: &str,
@@ -104,7 +106,9 @@ pub(super) fn replace_selector_windows(
     status: SelectorQuotaWindowStatus,
     remaining_headroom: u32,
 ) {
-    let state = SqliteStateStore::open(database_path).expect("compact selector state should open");
+    let state = AsyncSqliteStateStore::open(database_path)
+        .await
+        .expect("compact selector state should open");
     let selector_windows = [
         PersistedSelectorQuotaWindow::new(account_id.clone(), route_band, 18_000, status)
             .with_remaining_headroom(remaining_headroom)
@@ -117,41 +121,41 @@ pub(super) fn replace_selector_windows(
             .with_observed_unix_seconds(observed_unix_seconds)
             .with_reset_unix_seconds(observed_unix_seconds + 604_800),
     ];
-    SelectorQuotaRepository::record_refresh_success_and_replace_selector_windows(
-        &state,
-        account_id,
-        route_band,
-        &selector_windows,
-        observed_unix_seconds,
-        observed_unix_seconds + 300,
-    )
-    .expect("compact selector windows should persist");
+    state
+        .record_refresh_success_and_replace_selector_windows(
+            account_id,
+            route_band,
+            &selector_windows,
+            observed_unix_seconds,
+            observed_unix_seconds + 300,
+        )
+        .await
+        .expect("compact selector windows should persist");
 }
 
-pub(super) fn clear_selector_windows(
+pub(super) async fn clear_selector_windows(
     database_path: &Path,
     account_id: &AccountId,
     route_band: &str,
     observed_unix_seconds: u64,
 ) {
-    let state = SqliteStateStore::open(database_path).expect("compact selector state should open");
-    SelectorQuotaRepository::record_refresh_success_and_replace_selector_windows(
-        &state,
-        account_id,
-        route_band,
-        &[],
-        observed_unix_seconds,
-        observed_unix_seconds + 300,
-    )
-    .expect("empty canonical selector windows should persist");
+    let state = AsyncSqliteStateStore::open(database_path)
+        .await
+        .expect("compact selector state should open");
+    state
+        .record_refresh_success_and_replace_selector_windows(
+            account_id,
+            route_band,
+            &[],
+            observed_unix_seconds,
+            observed_unix_seconds + 300,
+        )
+        .await
+        .expect("empty canonical selector windows should persist");
 }
 
-pub(super) fn mark_credit_refresh_pending(database_path: &Path, account_id: &AccountId) {
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("pending-credit runtime should build");
-    runtime.block_on(async {
+pub(super) async fn mark_credit_refresh_pending(database_path: &Path, account_id: &AccountId) {
+    (async {
         let state = AsyncSqliteStateStore::open(database_path)
             .await
             .expect("pending-credit state should open");
@@ -164,19 +168,16 @@ pub(super) fn mark_credit_refresh_pending(database_path: &Path, account_id: &Acc
             .close()
             .await
             .expect("pending-credit state should close");
-    });
+    })
+    .await;
 }
 
-pub(super) fn set_provider_spend_control_reached(
+pub(super) async fn set_provider_spend_control_reached(
     database_path: &Path,
     account_id: &AccountId,
     observed_unix_seconds: u64,
 ) {
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .expect("spend-control runtime should build");
-    runtime.block_on(async {
+    (async {
         let state = AsyncSqliteStateStore::open(database_path)
             .await
             .expect("spend-control state should open");
@@ -261,10 +262,11 @@ pub(super) fn set_provider_spend_control_reached(
             .close()
             .await
             .expect("spend-control state should close");
-    });
+    })
+    .await;
 }
 
-fn assert_compact_transport_result(
+async fn assert_compact_transport_result(
     scenario: &str,
     database_path: &Path,
     secret_path: &Path,
@@ -292,24 +294,29 @@ fn assert_compact_transport_result(
     )
     .with_quota_clock(now_unix_seconds, 60);
 
-    let mut output = None;
-    let captured_logs = crate::test_log_capture::capture_log_output(|| {
-        let runtime = LoopbackRouterRuntime::start(config, secrets.into())
-            .expect("compact loopback runtime should start");
-        let router_address = runtime.local_addr();
-        let client_thread = std::thread::spawn(move || {
-            send_loopback_request(
-                router_address,
-                "POST /v1/responses/compact HTTP/1.1\r\n",
-                br#"{"model":"gpt-5","compact_credit_test":true}"#,
-            )
+    let (captured_logs, output) = tokio::task::spawn_blocking(move || {
+        let mut output = None;
+        let captured_logs = crate::test_log_capture::capture_log_output(|| {
+            let runtime = LoopbackRouterRuntime::start(config, secrets.into())
+                .expect("compact loopback runtime should start");
+            let router_address = runtime.local_addr();
+            let client_thread = std::thread::spawn(move || {
+                send_loopback_request(
+                    router_address,
+                    "POST /v1/responses/compact HTTP/1.1\r\n",
+                    br#"{"model":"gpt-5","compact_credit_test":true}"#,
+                )
+            });
+            let handled_connections = runtime
+                .serve_http_connections(1)
+                .expect("compact request should be served");
+            let response = client_thread.join().expect("compact client should finish");
+            output = Some((handled_connections, response));
         });
-        let handled_connections = runtime
-            .serve_http_connections(1)
-            .expect("compact request should be served");
-        let response = client_thread.join().expect("compact client should finish");
-        output = Some((handled_connections, response));
-    });
+        (captured_logs, output)
+    })
+    .await
+    .expect("blocking product journey should join");
     let (handled_connections, response) = output.expect("compact runtime should return output");
     assert_eq!(handled_connections, 1);
 

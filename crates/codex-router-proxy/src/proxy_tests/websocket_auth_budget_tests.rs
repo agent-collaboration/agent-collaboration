@@ -67,7 +67,7 @@ impl AsyncProviderCredentialResolver for AlternatingCredentialResolver {
     reason = "The existing error contract preserves the complete diagnostic payload."
 )]
 async fn websocket_auth_rejection_shares_one_budget_with_credential_failures() {
-    let fixture = AuthRejectionFixture::new("websocket_shared_auth_budget");
+    let fixture = AuthRejectionFixture::new("websocket_shared_auth_budget").await;
     let state = must_ok(AsyncSqliteStateStore::open(&fixture.database_path).await);
     let candidates: Vec<_> = (0..17)
         .map(|index| account_id(&format!("auth-budget-{index:02}")))

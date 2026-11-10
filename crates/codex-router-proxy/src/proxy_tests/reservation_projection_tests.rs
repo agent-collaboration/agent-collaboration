@@ -4,7 +4,7 @@ use super::*;
 async fn async_repository_backed_selector_releases_active_load_reservation() {
     let temp_dir = ProxyTestTempDir::new("async_repository_selector_active_load_release");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -25,13 +25,15 @@ async fn async_repository_backed_selector_releases_active_load_reservation() {
         &alpha,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &beta,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     let async_state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("async state store should open: {error}"),
@@ -98,7 +100,7 @@ async fn async_repository_backed_selector_releases_active_load_reservation() {
 async fn async_repository_backed_selector_counts_http_and_websocket_as_one_session_each() {
     let temp_dir = ProxyTestTempDir::new("async_repository_selector_distinct_load_weights");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -113,7 +115,8 @@ async fn async_repository_backed_selector_counts_http_and_websocket_as_one_sessi
         &account,
         "responses",
         &[(18_000, 90, true), (604_800, 90, false)],
-    );
+    )
+    .await;
     let async_state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("async state store should open: {error}"),
@@ -168,7 +171,7 @@ async fn async_repository_backed_selector_counts_http_and_websocket_as_one_sessi
 async fn async_repository_backed_selector_ignores_stale_active_load_reservations() {
     let temp_dir = ProxyTestTempDir::new("async_repository_selector_stale_active_load");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -189,13 +192,15 @@ async fn async_repository_backed_selector_ignores_stale_active_load_reservations
         &alpha,
         "responses",
         &[(18_000, 70, true), (604_800, 70, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &beta,
         "responses",
         &[(18_000, 70, true), (604_800, 70, false)],
-    );
+    )
+    .await;
     let active_reservations = RouteBandReservationBooks::default();
     {
         let mut reservations = lock_test_mutex(&active_reservations, "active reservations");
@@ -243,10 +248,10 @@ async fn async_repository_backed_selector_ignores_stale_active_load_reservations
 }
 
 #[tokio::test]
-async fn repository_backed_selector_weights_weekly_pressure_over_short_window_headroom() {
+async fn repository_backed_selector_weights_projected_weekly_burn_over_short_headroom() {
     let temp_dir = ProxyTestTempDir::new("repository_selector_weekly_pressure");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -272,8 +277,7 @@ async fn repository_backed_selector_weights_weekly_pressure_over_short_window_he
         (&weekly_healthy, [(18_000, 50, true), (604_800, 50, false)]),
     ] {
         let account_with_generation = account.clone().with_active_credential_generation(1);
-        if let Err(error) = AccountStateRepository::upsert_account(&state, &account_with_generation)
-        {
+        if let Err(error) = state.upsert_account(&account_with_generation).await {
             panic!("account should persist: {error}");
         }
         for (limit_window_seconds, remaining_headroom, effective) in windows {
@@ -287,9 +291,7 @@ async fn repository_backed_selector_weights_weekly_pressure_over_short_window_he
             .with_effective(effective)
             .with_observed_unix_seconds(now)
             .with_reset_unix_seconds(now.saturating_add(limit_window_seconds));
-            if let Err(error) =
-                SelectorQuotaRepository::upsert_selector_window(&state, &selector_window)
-            {
+            if let Err(error) = state.upsert_selector_quota_window(&selector_window).await {
                 panic!("selector quota window should persist: {error}");
             }
         }
@@ -318,16 +320,19 @@ async fn repository_backed_selector_weights_weekly_pressure_over_short_window_he
     )
     .await;
 
-    let selector = RepositoryBackedAccountSelector::new(&state);
-    let selected = match selector.select_upstream_account(
-        &HttpProxyRequest::new(Method::Post, "/v1/responses"),
-        TokenGeneration::new(1),
-        None,
-    ) {
+    let selector = AsyncRepositoryBackedAccountSelector::new(&state);
+    let selected = match selector
+        .select_upstream_account(
+            &HttpProxyRequest::new(Method::Post, "/v1/responses"),
+            TokenGeneration::new(1),
+            None,
+        )
+        .await
+    {
         Ok(selected) => selected,
         Err(error) => panic!("repository-backed selector should select account: {error}"),
     };
 
     assert_eq!(selected.account_id(), weekly_healthy.account_id());
-    assert_eq!(selected.selection_reason(), "preferred_weekly_healthier");
+    assert_eq!(selected.selection_reason(), "preferred_projected_burn");
 }

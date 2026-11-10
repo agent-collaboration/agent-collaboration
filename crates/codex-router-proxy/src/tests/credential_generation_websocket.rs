@@ -5,16 +5,18 @@ const ROUTE_BAND: &str = "responses";
 const SHORT_WINDOW_SECONDS: u64 = 18_000;
 const WEEKLY_WINDOW_SECONDS: u64 = 604_800;
 
-#[test]
+#[tokio::test]
 #[expect(
     clippy::result_large_err,
     reason = "The existing error contract preserves the complete diagnostic payload."
 )]
-fn assembled_loopback_websocket_preserves_ordinary_socket_across_credential_generation_renewal() {
+async fn assembled_loopback_websocket_preserves_ordinary_socket_across_credential_generation_renewal()
+ {
     let temp_dir = ProxyTestTempDir::new("ordinary_websocket_credential_renewal");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = SqliteStateStore::open(&database_path)
+    let state = AsyncSqliteStateStore::open(&database_path)
+        .await
         .unwrap_or_else(|error| panic!("ordinary socket state should open: {error}"));
     let secrets =
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_path)
@@ -27,21 +29,21 @@ fn assembled_loopback_websocket_preserves_ordinary_socket_across_credential_gene
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    AccountStateRepository::upsert_account(&state, &account)
+    state
+        .upsert_account(&account)
+        .await
         .unwrap_or_else(|error| panic!("ordinary socket account should persist: {error}"));
     save_generation_credential(&secrets, &account_id, 1, "generation-one-token");
-    save_included_quota_snapshot(&state, &account_id, FIXED_QUOTA_TIME);
-    persist_disallow_credit_policy(&database_path, &account_id);
+    save_included_quota_snapshot(&state, &account_id, FIXED_QUOTA_TIME).await;
+    persist_disallow_credit_policy(&database_path, &account_id).await;
 
-    let initial_input = SelectorQuotaRepository::selector_inputs_for_route_band(
-        &state,
-        ROUTE_BAND,
-        FIXED_QUOTA_TIME,
-    )
-    .unwrap_or_else(|error| panic!("initial ordinary selector input should load: {error}"))
-    .into_iter()
-    .find(|input| input.account_id() == &account_id)
-    .unwrap_or_else(|| panic!("initial ordinary account should be in selector input"));
+    let initial_input = state
+        .selector_inputs_for_route_band(ROUTE_BAND, FIXED_QUOTA_TIME)
+        .await
+        .unwrap_or_else(|error| panic!("initial ordinary selector input should load: {error}"))
+        .into_iter()
+        .find(|input| input.account_id() == &account_id)
+        .unwrap_or_else(|| panic!("initial ordinary account should be in selector input"));
     assert_eq!(initial_input.active_credential_generation(), Some(1));
     assert_eq!(
         initial_input.credit_usage_policy(),
@@ -126,8 +128,18 @@ fn assembled_loopback_websocket_preserves_ordinary_socket_across_credential_gene
         secret_path,
     )
     .with_quota_clock(FIXED_QUOTA_TIME, 300);
-    let runtime = LoopbackRouterRuntime::start(config, secrets.clone().into())
-        .unwrap_or_else(|error| panic!("assembled ordinary runtime should start: {error}"));
+    let runtime = tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        let startup_secrets = secrets.clone();
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start(config, startup_secrets.into())
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    .unwrap_or_else(|error| panic!("assembled ordinary runtime should start: {error}"));
     let router_address = runtime.local_addr();
     let runtime_thread = thread::spawn(move || runtime.serve_protocol_connections(1));
     let (client_ready_sender, client_ready_receiver) = mpsc::channel();
@@ -235,16 +247,14 @@ fn assembled_loopback_websocket_preserves_ordinary_socket_across_credential_gene
     });
     assert_forwarded_ordinary_turn(&client_turn_receiver, &upstream_receiver, 1);
 
-    activate_generation_two_with_invalidated_quota(&database_path, &secrets, &account_id);
-    let invalidated_input = SelectorQuotaRepository::selector_inputs_for_route_band(
-        &state,
-        ROUTE_BAND,
-        FIXED_QUOTA_TIME,
-    )
-    .unwrap_or_else(|error| panic!("invalidated ordinary selector input should load: {error}"))
-    .into_iter()
-    .find(|input| input.account_id() == &account_id)
-    .unwrap_or_else(|| panic!("invalidated ordinary account should be in selector input"));
+    activate_generation_two_with_invalidated_quota(&database_path, &secrets, &account_id).await;
+    let invalidated_input = state
+        .selector_inputs_for_route_band(ROUTE_BAND, FIXED_QUOTA_TIME)
+        .await
+        .unwrap_or_else(|error| panic!("invalidated ordinary selector input should load: {error}"))
+        .into_iter()
+        .find(|input| input.account_id() == &account_id)
+        .unwrap_or_else(|| panic!("invalidated ordinary account should be in selector input"));
     assert_eq!(invalidated_input.active_credential_generation(), Some(2));
     assert_eq!(
         invalidated_input.credit_usage_policy(),
@@ -265,16 +275,14 @@ fn assembled_loopback_websocket_preserves_ordinary_socket_across_credential_gene
     });
     assert_forwarded_ordinary_turn(&client_turn_receiver, &upstream_receiver, 2);
 
-    save_included_quota_snapshot(&state, &account_id, FIXED_QUOTA_TIME);
-    let refreshed_input = SelectorQuotaRepository::selector_inputs_for_route_band(
-        &state,
-        ROUTE_BAND,
-        FIXED_QUOTA_TIME,
-    )
-    .unwrap_or_else(|error| panic!("refreshed ordinary selector input should load: {error}"))
-    .into_iter()
-    .find(|input| input.account_id() == &account_id)
-    .unwrap_or_else(|| panic!("refreshed ordinary account should be in selector input"));
+    save_included_quota_snapshot(&state, &account_id, FIXED_QUOTA_TIME).await;
+    let refreshed_input = state
+        .selector_inputs_for_route_band(ROUTE_BAND, FIXED_QUOTA_TIME)
+        .await
+        .unwrap_or_else(|error| panic!("refreshed ordinary selector input should load: {error}"))
+        .into_iter()
+        .find(|input| input.account_id() == &account_id)
+        .unwrap_or_else(|| panic!("refreshed ordinary account should be in selector input"));
     assert_eq!(refreshed_input.active_credential_generation(), Some(2));
     assert_eq!(
         refreshed_input.credit_usage_policy(),
@@ -309,16 +317,12 @@ fn assembled_loopback_websocket_preserves_ordinary_socket_across_credential_gene
         .unwrap_or_else(|error| panic!("ordinary upstream thread should finish: {error:?}"));
 }
 
-fn activate_generation_two_with_invalidated_quota(
+async fn activate_generation_two_with_invalidated_quota(
     database_path: &Path,
     secrets: &EncryptedCredentialStore,
     account_id: &AccountId,
 ) {
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap_or_else(|error| panic!("credential activation runtime should build: {error}"));
-    runtime.block_on(async {
+    (async {
         let async_state = AsyncSqliteStateStore::open(database_path)
             .await
             .unwrap_or_else(|error| panic!("credential activation state should open: {error}"));
@@ -335,7 +339,8 @@ fn activate_generation_two_with_invalidated_quota(
             .close()
             .await
             .unwrap_or_else(|error| panic!("credential activation state should close: {error}"));
-    });
+    })
+    .await;
 
     save_generation_credential(secrets, account_id, 2, "generation-two-token");
 }
@@ -370,12 +375,8 @@ fn assert_forwarded_ordinary_turn(
     );
 }
 
-fn persist_disallow_credit_policy(database_path: &Path, account_id: &AccountId) {
-    let runtime = tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-        .unwrap_or_else(|error| panic!("credit policy runtime should build: {error}"));
-    runtime.block_on(async {
+async fn persist_disallow_credit_policy(database_path: &Path, account_id: &AccountId) {
+    (async {
         let async_state = AsyncSqliteStateStore::open(database_path)
             .await
             .unwrap_or_else(|error| panic!("credit policy state should open: {error}"));
@@ -390,7 +391,8 @@ fn persist_disallow_credit_policy(database_path: &Path, account_id: &AccountId) 
             .close()
             .await
             .unwrap_or_else(|error| panic!("credit policy state should close: {error}"));
-    });
+    })
+    .await;
 }
 
 fn save_generation_credential(
@@ -413,8 +415,8 @@ fn save_generation_credential(
         .unwrap_or_else(|error| panic!("account credential should persist: {error}"));
 }
 
-fn save_included_quota_snapshot(
-    state: &SqliteStateStore,
+async fn save_included_quota_snapshot(
+    state: &AsyncSqliteStateStore,
     account_id: &AccountId,
     observed_unix_seconds: u64,
 ) {
@@ -440,21 +442,24 @@ fn save_included_quota_snapshot(
         .with_observed_unix_seconds(observed_unix_seconds)
         .with_reset_unix_seconds(observed_unix_seconds + WEEKLY_WINDOW_SECONDS),
     ];
-    SelectorQuotaRepository::record_refresh_success_and_replace_selector_windows(
-        state,
-        account_id,
-        ROUTE_BAND,
-        &windows,
-        observed_unix_seconds,
-        observed_unix_seconds + 300,
-    )
-    .unwrap_or_else(|error| panic!("fresh included selector windows should persist: {error}"));
+    state
+        .record_refresh_success_and_replace_selector_windows(
+            account_id,
+            ROUTE_BAND,
+            &windows,
+            observed_unix_seconds,
+            observed_unix_seconds + 300,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("fresh included selector windows should persist: {error}"));
     let snapshot =
         PersistedQuotaSnapshot::new(account_id.clone(), QuotaSnapshotSource::MockEndpoint)
             .with_observed_unix_seconds(observed_unix_seconds)
             .with_route_band(ROUTE_BAND, 90)
             .with_reset_unix_seconds(observed_unix_seconds + SHORT_WINDOW_SECONDS)
             .with_stale_penalty(false);
-    QuotaSnapshotRepository::upsert_snapshot(state, &snapshot)
+    state
+        .upsert_quota_snapshot(&snapshot)
+        .await
         .unwrap_or_else(|error| panic!("fresh included quota snapshot should persist: {error}"));
 }

@@ -1,11 +1,11 @@
 use super::*;
 
-#[test]
-fn assembled_loopback_router_runtime_streams_sse_before_upstream_eof() {
+#[tokio::test]
+async fn assembled_loopback_router_runtime_streams_sse_before_upstream_eof() {
     let temp_dir = ProxyTestTempDir::new("assembled_runtime_streams_sse");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -27,7 +27,8 @@ fn assembled_loopback_router_runtime_streams_sse_before_upstream_eof() {
         &account,
         70,
         "runtime-streaming-token",
-    );
+    )
+    .await;
 
     let upstream_listener = match TcpListener::bind("127.0.0.1:0") {
         Ok(listener) => listener,
@@ -73,7 +74,17 @@ fn assembled_loopback_router_runtime_streams_sse_before_upstream_eof() {
         LocalRouterTokenRecord::new(SecretString::new("current-token"), TokenGeneration::new(1)),
     )
     .with_quota_clock(1_030, 60);
-    let runtime = match LoopbackRouterRuntime::start_for_test(config) {
+    let runtime = match tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test(config)
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    {
         Ok(runtime) => runtime,
         Err(error) => panic!("router runtime should start: {error}"),
     };
@@ -128,12 +139,12 @@ fn assembled_loopback_router_runtime_streams_sse_before_upstream_eof() {
     assert!(response.contains("data: first\n\n"));
 }
 
-#[test]
-fn assembled_loopback_router_runtime_routes_split_frame_previous_response_affinity() {
+#[tokio::test]
+async fn assembled_loopback_router_runtime_routes_split_frame_previous_response_affinity() {
     let temp_dir = ProxyTestTempDir::new("assembled_runtime_split_affinity");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -155,8 +166,8 @@ fn assembled_loopback_router_runtime_routes_split_frame_previous_response_affini
         "beta",
         AccountStatus::Enabled,
     );
-    persist_account_with_snapshot_and_token(&state, &secrets, &alpha, 90, "alpha-token");
-    persist_account_with_snapshot_and_token(&state, &secrets, &beta, 90, "beta-token");
+    persist_account_with_snapshot_and_token(&state, &secrets, &alpha, 90, "alpha-token").await;
+    persist_account_with_snapshot_and_token(&state, &secrets, &beta, 90, "beta-token").await;
     let affinity_secret = must_ok(load_or_create_router_affinity_hash_secret(&secrets))
         .secret()
         .clone();
@@ -165,7 +176,9 @@ fn assembled_loopback_router_runtime_routes_split_frame_previous_response_affini
         "resp_beta_split",
         &affinity_secret,
         beta.account_id(),
-    ) {
+    )
+    .await
+    {
         panic!("affinity owner should persist: {error}");
     }
 
@@ -212,7 +225,17 @@ fn assembled_loopback_router_runtime_routes_split_frame_previous_response_affini
         LocalRouterTokenRecord::new(SecretString::new("current-token"), TokenGeneration::new(1)),
     )
     .with_quota_clock(1_030, 60);
-    let runtime = match LoopbackRouterRuntime::start_for_test(config) {
+    let runtime = match tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test(config)
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    {
         Ok(runtime) => runtime,
         Err(error) => panic!("router runtime should start: {error}"),
     };

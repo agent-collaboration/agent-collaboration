@@ -1,11 +1,11 @@
 use super::*;
 
-#[test]
-fn assembled_loopback_router_runtime_retries_http_quota_errors_until_account_can_serve() {
+#[tokio::test]
+async fn assembled_loopback_router_runtime_retries_http_quota_errors_until_account_can_serve() {
     let temp_dir = ProxyTestTempDir::new("assembled_runtime_http_quota_retry_chain");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -33,9 +33,11 @@ fn assembled_loopback_router_runtime_retries_http_quota_errors_until_account_can
         "tertiary-quota-chain",
         AccountStatus::Enabled,
     );
-    persist_account_with_snapshot_and_token(&state, &secrets, &primary, 90, "primary-token");
-    persist_account_with_snapshot_and_token(&state, &secrets, &secondary, 80, "secondary-token");
-    persist_account_with_snapshot_and_token(&state, &secrets, &tertiary, 70, "tertiary-token");
+    persist_account_with_snapshot_and_token(&state, &secrets, &primary, 90, "primary-token").await;
+    persist_account_with_snapshot_and_token(&state, &secrets, &secondary, 80, "secondary-token")
+        .await;
+    persist_account_with_snapshot_and_token(&state, &secrets, &tertiary, 70, "tertiary-token")
+        .await;
 
     let upstream_listener = match TcpListener::bind("127.0.0.1:0") {
         Ok(listener) => listener,
@@ -96,7 +98,17 @@ fn assembled_loopback_router_runtime_retries_http_quota_errors_until_account_can
         LocalRouterTokenRecord::new(SecretString::new("current-token"), TokenGeneration::new(1)),
     )
     .with_quota_clock(1_030, 60);
-    let runtime = match LoopbackRouterRuntime::start_for_test(config) {
+    let runtime = match tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test(config)
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    {
         Ok(runtime) => runtime,
         Err(error) => panic!("router runtime should start: {error}"),
     };
@@ -145,12 +157,14 @@ fn assembled_loopback_router_runtime_retries_http_quota_errors_until_account_can
         Err(error) => panic!("mock upstream thread panicked: {error:?}"),
     }
 
-    wait_for_durable_quota_exhaustion(&state, &[primary.account_id(), secondary.account_id()]);
+    wait_for_durable_quota_exhaustion(&state, &[primary.account_id(), secondary.account_id()])
+        .await;
     wait_for_repository_selected_account(
         &state,
         tertiary.account_id(),
         "durable quota state should select the fallback while serving",
-    );
+    )
+    .await;
     shutdown.cancel();
     match server_thread.join() {
         Ok(Ok(handled)) => assert_eq!(handled, 1),
@@ -158,20 +172,21 @@ fn assembled_loopback_router_runtime_retries_http_quota_errors_until_account_can
         Err(error) => panic!("router server thread panicked: {error:?}"),
     }
 
-    let runtime_state = must_ok(SqliteStateStore::open(&database_path));
+    let runtime_state = must_ok(AsyncSqliteStateStore::open(&database_path).await);
     wait_for_repository_selected_account(
         &runtime_state,
         tertiary.account_id(),
         "tertiary should remain selectable after chained quota retries",
-    );
+    )
+    .await;
 }
 
-#[test]
-fn assembled_loopback_router_runtime_hides_http_quota_errors_when_all_accounts_exhausted() {
+#[tokio::test]
+async fn assembled_loopback_router_runtime_hides_http_quota_errors_when_all_accounts_exhausted() {
     let temp_dir = ProxyTestTempDir::new("assembled_runtime_http_all_quota_exhausted");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -193,8 +208,9 @@ fn assembled_loopback_router_runtime_hides_http_quota_errors_when_all_accounts_e
         "secondary-all-exhausted",
         AccountStatus::Enabled,
     );
-    persist_account_with_snapshot_and_token(&state, &secrets, &primary, 90, "primary-token");
-    persist_account_with_snapshot_and_token(&state, &secrets, &secondary, 80, "secondary-token");
+    persist_account_with_snapshot_and_token(&state, &secrets, &primary, 90, "primary-token").await;
+    persist_account_with_snapshot_and_token(&state, &secrets, &secondary, 80, "secondary-token")
+        .await;
 
     let upstream_listener = match TcpListener::bind("127.0.0.1:0") {
         Ok(listener) => listener,
@@ -249,7 +265,17 @@ fn assembled_loopback_router_runtime_hides_http_quota_errors_when_all_accounts_e
         LocalRouterTokenRecord::new(SecretString::new("current-token"), TokenGeneration::new(1)),
     )
     .with_quota_clock(1_030, 60);
-    let runtime = match LoopbackRouterRuntime::start_for_test(config) {
+    let runtime = match tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test(config)
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    {
         Ok(runtime) => runtime,
         Err(error) => panic!("router runtime should start: {error}"),
     };
@@ -262,7 +288,10 @@ fn assembled_loopback_router_runtime_hides_http_quota_errors_when_all_accounts_e
         )
     });
 
-    let handled = match runtime.serve_http_connections(1) {
+    let handled = match tokio::task::spawn_blocking(move || runtime.serve_http_connections(1))
+        .await
+        .expect("blocking product serving should join")
+    {
         Ok(handled) => handled,
         Err(error) => panic!("router runtime should serve one client connection: {error}"),
     };
@@ -301,12 +330,12 @@ fn assembled_loopback_router_runtime_hides_http_quota_errors_when_all_accounts_e
     }
 }
 
-#[test]
-fn loopback_router_runtime_balances_active_account_inside_hold_cooldown() {
+#[tokio::test]
+async fn loopback_router_runtime_balances_active_account_inside_hold_cooldown() {
     let temp_dir = ProxyTestTempDir::new("runtime_cross_connection_balance");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -328,8 +357,8 @@ fn loopback_router_runtime_balances_active_account_inside_hold_cooldown() {
         "beta",
         AccountStatus::Enabled,
     );
-    persist_account_with_snapshot_and_token(&state, &secrets, &alpha, 50, "alpha-token");
-    persist_account_with_snapshot_and_token(&state, &secrets, &beta, 50, "beta-token");
+    persist_account_with_snapshot_and_token(&state, &secrets, &alpha, 50, "alpha-token").await;
+    persist_account_with_snapshot_and_token(&state, &secrets, &beta, 50, "beta-token").await;
 
     let upstream_listener = match TcpListener::bind("127.0.0.1:0") {
         Ok(listener) => listener,
@@ -392,7 +421,17 @@ fn loopback_router_runtime_balances_active_account_inside_hold_cooldown() {
         LocalRouterTokenRecord::new(SecretString::new("current-token"), TokenGeneration::new(1)),
     )
     .with_quota_clock(1_030, 60);
-    let runtime = match LoopbackRouterRuntime::start_for_test(config) {
+    let runtime = match tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test(config)
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    {
         Ok(runtime) => runtime,
         Err(error) => panic!("router runtime should start: {error}"),
     };

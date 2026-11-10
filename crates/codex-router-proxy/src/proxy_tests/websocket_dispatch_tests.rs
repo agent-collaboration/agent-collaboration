@@ -1,15 +1,15 @@
 use super::*;
 
-#[test]
+#[tokio::test]
 #[expect(
     clippy::result_large_err,
     reason = "The existing error contract preserves the complete diagnostic payload."
 )]
-fn loopback_router_runtime_passes_large_malformed_websocket_first_frame_unchanged() {
+async fn loopback_router_runtime_passes_large_malformed_websocket_first_frame_unchanged() {
     let temp_dir = ProxyTestTempDir::new("runtime_websocket_large_first_frame");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -31,7 +31,8 @@ fn loopback_router_runtime_passes_large_malformed_websocket_first_frame_unchange
         &account,
         90,
         "runtime-ws-large-token-canary",
-    );
+    )
+    .await;
 
     let upstream_listener = match TcpListener::bind("127.0.0.1:0") {
         Ok(listener) => listener,
@@ -94,7 +95,17 @@ fn loopback_router_runtime_passes_large_malformed_websocket_first_frame_unchange
         LocalRouterTokenRecord::new(SecretString::new("current-token"), TokenGeneration::new(1)),
     )
     .with_quota_clock(1_030, 60);
-    let runtime = match LoopbackRouterRuntime::start_for_test(config) {
+    let runtime = match tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test(config)
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    {
         Ok(runtime) => runtime,
         Err(error) => panic!("router runtime should start: {error}"),
     };
@@ -133,7 +144,10 @@ fn loopback_router_runtime_passes_large_malformed_websocket_first_frame_unchange
         response
     });
 
-    let handled = match runtime.serve_protocol_connections(1) {
+    let handled = match tokio::task::spawn_blocking(move || runtime.serve_protocol_connections(1))
+        .await
+        .expect("blocking product serving should join")
+    {
         Ok(handled) => handled,
         Err(error) => panic!("router runtime should serve websocket connection: {error}"),
     };
@@ -160,16 +174,16 @@ fn loopback_router_runtime_passes_large_malformed_websocket_first_frame_unchange
     }
 }
 
-#[test]
+#[tokio::test]
 #[expect(
     clippy::result_large_err,
     reason = "The existing error contract preserves the complete diagnostic payload."
 )]
-fn loopback_router_runtime_reloads_local_auth_and_closes_old_token_websocket() {
+async fn loopback_router_runtime_reloads_local_auth_and_closes_old_token_websocket() {
     let temp_dir = ProxyTestTempDir::new("runtime_websocket_token_rotation");
     let database_path = temp_dir.path().join("state.sqlite");
     let secret_path = temp_dir.path().join("secrets");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -191,7 +205,8 @@ fn loopback_router_runtime_reloads_local_auth_and_closes_old_token_websocket() {
         &account,
         90,
         "runtime-ws-rotation-upstream-token",
-    );
+    )
+    .await;
 
     let upstream_listener = match TcpListener::bind("127.0.0.1:0") {
         Ok(listener) => listener,
@@ -242,7 +257,17 @@ fn loopback_router_runtime_reloads_local_auth_and_closes_old_token_websocket() {
         LocalRouterTokenRecord::new(SecretString::new("token-a"), TokenGeneration::new(1)),
     )
     .with_quota_clock(1_030, 60);
-    let runtime = match LoopbackRouterRuntime::start_for_test(config) {
+    let runtime = match tokio::task::spawn_blocking({
+        let startup_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        move || {
+            tracing::dispatcher::with_default(&startup_dispatcher, || {
+                LoopbackRouterRuntime::start_for_test(config)
+            })
+        }
+    })
+    .await
+    .expect("blocking runtime startup should join")
+    {
         Ok(runtime) => runtime,
         Err(error) => panic!("router runtime should start: {error}"),
     };

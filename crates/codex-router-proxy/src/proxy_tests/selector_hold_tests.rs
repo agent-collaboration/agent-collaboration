@@ -1,10 +1,10 @@
 use super::*;
 
-#[test]
-fn repository_backed_selector_reuses_held_account_inside_cooldown() {
+#[tokio::test]
+async fn repository_backed_selector_reuses_held_account_inside_cooldown() {
     let temp_dir = ProxyTestTempDir::new("repository_selector_hold_cooldown");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -25,17 +25,19 @@ fn repository_backed_selector_reuses_held_account_inside_cooldown() {
         &alpha,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &beta,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
 
     let now = Arc::new(Mutex::new(test_unix_seconds()));
     let clock_now = Arc::clone(&now);
-    let selector = RepositoryBackedAccountSelector::new_with_runtime(
+    let selector = AsyncRepositoryBackedAccountSelector::new_with_runtime(
         &state,
         RouteBandWeightedSelectors::default(),
         RouteBandAccountHolds::default(),
@@ -43,34 +45,44 @@ fn repository_backed_selector_reuses_held_account_inside_cooldown() {
         Arc::new(move || *lock_test_mutex(&clock_now, "test clock")),
     );
 
-    let first = match selector.select_upstream_account(
-        &HttpProxyRequest::new(Method::Post, "/v1/responses"),
-        TokenGeneration::new(1),
-        None,
-    ) {
+    let first = match selector
+        .select_upstream_account(
+            &HttpProxyRequest::new(Method::Post, "/v1/responses"),
+            TokenGeneration::new(1),
+            None,
+        )
+        .await
+    {
         Ok(selected) => selected,
         Err(error) => panic!("first request should select account: {error}"),
     };
-    let second = match selector.select_upstream_account(
-        &HttpProxyRequest::new(Method::Post, "/v1/responses"),
-        TokenGeneration::new(1),
-        None,
-    ) {
+    assert_eq!(first.account_id(), alpha.account_id());
+    assert_eq!(first.selection_reason(), "preferred_safest_quota");
+    assert!(first.reservation_handle().is_some());
+    // The retired fixture modeled a completed request with no active reservation.
+    drop(first);
+
+    let second = match selector
+        .select_upstream_account(
+            &HttpProxyRequest::new(Method::Post, "/v1/responses"),
+            TokenGeneration::new(1),
+            None,
+        )
+        .await
+    {
         Ok(selected) => selected,
         Err(error) => panic!("second request should reuse held account: {error}"),
     };
 
-    assert_eq!(first.account_id(), alpha.account_id());
-    assert_eq!(first.selection_reason(), "preferred_safest_quota");
     assert_eq!(second.account_id(), alpha.account_id());
     assert_eq!(second.selection_reason(), "account_hold_cooldown");
 }
 
-#[test]
-fn repository_backed_selector_keeps_preferring_healthiest_quota_account() {
+#[tokio::test]
+async fn repository_backed_selector_keeps_preferring_healthiest_quota_account() {
     let temp_dir = ProxyTestTempDir::new("repository_selector_prefers_healthiest_quota");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -97,21 +109,24 @@ fn repository_backed_selector_keeps_preferring_healthiest_quota_account() {
         &askluna,
         "responses",
         &[(18_000, 98, true), (604_800, 23, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &matches,
         "responses",
         &[(18_000, 99, true), (604_800, 34, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &ssdev,
         "responses",
         &[(18_000, 78, true), (604_800, 76, false)],
-    );
+    )
+    .await;
 
-    let selector = RepositoryBackedAccountSelector::new_with_runtime(
+    let selector = AsyncRepositoryBackedAccountSelector::new_with_runtime(
         &state,
         RouteBandWeightedSelectors::default(),
         RouteBandAccountHolds::default(),
@@ -120,11 +135,14 @@ fn repository_backed_selector_keeps_preferring_healthiest_quota_account() {
     );
 
     for request_index in 0..80 {
-        let selected = match selector.select_upstream_account(
-            &HttpProxyRequest::new(Method::Post, "/v1/responses"),
-            TokenGeneration::new(1),
-            None,
-        ) {
+        let selected = match selector
+            .select_upstream_account(
+                &HttpProxyRequest::new(Method::Post, "/v1/responses"),
+                TokenGeneration::new(1),
+                None,
+            )
+            .await
+        {
             Ok(selected) => selected,
             Err(error) => panic!("request {request_index} should select account: {error}"),
         };
@@ -141,7 +159,7 @@ fn repository_backed_selector_keeps_preferring_healthiest_quota_account() {
 async fn async_repository_backed_selector_reuses_held_account_inside_cooldown() {
     let temp_dir = ProxyTestTempDir::new("async_repository_selector_hold_cooldown");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -162,13 +180,15 @@ async fn async_repository_backed_selector_reuses_held_account_inside_cooldown() 
         &alpha,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &beta,
         "responses",
         &[(18_000, 50, true), (604_800, 50, false)],
-    );
+    )
+    .await;
     let async_state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("async state store should open: {error}"),
@@ -216,7 +236,7 @@ async fn async_repository_backed_selector_reuses_held_account_inside_cooldown() 
 async fn async_repository_backed_selector_breaks_hold_when_active_load_changes_next_choice() {
     let temp_dir = ProxyTestTempDir::new("async_repository_selector_hold_active_load_break");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -237,13 +257,15 @@ async fn async_repository_backed_selector_breaks_hold_when_active_load_changes_n
         &alpha,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &beta,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     let async_state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("async state store should open: {error}"),
@@ -285,11 +307,11 @@ async fn async_repository_backed_selector_breaks_hold_when_active_load_changes_n
     assert_ne!(second.selection_reason(), "account_hold_cooldown");
 }
 
-#[test]
-fn repository_backed_selector_keeps_strict_preferred_account_after_cooldown_expires() {
+#[tokio::test]
+async fn repository_backed_selector_keeps_strict_preferred_account_after_cooldown_expires() {
     let temp_dir = ProxyTestTempDir::new("repository_selector_hold_expired");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -310,17 +332,19 @@ fn repository_backed_selector_keeps_strict_preferred_account_after_cooldown_expi
         &alpha,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &beta,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
 
     let now = Arc::new(Mutex::new(test_unix_seconds()));
     let clock_now = Arc::clone(&now);
-    let selector = RepositoryBackedAccountSelector::new_with_runtime(
+    let selector = AsyncRepositoryBackedAccountSelector::new_with_runtime(
         &state,
         RouteBandWeightedSelectors::default(),
         RouteBandAccountHolds::default(),
@@ -328,11 +352,14 @@ fn repository_backed_selector_keeps_strict_preferred_account_after_cooldown_expi
         Arc::new(move || *lock_test_mutex(&clock_now, "test clock")),
     );
 
-    let first = match selector.select_upstream_account(
-        &HttpProxyRequest::new(Method::Post, "/v1/responses"),
-        TokenGeneration::new(1),
-        None,
-    ) {
+    let first = match selector
+        .select_upstream_account(
+            &HttpProxyRequest::new(Method::Post, "/v1/responses"),
+            TokenGeneration::new(1),
+            None,
+        )
+        .await
+    {
         Ok(selected) => selected,
         Err(error) => panic!("first request should select account: {error}"),
     };
@@ -340,25 +367,32 @@ fn repository_backed_selector_keeps_strict_preferred_account_after_cooldown_expi
         let mut now = lock_test_mutex(&now, "test clock");
         *now = now.saturating_add(121);
     }
-    let second = match selector.select_upstream_account(
-        &HttpProxyRequest::new(Method::Post, "/v1/responses"),
-        TokenGeneration::new(1),
-        None,
-    ) {
+    assert_eq!(first.account_id(), alpha.account_id());
+    assert!(first.reservation_handle().is_some());
+    // The retired fixture modeled a completed request with no active reservation.
+    drop(first);
+
+    let second = match selector
+        .select_upstream_account(
+            &HttpProxyRequest::new(Method::Post, "/v1/responses"),
+            TokenGeneration::new(1),
+            None,
+        )
+        .await
+    {
         Ok(selected) => selected,
         Err(error) => panic!("second request should keep strict preferred account: {error}"),
     };
 
-    assert_eq!(first.account_id(), alpha.account_id());
     assert_eq!(second.account_id(), alpha.account_id());
     assert_eq!(second.selection_reason(), "preferred_safest_quota");
 }
 
-#[test]
-fn repository_backed_selector_breaks_hold_when_account_needs_probe() {
+#[tokio::test]
+async fn repository_backed_selector_breaks_hold_when_account_needs_probe() {
     let temp_dir = ProxyTestTempDir::new("repository_selector_hold_probe_required");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -379,26 +413,31 @@ fn repository_backed_selector_breaks_hold_when_account_needs_probe() {
         &alpha,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
     persist_account_with_selector_window_specs(
         &state,
         &beta,
         "responses",
         &[(18_000, 100, true), (604_800, 100, false)],
-    );
+    )
+    .await;
 
-    let selector = RepositoryBackedAccountSelector::new_with_runtime(
+    let selector = AsyncRepositoryBackedAccountSelector::new_with_runtime(
         &state,
         RouteBandWeightedSelectors::default(),
         RouteBandAccountHolds::default(),
         120,
         Arc::new(test_unix_seconds),
     );
-    let first = match selector.select_upstream_account(
-        &HttpProxyRequest::new(Method::Post, "/v1/responses"),
-        TokenGeneration::new(1),
-        None,
-    ) {
+    let first = match selector
+        .select_upstream_account(
+            &HttpProxyRequest::new(Method::Post, "/v1/responses"),
+            TokenGeneration::new(1),
+            None,
+        )
+        .await
+    {
         Ok(selected) => selected,
         Err(error) => panic!("first request should select account: {error}"),
     };
@@ -410,12 +449,16 @@ fn repository_backed_selector_breaks_hold_when_account_needs_probe() {
             (18_000, 100, true, SelectorQuotaWindowStatus::Unknown),
             (604_800, 100, false, SelectorQuotaWindowStatus::Unknown),
         ],
-    );
-    let second = match selector.select_upstream_account(
-        &HttpProxyRequest::new(Method::Post, "/v1/responses"),
-        TokenGeneration::new(1),
-        None,
-    ) {
+    )
+    .await;
+    let second = match selector
+        .select_upstream_account(
+            &HttpProxyRequest::new(Method::Post, "/v1/responses"),
+            TokenGeneration::new(1),
+            None,
+        )
+        .await
+    {
         Ok(selected) => selected,
         Err(error) => panic!("second request should skip probe-required held account: {error}"),
     };
@@ -425,11 +468,11 @@ fn repository_backed_selector_breaks_hold_when_account_needs_probe() {
     assert_eq!(second.selection_reason(), "preferred_safest_quota");
 }
 
-#[test]
-fn repository_backed_selector_partitions_weighted_state_by_route_band() {
+#[tokio::test]
+async fn repository_backed_selector_partitions_weighted_state_by_route_band() {
     let temp_dir = ProxyTestTempDir::new("repository_selector_weighted_route_band");
     let database_path = temp_dir.path().join("state.sqlite");
-    let state = match SqliteStateStore::open(&database_path) {
+    let state = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(state) => state,
         Err(error) => panic!("state store should open: {error}"),
     };
@@ -445,23 +488,29 @@ fn repository_backed_selector_partitions_weighted_state_by_route_band() {
         "beta",
         AccountStatus::Enabled,
     );
-    persist_account_with_selector_windows(&state, &alpha, &["models", "responses"], 10);
-    persist_account_with_selector_windows(&state, &beta, &["models", "responses"], 10);
+    persist_account_with_selector_windows(&state, &alpha, &["models", "responses"], 10).await;
+    persist_account_with_selector_windows(&state, &beta, &["models", "responses"], 10).await;
 
-    let selector = RepositoryBackedAccountSelector::new(&state);
-    let selected_models = match selector.select_upstream_account(
-        &HttpProxyRequest::new(Method::Get, "/v1/models"),
-        TokenGeneration::new(1),
-        None,
-    ) {
+    let selector = AsyncRepositoryBackedAccountSelector::new(&state);
+    let selected_models = match selector
+        .select_upstream_account(
+            &HttpProxyRequest::new(Method::Get, "/v1/models"),
+            TokenGeneration::new(1),
+            None,
+        )
+        .await
+    {
         Ok(selected) => selected,
         Err(error) => panic!("models request should select account: {error}"),
     };
-    let selected_responses = match selector.select_upstream_account(
-        &HttpProxyRequest::new(Method::Post, "/v1/responses"),
-        TokenGeneration::new(1),
-        None,
-    ) {
+    let selected_responses = match selector
+        .select_upstream_account(
+            &HttpProxyRequest::new(Method::Post, "/v1/responses"),
+            TokenGeneration::new(1),
+            None,
+        )
+        .await
+    {
         Ok(selected) => selected,
         Err(error) => panic!("responses request should select account: {error}"),
     };
