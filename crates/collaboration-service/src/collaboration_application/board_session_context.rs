@@ -182,12 +182,15 @@ impl BoardOperations {
                         .await
                         .map_err(|_| UnavailableReason::BoardUnreachable {})?,
                 );
+                // Through the snapshot: it holds the Fleet database's one connection.
                 projects.extend(
-                    admission
-                        .fleet
-                        .pending_workspace_projects(&workspace.workspace_id, &admission.registry)
-                        .await
-                        .map_err(|_| UnavailableReason::BoardUnreachable {})?,
+                    collaboration_runtime::FleetClient::pending_workspace_projects_in(
+                        &mut snapshot,
+                        &workspace.workspace_id,
+                        &admission.registry,
+                    )
+                    .await
+                    .map_err(|_| UnavailableReason::BoardUnreachable {})?,
                 );
             }
             if !more {

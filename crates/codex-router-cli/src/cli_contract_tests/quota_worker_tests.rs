@@ -4,7 +4,7 @@ use super::*;
 fn background_quota_refresh_worker_runs_immediate_cycle_without_waiting_for_interval() {
     let test_root = TestRoot::new("background-quota-refresh-immediate");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let state = must_ok(SqliteStateStore::open(&state_path));
     let account_id = account_id("acct_background_refresh");
@@ -69,7 +69,7 @@ fn background_quota_refresh_worker_runs_immediate_cycle_without_waiting_for_inte
 fn background_quota_refresh_worker_start_does_not_wait_for_slow_provider() {
     let test_root = TestRoot::new("background-quota-refresh-slow-provider");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let state = must_ok(SqliteStateStore::open(&state_path));
     let account_id = account_id("acct_background_refresh_slow_provider");
@@ -126,7 +126,7 @@ fn background_quota_refresh_worker_start_does_not_wait_for_slow_provider() {
 fn background_quota_refresh_worker_uses_fresh_time_for_each_cycle() {
     let test_root = TestRoot::new("background-quota-refresh-fresh-time");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let state = must_ok(SqliteStateStore::open(&state_path));
     let account_id = account_id("acct_background_refresh_fresh_time");
@@ -212,7 +212,7 @@ fn background_quota_refresh_cycle_delay_subtracts_elapsed_work() {
 fn background_quota_refresh_worker_reports_refresh_failures() {
     let test_root = TestRoot::new("background-quota-refresh-diagnostics");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let state = must_ok(SqliteStateStore::open(&state_path));
     let account_id = account_id("acct_background_refresh_diagnostics");
@@ -292,7 +292,9 @@ fn cli_credential_resolver_refreshes_expired_bundle_through_runtime_wrapper() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     let account_id = account_id("acct_cli_runtime_refresh");
     let account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
@@ -330,7 +332,7 @@ fn cli_credential_resolver_refreshes_expired_bundle_through_runtime_wrapper() {
         .with_expires_unix_seconds(observed_now.saturating_add(3_600)),
     );
     let resolver = must_ok(CliCredentialResolver::open_with_refresh_client(
-        &router_root.join("state.sqlite"),
+        &codex_router_state::provider_proxy_database_path(&router_root),
         &secrets_root,
         refresh_client.clone(),
     ));

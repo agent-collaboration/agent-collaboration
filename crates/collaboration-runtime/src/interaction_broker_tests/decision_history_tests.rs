@@ -1,6 +1,17 @@
 use super::*;
 use std::path::PathBuf;
 
+/// Approval request ids the broker mints are `approval-<UUIDv7>`.
+fn assert_minted_approval_id_is_v7(request_id: &str) {
+    let minted = request_id
+        .strip_prefix("approval-")
+        .unwrap_or_else(|| panic!("approval id prefix: {request_id}"));
+    let version = uuid::Uuid::parse_str(minted)
+        .unwrap_or_else(|error| panic!("approval id {request_id}: {error}"))
+        .get_version_num();
+    assert_eq!(version, 7, "minted approval id {request_id}");
+}
+
 async fn native_approval_records(broker: &ServiceInteractionBroker) -> Vec<ApprovalRequestRecord> {
     broker
         .list_interactions()
@@ -97,6 +108,7 @@ async fn native_request_by_its_own_approver_is_recorded_and_refused() {
     assert_eq!(history[0].requester, self_approver);
     assert_eq!(history[0].approver, self_approver);
     assert_eq!(history[0].state, ApprovalState::ApproverIsRequester);
+    assert_minted_approval_id_is_v7(&history[0].request_id);
     assert_eq!(
         history[0].reason.as_deref(),
         Some("set a different approver")
@@ -188,6 +200,7 @@ async fn native_request_with_empty_option_mapping_is_recorded_as_refused() {
         history[0].reason.as_deref(),
         Some("native permission request has no supported decision option")
     );
+    assert_minted_approval_id_is_v7(&history[0].request_id);
 }
 
 #[tokio::test]
@@ -309,6 +322,7 @@ async fn native_allow_and_deny_decisions_survive_broker_restart() {
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].state, ApprovalState::PendingClientDecision);
         let request_id = pending[0].request_id.clone();
+        assert_minted_approval_id_is_v7(&request_id);
         let result = broker
             .decide(ApprovalDecideParams {
                 request_id: request_id.clone(),

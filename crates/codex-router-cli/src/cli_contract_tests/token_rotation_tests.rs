@@ -27,7 +27,7 @@ fn local_token_reload_watcher_reports_generation_changes() {
 fn serve_scopes_claude_token_rotation_and_keeps_codex_optional() {
     let test_root = TestRoot::new("serve-claude-token-scope-rotation");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let state = must_ok(SqliteStateStore::open(&state_path));
     let secrets = must_ok(
@@ -232,7 +232,7 @@ fn serve_scopes_claude_token_rotation_and_keeps_codex_optional() {
 fn serve_command_reloads_token_rotation_without_restart() {
     let test_root = TestRoot::new("serve-command-token-rotation");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let state = must_ok(SqliteStateStore::open(&state_path));
     let secrets = must_ok(

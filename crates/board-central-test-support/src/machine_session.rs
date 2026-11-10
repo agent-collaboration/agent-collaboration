@@ -78,7 +78,13 @@ pub(crate) async fn connect(
         .ok_or("board schema support is empty")?;
     let client = SessionClient::<_, _, BoardConsumerProtocol>::load(
         ReqwestSessionTransport::new(inputs.access, BOUND, BOUND)?,
-        MachineSessionStore::open(directory).await?,
+        MachineSessionStore::from_cache(std::sync::Arc::new(
+            message_board_storage::FleetStore::open(
+                &directory.join(message_board_storage::FleetStore::FILE_NAME),
+            )
+            .await?
+            .cache(),
+        )),
         &UuidV7Ids,
         SchemaSupport { max_version },
         Backoff {

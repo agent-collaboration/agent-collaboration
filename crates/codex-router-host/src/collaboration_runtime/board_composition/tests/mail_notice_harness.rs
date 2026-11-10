@@ -93,7 +93,13 @@ impl MailHarness {
         );
         let client = SessionClient::<_, _, BoardConsumerProtocol>::load(
             transport.clone(),
-            MachineSessionStore::open(&root).await?,
+            MachineSessionStore::from_cache(std::sync::Arc::new(
+                message_board_storage::FleetStore::open(
+                    &root.join(message_board_storage::FleetStore::FILE_NAME),
+                )
+                .await?
+                .cache(),
+            )),
             &UuidV7Ids,
             SchemaSupport { max_version: 1 },
             Backoff {
@@ -123,12 +129,17 @@ impl MailHarness {
             &root,
             Some(central.peer),
             Arc::new(runtime_primitives::SystemClock),
+            message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
+                .expect("32-byte fixture cursor key"),
         ));
         let projects = Arc::new(ProjectWriters::new(
             crate::collaboration_runtime::board_composition::project_writers::ProjectWriterInputs {
                 cache: Arc::new(
-                    message_board_storage::FleetCache::open(&root.join("fleet-cache.sqlite"))
-                        .await?,
+                    message_board_storage::FleetStore::open(
+                        &root.join(message_board_storage::FleetStore::FILE_NAME),
+                    )
+                    .await?
+                    .cache(),
                 ),
                 directory: &root,
                 peer: central.peer,
@@ -172,7 +183,15 @@ impl MailHarness {
             tasks.spawn(run_events(
                 receiving,
                 requests.clone(),
-                MachineNoticeReactions::open(&root).await?,
+                MachineNoticeReactions::open(
+                    message_board_storage::FleetStore::open(
+                        &root.join(message_board_storage::FleetStore::FILE_NAME),
+                    )
+                    .await
+                    .map_err(std::io::Error::other)?
+                    .cache(),
+                )
+                .await?,
                 MachineSessionEventOwners {
                     link_failures: None,
                     projects: projects.clone(),
@@ -322,7 +341,15 @@ impl MailHarness {
         self.tasks.spawn(run_events(
             receiving,
             self.requests.clone(),
-            MachineNoticeReactions::open(&self.root).await?,
+            MachineNoticeReactions::open(
+                message_board_storage::FleetStore::open(
+                    &self.root.join(message_board_storage::FleetStore::FILE_NAME),
+                )
+                .await
+                .map_err(std::io::Error::other)?
+                .cache(),
+            )
+            .await?,
             MachineSessionEventOwners {
                 link_failures: None,
                 projects: self.projects.clone(),
@@ -458,12 +485,17 @@ impl MailHarness {
         }
     }
     pub async fn ack(&self) -> Result<NoticePosition, TestError> {
-        Ok(MachineSessionStore::open(&self.root)
+        Ok(MachineSessionStore::from_cache(std::sync::Arc::new(
+            message_board_storage::FleetStore::open(
+                &self.root.join(message_board_storage::FleetStore::FILE_NAME),
+            )
             .await?
-            .load()
-            .await?
-            .ok_or("resume missing")?
-            .notice_cursor)
+            .cache(),
+        ))
+        .load()
+        .await?
+        .ok_or("resume missing")?
+        .notice_cursor)
     }
     pub async fn wait_ack(&self, position: NoticePosition) -> Result<(), TestError> {
         tokio::time::timeout(BOUND, async {

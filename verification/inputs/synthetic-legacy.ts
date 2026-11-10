@@ -5,7 +5,7 @@ import type { Declaration } from "../declaration.ts";
 import type { Receipt } from "../receipt.ts";
 import { SealedLegacyCopy } from "./sealed-legacy-copy.ts";
 
-const fixturePath = "crates/board-legacy-upgrade/tests/fixtures/role-history.sqlite";
+const fixturePath = "crates/agent-router-update/tests/fixtures/role-history.sqlite";
 
 export async function prepareSyntheticLegacy(
   declaration: Declaration,

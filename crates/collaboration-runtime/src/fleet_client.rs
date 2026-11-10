@@ -8,11 +8,11 @@ use fleet_sync_protocol::{OperationAnswer, OperationRequest};
 use fleet_sync_tokio_runner::SessionRequests;
 use message_board::{Record, RecordRef, RequestDecision, RequestId, RequestResult};
 use message_board_storage::{
-    FleetCache, FleetOutbox, FleetOutboxEntry, FleetOutboxState, FleetStorageError,
+    FleetCache, FleetOutbox, FleetOutboxEntry, FleetOutboxState, FleetStorageError, FleetStore,
     RouterLocalStorageError,
 };
 use serde::{Deserialize, Serialize};
-use std::{path::Path, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
@@ -55,6 +55,8 @@ pub enum FleetClientError {
 
 pub struct FleetClient {
     session: Option<SessionRequests<BoardConsumerProtocol>>,
+    /// Views over the Router's one Fleet database. Its owner closes it, never this
+    /// client: the link owner and the machine-session stores share the connection.
     outbox: FleetOutbox,
     cache: FleetCache,
     admission_mutex: Mutex<()>,
@@ -101,23 +103,22 @@ impl FleetClient {
         Ok(payload.decode::<fleet_admission::ArchiveReportOutcome>()?)
     }
 
-    pub async fn open(
-        directory: &Path,
+    /// Takes views over the Host's Fleet database. The store's owner closes it, after
+    /// every other user of the shared connection has stopped.
+    #[must_use]
+    pub fn new(
+        store: &FleetStore,
         registration: Arc<dyn collaboration_contracts::ProjectRegistration>,
         session: Option<SessionRequests<BoardConsumerProtocol>>,
-    ) -> Result<Self, FleetClientError> {
-        tokio::fs::create_dir_all(directory).await?;
-        let outbox = FleetOutbox::open(&directory.join("fleet-outbox.sqlite")).await?;
-        let cache = FleetCache::open(&directory.join("fleet-cache.sqlite")).await?;
-        cache.import_legacy_runtime(directory).await?;
-        Ok(Self {
+    ) -> Self {
+        Self {
             session,
-            outbox,
-            cache,
+            outbox: store.outbox(),
+            cache: store.cache(),
             admission_mutex: Mutex::new(()),
             synchronization: SynchronizationRequests::default(),
             registration,
-        })
+        }
     }
 
     /// Settle the outbox before an Accepted central answer starts registration.
@@ -491,6 +492,24 @@ impl FleetClient {
         )
         .await
     }
+    /// Pending creations for `workspace`, read through a held snapshot on its own
+    /// connection: inside a snapshot, `pending_workspace_projects` would wait for the
+    /// Fleet database's one connection, which the snapshot holds.
+    pub async fn pending_workspace_projects_in(
+        snapshot: &mut message_board_storage::FleetCacheSnapshot,
+        workspace: &message_board::WorkspaceId,
+        registry: &crate::ProjectStoreRegistry,
+    ) -> Result<Vec<message_board::ProjectId>, FleetClientError> {
+        Self::without_rejected(
+            snapshot
+                .pending_project_ids(workspace)
+                .await?
+                .into_iter()
+                .collect(),
+            registry,
+        )
+        .await
+    }
     async fn without_rejected(
         projects: std::collections::BTreeSet<message_board::ProjectId>,
         registry: &crate::ProjectStoreRegistry,
@@ -518,10 +537,6 @@ impl FleetClient {
     }
     pub async fn pending_requests(&self) -> Result<Vec<FleetOutboxEntry>, FleetClientError> {
         Ok(self.outbox.pending().await?)
-    }
-    pub async fn close(self) {
-        self.cache.close().await;
-        self.outbox.close().await;
     }
 }
 

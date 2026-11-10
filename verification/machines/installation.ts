@@ -99,16 +99,18 @@ export class Installation {
         ),
       );
     }
-    const providers = encode({
-      version: 1,
+    const settings = encode({
       providers: {
-        claude: { enabled: false, executable: null, arguments: [] },
-        cursor: { enabled: false, executable: null, arguments: [] },
+        version: 1,
+        providers: {
+          claude: { enabled: false, executable: null, arguments: [] },
+          cursor: { enabled: false, executable: null, arguments: [] },
+        },
       },
     });
     if (remote === undefined)
-      await writeFile(`${machine.root}/providers.json`, providers, { mode: 0o600, flag: "wx" });
-    else await remote.writePrivate("providers.json", providers);
+      await writeFile(`${machine.root}/settings.jsonc`, settings, { mode: 0o600, flag: "wx" });
+    else await remote.writePrivate("settings.jsonc", settings);
     return new Installation({ ...input, remote, guard });
   }
   get mcp(): RouterMcp {

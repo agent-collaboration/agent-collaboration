@@ -3,7 +3,7 @@ use board_fleet_sync::{
     BoardSessionInputs, FleetLinkObservation, FleetLinkOwner, FleetLinkPublisher, FleetLinkReader,
 };
 use message_board_storage::FleetCache;
-use std::{io, path::Path, sync::Arc};
+use std::{io, sync::Arc};
 use tokio::task::JoinSet;
 
 pub(super) struct PreparedMachineLink {
@@ -13,13 +13,9 @@ pub(super) struct PreparedMachineLink {
     pub tasks: JoinSet<io::Result<()>>,
 }
 impl PreparedMachineLink {
-    pub async fn prepare(directory: &Path, inputs: &BoardSessionInputs) -> io::Result<Self> {
-        tokio::fs::create_dir_all(directory).await?;
-        let cache = Arc::new(
-            FleetCache::open(&directory.join("fleet-cache.sqlite"))
-                .await
-                .map_err(io::Error::other)?,
-        );
+    /// Starts the link owner over a view of the Host's one Fleet database; the
+    /// database's owner closes it only after this owner's task has ended.
+    pub async fn prepare(cache: Arc<FleetCache>, inputs: &BoardSessionInputs) -> io::Result<Self> {
         let (publisher, reader, owner) =
             FleetLinkOwner::prepare(cache.clone(), inputs.peer, inputs.endpoint.as_str())
                 .await

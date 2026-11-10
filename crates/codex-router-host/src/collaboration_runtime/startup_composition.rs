@@ -95,10 +95,10 @@ impl CollaborationRuntime {
         )
         .map_err(io::Error::other)?;
         let native_digest = if let Some(export) = &inputs.native_schema {
-            export
-                .bundle()
-                .publish(&inputs.directory)
-                .map_err(io::Error::other)?;
+            super::schema_bundle_retention::publish_in_use_schema_bundle(
+                &inputs.directory,
+                export.bundle(),
+            )?;
             let encoded = format!(
                 "sha256:{}",
                 export
@@ -275,19 +275,6 @@ impl CollaborationRuntime {
             .await
             .map_err(io::Error::other)?,
         );
-        let legacy_approval_history = inputs.directory.join("approval-history.json");
-        match tokio::fs::remove_file(&legacy_approval_history).await {
-            Ok(()) => {}
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error),
-        }
-        collaboration_runtime::ServiceInteractionBroker::import_legacy_approval_routes(
-            &interaction_store,
-            &inputs.directory.join("approval-routes.json"),
-            chrono::Utc::now().timestamp_millis(),
-        )
-        .await
-        .map_err(io::Error::other)?;
         let approval_broker = collaboration_runtime::ServiceInteractionBroker::load(
             service_id.clone(),
             native_backend.clone(),
@@ -297,6 +284,8 @@ impl CollaborationRuntime {
         .map_err(io::Error::other)?;
         let unmaterialized_threads =
             std::sync::Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new());
+        let open_scratch_scopes =
+            std::sync::Arc::new(collaboration_runtime::OpenScratchScopes::new());
         let peer_registry_directory = inputs.peer_registry_directory.clone().map_or_else(
             crate::session_message_route_composition::default_peer_registry_directory,
             Ok,
@@ -614,6 +603,8 @@ impl CollaborationRuntime {
             approval_broker.clone(),
             unmaterialized_threads,
             crate::codex_conversation_recording_composition::adapter_recorder(codex_recorder),
+            std::sync::Arc::clone(&open_scratch_scopes)
+                as std::sync::Arc<dyn codex_acp_adapter::ScratchScopeRegister>,
         )?
         .with_connection_budget(permits);
         let mut provider_app_servers = Vec::new();
@@ -842,6 +833,7 @@ impl CollaborationRuntime {
             notification_publisher,
             installation_peer,
             board_session: None,
+            fleet_store: None,
             owner_human_id,
             project_admission,
             subscription_delivery,
@@ -850,6 +842,8 @@ impl CollaborationRuntime {
             external_provider_supervisor,
             provider_delivery_route,
             provider_retention: None,
+            open_scratch_scopes,
+            scratch_sweep: None,
             directory: inputs.directory,
             native_digest,
             payload_cache: crate::native_schema_cache::NativeSchemaCache::default(),
@@ -871,7 +865,11 @@ impl CollaborationRuntime {
             collaboration_api,
             tailscale_exposure: None,
         };
-        runtime.board_session = prepared_board.and_then(board_composition::BoardComposition::start);
+        if let Some(board) = prepared_board {
+            let started = board.start();
+            runtime.board_session = started.session;
+            runtime.fleet_store = Some(started.fleet_store);
+        }
         if let Some(prepared) = prepared_exposure {
             match prepared
                 .start(

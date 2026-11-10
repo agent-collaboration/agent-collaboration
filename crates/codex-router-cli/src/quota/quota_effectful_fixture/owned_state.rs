@@ -27,7 +27,10 @@ impl OwnedQuotaState {
     pub(super) async fn create(scenario: Scenario) -> FixtureResult<Self> {
         let root =
             crate::quota::quota_account_adapter::fixture_factory::OwnedQuotaFixtureRoot::create()?;
-        let store = AsyncSqliteStateStore::open(&root.path().join("state.sqlite")).await?;
+        let store = AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            root.path(),
+        ))
+        .await?;
         let now = current_unix_seconds();
         let position = scenario.captured_position();
         let mut target = None;
@@ -150,7 +153,10 @@ pub(super) struct PersistedAccountFact {
     pub credential_generation: Option<u64>,
 }
 pub(super) async fn read_accounts(root: &Path) -> FixtureResult<Vec<PersistedAccountFact>> {
-    let store = AsyncSqliteStateStore::open_read_only(&root.join("state.sqlite")).await?;
+    let store = AsyncSqliteStateStore::open_read_only(
+        &codex_router_state::provider_proxy_database_path(root),
+    )
+    .await?;
     let records = store.list_accounts().await?;
     store.close().await?;
     Ok(records
@@ -171,7 +177,7 @@ pub(super) async fn change_status(
     status: AccountStatus,
 ) -> FixtureResult<()> {
     let writer = codex_router_state::sqlite::AsyncWeeklyQuotaFloorMutationStore::open(
-        &root.join("state.sqlite"),
+        &codex_router_state::provider_proxy_database_path(root),
     )
     .await?;
     let result = writer.set_account_status_by_account_id(id, status).await;
@@ -182,7 +188,9 @@ pub(super) async fn change_status(
 
 pub(super) async fn replace_login_generation(root: &Path, id: &AccountId) -> FixtureResult<()> {
     use codex_router_state::credential_maintenance::ClaimPurpose;
-    let store = AsyncSqliteStateStore::open(&root.join("state.sqlite")).await?;
+    let store =
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(root))
+            .await?;
     if !store
         .claim_credential_refresh(
             id,
@@ -216,7 +224,10 @@ pub(super) async fn replace_login_generation(root: &Path, id: &AccountId) -> Fix
 
 pub(super) async fn read_policy_facts(root: &Path) -> FixtureResult<serde_json::Value> {
     use serde_json::json;
-    let store = AsyncSqliteStateStore::open_read_only(&root.join("state.sqlite")).await?;
+    let store = AsyncSqliteStateStore::open_read_only(
+        &codex_router_state::provider_proxy_database_path(root),
+    )
+    .await?;
     let floors = store.list_account_routing_policies().await?.into_iter().map(|policy|json!({
         "accountId":policy.account_id().as_str(),"basisPoints":policy.weekly_quota_floor_basis_points().basis_points()
     })).collect::<Vec<_>>();

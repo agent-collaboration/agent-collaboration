@@ -35,8 +35,10 @@ impl StoredFleetRecord {
         decode_fleet_record(&self.reference, &self.payload).map_err(record_decode_error)
     }
 }
+/// A read of the Fleet database held open on its one connection. Reads inside a snapshot go
+/// through it; a FleetClient read while holding one waits on that same connection.
 pub struct FleetCacheSnapshot {
-    pub(super) transaction: sqlx::Transaction<'static, sqlx_turso::Turso>,
+    pub(crate) transaction: sqlx::Transaction<'static, sqlx_turso::Turso>,
 }
 impl FleetCache {
     pub async fn read_snapshot(&self) -> Result<FleetCacheSnapshot, RouterLocalStorageError> {

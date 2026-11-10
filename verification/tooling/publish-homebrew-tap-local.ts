@@ -15,7 +15,7 @@ export const installedExecutables = [
   "codex-router",
   "agent-collaboration",
   "agent-sessions",
-  "codex-router-board-upgrade",
+  "agent-router-update",
 ];
 export class PublishError extends Error {}
 

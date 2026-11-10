@@ -100,7 +100,9 @@ pub(crate) async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let probe = std::net::TcpListener::bind(endpoint)
         .map_err(|_| "The debug port is already occupied; no existing process was touched.")?;
     let profile = luna_profile(&codex_home, options.port)?;
-    if !debug_root.join("state.sqlite").is_file() || !debug_root.join("secrets").is_dir() {
+    if !codex_router_state::provider_proxy_database_path(&debug_root).is_file()
+        || !debug_root.join("secrets").is_dir()
+    {
         return Err("Existing debug router state and credentials are required; this harness never copies production credentials.".into());
     }
     let native_directory = options.run_directory.join("native-socket");

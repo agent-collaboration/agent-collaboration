@@ -115,7 +115,7 @@ async fn received_move_then_takeover_round_trip_seeds_each_new_epoch_from_copy()
     let second_registry = second_projects.registry()?;
     let ready = session.welcomed.subscribe();
     let second_admission = second_board.admission.clone();
-    let second_running = second_board.start().ok_or("second runtime")?;
+    let second_running = second_board.start().session.ok_or("second runtime")?;
     wait_welcome(ready).await?;
     let proof = async {
         assert!(matches!(fixture.claim(&project).await?, ProjectClaimReply::Claimed { epoch, start, .. } if epoch.value() == 2 && start == prefix.position));
@@ -334,7 +334,7 @@ async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> Test
         .projects
         .clone();
     let second_admission = second_board.admission.clone();
-    let second_running = second_board.start().ok_or("second runtime")?;
+    let second_running = second_board.start().session.ok_or("second runtime")?;
     wait_welcome(second_projects.welcomed.clone()).await?;
     let proof = async {
         let installed = timeout(BOUND, database.wait_bootstrap_published()).await??;
@@ -355,7 +355,7 @@ async fn received_higher_epoch_replaces_a_held_seed_with_a_new_attempt() -> Test
         claim_joined = true;
         assert!(matches!(pending_reply??, ProjectClaimReply::Pending { attempt } if attempt == original_request.request_id));
         gate.release()?;
-        let session_store = board_fleet_sync::MachineSessionStore::open(&fixture.projects.directory).await?;
+        let session_store = board_fleet_sync::MachineSessionStore::from_cache(std::sync::Arc::new(message_board_storage::FleetStore::open(&fixture.projects.directory.join(message_board_storage::FleetStore::FILE_NAME)).await?.cache()));
         timeout(BOUND, async {
             loop {
                 if session_store.load().await?.is_some_and(|state| state.notice_cursor >= grant_position) { return Ok::<_, fleet_sync_session::StoreError>(()); }
@@ -518,7 +518,7 @@ async fn received_idle_holder_move_preserves_claimed_prefix_without_an_interveni
         .clone();
     let registry = projects.registry()?;
     let admission = board.admission.clone();
-    let running = board.start().ok_or("idle target running")?;
+    let running = board.start().session.ok_or("idle target running")?;
     let result = async {
         wait_welcome(projects.welcomed.clone()).await?;
         assert!(

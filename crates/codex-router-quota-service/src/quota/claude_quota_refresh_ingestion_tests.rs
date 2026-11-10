@@ -126,9 +126,11 @@ impl ClaudeQuotaIngestionFixture {
         let router_root = test_root.path().join("router");
         std::fs::create_dir_all(&router_root).expect("router root");
         let account_id = AccountId::new("claude_quota_ingestion").expect("Claude account id");
-        let state = AsyncSqliteStateStore::open(&router_root.join("state.sqlite"))
-            .await
-            .expect("state store should open");
+        let state = AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        ))
+        .await
+        .expect("state store should open");
         state
             .upsert_account(
                 &AccountRecord::new(
@@ -219,9 +221,11 @@ impl ClaudeQuotaIngestionFixture {
     async fn observations_and_status(
         &self,
     ) -> (Vec<WindowObservation>, Option<QuotaRefreshStatusView>) {
-        let state = AsyncSqliteStateStore::open_read_only(&self.router_root.join("state.sqlite"))
-            .await
-            .expect("read-only state store should open");
+        let state = AsyncSqliteStateStore::open_read_only(
+            &codex_router_state::provider_proxy_database_path(&self.router_root),
+        )
+        .await
+        .expect("read-only state store should open");
         let observations = state
             .window_observations_for_account(&self.account_id)
             .await

@@ -80,7 +80,7 @@ impl RuleMachine {
         let notifications =
             HolderNotifications::prepare_with_worker(&mut board, &root, identity, worker_start)
                 .await?;
-        let running = board.start().ok_or("successor running session")?;
+        let running = board.start().session.ok_or("successor running session")?;
         wait_welcome(projects.welcomed.clone()).await?;
         Ok(Self {
             peer: peer.as_uuid(),

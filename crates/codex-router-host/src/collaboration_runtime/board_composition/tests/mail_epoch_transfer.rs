@@ -34,7 +34,13 @@ impl TestFleet {
         let inputs = self.inputs()?;
         let client = SessionClient::<_, _, BoardConsumerProtocol>::load(
             ReqwestSessionTransport::new(inputs.access, BOUND, BOUND)?,
-            MachineSessionStore::open(root).await?,
+            MachineSessionStore::from_cache(std::sync::Arc::new(
+                message_board_storage::FleetStore::open(
+                    &root.join(message_board_storage::FleetStore::FILE_NAME),
+                )
+                .await?
+                .cache(),
+            )),
             &UuidV7Ids,
             SchemaSupport { max_version: 1 },
             Backoff {

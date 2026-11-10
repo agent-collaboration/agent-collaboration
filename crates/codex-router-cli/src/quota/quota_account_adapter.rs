@@ -49,7 +49,10 @@ async fn execute_account_command(
     clipboard: QuotaClipboardWriter,
     #[cfg(test)] before_commit: Option<crate::account::account_removal::RemovalCommitHook>,
 ) -> QuotaAccountCommandResult {
-    let store = match AsyncSqliteStateStore::open_read_only(&router_root.join("state.sqlite")).await
+    let store = match AsyncSqliteStateStore::open_read_only(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    )
+    .await
     {
         Ok(store) => store,
         Err(error) => return failed(error.to_string()),
@@ -78,13 +81,14 @@ async fn execute_account_command(
             Err(error) => failed(format!("Copy account ID failed: {error}")),
         },
         QuotaAccountAction::Disable | QuotaAccountAction::Enable => {
-            let writer =
-                match AsyncWeeklyQuotaFloorMutationStore::open(&router_root.join("state.sqlite"))
-                    .await
-                {
-                    Ok(writer) => writer,
-                    Err(error) => return failed(error.to_string()),
-                };
+            let writer = match AsyncWeeklyQuotaFloorMutationStore::open(
+                &codex_router_state::provider_proxy_database_path(&router_root),
+            )
+            .await
+            {
+                Ok(writer) => writer,
+                Err(error) => return failed(error.to_string()),
+            };
             let status = if request.action == QuotaAccountAction::Disable {
                 AccountStatus::Disabled
             } else {

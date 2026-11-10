@@ -19,7 +19,7 @@ pub(in crate::collaboration_runtime::board_composition) async fn attempt_record(
 ) -> ObservationResult<Option<SnapshotInstallAttempt>> {
     let mut connection = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(key.0.join("fleet-cache.sqlite"))
+            .filename(key.0.join(message_board_storage::FleetStore::FILE_NAME))
             .read_only(true),
     )
     .await?;
@@ -58,7 +58,7 @@ pub(in crate::collaboration_runtime::board_composition) async fn attempt_count(
 ) -> ObservationResult<usize> {
     let mut connection = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(root.join("fleet-cache.sqlite"))
+            .filename(root.join(message_board_storage::FleetStore::FILE_NAME))
             .read_only(true),
     )
     .await?;

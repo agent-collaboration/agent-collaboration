@@ -3,7 +3,7 @@ use super::*;
 #[tokio::test]
 async fn unavailable_refresh_targets_are_rejected_before_secret_access() {
     let root = tempfile::tempdir().expect("temporary router root should exist");
-    let database_path = root.path().join("state.sqlite");
+    let database_path = codex_router_state::provider_proxy_database_path(root.path());
     let disabled_id = AccountId::new("refresh-disabled").expect("account id");
     let credentialless_id = AccountId::new("refresh-credentialless").expect("account id");
     let claude_id = AccountId::new("refresh-claude").expect("account id");

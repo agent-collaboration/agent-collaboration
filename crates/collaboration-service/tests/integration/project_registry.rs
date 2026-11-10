@@ -69,6 +69,8 @@ async fn never_enrolled_writer_is_refused_before_any_file_is_created() -> TestRe
         &root,
         None,
         Arc::new(ControlledClock::at(SyncTime::from_unix_millis(START))),
+        message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
+            .expect("32-byte fixture cursor key"),
     );
     assert!(matches!(
         registry.open_project(&ProjectId::generate()).await,
@@ -89,7 +91,13 @@ async fn an_unregistered_native_file_remains_unwritable_after_reopen() -> TestRe
     let peer = peer()?;
     let clock = Arc::new(ControlledClock::at(SyncTime::from_unix_millis(START)));
     // No transport, session or Welcome is supplied. Only the persisted enrollment input is present.
-    let registry = ProjectStoreRegistry::new(directory.path(), Some(peer), clock.clone());
+    let registry = ProjectStoreRegistry::new(
+        directory.path(),
+        Some(peer),
+        clock.clone(),
+        message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
+            .expect("32-byte fixture cursor key"),
+    );
     let project = ProjectId::generate();
     let store = registry.open_project(&project).await?;
     assert!(matches!(
@@ -111,7 +119,13 @@ async fn an_unregistered_native_file_remains_unwritable_after_reopen() -> TestRe
     drop(store);
     registry.close().await?;
 
-    let reopened = ProjectStoreRegistry::new(directory.path(), Some(peer), clock);
+    let reopened = ProjectStoreRegistry::new(
+        directory.path(),
+        Some(peer),
+        clock,
+        message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
+            .expect("32-byte fixture cursor key"),
+    );
     assert_eq!(reopened.project_ids().await?, vec![project.clone()]);
     let store = reopened
         .existing_project(&project)
@@ -140,7 +154,13 @@ async fn real_clock_expiry_refuses_an_open_write_keeps_reads_and_renewal_resumes
     let directory = tempfile::tempdir()?;
     let peer = peer()?;
     let clock = Arc::new(ControlledClock::at(SyncTime::from_unix_millis(START)));
-    let registry = ProjectStoreRegistry::new(directory.path(), Some(peer), clock.clone());
+    let registry = ProjectStoreRegistry::new(
+        directory.path(),
+        Some(peer),
+        clock.clone(),
+        message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
+            .expect("32-byte fixture cursor key"),
+    );
     let project = ProjectId::generate();
     let store = registry.open_project(&project).await?;
     let database = registry.database(&project).await?;

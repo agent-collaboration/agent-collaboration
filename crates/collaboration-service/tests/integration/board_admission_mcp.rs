@@ -37,6 +37,8 @@ async fn native_mcp_admission_replays_decisions_and_isolates_project_authority()
         directory.path(),
         Some(fixture_peer()?),
         Arc::new(runtime_primitives::SystemClock),
+        message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
+            .expect("32-byte fixture cursor key"),
     ));
     let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
         registry: registry.clone(),

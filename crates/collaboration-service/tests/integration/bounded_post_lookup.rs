@@ -88,7 +88,7 @@ async fn lookup_costs(size: usize) -> Result<(ReadCost, ReadCost), TestError> {
     for index in 1..=size {
         let sibling = ProjectId::try_from(format!("00000000-0000-7000-8000-{index:012x}"))?;
         assert!(sibling < project);
-        let seed = crate::native_registry::new_registry(fixture._directory.path())?;
+        let seed = crate::native_registry::new_registry(fixture._directory.path()).await?;
         let input: ProjectCreateRequest = serde_json::from_value(json!({
             "requestId":RequestId::generate(),"protocolVersion":1,"actor":fixture.actor,
             "projectId":sibling,"boardId":fixture.board,"title":sibling.as_str()

@@ -18,7 +18,7 @@ pub(super) async fn refresh_quota(
     }
 
     let resolver = crate::credential_runtime::AsyncCliCredentialResolver::open(
-        &router_root.join("state.sqlite"),
+        &codex_router_state::provider_proxy_database_path(&router_root),
         &router_root.join("secrets"),
     )
     .await?;

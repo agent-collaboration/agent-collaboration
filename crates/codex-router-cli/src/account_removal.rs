@@ -18,7 +18,7 @@ pub(super) fn remove_account(
 ) -> Result<(), AccountCommandError> {
     let runtime = account_command_runtime()?;
     let account = runtime.block_on(async {
-        let database_path = router_root.join("state.sqlite");
+        let database_path = codex_router_state::provider_proxy_database_path(&router_root);
         let state = AsyncSqliteStateStore::open_read_only(&database_path).await?;
         let accounts = state.list_accounts().await;
         state.close().await?;
@@ -81,7 +81,7 @@ async fn remove_resolved_account_inner(
         }
         .into());
     }
-    let database_path = router_root.join("state.sqlite");
+    let database_path = codex_router_state::provider_proxy_database_path(&router_root);
     // Match login/renewal lock ordering: account authority precedes the SQLite writer.
     let lock_account_id = account.account_id().clone();
     let lock_database_path = database_path.clone();

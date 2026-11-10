@@ -76,6 +76,8 @@ unicode-width.workspace = true
 ui-preference-store = { path = "../ui-preference-store", version = "0.1.118" }
 
 [dev-dependencies]
+agent-router-update = { path = "../agent-router-update", version = "0.1.133" }
+message-board-storage = { path = "../message-board-storage", version = "0.1.20" }
 codex-router-quota-reset-test-harness = { path = "../codex-router-quota-reset-test-harness", version = "0.1.126", default-features = false }
 agent-collaboration-tui = { workspace = true, features = ["test-support"] }
 owned-process-test-support = { path = "../owned-process-test-support", version = "0.1.126" }

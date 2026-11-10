@@ -17,7 +17,7 @@ async fn too_new_schema_is_refused_unchanged_and_mismatched_schema_keeps_readabl
     for reason in ["tooNew", "mismatch"] {
         let project = ProjectId::generate();
         let workstream = WorkstreamId::generate();
-        let seed_registry = crate::native_registry::new_registry(fixture._directory.path())?;
+        let seed_registry = crate::native_registry::new_registry(fixture._directory.path()).await?;
         let input: ProjectCreateRequest = serde_json::from_value(json!({
             "requestId":RequestId::generate(),"protocolVersion":1,"actor":reader,
             "projectId":project,"boardId":fixture.board,"title":project.as_str()

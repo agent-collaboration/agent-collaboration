@@ -62,6 +62,7 @@ impl SaturatedApi {
         .map_err(|error| std::io::Error::other(error.to_string()))?;
         let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
             registry: native_registry::new_registry(directory.path())
+                .await
                 .map_err(|error| std::io::Error::other(error.to_string()))?,
             fleet: Arc::new(fleet),
             identity: MachineIdentity::new(

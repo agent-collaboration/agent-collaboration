@@ -366,7 +366,7 @@ async fn wal_reader_never_observes_uncommitted_generation_and_refreshes_after_co
 #[tokio::test]
 async fn authority_read_does_not_create_absent_state_or_secret_roots() {
     let missing_state_root = unique_test_root("absent-state-root");
-    let database_path = missing_state_root.join("state.sqlite");
+    let database_path = codex_router_state::provider_proxy_database_path(&missing_state_root);
     let test_secret_root = unique_test_root("existing-authority-secret-root");
     fs::create_dir_all(&test_secret_root)
         .unwrap_or_else(|error| panic!("test secret root should create: {error}"));
@@ -455,7 +455,7 @@ impl AuthorityFixture {
         let root = unique_test_root(name);
         fs::create_dir_all(&root)
             .unwrap_or_else(|error| panic!("fixture root should create: {error}"));
-        let database_path = root.join("state.sqlite");
+        let database_path = codex_router_state::provider_proxy_database_path(&root);
         let secret_root = root.join("secrets");
         let secret_store =
             codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_root)

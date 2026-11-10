@@ -74,7 +74,10 @@ impl ProviderAcpRouteClaim {
                 return NativeRouteClaim::unavailable(
                     RouteUnavailableReason {
                         reason,
-                        fix: fix.map_or_else(|| "check providers.json".to_owned(), String::from),
+                        fix: fix.map_or_else(
+                            || "check the \"providers\" section of settings.jsonc".to_owned(),
+                            String::from,
+                        ),
                     },
                     retryable,
                     if retryable {

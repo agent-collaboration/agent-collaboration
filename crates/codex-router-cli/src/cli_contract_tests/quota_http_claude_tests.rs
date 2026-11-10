@@ -115,7 +115,7 @@ fn claude_quota_401_recovers_credentials_and_retries_the_usage_request() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state_path = router_root.join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(&router_root);
     let account_id = account_id("acct_claude_401_recovery");
     let state = must_ok(test_async_runtime().block_on(AsyncSqliteStateStore::open(&state_path)));
     must_ok(
@@ -177,7 +177,7 @@ fn background_quota_refresh_polls_only_claude_accounts_idle_longer_than_interval
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state_path = router_root.join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(&router_root);
     let state = must_ok(test_async_runtime().block_on(AsyncSqliteStateStore::open(&state_path)));
     let labels = ["busy", "recent", "idle", "never-used"];
     let accounts = labels.map(|label| {

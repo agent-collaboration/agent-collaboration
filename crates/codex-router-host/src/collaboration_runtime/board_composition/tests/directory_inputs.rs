@@ -40,7 +40,11 @@ pub(super) async fn arrange_project_input(
         }),
         time: RecordTime::Router(chrono::Utc::now()),
     };
-    let cache = message_board_storage::FleetCache::open(&root.join("fleet-cache.sqlite")).await?;
+    let cache_store = message_board_storage::FleetStore::open(
+        &root.join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?;
+    let cache = cache_store.cache();
     cache
         .replace_snapshot(&message_board_storage::FleetRecordSnapshot {
             through: FleetPosition::try_from(2)?,
@@ -69,7 +73,7 @@ pub(super) async fn arrange_project_input(
             ],
         })
         .await?;
-    cache.close().await;
+    cache_store.close().await;
     let request = ProjectCreateRequest {
         request_id: RequestId::generate(),
         protocol_version: ProtocolVersion::CURRENT,

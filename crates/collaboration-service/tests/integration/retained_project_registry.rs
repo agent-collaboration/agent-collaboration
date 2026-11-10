@@ -139,7 +139,7 @@ async fn snapshots_drain_before_swap_and_a_stale_read_handle_becomes_unavailable
         assert!(fixture._registry.open_project(&project).await.is_err());
         assert!(fixture._registry.database(&project).await.is_err());
         let bytes = std::fs::read(stale_writer.path())?;
-        let restarted = ProjectStoreRegistry::new(fixture._directory.path(), None, Arc::new(SystemClock));
+        let restarted = ProjectStoreRegistry::new(fixture._directory.path(), None, Arc::new(SystemClock), message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32]).expect("32-byte fixture cursor key"),);
         assert!(matches!(restarted.read_project(&project).await, Err(ProjectRegistryError::Unavailable { .. })));
         assert_eq!(restarted.superseded_current(&project).await, Some(Some(authority)));
         assert_eq!(std::fs::read(stale_writer.path())?, bytes);

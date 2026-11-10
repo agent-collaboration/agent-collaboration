@@ -236,7 +236,8 @@ async fn assert_private_scratch_binding(
 
     // Act: real create, scratch validation, projection and native protocol consumer.
     let result = AcpSessionBinding::create(&mut catalog, SessionSetupInputs {
-        operation_id: None,
+            scratch_scopes: std::sync::Arc::new(crate::recording_scratch_scopes::RecordingScratchScopes::default()),
+            operation_id: None,
         recorder: Arc::new(AcceptingConversationRecorder),
         connection, schemas, generation,
         params: json!({"cwd":"/work/project","mcpServers":[],"_meta":{"codexRouter":{

@@ -76,11 +76,14 @@ fn assert_upstream_credentials(
 
 async fn seed_private_root(root: &Path) -> TestResult<u64> {
     std::fs::set_permissions(root, std::fs::Permissions::from_mode(0o700))?;
-    let state = AsyncSqliteStateStore::open(&root.join("state.sqlite")).await?;
+    let state =
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(root))
+            .await?;
     let secret_root = root.join("secrets");
     let secrets = open_encrypted_credential_store(&secret_root)?;
     let last_success = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
-    let options = sqlx::sqlite::SqliteConnectOptions::new().filename(root.join("state.sqlite"));
+    let options = sqlx::sqlite::SqliteConnectOptions::new()
+        .filename(codex_router_state::provider_proxy_database_path(root));
     let mut seed_connection = sqlx::SqliteConnection::connect_with(&options).await?;
     LocalRouterTokenService::new(FileSecretStore::open(&secret_root)?)
         .rotate_with_token(LOCAL_TOKEN)?;
@@ -179,7 +182,7 @@ async fn start_compiled_serve(
             router_port.as_str(),
             "--state-db",
         ])
-        .arg(root.join("state.sqlite"))
+        .arg(codex_router_state::provider_proxy_database_path(root))
         .arg("--secret-root")
         .arg(root.join("secrets"))
         .args([
@@ -267,7 +270,9 @@ async fn finish_serve_and_check_state(
             == Some(0),
         "compiled serve leaked a websocket registration",
     )?;
-    let state = AsyncSqliteStateStore::open(&root.join("state.sqlite")).await?;
+    let state =
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(root))
+            .await?;
     for (name, generation) in [("fixture-primary", 1), ("fixture-fallback", 2)] {
         let account_id = AccountId::new(name)?;
         let account = state

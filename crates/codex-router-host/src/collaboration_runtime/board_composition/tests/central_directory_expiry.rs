@@ -91,7 +91,7 @@ async fn native_directory_expiry_refresh_keeps_the_host_read_generation() -> Tes
     let requests = session.requests.clone();
     let ready = session.welcomed.subscribe();
     let admission = board.admission.clone();
-    let running = board.start().ok_or("reader session not started")?;
+    let running = board.start().session.ok_or("reader session not started")?;
     wait_welcome(ready).await?;
     let application = (collaboration_service::ApplicationFixture::new(
         reader_origin.installation.as_str(),

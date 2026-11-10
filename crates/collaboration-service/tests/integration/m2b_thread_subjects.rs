@@ -89,7 +89,12 @@ async fn every_subject_variant_is_required_and_read_titles_follow_current_record
             let adr: AdrId =
                 serde_json::from_value(subject.get("subject").ok_or("ADR input")?.clone())?;
             let mut cache = sqlx_turso::TursoConnectOptions::new()
-                .filename(fixture._directory.path().join("fleet-cache.sqlite"))
+                .filename(
+                    fixture
+                        ._directory
+                        .path()
+                        .join(message_board_storage::FleetStore::FILE_NAME),
+                )
                 .connect()
                 .await?;
             let removed = sqlx::query("DELETE FROM cached_fleet_records WHERE kind='adr' AND id=?")

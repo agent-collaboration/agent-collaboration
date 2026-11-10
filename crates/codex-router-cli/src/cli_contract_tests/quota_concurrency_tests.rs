@@ -4,7 +4,7 @@ use super::*;
 fn served_router_http_uses_persisted_quota_while_background_refresh_is_blocked() {
     let test_root = TestRoot::new("serve-background-refresh-blocked");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let state = must_ok(SqliteStateStore::open(&state_path));
     let secrets = must_ok(
@@ -153,7 +153,7 @@ fn served_router_http_uses_persisted_quota_while_background_refresh_is_blocked()
 fn served_router_websocket_uses_persisted_quota_while_background_refresh_is_blocked() {
     let test_root = TestRoot::new("serve-websocket-background-refresh-blocked");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let state = must_ok(SqliteStateStore::open(&state_path));
     let secrets = must_ok(

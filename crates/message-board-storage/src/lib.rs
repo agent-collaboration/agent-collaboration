@@ -1,8 +1,16 @@
 //! Per-project native Turso stores and the Router's fleet/local storage.
 mod cursor_store;
 mod fleet_cache;
+mod fleet_cache_schema;
+mod fleet_snapshot_outbox;
+mod fleet_store;
+mod legacy_fleet_sources;
+#[cfg(feature = "test-support")]
+pub mod router_store_contents;
 #[cfg(feature = "test-support")]
 pub use fleet_cache::{MachineNoticeProgressObservation, observe_machine_notice_progress};
+pub use fleet_store::FleetStore;
+pub use legacy_fleet_sources::LegacyFleetSource;
 mod fleet_outbox;
 mod fleet_record_codec;
 mod fleet_storage_error;
@@ -91,6 +99,11 @@ pub use project_import_keys::{ImportRowKeys, ImportRowKind};
 pub use project_ledger_reader::ProjectLedgerReader;
 mod router_local_database;
 pub mod schema_fingerprint;
+mod update_ledger;
+pub use update_ledger::{
+    RouterUpdateStep, StoredUpdateLedger, UpdateLedger, UpdateLedgerEntry, UpdateSourceProgress,
+    UpdateStepNumber, UpdateStepProgress, read_update_ledger,
+};
 
 pub use cursor_store::{CursorSigningKey, CursorStore};
 pub use fleet_cache::{

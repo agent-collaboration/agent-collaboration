@@ -29,7 +29,7 @@ async fn adr_lifecycle_is_replayable_through_mcp() -> TestResult {
     .await?;
     let fleet = Arc::new(fleet);
     let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
-        registry: crate::native_registry::new_registry(directory.path())?,
+        registry: crate::native_registry::new_registry(directory.path()).await?,
         fleet,
         identity: MachineIdentity::new(
             collaboration_protocol::UuidIdentity::try_from(
@@ -119,7 +119,7 @@ fn assert_accepted(value: &Value) {
 async fn a_thread_can_discuss_an_immutable_adr_in_its_workspace() -> TestResult {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
-    let registry = crate::native_registry::new_registry(directory.path())?;
+    let registry = crate::native_registry::new_registry(directory.path()).await?;
     let origin = ActorOrigin {
         installation: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
         machine: MachineLabel::try_from("ADR subject proof".to_owned())?,

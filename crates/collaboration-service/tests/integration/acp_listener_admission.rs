@@ -42,6 +42,7 @@ async fn acp_listener_reports_unavailable_codex_without_closing_the_connection()
         Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         Arc::new(UnmaterializedThreadHolder::new()),
         Arc::new(AcceptingConversationRecorder),
+        Arc::new(codex_acp_adapter::test_support::recording_scratch_scopes::RecordingScratchScopes::default()),
     )
     .unwrap()
     .with_provider_session_backend(

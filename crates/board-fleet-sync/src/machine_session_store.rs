@@ -1,31 +1,15 @@
 //! The library's resume state is retained by the Router's existing FleetCache.
 use fleet_sync_session::{ClientSessionState, SessionClientStore, StoreError};
 use message_board_storage::{FleetCache, RouterLocalStorageError};
-use std::{path::Path, sync::Arc};
+use std::sync::Arc;
 
 pub struct MachineSessionStore {
     cache: Arc<FleetCache>,
 }
 
 impl MachineSessionStore {
-    pub async fn open(router_directory: &Path) -> Result<Self, StoreError> {
-        tokio::fs::create_dir_all(router_directory)
-            .await
-            .map_err(|error| StoreError::Unavailable {
-                message: error.to_string(),
-            })?;
-        let cache = Arc::new(
-            FleetCache::open(&router_directory.join("fleet-cache.sqlite"))
-                .await
-                .map_err(cache_error)?,
-        );
-        cache
-            .import_legacy_runtime(router_directory)
-            .await
-            .map_err(cache_error)?;
-        Ok(Self::from_cache(cache))
-    }
-
+    /// A view over the Router's one Fleet database; the Host opens it, imports any
+    /// older runtime files into it once, and closes it after every user has stopped.
     pub fn from_cache(cache: Arc<FleetCache>) -> Self {
         Self { cache }
     }

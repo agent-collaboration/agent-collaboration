@@ -304,7 +304,7 @@ pub fn observe_native_readiness(
             || entry.label.is_empty()
             || !entry.channels.is_empty()
             || state.state != "unavailable"
-            || state.reason != "disabled in providers.json"
+            || state.reason != "disabled in settings.jsonc"
             || state.fix.is_empty()
             || !state.observed_at.ends_with('Z')
             || chrono::DateTime::parse_from_rfc3339(&state.observed_at).is_err()
