@@ -147,6 +147,46 @@ test("the S4 routes refuse outside the S4 allocation", async () => {
   }
 });
 
+test("S4 includes acfx and its dependents, excludes platform tables, and restores its exact image", async () => {
+  const signer = await testSigner(),
+    storage = await persistenceRoot();
+  try {
+    await withSeed(storage.path, signer, S4_ALLOCATION, async (call) => {
+      const object = { binding: "FLEET", name: "literal-platform-prefix" } as const;
+      await writeStatements(call, [
+        {
+          ...object,
+          statements: [
+            "CREATE TABLE acfx(value TEXT)",
+            "CREATE INDEX acfx_value ON acfx(value)",
+            "CREATE TRIGGER acfx_trigger AFTER INSERT ON acfx BEGIN UPDATE acfx SET value = upper(value) WHERE rowid = new.rowid; END",
+            "INSERT INTO acfx(rowid,value) VALUES (7,'retained')",
+          ],
+        },
+      ]);
+      const image = (await snapshotCohort(call, [object]))[cohortKey(object)];
+      assert.ok(image !== undefined);
+      assert.deepEqual(image.schema.map((row) => row.name).sort(), [
+        "acfx",
+        "acfx_trigger",
+        "acfx_value",
+      ]);
+      assert.equal(
+        image.schema.some((row) => row.name.startsWith("_cf_") || row.tbl_name.startsWith("_cf_")),
+        false,
+      );
+      assert.deepEqual(image.tables.acfx?.rows, [
+        { rowid: "7", cells: [{ kind: "text", value: "RETAINED" }] },
+      ]);
+      await writeStatements(call, [{ ...object, statements: ["DROP TABLE acfx"] }]);
+      await restoreObjects(call, [object], { [cohortKey(object)]: image });
+      assert.deepEqual((await snapshotCohort(call, [object]))[cohortKey(object)], image);
+    });
+  } finally {
+    await storage.remove();
+  }
+});
+
 test("the snapshot reads rows at both rowid extremes, across a page boundary, and the restore puts them back", async () => {
   const signer = await testSigner();
   const storage = await persistenceRoot();

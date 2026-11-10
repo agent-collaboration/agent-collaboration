@@ -42,7 +42,7 @@ const json = (value: unknown, status = 200): Response =>
 function userTables(sql: SqlStorage): string[] {
   return sql
     .exec<{ name: string }>(
-      "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE '_cf_%' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+      "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT GLOB '_cf_*' AND name NOT LIKE 'sqlite_%' ORDER BY name",
     )
     .toArray()
     .map((row) => row.name);

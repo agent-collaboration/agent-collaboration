@@ -67,10 +67,10 @@ export const CONTRADICTIONS: readonly Contradiction[] = [
   },
   {
     name: "a storage shape the migration doesn't recognise",
-    edit: (production) => production.fleet.push("CREATE TABLE unexpected_table(value TEXT)"),
+    edit: (production) => production.fleet.push("CREATE TABLE acfx(value TEXT)"),
     object: "fleet",
     subject: "storage shape",
-    reason: /unexpected \[unexpected_table\]/,
+    reason: /unexpected \[acfx\]/,
   },
   {
     name: "a holder Mac has no enrollment",

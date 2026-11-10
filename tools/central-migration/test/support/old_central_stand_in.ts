@@ -31,13 +31,13 @@ class OldCentralObject {
     if (path === "/dump") {
       const tables = sql
         .exec(
-          "SELECT name FROM sqlite_schema WHERE type IN ('table','index') AND name NOT LIKE '_cf_%' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+          "SELECT name FROM sqlite_schema WHERE type IN ('table','index') AND name NOT GLOB '_cf_*' AND name NOT LIKE 'sqlite_%' ORDER BY name",
         )
         .toArray()
         .map((row) => String(row.name));
       const schema = sql
         .exec(
-          "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE '_cf_%' AND name NOT LIKE 'sqlite_%' ORDER BY type, name",
+          "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT GLOB '_cf_*' AND name NOT LIKE 'sqlite_%' AND tbl_name NOT GLOB '_cf_*' ORDER BY type, name",
         )
         .toArray();
       const rows: Record<string, unknown[]> = {};

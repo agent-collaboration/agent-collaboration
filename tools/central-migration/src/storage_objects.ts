@@ -125,7 +125,7 @@ const quoted = (name: string): string => `"${name.replaceAll('"', '""')}"`;
 function tableNames(sql: SqlStorage): string[] {
   return sql
     .exec<{ name: string }>(
-      "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE '_cf_%' AND name NOT LIKE 'sqlite_%' ORDER BY name",
+      "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT GLOB '_cf_*' AND name NOT LIKE 'sqlite_%' ORDER BY name",
     )
     .toArray()
     .map((row) => row.name);
@@ -173,7 +173,7 @@ class RolledBack extends Error {}
 function typedImage(sql: SqlStorage, exclude: readonly string[]): ObjectImage {
   const schema = sql
     .exec<{ type: string; name: string; tbl_name: string; sql: string }>(
-      "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT LIKE '_cf_%' AND name NOT LIKE 'sqlite_%' ORDER BY rowid",
+      "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE sql IS NOT NULL AND name NOT GLOB '_cf_*' AND name NOT LIKE 'sqlite_%' AND tbl_name NOT GLOB '_cf_*' ORDER BY rowid",
     )
     .toArray()
     .filter((entry) => !exclude.includes(entry.tbl_name))
@@ -267,7 +267,7 @@ abstract class MigrationStorageObject {
 
   private dump(sql: SqlStorage): ObjectDump {
     const schemaCursor = sql.exec(
-      "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT LIKE '_cf_%' AND name NOT LIKE 'sqlite_%' ORDER BY type, name",
+      "SELECT type, name, tbl_name, sql FROM sqlite_schema WHERE name NOT GLOB '_cf_*' AND name NOT LIKE 'sqlite_%' AND tbl_name NOT GLOB '_cf_*' ORDER BY type, name",
     );
     const schema = schemaCursor.toArray() as ReadRow[];
     let rowsWritten = (schemaCursor as unknown as { rowsWritten: number }).rowsWritten;
