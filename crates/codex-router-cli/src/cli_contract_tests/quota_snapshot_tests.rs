@@ -61,25 +61,28 @@ impl QuotaRefreshProvider for FaultingFloorRefreshProvider {
     }
 }
 
-#[test]
-fn responses_observation_transaction_failure_sends_no_floor_signal_or_windows() {
+#[tokio::test]
+async fn responses_observation_transaction_failure_sends_no_floor_signal_or_windows() {
     for stage in ["history", "snapshot"] {
         let test_root = TestRoot::new(&format!("floor-refresh-{stage}-fault"));
         must_ok(fs::create_dir(test_root.path()));
         let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
         let secret_root = test_root.path().join("secrets");
-        let state = must_ok(SqliteStateStore::open(&state_path));
+        let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
         let account_id = account_id("floor-fault-account");
-        must_ok(AccountStateRepository::upsert_account(
-            &state,
-            &AccountRecord::new(
-                codex_router_core::provider::Provider::Openai,
-                account_id.clone(),
-                "floor-fault",
-                AccountStatus::Enabled,
-            )
-            .with_active_credential_generation(1),
-        ));
+        must_ok(
+            state
+                .upsert_account(
+                    &AccountRecord::new(
+                        codex_router_core::provider::Provider::Openai,
+                        account_id.clone(),
+                        "floor-fault",
+                        AccountStatus::Enabled,
+                    )
+                    .with_active_credential_generation(1),
+                )
+                .await,
+        );
         let secrets = must_ok(
             codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_root),
         );
@@ -97,7 +100,7 @@ fn responses_observation_transaction_failure_sends_no_floor_signal_or_windows() 
                 ),
             ),
         );
-        test_async_runtime().block_on(async {
+        (async {
             let mutation = must_ok(AsyncWeeklyQuotaFloorMutationStore::open(&state_path).await);
             must_ok(
                 mutation
@@ -108,7 +111,8 @@ fn responses_observation_transaction_failure_sends_no_floor_signal_or_windows() 
                     .await,
             );
             mutation.close().await;
-        });
+        })
+        .await;
         let resolver =
             contract_credential_resolver(&state, &secrets, NoopCredentialRefreshClient, 1_000);
         let provider = FaultingFloorRefreshProvider {
@@ -117,26 +121,29 @@ fn responses_observation_transaction_failure_sends_no_floor_signal_or_windows() 
         };
         let observer = RecordingWeeklyFloorObserver::default();
         let mut output = Vec::new();
-        let error = must_err(refresh_quota_store_paths_with_floor_observer(
-            &mut output,
-            &state_path,
-            &secret_root,
-            "https://chatgpt.com/backend-api".to_owned(),
-            &resolver,
-            &provider,
-            QuotaRefreshObservationContext {
-                observed_unix_seconds: 1_100,
-                schedule: codex_router_quota_service::quota::QuotaRefreshSchedule::Manual,
-                weekly_floor_observer: Some(&observer),
-            },
-        ));
+        let error = must_err(
+            refresh_quota_store_paths_with_floor_observer(
+                &mut output,
+                &state_path,
+                &secret_root,
+                "https://chatgpt.com/backend-api".to_owned(),
+                &resolver,
+                &provider,
+                QuotaRefreshObservationContext {
+                    observed_unix_seconds: 1_100,
+                    schedule: codex_router_quota_service::quota::QuotaRefreshSchedule::Manual,
+                    weekly_floor_observer: Some(&observer),
+                },
+            )
+            .await,
+        );
         assert!(error.to_string().contains("sqlite state store failed"));
         assert!(lock_test_mutex(&observer.account_ids, "weekly floor observer").is_empty());
-        let windows = must_ok(SelectorQuotaRepository::selector_inputs_for_route_band(
-            &state,
-            "responses",
-            1_100,
-        ));
+        let windows = must_ok(
+            state
+                .selector_inputs_for_route_band("responses", 1_100)
+                .await,
+        );
         let saved_new_weekly = windows
             .iter()
             .flat_map(|input| input.windows())
@@ -147,15 +154,18 @@ fn responses_observation_transaction_failure_sends_no_floor_signal_or_windows() 
     }
 }
 
-#[test]
-fn quota_refresh_writes_selector_windows_for_runtime_selection() {
+#[tokio::test]
+async fn quota_refresh_writes_selector_windows_for_runtime_selection() {
     let test_root = TestRoot::new("quota-refresh-selector-windows");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    ));
+    let state = must_ok(
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        ))
+        .await,
+    );
     let account_id = account_id("acct_quota_selector");
     let account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
@@ -164,7 +174,7 @@ fn quota_refresh_writes_selector_windows_for_runtime_selection() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(&state, &account));
+    must_ok(state.upsert_account(&account).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(
             router_root.join("secrets"),
@@ -201,7 +211,7 @@ fn quota_refresh_writes_selector_windows_for_runtime_selection() {
         },
     ]);
     let mut stdout = Vec::new();
-    test_async_runtime().block_on(async {
+    (async {
         let mutation = must_ok(
             AsyncWeeklyQuotaFloorMutationStore::open(
                 &codex_router_state::provider_proxy_database_path(&router_root),
@@ -217,23 +227,27 @@ fn quota_refresh_writes_selector_windows_for_runtime_selection() {
                 .await,
         );
         mutation.close().await;
-    });
+    })
+    .await;
 
     let floor_observer = RecordingWeeklyFloorObserver::default();
 
-    must_ok(refresh_quota_store_paths_with_floor_observer(
-        &mut stdout,
-        &codex_router_state::provider_proxy_database_path(&router_root),
-        &router_root.join("secrets"),
-        "https://chatgpt.com/backend-api".to_owned(),
-        &resolver,
-        &provider,
-        QuotaRefreshObservationContext {
-            observed_unix_seconds: 1_100,
-            schedule: codex_router_quota_service::quota::QuotaRefreshSchedule::Manual,
-            weekly_floor_observer: Some(&floor_observer),
-        },
-    ));
+    must_ok(
+        refresh_quota_store_paths_with_floor_observer(
+            &mut stdout,
+            &codex_router_state::provider_proxy_database_path(&router_root),
+            &router_root.join("secrets"),
+            "https://chatgpt.com/backend-api".to_owned(),
+            &resolver,
+            &provider,
+            QuotaRefreshObservationContext {
+                observed_unix_seconds: 1_100,
+                schedule: codex_router_quota_service::quota::QuotaRefreshSchedule::Manual,
+                weekly_floor_observer: Some(&floor_observer),
+            },
+        )
+        .await,
+    );
     assert_eq!(
         *lock_test_mutex(&floor_observer.account_ids, "weekly floor observer"),
         vec![account_id]
@@ -243,11 +257,11 @@ fn quota_refresh_writes_selector_windows_for_runtime_selection() {
         vec![WeeklyQuotaFloorIntent::HardStop]
     );
 
-    let selector_inputs = must_ok(SelectorQuotaRepository::selector_inputs_for_route_band(
-        &state,
-        "responses",
-        1_100,
-    ));
+    let selector_inputs = must_ok(
+        state
+            .selector_inputs_for_route_band("responses", 1_100)
+            .await,
+    );
     assert_eq!(selector_inputs.len(), 1);
     let windows = selector_inputs[0].windows();
     assert_eq!(windows.len(), 2);
@@ -278,22 +292,26 @@ fn quota_refresh_writes_selector_windows_for_runtime_selection() {
             "1100",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
     assert!(status_output.stdout.contains("selector"));
     assert!(status_output.stdout.contains("next"));
     assert!(!status_output.stdout.contains("needs probe"));
     assert!(status_output.stderr.is_empty());
 }
 
-#[test]
-fn quota_refresh_signals_floor_after_saved_history_before_next_account() {
+#[tokio::test]
+async fn quota_refresh_signals_floor_after_saved_history_before_next_account() {
     let test_root = TestRoot::new("quota-refresh-prompt-floor-notification");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    ));
+    let state = must_ok(
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        ))
+        .await,
+    );
     let floor_account_id = account_id("acct_a_floor");
     let healthy_account_id = account_id("acct_b_healthy");
     let floor_account = AccountRecord::new(
@@ -310,14 +328,8 @@ fn quota_refresh_signals_floor_after_saved_history_before_next_account() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(
-        &state,
-        &floor_account,
-    ));
-    must_ok(AccountStateRepository::upsert_account(
-        &state,
-        &healthy_account,
-    ));
+    must_ok(state.upsert_account(&floor_account).await);
+    must_ok(state.upsert_account(&healthy_account).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(
             router_root.join("secrets"),
@@ -344,7 +356,7 @@ fn quota_refresh_signals_floor_after_saved_history_before_next_account() {
     }
     let resolver =
         contract_credential_resolver(&state, &secrets, NoopCredentialRefreshClient, 1_000);
-    test_async_runtime().block_on(async {
+    (async {
         let mutation = must_ok(
             AsyncWeeklyQuotaFloorMutationStore::open(
                 &codex_router_state::provider_proxy_database_path(&router_root),
@@ -360,7 +372,8 @@ fn quota_refresh_signals_floor_after_saved_history_before_next_account() {
                 .await,
         );
         mutation.close().await;
-    });
+    })
+    .await;
     let floor_observer = Arc::new(RecordingWeeklyFloorObserver::default());
     let provider = FloorNotificationOrderingQuotaProvider::new(
         floor_account_id.clone(),
@@ -370,19 +383,22 @@ fn quota_refresh_signals_floor_after_saved_history_before_next_account() {
     );
     let mut stdout = Vec::new();
 
-    must_ok(refresh_quota_store_paths_with_floor_observer(
-        &mut stdout,
-        &codex_router_state::provider_proxy_database_path(&router_root),
-        &router_root.join("secrets"),
-        "https://chatgpt.com/backend-api".to_owned(),
-        &resolver,
-        &provider,
-        QuotaRefreshObservationContext {
-            observed_unix_seconds: 1_100,
-            schedule: codex_router_quota_service::quota::QuotaRefreshSchedule::Manual,
-            weekly_floor_observer: Some(floor_observer.as_ref()),
-        },
-    ));
+    must_ok(
+        refresh_quota_store_paths_with_floor_observer(
+            &mut stdout,
+            &codex_router_state::provider_proxy_database_path(&router_root),
+            &router_root.join("secrets"),
+            "https://chatgpt.com/backend-api".to_owned(),
+            &resolver,
+            &provider,
+            QuotaRefreshObservationContext {
+                observed_unix_seconds: 1_100,
+                schedule: codex_router_quota_service::quota::QuotaRefreshSchedule::Manual,
+                weekly_floor_observer: Some(floor_observer.as_ref()),
+            },
+        )
+        .await,
+    );
 
     assert_eq!(
         *lock_test_mutex(&floor_observer.account_ids, "weekly floor observer"),
@@ -397,24 +413,27 @@ fn quota_refresh_signals_floor_after_saved_history_before_next_account() {
     );
 }
 
-#[test]
-fn saved_quota_observations_switch_clear_and_floor_disable_intents() {
+#[tokio::test]
+async fn saved_quota_observations_switch_clear_and_floor_disable_intents() {
     let test_root = TestRoot::new("quota-switch-clear-intents");
     must_ok(fs::create_dir(test_root.path()));
     let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
-    let state = must_ok(SqliteStateStore::open(&state_path));
+    let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let account_id = account_id("acct_switch_intent");
-    must_ok(AccountStateRepository::upsert_account(
-        &state,
-        &AccountRecord::new(
-            codex_router_core::provider::Provider::Openai,
-            account_id.clone(),
-            "switch-intent",
-            AccountStatus::Enabled,
-        )
-        .with_active_credential_generation(1),
-    ));
+    must_ok(
+        state
+            .upsert_account(
+                &AccountRecord::new(
+                    codex_router_core::provider::Provider::Openai,
+                    account_id.clone(),
+                    "switch-intent",
+                    AccountStatus::Enabled,
+                )
+                .with_active_credential_generation(1),
+            )
+            .await,
+    );
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_root),
     );
@@ -427,7 +446,7 @@ fn saved_quota_observations_switch_clear_and_floor_disable_intents() {
     must_ok(secrets.write_secret(&key, &must_ok(bundle.to_secret_string())));
     let resolver =
         contract_credential_resolver(&state, &secrets, NoopCredentialRefreshClient, 1_000);
-    test_async_runtime().block_on(async {
+    (async {
         let mutation = must_ok(AsyncWeeklyQuotaFloorMutationStore::open(&state_path).await);
         must_ok(
             mutation
@@ -438,11 +457,12 @@ fn saved_quota_observations_switch_clear_and_floor_disable_intents() {
                 .await,
         );
         mutation.close().await;
-    });
+    })
+    .await;
     let observer = RecordingWeeklyFloorObserver::default();
     for (index, remaining) in [8, 9, 8, 8].into_iter().enumerate() {
         if index == 3 {
-            test_async_runtime().block_on(async {
+            (async {
                 let mutation = must_ok(AsyncWeeklyQuotaFloorMutationStore::open(&state_path).await);
                 must_ok(
                     mutation
@@ -450,7 +470,8 @@ fn saved_quota_observations_switch_clear_and_floor_disable_intents() {
                         .await,
                 );
                 mutation.close().await;
-            });
+            })
+            .await;
         }
         let provider = StaticQuotaRefreshProvider::new(vec![
             QuotaRefreshProviderWindow {
@@ -468,24 +489,27 @@ fn saved_quota_observations_switch_clear_and_floor_disable_intents() {
         ]);
         let observed_unix_seconds = 1_100 + u64::try_from(index).expect("small index") * 100;
         let mut output = Vec::new();
-        must_ok(refresh_quota_store_paths_with_floor_observer(
-            &mut output,
-            &state_path,
-            &secret_root,
-            "https://chatgpt.com/backend-api".to_owned(),
-            &resolver,
-            &provider,
-            QuotaRefreshObservationContext {
-                observed_unix_seconds,
-                schedule: codex_router_quota_service::quota::QuotaRefreshSchedule::Manual,
-                weekly_floor_observer: Some(&observer),
-            },
-        ));
-        let saved = must_ok(SelectorQuotaRepository::selector_inputs_for_route_band(
-            &state,
-            "responses",
-            observed_unix_seconds,
-        ));
+        must_ok(
+            refresh_quota_store_paths_with_floor_observer(
+                &mut output,
+                &state_path,
+                &secret_root,
+                "https://chatgpt.com/backend-api".to_owned(),
+                &resolver,
+                &provider,
+                QuotaRefreshObservationContext {
+                    observed_unix_seconds,
+                    schedule: codex_router_quota_service::quota::QuotaRefreshSchedule::Manual,
+                    weekly_floor_observer: Some(&observer),
+                },
+            )
+            .await,
+        );
+        let saved = must_ok(
+            state
+                .selector_inputs_for_route_band("responses", observed_unix_seconds)
+                .await,
+        );
         assert!(saved.iter().any(|account| {
             account.account_id() == &account_id
                 && account.windows().iter().any(|window| {
@@ -505,15 +529,18 @@ fn saved_quota_observations_switch_clear_and_floor_disable_intents() {
     );
 }
 
-#[test]
-fn quota_refresh_weekly_only_response_is_known_with_five_hour_no_data() {
+#[tokio::test]
+async fn quota_refresh_weekly_only_response_is_known_with_five_hour_no_data() {
     let test_root = TestRoot::new("quota-refresh-partial-window");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    ));
+    let state = must_ok(
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        ))
+        .await,
+    );
     let account_id = account_id("acct_quota_partial");
     let account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
@@ -522,7 +549,7 @@ fn quota_refresh_weekly_only_response_is_known_with_five_hour_no_data() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(&state, &account));
+    must_ok(state.upsert_account(&account).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(
             router_root.join("secrets"),
@@ -552,20 +579,23 @@ fn quota_refresh_weekly_only_response_is_known_with_five_hour_no_data() {
     }]);
     let mut stdout = Vec::new();
 
-    must_ok(refresh_quota_with_dependencies(
-        &mut stdout,
-        router_root.clone(),
-        "https://chatgpt.com/backend-api".to_owned(),
-        &resolver,
-        &provider,
-        1_100,
-    ));
+    must_ok(
+        refresh_quota_with_dependencies(
+            &mut stdout,
+            router_root.clone(),
+            "https://chatgpt.com/backend-api".to_owned(),
+            &resolver,
+            &provider,
+            1_100,
+        )
+        .await,
+    );
 
-    let selector_inputs = must_ok(SelectorQuotaRepository::selector_inputs_for_route_band(
-        &state,
-        "responses",
-        1_100,
-    ));
+    let selector_inputs = must_ok(
+        state
+            .selector_inputs_for_route_band("responses", 1_100)
+            .await,
+    );
     assert_eq!(selector_inputs[0].windows().len(), 1);
     let status_output = run_cli(
         [
@@ -580,7 +610,8 @@ fn quota_refresh_weekly_only_response_is_known_with_five_hour_no_data() {
             "1100",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
     assert!(status_output.stdout.contains("partial"));
     assert!(status_output.stdout.contains("no data"));
     assert!(!status_output.stdout.contains("same unknown pool"));
@@ -610,7 +641,8 @@ fn quota_refresh_weekly_only_response_is_known_with_five_hour_no_data() {
             "1100",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
     assert!(json_status_output.stdout.contains(r#""no_data""#));
     assert!(
         !json_status_output
@@ -621,15 +653,18 @@ fn quota_refresh_weekly_only_response_is_known_with_five_hour_no_data() {
     assert!(json_status_output.stderr.is_empty());
 }
 
-#[test]
-fn quota_refresh_missing_reset_response_is_unknown_fallback() {
+#[tokio::test]
+async fn quota_refresh_missing_reset_response_is_unknown_fallback() {
     let test_root = TestRoot::new("quota-refresh-missing-reset");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    ));
+    let state = must_ok(
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        ))
+        .await,
+    );
     let account_id = account_id("acct_quota_missing_reset");
     let account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
@@ -638,7 +673,7 @@ fn quota_refresh_missing_reset_response_is_unknown_fallback() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(&state, &account));
+    must_ok(state.upsert_account(&account).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(
             router_root.join("secrets"),
@@ -676,14 +711,17 @@ fn quota_refresh_missing_reset_response_is_unknown_fallback() {
     ]);
     let mut stdout = Vec::new();
 
-    must_ok(refresh_quota_with_dependencies(
-        &mut stdout,
-        router_root.clone(),
-        "https://chatgpt.com/backend-api".to_owned(),
-        &resolver,
-        &provider,
-        1_100,
-    ));
+    must_ok(
+        refresh_quota_with_dependencies(
+            &mut stdout,
+            router_root.clone(),
+            "https://chatgpt.com/backend-api".to_owned(),
+            &resolver,
+            &provider,
+            1_100,
+        )
+        .await,
+    );
 
     let status_output = run_cli(
         [
@@ -698,7 +736,8 @@ fn quota_refresh_missing_reset_response_is_unknown_fallback() {
             "1100",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
     assert!(status_output.stdout.contains("missing-reset"));
     assert!(status_output.stdout.contains("needs refresh"));
     assert!(

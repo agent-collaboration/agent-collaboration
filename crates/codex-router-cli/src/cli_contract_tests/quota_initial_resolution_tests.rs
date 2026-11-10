@@ -148,7 +148,7 @@ async fn assert_delayed_initial_failure_preserves_newer_authority(successful_gen
         );
     }
     {
-        let resolver_state = must_ok(SqliteStateStore::open(&state_path));
+        let resolver_state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
         let newer_resolver = contract_credential_resolver(
             &resolver_state,
             &secrets,

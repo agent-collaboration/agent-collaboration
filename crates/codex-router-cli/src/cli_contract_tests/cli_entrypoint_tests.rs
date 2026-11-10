@@ -227,12 +227,13 @@ fn websocket_registry_report_value_omits_raw_session_ids_and_peer_addrs() {
     );
 }
 
-#[test]
-fn process_binary_path_supports_top_level_version() {
+#[tokio::test]
+async fn process_binary_path_supports_top_level_version() {
     let output = run_cli(
         ["/tmp/build/target/debug/codex-router", "--version"],
         CliContext::new(vec![("CODEX_ROUTER_FORCE_TTY".to_owned(), "1".to_owned())]),
-    );
+    )
+    .await;
 
     assert_eq!(
         output.stdout,
@@ -241,12 +242,13 @@ fn process_binary_path_supports_top_level_version() {
     assert!(output.stderr.is_empty());
 }
 
-#[test]
-fn process_binary_path_is_skipped_before_command_parse() {
+#[tokio::test]
+async fn process_binary_path_is_skipped_before_command_parse() {
     let output = run_cli(
         ["/tmp/build/target/debug/codex-router", "--help"],
         CliContext::new(vec![("CODEX_ROUTER_FORCE_TTY".to_owned(), "1".to_owned())]),
-    );
+    )
+    .await;
 
     for expected_line in [
         "serve                         Run the local Codex account router",
@@ -287,8 +289,8 @@ fn process_binary_path_is_skipped_before_command_parse() {
     assert!(output.stderr.is_empty());
 }
 
-#[test]
-fn nested_user_facing_help_does_not_leak_internal_commands() {
+#[tokio::test]
+async fn nested_user_facing_help_does_not_leak_internal_commands() {
     for (arguments, expected_lines) in [
         (
             &["codex-router", "account", "--help"][..],
@@ -335,12 +337,15 @@ fn nested_user_facing_help_does_not_leak_internal_commands() {
     ] {
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
-        must_ok(test_async_runtime().block_on(run_with_io_async(
-            arguments.iter().map(OsString::from).collect(),
-            &CliContext::new(Vec::new()),
-            &mut stdout,
-            &mut stderr,
-        )));
+        must_ok(
+            (run_with_io_async(
+                arguments.iter().map(OsString::from).collect(),
+                &CliContext::new(Vec::new()),
+                &mut stdout,
+                &mut stderr,
+            ))
+            .await,
+        );
         let output = CliRunOutput {
             stdout: must_ok(String::from_utf8(stdout)),
             stderr: must_ok(String::from_utf8(stderr)),

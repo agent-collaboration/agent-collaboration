@@ -39,7 +39,7 @@ impl QuotaRefreshProvider for JoinedFloorCrossingProvider {
     }
 }
 
-pub(super) fn refresh_quota_with_dependencies<R, P>(
+pub(super) async fn refresh_quota_with_dependencies<R, P>(
     stdout: &mut impl Write,
     router_root: PathBuf,
     base_url: String,
@@ -51,19 +51,19 @@ where
     R: AsyncProviderCredentialResolver,
     P: QuotaRefreshProvider,
 {
-    test_async_runtime()
-        .block_on(refresh_quota_with_dependencies_async(
-            stdout,
-            router_root,
-            base_url,
-            credential_resolver,
-            quota_provider,
-            observed_unix_seconds,
-        ))
-        .map(|_report| ())
+    (refresh_quota_with_dependencies_async(
+        stdout,
+        router_root,
+        base_url,
+        credential_resolver,
+        quota_provider,
+        observed_unix_seconds,
+    ))
+    .await
+    .map(|_report| ())
 }
 
-pub(super) fn refresh_quota_store_paths_with_dependencies<R, P>(
+pub(super) async fn refresh_quota_store_paths_with_dependencies<R, P>(
     stdout: &mut impl Write,
     state_db: &Path,
     secret_root: &Path,
@@ -76,20 +76,20 @@ where
     R: AsyncProviderCredentialResolver,
     P: QuotaRefreshProvider,
 {
-    test_async_runtime()
-        .block_on(refresh_quota_store_paths_with_dependencies_async(
-            stdout,
-            state_db,
-            secret_root,
-            base_url,
-            credential_resolver,
-            quota_provider,
-            observed_unix_seconds,
-        ))
-        .map(|_report| ())
+    (refresh_quota_store_paths_with_dependencies_async(
+        stdout,
+        state_db,
+        secret_root,
+        base_url,
+        credential_resolver,
+        quota_provider,
+        observed_unix_seconds,
+    ))
+    .await
+    .map(|_report| ())
 }
 
-pub(super) fn refresh_quota_store_paths_with_floor_observer<R, P>(
+pub(super) async fn refresh_quota_store_paths_with_floor_observer<R, P>(
     stdout: &mut impl Write,
     state_db: &Path,
     secret_root: &Path,
@@ -102,19 +102,17 @@ where
     R: AsyncProviderCredentialResolver,
     P: QuotaRefreshProvider,
 {
-    test_async_runtime()
-        .block_on(
-            refresh_quota_store_paths_with_dependencies_and_floor_notifier_async(
-                stdout,
-                state_db,
-                secret_root,
-                base_url,
-                credential_resolver,
-                quota_provider,
-                observation_context,
-            ),
-        )
-        .map(|_report| ())
+    (refresh_quota_store_paths_with_dependencies_and_floor_notifier_async(
+        stdout,
+        state_db,
+        secret_root,
+        base_url,
+        credential_resolver,
+        quota_provider,
+        observation_context,
+    ))
+    .await
+    .map(|_report| ())
 }
 
 #[derive(Default)]
@@ -132,36 +130,39 @@ impl WeeklyQuotaFloorIntentObserver for RecordingWeeklyFloorObserver {
 
 pub(super) struct ContractCredentialResolver<R>(R);
 
-pub(super) fn contract_credential_resolver<'a, S: SecretStore, C: CredentialRefreshClient>(
-    state: &'a SqliteStateStore,
-    secrets: &'a S,
+pub(super) fn contract_credential_resolver<S, C>(
+    state: &AsyncSqliteStateStore,
+    secrets: &S,
     refresh_client: C,
     now_unix_seconds: u64,
-) -> ContractCredentialResolver<RouterCredentialResolver<'a, S, C>> {
-    ContractCredentialResolver(RouterCredentialResolver::new(
-        state,
-        secrets,
-        refresh_client,
-        now_unix_seconds,
-    ))
-}
-
-impl<S, C> AsyncProviderCredentialResolver
-    for ContractCredentialResolver<RouterCredentialResolver<'_, S, C>>
+) -> ContractCredentialResolver<codex_router_auth::resolver::AsyncRouterCredentialResolver<S, C>>
 where
-    S: SecretStore,
-    C: CredentialRefreshClient,
+    S: SecretStore + Clone + Send + Sync + 'static,
+    C: CredentialRefreshClient + Clone + Send + Sync + 'static,
+{
+    ContractCredentialResolver(
+        codex_router_auth::resolver::AsyncRouterCredentialResolver::new(
+            state.clone(),
+            secrets.clone(),
+            refresh_client,
+            Some(now_unix_seconds),
+        ),
+    )
+}
+impl<S, C> AsyncProviderCredentialResolver
+    for ContractCredentialResolver<codex_router_auth::resolver::AsyncRouterCredentialResolver<S, C>>
+where
+    S: SecretStore + Clone + Send + Sync + 'static,
+    C: CredentialRefreshClient + Clone + Send + Sync + 'static,
 {
     async fn resolve_provider_credentials_async(
         &self,
         account_id: &AccountId,
         expected_provider: codex_router_core::provider::Provider,
     ) -> Result<ResolvedProviderCredential, CredentialResolverError> {
-        ProviderCredentialResolver::resolve_provider_credentials(
-            &self.0,
-            account_id,
-            expected_provider,
-        )
+        self.0
+            .resolve_provider_credentials(account_id, expected_provider)
+            .await
     }
 }
 
@@ -551,7 +552,7 @@ pub(super) fn verified_quota_windows(remaining_headroom: u32) -> Vec<QuotaRefres
     ]
 }
 
-pub(super) fn run_static_quota_cli<const ARGUMENT_COUNT: usize>(
+pub(super) async fn run_static_quota_cli<const ARGUMENT_COUNT: usize>(
     args: [&str; ARGUMENT_COUNT],
 ) -> CliRunOutput {
     let command = match must_ok(CliCommand::parse(args.into_iter().map(Into::into))) {
@@ -559,23 +560,15 @@ pub(super) fn run_static_quota_cli<const ARGUMENT_COUNT: usize>(
         _ => panic!("static quota helper requires a quota command"),
     };
     let mut stdout = Vec::new();
-    must_ok(
-        test_async_runtime().block_on(crate::quota::run_quota_command(
-            &mut stdout,
-            command,
-            false,
-            true,
-            None,
-        )),
-    );
+    must_ok((crate::quota::run_quota_command(&mut stdout, command, false, true, None)).await);
     CliRunOutput {
         stdout: must_ok(String::from_utf8(stdout)),
         stderr: String::new(),
     }
 }
 
-pub(super) fn persist_effective_selector_window(
-    state: &SqliteStateStore,
+pub(super) async fn persist_effective_selector_window(
+    state: &AsyncSqliteStateStore,
     account_id: &AccountId,
     route_band: &str,
     remaining_headroom: u32,
@@ -590,10 +583,7 @@ pub(super) fn persist_effective_selector_window(
     .with_reset_unix_seconds(18_000)
     .with_effective(true)
     .with_observed_unix_seconds(1_000);
-    must_ok(SelectorQuotaRepository::upsert_selector_window(
-        state,
-        &short_window,
-    ));
+    must_ok(state.upsert_selector_quota_window(&short_window).await);
     let weekly_window = PersistedSelectorQuotaWindow::new(
         account_id.clone(),
         route_band,
@@ -603,8 +593,5 @@ pub(super) fn persist_effective_selector_window(
     .with_remaining_headroom(100)
     .with_reset_unix_seconds(604_800)
     .with_observed_unix_seconds(1_000);
-    must_ok(SelectorQuotaRepository::upsert_selector_window(
-        state,
-        &weekly_window,
-    ));
+    must_ok(state.upsert_selector_quota_window(&weekly_window).await);
 }

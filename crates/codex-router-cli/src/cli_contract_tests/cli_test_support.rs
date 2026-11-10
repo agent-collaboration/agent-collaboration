@@ -1,17 +1,8 @@
 use super::*;
 
-pub(super) fn test_async_runtime() -> tokio::runtime::Runtime {
-    must_ok(
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build(),
-    )
-}
-
-pub(super) fn migrate_test_state_database(state_database_path: &Path) {
-    let runtime = test_async_runtime();
-    let state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(state_database_path)));
-    must_ok(runtime.block_on(state.close()));
+pub(super) async fn migrate_test_state_database(state_database_path: &Path) {
+    let state = must_ok(AsyncSqliteStateStore::open(state_database_path).await);
+    must_ok(state.close().await);
 }
 
 pub(super) struct TestRoot {
@@ -130,43 +121,55 @@ pub(super) struct CliRunOutput {
     pub(super) stderr: String,
 }
 
-pub(super) fn run_cli<const ARGUMENT_COUNT: usize>(
-    args: [&str; ARGUMENT_COUNT],
+pub(super) fn run_cli_in_blocking_context(
+    arguments: Vec<OsString>,
     context: CliContext,
 ) -> CliRunOutput {
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
-    let arguments = args.into_iter().map(Into::into).collect::<Vec<_>>();
-    if matches!(
-        must_ok(CliCommand::parse(arguments.clone())),
-        CliCommand::Quota(_)
-    ) {
-        must_ok(test_async_runtime().block_on(run_with_io_async(
-            arguments,
-            &context,
-            &mut stdout,
-            &mut stderr,
-        )));
-    } else {
-        must_ok(run_with_io(arguments, &context, &mut stdout, &mut stderr));
-    }
-
+    must_ok(run_with_io(arguments, &context, &mut stdout, &mut stderr));
     CliRunOutput {
         stdout: must_ok(String::from_utf8(stdout)),
         stderr: must_ok(String::from_utf8(stderr)),
     }
 }
+pub(super) async fn run_cli<const ARGUMENT_COUNT: usize>(
+    args: [&str; ARGUMENT_COUNT],
+    context: CliContext,
+) -> CliRunOutput {
+    let arguments = args.into_iter().map(Into::into).collect::<Vec<_>>();
+    if matches!(
+        must_ok(CliCommand::parse(arguments.clone())),
+        CliCommand::Quota(_)
+    ) {
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        must_ok(run_with_io_async(arguments, &context, &mut stdout, &mut stderr).await);
+        CliRunOutput {
+            stdout: must_ok(String::from_utf8(stdout)),
+            stderr: must_ok(String::from_utf8(stderr)),
+        }
+    } else {
+        let command_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        must_ok(
+            tokio::task::spawn_blocking(move || {
+                tracing::dispatcher::with_default(&command_dispatcher, || {
+                    run_cli_in_blocking_context(arguments, context)
+                })
+            })
+            .await,
+        )
+    }
+}
 
-pub(super) fn ensure_async_state_schema(router_root: &Path) {
-    let runtime = must_ok(
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build(),
+pub(super) async fn ensure_async_state_schema(router_root: &Path) {
+    let state = must_ok(
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            router_root,
+        ))
+        .await,
     );
-    let state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(router_root),
-    )));
-    must_ok(runtime.block_on(state.close()));
+    must_ok(state.close().await);
 }
 
 pub(super) fn path_to_str(path: &Path) -> &str {

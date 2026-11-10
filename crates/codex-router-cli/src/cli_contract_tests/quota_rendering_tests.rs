@@ -1,14 +1,17 @@
 use super::*;
 
-#[test]
-fn quota_status_reads_sqlite_rows_without_provider_io() {
+#[tokio::test]
+async fn quota_status_reads_sqlite_rows_without_provider_io() {
     let test_root = TestRoot::new("quota-status");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    ));
+    let state = must_ok(
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        ))
+        .await,
+    );
     let primary_account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_primary"),
@@ -16,33 +19,36 @@ fn quota_status_reads_sqlite_rows_without_provider_io() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(
-        &state,
-        &primary_account,
-    ));
-    must_ok(QuotaSnapshotRepository::upsert_snapshot(
-        &state,
-        &PersistedQuotaSnapshot::new(
-            account_id("acct_primary"),
-            QuotaSnapshotSource::MockEndpoint,
-        )
-        .with_observed_unix_seconds(1_000)
-        .with_route_band("responses", 72)
-        .with_reset_unix_seconds(2_000)
-        .with_stale_penalty(false),
-    ));
-    must_ok(QuotaSnapshotRepository::upsert_snapshot(
-        &state,
-        &PersistedQuotaSnapshot::new(
-            account_id("acct_primary"),
-            QuotaSnapshotSource::MockEndpoint,
-        )
-        .with_observed_unix_seconds(1_005)
-        .with_route_band("models", 44)
-        .with_reset_unix_seconds(3_000),
-    ));
-    drop(state);
-    ensure_async_state_schema(&router_root);
+    must_ok(state.upsert_account(&primary_account).await);
+    must_ok(
+        state
+            .upsert_quota_snapshot(
+                &PersistedQuotaSnapshot::new(
+                    account_id("acct_primary"),
+                    QuotaSnapshotSource::MockEndpoint,
+                )
+                .with_observed_unix_seconds(1_000)
+                .with_route_band("responses", 72)
+                .with_reset_unix_seconds(2_000)
+                .with_stale_penalty(false),
+            )
+            .await,
+    );
+    must_ok(
+        state
+            .upsert_quota_snapshot(
+                &PersistedQuotaSnapshot::new(
+                    account_id("acct_primary"),
+                    QuotaSnapshotSource::MockEndpoint,
+                )
+                .with_observed_unix_seconds(1_005)
+                .with_route_band("models", 44)
+                .with_reset_unix_seconds(3_000),
+            )
+            .await,
+    );
+    state.close().await.expect("fixture state should close");
+    ensure_async_state_schema(&router_root).await;
 
     let output = run_cli(
         [
@@ -54,7 +60,8 @@ fn quota_status_reads_sqlite_rows_without_provider_io() {
             "--no-refresh",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
 
     assert!(output.stdout.contains("primary"));
     assert!(output.stdout.contains("72%"));
@@ -72,16 +79,19 @@ fn quota_status_reads_sqlite_rows_without_provider_io() {
     assert!(output.stderr.is_empty());
 }
 
-#[test]
-fn quota_status_mixed_provider_view_shows_openai_and_claude_accounts() {
+#[tokio::test]
+async fn quota_status_mixed_provider_view_shows_openai_and_claude_accounts() {
     let test_root = TestRoot::new("quota-status-openai-provider-filter");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let runtime = test_async_runtime();
-    let state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    )));
+
+    let state = must_ok(
+        (AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        )))
+        .await,
+    );
     for (provider, id, label) in [
         (
             codex_router_core::provider::Provider::Openai,
@@ -95,15 +105,15 @@ fn quota_status_mixed_provider_view_shows_openai_and_claude_accounts() {
         ),
     ] {
         must_ok(
-            runtime.block_on(
-                state.upsert_account(
+            state
+                .upsert_account(
                     &AccountRecord::new(provider, account_id(id), label, AccountStatus::Enabled)
                         .with_active_credential_generation(1),
-                ),
-            ),
+                )
+                .await,
         );
     }
-    must_ok(runtime.block_on(state.close()));
+    must_ok((state.close()).await);
 
     let output = run_cli(
         [
@@ -117,7 +127,8 @@ fn quota_status_mixed_provider_view_shows_openai_and_claude_accounts() {
             "--no-refresh",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
 
     assert!(output.stdout.contains("openai-view-account"));
     assert!(output.stdout.contains("claude-view-account"));
@@ -131,15 +142,18 @@ fn quota_status_mixed_provider_view_shows_openai_and_claude_accounts() {
     assert!(output.stderr.is_empty());
 }
 
-#[test]
-fn quota_status_snapshot_rows_show_unknown_pace_until_window_metadata_exists() {
+#[tokio::test]
+async fn quota_status_snapshot_rows_show_unknown_pace_until_window_metadata_exists() {
     let test_root = TestRoot::new("quota-status-snapshot-unknown-pace");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    ));
+    let state = must_ok(
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        ))
+        .await,
+    );
     let primary_account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_snapshot_pace"),
@@ -147,23 +161,23 @@ fn quota_status_snapshot_rows_show_unknown_pace_until_window_metadata_exists() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(
-        &state,
-        &primary_account,
-    ));
-    must_ok(QuotaSnapshotRepository::upsert_snapshot(
-        &state,
-        &PersistedQuotaSnapshot::new(
-            account_id("acct_snapshot_pace"),
-            QuotaSnapshotSource::MockEndpoint,
-        )
-        .with_observed_unix_seconds(9_900)
-        .with_route_band("responses", 75)
-        .with_reset_unix_seconds(20_000)
-        .with_stale_penalty(false),
-    ));
-    drop(state);
-    ensure_async_state_schema(&router_root);
+    must_ok(state.upsert_account(&primary_account).await);
+    must_ok(
+        state
+            .upsert_quota_snapshot(
+                &PersistedQuotaSnapshot::new(
+                    account_id("acct_snapshot_pace"),
+                    QuotaSnapshotSource::MockEndpoint,
+                )
+                .with_observed_unix_seconds(9_900)
+                .with_route_band("responses", 75)
+                .with_reset_unix_seconds(20_000)
+                .with_stale_penalty(false),
+            )
+            .await,
+    );
+    state.close().await.expect("fixture state should close");
+    ensure_async_state_schema(&router_root).await;
 
     let output = run_cli(
         [
@@ -179,7 +193,8 @@ fn quota_status_snapshot_rows_show_unknown_pace_until_window_metadata_exists() {
             "10000",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
 
     let lines = output.stdout.lines().collect::<Vec<_>>();
     assert_eq!(
@@ -202,15 +217,18 @@ fn quota_status_snapshot_rows_show_unknown_pace_until_window_metadata_exists() {
     assert!(output.stderr.is_empty());
 }
 
-#[test]
-fn quota_status_shows_two_user_quota_windows_per_account() {
+#[tokio::test]
+async fn quota_status_shows_two_user_quota_windows_per_account() {
     let test_root = TestRoot::new("quota-status-all-limits");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    ));
+    let state = must_ok(
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        ))
+        .await,
+    );
     let primary_account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_primary"),
@@ -218,10 +236,7 @@ fn quota_status_shows_two_user_quota_windows_per_account() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(
-        &state,
-        &primary_account,
-    ));
+    must_ok(state.upsert_account(&primary_account).await);
     let five_hour_window = PersistedSelectorQuotaWindow::new(
         account_id("acct_primary"),
         "responses",
@@ -242,29 +257,33 @@ fn quota_status_shows_two_user_quota_windows_per_account() {
     .with_reset_unix_seconds(614_800)
     .with_observed_unix_seconds(10_000);
     must_ok(
-        SelectorQuotaRepository::record_refresh_success_and_replace_selector_windows(
-            &state,
-            primary_account.account_id(),
-            "responses",
-            &[five_hour_window, weekly_window],
-            10_000,
-            20_000,
-        ),
+        state
+            .record_refresh_success_and_replace_selector_windows(
+                primary_account.account_id(),
+                "responses",
+                &[five_hour_window, weekly_window],
+                10_000,
+                20_000,
+            )
+            .await,
     );
-    must_ok(QuotaSnapshotRepository::upsert_snapshot(
-        &state,
-        &PersistedQuotaSnapshot::new(
-            account_id("acct_primary"),
-            QuotaSnapshotSource::MockEndpoint,
-        )
-        .with_observed_unix_seconds(10_000)
-        .with_route_band("responses", 25)
-        .with_reset_unix_seconds(20_000)
-        .with_reset_credits_available(1)
-        .with_stale_penalty(false),
-    ));
-    ensure_async_state_schema(&router_root);
-    drop(state);
+    must_ok(
+        state
+            .upsert_quota_snapshot(
+                &PersistedQuotaSnapshot::new(
+                    account_id("acct_primary"),
+                    QuotaSnapshotSource::MockEndpoint,
+                )
+                .with_observed_unix_seconds(10_000)
+                .with_route_band("responses", 25)
+                .with_reset_unix_seconds(20_000)
+                .with_reset_credits_available(1)
+                .with_stale_penalty(false),
+            )
+            .await,
+    );
+    ensure_async_state_schema(&router_root).await;
+    state.close().await.expect("fixture state should close");
 
     let output = run_cli(
         [
@@ -281,7 +300,8 @@ fn quota_status_shows_two_user_quota_windows_per_account() {
             "11000",
         ],
         CliContext::new(vec![("CODEX_ROUTER_FORCE_TTY".to_owned(), "1".to_owned())]),
-    );
+    )
+    .await;
 
     let lines = output.stdout.lines().collect::<Vec<_>>();
     assert_eq!(
@@ -320,8 +340,8 @@ fn quota_status_shows_two_user_quota_windows_per_account() {
     assert!(output.stderr.is_empty());
 }
 
-#[test]
-fn quota_status_renders_mixed_providers_and_fresh_stale_unknown_claude_windows() {
+#[tokio::test]
+async fn quota_status_renders_mixed_providers_and_fresh_stale_unknown_claude_windows() {
     use codex_router_core::route_profile::WindowKind;
     use codex_router_state::window_observation::WindowObservation;
     use codex_router_state::window_observation::WindowObservationProps;
@@ -331,15 +351,18 @@ fn quota_status_renders_mixed_providers_and_fresh_stale_unknown_claude_windows()
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    ensure_async_state_schema(&router_root);
+    ensure_async_state_schema(&router_root).await;
 
     let openai_account_id = account_id("acct_openai_mixed");
     let fresh_claude_id = account_id("acct_claude_fresh");
     let stale_claude_id = account_id("acct_claude_stale");
     let unknown_claude_id = account_id("acct_claude_unknown");
-    let state = must_ok(SqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    ));
+    let state = must_ok(
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        ))
+        .await,
+    );
     let openai_account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         openai_account_id.clone(),
@@ -347,40 +370,45 @@ fn quota_status_renders_mixed_providers_and_fresh_stale_unknown_claude_windows()
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(
-        &state,
-        &openai_account,
-    ));
-    must_ok(QuotaSnapshotRepository::upsert_snapshot(
-        &state,
-        &PersistedQuotaSnapshot::new(openai_account_id, QuotaSnapshotSource::MockEndpoint)
-            .with_observed_unix_seconds(NOW)
-            .with_route_band("responses", 60)
-            .with_reset_unix_seconds(NOW + 3_600)
-            .with_stale_penalty(false),
-    ));
+    must_ok(state.upsert_account(&openai_account).await);
+    must_ok(
+        state
+            .upsert_quota_snapshot(
+                &PersistedQuotaSnapshot::new(openai_account_id, QuotaSnapshotSource::MockEndpoint)
+                    .with_observed_unix_seconds(NOW)
+                    .with_route_band("responses", 60)
+                    .with_reset_unix_seconds(NOW + 3_600)
+                    .with_stale_penalty(false),
+            )
+            .await,
+    );
     for (id, label) in [
         (&fresh_claude_id, "claude-fresh"),
         (&stale_claude_id, "claude-stale"),
         (&unknown_claude_id, "claude-unknown"),
     ] {
-        must_ok(AccountStateRepository::upsert_account(
-            &state,
-            &AccountRecord::new(
-                codex_router_core::provider::Provider::Claude,
-                id.clone(),
-                label,
-                AccountStatus::Enabled,
-            )
-            .with_active_credential_generation(1),
-        ));
+        must_ok(
+            state
+                .upsert_account(
+                    &AccountRecord::new(
+                        codex_router_core::provider::Provider::Claude,
+                        id.clone(),
+                        label,
+                        AccountStatus::Enabled,
+                    )
+                    .with_active_credential_generation(1),
+                )
+                .await,
+        );
     }
-    drop(state);
+    state.close().await.expect("fixture state should close");
 
-    let runtime = test_async_runtime();
-    let async_state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    )));
+    let async_state = must_ok(
+        (AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        )))
+        .await,
+    );
     for (id, kind, remaining, reset, observed_at) in [
         (
             &fresh_claude_id,
@@ -408,9 +436,9 @@ fn quota_status_renders_mixed_providers_and_fresh_stale_unknown_claude_windows()
             WindowObservationProps::new(id.clone(), kind, remaining, observed_at)
                 .with_reset_unix_seconds(reset),
         ));
-        must_ok(runtime.block_on(async_state.record_window_observation(&observation, || NOW)));
+        must_ok((async_state.record_window_observation(&observation, || NOW)).await);
     }
-    must_ok(runtime.block_on(async_state.close()));
+    must_ok((async_state.close()).await);
 
     let output = run_cli(
         [
@@ -427,7 +455,8 @@ fn quota_status_renders_mixed_providers_and_fresh_stale_unknown_claude_windows()
             "10000",
         ],
         CliContext::new(vec![("CODEX_ROUTER_FORCE_TTY".to_owned(), "1".to_owned())]),
-    );
+    )
+    .await;
 
     assert!(output.stdout.contains("openai-mixed"));
     let fresh_line = output
@@ -455,15 +484,18 @@ fn quota_status_renders_mixed_providers_and_fresh_stale_unknown_claude_windows()
     assert!(output.stderr.is_empty());
 }
 
-#[test]
-fn quota_status_table_format_renders_account_rows_without_legacy_tables() {
+#[tokio::test]
+async fn quota_status_table_format_renders_account_rows_without_legacy_tables() {
     let test_root = TestRoot::new("quota-status-account-rows");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    ));
+    let state = must_ok(
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        ))
+        .await,
+    );
     let primary_account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_primary"),
@@ -471,10 +503,7 @@ fn quota_status_table_format_renders_account_rows_without_legacy_tables() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(
-        &state,
-        &primary_account,
-    ));
+    must_ok(state.upsert_account(&primary_account).await);
     let five_hour_window = PersistedSelectorQuotaWindow::new(
         account_id("acct_primary"),
         "responses",
@@ -495,29 +524,33 @@ fn quota_status_table_format_renders_account_rows_without_legacy_tables() {
     .with_reset_unix_seconds(614_800)
     .with_observed_unix_seconds(10_000);
     must_ok(
-        SelectorQuotaRepository::record_refresh_success_and_replace_selector_windows(
-            &state,
-            primary_account.account_id(),
-            "responses",
-            &[five_hour_window, weekly_window],
-            10_000,
-            20_000,
-        ),
+        state
+            .record_refresh_success_and_replace_selector_windows(
+                primary_account.account_id(),
+                "responses",
+                &[five_hour_window, weekly_window],
+                10_000,
+                20_000,
+            )
+            .await,
     );
-    must_ok(QuotaSnapshotRepository::upsert_snapshot(
-        &state,
-        &PersistedQuotaSnapshot::new(
-            account_id("acct_primary"),
-            QuotaSnapshotSource::MockEndpoint,
-        )
-        .with_observed_unix_seconds(10_000)
-        .with_route_band("responses", 25)
-        .with_reset_unix_seconds(20_000)
-        .with_reset_credits_available(1)
-        .with_stale_penalty(false),
-    ));
-    ensure_async_state_schema(&router_root);
-    drop(state);
+    must_ok(
+        state
+            .upsert_quota_snapshot(
+                &PersistedQuotaSnapshot::new(
+                    account_id("acct_primary"),
+                    QuotaSnapshotSource::MockEndpoint,
+                )
+                .with_observed_unix_seconds(10_000)
+                .with_route_band("responses", 25)
+                .with_reset_unix_seconds(20_000)
+                .with_reset_credits_available(1)
+                .with_stale_penalty(false),
+            )
+            .await,
+    );
+    ensure_async_state_schema(&router_root).await;
+    state.close().await.expect("fixture state should close");
 
     let output = run_static_quota_cli([
         "codex-router",
@@ -531,7 +564,8 @@ fn quota_status_table_format_renders_account_rows_without_legacy_tables() {
         "--no-refresh",
         "--now-unix-seconds",
         "11000",
-    ]);
+    ])
+    .await;
 
     let visible_stdout = strip_ansi_sequences(&output.stdout);
 
@@ -560,15 +594,18 @@ fn quota_status_table_format_renders_account_rows_without_legacy_tables() {
     assert!(output.stderr.is_empty());
 }
 
-#[test]
-fn quota_status_default_keeps_single_human_status_block_without_refresh() {
+#[tokio::test]
+async fn quota_status_default_keeps_single_human_status_block_without_refresh() {
     let test_root = TestRoot::new("quota-status-default-readonly-single-block");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    ));
+    let state = must_ok(
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        ))
+        .await,
+    );
     let primary_account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_primary"),
@@ -576,23 +613,23 @@ fn quota_status_default_keeps_single_human_status_block_without_refresh() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(
-        &state,
-        &primary_account,
-    ));
-    must_ok(QuotaSnapshotRepository::upsert_snapshot(
-        &state,
-        &PersistedQuotaSnapshot::new(
-            account_id("acct_primary"),
-            QuotaSnapshotSource::MockEndpoint,
-        )
-        .with_observed_unix_seconds(10_000)
-        .with_route_band("responses", 25)
-        .with_reset_unix_seconds(20_000)
-        .with_stale_penalty(false),
-    ));
-    ensure_async_state_schema(&router_root);
-    drop(state);
+    must_ok(state.upsert_account(&primary_account).await);
+    must_ok(
+        state
+            .upsert_quota_snapshot(
+                &PersistedQuotaSnapshot::new(
+                    account_id("acct_primary"),
+                    QuotaSnapshotSource::MockEndpoint,
+                )
+                .with_observed_unix_seconds(10_000)
+                .with_route_band("responses", 25)
+                .with_reset_unix_seconds(20_000)
+                .with_stale_penalty(false),
+            )
+            .await,
+    );
+    ensure_async_state_schema(&router_root).await;
+    state.close().await.expect("fixture state should close");
 
     let output = run_static_quota_cli([
         "codex-router",
@@ -604,7 +641,8 @@ fn quota_status_default_keeps_single_human_status_block_without_refresh() {
         "table",
         "--now-unix-seconds",
         "11000",
-    ]);
+    ])
+    .await;
 
     assert_eq!(output.stdout.matches("Quota status").count(), 1);
     assert!(
@@ -620,15 +658,18 @@ fn quota_status_default_keeps_single_human_status_block_without_refresh() {
     assert!(output.stderr.is_empty());
 }
 
-#[test]
-fn quota_status_redacts_unsafe_account_labels() {
+#[tokio::test]
+async fn quota_status_redacts_unsafe_account_labels() {
     let test_root = TestRoot::new("quota-status-redacts-unsafe-account-labels");
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(
-        &codex_router_state::provider_proxy_database_path(&router_root),
-    ));
+    let state = must_ok(
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        ))
+        .await,
+    );
     let account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_unsafe_status_label"),
@@ -636,20 +677,23 @@ fn quota_status_redacts_unsafe_account_labels() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(&state, &account));
-    must_ok(QuotaSnapshotRepository::upsert_snapshot(
-        &state,
-        &PersistedQuotaSnapshot::new(
-            account_id("acct_unsafe_status_label"),
-            QuotaSnapshotSource::MockEndpoint,
-        )
-        .with_observed_unix_seconds(10_000)
-        .with_route_band("responses", 80)
-        .with_reset_unix_seconds(20_000)
-        .with_stale_penalty(false),
-    ));
-    ensure_async_state_schema(&router_root);
-    drop(state);
+    must_ok(state.upsert_account(&account).await);
+    must_ok(
+        state
+            .upsert_quota_snapshot(
+                &PersistedQuotaSnapshot::new(
+                    account_id("acct_unsafe_status_label"),
+                    QuotaSnapshotSource::MockEndpoint,
+                )
+                .with_observed_unix_seconds(10_000)
+                .with_route_band("responses", 80)
+                .with_reset_unix_seconds(20_000)
+                .with_stale_penalty(false),
+            )
+            .await,
+    );
+    ensure_async_state_schema(&router_root).await;
+    state.close().await.expect("fixture state should close");
 
     let output = run_static_quota_cli([
         "codex-router",
@@ -661,7 +705,8 @@ fn quota_status_redacts_unsafe_account_labels() {
         "table",
         "--now-unix-seconds",
         "11000",
-    ]);
+    ])
+    .await;
 
     assert!(!output.stdout.contains("person@example.com"));
     assert!(output.stdout.contains("acct-"));

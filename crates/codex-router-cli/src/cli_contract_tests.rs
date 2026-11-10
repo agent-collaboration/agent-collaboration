@@ -36,7 +36,6 @@ use codex_router_auth::resolver::CredentialResolverError;
 use codex_router_auth::resolver::NoopCredentialRefreshClient;
 use codex_router_auth::resolver::ProviderCredentialResolver;
 use codex_router_auth::resolver::ResolvedProviderCredential;
-use codex_router_auth::resolver::RouterCredentialResolver;
 use codex_router_core::ids::AccountId;
 use codex_router_core::ids::ReservationId;
 use codex_router_core::redaction::SecretString;
@@ -61,12 +60,8 @@ use codex_router_state::quota_snapshot::PersistedQuotaSnapshot;
 use codex_router_state::quota_snapshot::PersistedSelectorQuotaWindow;
 use codex_router_state::quota_snapshot::QuotaSnapshotSource;
 use codex_router_state::quota_snapshot::SelectorQuotaWindowStatus;
-use codex_router_state::repositories::AccountStateRepository;
-use codex_router_state::repositories::QuotaSnapshotRepository;
-use codex_router_state::repositories::SelectorQuotaRepository;
 use codex_router_state::sqlite::AsyncSqliteStateStore;
 use codex_router_state::sqlite::AsyncWeeklyQuotaFloorMutationStore;
-use codex_router_state::sqlite::SqliteStateStore;
 
 use crate::account::AccountCommand;
 use crate::account::AccountCommandError;
@@ -188,3 +183,8 @@ mod quota_concurrency_tests;
 
 #[path = "cli_contract_tests/token_rotation_tests.rs"]
 mod token_rotation_tests;
+
+#[path = "cli_contract_tests/quota_http_persistence_journey.rs"]
+mod quota_http_persistence_journey;
+#[path = "cli_contract_tests/quota_unauthorized_journeys.rs"]
+mod quota_unauthorized_journeys;

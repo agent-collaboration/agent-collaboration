@@ -23,13 +23,13 @@ fn local_token_reload_watcher_reports_generation_changes() {
     assert_eq!(observed_generation, rotated_token.generation());
 }
 
-#[test]
-fn serve_scopes_claude_token_rotation_and_keeps_codex_optional() {
+#[tokio::test]
+async fn serve_scopes_claude_token_rotation_and_keeps_codex_optional() {
     let test_root = TestRoot::new("serve-claude-token-scope-rotation");
     must_ok(fs::create_dir(test_root.path()));
     let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
-    let state = must_ok(SqliteStateStore::open(&state_path));
+    let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_root),
     );
@@ -41,13 +41,13 @@ fn serve_scopes_claude_token_rotation_and_keeps_codex_optional() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(&state, &account));
+    must_ok(state.upsert_account(&account).await);
     let snapshot =
         PersistedQuotaSnapshot::new(account_id.clone(), QuotaSnapshotSource::MockEndpoint)
             .with_observed_unix_seconds(1_000)
             .with_route_band("responses", 100);
-    must_ok(QuotaSnapshotRepository::upsert_snapshot(&state, &snapshot));
-    persist_effective_selector_window(&state, &account_id, "responses", 100);
+    must_ok(state.upsert_quota_snapshot(&snapshot).await);
+    persist_effective_selector_window(&state, &account_id, "responses", 100).await;
     let upstream_token_key = must_ok(openai_account_credential_bundle_key(&account_id, 1));
     let upstream_credential_bundle = must_ok(
         AccountCredentialBundle::imported_codex_auth(
@@ -152,7 +152,8 @@ fn serve_scopes_claude_token_rotation_and_keeps_codex_optional() {
             path_to_str(&secret_root),
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
     let token_b = must_ok(token_service.load_current());
     let reload_observation = token_reload_receiver.recv_timeout(Duration::from_secs(2));
     assert_eq!(
@@ -224,17 +225,17 @@ fn serve_scopes_claude_token_rotation_and_keeps_codex_optional() {
     assert!(String::from_utf8_lossy(&stdout).contains("listening: 127.0.0.1:"));
 }
 
-#[test]
+#[tokio::test]
 #[expect(
     clippy::result_large_err,
     reason = "The existing callback contract requires the unboxed error value."
 )]
-fn serve_command_reloads_token_rotation_without_restart() {
+async fn serve_command_reloads_token_rotation_without_restart() {
     let test_root = TestRoot::new("serve-command-token-rotation");
     must_ok(fs::create_dir(test_root.path()));
     let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
-    let state = must_ok(SqliteStateStore::open(&state_path));
+    let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_root),
     );
@@ -248,13 +249,13 @@ fn serve_command_reloads_token_rotation_without_restart() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(&state, &account));
+    must_ok(state.upsert_account(&account).await);
     let snapshot =
         PersistedQuotaSnapshot::new(account_id.clone(), QuotaSnapshotSource::MockEndpoint)
             .with_observed_unix_seconds(1_000)
             .with_route_band("responses", 100);
-    must_ok(QuotaSnapshotRepository::upsert_snapshot(&state, &snapshot));
-    persist_effective_selector_window(&state, &account_id, "responses", 100);
+    must_ok(state.upsert_quota_snapshot(&snapshot).await);
+    persist_effective_selector_window(&state, &account_id, "responses", 100).await;
     let upstream_token_key = must_ok(openai_account_credential_bundle_key(&account_id, 1));
     let upstream_credential_bundle = must_ok(
         AccountCredentialBundle::imported_codex_auth(
@@ -313,7 +314,7 @@ fn serve_command_reloads_token_rotation_without_restart() {
     let state_arg = state_path;
     let secret_arg = secret_root.clone();
     let serve_thread = thread::spawn(move || {
-        run_cli(
+        run_cli_in_blocking_context(
             [
                 "codex-router",
                 "serve",
@@ -335,7 +336,10 @@ fn serve_command_reloads_token_rotation_without_restart() {
                 "--require-local-token",
                 "--max-connections",
                 "3",
-            ],
+            ]
+            .into_iter()
+            .map(OsString::from)
+            .collect(),
             CliContext::new(Vec::new()),
         )
     });
@@ -359,7 +363,8 @@ fn serve_command_reloads_token_rotation_without_restart() {
             path_to_str(&secret_root),
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
     assert_eq!(rotate_output.stdout, "generation: 2\n");
     assert!(rotate_output.stderr.is_empty());
     let token_b = must_ok(token_service.load_current());

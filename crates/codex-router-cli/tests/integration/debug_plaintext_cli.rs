@@ -66,8 +66,7 @@ async fn debug_plaintext_compiled_cli_activates_and_selects_current_token_across
         PersistedQuotaSnapshot, PersistedSelectorQuotaWindow, QuotaSnapshotSource,
         SelectorQuotaWindowStatus,
     };
-    use codex_router_state::repositories::{QuotaSnapshotRepository, SelectorQuotaRepository};
-    use codex_router_state::sqlite::{AsyncSqliteStateStore, SqliteStateStore};
+    use codex_router_state::sqlite::AsyncSqliteStateStore;
     use sha2::{Digest, Sha256};
     use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 
@@ -129,7 +128,7 @@ async fn debug_plaintext_compiled_cli_activates_and_selects_current_token_across
             "credential activation must advance the active generation",
         )?;
     }
-    drop(state);
+    state.close().await?;
     let current_key = openai_account_credential_bundle_key(&account_id, 2)?;
     check(
         std::fs::read_to_string(secret_root.join(format!("{}.secret", current_key.as_str())))?
@@ -144,29 +143,31 @@ async fn debug_plaintext_compiled_cli_activates_and_selects_current_token_across
         !secret_root.join("format-v2.marker").exists(),
         "plaintext root must not create encrypted format marker",
     )?;
-    let state = SqliteStateStore::open(&state_path)?;
-    QuotaSnapshotRepository::upsert_snapshot(
-        &state,
-        &PersistedQuotaSnapshot::new(account_id.clone(), QuotaSnapshotSource::MockEndpoint)
-            .with_observed_unix_seconds(1_000)
-            .with_route_band("responses", 88),
-    )?;
+    let state = AsyncSqliteStateStore::open(&state_path).await?;
+    state
+        .upsert_quota_snapshot(
+            &PersistedQuotaSnapshot::new(account_id.clone(), QuotaSnapshotSource::MockEndpoint)
+                .with_observed_unix_seconds(1_000)
+                .with_route_band("responses", 88),
+        )
+        .await?;
     for (duration, effective) in [(18_000, true), (604_800, false)] {
-        SelectorQuotaRepository::upsert_selector_window(
-            &state,
-            &PersistedSelectorQuotaWindow::new(
-                account_id.clone(),
-                "responses",
-                duration,
-                SelectorQuotaWindowStatus::Eligible,
+        state
+            .upsert_selector_quota_window(
+                &PersistedSelectorQuotaWindow::new(
+                    account_id.clone(),
+                    "responses",
+                    duration,
+                    SelectorQuotaWindowStatus::Eligible,
+                )
+                .with_remaining_headroom(88)
+                .with_reset_unix_seconds(duration)
+                .with_effective(effective)
+                .with_observed_unix_seconds(1_000),
             )
-            .with_remaining_headroom(88)
-            .with_reset_unix_seconds(duration)
-            .with_effective(effective)
-            .with_observed_unix_seconds(1_000),
-        )?;
+            .await?;
     }
-    drop(state);
+    state.close().await?;
     let mut list = candidate_command();
     list.args(["account", "list", "--router-root"])
         .arg(&router_root);

@@ -11,8 +11,8 @@ fn token_export_is_single_assignment_without_prose() {
     assert!(assignment.contains("'\\''"));
 }
 
-#[test]
-fn token_export_and_profile_doctor_redact_router_token_value() {
+#[tokio::test]
+async fn token_export_and_profile_doctor_redact_router_token_value() {
     let test_root = TestRoot::new("token-export-profile-doctor");
     let store = must_ok(FileSecretStore::open(test_root.path()));
     let service = LocalRouterTokenService::new(store);
@@ -27,14 +27,16 @@ fn token_export_and_profile_doctor_redact_router_token_value() {
             path_to_str(test_root.path()),
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
     let doctor_output = run_cli(
         ["codex-router", "profile", "doctor"],
         CliContext::new(vec![(
             "CODEX_ROUTER_TOKEN".to_owned(),
             record.token().expose_secret().to_owned(),
         )]),
-    );
+    )
+    .await;
 
     assert!(
         export_output
@@ -55,8 +57,8 @@ fn token_export_and_profile_doctor_redact_router_token_value() {
     assert!(doctor_output.stderr.is_empty());
 }
 
-#[test]
-fn token_export_command_emits_current_router_root_token_assignment() {
+#[tokio::test]
+async fn token_export_command_emits_current_router_root_token_assignment() {
     let test_root = TestRoot::new("token-export-command");
     let store = must_ok(FileSecretStore::open(test_root.path()));
     let service = LocalRouterTokenService::new(store);
@@ -73,7 +75,8 @@ fn token_export_command_emits_current_router_root_token_assignment() {
             "posix",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
 
     assert_eq!(
         output.stdout,
@@ -87,8 +90,8 @@ fn token_export_command_emits_current_router_root_token_assignment() {
     assert!(output.stderr.is_empty());
 }
 
-#[test]
-fn token_init_and_rotate_commands_do_not_print_secret_and_update_export() {
+#[tokio::test]
+async fn token_init_and_rotate_commands_do_not_print_secret_and_update_export() {
     let test_root = TestRoot::new("token-init-rotate-command");
 
     let init_output = run_cli(
@@ -100,7 +103,8 @@ fn token_init_and_rotate_commands_do_not_print_secret_and_update_export() {
             path_to_str(test_root.path()),
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
     assert_eq!(init_output.stdout, "generation: 1\n");
     assert!(!init_output.stdout.contains("CODEX_ROUTER_TOKEN="));
     assert!(init_output.stderr.is_empty());
@@ -114,7 +118,8 @@ fn token_init_and_rotate_commands_do_not_print_secret_and_update_export() {
             path_to_str(test_root.path()),
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
     assert!(
         first_export
             .stdout
@@ -130,7 +135,8 @@ fn token_init_and_rotate_commands_do_not_print_secret_and_update_export() {
             path_to_str(test_root.path()),
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
     assert_eq!(rotate_output.stdout, "generation: 2\n");
     assert!(!rotate_output.stdout.contains("CODEX_ROUTER_TOKEN="));
     assert!(rotate_output.stderr.is_empty());
@@ -144,7 +150,8 @@ fn token_init_and_rotate_commands_do_not_print_secret_and_update_export() {
             path_to_str(test_root.path()),
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
     assert!(
         second_export
             .stdout

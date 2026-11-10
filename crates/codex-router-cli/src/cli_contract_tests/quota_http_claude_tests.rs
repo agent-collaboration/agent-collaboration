@@ -105,8 +105,8 @@ impl QuotaRefreshProvider for RecordingClaudeQuotaProvider {
     }
 }
 
-#[test]
-fn claude_quota_401_recovers_credentials_and_retries_the_usage_request() {
+#[tokio::test]
+async fn claude_quota_401_recovers_credentials_and_retries_the_usage_request() {
     use codex_router_core::provider::Provider;
     use codex_router_state::sqlite::AsyncSqliteStateStore;
     use std::sync::atomic::Ordering;
@@ -117,10 +117,10 @@ fn claude_quota_401_recovers_credentials_and_retries_the_usage_request() {
     must_ok(fs::create_dir_all(&router_root));
     let state_path = codex_router_state::provider_proxy_database_path(&router_root);
     let account_id = account_id("acct_claude_401_recovery");
-    let state = must_ok(test_async_runtime().block_on(AsyncSqliteStateStore::open(&state_path)));
+    let state = must_ok((AsyncSqliteStateStore::open(&state_path)).await);
     must_ok(
-        test_async_runtime().block_on(
-            state.upsert_account(
+        state
+            .upsert_account(
                 &AccountRecord::new(
                     Provider::Claude,
                     account_id.clone(),
@@ -128,10 +128,10 @@ fn claude_quota_401_recovers_credentials_and_retries_the_usage_request() {
                     AccountStatus::Enabled,
                 )
                 .with_active_credential_generation(1),
-            ),
-        ),
+            )
+            .await,
     );
-    must_ok(test_async_runtime().block_on(state.close()));
+    must_ok((state.close()).await);
 
     let resolver = RecoveringClaudeQuotaCredentialResolver {
         recovery_calls: std::sync::atomic::AtomicUsize::new(0),
@@ -139,7 +139,7 @@ fn claude_quota_401_recovers_credentials_and_retries_the_usage_request() {
     let provider = RecordingClaudeQuotaProvider::new(true);
     let mut stdout = Vec::new();
     must_ok(
-        test_async_runtime().block_on(refresh_quota_store_paths_with_dependencies_async(
+        (refresh_quota_store_paths_with_dependencies_async(
             &mut stdout,
             &state_path,
             &router_root.join("secrets"),
@@ -147,7 +147,8 @@ fn claude_quota_401_recovers_credentials_and_retries_the_usage_request() {
             &resolver,
             &provider,
             2_000,
-        )),
+        ))
+        .await,
     );
 
     assert_eq!(resolver.recovery_calls.load(Ordering::SeqCst), 1);
@@ -167,8 +168,8 @@ fn claude_quota_401_recovers_credentials_and_retries_the_usage_request() {
     assert_eq!(must_ok(String::from_utf8(stdout)), "refreshed: 1\n");
 }
 
-#[test]
-fn background_quota_refresh_polls_only_claude_accounts_idle_longer_than_interval() {
+#[tokio::test]
+async fn background_quota_refresh_polls_only_claude_accounts_idle_longer_than_interval() {
     use codex_router_core::ids::ReservationId;
     use codex_router_core::provider::Provider;
     use codex_router_state::sqlite::AsyncSqliteStateStore;
@@ -178,7 +179,7 @@ fn background_quota_refresh_polls_only_claude_accounts_idle_longer_than_interval
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
     let state_path = codex_router_state::provider_proxy_database_path(&router_root);
-    let state = must_ok(test_async_runtime().block_on(AsyncSqliteStateStore::open(&state_path)));
+    let state = must_ok((AsyncSqliteStateStore::open(&state_path)).await);
     let labels = ["busy", "recent", "idle", "never-used"];
     let accounts = labels.map(|label| {
         AccountRecord::new(
@@ -190,49 +191,51 @@ fn background_quota_refresh_polls_only_claude_accounts_idle_longer_than_interval
         .with_active_credential_generation(1)
     });
     for account in &accounts {
-        must_ok(test_async_runtime().block_on(state.upsert_account(account)));
+        must_ok(state.upsert_account(account).await);
     }
     let busy_reservation = ReservationId::new("busy-reservation");
     must_ok(
-        test_async_runtime().block_on(state.record_active_client_acquired(
+        (state.record_active_client_acquired(
             "claude_messages",
             "busy-process",
             &busy_reservation,
             accounts[0].account_id(),
             1_000,
             0,
-        )),
+        ))
+        .await,
     );
     for (account_index, acquired_at, released_at, process_id) in
         [(1, 1_600, 1_800, "recent"), (2, 1_000, 1_100, "idle")]
     {
         let reservation = ReservationId::new(format!("{process_id}-reservation"));
         must_ok(
-            test_async_runtime().block_on(state.record_active_client_acquired(
+            (state.record_active_client_acquired(
                 "claude_messages",
                 process_id,
                 &reservation,
                 accounts[account_index].account_id(),
                 acquired_at,
                 0,
-            )),
+            ))
+            .await,
         );
         must_ok(
-            test_async_runtime().block_on(state.record_active_client_released(
+            (state.record_active_client_released(
                 "claude_messages",
                 process_id,
                 &reservation,
                 released_at,
-            )),
+            ))
+            .await,
         );
     }
-    must_ok(test_async_runtime().block_on(state.close()));
+    must_ok((state.close()).await);
 
     let provider = RecordingClaudeQuotaProvider::new(false);
     let resolver = FixedClaudeQuotaCredentialResolver;
     let mut stdout = Vec::new();
-    must_ok(test_async_runtime().block_on(
-        codex_router_quota_service::quota::refresh_quota_store_paths_with_dependencies_and_floor_notifier(
+    must_ok((codex_router_quota_service::quota::refresh_quota_store_paths_with_dependencies_and_floor_notifier(
             &mut stdout,
             &state_path,
             &router_root.join("secrets"),
@@ -246,8 +249,7 @@ fn background_quota_refresh_polls_only_claude_accounts_idle_longer_than_interval
                 },
                 weekly_floor_observer: None,
             },
-        ),
-    ));
+        )).await);
 
     let polled_account_ids = provider
         .recorded_requests()

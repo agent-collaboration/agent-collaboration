@@ -5,15 +5,16 @@ struct RetainedRemovalCredentialResolver;
 #[path = "account_removal_lifetime_tests.rs"]
 mod lifetime_tests;
 
-#[test]
-fn account_remove_async_owner_refuses_a_mismatched_expected_record_without_deleting() {
+#[tokio::test]
+async fn account_remove_async_owner_refuses_a_mismatched_expected_record_without_deleting() {
     for mismatch in ["label", "provider", "generation"] {
-        let fixture = RemovalFixture::new("remove-captured-mismatch", AccountStatus::Disabled);
-        fixture.login_account("acct_secondary", "secondary");
-        fixture.seed_dependents();
-        let before = fixture.dependent_row_counts("acct_primary");
-        let runtime = test_async_runtime();
-        let result = runtime.block_on(async {
+        let fixture =
+            RemovalFixture::new("remove-captured-mismatch", AccountStatus::Disabled).await;
+        fixture.login_account("acct_secondary", "secondary").await;
+        fixture.seed_dependents().await;
+        let before = fixture.dependent_row_counts("acct_primary").await;
+
+        let result = (async {
             let state = AsyncSqliteStateStore::open_read_only(
                 &codex_router_state::provider_proxy_database_path(fixture.root.path()),
             )
@@ -45,7 +46,8 @@ fn account_remove_async_owner_refuses_a_mismatched_expected_record_without_delet
                 expected,
             )
             .await
-        });
+        })
+        .await;
         assert!(
             matches!(
                 result,
@@ -55,9 +57,9 @@ fn account_remove_async_owner_refuses_a_mismatched_expected_record_without_delet
             ),
             "{mismatch}: {result:?}"
         );
-        assert!(fixture.account_exists());
+        assert!(fixture.account_exists().await);
         assert!(fixture.credential_exists(1));
-        assert_eq!(fixture.dependent_row_counts("acct_primary"), before);
+        assert_eq!(fixture.dependent_row_counts("acct_primary").await, before);
     }
 }
 
@@ -104,12 +106,12 @@ impl QuotaRefreshProvider for HeldModelsQuotaProvider {
     }
 }
 
-#[test]
-fn account_remove_discards_in_flight_quota_writes() {
+#[tokio::test]
+async fn account_remove_discards_in_flight_quota_writes() {
     let mut outcomes = Vec::new();
     for response_succeeds in [true, false] {
-        let fixture = RemovalFixture::new("remove-in-flight-quota", AccountStatus::Enabled);
-        fixture.login_account("acct_secondary", "secondary");
+        let fixture = RemovalFixture::new("remove-in-flight-quota", AccountStatus::Enabled).await;
+        fixture.login_account("acct_secondary", "secondary").await;
         // Keep the second account outside the refresh while preserving all of its rows.
         run_cli(
             [
@@ -121,12 +123,13 @@ fn account_remove_discards_in_flight_quota_writes() {
                 path_to_str(fixture.root.path()),
             ],
             CliContext::new(Vec::new()),
-        );
-        fixture.seed_dependents();
-        let secondary_before = fixture.dependent_row_counts("acct_secondary");
+        )
+        .await;
+        fixture.seed_dependents().await;
+        let secondary_before = fixture.dependent_row_counts("acct_secondary").await;
         let state_path = codex_router_state::provider_proxy_database_path(fixture.root.path());
         let secret_root = fixture.root.path().join("secrets");
-        let runtime = test_async_runtime();
+        let runtime = tokio::runtime::Handle::current();
         let entered = Arc::new(tokio::sync::Notify::new());
         let release = Arc::new(tokio::sync::Notify::new());
         let provider = HeldModelsQuotaProvider {
@@ -146,12 +149,12 @@ fn account_remove_discards_in_flight_quota_writes() {
             )
             .await
         });
-        runtime.block_on(async {
+        (async {
             tokio::select! {
                 () = entered.notified() => {},
                 result = &mut refresh => panic!("refresh ended before the held Models fetch: {result:?}"),
             }
-        });
+        }).await;
         run_cli(
             [
                 "account",
@@ -162,17 +165,21 @@ fn account_remove_discards_in_flight_quota_writes() {
                 path_to_str(fixture.root.path()),
             ],
             CliContext::new(Vec::new()),
+        )
+        .await;
+        assert_eq!(
+            must_ok(fixture.remove().await),
+            "removed account: primary\n"
         );
-        assert_eq!(must_ok(fixture.remove()), "removed account: primary\n");
         release.notify_one();
-        must_ok(must_ok(runtime.block_on(refresh)));
-        assert!(!fixture.account_exists());
+        must_ok(must_ok((refresh).await));
+        assert!(!fixture.account_exists().await);
         assert!(!fixture.credential_exists(1));
         outcomes.push((
             response_succeeds,
-            fixture.dependent_row_counts("acct_primary"),
+            fixture.dependent_row_counts("acct_primary").await,
             secondary_before,
-            fixture.dependent_row_counts("acct_secondary"),
+            fixture.dependent_row_counts("acct_secondary").await,
         ));
     }
     // Collect both late outcomes before asserting, so a red run exercises both paths.
@@ -216,24 +223,25 @@ fn account_remove_help_and_target_options_follow_sibling_commands() {
     }
 }
 
-#[test]
-fn account_remove_refuses_enabled_account_without_changing_credentials_or_rows() {
-    let fixture = RemovalFixture::new("remove-enabled", AccountStatus::Enabled);
+#[tokio::test]
+async fn account_remove_refuses_enabled_account_without_changing_credentials_or_rows() {
+    let fixture = RemovalFixture::new("remove-enabled", AccountStatus::Enabled).await;
 
     let error = fixture
         .remove()
+        .await
         .expect_err("enabled accounts require disable first");
 
     assert!(error.to_string().contains("primary"));
     assert!(error.to_string().contains("disable"));
-    assert!(fixture.account_exists());
+    assert!(fixture.account_exists().await);
     assert!(fixture.credential_exists(1));
 }
 
-#[test]
-fn account_remove_disabled_account_deletes_all_generations_and_dependent_rows() {
-    let fixture = RemovalFixture::new("remove-disabled", AccountStatus::Disabled);
-    fixture.login_account("acct_secondary", "secondary");
+#[tokio::test]
+async fn account_remove_disabled_account_deletes_all_generations_and_dependent_rows() {
+    let fixture = RemovalFixture::new("remove-disabled", AccountStatus::Disabled).await;
+    fixture.login_account("acct_secondary", "secondary").await;
     let secrets = must_ok(open_encrypted_credential_store(
         fixture.root.path().join("secrets"),
     ));
@@ -244,15 +252,18 @@ fn account_remove_disabled_account_deletes_all_generations_and_dependent_rows() 
         ));
         must_ok(secrets.write_staged(&key, &SecretString::new("fixture-staged-credential")));
     }
-    fixture.seed_dependents();
+    fixture.seed_dependents().await;
 
-    assert_eq!(must_ok(fixture.remove()), "removed account: primary\n");
+    assert_eq!(
+        must_ok(fixture.remove().await),
+        "removed account: primary\n"
+    );
 
-    assert!(!fixture.account_exists());
+    assert!(!fixture.account_exists().await);
     for generation in [1, 2, 9] {
         assert!(!fixture.credential_exists(generation));
     }
-    fixture.assert_no_dependent_rows();
+    fixture.assert_no_dependent_rows().await;
     let secondary_key = must_ok(openai_account_credential_bundle_key(
         &account_id("acct_secondary"),
         1,
@@ -266,26 +277,28 @@ fn account_remove_disabled_account_deletes_all_generations_and_dependent_rows() 
             path_to_str(fixture.root.path()),
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
     assert!(!listed.stdout.contains("primary"));
 }
 
-#[test]
-fn account_remove_second_attempt_reports_not_found() {
-    let fixture = RemovalFixture::new("remove-twice", AccountStatus::Disabled);
-    must_ok(fixture.remove());
+#[tokio::test]
+async fn account_remove_second_attempt_reports_not_found() {
+    let fixture = RemovalFixture::new("remove-twice", AccountStatus::Disabled).await;
+    must_ok(fixture.remove().await);
 
     let error = fixture
         .remove()
+        .await
         .expect_err("a second removal must report not found");
 
     assert!(error.to_string().contains("not found"));
 }
 
-#[test]
-fn account_remove_allows_login_with_the_same_label_again() {
-    let fixture = RemovalFixture::new("remove-login", AccountStatus::Disabled);
-    must_ok(fixture.remove());
+#[tokio::test]
+async fn account_remove_allows_login_with_the_same_label_again() {
+    let fixture = RemovalFixture::new("remove-login", AccountStatus::Disabled).await;
+    must_ok(fixture.remove().await);
 
     let issuer = super::account_login_tests::FakeDeviceIssuer::spawn("new-access", "new-refresh");
     let client = codex_router_auth::openai_oauth::OpenAiOAuthDeviceLoginClient::with_test_issuer(
@@ -307,24 +320,40 @@ fn account_remove_allows_login_with_the_same_label_again() {
         panic!("expected account login");
     };
     let mut stdout = Vec::new();
-    must_ok(
-        crate::account::run_account_command_with_input_and_openai_client(
-            &mut stdout,
-            &mut std::io::Cursor::new(Vec::<u8>::new()),
-            command,
-            &client,
-        ),
-    );
+    must_ok({
+        let mut command_argument_1 = std::io::Cursor::new(Vec::<u8>::new());
+        let command_argument_2 = command;
+        let command_argument_3 = (client).clone();
+        let command_dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        let (command_result, command_stdout) = must_ok(
+            tokio::task::spawn_blocking(move || {
+                tracing::dispatcher::with_default(&command_dispatcher, || {
+                    let mut stdout = stdout;
+                    let command_result =
+                        crate::account::run_account_command_with_input_and_openai_client(
+                            &mut stdout,
+                            &mut command_argument_1,
+                            command_argument_2,
+                            &command_argument_3,
+                        );
+                    (command_result, stdout)
+                })
+            })
+            .await,
+        );
+        stdout = command_stdout;
+        command_result
+    });
     assert_eq!(issuer.finish().len(), 3);
     assert!(must_ok(String::from_utf8(stdout)).contains("logged in account: primary"));
 
-    assert!(fixture.account_exists());
+    assert!(fixture.account_exists().await);
     assert!(fixture.credential_exists(1));
 }
 
-#[test]
-fn account_remove_preserves_disabled_metadata_when_secret_cleanup_fails() {
-    let fixture = RemovalFixture::new("remove-cleanup-failure", AccountStatus::Disabled);
+#[tokio::test]
+async fn account_remove_preserves_disabled_metadata_when_secret_cleanup_fails() {
+    let fixture = RemovalFixture::new("remove-cleanup-failure", AccountStatus::Disabled).await;
     let credential_path = fixture
         .root
         .path()
@@ -337,18 +366,19 @@ fn account_remove_preserves_disabled_metadata_when_secret_cleanup_fails() {
 
     let error = fixture
         .remove()
+        .await
         .expect_err("an invalid secret entry must stop removal");
 
     assert!(error.to_string().contains("remains disabled"));
-    assert!(fixture.account_exists());
+    assert!(fixture.account_exists().await);
 }
 
-#[test]
-fn account_remove_rechecks_disabled_state_after_target_resolution() {
+#[tokio::test]
+async fn account_remove_rechecks_disabled_state_after_target_resolution() {
     for generation in [1, 2] {
-        let fixture = RemovalFixture::new("remove-reenabled", AccountStatus::Disabled);
-        let runtime = test_async_runtime();
-        runtime.block_on(async {
+        let fixture = RemovalFixture::new("remove-reenabled", AccountStatus::Disabled).await;
+
+        (async {
             let state = must_ok(
                 AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(fixture.root.path())).await,
             );
@@ -373,8 +403,8 @@ fn account_remove_rechecks_disabled_state_after_target_resolution() {
                     if account_label == "primary"
             ), "generation {generation}: {error}");
             mutation.close().await;
-        });
-        assert!(fixture.account_exists());
+        }).await;
+        assert!(fixture.account_exists().await);
         assert!(fixture.credential_exists(1));
     }
 }
@@ -384,12 +414,12 @@ struct RemovalFixture {
 }
 
 impl RemovalFixture {
-    fn new(name: &str, status: AccountStatus) -> Self {
+    async fn new(name: &str, status: AccountStatus) -> Self {
         let fixture = Self {
             root: TestRoot::new(name),
         };
         must_ok(fs::create_dir_all(fixture.root.path()));
-        fixture.login();
+        fixture.login().await;
         if status == AccountStatus::Disabled {
             run_cli(
                 [
@@ -401,68 +431,78 @@ impl RemovalFixture {
                     path_to_str(fixture.root.path()),
                 ],
                 CliContext::new(Vec::new()),
-            );
+            )
+            .await;
         }
         fixture
     }
 
-    fn login(&self) {
-        self.login_account("acct_primary", "primary");
+    async fn login(&self) {
+        self.login_account("acct_primary", "primary").await;
     }
 
-    fn login_account(&self, account_name: &str, label: &str) {
-        let runtime = test_async_runtime();
-        let state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(
-            &codex_router_state::provider_proxy_database_path(self.root.path()),
-        )));
+    async fn login_account(&self, account_name: &str, label: &str) {
+        let state = must_ok(
+            (AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+                self.root.path(),
+            )))
+            .await,
+        );
         let secrets = must_ok(open_encrypted_credential_store(
             self.root.path().join("secrets"),
         ));
         must_ok(
-            runtime.block_on(import_codex_auth_from_request_async(
+            (import_codex_auth_from_request_async(
                 &state,
                 &secrets,
                 AccountImportRequest::new(account_id(account_name), label, "fixture-access")
                     .with_refresh_token("fixture-refresh"),
-            )),
+            ))
+            .await,
         );
-        must_ok(runtime.block_on(state.close()));
+        must_ok((state.close()).await);
     }
 
-    #[expect(
-        clippy::panic_in_result_fn,
-        reason = "CLI errors are returned for rejection assertions; empty stderr is a separate test contract."
-    )]
-    fn remove(&self) -> Result<String, CliError> {
-        let mut stdout = Vec::new();
-        let mut stderr = Vec::new();
-        run_with_io(
-            [
-                "account",
-                "remove",
-                "--account",
-                "primary",
-                "--router-root",
-                path_to_str(self.root.path()),
-            ]
-            .map(OsString::from)
-            .to_vec(),
-            &CliContext::new(Vec::new()),
-            &mut stdout,
-            &mut stderr,
-        )?;
-        assert!(stderr.is_empty());
-        Ok(must_ok(String::from_utf8(stdout)))
+    async fn remove(&self) -> Result<String, CliError> {
+        let router_root = self.root.path().to_path_buf();
+        let dispatcher = tracing::dispatcher::get_default(Clone::clone);
+        must_ok(
+            tokio::task::spawn_blocking(move || {
+                tracing::dispatcher::with_default(&dispatcher, || {
+                    let mut stdout = Vec::new();
+                    let mut stderr = Vec::new();
+                    run_with_io(
+                        [
+                            "account",
+                            "remove",
+                            "--account",
+                            "primary",
+                            "--router-root",
+                            path_to_str(&router_root),
+                        ]
+                        .map(OsString::from)
+                        .to_vec(),
+                        &CliContext::new(Vec::new()),
+                        &mut stdout,
+                        &mut stderr,
+                    )?;
+                    assert!(stderr.is_empty());
+                    Ok(must_ok(String::from_utf8(stdout)))
+                })
+            })
+            .await,
+        )
     }
 
-    fn account_exists(&self) -> bool {
-        let runtime = test_async_runtime();
-        let state = must_ok(runtime.block_on(AsyncSqliteStateStore::open_read_only(
-            &codex_router_state::provider_proxy_database_path(self.root.path()),
-        )));
-        let exists =
-            must_ok(runtime.block_on(state.load_account(&account_id("acct_primary")))).is_some();
-        must_ok(runtime.block_on(state.close()));
+    async fn account_exists(&self) -> bool {
+        let state = must_ok(
+            (AsyncSqliteStateStore::open_read_only(
+                &codex_router_state::provider_proxy_database_path(self.root.path()),
+            ))
+            .await,
+        );
+        let exists = must_ok(state.load_account(&account_id("acct_primary")).await).is_some();
+        must_ok((state.close()).await);
         exists
     }
 
@@ -477,9 +517,8 @@ impl RemovalFixture {
         secrets.read_secret(&key).is_ok()
     }
 
-    fn seed_dependents(&self) {
-        let runtime = test_async_runtime();
-        runtime.block_on(async {
+    async fn seed_dependents(&self) {
+        (async {
             let state = must_ok(
                 AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
                     self.root.path(),
@@ -512,12 +551,12 @@ impl RemovalFixture {
             }
             pool.close().await;
             must_ok(state.close().await);
-        });
+        })
+        .await;
     }
 
-    fn assert_no_dependent_rows(&self) {
-        let runtime = test_async_runtime();
-        runtime.block_on(async {
+    async fn assert_no_dependent_rows(&self) {
+        (async {
             let pool = must_ok(
                 sqlx::SqlitePool::connect(&format!(
                     "sqlite://{}",
@@ -542,11 +581,12 @@ impl RemovalFixture {
                 assert!(count > 0, "unrelated account must survive: {statement}");
             }
             pool.close().await;
-        });
+        })
+        .await;
     }
 
-    fn dependent_row_counts(&self, account_name: &str) -> Vec<i64> {
-        test_async_runtime().block_on(async {
+    async fn dependent_row_counts(&self, account_name: &str) -> Vec<i64> {
+        (async {
             let pool = must_ok(
                 sqlx::sqlite::SqlitePoolOptions::new()
                     .connect_with(
@@ -570,6 +610,7 @@ impl RemovalFixture {
             pool.close().await;
             counts
         })
+        .await
     }
 }
 

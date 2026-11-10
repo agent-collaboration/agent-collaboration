@@ -1,7 +1,7 @@
 use super::*;
 
-#[test]
-fn account_remove_discards_queued_account_owned_writes() {
+#[tokio::test]
+async fn account_remove_discards_queued_account_owned_writes() {
     use codex_router_core::affinity::AffinityKeyHash;
     use codex_router_core::provider::Provider;
     use codex_router_core::routes::RouteBand;
@@ -11,12 +11,12 @@ fn account_remove_discards_queued_account_owned_writes() {
     use codex_router_state::quota_snapshot::QuotaRefreshErrorClass;
     use codex_router_state::session_account_affinity::{PinObservation, SessionAccountAffinity};
 
-    let fixture = RemovalFixture::new("remove-queued-writes", AccountStatus::Disabled);
-    fixture.login_account("acct_secondary", "secondary");
-    fixture.seed_dependents();
-    let secondary_before = fixture.dependent_row_counts("acct_secondary");
-    must_ok(fixture.remove());
-    test_async_runtime().block_on(async {
+    let fixture = RemovalFixture::new("remove-queued-writes", AccountStatus::Disabled).await;
+    fixture.login_account("acct_secondary", "secondary").await;
+    fixture.seed_dependents().await;
+    let secondary_before = fixture.dependent_row_counts("acct_secondary").await;
+    must_ok(fixture.remove().await);
+    (async {
         let state = must_ok(
             AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
                 fixture.root.path(),
@@ -158,14 +158,15 @@ fn account_remove_discards_queued_account_owned_writes() {
         );
         must_ok(state.close().await);
         assert!(!acquired, "a queued pin cannot claim a removed account");
-    });
-    assert!(!fixture.account_exists());
+    })
+    .await;
+    assert!(!fixture.account_exists().await);
     assert_eq!(
-        fixture.dependent_row_counts("acct_primary"),
+        fixture.dependent_row_counts("acct_primary").await,
         vec![0; DEPENDENT_COUNTS.len()]
     );
     assert_eq!(
-        fixture.dependent_row_counts("acct_secondary"),
+        fixture.dependent_row_counts("acct_secondary").await,
         secondary_before
     );
 }

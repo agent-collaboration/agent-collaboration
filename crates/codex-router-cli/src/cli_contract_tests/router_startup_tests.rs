@@ -1,13 +1,13 @@
 use super::*;
 use codex_router_secret_store::encrypted_credential_store::EncryptedCredentialStore;
 
-#[test]
-fn serve_provisions_local_token_and_keeps_codex_optional() {
+#[tokio::test]
+async fn serve_provisions_local_token_and_keeps_codex_optional() {
     let test_root = TestRoot::new("serve-command");
     must_ok(fs::create_dir(test_root.path()));
     let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
-    let state = must_ok(SqliteStateStore::open(&state_path));
+    let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_root),
     );
@@ -19,13 +19,13 @@ fn serve_provisions_local_token_and_keeps_codex_optional() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(&state, &account));
+    must_ok(state.upsert_account(&account).await);
     let snapshot =
         PersistedQuotaSnapshot::new(account_id.clone(), QuotaSnapshotSource::MockEndpoint)
             .with_observed_unix_seconds(1_000)
             .with_route_band("responses", 100);
-    must_ok(QuotaSnapshotRepository::upsert_snapshot(&state, &snapshot));
-    persist_effective_selector_window(&state, &account_id, "responses", 100);
+    must_ok(state.upsert_quota_snapshot(&snapshot).await);
+    persist_effective_selector_window(&state, &account_id, "responses", 100).await;
     let upstream_token_key = must_ok(openai_account_credential_bundle_key(&account_id, 1));
     let upstream_credential_bundle = must_ok(
         AccountCredentialBundle::imported_codex_auth(
@@ -87,7 +87,8 @@ fn serve_provisions_local_token_and_keeps_codex_optional() {
             "1",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
 
     assert!(
         output
@@ -120,8 +121,8 @@ fn serve_provisions_local_token_and_keeps_codex_optional() {
     }
 }
 
-#[test]
-fn serve_starts_and_codex_route_fails_closed_for_unavailable_pooled_stores() {
+#[tokio::test]
+async fn serve_starts_and_codex_route_fails_closed_for_unavailable_pooled_stores() {
     #[derive(Clone, Copy)]
     enum UnavailableStoreKind {
         KeyUnavailable,
@@ -139,24 +140,27 @@ fn serve_starts_and_codex_route_fails_closed_for_unavailable_pooled_stores() {
         must_ok(fs::create_dir(test_root.path()));
         let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
         let secret_root = test_root.path().join("secrets");
-        let state = must_ok(SqliteStateStore::open(&state_path));
+        let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
         let account_id = account_id(&format!("acct_serve_{suffix}"));
-        must_ok(AccountStateRepository::upsert_account(
-            &state,
-            &AccountRecord::new(
-                codex_router_core::provider::Provider::Openai,
-                account_id.clone(),
-                suffix,
-                AccountStatus::Enabled,
-            )
-            .with_active_credential_generation(1),
-        ));
+        must_ok(
+            state
+                .upsert_account(
+                    &AccountRecord::new(
+                        codex_router_core::provider::Provider::Openai,
+                        account_id.clone(),
+                        suffix,
+                        AccountStatus::Enabled,
+                    )
+                    .with_active_credential_generation(1),
+                )
+                .await,
+        );
         let snapshot =
             PersistedQuotaSnapshot::new(account_id.clone(), QuotaSnapshotSource::MockEndpoint)
                 .with_observed_unix_seconds(1_000)
                 .with_route_band("responses", 100);
-        must_ok(QuotaSnapshotRepository::upsert_snapshot(&state, &snapshot));
-        persist_effective_selector_window(&state, &account_id, "responses", 100);
+        must_ok(state.upsert_quota_snapshot(&snapshot).await);
+        persist_effective_selector_window(&state, &account_id, "responses", 100).await;
         let file_store = must_ok(FileSecretStore::open(&secret_root));
         let credential_store = match store_kind {
             UnavailableStoreKind::KeyUnavailable => EncryptedCredentialStore::key_unavailable(file_store),
@@ -304,17 +308,17 @@ fn serve_command_defaults_to_home_router_paths_and_provider_upstream() {
     assert_eq!(explicit_command.port, Some(9876));
 }
 
-#[test]
+#[tokio::test]
 #[expect(
     clippy::result_large_err,
     reason = "The existing callback contract requires the unboxed error value."
 )]
-fn serve_command_dispatches_websocket_upgrade_through_runtime() {
+async fn serve_command_dispatches_websocket_upgrade_through_runtime() {
     let test_root = TestRoot::new("serve-command-websocket");
     must_ok(fs::create_dir(test_root.path()));
     let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
-    let state = must_ok(SqliteStateStore::open(&state_path));
+    let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_root),
     );
@@ -326,13 +330,13 @@ fn serve_command_dispatches_websocket_upgrade_through_runtime() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    must_ok(AccountStateRepository::upsert_account(&state, &account));
+    must_ok(state.upsert_account(&account).await);
     let snapshot =
         PersistedQuotaSnapshot::new(account_id.clone(), QuotaSnapshotSource::MockEndpoint)
             .with_observed_unix_seconds(1_000)
             .with_route_band("responses", 100);
-    must_ok(QuotaSnapshotRepository::upsert_snapshot(&state, &snapshot));
-    persist_effective_selector_window(&state, &account_id, "responses", 100);
+    must_ok(state.upsert_quota_snapshot(&snapshot).await);
+    persist_effective_selector_window(&state, &account_id, "responses", 100).await;
     let upstream_token_key = must_ok(openai_account_credential_bundle_key(&account_id, 1));
     let upstream_credential_bundle = must_ok(
         AccountCredentialBundle::imported_codex_auth(
@@ -420,7 +424,8 @@ fn serve_command_dispatches_websocket_upgrade_through_runtime() {
             "1",
         ],
         CliContext::new(Vec::new()),
-    );
+    )
+    .await;
 
     assert!(
         output
@@ -508,8 +513,8 @@ impl CredentialRefreshClient for LoopbackUpkeepOAuthClient {
     }
 }
 
-#[test]
-fn serve_startup_maintains_idle_enabled_oauth_account_across_simulated_days() {
+#[tokio::test]
+async fn serve_startup_maintains_idle_enabled_oauth_account_across_simulated_days() {
     use super::credential_upkeep_tests::wait_for_upkeep_generation;
     use crate::credential_upkeep_worker::start_background_credential_upkeep_worker_with_client_and_clock;
 
@@ -517,7 +522,7 @@ fn serve_startup_maintains_idle_enabled_oauth_account_across_simulated_days() {
     must_ok(fs::create_dir(test_root.path()));
     let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
-    let state = must_ok(SqliteStateStore::open(&state_path));
+    let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_root),
     );
@@ -535,16 +540,19 @@ fn serve_startup_maintains_idle_enabled_oauth_account_across_simulated_days() {
             "disabled-refresh-canary",
         ),
     ] {
-        must_ok(AccountStateRepository::upsert_account(
-            &state,
-            &AccountRecord::new(
-                codex_router_core::provider::Provider::Openai,
-                account_id.clone(),
-                "upkeep",
-                status,
-            )
-            .with_active_credential_generation(1),
-        ));
+        must_ok(
+            state
+                .upsert_account(
+                    &AccountRecord::new(
+                        codex_router_core::provider::Provider::Openai,
+                        account_id.clone(),
+                        "upkeep",
+                        status,
+                    )
+                    .with_active_credential_generation(1),
+                )
+                .await,
+        );
         let key = must_ok(openai_account_credential_bundle_key(account_id, 1));
         must_ok(
             secrets.write_secret(
@@ -560,13 +568,16 @@ fn serve_startup_maintains_idle_enabled_oauth_account_across_simulated_days() {
             ),
         );
     }
-    must_ok(QuotaSnapshotRepository::upsert_snapshot(
-        &state,
-        &PersistedQuotaSnapshot::new(enabled_id.clone(), QuotaSnapshotSource::MockEndpoint)
-            .with_observed_unix_seconds(1_000)
-            .with_route_band("responses", 0),
-    ));
-    drop(state);
+    must_ok(
+        state
+            .upsert_quota_snapshot(
+                &PersistedQuotaSnapshot::new(enabled_id.clone(), QuotaSnapshotSource::MockEndpoint)
+                    .with_observed_unix_seconds(1_000)
+                    .with_route_band("responses", 0),
+            )
+            .await,
+    );
+    state.close().await.expect("fixture state should close");
 
     let oauth_listener = must_ok(TcpListener::bind("127.0.0.1:0"));
     must_ok(oauth_listener.set_nonblocking(true));
@@ -671,14 +682,14 @@ fn serve_startup_maintains_idle_enabled_oauth_account_across_simulated_days() {
         must_ok(oauth_call_receiver.recv_timeout(Duration::from_secs(2))),
         1
     );
-    wait_for_upkeep_generation(&state_path, &enabled_id, 2);
+    wait_for_upkeep_generation(&state_path, &enabled_id, 2).await;
     clock.store(1_000 + 2 * 86_400, Ordering::SeqCst);
     wake_handle.wake();
     assert_eq!(
         must_ok(oauth_call_receiver.recv_timeout(Duration::from_secs(2))),
         2
     );
-    wait_for_upkeep_generation(&state_path, &enabled_id, 3);
+    wait_for_upkeep_generation(&state_path, &enabled_id, 3).await;
 
     let mut health_client = must_ok(TcpStream::connect(("127.0.0.1", router_port)));
     must_ok(
@@ -692,9 +703,9 @@ fn serve_startup_maintains_idle_enabled_oauth_account_across_simulated_days() {
     must_ok(serve_result);
     assert!(String::from_utf8_lossy(&stdout).contains("listening: 127.0.0.1:"));
     must_ok(oauth_thread.join().map_err(|_| "OAuth thread failed"));
-    let state = must_ok(SqliteStateStore::open(&state_path));
-    let disabled = must_ok(AccountStateRepository::load_account(&state, &disabled_id))
-        .expect("disabled account should remain");
+    let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
+    let disabled =
+        must_ok(state.load_account(&disabled_id).await).expect("disabled account should remain");
     assert_eq!(disabled.active_credential_generation(), Some(1));
     assert_eq!(disabled.status(), AccountStatus::Disabled);
 }
