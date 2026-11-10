@@ -1,4 +1,4 @@
-/** Lead-released separate synthetic board/project; one retirement send, then public reads only. */
+/** One dedicated imported-unheld retirement identity, with explicit completion evidence. */
 import { randomUUIDv7 } from "node:crypto";
 import { readdir } from "node:fs/promises";
 import { setTimeout } from "node:timers/promises";
@@ -14,30 +14,51 @@ import { healthReply } from "./contracts.ts";
 import { hashFile } from "./project-backups.ts";
 import { loadOwnedHostObservation, readOwnedHostProcess } from "./s1-owned-host-observation.ts";
 
-export const dedicatedRetirementProject = "01a1c307-6ffd-7b12-bdbd-4ec6ad1030b3";
-const dedicatedBoard = "01a1c307-6ffd-716c-9957-0b382a7018e4";
+export const dedicatedRetirementProject = "01a1c438-6b0d-7490-91d1-1f46a8852fdd";
+const dedicatedBoard = "01a1c438-6b0d-7802-926f-ef51b2a6eef4";
+type RetirementCli = Pick<SyntheticCli, "execute" | "save">;
 const position = z.object({ epoch: z.bigint().nonnegative(), sequence: z.bigint().nonnegative() });
-const previewReply = z.object({
-  preview: z.object({
-    token: z.string().min(1),
-    holder: z.uuidv7(),
-    fence: z.bigint().positive(),
-    acked: position,
-  }),
-  holderInstallation: z.uuid(),
+const retirementFacts = z.object({
+  fence: z.bigint().positive(),
+  acked: position,
 });
+const cliFailure = z.object({
+  kind: z.literal("syntheticCliAnswer"),
+  exit: z.number().int(),
+  answer: z.object({ kind: z.string() }).passthrough(),
+});
+interface RetirementCompletion {
+  readonly actualOwnerRetiredReply: boolean;
+  readonly ownerInvocations: 1 | 2;
+}
+
+function stableDirectoryGrant(entry: z.infer<typeof oldDirectoryEntry>): unknown {
+  const lease = entry.leaseSide.kind === "known" ? entry.leaseSide.value.lease : entry.leaseSide;
+  return {
+    project: entry.project,
+    name: entry.name,
+    workspace: entry.workspace,
+    board: entry.board,
+    boardArchive: entry.boardArchive,
+    lease:
+      lease.kind === "held"
+        ? {
+            kind: "held",
+            epoch: lease.value.epoch,
+            holder: lease.value.holder,
+            state: lease.value.state,
+          }
+        : lease,
+  };
+}
 
 export function validateRetirementFacts(input: {
-  preview: unknown;
   health: unknown;
   directory: unknown;
-  local: unknown;
+  projectReadback: unknown;
   board: unknown;
-  installation: string;
-  peer: string;
-}): z.infer<typeof previewReply> {
-  const preview = previewReply.parse(input.preview),
-    health = healthReply.parse(input.health),
+}): z.infer<typeof retirementFacts> {
+  const health = healthReply.parse(input.health),
     entry = oldDirectoryEntry.parse(input.directory);
   z.object({
     record: z.object({
@@ -46,7 +67,7 @@ export function validateRetirementFacts(input: {
         board: z.literal(dedicatedBoard),
       }),
     }),
-  }).parse(input.local);
+  }).parse(input.projectReadback);
   z.object({
     record: z.object({
       board: z.object({ boardId: z.literal(dedicatedBoard), state: z.literal("archived") }),
@@ -57,10 +78,9 @@ export function validateRetirementFacts(input: {
     entry.board !== dedicatedBoard ||
     entry.boardArchive !== "archived" ||
     entry.leaseSide.kind !== "known" ||
-    entry.leaseSide.value.lease.kind !== "held"
+    entry.leaseSide.value.lease.kind !== "unheld"
   )
-    throw new Error("dedicated archived project has no current Registry grant");
-  const lease = entry.leaseSide.value.lease.value;
+    throw new Error("dedicated archived project must be imported and unheld");
   if (
     health.kind !== "live" ||
     health.value.copy.kind !== "known" ||
@@ -71,16 +91,10 @@ export function validateRetirementFacts(input: {
   if (
     copy.database !== dedicatedRetirementProject ||
     copy.role !== "authoritative" ||
-    copy.holder !== input.peer ||
-    preview.preview.holder !== input.peer ||
-    preview.holderInstallation !== input.installation ||
-    lease.holder !== input.installation ||
-    lease.epoch !== copy.fence ||
-    preview.preview.fence !== copy.fence ||
-    encode(preview.preview.acked) !== encode(copy.acked)
+    copy.holder !== null
   )
-    throw new Error("fresh preview/Registry/Copy D/M/N or ACK differs; no retirement sent");
-  return preview;
+    throw new Error("dedicated Copy must be authoritative and unheld; no retirement sent");
+  return retirementFacts.parse({ fence: copy.fence, acked: copy.acked });
 }
 
 async function waitForArchived(cli: SyntheticCli, board: string): Promise<unknown> {
@@ -110,7 +124,7 @@ async function waitForArchived(cli: SyntheticCli, board: string): Promise<unknow
   );
 }
 async function registryDirectory(
-  cli: SyntheticCli,
+  cli: RetirementCli,
   sample: string,
 ): Promise<z.infer<typeof oldDirectoryEntry>[]> {
   let after: string | null = null;
@@ -146,48 +160,48 @@ async function registryDirectory(
   throw new Error("directory paging bound exceeded");
 }
 
-async function captureBefore(
-  cli: SyntheticCli,
-): Promise<{ cohort: z.infer<typeof oldDirectoryEntry>[]; preview: z.infer<typeof previewReply> }> {
+async function captureBefore(cli: SyntheticCli): Promise<{
+  cohort: z.infer<typeof oldDirectoryEntry>[];
+  facts: z.infer<typeof retirementFacts>;
+}> {
   const project = dedicatedRetirementProject;
-  const local = await cli.execute("local-before", ["project", "show", "--project-id", project]);
+  const projectReadback = await cli.execute("project-before", [
+    "project",
+    "show",
+    "--project-id",
+    project,
+  ]);
   const board = await waitForArchived(cli, dedicatedBoard);
   const cohort = await registryDirectory(cli, "before");
   const directory = cohort.find((entry): boolean => entry.project === project);
-  // Own preview is obtained through this attempt's registered old125 CLI, never reused.
-  const rawPreview = await cli.execute(
-    "preview",
-    ["central", "project", "takeover", "preview", project],
-    true,
-  );
   const health = await cli.execute("health-before", ["central", "copy", "health", project], true);
-  const preview = validateRetirementFacts({
-    preview: rawPreview,
+  const facts = validateRetirementFacts({
     health,
     directory,
-    local,
+    projectReadback,
     board,
-    installation: cli.baseline.installationId,
-    peer: cli.baseline.peerId,
   });
   await cli.save("preconditions", {
     project,
     board: dedicatedBoard,
-    installation: preview.holderInstallation,
-    peer: preview.preview.holder,
-    fence: preview.preview.fence,
-    acked: preview.preview.acked,
-    previewTokenRetainedOnlyInPrivateReply: true,
-    source:
-      "old125 central_commands.rs retirement accepts requestId/fence/ACK; the preview token has no retirement flag",
+    holder: null,
+    lifecycle: "unheld",
+    fence: facts.fence,
+    acked: facts.acked,
+    source: "fresh authoritative Copy health; an unheld project has no holder takeover preview",
   });
-  return { cohort, preview };
+  return { cohort, facts };
 }
 
 async function reconcileRetirement(
-  cli: SyntheticCli,
-  input: { before: z.infer<typeof oldDirectoryEntry>[]; requestId: string; ownerReply: unknown },
-): Promise<void> {
+  cli: RetirementCli,
+  input: {
+    before: z.infer<typeof oldDirectoryEntry>[];
+    requestId: string;
+    ownerReply: unknown;
+    requestArguments: readonly string[];
+  },
+): Promise<RetirementCompletion> {
   const expectedMembership = input.before.map((entry): string => entry.project).sort();
   for (let sample = 0; sample <= 30; sample += 1) {
     const rawHealth = await cli.execute(
@@ -199,6 +213,16 @@ async function reconcileRetirement(
     const cohort = await registryDirectory(cli, `after-${sample}`);
     if (encode(cohort.map((entry): string => entry.project).sort()) !== encode(expectedMembership))
       throw new Error("Registry cohort membership changed across retirement");
+    for (const original of input.before.filter(
+      (entry) => entry.project !== dedicatedRetirementProject,
+    )) {
+      const current = cohort.find((entry) => entry.project === original.project);
+      if (
+        current === undefined ||
+        encode(stableDirectoryGrant(original)) !== encode(stableDirectoryGrant(current))
+      )
+        throw new Error("another project's directory or stable grant changed across retirement");
+    }
     const entry = cohort.find((item): boolean => item.project === dedicatedRetirementProject);
     if (entry === undefined) throw new Error("dedicated project missing from the preserved cohort");
     const copyRetired = health.kind === "retired",
@@ -217,55 +241,98 @@ async function reconcileRetirement(
       `${encode({ case: "retirement", sample, copyRetired, registryRetired })}\n`,
     );
     if (copyRetired && registryRetired) {
+      let ownerReply = input.ownerReply;
+      let ownerInvocations: 1 | 2 = 1;
+      const pending = z
+        .object({
+          kind: z.literal("pending"),
+          value: z.object({ requestId: z.literal(input.requestId) }),
+        })
+        .safeParse(ownerReply);
+      if (pending.success) {
+        // The API's known-pending completion uses the SAME saved identity/body.
+        ownerReply = await cli.execute(
+          "retire-terminal-same-request",
+          input.requestArguments,
+          true,
+        );
+        ownerInvocations = 2;
+      }
+      const actualOwnerRetiredReply = z
+        .object({ kind: z.literal("retired") })
+        .safeParse(ownerReply).success;
       await cli.save("retirement-public-state-fact", {
         project: dedicatedRetirementProject,
         requestId: input.requestId,
-        ownerReply: input.ownerReply,
-        actualOwnerRetiredReply: z
-          .object({ kind: z.literal("retired") })
-          .safeParse(input.ownerReply).success,
+        ownerReply,
+        actualOwnerRetiredReply,
+        ownerInvocations,
         copy: rawHealth,
         registry: entry,
         membership: expectedMembership,
+        otherDirectoryGrantsUnchanged: true,
       });
-      return;
+      return { actualOwnerRetiredReply, ownerInvocations };
     }
     if (sample < 30) await setTimeout(30_000);
   }
   throw new Error("retirement public state remains incomplete; the retire request was not resent");
 }
 
-async function retireOnce(
-  cli: SyntheticCli,
+export async function retireOnce(
+  cli: RetirementCli,
   before: Awaited<ReturnType<typeof captureBefore>>,
-): Promise<void> {
+): Promise<RetirementCompletion> {
   const requestId = randomUUIDv7();
   const request = {
     project: dedicatedRetirementProject,
     requestId,
-    expectFence: before.preview.preview.fence,
-    expectAcked: before.preview.preview.acked,
+    expectFence: before.facts.fence,
+    expectAcked: before.facts.acked,
   };
+  const requestArguments = [
+    "central",
+    "project",
+    "retire",
+    dedicatedRetirementProject,
+    "--request-id",
+    requestId,
+    "--expect-fence",
+    request.expectFence.toString(),
+    "--expect-acked",
+    encode(request.expectAcked),
+  ];
   await cli.save("retirement-request", request);
   let answer: unknown;
   try {
-    answer = await cli.execute(
-      "retire-once",
-      [
-        "central",
-        "project",
-        "retire",
-        dedicatedRetirementProject,
-        "--request-id",
-        requestId,
-        "--expect-fence",
-        request.expectFence.toString(),
-        "--expect-acked",
-        encode(request.expectAcked),
-      ],
-      true,
-    );
+    answer = await cli.execute("retire-once", requestArguments, true);
+    const kind = z.object({ kind: z.enum(["pending", "retired"]) }).parse(answer).kind;
+    if (kind === "pending")
+      z.object({ value: z.object({ requestId: z.literal(requestId) }) }).parse(answer);
   } catch (error: unknown) {
+    const explicit = error instanceof Error ? cliFailure.safeParse(error.cause) : undefined;
+    if (
+      explicit?.success &&
+      explicit.data.exit === 4 &&
+      ["refused", "notFound", "conflictingRequest"].includes(explicit.data.answer.kind)
+    ) {
+      await cli.save("retirement-explicit-refusal", {
+        requestId,
+        answer: explicit.data.answer,
+        sentOnce: true,
+      });
+      throw new Error("retirement explicitly refused; no reconciliation or resend", {
+        cause: error,
+      });
+    }
+    if (explicit?.success && explicit.data.exit === 3) {
+      await cli.save("retirement-known-unavailable", {
+        requestId,
+        answer: explicit.data.answer,
+        sentOnce: true,
+      });
+      throw new Error("retirement unavailable; no automatic polling or resend", { cause: error });
+    }
     await cli.save("retirement-outcome-unknown", {
       requestId,
       sentAtMostOnce: true,
@@ -275,19 +342,22 @@ async function retireOnce(
       before: before.cohort,
       requestId,
       ownerReply: { kind: "outcomeUnknown" },
+      requestArguments,
     });
     throw new Error("retirement answer unknown; public state reconciled and no resend performed");
   }
-  const kind = z.object({ kind: z.enum(["pending", "retired"]) }).parse(answer).kind;
-  if (kind === "pending")
-    z.object({ value: z.object({ requestId: z.literal(requestId) }) }).parse(answer);
   await cli.save("retirement-owner-reply", {
     project: dedicatedRetirementProject,
     requestId,
     answer,
-    actualOwnerRetiredReply: kind === "retired",
+    actualOwnerRetiredReply: z.object({ kind: z.literal("retired") }).safeParse(answer).success,
   });
-  await reconcileRetirement(cli, { before: before.cohort, requestId, ownerReply: answer });
+  return reconcileRetirement(cli, {
+    before: before.cohort,
+    requestId,
+    ownerReply: answer,
+    requestArguments,
+  });
 }
 
 async function observeLocal(
@@ -306,12 +376,9 @@ async function observeLocal(
   )
     throw new Error("selected current owned Host is not observable");
   const enrollment = await hashFile(`${stagingRoot}/fleet/enrollment.json`);
-  const localFiles = await readdir(
-    `${stagingRoot}/agent-communication/projects/${dedicatedRetirementProject}`,
-  );
-  await cli.save(`local-files-${phase}`, {
+  await cli.save(`unheld-target-${phase}`, {
     project: dedicatedRetirementProject,
-    entries: localFiles.sort(),
+    nativeWriterNotClaimedByThisCase: true,
     enrollmentSha256: enrollment,
   });
   return { host: observed.stdout, enrollment, selectionSha256: ownedHost.selectionSha256 };
@@ -335,24 +402,35 @@ async function run(): Promise<void> {
     );
   const attempt = z.uuidv7().parse(rawAttempt);
   const existing = await readdir(syntheticReceipts, { recursive: true });
-  if (
-    existing.some(
-      (name): boolean =>
-        name.endsWith("retirement-request.json") || name.endsWith("-retire-once-request.json"),
+  for (const name of existing.filter(
+    (name) =>
+      name.endsWith("retirement-request.json") || name.endsWith("-retire-once-request.json"),
+  )) {
+    const prior = z
+      .object({ project: z.string().optional(), arguments: z.array(z.string()).optional() })
+      .parse(decodeAuthoredJson(await readPrivateText(`${syntheticReceipts}/${name}`)));
+    if (
+      prior.project === dedicatedRetirementProject ||
+      (prior.arguments?.[0] === "central" &&
+        prior.arguments[1] === "project" &&
+        prior.arguments[2] === "retire" &&
+        prior.arguments[3] === dedicatedRetirementProject)
     )
-  )
-    throw new Error(
-      "a saved retirement invocation exists; reconcile existing state without another send",
-    );
+      throw new Error(
+        "a saved retirement invocation exists for this project; reconcile without another send",
+      );
+  }
   const saved = z
     .object({ board: z.literal(dedicatedBoard), project: z.literal(dedicatedRetirementProject) })
     .parse(
-      decodeAuthoredJson(await readPrivateText(`${syntheticReceipts}/retirement/manifest.json`)),
+      decodeAuthoredJson(
+        await readPrivateText(`${syntheticReceipts}/retirement-unheld/manifest.json`),
+      ),
     );
   const cli = await SyntheticCli.open("retirementContinuation", attempt, executionOverlay);
   try {
     await cli.save("commission", {
-      leadPush: "01a1c34d-3edf-70e0-a848-d08074cd0c51",
+      leadTrailRow: "01a1c491-8858-7d26-94e8-9827c60d2304",
       target: saved,
       receiptAttempt: attempt,
       cli: cli.baseline.machine.cli,
@@ -363,8 +441,13 @@ async function run(): Promise<void> {
       throw new Error("retirement execution overlay differs from selected owned generation");
     const original = await observeLocal(cli, "before", ownedHostFile);
     const before = await captureBefore(cli);
-    await retireOnce(cli, before);
-    await cli.execute("local-after", ["project", "show", "--project-id", saved.project]);
+    const completed = await retireOnce(cli, before);
+    if (!completed.actualOwnerRetiredReply)
+      throw new Error(
+        "public retirement is visible, but the owner's terminal Retired answer remains unobserved",
+      );
+    // A retired Copy intentionally refuses ProjectState reads. The retained
+    // Directory and minimal Copy receipt above are this case's after facts.
     const after = await observeLocal(cli, "after", ownedHostFile);
     if (
       original.host !== after.host ||
@@ -375,14 +458,16 @@ async function run(): Promise<void> {
     await cli.save("complete", {
       project: saved.project,
       board: saved.board,
-      retireInvocations: 1,
+      retireInvocations: completed.ownerInvocations,
+      retirementRequestIds: 1,
+      actualOwnerRetiredReply: true,
       hostAndEnrollmentUnchanged: true,
-      noOtherProjectMutation: true,
+      otherDirectoryGrantsUnchanged: true,
     });
   } catch (error: unknown) {
     await cli.save("incomplete", {
       message: error instanceof Error ? error.message : String(error),
-      retireRequestNeverResent: true,
+      noNewRetirementIntentOnFailure: true,
     });
     throw error;
   } finally {

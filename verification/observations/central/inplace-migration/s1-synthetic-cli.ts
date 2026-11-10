@@ -215,9 +215,11 @@ export class SyntheticCli {
         timeoutSeconds: 60,
       });
       await this.save(`${name}-reply`, result);
-      if (result.exit !== 0)
-        throw new Error(`old125 CLI refused ${name}; inspect saved reply, no replay`);
       const value = decode(result.stdout);
+      if (result.exit !== 0)
+        throw new Error(`old125 CLI refused ${name}; inspect saved reply, no replay`, {
+          cause: { kind: "syntheticCliAnswer", exit: result.exit, answer: value },
+        });
       return admin ? value : envelope.parse(value).result;
     } catch (error: unknown) {
       await this.save(`${name}-stopped`, {
