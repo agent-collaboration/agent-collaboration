@@ -18,6 +18,28 @@ const disabledProviders = z.object({
     .strict(),
 });
 
+const carriedSettingsHeader =
+  "// Router settings, carried unchanged from providers.json and ports.json by\n" +
+  "// agent-router-update. Edit by hand; the Host reads it at each start.\n";
+
+/** Accept only this fixture's updater-generated settings, not arbitrary JSONC. */
+export function requireCarriedDisabledProviders(text: string): void {
+  if (!text.startsWith(carriedSettingsHeader))
+    throw new Error("updater-generated carried settings required");
+  z.object({ providers: disabledProviders })
+    .strict()
+    .parse(decodeAuthoredJson(text.slice(carriedSettingsHeader.length)));
+}
+
+export async function requireDisabledUpdateConfiguration(root: string): Promise<void> {
+  try {
+    disabledProviders.parse(decodeAuthoredJson(await readFile(`${root}/providers.json`, "utf8")));
+  } catch (error: unknown) {
+    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) throw error;
+    requireCarriedDisabledProviders(await readFile(`${root}/settings.jsonc`, "utf8"));
+  }
+}
+
 export async function qualifyRootUpdater(input: {
   root: string;
   updater: Artifact;
@@ -87,9 +109,7 @@ export async function updateStoppedInstallationRoot(input: {
     await qualifyArtifact(input.updater);
     // The source is ordinary JSON. The updater itself confirms its JSONC section through
     // the Host's public settings reader before removing this file (settings_step.rs).
-    disabledProviders.parse(
-      decodeAuthoredJson(await readFile(`${input.root}/providers.json`, "utf8")),
-    );
+    await requireDisabledUpdateConfiguration(input.root);
     const before = await protectedFiles(input.root);
     await input.receipt.record("rootUpdateBefore", {
       root: input.root,

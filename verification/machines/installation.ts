@@ -46,6 +46,7 @@ import { qualifyRootUpdater, updateStoppedInstallationRoot } from "./installatio
 import {
   loadStoppedOwnedRoot,
   inspectStoppedOwnedRoot,
+  inspectInterruptedOwnedUpgrade,
   assertStoppedFileIdentities,
   assertContinuationController,
   type StoppedOwnedRootDeclaration,
@@ -71,6 +72,10 @@ export function readsLegacyProvidersFile(productVersion: string): boolean {
   if (match === null) throw new Error(`semantic product version required: ${productVersion}`);
   const [major, minor, patch] = [Number(match[1]), Number(match[2]), Number(match[3])];
   return major === 0 && (minor < 1 || (minor === 1 && patch < 142));
+}
+/** Both root-file renames shipped in the same 0.1.142 storage cutover. */
+export function installationProxyDatabase(root: string, productVersion: string): string {
+  return `${root}/${readsLegacyProvidersFile(productVersion) ? "state.sqlite" : "provider-proxy.sqlite"}`;
 }
 export class Installation {
   readonly machine: Machine;
@@ -224,6 +229,89 @@ export class Installation {
       });
     } catch (error: unknown) {
       release();
+      throw error;
+    }
+  }
+
+  /** Finish an interrupted updater without relaunching the old product or enrolling. */
+  static async resumeStoppedUpgrade(input: {
+    declaration: unknown;
+    receipt: Receipt;
+    router: Artifact;
+    cli: Artifact;
+    updater: Artifact;
+    productVersion: string;
+    sourceHead: string;
+  }): Promise<Installation> {
+    if (readsLegacyProvidersFile(input.productVersion))
+      throw new Error("interrupted upgrade must target the current settings layout");
+    z.string()
+      .regex(/^[a-f0-9]{40}$/)
+      .parse(input.sourceHead);
+    const initial = await loadStoppedOwnedRoot(input.declaration);
+    const release = await registerCommandRoot(initial.declaration.root);
+    let replacement: Installation | undefined;
+    let guard: CodexHomeGuard | undefined;
+    try {
+      const context = await inspectInterruptedOwnedUpgrade(initial.declaration);
+      const machine = { ...context.machine, router: input.router, cli: input.cli };
+      for (const artifact of [input.router, input.cli])
+        await qualifyArtifact(artifact, machine.root);
+      await qualifyRootUpdater({
+        root: machine.root,
+        updater: input.updater,
+        targetVersion: input.productVersion,
+        receipt: input.receipt,
+      });
+      guard = await CodexHomeGuard.captureExistingStaging({
+        machine,
+        home: context.original.stagingHome,
+        expected: context.declaration.homes,
+      });
+      await input.receipt.record("interruptedUpgradeResumed", {
+        root: machine.root,
+        originalBaseline: context.baseline,
+        sourceHead: input.sourceHead,
+        updater: input.updater,
+        oldProductRelaunched: false,
+      });
+      const environment: NodeJS.ProcessEnv = {
+        ...process.env,
+        HOME: context.original.stagingHome,
+        CODEX_HOME: machine.codexHome,
+      };
+      delete environment.CODEX_ROUTER_HOST_INHERITED_LOCK;
+      delete environment.CODEX_ROUTER_USE_HOME_DEFAULT;
+      await updateStoppedInstallationRoot({
+        root: machine.root,
+        updater: input.updater,
+        receipt: input.receipt,
+        environment,
+      });
+      replacement = new Installation({
+        machine,
+        remote: undefined,
+        guard,
+        repository: context.original.repository,
+        productVersion: input.productVersion,
+        receipt: input.receipt,
+        releaseCommandRoot: release,
+        stagingHome: context.original.stagingHome,
+        continuation: {
+          kind: "owned",
+          declaration: context.declaration,
+          baseline: context.baseline,
+        },
+      });
+      await replacement.start();
+      await replacement.verifyOriginalEnrollment(context.baseline);
+      return replacement;
+    } catch (error: unknown) {
+      if (replacement !== undefined) await replacement.close();
+      else {
+        release();
+        await guard?.verify(input.receipt);
+      }
       throw error;
     }
   }
@@ -381,7 +469,7 @@ export class Installation {
           "--port",
           String(this.machine.port),
           "--state-db",
-          `${root}/state.sqlite`,
+          installationProxyDatabase(root, this.input.productVersion),
           "--secret-root",
           `${root}/secrets`,
           "--require-debug-isolation",

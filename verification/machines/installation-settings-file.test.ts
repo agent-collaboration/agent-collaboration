@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readsLegacyProvidersFile } from "./installation.ts";
+import { readsLegacyProvidersFile, installationProxyDatabase } from "./installation.ts";
 
 test("provider isolation targets the file each declared product version reads", (): void => {
   // Arrange: the old baseline release, the last legacy release, the first settings.jsonc release.
@@ -10,6 +10,13 @@ test("provider isolation targets the file each declared product version reads", 
   // Act and assert
   for (const version of legacy) assert.equal(readsLegacyProvidersFile(version), true, version);
   for (const version of current) assert.equal(readsLegacyProvidersFile(version), false, version);
+  for (const version of legacy)
+    assert.equal(installationProxyDatabase("/owned/router", version), "/owned/router/state.sqlite");
+  for (const version of current)
+    assert.equal(
+      installationProxyDatabase("/owned/router", version),
+      "/owned/router/provider-proxy.sqlite",
+    );
   assert.throws(() => readsLegacyProvidersFile("0.1"), /semantic product version/);
   assert.throws(() => readsLegacyProvidersFile("latest"), /semantic product version/);
 });

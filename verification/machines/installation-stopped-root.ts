@@ -18,6 +18,7 @@ import {
 } from "./command-ledger.ts";
 import { existingStagingHomesSchema, validateExistingStagingHomes } from "./codex-home.ts";
 import { upgradeBaselineSchema, type UpgradeBaseline } from "./installation-baseline.ts";
+import { requireDisabledUpdateConfiguration } from "./installation-root-update.ts";
 
 export const stoppedFileSchema = z
   .object({
@@ -318,8 +319,25 @@ export async function inspectStoppedOwnedRoot(
   }
 }
 
+/** Resume only the same stopped root after its updater carried the provider file. */
+export async function inspectInterruptedOwnedUpgrade(
+  raw: unknown,
+): Promise<Awaited<ReturnType<typeof loadStoppedOwnedRoot>>> {
+  const context = await loadStoppedOwnedRoot(raw);
+  const release = await registerCommandRoot(context.declaration.root);
+  try {
+    await inspectRegisteredStoppedRoot(context, () =>
+      requireDisabledUpdateConfiguration(context.declaration.root),
+    );
+    return context;
+  } finally {
+    release();
+  }
+}
+
 async function inspectRegisteredStoppedRoot(
   context: Awaited<ReturnType<typeof loadStoppedOwnedRoot>>,
+  configurationCheck?: () => Promise<void>,
 ): Promise<void> {
   const { declaration, original, baseline, machine } = context;
   const observations = await readStoppedObservations(declaration.original.observations);
@@ -349,12 +367,14 @@ async function inspectRegisteredStoppedRoot(
       arguments: z.array(z.never()).length(0),
     })
     .strict();
-  z.object({
-    version: z.literal(1),
-    providers: z.object({ claude: disabledProvider, cursor: disabledProvider }).strict(),
-  })
-    .strict()
-    .parse(decodeAuthoredJson(await readFile(`${declaration.root}/providers.json`, "utf8")));
+  if (configurationCheck === undefined)
+    z.object({
+      version: z.literal(1),
+      providers: z.object({ claude: disabledProvider, cursor: disabledProvider }).strict(),
+    })
+      .strict()
+      .parse(decodeAuthoredJson(await readFile(`${declaration.root}/providers.json`, "utf8")));
+  else await configurationCheck();
   await validateExistingStagingHomes({
     machine,
     home: original.stagingHome,
@@ -413,7 +433,8 @@ async function requireStoppedRootQuiescence(
       .filter((relative) => relative.endsWith(".sqlite"))
       .map((relative) => `${declaration.root}/agent-communication/projects/${relative}`),
     `${declaration.root}/state.sqlite`,
-    ...["fleet-cache.sqlite", "fleet-outbox.sqlite", "board-cursors.sqlite"].map(
+    `${declaration.root}/provider-proxy.sqlite`,
+    ...["fleet-cache.sqlite", "fleet.sqlite", "fleet-outbox.sqlite", "board-cursors.sqlite"].map(
       (name) => `${declaration.root}/agent-communication/${name}`,
     ),
     ...declaration.homes.codexHomeTree

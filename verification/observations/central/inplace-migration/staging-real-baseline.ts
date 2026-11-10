@@ -351,7 +351,7 @@ const continuationControl = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("stop") }).strict(),
   z.object({ kind: z.literal("upgrade"), planFile: z.string().startsWith("/") }).strict(),
 ]);
-const ownedUpgradePlan = z
+export const ownedUpgradePlan = z
   .object({
     router: artifactSchema,
     cli: artifactSchema,
