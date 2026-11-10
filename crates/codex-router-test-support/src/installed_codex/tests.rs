@@ -1,11 +1,17 @@
+#[path = "receipt_fixture_inputs.rs"]
+mod receipt_fixture_inputs;
+use receipt_fixture_inputs::{
+    success_status, valid_quota_status, valid_router_audit_observation,
+    valid_router_process_observation, valid_transcript,
+};
+
 use codex_router_secret_store::SecretStore;
 use codex_router_secret_store::account_tokens::AccountCredentialBundle;
 use codex_router_secret_store::account_tokens::openai_account_credential_bundle_key;
-use codex_router_state::sqlite::SqliteStateStore;
+use codex_router_state::sqlite::AsyncSqliteStateStore;
 use std::borrow::Cow;
 use std::fs;
 use std::os::unix::fs as unix_fs;
-use std::os::unix::process::ExitStatusExt;
 use std::process::ExitStatus;
 use std::process::Output;
 
@@ -41,19 +47,22 @@ use super::run_installed_codex_websocket_mock_smoke;
 use super::smoke_runtime::validate_copied_dev_state_roots;
 use super::write_redacted_transcript;
 
-#[test]
-fn access_forwarding_smoke_seed_cannot_refresh_with_production_oauth() {
+#[tokio::test]
+async fn access_forwarding_smoke_seed_cannot_refresh_with_production_oauth() {
     let root = SmokeTempRoot::new("access-forwarding-no-refresh").expect("fixture root");
-    let state = SqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+    let state = AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
         root.path(),
     ))
+    .await
     .expect("fixture state");
     let secrets = codex_router_secret_store::test_support::open_encrypted_credential_store(
         root.path().join("secrets"),
     )
     .expect("fixture secrets");
     seed_smoke_account(&state, &secrets, QUOTA_RECONNECT_PRIMARY)
+        .await
         .expect("smoke account should seed");
+    state.close().await.expect("fixture state should close");
     let account_id = codex_router_core::ids::AccountId::new(QUOTA_RECONNECT_PRIMARY.account_id)
         .expect("fixture account id");
     let key = openai_account_credential_bundle_key(&account_id, 1).expect("bundle key");
@@ -71,61 +80,6 @@ fn expect_string_error(result: Result<(), String>, context: &'static str) -> Str
     match result {
         Ok(()) => panic!("{context}"),
         Err(error) => error,
-    }
-}
-
-fn success_status() -> ExitStatus {
-    ExitStatus::from_raw(0)
-}
-
-fn valid_transcript(
-    local_token_in_http_body: bool,
-    local_token_in_first_frame: bool,
-) -> MockWebSocketTranscript {
-    let local_token = "local-token-canary";
-    let first_frame = if local_token_in_first_frame {
-        format!(
-            r#"{{"model":"gpt-5.5","input":[{{"role":"user","content":[{{"type":"input_text","text":"hello"}}]}}],"stream":true,"token":"{local_token}"}}"#
-        )
-    } else {
-        r#"{"model":"gpt-5.5","input":[{"role":"user","content":[{"type":"input_text","text":"hello"}]}],"stream":true}"#.to_owned()
-    };
-    MockWebSocketTranscript {
-        headers: vec![(
-            "authorization".to_owned(),
-            format!("Bearer {}", upstream_account_token()),
-        )],
-        first_frame: first_frame.clone(),
-        request_frames: vec![first_frame],
-        websocket_request_frame_count: 1,
-        http_probe_count: 0,
-        http_sse: Some(MockHttpSseTranscript {
-            request_line: "POST /v1/responses HTTP/1.1".to_owned(),
-            headers: vec![(
-                "authorization".to_owned(),
-                format!("Bearer {}", upstream_account_token()),
-            )],
-            body: if local_token_in_http_body {
-                format!(r#"{{"stream":true,"token":"{local_token}"}}"#)
-            } else {
-                r#"{"stream":true}"#.to_owned()
-            },
-        }),
-    }
-}
-
-fn valid_quota_status() -> SmokeQuotaStatus {
-    SmokeQuotaStatus {
-        table: "matches 5h weekly resets available routing next use\n".to_owned(),
-        plain: "account\tstatus\t5h\tweekly\tresets available\trouting\tnext use\nmatches\tenabled\t██████████ 91% resets in 4h\t██████░░░░ 54% resets in 6d\t-\t✓ preferred 5h 91%\tnext\nresponses route\tnext: matches\twhy: ✓ preferred 5h 91%\n".to_owned(),
-        json: r#"{"preferred_next_account_hash":"hash_matches","accounts":[{"account_hash":"hash_matches","safe_account_label":"matches","preferred_next":true}]}"#.to_owned(),
-    }
-}
-
-fn valid_router_audit_observation() -> RouterAuditObservation {
-    RouterAuditObservation {
-        http_sse_local_auth_validated: true,
-        websocket_local_auth_validated: true,
     }
 }
 
@@ -234,17 +188,6 @@ fn proxy_db_runtime_isolation_uses_copied_roots_and_blocks_false_receipts() -> R
     assert!(installed_script.contains("require-copied-root"));
 
     Ok(())
-}
-
-fn valid_router_process_observation(test_root: &SmokeTempRoot) -> RouterProcessObservation {
-    RouterProcessObservation {
-        binary_path: test_root.path().join("target/debug/codex-router"),
-        pid: 42,
-        argv: vec!["serve".to_owned(), "--port".to_owned(), "8787".to_owned()],
-        listener: "127.0.0.1:8787".to_owned(),
-        readiness_line: "listening: 127.0.0.1:8787".to_owned(),
-        cleanup_result: "terminated:signal: 9 (SIGKILL)".to_owned(),
-    }
 }
 
 #[test]
@@ -794,10 +737,10 @@ fn installed_codex_http_sse_harness_inventory_preflight() {
     }
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "T9 installed-Codex HTTP/SSE e2e; run through tests/smoke/installed_codex_mock.sh --transport http-sse"]
-fn installed_codex_http_sse_e2e_exercises_generated_profile_token() {
-    let report = match run_installed_codex_http_sse_mock_smoke() {
+async fn installed_codex_http_sse_e2e_exercises_generated_profile_token() {
+    let report = match run_installed_codex_http_sse_mock_smoke().await {
         Ok(report) => report,
         Err(error) => panic!("installed Codex HTTP/SSE e2e failed: {error}"),
     };
@@ -831,10 +774,10 @@ fn installed_codex_websocket_harness_inventory_preflight() {
     }
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "T10 installed-Codex WebSocket e2e; run through tests/smoke/installed_codex_mock.sh --transport websocket"]
-fn installed_codex_websocket_e2e_exercises_generated_profile_token() {
-    let report = match run_installed_codex_websocket_mock_smoke() {
+async fn installed_codex_websocket_e2e_exercises_generated_profile_token() {
+    let report = match run_installed_codex_websocket_mock_smoke().await {
         Ok(report) => report,
         Err(error) => panic!("installed Codex WebSocket e2e failed: {error}"),
     };
@@ -846,10 +789,10 @@ fn installed_codex_websocket_e2e_exercises_generated_profile_token() {
     );
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "T8 installed-Codex concurrent WebSocket e2e; run through tests/smoke/installed_codex_mock.sh --transport websocket --scenario concurrent"]
-fn three_codex_websocket_concurrent_e2e_shares_router_pid_and_overlaps() {
-    let report = match run_installed_codex_three_websocket_mock_e2e() {
+async fn three_codex_websocket_concurrent_e2e_shares_router_pid_and_overlaps() {
+    let report = match run_installed_codex_three_websocket_mock_e2e().await {
         Ok(report) => report,
         Err(error) => panic!("installed Codex concurrent WebSocket e2e failed: {error}"),
     };
@@ -861,10 +804,10 @@ fn three_codex_websocket_concurrent_e2e_shares_router_pid_and_overlaps() {
     );
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "T8 installed-Codex five-minute WebSocket soak; run through tests/smoke/installed_codex_mock.sh --transport websocket --scenario soak"]
-fn three_codex_websocket_soak_holds_overlap_and_records_activity() {
-    let report = match run_installed_codex_three_websocket_mock_soak() {
+async fn three_codex_websocket_soak_holds_overlap_and_records_activity() {
+    let report = match run_installed_codex_three_websocket_mock_soak().await {
         Ok(report) => report,
         Err(error) => panic!("installed Codex concurrent WebSocket soak failed: {error}"),
     };
@@ -876,10 +819,10 @@ fn three_codex_websocket_soak_holds_overlap_and_records_activity() {
     );
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "S8 installed-Codex WebSocket overlap quota proof; run through tests/smoke/installed_codex_mock.sh --transport websocket --scenario s8-overlap-quota"]
-fn installed_codex_websocket_s8_overlap_quota_reconnects_during_three_client_overlap() {
-    let report = match run_installed_codex_s8_overlap_quota_websocket_mock_smoke() {
+async fn installed_codex_websocket_s8_overlap_quota_reconnects_during_three_client_overlap() {
+    let report = match run_installed_codex_s8_overlap_quota_websocket_mock_smoke().await {
         Ok(report) => report,
         Err(error) => panic!("installed Codex S8 overlap quota smoke failed: {error}"),
     };
@@ -891,10 +834,10 @@ fn installed_codex_websocket_s8_overlap_quota_reconnects_during_three_client_ove
     );
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "T8 installed-Codex quota reconnect WebSocket e2e; run through tests/smoke/installed_codex_mock.sh --transport websocket --scenario quota-reconnect"]
-fn installed_codex_websocket_quota_reconnect_e2e_switches_account_and_completes() {
-    let report = match run_installed_codex_quota_reconnect_websocket_mock_smoke() {
+async fn installed_codex_websocket_quota_reconnect_e2e_switches_account_and_completes() {
+    let report = match run_installed_codex_quota_reconnect_websocket_mock_smoke().await {
         Ok(report) => report,
         Err(error) => panic!("installed Codex quota reconnect WebSocket e2e failed: {error}"),
     };
@@ -906,10 +849,10 @@ fn installed_codex_websocket_quota_reconnect_e2e_switches_account_and_completes(
     );
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "run through tests/smoke/installed_codex_mock.sh"]
-fn installed_codex_mock_smoke_exercises_generated_profile_token_and_websocket() {
-    let report = match run_installed_codex_mock_smoke() {
+async fn installed_codex_mock_smoke_exercises_generated_profile_token_and_websocket() {
+    let report = match run_installed_codex_mock_smoke().await {
         Ok(report) => report,
         Err(error) => panic!("installed Codex smoke failed: {error}"),
     };
@@ -921,10 +864,10 @@ fn installed_codex_mock_smoke_exercises_generated_profile_token_and_websocket() 
     );
 }
 
-#[test]
+#[tokio::test]
 #[ignore = "run through tests/smoke/installed_codex_mock.sh"]
-fn installed_codex_hostile_no_token_smoke_keeps_upstream_empty() {
-    if let Err(error) = run_hostile_no_token_smoke() {
+async fn installed_codex_hostile_no_token_smoke_keeps_upstream_empty() {
+    if let Err(error) = run_hostile_no_token_smoke().await {
         panic!("hostile no-token smoke failed: {error}");
     }
 }

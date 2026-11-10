@@ -1,15 +1,15 @@
 use super::{
-    AccountCredentialBundle, AccountRecord, AccountStateRepository, AccountStatus, Arc, AtomicBool,
+    AccountCredentialBundle, AccountRecord, AccountStatus, Arc, AsyncSqliteStateStore, AtomicBool,
     BTreeSet, CodexChildEnvironment, CodexRouterProfile, CodexRouterProfileWriter,
     CodexTransportMode, Duration, ErrorKind, Instant, Message, Mutex, Ordering, Output, Path,
     PersistedSelectorQuotaWindow, Request, Response, RouterProcessStartOptions, SecretStore,
-    SelectorQuotaRepository, SelectorQuotaWindowStatus, SmokeTempRoot, SqliteStateStore,
-    TcpListener, accept_hdr, account_id, bearer_token_from_headers, fs, is_prewarm_request_frame,
-    join_result, looks_like_websocket_upgrade, openai_account_credential_bundle_key,
-    process_output_markers, quota_reconnect_usage_limit_frame, redacted_process_output_preview,
-    reserve_loopback_port, respond_to_http_request, run_codex_exec_with_timeout,
-    smoke_prewarm_events, smoke_response_events, start_router_process_with_options, thread,
-    timestamp_seconds, wake_mock_upstream_accept,
+    SelectorQuotaWindowStatus, SmokeTempRoot, TcpListener, accept_hdr, account_id,
+    bearer_token_from_headers, fs, is_prewarm_request_frame, join_result,
+    looks_like_websocket_upgrade, openai_account_credential_bundle_key, process_output_markers,
+    quota_reconnect_usage_limit_frame, redacted_process_output_preview, reserve_loopback_port,
+    respond_to_http_request, run_codex_exec_with_timeout, smoke_prewarm_events,
+    smoke_response_events, start_router_process_with_options, thread, timestamp_seconds,
+    wake_mock_upstream_accept,
 };
 
 const TEST_STREAM_MAX_RETRIES: u64 = 100;
@@ -40,15 +40,15 @@ struct RetryUpstream {
     pub(super) handle: Option<thread::JoinHandle<Result<(), String>>>,
 }
 
-pub fn run_three_account_short_quota_reconnect() -> Result<(), String> {
-    run_retry_scenario(RetryScenario::ThreeAccountShortQuota)
+pub async fn run_three_account_short_quota_reconnect() -> Result<(), String> {
+    run_retry_scenario(RetryScenario::ThreeAccountShortQuota).await
 }
 
-pub fn run_all_weekly_exhausted_terminal() -> Result<(), String> {
-    run_retry_scenario(RetryScenario::WeeklyTerminal)
+pub async fn run_all_weekly_exhausted_terminal() -> Result<(), String> {
+    run_retry_scenario(RetryScenario::WeeklyTerminal).await
 }
 
-fn run_retry_scenario(scenario: RetryScenario) -> Result<(), String> {
+async fn run_retry_scenario(scenario: RetryScenario) -> Result<(), String> {
     let smoke_root = SmokeTempRoot::new("installed-codex-retry-integration")?;
     let codex_home = smoke_root.path().join("codex-home");
     let workdir = smoke_root.path().join("workdir");
@@ -73,7 +73,7 @@ fn run_retry_scenario(scenario: RetryScenario) -> Result<(), String> {
     }
 
     let test_now_unix_seconds = timestamp_seconds();
-    seed_retry_accounts(&state_path, &secret_root, scenario, test_now_unix_seconds)?;
+    seed_retry_accounts(&state_path, &secret_root, scenario, test_now_unix_seconds).await?;
     let upstream = RetryUpstream::start(scenario)?;
     let router_port = reserve_loopback_port()?;
     let profile_path = CodexRouterProfileWriter::new(&codex_home)
@@ -132,13 +132,14 @@ fn append_stream_retry_override(profile_path: &Path) -> Result<(), String> {
         .map_err(|error| format!("failed to write stream retry override: {error}"))
 }
 
-fn seed_retry_accounts(
+async fn seed_retry_accounts(
     state_path: &Path,
     secret_root: &Path,
     scenario: RetryScenario,
     now_unix_seconds: u64,
 ) -> Result<(), String> {
-    let state = SqliteStateStore::open(state_path)
+    let state = AsyncSqliteStateStore::open(state_path)
+        .await
         .map_err(|error| format!("failed to open retry integration state: {error}"))?;
     let secrets =
         codex_router_secret_store::test_support::open_encrypted_credential_store(secret_root)
@@ -161,7 +162,9 @@ fn seed_retry_accounts(
             AccountStatus::Enabled,
         )
         .with_active_credential_generation(1);
-        AccountStateRepository::upsert_account(&state, &account)
+        state
+            .upsert_account(&account)
+            .await
             .map_err(|error| format!("failed to seed retry account: {error}"))?;
         let short_window = PersistedSelectorQuotaWindow::new(
             account_id.clone(),
@@ -186,15 +189,16 @@ fn seed_retry_accounts(
         .with_remaining_headroom(if weekly_exhausted { 0 } else { 100 })
         .with_reset_unix_seconds(now_unix_seconds.saturating_add(604_800))
         .with_observed_unix_seconds(now_unix_seconds);
-        SelectorQuotaRepository::record_refresh_success_and_replace_selector_windows(
-            &state,
-            &account_id,
-            "responses",
-            &[short_window, weekly_window],
-            now_unix_seconds,
-            now_unix_seconds.saturating_add(300),
-        )
-        .map_err(|error| format!("failed to seed retry quota windows: {error}"))?;
+        state
+            .record_refresh_success_and_replace_selector_windows(
+                &account_id,
+                "responses",
+                &[short_window, weekly_window],
+                now_unix_seconds,
+                now_unix_seconds.saturating_add(300),
+            )
+            .await
+            .map_err(|error| format!("failed to seed retry quota windows: {error}"))?;
         let credential_key = openai_account_credential_bundle_key(&account_id, 1)
             .map_err(|error| format!("failed to build retry credential key: {error}"))?;
         let credential = AccountCredentialBundle::imported_codex_auth(*token, None)
@@ -204,6 +208,10 @@ fn seed_retry_accounts(
             .write_secret(&credential_key, &credential)
             .map_err(|error| format!("failed to write retry credential: {error}"))?;
     }
+    state
+        .close()
+        .await
+        .map_err(|error| format!("fixture state close failed: {error}"))?;
     Ok(())
 }
 

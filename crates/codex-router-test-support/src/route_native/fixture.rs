@@ -24,10 +24,7 @@ use codex_router_state::quota_snapshot::PersistedQuotaSnapshot;
 use codex_router_state::quota_snapshot::PersistedSelectorQuotaWindow;
 use codex_router_state::quota_snapshot::QuotaSnapshotSource;
 use codex_router_state::quota_snapshot::SelectorQuotaWindowStatus;
-use codex_router_state::repositories::AccountStateRepository;
-use codex_router_state::repositories::QuotaSnapshotRepository;
-use codex_router_state::repositories::SelectorQuotaRepository;
-use codex_router_state::sqlite::SqliteStateStore;
+use codex_router_state::sqlite::AsyncSqliteStateStore;
 
 pub(super) const LOCAL_TOKEN: &str = "route-native-local-token";
 
@@ -105,59 +102,75 @@ impl StartedRouteNativeRouter {
     }
 }
 
-pub(super) fn start_route_native_router(
+pub(super) async fn start_route_native_router(
     state_path: &Path,
     secret_root: &Path,
     upstream_base_url: String,
     max_connections: usize,
 ) -> Result<StartedRouteNativeRouter, String> {
-    let bind_address = LoopbackBindAddress::new("127.0.0.1", 0)
-        .map_err(|error| format!("failed to build route-native bind address: {error}"))?;
-    let upstream_endpoint = UpstreamEndpoint::new(upstream_base_url)
-        .map_err(|error| format!("failed to build route-native upstream endpoint: {error}"))?;
-    let local_token = LocalRouterTokenRecord::new(
-        SecretString::new(LOCAL_TOKEN.to_owned()),
-        TokenGeneration::new(1),
-    );
-    let credential_store =
-        codex_router_secret_store::test_support::open_encrypted_credential_store(secret_root)
-            .map_err(|error| format!("failed to open route-native credential store: {error}"))?;
-    let runtime = LoopbackRouterRuntime::start(
-        LoopbackRouterRuntimeConfig::new(
-            bind_address,
-            upstream_endpoint,
-            state_path.to_path_buf(),
-            secret_root.to_path_buf(),
-            local_token,
+    let owned_state_path = state_path.to_path_buf();
+    let owned_secret_root = secret_root.to_path_buf();
+    tokio::task::spawn_blocking(move || {
+        let state_path = owned_state_path.as_path();
+        let secret_root = owned_secret_root.as_path();
+        let bind_address = LoopbackBindAddress::new("127.0.0.1", 0)
+            .map_err(|error| format!("failed to build route-native bind address: {error}"))?;
+        let upstream_endpoint = UpstreamEndpoint::new(upstream_base_url)
+            .map_err(|error| format!("failed to build route-native upstream endpoint: {error}"))?;
+        let local_token = LocalRouterTokenRecord::new(
+            SecretString::new(LOCAL_TOKEN.to_owned()),
+            TokenGeneration::new(1),
+        );
+        let credential_store =
+            codex_router_secret_store::test_support::open_encrypted_credential_store(secret_root)
+                .map_err(|error| format!("failed to open route-native credential store: {error}"))?;
+        let runtime = LoopbackRouterRuntime::start(
+            LoopbackRouterRuntimeConfig::new(
+                bind_address,
+                upstream_endpoint,
+                state_path.to_path_buf(),
+                secret_root.to_path_buf(),
+                local_token,
+            )
+            .with_quota_clock(1_030, 60),
+            credential_store.into(),
         )
-        .with_quota_clock(1_030, 60),
-        credential_store.into(),
-    )
-    .map_err(|error| format!("failed to start route-native router: {error}"))?;
-    let address = runtime.local_addr();
-    let handle = thread::Builder::new()
-        .name("codex-router-route-native-router".to_owned())
-        .spawn(move || {
-            runtime
-                .serve_protocol_connections(max_connections)
-                .map(|_| ())
-                .map_err(|error| format!("route-native router failed: {error}"))
-        })
-        .map_err(|error| format!("failed to spawn route-native router: {error}"))?;
+        .map_err(|error| format!("failed to start route-native router: {error}"))?;
+        let address = runtime.local_addr();
+        let handle = thread::Builder::new()
+            .name("codex-router-route-native-router".to_owned())
+            .spawn(move || {
+                runtime
+                    .serve_protocol_connections(max_connections)
+                    .map(|_| ())
+                    .map_err(|error| format!("route-native router failed: {error}"))
+            })
+            .map_err(|error| format!("failed to spawn route-native router: {error}"))?;
 
-    Ok(StartedRouteNativeRouter { address, handle })
+        Ok(StartedRouteNativeRouter { address, handle })
+    })
+    .await
+    .map_err(|error| format!("fixture router startup task failed: {error}"))?
 }
 
-pub(super) fn seed_route_native_state(state_path: &Path, secret_root: &Path) -> Result<(), String> {
-    let state = SqliteStateStore::open(state_path)
+pub(super) async fn seed_route_native_state(
+    state_path: &Path,
+    secret_root: &Path,
+) -> Result<(), String> {
+    let state = AsyncSqliteStateStore::open(state_path)
+        .await
         .map_err(|error| format!("failed to open route-native state: {error}"))?;
     let secrets =
         codex_router_secret_store::test_support::open_encrypted_credential_store(secret_root)
             .map_err(|error| format!("failed to open route-native secrets: {error}"))?;
     for fixture in ROUTE_NATIVE_ACCOUNTS {
-        seed_route_native_account(&state, &secrets, *fixture)?;
+        seed_route_native_account(&state, &secrets, *fixture).await?;
     }
 
+    state
+        .close()
+        .await
+        .map_err(|error| format!("fixture state close failed: {error}"))?;
     Ok(())
 }
 
@@ -185,8 +198,8 @@ pub(super) fn join_result<T>(
     }
 }
 
-fn seed_route_native_account(
-    state: &SqliteStateStore,
+async fn seed_route_native_account(
+    state: &AsyncSqliteStateStore,
     secrets: &EncryptedCredentialStore,
     fixture: RouteNativeAccountFixture,
 ) -> Result<(), String> {
@@ -198,7 +211,7 @@ fn seed_route_native_account(
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(1);
-    AccountStateRepository::upsert_account(state, &account).map_err(|error| {
+    state.upsert_account(&account).await.map_err(|error| {
         format!(
             "failed to seed route-native account {}: {error}",
             fixture.label
@@ -210,9 +223,12 @@ fn seed_route_native_account(
             .with_observed_unix_seconds(1_000)
             .with_route_band(route_band, 88)
             .with_reset_unix_seconds(18_000);
-    QuotaSnapshotRepository::upsert_snapshot(state, &snapshot).map_err(|error| {
-        format!("failed to seed route-native quota snapshot for {route_band}: {error}")
-    })?;
+    state
+        .upsert_quota_snapshot(&snapshot)
+        .await
+        .map_err(|error| {
+            format!("failed to seed route-native quota snapshot for {route_band}: {error}")
+        })?;
     let short_window = PersistedSelectorQuotaWindow::new(
         account_id.clone(),
         route_band,
@@ -223,9 +239,12 @@ fn seed_route_native_account(
     .with_reset_unix_seconds(18_000)
     .with_effective(true)
     .with_observed_unix_seconds(1_000);
-    SelectorQuotaRepository::upsert_selector_window(state, &short_window).map_err(|error| {
-        format!("failed to seed route-native short window for {route_band}: {error}")
-    })?;
+    state
+        .upsert_selector_quota_window(&short_window)
+        .await
+        .map_err(|error| {
+            format!("failed to seed route-native short window for {route_band}: {error}")
+        })?;
     let weekly_window = PersistedSelectorQuotaWindow::new(
         account_id.clone(),
         route_band,
@@ -235,9 +254,12 @@ fn seed_route_native_account(
     .with_remaining_headroom(72)
     .with_reset_unix_seconds(604_800)
     .with_observed_unix_seconds(1_000);
-    SelectorQuotaRepository::upsert_selector_window(state, &weekly_window).map_err(|error| {
-        format!("failed to seed route-native weekly window for {route_band}: {error}")
-    })?;
+    state
+        .upsert_selector_quota_window(&weekly_window)
+        .await
+        .map_err(|error| {
+            format!("failed to seed route-native weekly window for {route_band}: {error}")
+        })?;
 
     let credential_key = openai_account_credential_bundle_key(&account_id, 1)
         .map_err(|error| format!("failed to build route-native credential key: {error}"))?;
