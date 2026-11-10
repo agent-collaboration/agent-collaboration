@@ -105,9 +105,9 @@ async function checkPrivateReference(path: string, maxBytes: number): Promise<vo
 export async function readStoppedObservations(
   reference: z.infer<typeof fileSchema>,
 ): Promise<unknown[]> {
-  // Root3's original journal is 388,165,976 bytes. It remains immutable evidence;
-  // a streaming reader avoids turning that existing size into a fresh-root waiver.
-  const maxBytes = 512 * 1024 * 1024;
+  // Sunclaw's original journal is 625,282,296 bytes. Stream its full immutable
+  // history within 1 GiB rather than truncating it or replacing the baseline.
+  const maxBytes = 1024 * 1024 * 1024;
   await checkPrivateReference(reference.path, maxBytes);
   const stream = createReadStream(reference.path),
     hash = createHash("sha256");
