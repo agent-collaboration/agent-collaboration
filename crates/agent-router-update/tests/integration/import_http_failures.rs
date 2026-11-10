@@ -16,8 +16,11 @@ use serde_json::{Value, json};
 use std::{num::NonZeroU64, time::Duration};
 use support::*;
 
-// JSON cannot carry SQLite BLOBs; hex is only this fixture's lossless readback encoding.
-const RECEIVER_MIGRATION_STAMP: &str = "SELECT json_array(version,description,CAST(installed_on AS TEXT),success,hex(checksum),execution_time) AS value FROM _sqlx_migrations_fleet_sync_receiver WHERE version=3";
+// The central-owned summary hook has one migration. Removing its receipt leaves
+// its existing table in place, so reopening exercises a real failed hook DDL.
+// JSON cannot carry SQLite BLOBs; hex is lossless fixture readback only.
+const COPY_HOOK_MIGRATION_STAMP: &str = "SELECT json_array(version,description,CAST(installed_on AS TEXT),success,hex(checksum),execution_time) AS value FROM _fleet_sync_hook_migrations WHERE version=1";
+const RECEIVER_MIGRATION_HISTORY: &str = "SELECT json_array(version,description,CAST(installed_on AS TEXT),success,hex(checksum),execution_time) AS value FROM _sqlx_migrations_fleet_sync_receiver ORDER BY version";
 
 async fn request(
     http: &reqwest::Client,
@@ -187,9 +190,11 @@ async fn pending_copy_import_keeps_the_owner_reason_across_reopen() -> TestResul
     let (header, import_id, seed) = begin(&server, &prepared).await?;
     server.shutdown().await?;
     let object = format!("copy-{}", header.database());
-    let saved = upload_support::read(root.path(), &object, RECEIVER_MIGRATION_STAMP).await?;
+    let receiver_history =
+        upload_support::read(root.path(), &object, RECEIVER_MIGRATION_HISTORY).await?;
+    let saved = upload_support::read(root.path(), &object, COPY_HOOK_MIGRATION_STAMP).await?;
     let [saved] = saved.as_slice() else {
-        return Err("one receiver history stamp required".into());
+        return Err("one central copy hook history stamp required".into());
     };
     let (version, description, installed_on, success, checksum_hex, execution_time): (
         i64,
@@ -209,17 +214,23 @@ async fn pending_copy_import_keeps_the_owner_reason_across_reopen() -> TestResul
     upload_support::execute(
         root.path(),
         &object,
-        "DELETE FROM _sqlx_migrations_fleet_sync_receiver WHERE version=3",
+        "DELETE FROM _fleet_sync_hook_migrations WHERE version=1",
     )
     .await?;
     let server = central_fixture::start_server(root.path(), &jwks).await?;
     let observed:TestResult=async {
         // Act/assert: the actual reopened Copy prelude supplies its shared typed reason.
         let (status,body)=request(&central_fixture::owner_client()?,server.base_url(),&header,&AdminProjectImportRequest::Begin {header:header.clone()}).await?;
+        let health:Value=central_fixture::owner_client()?.get(format!("{}/admin/v1/copies/{}/health",server.base_url(),header.database())).send().await?.json().await?;
+        assert_eq!(health["value"]["bookkeeping"]["value"],json!([{"corpus":"fleet-sync-receiver","stored":4,"supported":4}]));
+        let failures=health["value"]["migrationFailures"]["value"].as_array().ok_or("migration failure readback missing")?;
+        assert_eq!(failures.len(),1);
+        assert_eq!(failures[0]["corpus"],"central-copy-summary");
+        assert_eq!(failures[0]["version"],1);
         assert_eq!(status,StatusCode::SERVICE_UNAVAILABLE,"{body}");
-        assert_eq!(body,json!({"kind":"copyUnavailable","reason":{"kind":"migrationPending","value":{"version":3}}}));
+        assert_eq!(body,json!({"kind":"copyUnavailable","reason":{"kind":"migrationPending","value":{"version":1}}}));
         let error=UpgradePublisher::new(server.base_url().parse()?,central_fixture::owner_client()?).publish(&prepared).await.unwrap_err();
-        assert!(matches!(error,UpgradeUploadError::OwnerFailure {failure:OwnerOperationFailure::CopyUnavailable {reason:fleet_sync_protocol::CopyUnavailableReason::MigrationPending {version:3}}}));
+        assert!(matches!(error,UpgradeUploadError::OwnerFailure {failure:OwnerOperationFailure::CopyUnavailable {reason:fleet_sync_protocol::CopyUnavailableReason::MigrationPending {version:1}}}));
         Ok(())
     }.await;
     server.shutdown().await?;
@@ -229,7 +240,7 @@ async fn pending_copy_import_keeps_the_owner_reason_across_reopen() -> TestResul
         .connect()
         .await?;
     let restored = sqlx_turso::sqlx::query::<sqlx_turso::Turso>(
-        "INSERT INTO _sqlx_migrations_fleet_sync_receiver(version,description,installed_on,success,checksum,execution_time) VALUES(?,?,?,?,?,?)",
+        "INSERT INTO _fleet_sync_hook_migrations(version,description,installed_on,success,checksum,execution_time) VALUES(?,?,?,?,?,?)",
     )
     .bind(version)
     .bind(description)
@@ -242,7 +253,7 @@ async fn pending_copy_import_keeps_the_owner_reason_across_reopen() -> TestResul
     connection.close().await?;
     restored?;
     assert_eq!(
-        upload_support::read(root.path(), &object, RECEIVER_MIGRATION_STAMP).await?,
+        upload_support::read(root.path(), &object, COPY_HOOK_MIGRATION_STAMP).await?,
         vec![saved.as_str().to_owned()],
         "restoration must preserve all sqlx-shaped migration fields and original checksum bytes"
     );
@@ -262,5 +273,11 @@ async fn pending_copy_import_keeps_the_owner_reason_across_reopen() -> TestResul
         .map_err(|error| error as Box<dyn std::error::Error>)?;
     prepared.close().await;
     observed?;
-    recovery
+    recovery?;
+    assert_eq!(
+        upload_support::read(root.path(), &object, RECEIVER_MIGRATION_HISTORY).await?,
+        receiver_history,
+        "the receiver corpus must remain unchanged while the central hook is repaired"
+    );
+    Ok(())
 }

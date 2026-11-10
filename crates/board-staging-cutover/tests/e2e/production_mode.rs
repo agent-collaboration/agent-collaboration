@@ -69,6 +69,8 @@ pub(super) async fn execute(
     phase: &str,
     target: &str,
 ) -> TestResult<serde_json::Value> {
+    let projects = codex_router_host::router_collaboration_directory(&host.root).join("projects");
+    let before = snapshot(&projects)?;
     let plan = preview(run, host, target).await?;
     let digest = plan
         .get("digest")
@@ -87,8 +89,20 @@ pub(super) async fn execute(
     }
     let output = command.output().await?;
     if !output.status.success() {
+        let after = snapshot(&projects)?;
+        let changed = before
+            .iter()
+            .filter(|entry| !after.contains(entry))
+            .map(|entry| &entry.path)
+            .chain(
+                after
+                    .iter()
+                    .filter(|entry| !before.contains(entry))
+                    .map(|entry| &entry.path),
+            )
+            .collect::<std::collections::BTreeSet<_>>();
         return Err(format!(
-            "{phase} failed: {} {}",
+            "{phase} failed: {} {}; project paths changed during preview/execution: {changed:?}",
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         )
