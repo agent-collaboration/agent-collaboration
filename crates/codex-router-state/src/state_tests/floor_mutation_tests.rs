@@ -1,4 +1,5 @@
 use super::*;
+use sqlx::Connection as _;
 
 #[tokio::test]
 async fn policy_bulk_read_is_independent_and_unknown_account_is_redacted() {
@@ -186,8 +187,17 @@ async fn weekly_floor_mutation_busy_retry_is_bounded_and_preserves_value() {
         .await
         .expect("old floor should persist");
 
-    let lock = Connection::open(&database_path).expect("lock connection should open");
-    lock.execute_batch("PRAGMA busy_timeout = 0; BEGIN IMMEDIATE;")
+    let mut lock = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    .expect("lock connection should open");
+    sqlx::raw_sql("PRAGMA busy_timeout = 0; BEGIN IMMEDIATE;")
+        .execute(&mut lock)
+        .await
         .expect("writer lock should be held");
     let concurrent_reader = AsyncSqliteStateStore::open_read_only(&database_path)
         .await
@@ -215,8 +225,11 @@ async fn weekly_floor_mutation_busy_retry_is_bounded_and_preserves_value() {
     assert_eq!(error, StateStoreError::WeeklyQuotaFloorDatabaseBusy);
     assert!(elapsed >= std::time::Duration::from_millis(150));
     assert!(elapsed < std::time::Duration::from_millis(250));
-    lock.execute_batch("ROLLBACK;")
+    sqlx::raw_sql("ROLLBACK;")
+        .execute(&mut lock)
+        .await
         .expect("lock should release");
+    lock.close().await.expect("lock connection should close");
     mutation.close().await;
 
     let read_only = AsyncSqliteStateStore::open_read_only(&database_path)
@@ -247,8 +260,17 @@ async fn weekly_floor_mutation_commits_after_held_writer_releases() {
         .expect("account should persist");
     store.close().await.expect("state should close");
 
-    let lock = Connection::open(&database_path).expect("lock connection should open");
-    lock.execute_batch("PRAGMA busy_timeout = 0; BEGIN IMMEDIATE;")
+    let mut lock = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    .expect("lock connection should open");
+    sqlx::raw_sql("PRAGMA busy_timeout = 0; BEGIN IMMEDIATE;")
+        .execute(&mut lock)
+        .await
         .expect("writer lock should be held");
     let mutation = Arc::new(
         AsyncWeeklyQuotaFloorMutationStore::open(&database_path)
@@ -276,8 +298,11 @@ async fn weekly_floor_mutation_commits_after_held_writer_releases() {
         !mutation_task.is_finished(),
         "held writer should leave the setter pending for a retry"
     );
-    lock.execute_batch("ROLLBACK;")
+    sqlx::raw_sql("ROLLBACK;")
+        .execute(&mut lock)
+        .await
         .expect("lock should release");
+    lock.close().await.expect("lock connection should close");
 
     assert_eq!(
         mutation_task.await.expect("mutation task should join"),

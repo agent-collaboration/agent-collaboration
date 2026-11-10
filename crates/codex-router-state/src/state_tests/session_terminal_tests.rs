@@ -242,7 +242,7 @@ async fn writable_selection_projection_terminalizes_stale_active_leases() {
 async fn sqlx_v8_migration_preserves_current_leases_without_synthetic_session_history() {
     let temp_dir = TestTempDir::new("async_v8_active_session_migration");
     let database_path = temp_dir.path().join("state.sqlite");
-    create_v8_database_with_current_active_lease(&database_path);
+    create_v8_database_with_current_active_lease(&database_path).await;
 
     let store = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(store) => store,
@@ -281,7 +281,7 @@ async fn sqlx_v8_migration_preserves_current_leases_without_synthetic_session_hi
 async fn sqlx_current_schema_repairs_partial_v10_active_session_columns() {
     let temp_dir = TestTempDir::new("async_partial_v10_active_session_repair");
     let database_path = temp_dir.path().join("state.sqlite");
-    create_partial_v10_database_missing_active_session_columns(&database_path);
+    create_partial_v10_database_missing_active_session_columns(&database_path).await;
 
     let store = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(store) => store,

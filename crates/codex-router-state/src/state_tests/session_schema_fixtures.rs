@@ -1,13 +1,21 @@
 use std::path::Path;
 
-use rusqlite::Connection;
+use sqlx::sqlite::SqliteConnectOptions;
+use sqlx::{Connection, SqliteConnection};
 
-pub(super) fn create_v8_database_with_current_active_lease(database_path: &Path) {
-    let connection = match Connection::open(database_path) {
+pub(super) async fn create_v8_database_with_current_active_lease(database_path: &Path) {
+    let mut connection = match SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    {
         Ok(connection) => connection,
         Err(error) => panic!("raw v8 database should open: {error}"),
     };
-    if let Err(error) = connection.execute_batch(
+    if let Err(error) = sqlx::raw_sql(
         "
             CREATE TABLE accounts (
                 account_id TEXT PRIMARY KEY NOT NULL,
@@ -90,17 +98,31 @@ pub(super) fn create_v8_database_with_current_active_lease(database_path: &Path)
 
             PRAGMA user_version = 8;
             ",
-    ) {
+    )
+    .execute(&mut connection)
+    .await
+    {
         panic!("raw v8 database should initialize: {error}");
     }
+    connection
+        .close()
+        .await
+        .expect("legacy session fixture should close");
 }
 
-pub(super) fn create_v10_database_missing_async_projection_tables(database_path: &Path) {
-    let connection = match Connection::open(database_path) {
+pub(super) async fn create_v10_database_missing_async_projection_tables(database_path: &Path) {
+    let mut connection = match SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    {
         Ok(connection) => connection,
         Err(error) => panic!("raw v10 database should open: {error}"),
     };
-    if let Err(error) = connection.execute_batch(
+    if let Err(error) = sqlx::raw_sql(
         "
             CREATE TABLE accounts (
                 account_id TEXT PRIMARY KEY NOT NULL,
@@ -145,17 +167,33 @@ pub(super) fn create_v10_database_missing_async_projection_tables(database_path:
 
             PRAGMA user_version = 10;
             ",
-    ) {
+    )
+    .execute(&mut connection)
+    .await
+    {
         panic!("raw v10 database should initialize without async projection tables: {error}");
     }
+    connection
+        .close()
+        .await
+        .expect("legacy session fixture should close");
 }
 
-pub(super) fn create_partial_v10_database_missing_active_session_columns(database_path: &Path) {
-    let connection = match Connection::open(database_path) {
+pub(super) async fn create_partial_v10_database_missing_active_session_columns(
+    database_path: &Path,
+) {
+    let mut connection = match SqliteConnection::connect_with(
+        &SqliteConnectOptions::new()
+            .filename(database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    {
         Ok(connection) => connection,
         Err(error) => panic!("raw partial v10 database should open: {error}"),
     };
-    if let Err(error) = connection.execute_batch(
+    if let Err(error) = sqlx::raw_sql(
         "
             CREATE TABLE active_client_leases (
                 route_band TEXT NOT NULL,
@@ -204,7 +242,14 @@ pub(super) fn create_partial_v10_database_missing_active_session_columns(databas
 
             PRAGMA user_version = 10;
             ",
-    ) {
+    )
+    .execute(&mut connection)
+    .await
+    {
         panic!("raw partial v10 database should initialize: {error}");
     }
+    connection
+        .close()
+        .await
+        .expect("legacy session fixture should close");
 }

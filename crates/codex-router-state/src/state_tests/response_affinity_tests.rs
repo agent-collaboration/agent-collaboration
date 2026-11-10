@@ -1,13 +1,14 @@
 use super::*;
 
-#[test]
-fn previous_response_affinity_owner_repository_is_hash_only_and_route_scoped() {
+#[tokio::test]
+async fn previous_response_affinity_owner_repository_is_hash_only_and_route_scoped() {
     let temp_dir = TestTempDir::new("affinity_owner_hash_only");
     let database_path = temp_dir.path().join("state.sqlite");
-    let store = match SqliteStateStore::open(&database_path) {
+    let store = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(store) => store,
         Err(error) => panic!("state store should open and migrate: {error}"),
     };
+    seed_account_records(&store, Provider::Openai, &["acct_owner", "acct_models"]).await;
     let hash = affinity_hash('a');
     let responses_owner = PreviousResponseAffinityOwnerRecord::new(
         hash.clone(),
@@ -26,45 +27,45 @@ fn previous_response_affinity_owner_repository_is_hash_only_and_route_scoped() {
         1_100,
     );
 
-    if let Err(error) = AffinityRepository::write_previous_response_owner(&store, &responses_owner)
-    {
+    if let Err(error) = store.write_previous_response_owner(&responses_owner).await {
         panic!("responses affinity owner should persist: {error}");
     }
-    if let Err(error) = AffinityRepository::write_previous_response_owner(&store, &models_owner) {
+    if let Err(error) = store.write_previous_response_owner(&models_owner).await {
         panic!("models affinity owner should persist: {error}");
     }
 
     assert_eq!(
-        AffinityRepository::load_previous_response_owner(
-            &store,
-            &hash,
-            RouteBand::Responses.as_str()
-        ),
+        store
+            .load_previous_response_owner(&hash, RouteBand::Responses.as_str())
+            .await,
         Ok(PreviousResponseAffinityOwnerLookup::Found(responses_owner))
     );
     assert_eq!(
-        AffinityRepository::load_previous_response_owner(&store, &hash, RouteBand::Models.as_str()),
+        store
+            .load_previous_response_owner(&hash, RouteBand::Models.as_str())
+            .await,
         Ok(PreviousResponseAffinityOwnerLookup::Found(models_owner))
     );
     assert_eq!(
-        AffinityRepository::load_previous_response_owner(
-            &store,
-            &affinity_hash('b'),
-            RouteBand::Responses.as_str()
-        ),
+        store
+            .load_previous_response_owner(&affinity_hash('b'), RouteBand::Responses.as_str())
+            .await,
         Ok(PreviousResponseAffinityOwnerLookup::Missing)
     );
-    assert_no_previous_response_id_in_affinity_owner_rows(&database_path, "resp_raw_canary");
+    assert_no_previous_response_id_in_affinity_owner_rows(&database_path, "resp_raw_canary").await;
+
+    store.close().await.expect("state store should close");
 }
 
 #[tokio::test]
-async fn async_previous_response_affinity_owner_matches_sync_repository_projection() {
+async fn async_previous_response_affinity_owner_survives_reopen() {
     let temp_dir = TestTempDir::new("async_affinity_owner_hash_only");
     let database_path = temp_dir.path().join("state.sqlite");
-    let sync_store = match SqliteStateStore::open(&database_path) {
+    let seed_store = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(store) => store,
-        Err(error) => panic!("sync state store should open and migrate: {error}"),
+        Err(error) => panic!("seed state store should open and migrate: {error}"),
     };
+    seed_account_records(&seed_store, Provider::Openai, &["acct_async_owner"]).await;
     let hash = affinity_hash('c');
     let responses_owner = PreviousResponseAffinityOwnerRecord::new(
         hash.clone(),
@@ -74,24 +75,21 @@ async fn async_previous_response_affinity_owner_matches_sync_repository_projecti
         AffinitySourceTransport::WebSocket,
         1_200,
     );
-    if let Err(error) =
-        AffinityRepository::write_previous_response_owner(&sync_store, &responses_owner)
+    if let Err(error) = seed_store
+        .write_previous_response_owner(&responses_owner)
+        .await
     {
         panic!("responses affinity owner should persist: {error}");
     }
+    seed_store
+        .close()
+        .await
+        .expect("seed owner store should close before reopen");
     let async_store = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(store) => store,
         Err(error) => panic!("async state store should open and migrate: {error}"),
     };
 
-    let sync_lookup = match AffinityRepository::load_previous_response_owner(
-        &sync_store,
-        &hash,
-        RouteBand::Responses.as_str(),
-    ) {
-        Ok(lookup) => lookup,
-        Err(error) => panic!("sync affinity owner should load: {error}"),
-    };
     let async_lookup = match AsyncAffinityRepository::load_previous_response_owner(
         &async_store,
         &hash,
@@ -113,12 +111,17 @@ async fn async_previous_response_affinity_owner_matches_sync_repository_projecti
         Err(error) => panic!("async missing affinity owner should load: {error}"),
     };
 
-    assert_eq!(async_lookup, sync_lookup);
+    assert_eq!(
+        async_lookup,
+        PreviousResponseAffinityOwnerLookup::Found(responses_owner)
+    );
     assert_eq!(async_missing, PreviousResponseAffinityOwnerLookup::Missing);
+
+    async_store.close().await.expect("state store should close");
 }
 
 #[tokio::test]
-async fn async_previous_response_affinity_owner_write_matches_sync_projection() {
+async fn async_previous_response_affinity_owner_write_persists_exact_record() {
     let temp_dir = TestTempDir::new("async_affinity_owner_write");
     let database_path = temp_dir.path().join("state.sqlite");
     let async_store = match AsyncSqliteStateStore::open(&database_path).await {
@@ -140,23 +143,31 @@ async fn async_previous_response_affinity_owner_write_matches_sync_projection() 
     {
         panic!("async affinity owner should persist: {error}");
     }
-    let sync_store = match SqliteStateStore::open(&database_path) {
+    async_store
+        .close()
+        .await
+        .expect("written owner store should close");
+    let reopened_store = match AsyncSqliteStateStore::open_read_only(&database_path).await {
         Ok(store) => store,
-        Err(error) => panic!("sync state store should open after async write: {error}"),
+        Err(error) => panic!("read-only state store should open after async write: {error}"),
     };
-    let sync_lookup = match AffinityRepository::load_previous_response_owner(
-        &sync_store,
-        &hash,
-        RouteBand::Responses.as_str(),
-    ) {
+    let reopened_lookup = match reopened_store
+        .load_previous_response_owner(&hash, RouteBand::Responses.as_str())
+        .await
+    {
         Ok(lookup) => lookup,
-        Err(error) => panic!("sync affinity owner should load after async write: {error}"),
+        Err(error) => panic!("reopened affinity owner should load after async write: {error}"),
     };
 
     assert_eq!(
-        sync_lookup,
+        reopened_lookup,
         PreviousResponseAffinityOwnerLookup::Found(responses_owner)
     );
+
+    reopened_store
+        .close()
+        .await
+        .expect("state store should close");
 }
 
 #[tokio::test]
@@ -280,14 +291,15 @@ async fn previous_response_affinity_owner_retention_deletes_one_bounded_batch_be
         .unwrap_or_else(|error| panic!("state store should close: {error}"));
 }
 
-#[test]
-fn previous_response_affinity_owner_detects_ambiguous_rows_and_can_purge() {
+#[tokio::test]
+async fn previous_response_affinity_owner_detects_ambiguous_rows_and_can_prune() {
     let temp_dir = TestTempDir::new("affinity_owner_ambiguous_purge");
     let database_path = temp_dir.path().join("state.sqlite");
-    let store = match SqliteStateStore::open(&database_path) {
+    let store = match AsyncSqliteStateStore::open(&database_path).await {
         Ok(store) => store,
         Err(error) => panic!("state store should open and migrate: {error}"),
     };
+    seed_account_records(&store, Provider::Openai, &["acct_first", "acct_second"]).await;
     let hash = affinity_hash('c');
     for account_id_value in ["acct_first", "acct_second"] {
         let owner = PreviousResponseAffinityOwnerRecord::new(
@@ -298,29 +310,27 @@ fn previous_response_affinity_owner_detects_ambiguous_rows_and_can_purge() {
             AffinitySourceTransport::HttpSse,
             2_000,
         );
-        if let Err(error) = AffinityRepository::write_previous_response_owner(&store, &owner) {
+        if let Err(error) = store.write_previous_response_owner(&owner).await {
             panic!("affinity owner should persist: {error}");
         }
     }
 
     assert_eq!(
-        AffinityRepository::load_previous_response_owner(
-            &store,
-            &hash,
-            RouteBand::Responses.as_str()
-        ),
+        store
+            .load_previous_response_owner(&hash, RouteBand::Responses.as_str())
+            .await,
         Ok(PreviousResponseAffinityOwnerLookup::Ambiguous)
     );
 
-    if let Err(error) = AffinityRepository::purge_previous_response_owners(&store) {
+    if let Err(error) = store.prune_previous_response_owners_before(2_001).await {
         panic!("affinity owners should purge: {error}");
     }
     assert_eq!(
-        AffinityRepository::load_previous_response_owner(
-            &store,
-            &hash,
-            RouteBand::Responses.as_str()
-        ),
+        store
+            .load_previous_response_owner(&hash, RouteBand::Responses.as_str())
+            .await,
         Ok(PreviousResponseAffinityOwnerLookup::Missing)
     );
+
+    store.close().await.expect("state store should close");
 }

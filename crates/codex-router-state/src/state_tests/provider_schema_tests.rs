@@ -1,4 +1,5 @@
 use super::*;
+use sqlx::Connection as _;
 
 #[tokio::test]
 async fn account_provider_is_immutable_after_insert() {
@@ -50,17 +51,30 @@ async fn native_v13_database_rejects_missing_session_affinity_index() {
         .close()
         .await
         .expect("initial store should close");
-    let existing_v13 = Connection::open(&database_path).expect("v13 database should open");
-    existing_v13
-        .execute("DROP INDEX session_account_affinities_last_seen_lookup", [])
+    let mut existing_v13 = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    .expect("v13 database should open");
+    sqlx::query("DROP INDEX session_account_affinities_last_seen_lookup")
+        .execute(&mut existing_v13)
+        .await
+        .map(|result| result.rows_affected())
         .expect("test fixture should remove the post-v13 index");
     assert_eq!(
-        existing_v13
-            .pragma_query_value(None, "user_version", |row| row.get::<_, u32>(0))
+        sqlx::query_scalar::<_, i64>("PRAGMA user_version")
+            .fetch_one(&mut existing_v13)
+            .await
             .expect("v13 fixture version should query"),
         13
     );
-    drop(existing_v13);
+    existing_v13
+        .close()
+        .await
+        .expect("fixture connection should close");
 
     let error = AsyncSqliteStateStore::open(&database_path)
         .await
@@ -71,15 +85,25 @@ async fn native_v13_database_rejects_missing_session_affinity_index() {
             message: "incompatible account database schema".to_owned()
         }
     );
-    let inspected = Connection::open(&database_path).expect("reopened database should inspect");
-    let index_count: i64 = inspected
-        .query_row(
-            "SELECT COUNT(*)
+    let mut inspected = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&database_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await
+    .expect("reopened database should inspect");
+    let index_count: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*)
                    FROM pragma_index_list('session_account_affinities')
                   WHERE name = 'session_account_affinities_last_seen_lookup'",
-            [],
-            |row| row.get(0),
-        )
-        .expect("session affinity indexes should query");
+    )
+    .fetch_one(&mut inspected)
+    .await
+    .expect("session affinity indexes should query");
     assert_eq!(index_count, 0, "rejection must not repair native schema");
+    inspected
+        .close()
+        .await
+        .expect("schema inspection should close");
 }
