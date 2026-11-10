@@ -204,10 +204,37 @@ pub(super) async fn retire_imported_fixture(base: &str) -> ConformanceResult<()>
     )
     .await?;
     let proof=async {
-        match creation::operation_answer(&mut reader.socket,OperationRequest::Replication(ReplicationRequest::SnapshotPage {database,cursor:None})).await? {
-            OperationAnswer::Replication(ReplicationAnswer::SnapshotPage(SnapshotRead::Page(page)))
-                if page.table=="owner_retirement_rows" && page.rows==vec![vec![SqlValue::Text("019f0000-0000-7000-8000-000000005595".into()),SqlValue::Text("fixture imported row".into())]]=>{},
-            _=>return Err("normal reader did not observe the fixture's actual seeded row before retirement".into()),
+        let mut cursor = None;
+        let mut observed_tables = Vec::new();
+        for _ in 0..2 {
+            let answer = creation::operation_answer(
+                &mut reader.socket,
+                OperationRequest::Replication(ReplicationRequest::SnapshotPage { database, cursor }),
+            )
+            .await?;
+            let OperationAnswer::Replication(ReplicationAnswer::SnapshotPage(SnapshotRead::Page(page))) = answer else {
+                return Err("normal reader did not observe both seeded tables before retirement".into());
+            };
+            let expected = match page.table.as_str() {
+                "owner_retirement_parents" => vec![
+                    SqlValue::Text("019f0000-0000-7000-8000-000000005598".into()),
+                    SqlValue::Text("fixture referenced parent".into()),
+                ],
+                "owner_retirement_rows" => vec![
+                    SqlValue::Text("019f0000-0000-7000-8000-000000005595".into()),
+                    SqlValue::Text("fixture imported row".into()),
+                    SqlValue::Text("019f0000-0000-7000-8000-000000005598".into()),
+                ],
+                _ => return Err("unexpected table in retirement fixture snapshot".into()),
+            };
+            if page.rows != vec![expected] {
+                return Err("normal reader lost the referenced parent/child graph".into());
+            }
+            observed_tables.push(page.table);
+            cursor = page.next;
+        }
+        if observed_tables != ["owner_retirement_parents", "owner_retirement_rows"] || cursor.is_some() {
+            return Err("retirement fixture snapshot was incomplete or duplicated".into());
         }
         let route=format!("{base}/admin/v1/projects/{database}/retire");
         let request=json!({"requestId":Uuid::now_v7(),"expectFence":1,"expectAcked":{"epoch":1,"sequence":1}});

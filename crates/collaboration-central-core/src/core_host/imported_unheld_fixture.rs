@@ -96,66 +96,92 @@ where
         else {
             return Err(StoreError::backend("import fixture seed did not begin"));
         };
-        let sql =
-            "CREATE TABLE owner_retirement_rows(id TEXT NOT NULL PRIMARY KEY,value TEXT NOT NULL)";
+        let parent_sql = "CREATE TABLE owner_retirement_parents(id TEXT NOT NULL PRIMARY KEY,value TEXT NOT NULL)";
+        let child_sql = "CREATE TABLE owner_retirement_rows(id TEXT NOT NULL PRIMARY KEY,value TEXT NOT NULL,parent_id TEXT NOT NULL REFERENCES owner_retirement_parents(id))";
+        let schema_steps = vec![parent_sql.to_owned(), child_sql.to_owned()];
         let schema = SchemaIdentity::new(
             1,
-            schema_fingerprint(&[SchemaEntry {
-                kind: SchemaObjectKind::Table,
-                name: "owner_retirement_rows".into(),
-                sql: sql.into(),
-            }])
+            schema_fingerprint(&[
+                SchemaEntry {
+                    kind: SchemaObjectKind::Table,
+                    name: "owner_retirement_parents".into(),
+                    sql: parent_sql.into(),
+                },
+                SchemaEntry {
+                    kind: SchemaObjectKind::Table,
+                    name: "owner_retirement_rows".into(),
+                    sql: child_sql.into(),
+                },
+            ])
             .map_err(StoreError::backend)?,
         )
         .map_err(StoreError::backend)?;
-        let row = vec![
-            SqlValue::Text("019f0000-0000-7000-8000-000000005595".into()),
-            SqlValue::Text("fixture imported row".into()),
+        let parent_id = "019f0000-0000-7000-8000-000000005598";
+        let tables = [
+            (
+                "owner_retirement_parents",
+                vec![
+                    SqlValue::Text(parent_id.into()),
+                    SqlValue::Text("fixture referenced parent".into()),
+                ],
+            ),
+            (
+                "owner_retirement_rows",
+                vec![
+                    SqlValue::Text("019f0000-0000-7000-8000-000000005595".into()),
+                    SqlValue::Text("fixture imported row".into()),
+                    SqlValue::Text(parent_id.into()),
+                ],
+            ),
         ];
-        let mut digest = TableDigestBuilder::new();
-        digest.push_row(&row).map_err(StoreError::backend)?;
         let position = ReplicationPosition::new(
             Epoch::new(1).map_err(StoreError::backend)?,
             CommitSequence::new(1),
         );
-        let contents = SnapshotPage {
-            database,
-            position,
-            schema: schema.clone(),
-            schema_steps: vec![sql.into()],
-            table: "owner_retirement_rows".into(),
-            rows: vec![row],
-            next: None,
-        };
-        let page = SeedPage {
-            seed,
-            page: 0,
-            digest: PageDigest::of(&contents).map_err(StoreError::backend)?,
-            contents,
-        };
-        if fixture_seed(
-            shared_host,
-            &owner,
-            &target,
-            AdminCopySeedRequest::Page(Box::new(page)),
-        )
-        .await?
-            != ReplicationAnswer::SeedPage(SeedPageAnswer::Staged)
-        {
-            return Err(StoreError::backend(
-                "import fixture seed page was not staged",
+        let mut table_digests = Vec::new();
+        for (page_index, (table, row)) in tables.into_iter().enumerate() {
+            let mut digest = TableDigestBuilder::new();
+            digest.push_row(&row).map_err(StoreError::backend)?;
+            table_digests.push((
+                TableName::new(table).map_err(StoreError::backend)?,
+                digest.finish(),
             ));
+            let contents = SnapshotPage {
+                database,
+                position,
+                schema: schema.clone(),
+                schema_steps: schema_steps.clone(),
+                table: table.into(),
+                rows: vec![row],
+                next: None,
+            };
+            let page = SeedPage {
+                seed,
+                page: u32::try_from(page_index).map_err(StoreError::backend)?,
+                digest: PageDigest::of(&contents).map_err(StoreError::backend)?,
+                contents,
+            };
+            if fixture_seed(
+                shared_host,
+                &owner,
+                &target,
+                AdminCopySeedRequest::Page(Box::new(page)),
+            )
+            .await?
+                != ReplicationAnswer::SeedPage(SeedPageAnswer::Staged)
+            {
+                return Err(StoreError::backend(
+                    "import fixture seed page was not staged",
+                ));
+            }
         }
         let done = SeedComplete {
             database,
             seed,
             position,
-            pages: 1,
+            pages: 2,
             schema,
-            table_digests: vec![(
-                TableName::new("owner_retirement_rows").map_err(StoreError::backend)?,
-                digest.finish(),
-            )],
+            table_digests,
         };
         if fixture_seed(
             shared_host,
