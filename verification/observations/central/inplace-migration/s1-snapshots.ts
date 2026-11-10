@@ -36,7 +36,7 @@ const queries = z
   .array(
     z
       .object({
-        object: z.string().min(1).optional(),
+        object: z.string().min(1),
         statement: z.string().min(1),
         rowsWritten: z.literal(0n),
       })
@@ -80,12 +80,15 @@ const key = (object: Address): string => `${object.kind}/${object.name}`;
 /** Validate actual telemetry, removing only the extra S1 field before the strict S4 collector. */
 function collectorPage(text: string, object: Address): unknown {
   const body = z.record(z.string(), z.unknown()).parse(decode(text));
-  for (const query of queries.parse(body.queries))
+  const reads = queries.parse(body.queries);
+  for (const query of reads)
     if (
       !/^\s*SELECT\b/i.test(query.statement) ||
-      (query.object !== undefined && query.object !== object.name && query.object !== "registry")
+      (query.object !== object.name && query.object !== "registry")
     )
       throw new Error("S1 query is not an attributed read-only SELECT");
+  if (!reads.some((query) => query.object === object.name))
+    throw new Error("S1 page has no read attributed to the requested object");
   const { queries: _queries, ...page } = body;
   return page;
 }

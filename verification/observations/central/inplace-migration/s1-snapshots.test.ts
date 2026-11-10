@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { z } from "zod";
 import { decode, encode } from "../../../exact-json.ts";
 import { recordS1, compareS1, type S1Transport } from "./s1-snapshots.ts";
 
@@ -13,6 +15,12 @@ function transport(changed = false): S1Transport {
     const queries = [
       { object: request.name, statement: "SELECT value FROM snapshot", rowsWritten: 0n },
     ];
+    if (request.kind !== "registry")
+      queries.unshift({
+        object: "registry",
+        statement: "SELECT database FROM cohort",
+        rowsWritten: 0n,
+      });
     const schema = (
       names: string[],
     ): { type: string; name: string; tbl_name: string; sql: string }[] =>
@@ -100,6 +108,69 @@ test("S1 reuses lossless collector across pages/empty tables and compares a comp
     await rm(root, { recursive: true, force: true });
   }
 });
+
+for (const [name, queries] of [
+  ["missing labels", [{ statement: "SELECT value FROM snapshot", rowsWritten: 0n }]],
+  [
+    "Registry-only attribution",
+    [{ object: "registry", statement: "SELECT database FROM cohort", rowsWritten: 0n }],
+  ],
+] as const) {
+  test(`S1 record refuses ${name} on a later non-Registry page`, async (): Promise<void> => {
+    const root = await mkdtemp(join(await realpath(tmpdir()), "2026-11-s1-client-"));
+    try {
+      const read = transport();
+      await assert.rejects(
+        recordS1(plan(join(root, "capture")), async (request) => {
+          const response = await read(request);
+          if (request.kind !== "copy" || request.cursor === null) return response;
+          const body = z.record(z.string(), z.unknown()).parse(decode(response.text));
+          return { ...response, text: encode({ ...body, queries }) };
+        }),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test(`S1 retained-page replay refuses ${name} even with matching raw hashes`, async (): Promise<void> => {
+    const root = await mkdtemp(join(await realpath(tmpdir()), "2026-11-s1-client-"));
+    try {
+      const before = await recordS1(plan(join(root, "before")), transport());
+      const after = await recordS1(plan(join(root, "after")), transport());
+      const page = join(root, "after", "2", "page-1.json");
+      const body = z.record(z.string(), z.unknown()).parse(decode(await readFile(page, "utf8")));
+      const text = encode({ ...body, queries });
+      await writeFile(page, text, { mode: 0o600 });
+      const saved = z
+        .object({
+          objects: z.array(
+            z
+              .object({
+                object: z.object({ kind: z.string() }).passthrough(),
+                pages: z.array(
+                  z.object({ artifact: z.string(), sha256: z.string() }).passthrough(),
+                ),
+              })
+              .passthrough(),
+          ),
+        })
+        .passthrough()
+        .parse(decode(await readFile(after, "utf8")));
+      const source = saved.objects.find((entry) => entry.object.kind === "copy")?.pages[1];
+      assert.ok(source);
+      assert.equal(source.artifact, "2/page-1.json");
+      source.sha256 = createHash("sha256").update(text).digest("hex");
+      await writeFile(after, encode(saved), { mode: 0o600 });
+      await assert.rejects(
+        compareS1(before, after),
+        (error: unknown): boolean => error instanceof Error && !error.message.includes("hash"),
+      );
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+}
 
 test("S1 refuses non200, unknown/write telemetry, nonSELECT and wrong query attribution after retaining raw bytes", async (): Promise<void> => {
   const root = await mkdtemp(join(await realpath(tmpdir()), "2026-11-s1-client-"));
