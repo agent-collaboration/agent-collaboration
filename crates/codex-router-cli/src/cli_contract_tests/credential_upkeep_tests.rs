@@ -104,16 +104,25 @@ async fn enabled_exhausted_idle_account_renews_across_simulated_days_without_quo
         observed_calls: call_sender,
     };
     let clock = Arc::clone(&now);
-    let worker = must_ok({
+    let worker_result = {
         let fixture_state_path = (state_path).clone();
         let fixture_secrets = secrets.into();
         let fixture_client = client;
         let fixture_clock = move || clock.load(Ordering::SeqCst);
         let fixture_dispatcher = tracing::dispatcher::get_default(Clone::clone);
-        must_ok(tokio::task::spawn_blocking(move|| tracing::dispatcher::with_default(&fixture_dispatcher,||{
- crate::credential_upkeep_worker::start_background_credential_upkeep_worker_with_client_and_clock(&fixture_state_path,fixture_secrets,fixture_client,fixture_clock)
- })).await)
-    });
+        let upkeep_task = tokio::task::spawn_blocking(move || {
+            tracing::dispatcher::with_default(&fixture_dispatcher, || {
+                crate::credential_upkeep_worker::start_background_credential_upkeep_worker_with_client_and_clock(
+                    &fixture_state_path,
+                    fixture_secrets,
+                    fixture_client,
+                    fixture_clock,
+                )
+            })
+        });
+        must_ok(upkeep_task.await)
+    };
+    let worker = must_ok(worker_result);
     assert_eq!(
         must_ok(call_receiver.recv_timeout(Duration::from_secs(2))),
         1
@@ -246,7 +255,7 @@ async fn credential_upkeep_refreshes_exhausted_and_idle_claude_accounts() {
     state.close().await.expect("fixture state should close");
 
     let (observed_sender, observed_receiver) = mpsc::channel();
-    let worker = must_ok({
+    let worker_result = {
         let fixture_state_path = (state_path).clone();
         let fixture_secrets = secrets.clone().into();
         let fixture_client = RecordingClaudeUpkeepRefreshClient {
@@ -254,10 +263,19 @@ async fn credential_upkeep_refreshes_exhausted_and_idle_claude_accounts() {
         };
         let fixture_clock = || 1_000;
         let fixture_dispatcher = tracing::dispatcher::get_default(Clone::clone);
-        must_ok(tokio::task::spawn_blocking(move|| tracing::dispatcher::with_default(&fixture_dispatcher,||{
- crate::credential_upkeep_worker::start_background_credential_upkeep_worker_with_client_and_clock(&fixture_state_path,fixture_secrets,fixture_client,fixture_clock)
- })).await)
-    });
+        let upkeep_task = tokio::task::spawn_blocking(move || {
+            tracing::dispatcher::with_default(&fixture_dispatcher, || {
+                crate::credential_upkeep_worker::start_background_credential_upkeep_worker_with_client_and_clock(
+                    &fixture_state_path,
+                    fixture_secrets,
+                    fixture_client,
+                    fixture_clock,
+                )
+            })
+        });
+        must_ok(upkeep_task.await)
+    };
+    let worker = must_ok(worker_result);
     let mut observed_accounts = [
         must_ok(observed_receiver.recv_timeout(Duration::from_secs(2)))
             .as_str()
@@ -375,7 +393,7 @@ async fn upkeep_shutdown_drains_in_flight_rotation_before_returning() {
     state.close().await.expect("fixture state should close");
     let (entered_sender, entered_receiver) = mpsc::channel();
     let (release_sender, release_receiver) = mpsc::channel();
-    let worker = must_ok({
+    let worker_result = {
         let fixture_state_path = (state_path).clone();
         let fixture_secrets = secrets.into();
         let fixture_client = HeldUpkeepRefreshClient {
@@ -384,10 +402,19 @@ async fn upkeep_shutdown_drains_in_flight_rotation_before_returning() {
         };
         let fixture_clock = || 1_000;
         let fixture_dispatcher = tracing::dispatcher::get_default(Clone::clone);
-        must_ok(tokio::task::spawn_blocking(move|| tracing::dispatcher::with_default(&fixture_dispatcher,||{
- crate::credential_upkeep_worker::start_background_credential_upkeep_worker_with_client_and_clock(&fixture_state_path,fixture_secrets,fixture_client,fixture_clock)
- })).await)
-    });
+        let upkeep_task = tokio::task::spawn_blocking(move || {
+            tracing::dispatcher::with_default(&fixture_dispatcher, || {
+                crate::credential_upkeep_worker::start_background_credential_upkeep_worker_with_client_and_clock(
+                    &fixture_state_path,
+                    fixture_secrets,
+                    fixture_client,
+                    fixture_clock,
+                )
+            })
+        });
+        must_ok(upkeep_task.await)
+    };
+    let worker = must_ok(worker_result);
     must_ok(entered_receiver.recv_timeout(Duration::from_secs(2)));
     let (stopped_sender, stopped_receiver) = mpsc::channel();
     let shutdown = thread::spawn(move || {
@@ -485,7 +512,7 @@ async fn upkeep_shutdown_does_not_admit_a_queued_account_after_stop() {
 
     let (entered_sender, entered_receiver) = mpsc::channel();
     let (release_sender, release_receiver) = mpsc::channel();
-    let worker = must_ok({
+    let worker_result = {
         let fixture_state_path = (state_path).clone();
         let fixture_secrets = credential_store.into();
         let fixture_client = HeldQueuedUpkeepRefreshClient {
@@ -494,10 +521,19 @@ async fn upkeep_shutdown_does_not_admit_a_queued_account_after_stop() {
         };
         let fixture_clock = || 1_000;
         let fixture_dispatcher = tracing::dispatcher::get_default(Clone::clone);
-        must_ok(tokio::task::spawn_blocking(move|| tracing::dispatcher::with_default(&fixture_dispatcher,||{
- crate::credential_upkeep_worker::start_background_credential_upkeep_worker_with_client_and_clock(&fixture_state_path,fixture_secrets,fixture_client,fixture_clock)
- })).await)
-    });
+        let upkeep_task = tokio::task::spawn_blocking(move || {
+            tracing::dispatcher::with_default(&fixture_dispatcher, || {
+                crate::credential_upkeep_worker::start_background_credential_upkeep_worker_with_client_and_clock(
+                    &fixture_state_path,
+                    fixture_secrets,
+                    fixture_client,
+                    fixture_clock,
+                )
+            })
+        });
+        must_ok(upkeep_task.await)
+    };
+    let worker = must_ok(worker_result);
     let admitted = (0..4)
         .map(|_| must_ok(entered_receiver.recv_timeout(Duration::from_secs(3))))
         .collect::<Vec<_>>();

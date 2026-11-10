@@ -320,10 +320,10 @@ async fn account_remove_allows_login_with_the_same_label_again() {
         panic!("expected account login");
     };
     let mut stdout = Vec::new();
-    must_ok({
-        let mut command_argument_1 = std::io::Cursor::new(Vec::<u8>::new());
-        let command_argument_2 = command;
-        let command_argument_3 = (client).clone();
+    let login_result = {
+        let mut login_input = std::io::Cursor::new(Vec::<u8>::new());
+        let login_command = command;
+        let issuer_client = (client).clone();
         let command_dispatcher = tracing::dispatcher::get_default(Clone::clone);
         let (command_result, command_stdout) = must_ok(
             tokio::task::spawn_blocking(move || {
@@ -332,9 +332,9 @@ async fn account_remove_allows_login_with_the_same_label_again() {
                     let command_result =
                         crate::account::run_account_command_with_input_and_openai_client(
                             &mut stdout,
-                            &mut command_argument_1,
-                            command_argument_2,
-                            &command_argument_3,
+                            &mut login_input,
+                            login_command,
+                            &issuer_client,
                         );
                     (command_result, stdout)
                 })
@@ -343,7 +343,8 @@ async fn account_remove_allows_login_with_the_same_label_again() {
         );
         stdout = command_stdout;
         command_result
-    });
+    };
+    must_ok(login_result);
     assert_eq!(issuer.finish().len(), 3);
     assert!(must_ok(String::from_utf8(stdout)).contains("logged in account: primary"));
 

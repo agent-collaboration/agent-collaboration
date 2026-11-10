@@ -363,7 +363,7 @@ async fn claude_usage_401_after_renewal_preserves_account_for_upkeep_and_records
     must_ok((read_state.close()).await);
 
     let (observed_sender, observed_receiver) = mpsc::channel();
-    let upkeep_worker = must_ok({
+    let upkeep_worker_result = {
         let fixture_state_path = (state_path).clone();
         let fixture_secrets = secrets.into();
         let fixture_client = RecordingClaudeUpkeepRefreshClient {
@@ -371,10 +371,19 @@ async fn claude_usage_401_after_renewal_preserves_account_for_upkeep_and_records
         };
         let fixture_clock = || 2_000;
         let fixture_dispatcher = tracing::dispatcher::get_default(Clone::clone);
-        must_ok(tokio::task::spawn_blocking(move|| tracing::dispatcher::with_default(&fixture_dispatcher,||{
- crate::credential_upkeep_worker::start_background_credential_upkeep_worker_with_client_and_clock(&fixture_state_path,fixture_secrets,fixture_client,fixture_clock)
- })).await)
-    });
+        let upkeep_task = tokio::task::spawn_blocking(move || {
+            tracing::dispatcher::with_default(&fixture_dispatcher, || {
+                crate::credential_upkeep_worker::start_background_credential_upkeep_worker_with_client_and_clock(
+                    &fixture_state_path,
+                    fixture_secrets,
+                    fixture_client,
+                    fixture_clock,
+                )
+            })
+        });
+        must_ok(upkeep_task.await)
+    };
+    let upkeep_worker = must_ok(upkeep_worker_result);
     assert_eq!(
         must_ok(observed_receiver.recv_timeout(std::time::Duration::from_secs(2))),
         account_id

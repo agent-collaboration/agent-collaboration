@@ -349,7 +349,7 @@ async fn account_set_weekly_floor_label_failures_are_redacted_and_do_not_mutate(
             .into_iter()
             .map(OsString::from))
             .collect::<Vec<OsString>>();
-            let command_argument_1 = (CliContext::new(Vec::new())).clone();
+            let command_context = (CliContext::new(Vec::new())).clone();
             let command_dispatcher = tracing::dispatcher::get_default(Clone::clone);
             let (command_result, command_stdout, command_stderr) = must_ok(
                 tokio::task::spawn_blocking(move || {
@@ -358,7 +358,7 @@ async fn account_set_weekly_floor_label_failures_are_redacted_and_do_not_mutate(
                         let mut stderr = stderr;
                         let command_result = run_with_io(
                             command_arguments,
-                            &command_argument_1,
+                            &command_context,
                             &mut stdout,
                             &mut stderr,
                         );

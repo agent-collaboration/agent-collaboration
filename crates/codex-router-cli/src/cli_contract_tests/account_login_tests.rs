@@ -103,23 +103,31 @@ pub(super) async fn openai_device_login_activation_journey() {
     let mut stdout = Vec::new();
     let mut reader = Cursor::new(Vec::<u8>::new());
 
-    must_ok({
-        let command_argument_2 = command;
-        let command_argument_3 = (client).clone();
-        let command_argument_4 = traced_secret_store.into();
+    let login_result = {
+        let login_command = command;
+        let issuer_client = (client).clone();
+        let credential_store = traced_secret_store.into();
         let command_dispatcher = tracing::dispatcher::get_default(Clone::clone);
-        let (command_result,command_stdout,command_reader)=must_ok(tokio::task::spawn_blocking(move||{
-tracing::dispatcher::with_default(&command_dispatcher,||{
-let mut stdout = stdout;
-let mut reader = reader;
-let command_result=crate::account::run_account_command_with_input_and_openai_client_and_secret_store(&mut stdout,&mut reader,command_argument_2,&command_argument_3,command_argument_4);
-(command_result,stdout,reader)
-})
-}).await);
+        let login_task = tokio::task::spawn_blocking(move || {
+            tracing::dispatcher::with_default(&command_dispatcher, || {
+                let mut stdout = stdout;
+                let mut reader = reader;
+                let command_result = crate::account::run_account_command_with_input_and_openai_client_and_secret_store(
+                    &mut stdout,
+                    &mut reader,
+                    login_command,
+                    &issuer_client,
+                    credential_store,
+                );
+                (command_result, stdout, reader)
+            })
+        });
+        let (command_result, command_stdout, command_reader) = must_ok(login_task.await);
         stdout = command_stdout;
         reader = command_reader;
         command_result
-    });
+    };
+    must_ok(login_result);
 
     let requests = issuer.finish();
     let read_events = read_trace.events();
@@ -297,22 +305,30 @@ async fn exercise_openai_relogin(stored_id: &str) {
     );
     let command = parse_openai_login(&router_root, "device primary");
     let mut stdout = Vec::new();
-    must_ok({
-        let mut command_argument_1 = Cursor::new(Vec::<u8>::new());
-        let command_argument_2 = command;
-        let command_argument_3 = (client).clone();
-        let command_argument_4 = secrets.into();
+    let login_result = {
+        let mut login_input = Cursor::new(Vec::<u8>::new());
+        let login_command = command;
+        let issuer_client = (client).clone();
+        let credential_store = secrets.into();
         let command_dispatcher = tracing::dispatcher::get_default(Clone::clone);
-        let (command_result,command_stdout)=must_ok(tokio::task::spawn_blocking(move||{
-tracing::dispatcher::with_default(&command_dispatcher,||{
-let mut stdout = stdout;
-let command_result=crate::account::run_account_command_with_input_and_openai_client_and_secret_store(&mut stdout,&mut command_argument_1,command_argument_2,&command_argument_3,command_argument_4);
-(command_result,stdout)
-})
-}).await);
+        let login_task = tokio::task::spawn_blocking(move || {
+            tracing::dispatcher::with_default(&command_dispatcher, || {
+                let mut stdout = stdout;
+                let command_result = crate::account::run_account_command_with_input_and_openai_client_and_secret_store(
+                    &mut stdout,
+                    &mut login_input,
+                    login_command,
+                    &issuer_client,
+                    credential_store,
+                );
+                (command_result, stdout)
+            })
+        });
+        let (command_result, command_stdout) = must_ok(login_task.await);
         stdout = command_stdout;
         command_result
-    });
+    };
+    must_ok(login_result);
     assert_eq!(
         issuer.finish().len(),
         3,
@@ -425,9 +441,9 @@ async fn openai_login_label_guard_runs_before_device_authorization() {
     );
     let mut stdout = Vec::new();
     let error = {
-        let mut command_argument_1 = Cursor::new(Vec::<u8>::new());
-        let command_argument_2 = parse_openai_login(&router_root, "shared-label");
-        let command_argument_3 = (client).clone();
+        let mut login_input = Cursor::new(Vec::<u8>::new());
+        let login_command = parse_openai_login(&router_root, "shared-label");
+        let issuer_client = (client).clone();
         let command_dispatcher = tracing::dispatcher::get_default(Clone::clone);
         let (command_result, command_stdout) = must_ok(
             tokio::task::spawn_blocking(move || {
@@ -436,9 +452,9 @@ async fn openai_login_label_guard_runs_before_device_authorization() {
                     let command_result =
                         crate::account::run_account_command_with_input_and_openai_client(
                             &mut stdout,
-                            &mut command_argument_1,
-                            command_argument_2,
-                            &command_argument_3,
+                            &mut login_input,
+                            login_command,
+                            &issuer_client,
                         );
                     (command_result, stdout)
                 })
@@ -499,7 +515,7 @@ async fn claude_login_label_guard_runs_before_prompt_or_oauth() {
     let mut reader = Cursor::new(b"callback-must-not-be-read".to_vec());
 
     let error = {
-        let command_argument_2 = command;
+        let login_command = command;
         let command_dispatcher = tracing::dispatcher::get_default(Clone::clone);
         let (command_result, command_stdout, command_reader) = must_ok(
             tokio::task::spawn_blocking(move || {
@@ -509,7 +525,7 @@ async fn claude_login_label_guard_runs_before_prompt_or_oauth() {
                     let command_result = crate::account::run_account_command_with_input(
                         &mut stdout,
                         &mut reader,
-                        command_argument_2,
+                        login_command,
                     );
                     (command_result, stdout, reader)
                 })

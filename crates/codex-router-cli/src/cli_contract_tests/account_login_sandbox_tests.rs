@@ -249,23 +249,33 @@ async fn claude_login_and_refresh_use_only_router_owned_credentials() {
     let mut output = Vec::new();
     let reader = StateDrivenClaudeCallbackReader::new(observed_state);
 
-    must_ok({
-        let command_argument_2 = command;
-        let command_argument_3 = login_flow;
-        let command_argument_4 = secret_store.clone().into();
+    let login_result = {
+        let login_command = command;
+        let claude_login_flow = login_flow;
+        let credential_store = secret_store.clone().into();
         let command_dispatcher = tracing::dispatcher::get_default(Clone::clone);
-        let (command_result,command_output,_command_reader,returned_login_flow)=must_ok(tokio::task::spawn_blocking(move||{
-tracing::dispatcher::with_default(&command_dispatcher,||{
-let mut output = output;
-let mut reader = reader;
-let command_result=crate::account::run_account_command_with_input_and_claude_flow_and_secret_store(&mut output,&mut reader,command_argument_2,&command_argument_3,command_argument_4);
-(command_result,output,reader,command_argument_3)
-})
-}).await);
+        let login_task = tokio::task::spawn_blocking(move || {
+            tracing::dispatcher::with_default(&command_dispatcher, || {
+                let mut output = output;
+                let mut reader = reader;
+                let command_result =
+                    crate::account::run_account_command_with_input_and_claude_flow_and_secret_store(
+                        &mut output,
+                        &mut reader,
+                        login_command,
+                        &claude_login_flow,
+                        credential_store,
+                    );
+                (command_result, output, reader, claude_login_flow)
+            })
+        });
+        let (command_result, command_output, _command_reader, returned_login_flow) =
+            must_ok(login_task.await);
         output = command_output;
         login_flow = returned_login_flow;
         command_result
-    });
+    };
+    must_ok(login_result);
 
     let login_output = String::from_utf8(output).expect("login output should be UTF-8");
     assert!(login_output.contains("https://claude.ai/oauth/authorize"));
