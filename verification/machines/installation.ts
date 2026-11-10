@@ -28,6 +28,7 @@ import {
   enrollInvocationsSince,
 } from "./command-ledger.ts";
 import { validateStagingUserHome, observeRuntimeHomeIsolation } from "./user-home-isolation.ts";
+import { observeInstallationStopWindow } from "./installation-stop-window.ts";
 
 type Child =
   | { readonly kind: "local"; readonly process: OwnedProcess }
@@ -444,6 +445,8 @@ export class Installation {
     cli: Machine["cli"];
     productVersion: string;
     sourceHead: string;
+    /** The observer owns its root registration and receipts; failure leaves old children stopped. */
+    observeStoppedOld?: () => Promise<void>;
   }): Promise<Installation> {
     if (this.remote !== undefined || this.state.kind !== "ready")
       throw new Error("upgrade requires the ready owned local installation");
@@ -482,7 +485,12 @@ export class Installation {
       baselineId: baseline.baselineId,
     });
     // close owns only this instance's Host/Router children. The root and enrollment stay in place.
-    await this.close();
+    await observeInstallationStopWindow({
+      stopOwnedChildren: (): Promise<void> => this.close(),
+      ...(input.observeStoppedOld === undefined
+        ? {}
+        : { observeStoppedOld: input.observeStoppedOld }),
+    });
     const releaseCommandRoot = await registerCommandRoot(this.machine.root);
     const replacement = new Installation({
       machine: { ...this.machine, router: input.router, cli: input.cli },
