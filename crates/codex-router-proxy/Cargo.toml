@@ -38,9 +38,9 @@ tokio-util = { workspace = true, features = ["io"] }
 tracing.workspace = true
 
 [dev-dependencies]
-codex-router-auth = { path = "../codex-router-auth", version = "0.1.4", features = ["sync-rusqlite-fixtures", "test-support"] }
+codex-router-auth = { path = "../codex-router-auth", version = "0.1.4", features = ["test-support"] }
 codex-router-secret-store = { path = "../codex-router-secret-store", version = "0.1.4", features = ["keychain-test-guard", "test-support"] }
-codex-router-state = { path = "../codex-router-state", version = "0.1.4", features = ["sync-rusqlite-fixtures"] }
+codex-router-state = { path = "../codex-router-state", version = "0.1.4", features = ["test-support"] }
 sqlx = { workspace = true, features = ["sqlite"] }
 tempfile = "3.27.0"
 tokio = { workspace = true, features = ["test-util"] }
