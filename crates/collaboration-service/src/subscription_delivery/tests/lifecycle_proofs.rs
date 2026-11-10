@@ -101,7 +101,7 @@ async fn wake_uses_may_load_only_for_a_wakeable_target() {
             SubscriptionMode::Deliver,
             WhenIdle::Wake,
             0,
-            0,
+            900,
         )
         .await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;
@@ -127,7 +127,7 @@ async fn unreachable_wake_is_held_with_visible_reason() {
             SubscriptionMode::Deliver,
             WhenIdle::Wake,
             0,
-            0,
+            900,
         )
         .await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Unreachable {
@@ -171,7 +171,7 @@ async fn drop_then_push_leaves_both_messages_unread() {
             SubscriptionMode::Deliver,
             WhenIdle::Drop,
             0,
-            0,
+            900,
         )
         .await;
     *fixture.presence.0.lock().unwrap() = TargetPresence::Wakeable;

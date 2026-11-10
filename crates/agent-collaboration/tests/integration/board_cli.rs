@@ -320,10 +320,17 @@ fn subscription_policy_durations_enforce_the_contract_bounds_before_connection()
             "--quiet must be between 0 seconds and 30 minutes",
         ),
         (
-            vec!["--quiet", "2m", "--cap", "1m"],
+            vec!["--quiet", "20m", "--cap", "15m"],
             "invalid subscription capSeconds: must be at least quietSeconds",
         ),
-        (vec!["--cap", "61m"], "--cap must be at most 60 minutes"),
+        (
+            vec!["--cap", "899s"],
+            "--cap must be between 15 and 55 minutes",
+        ),
+        (
+            vec!["--cap", "3301s"],
+            "--cap must be between 15 and 55 minutes",
+        ),
         (
             vec!["--for", "9m"],
             "invalid subscription forSeconds: must be between 600 seconds and 604800 seconds",

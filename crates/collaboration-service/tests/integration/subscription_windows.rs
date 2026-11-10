@@ -20,7 +20,7 @@ async fn local_selection_settles_without_changing_replicated_membership_or_feed(
         "requestId":RequestId::generate(),"projectId":project,"protocolVersion":1,
         "actingFor":null,"actor":owner,
         "operation":{"kind":"threadSubscribe","scope":{"kind":"project","projectId":project},
-            "policy":{"mode":"poll","quietSeconds":0,"capSeconds":0}},
+            "policy":{"mode":"poll","quietSeconds":0,"capSeconds":900}},
     }))?;
     let subscribed = fixture._admission.submit(&subscribe).await?;
     assert!(matches!(

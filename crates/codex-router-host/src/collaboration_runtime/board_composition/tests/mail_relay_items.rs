@@ -7,7 +7,7 @@ use collaboration_mail_protocol::{
 };
 use fleet_sync_protocol::{DeliveryItem, DeliveryTypes, ItemId, PeerId, Recipient};
 use message_board::{
-    BatchTiming, FeedCursor, Identity, MAX_SUBSCRIPTION_CAP_SECONDS,
+    BatchTiming, FeedCursor, Identity, MAX_STORED_SUBSCRIPTION_CAP_SECONDS,
     MAX_SUBSCRIPTION_LIFETIME_SECONDS, MAX_SUBSCRIPTION_NOTICE_ROOTS,
     MAX_SUBSCRIPTION_QUIET_SECONDS, ProjectId, RecordKind, RecordRef, SessionRef,
     SubscriptionGeneration, SubscriptionLifetime, SubscriptionMode, WhenIdle,
@@ -115,8 +115,11 @@ pub(super) fn largest_notification(peer: PeerId) -> DeliveryItem<RouterDeliveryT
                     &Identity::Session { session: address },
                     SubscriptionMode::Deliver,
                     WhenIdle::Hold,
-                    BatchTiming::new(MAX_SUBSCRIPTION_QUIET_SECONDS, MAX_SUBSCRIPTION_CAP_SECONDS)
-                        .unwrap(),
+                    BatchTiming::new(
+                        MAX_SUBSCRIPTION_QUIET_SECONDS,
+                        MAX_STORED_SUBSCRIPTION_CAP_SECONDS,
+                    )
+                    .unwrap(),
                     SubscriptionLifetime::new(MAX_SUBSCRIPTION_LIFETIME_SECONDS).unwrap(),
                 )
                 .unwrap(),

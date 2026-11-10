@@ -82,7 +82,7 @@ pub(super) async fn post_thread_activity_for_sessions(
                         mode: Some(SubscriptionMode::Deliver),
                         timing: SubscriptionTimingPatch {
                             quiet_seconds: Some(0),
-                            cap_seconds: Some(0),
+                            cap_seconds: Some(900),
                         },
                         ..SubscriptionPolicyPatch::default()
                     },

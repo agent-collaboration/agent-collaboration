@@ -29,7 +29,8 @@ pub(super) struct ThreadSubscribeArguments {
     /// Quiet period: 0 seconds through 30 minutes.
     #[arg(long)]
     pub quiet: Option<String>,
-    /// Maximum batch delay: at least the quiet period, up to 60 minutes.
+    /// Maximum batch delay: at least the quiet period, 15 to 55 minutes. Defaults to 15
+    /// minutes for a new subscription; an existing one keeps its cap unless this is set.
     #[arg(long)]
     pub cap: Option<String>,
     /// Subscription lifetime: 10 minutes through 7 days.

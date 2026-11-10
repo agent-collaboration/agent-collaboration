@@ -27,7 +27,13 @@ async fn held_item(
 async fn a_disconnected_poll_waiter_keeps_the_item_for_the_next_wait_without_unknown() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
-        .policy(&fixture.root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
+        .policy(
+            &fixture.root,
+            SubscriptionMode::Poll,
+            WhenIdle::Hold,
+            0,
+            900,
+        )
         .await;
     let runtime = fixture.runtime().await;
     let (app, native, publisher) = follow_application(&fixture, &runtime).await;
@@ -124,7 +130,13 @@ async fn a_disconnected_poll_waiter_keeps_the_item_for_the_next_wait_without_unk
 async fn held_poll_policy_and_original_identity_survive_physical_owner_reopen() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
-        .policy(&fixture.root, SubscriptionMode::Poll, WhenIdle::Hold, 0, 0)
+        .policy(
+            &fixture.root,
+            SubscriptionMode::Poll,
+            WhenIdle::Hold,
+            0,
+            900,
+        )
         .await;
     let runtime = fixture.runtime().await;
     let (app, native, publisher) = follow_application(&fixture, &runtime).await;
@@ -232,7 +244,7 @@ async fn interruption_after_b_handover_leaves_b_uncertain_and_c_deliverable_afte
                     when_idle: None,
                     timing: SubscriptionTimingPatch {
                         quiet_seconds: Some(1),
-                        cap_seconds: Some(1),
+                        cap_seconds: Some(900),
                     },
                     lifetime_seconds: None,
                 },

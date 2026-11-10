@@ -329,7 +329,7 @@ async fn expiry_after_resubscribe_stores_a_reference_for_the_new_generation() {
             message_board::SubscriptionMode::Deliver,
             message_board::WhenIdle::Hold,
             0,
-            0,
+            900,
         )
         .await;
     let resubscribed = fixture
@@ -433,7 +433,7 @@ async fn failed_poll_attempt_mark_keeps_the_frozen_item_retryable_and_returns_ex
             message_board::SubscriptionMode::Poll,
             message_board::WhenIdle::Hold,
             0,
-            0,
+            900,
         )
         .await;
     let mut observer = sqlx_turso::TursoConnection::connect_with(

@@ -100,7 +100,7 @@ pub async fn poll_restart(fixture: &mut BoardFixture) -> FixtureResult {
             "--quiet",
             "0s",
             "--cap",
-            "0s",
+            "15m",
             "--for",
             "24h",
         ])
@@ -115,7 +115,7 @@ pub async fn poll_restart(fixture: &mut BoardFixture) -> FixtureResult {
     );
     assert_eq!(
         initial.pointer("/policy/timing/capSeconds"),
-        Some(&json!(0))
+        Some(&json!(900))
     );
     for text in ["first actual range", "message between bounded waits"] {
         let post = fixture.reply(&fixture.project, &thread, text).await?;
@@ -134,7 +134,7 @@ pub async fn poll_restart(fixture: &mut BoardFixture) -> FixtureResult {
         .accept(
             "thread_subscribe",
             fields(header(&reader), json!({"scope":{"kind":"thread","thread":{"project":fixture.project,"thread":thread}},
-                "policy":{"mode":"poll","quietSeconds":0,"capSeconds":1,"lifetimeSeconds":172800}}))?,
+                "policy":{"mode":"poll","quietSeconds":0,"capSeconds":900,"lifetimeSeconds":172800}}))?,
         )
         .await?;
     assert_policy_and_reopen(fixture, &reader, &thread, &initial, &owed_range).await

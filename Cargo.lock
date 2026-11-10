@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "acp-client-runtime"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "agent-client-protocol",
  "futures-util",
@@ -23,7 +23,7 @@ dependencies = [
 
 [[package]]
 name = "acp-provider-adapters"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "acp-client-runtime",
  "serde",
@@ -124,7 +124,7 @@ dependencies = [
 
 [[package]]
 name = "agent-automation"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -189,7 +189,7 @@ dependencies = [
 
 [[package]]
 name = "agent-collaboration"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "agent-automation",
  "agent-collaboration-tui",
@@ -260,7 +260,7 @@ dependencies = [
 
 [[package]]
 name = "agent-collaboration-tui"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "futures-util",
  "iocraft",
@@ -274,7 +274,7 @@ dependencies = [
 
 [[package]]
 name = "agent-router-quota-tui"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "agent-collaboration-tui",
  "chrono",
@@ -294,7 +294,7 @@ dependencies = [
 
 [[package]]
 name = "agent-router-update"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "agent-session-inventory",
  "automation-storage",
@@ -345,7 +345,7 @@ dependencies = [
 
 [[package]]
 name = "agent-session-inventory"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "axum",
  "chrono",
@@ -379,7 +379,7 @@ dependencies = [
 
 [[package]]
 name = "agent-session-tui"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "agent-collaboration-tui",
  "agent-session-inventory",
@@ -730,7 +730,7 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "automation-storage"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "agent-automation",
  "chrono",
@@ -949,7 +949,7 @@ dependencies = [
 
 [[package]]
 name = "board-central-test-support"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "axum",
  "board-fleet-sync",
@@ -982,7 +982,7 @@ dependencies = [
 
 [[package]]
 name = "board-fleet-sync"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "axum",
  "board-sync-protocol",
@@ -1015,7 +1015,7 @@ dependencies = [
 
 [[package]]
 name = "board-staging-cutover"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "axum",
  "board-central-test-support",
@@ -1067,7 +1067,7 @@ dependencies = [
 
 [[package]]
 name = "board-sync-protocol"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "chrono",
  "collaboration-mail-protocol",
@@ -1322,7 +1322,7 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "claude-code-peer-messaging"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "agent-automation",
  "collaboration-protocol",
@@ -1353,7 +1353,7 @@ checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 
 [[package]]
 name = "codex-acp-adapter"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -1375,7 +1375,7 @@ dependencies = [
 
 [[package]]
 name = "codex-native-integration"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "futures-util",
  "jsonschema",
@@ -1395,7 +1395,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-auth"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "base64 0.22.1",
  "codex-router-core",
@@ -1415,7 +1415,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-cli"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "agent-collaboration-tui",
  "agent-router-quota-tui",
@@ -1480,7 +1480,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-core"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "hmac 0.12.1",
  "serde",
@@ -1492,7 +1492,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-host"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "acp-client-runtime",
  "acp-provider-adapters",
@@ -1567,7 +1567,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-proxy"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "async-compression",
  "bytes",
@@ -1602,7 +1602,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-quota"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "codex-router-core",
  "thiserror 2.0.18",
@@ -1610,7 +1610,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-quota-reset-test-harness"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "agent-collaboration",
  "axum",
@@ -1631,7 +1631,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-quota-service"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "chrono",
  "codex-router-auth",
@@ -1656,7 +1656,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-secret-store"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "aes-gcm 0.11.1",
  "apple-native-keyring-store",
@@ -1679,7 +1679,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-selection"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "base64 0.22.1",
  "codex-router-core",
@@ -1694,7 +1694,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-state"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "codex-router-core",
  "codex-router-selection",
@@ -1707,7 +1707,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-tailnet-verification-host"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "axum",
  "board-fleet-sync",
@@ -1737,7 +1737,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-test-support"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "codex-native-integration",
  "codex-router-cli",
@@ -1761,14 +1761,14 @@ dependencies = [
 
 [[package]]
 name = "codex-router-ux-prototype"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "iocraft",
 ]
 
 [[package]]
 name = "collaboration-application-test-support"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "automation-storage",
  "board-central-test-support",
@@ -1803,7 +1803,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-admin-protocol"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "board-sync-protocol",
  "chrono",
@@ -1816,7 +1816,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-cloudflare"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1850,7 +1850,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-conformance"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1877,7 +1877,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-core"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1916,7 +1916,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-tokio"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "aws-lc-rs",
  "axum",
@@ -1961,7 +1961,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-client"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "automation-storage",
  "board-central-test-support",
@@ -2000,7 +2000,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-contracts"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -2024,7 +2024,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-mail-protocol"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "chrono",
  "message-board",
@@ -2037,7 +2037,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-mcp"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "agent-collaboration",
  "automation-storage",
@@ -2083,7 +2083,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-protocol"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "agent-automation",
  "board-sync-protocol",
@@ -2105,7 +2105,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-runtime"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -2150,7 +2150,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-service"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -2924,7 +2924,7 @@ dependencies = [
 
 [[package]]
 name = "fleet-admission"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "chrono",
  "fleet-sync-protocol",
@@ -2937,7 +2937,7 @@ dependencies = [
 
 [[package]]
 name = "fleet-identity-protocol"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "chrono",
  "jsonschema",
@@ -3948,7 +3948,7 @@ dependencies = [
 
 [[package]]
 name = "interaction-storage"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -4205,7 +4205,7 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "legacy-upgrade-test-support"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "message-board",
  "owned-process-test-support",
@@ -4248,7 +4248,7 @@ dependencies = [
 
 [[package]]
 name = "lifecycle-observation"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -4393,7 +4393,7 @@ dependencies = [
 
 [[package]]
 name = "message-board"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "chrono",
  "petgraph",
@@ -4409,7 +4409,7 @@ dependencies = [
 
 [[package]]
 name = "message-board-storage"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "base64 0.22.1",
  "board-fleet-sync",
@@ -4515,7 +4515,7 @@ dependencies = [
 
 [[package]]
 name = "node-test-fixture"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "serde_json",
 ]
@@ -4741,7 +4741,7 @@ checksum = "1a80800c0488c3a21695ea981a54918fbb37abf04f4d0720c453632255e2ff0e"
 
 [[package]]
 name = "owned-process-test-support"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "futures-util",
  "tokio",
@@ -5888,7 +5888,7 @@ dependencies = [
 
 [[package]]
 name = "session-event-model"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "base64 0.22.1",
  "message-board",
@@ -6114,7 +6114,7 @@ dependencies = [
 
 [[package]]
 name = "sqlite-storage-maintenance"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "fs2",
  "sqlx",
@@ -7288,7 +7288,7 @@ checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 
 [[package]]
 name = "ui-preference-store"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "sqlx",
  "tempfile",
@@ -7983,7 +7983,7 @@ dependencies = [
 
 [[package]]
 name = "workspace-architecture-check"
-version = "0.1.142"
+version = "0.1.143"
 dependencies = [
  "proc-macro2",
  "serde",

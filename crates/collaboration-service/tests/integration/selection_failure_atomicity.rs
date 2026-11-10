@@ -26,7 +26,7 @@ async fn failing_second_membership_save_rolls_back_the_first_and_retries_without
         let (project, _) = fixture.project().await?;
         let mut request = fixture.header();
         request["scope"] = json!({"kind":"project","projectId":project});
-        request["policy"] = json!({"mode":"poll","whenIdle":null,"quietSeconds":0,"capSeconds":0,"lifetimeSeconds":3600});
+        request["policy"] = json!({"mode":"poll","whenIdle":null,"quietSeconds":0,"capSeconds":900,"lifetimeSeconds":3600});
         accepted(&fixture.api.call("thread_subscribe", request).await?);
         projects.push(project);
     }

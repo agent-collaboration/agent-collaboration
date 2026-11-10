@@ -122,7 +122,7 @@ async fn subscription_methods_roundtrip_through_the_api_and_sqlite() -> Result<(
         ),
         "wait must refuse off mode"
     );
-    accepted(&client.thread_subscribe(request(&reader,json!({"scope":project_scope,"policy":{"mode":"poll","quietSeconds":0,"capSeconds":0}}))?).await?);
+    accepted(&client.thread_subscribe(request(&reader,json!({"scope":project_scope,"policy":{"mode":"poll","quietSeconds":0,"capSeconds":900}}))?).await?);
     let root_author = Identity::Human {
         human_id: HumanId::try_from("root-author".to_owned())?,
     };
@@ -238,7 +238,7 @@ async fn subscription_methods_roundtrip_through_the_api_and_sqlite() -> Result<(
         .ok_or("join did not create subscription")?;
     assert_eq!(joined.policy.mode(), SubscriptionMode::Poll);
     assert_eq!(joined.policy.when_idle(), WhenIdle::Hold);
-    accepted(&client.thread_subscribe(request(&session_reader,json!({"scope":SubscriptionTarget::from(SubscriptionScope::thread(thread.clone())),"policy":{"mode":"poll","whenIdle":"hold","quietSeconds":0,"capSeconds":0}}))?).await?);
+    accepted(&client.thread_subscribe(request(&session_reader,json!({"scope":SubscriptionTarget::from(SubscriptionScope::thread(thread.clone())),"policy":{"mode":"poll","whenIdle":"hold","quietSeconds":0,"capSeconds":900}}))?).await?);
     assert!(matches!(
         wait(
             &client,

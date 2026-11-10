@@ -522,7 +522,7 @@ async fn create_project_thread_and_subscription(
                         when_idle: Some(WhenIdle::Hold),
                         timing: SubscriptionTimingPatch {
                             quiet_seconds: Some(0),
-                            cap_seconds: Some(0),
+                            cap_seconds: Some(900),
                         },
                         ..SubscriptionPolicyPatch::default()
                     },

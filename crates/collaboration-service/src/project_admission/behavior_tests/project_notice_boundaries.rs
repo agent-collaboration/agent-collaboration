@@ -23,7 +23,7 @@ async fn empty_project_subscription_covers_its_first_later_root_with_a_pending_w
                     mode: Some(SubscriptionMode::Poll),
                     timing: SubscriptionTimingPatch {
                         quiet_seconds: Some(0),
-                        cap_seconds: Some(0),
+                        cap_seconds: Some(900),
                     },
                     ..Default::default()
                 },
