@@ -5,8 +5,117 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { convertFleetGraph } from "../src/fleet_conversion.ts";
 import { withProduction } from "./support/migration_run.ts";
 import { IDS } from "./support/production_fixture.ts";
+
+// Old message-board Record::DirectoryEntry (project_feed.rs) contains a
+// ProjectDirectoryEntry (board_metadata.rs), distinct from Record::Project.
+const directoryEntryPayload = {
+  kind: "directoryEntry",
+  record: {
+    envelope: {
+      id: IDS.projectHeld1,
+      scope: { workspace: IDS.workspace, board: IDS.board, project: null },
+      actor: { kind: "human", humanId: "shravan" },
+      request: IDS.operation,
+      position: {
+        kind: "fleet",
+        position: {
+          position: 42,
+          origin: { installation: IDS.serviceA, machine: "Sunbook" },
+        },
+      },
+      time: { kind: "router", value: "2026-11-01T12:00:00Z" },
+    },
+    id: IDS.projectHeld1,
+    board: IDS.board,
+    title: "held at one",
+  },
+};
+const directoryEntryRow = {
+  project_id: IDS.projectHeld1,
+  workspace_id: IDS.workspace,
+  board_id: IDS.board,
+  name: "held at one",
+  payload: JSON.stringify(directoryEntryPayload),
+  router_time: "2026-11-01T12:00:00Z",
+  time_basis: "router",
+  origin_installation: IDS.serviceA,
+  origin_machine: "Sunbook",
+  import_digest: "ab".repeat(32),
+};
+
+test("an old directoryEntry payload preserves every normalized project directory column", () => {
+  // Arrange / Act: use the literal old Serde payload, not the SQL reader's project tag.
+  const carried = convertFleetGraph(
+    {
+      workspaces: [],
+      boards: [],
+      project_directory: [directoryEntryRow],
+      workspace_adrs: [],
+      repository_attachments: [],
+    },
+    1_794_000_000_000,
+    () => assert.fail("a directory entry must retain its id"),
+  );
+
+  // Assert
+  assert.deepEqual(carried.fleet_project_directory, [
+    {
+      project_id: IDS.projectHeld1,
+      workspace_id: IDS.workspace,
+      board_id: IDS.board,
+      name: "held at one",
+      actor_kind: "human",
+      actor_human_id: "shravan",
+      actor_service_id: null,
+      actor_endpoint_id: null,
+      actor_session_id: null,
+      actor_router_component: null,
+      request_id: IDS.operation,
+      fleet_position: 42,
+      router_time: "2026-11-01T12:00:00Z",
+      time_basis: "router",
+      origin_installation: IDS.serviceA,
+      origin_machine: "Sunbook",
+      import_digest: "abababababababababababababababababababababababababababababababab",
+      created_at: 1_794_000_000_000,
+      updated_at: 1_794_000_000_000,
+    },
+  ]);
+});
+
+test("a project directory refuses a genuine old ProjectState payload", () => {
+  // Arrange: ProjectState has its own projectId, description, revision and closedAt.
+  const payload = JSON.stringify({
+    kind: "project",
+    record: {
+      envelope: directoryEntryPayload.record.envelope,
+      projectId: IDS.projectHeld1,
+      description: "project state is not a directory entry",
+      revision: 1,
+      closedAt: null,
+    },
+  });
+
+  // Act / Assert: refuse the tag before interpreting the different body.
+  assert.throws(
+    () =>
+      convertFleetGraph(
+        {
+          workspaces: [],
+          boards: [],
+          project_directory: [{ ...directoryEntryRow, payload }],
+          workspace_adrs: [],
+          repository_attachments: [],
+        },
+        1_794_000_000_000,
+        () => assert.fail("a directory entry must retain its id"),
+      ),
+    /project_directory\/.*\.payload.kind: expected directoryEntry/,
+  );
+});
 
 test("an enrollment's 121-character ASCII machine label migrates unchanged and verifies", async () => {
   const label = "m".repeat(121);

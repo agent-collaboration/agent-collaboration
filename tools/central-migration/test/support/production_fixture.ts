@@ -215,7 +215,7 @@ export function productionSeed(): ProductionSeed {
     },
   };
   const project = (id: string, title: string, position: number) => ({
-    kind: "project",
+    kind: "directoryEntry",
     record: { envelope: envelope(id, position), board: IDS.board, title },
   });
   const adr = (

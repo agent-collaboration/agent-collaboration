@@ -313,7 +313,8 @@ export function convertFleetGraph(
   }
   for (const row of old.project_directory) {
     const where = `project_directory/${String(row.project_id)}`;
-    const { envelope } = record(parsePayload(row, where), "project", where);
+    // SQL labels this row "project"; the stored Record::DirectoryEntry tag differs.
+    const { envelope } = record(parsePayload(row, where), "directoryEntry", where);
     const projectId = uuid(row.project_id, `${where}.project_id`);
     if (envelope.id !== projectId) reject(where, "payload id differs from the row key");
     rows.fleet_project_directory.push({
