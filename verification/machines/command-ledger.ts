@@ -7,9 +7,9 @@ import { z } from "zod";
 import { decodeAuthoredJson, encode } from "../exact-json.ts";
 
 const roots = new Map<string, { path: string; users: number }>();
-// The normal long-run Sunclaw ledger reached38.7MiB. Retain all history and its
+// The retained Sunbook staging ledger reached190MB. Retain all history and its
 // original marker; this is a bounded full read, never rotation or truncation.
-const maximumLedgerBytes = 128 * 1024 * 1024;
+const maximumLedgerBytes = 512 * 1024 * 1024;
 const base = z.object({ at: z.iso.datetime(), commandId: z.uuidv7() });
 const started = base
   .extend({
@@ -142,7 +142,8 @@ export async function readCommandLedger(root: string): Promise<CommandLedgerEntr
     .filter((line): boolean => line !== "")
     .map((line): CommandLedgerEntry => {
       // JSON protocol integers are exact, while process PIDs/exits are bounded JS integers.
-      return entry.parse(decodeAuthoredJson(line));
+      // Keep decoded values, without retaining the parser's string storage.
+      return entry.parse(structuredClone(decodeAuthoredJson(line)));
     });
 }
 export async function markCommandBaseline(root: string): Promise<string> {
