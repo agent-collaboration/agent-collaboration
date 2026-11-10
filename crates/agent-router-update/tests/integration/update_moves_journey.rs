@@ -125,6 +125,93 @@ async fn a_full_update_carries_every_value_and_removes_the_older_stores() -> Upd
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
+async fn a_closed_sqlite_reader_does_not_block_the_fleet_database_rename() -> UpdateResult {
+    use sqlx::{ConnectOptions as _, Connection as _, sqlite::SqliteConnectOptions};
+
+    // Arrange: an old SQLite reader creates its WAL index, then closes. Turso
+    // does not own that index, so its own checkpoint cannot remove it.
+    let (_directory, root) = populated_root()?;
+    let expected = fixture_values(&root).await?;
+    let former = router_fleet_cache_database(&root);
+    let mut reader = SqliteConnectOptions::new()
+        .filename(&former)
+        .read_only(true)
+        .connect()
+        .await?;
+    let _: i64 = sqlx::query_scalar("SELECT count(*) FROM sqlite_schema")
+        .fetch_one(&mut reader)
+        .await?;
+    reader.close().await?;
+    let shared_memory = router_collaboration_directory(&root).join("fleet-cache.sqlite-shm");
+    assert!(
+        shared_memory.exists(),
+        "the closed reader must leave its WAL index"
+    );
+
+    // Act
+    let output = run_update(&root_argument(&root)).await?;
+
+    // Assert: the real updater, including its no-leftover-log guard, completes.
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !shared_memory.exists(),
+        "the former SQLite WAL index must be gone"
+    );
+    assert_update_finished(&root, &expected, "closed SQLite reader").await
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
+#[tokio::test]
+async fn an_active_sqlite_reader_keeps_the_fleet_database_under_its_old_name() -> UpdateResult {
+    use sqlx::{ConnectOptions as _, Connection as _, sqlite::SqliteConnectOptions};
+
+    // Arrange: retain a real SQLite snapshot while the updater carries newer rows.
+    let (_directory, root) = populated_root()?;
+    let expected = fixture_values(&root).await?;
+    let former = router_fleet_cache_database(&root);
+    let mut reader = SqliteConnectOptions::new()
+        .filename(&former)
+        .read_only(true)
+        .connect()
+        .await?;
+    let mut transaction = reader.begin().await?;
+    let _: i64 = sqlx::query_scalar("SELECT count(*) FROM sqlite_schema")
+        .fetch_one(&mut *transaction)
+        .await?;
+
+    // Act
+    let output = run_update(&root_argument(&root)).await?;
+
+    // Assert: no rename while the reader owns its snapshot; after it closes, a
+    // normal rerun preserves every row and completes the same update.
+    assert_ne!(output.status.code(), Some(0));
+    assert!(former.is_file());
+    assert!(!router_fleet_database(&root).exists());
+    transaction.rollback().await?;
+    reader.close().await?;
+    let resumed = run_update(&root_argument(&root)).await?;
+    assert_eq!(
+        resumed.status.code(),
+        Some(0),
+        "{}",
+        String::from_utf8_lossy(&resumed.stderr)
+    );
+    assert_update_finished(&root, &expected, "after active reader closes").await
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
+#[tokio::test]
 async fn a_kill_at_any_move_barrier_reruns_to_the_same_values() -> UpdateResult {
     let markers = [
         "step-0002:done",
