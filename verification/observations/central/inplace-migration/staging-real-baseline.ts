@@ -201,14 +201,17 @@ const DIRECTORY_SYNC_DEADLINE_SECONDS = 180;
 async function showOnceDirectoryListed(
   installation: Installation,
   project: string,
-): Promise<{ outcome: CliOutcome; attempts: number }> {
+): Promise<{ outcome: CliOutcome; attempts: number; retried: CliOutcome[] }> {
   const deadline = Date.now() + DIRECTORY_SYNC_DEADLINE_SECONDS * 1000;
+  // Keep each retried refusal body so its resourceNotFound classification stays auditable.
+  const retried: CliOutcome[] = [];
   for (let attempts = 1; ; attempts += 1) {
     const outcome = await installation.cli.outcome(["project", "show", "--project-id", project]);
     const notYetListed =
       outcome.kind === "refused" &&
       z.object({ kind: z.literal("resourceNotFound") }).safeParse(outcome.value).success;
-    if (!notYetListed || Date.now() >= deadline) return { outcome, attempts };
+    if (!notYetListed || Date.now() >= deadline) return { outcome, attempts, retried };
+    retried.push(outcome);
     await setTimeout(2000);
   }
 }
@@ -252,8 +255,11 @@ async function run(plan: BaselinePlan): Promise<void> {
     })();
     const reads = [];
     for (const file of plan.files) {
-      const { outcome, attempts } = await showOnceDirectoryListed(installation, file.project);
-      await receipt.save(`project-${file.project}.json`, { attempts, ...outcome });
+      const { outcome, attempts, retried } = await showOnceDirectoryListed(
+        installation,
+        file.project,
+      );
+      await receipt.save(`project-${file.project}.json`, { attempts, retried, ...outcome });
       if (outcome.kind !== "answered")
         throw new Error(
           `ordinary old125 project open/read refused or unconfirmed: ${file.project}`,
