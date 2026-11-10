@@ -11,8 +11,8 @@ import {
   directoryPage as oldDirectoryPage,
 } from "./contracts.ts";
 import { healthReply } from "./contracts.ts";
-import { command } from "../../../machines/owned-process.ts";
 import { hashFile } from "./project-backups.ts";
+import { loadOwnedHostObservation, readOwnedHostProcess } from "./s1-owned-host-observation.ts";
 
 export const dedicatedRetirementProject = "01a1c307-6ffd-7b12-bdbd-4ec6ad1030b3";
 const dedicatedBoard = "01a1c307-6ffd-716c-9957-0b382a7018e4";
@@ -293,22 +293,18 @@ async function retireOnce(
 async function observeLocal(
   cli: SyntheticCli,
   phase: "before" | "after",
-): Promise<{ host: string; enrollment: string }> {
-  const renewal = z
-    .object({ hostWindow: z.object({ pid: z.number().int().positive() }) })
-    .parse(decodeAuthoredJson(await readPrivateText(`${syntheticReceipts}/renewal/summary.json`)));
-  const observed = await command(
-    "/bin/ps",
-    ["-p", String(renewal.hostWindow.pid), "-o", "pid=,lstart=,args="],
-    { cwd: stagingRoot },
-  );
+  ownedHostFile: string,
+): Promise<{ host: string; enrollment: string; selectionSha256: string }> {
+  const ownedHost = await loadOwnedHostObservation(ownedHostFile);
+  await cli.save(`owned-host-${phase}`, ownedHost);
+  const observed = await readOwnedHostProcess(ownedHost);
   await cli.save(`host-${phase}`, observed);
   if (
     observed.exit !== 0 ||
     !observed.stdout.includes(stagingRoot) ||
     !observed.stdout.includes(" host ")
   )
-    throw new Error("original root-3 Host is not observable");
+    throw new Error("selected current owned Host is not observable");
   const enrollment = await hashFile(`${stagingRoot}/fleet/enrollment.json`);
   const localFiles = await readdir(
     `${stagingRoot}/agent-communication/projects/${dedicatedRetirementProject}`,
@@ -318,21 +314,21 @@ async function observeLocal(
     entries: localFiles.sort(),
     enrollmentSha256: enrollment,
   });
-  return { host: observed.stdout, enrollment };
+  return { host: observed.stdout, enrollment, selectionSha256: ownedHost.selectionSha256 };
 }
 
 async function run(): Promise<void> {
   process.umask(0o077);
-  const [mode, attemptFlag, rawAttempt, overlayFlag, executionOverlay] = process.argv.slice(2);
+  const [mode, attemptFlag, rawAttempt, overlayFlag, executionOverlay, hostFlag, ownedHostFile] =
+    process.argv.slice(2);
   if (
     mode !== "--continue-after-archived" ||
     attemptFlag !== "--receipt-attempt" ||
-    !(
-      process.argv.length === 5 ||
-      (process.argv.length === 7 &&
-        overlayFlag === "--execution-overlay" &&
-        executionOverlay?.startsWith("/"))
-    )
+    process.argv.length !== 9 ||
+    overlayFlag !== "--execution-overlay" ||
+    !executionOverlay?.startsWith("/") ||
+    hostFlag !== "--owned-host-observation" ||
+    !ownedHostFile?.startsWith("/")
   )
     throw new Error(
       "use --continue-after-archived --receipt-attempt SAVED_UUIDv7 for the dedicated project only",
@@ -362,12 +358,19 @@ async function run(): Promise<void> {
       cli: cli.baseline.machine.cli,
       root: stagingRoot,
     });
-    const original = await observeLocal(cli, "before");
+    const selectedHost = await loadOwnedHostObservation(ownedHostFile);
+    if ((await hashFile(executionOverlay)) !== selectedHost.selection.continuationPlan.sha256)
+      throw new Error("retirement execution overlay differs from selected owned generation");
+    const original = await observeLocal(cli, "before", ownedHostFile);
     const before = await captureBefore(cli);
     await retireOnce(cli, before);
     await cli.execute("local-after", ["project", "show", "--project-id", saved.project]);
-    const after = await observeLocal(cli, "after");
-    if (original.host !== after.host || original.enrollment !== after.enrollment)
+    const after = await observeLocal(cli, "after", ownedHostFile);
+    if (
+      original.host !== after.host ||
+      original.enrollment !== after.enrollment ||
+      original.selectionSha256 !== after.selectionSha256
+    )
       throw new Error("root-3 Host or enrollment identity changed");
     await cli.save("complete", {
       project: saved.project,

@@ -2,13 +2,14 @@
 import { chmod, lstat, mkdir, writeFile } from "node:fs/promises";
 import { z } from "zod";
 import { decode, decodeAuthoredJson, encode } from "../../../exact-json.ts";
-import { readCommandLedger, registerCommandRoot } from "../../../machines/command-ledger.ts";
+import { registerCommandRoot } from "../../../machines/command-ledger.ts";
 import { command, privateDirectory, qualifyArtifact } from "../../../machines/owned-process.ts";
 import { backupDatabase, hashFile } from "./project-backups.ts";
 import { directoryEntry } from "./contracts.ts";
 import type { Artifact } from "../../../declaration.ts";
 import { readPrivateText } from "./record.ts";
 import { stagingRoot, syntheticReceipts } from "./s1-synthetic-cli.ts";
+import { loadOwnedHostObservation, readOwnedHostProcess } from "./s1-owned-host-observation.ts";
 
 const renewal = z.object({
   kind: z.literal("renewalObserved"),
@@ -65,12 +66,11 @@ export function validateSyntheticRenewal(input: {
   return observed;
 }
 
-async function readRenewalContext(): Promise<{
+async function readRenewalContext(ownedHostFile: string): Promise<{
   project: string;
   holder: string;
   lease: bigint;
-  window: { openedAt: string };
-  pid: number;
+  ownedHost: Awaited<ReturnType<typeof loadOwnedHostObservation>>;
 }> {
   const project = z
     .object({ ids: z.object({ heldProject: z.uuidv7() }) })
@@ -98,28 +98,13 @@ async function readRenewalContext(): Promise<{
   if (held.leaseSide.value.lease.value.holder !== selected.expected.holderInstallation)
     throw new Error("Registry installation mapping differs from the captured enrollment");
   const holder = selected.expected.holderPeer;
-  const window = z
-    .object({ openedAt: z.iso.datetime() })
-    .parse(
-      decodeAuthoredJson(
-        await readPrivateText(
-          "/private/tmp/2026-11-s1-baseline-sunbook-3/evidence/host-window.json",
-        ),
-      ),
-    );
-  const ledger = await readCommandLedger(stagingRoot);
-  const starts = ledger.filter(
-    (row): boolean =>
-      row.kind === "started" && row.mode === "daemon" && row.arguments[0] === "host",
-  );
-  const start = starts[0];
-  if (starts.length !== 1 || start?.kind !== "started")
-    throw new Error("one original root-3 Host command required");
-  const spawned = ledger.find(
-    (row): boolean => row.kind === "spawned" && row.commandId === start.commandId,
-  );
-  if (spawned?.kind !== "spawned") throw new Error("original Host PID missing");
-  return { project, holder, lease, window, pid: spawned.pid };
+  const ownedHost = await loadOwnedHostObservation(ownedHostFile);
+  if (
+    holder !== ownedHost.originalBaseline.machineId ||
+    selected.expected.holderInstallation !== ownedHost.originalBaseline.installationId
+  )
+    throw new Error("current owned generation differs from captured Registry installation mapping");
+  return { project, holder, lease, ownedHost };
 }
 
 async function signReader(
@@ -139,7 +124,7 @@ async function signReader(
     identifier: "dev.shravansunder.test.retained_writer_observation",
     team: "974QD84WVC",
   };
-  await qualifyArtifact(reader);
+  await qualifyArtifact(reader, stagingRoot);
   return { reader, runner, executable };
 }
 
@@ -179,28 +164,26 @@ async function takeProjectCut(input: {
 async function observeRenewal(
   directory: string,
   save: (name: string, value: unknown) => Promise<void>,
+  ownedHostFile: string,
 ): Promise<void> {
-  const { project, holder, lease, window, pid } = await readRenewalContext();
-  const spawned = { pid };
-  const beforeHost = await command(
-    "/bin/ps",
-    ["-p", String(spawned.pid), "-o", "pid=,lstart=,args="],
-    { cwd: stagingRoot },
-  );
+  const { project, holder, lease, ownedHost } = await readRenewalContext(ownedHostFile);
+  const { host: spawned, window } = ownedHost;
+  await save("owned-host-observation", ownedHost);
+  const beforeHost = await readOwnedHostProcess(ownedHost);
   await save("host-before", beforeHost);
   if (
     beforeHost.exit !== 0 ||
     !beforeHost.stdout.includes(stagingRoot) ||
     !beforeHost.stdout.includes(" host ")
   )
-    throw new Error("original root-3 Host is not observable");
+    throw new Error("selected current owned Host is not observable");
   const { source, scratch, untouched, endedAt, backup, sourceIdentity } = await takeProjectCut({
     directory,
     project,
     lease,
   });
   const { reader, runner, executable } = await signReader(save);
-  const startMs = BigInt(Date.parse(window.openedAt)),
+  const startMs = BigInt(Date.parse(spawned.startedAt)),
     endMs = BigInt(Date.parse(endedAt));
   const arguments_ = [
     executable,
@@ -220,7 +203,7 @@ async function observeRenewal(
     readerSourceHead: "0cb050dd647a300a033195261315b1462a06ef39",
     source,
     backup,
-    host: { pid: spawned.pid, openedAt: window.openedAt, cutEndedAt: endedAt },
+    host: { ...spawned, openedAt: window.openedAt, cutEndedAt: endedAt },
   });
   const aBefore = await hashFile(scratch),
     bBefore = await hashFile(untouched);
@@ -242,15 +225,14 @@ async function observeRenewal(
   });
   if ((await hashFile(scratch)) !== aBefore || (await hashFile(untouched)) !== bBefore)
     throw new Error("A/B bytes changed during renewal read");
-  const afterHost = await command(
-    "/bin/ps",
-    ["-p", String(spawned.pid), "-o", "pid=,lstart=,args="],
-    { cwd: stagingRoot },
-  );
+  const afterHost = await readOwnedHostProcess(ownedHost);
   await save("host-after", afterHost);
   if (afterHost.exit !== 0 || afterHost.stdout !== beforeHost.stdout)
     throw new Error("root-3 Host identity changed during observation");
-  await qualifyArtifact(reader);
+  const afterBinding = await loadOwnedHostObservation(ownedHostFile);
+  if (afterBinding.selectionSha256 !== ownedHost.selectionSha256)
+    throw new Error("selected owned Host declaration changed during observation");
+  await qualifyArtifact(reader, stagingRoot);
   await save("summary", {
     kind: "syntheticHeldRenewalObserved",
     observed,
@@ -259,7 +241,13 @@ async function observeRenewal(
     scratchSha256: aBefore,
     sealedSha256: bBefore,
     reader,
-    hostWindow: { openedAt: window.openedAt, cutEndedAt: endedAt, pid: spawned.pid },
+    hostWindow: {
+      openedAt: window.openedAt,
+      cutEndedAt: endedAt,
+      ...spawned,
+      originalBaselineId: ownedHost.originalBaseline.baselineId,
+      reference: ownedHost.selection.hostWindow,
+    },
     currentRenewalObserved: true,
   });
   process.stdout.write(
@@ -269,7 +257,18 @@ async function observeRenewal(
 
 async function run(): Promise<void> {
   process.umask(0o077);
-  const directory = `${syntheticReceipts}/renewal`;
+  const [hostFlag, ownedHostFile, attemptFlag, rawAttempt] = process.argv.slice(2);
+  if (
+    process.argv.length !== 6 ||
+    hostFlag !== "--owned-host-observation" ||
+    !ownedHostFile?.startsWith("/") ||
+    attemptFlag !== "--receipt-attempt"
+  )
+    throw new Error(
+      "use --owned-host-observation PRIVATE_CURRENT_GENERATION --receipt-attempt SAVED_UUIDv7",
+    );
+  const attempt = z.uuidv7().parse(rawAttempt);
+  const directory = `${syntheticReceipts}/renewal-${attempt}`;
   await mkdir(directory, { mode: 0o700 });
   await privateDirectory(directory);
   const release = await registerCommandRoot(stagingRoot);
@@ -277,7 +276,7 @@ async function run(): Promise<void> {
     await writeFile(`${directory}/${name}.json`, `${encode(value)}\n`, { mode: 0o600, flag: "wx" });
   };
   try {
-    await observeRenewal(directory, save);
+    await observeRenewal(directory, save, ownedHostFile);
   } catch (error: unknown) {
     await save("incomplete", {
       message: error instanceof Error ? error.message : String(error),
