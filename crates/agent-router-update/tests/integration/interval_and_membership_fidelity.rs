@@ -1,5 +1,6 @@
 use crate::support;
 use message_board::*;
+use sqlx::Connection as _;
 use support::*;
 
 #[tokio::test]
@@ -83,26 +84,35 @@ async fn draining_membership_ends_at_the_last_recorded_event_even_after_reopen()
     for name in ["legacy-complete.sqlite", "legacy-reopened.sqlite"] {
         let (_directory, path) = fixture_copy(name)?;
         let prepared = prepare_path(&path).await?;
-        let source = rusqlite::Connection::open_with_flags(
-            &path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )?;
+        let mut source = sqlx::SqliteConnection::connect_with(
+            &sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(&path)
+                .read_only(true)
+                .create_if_missing(false)
+                .foreign_keys(false),
+        )
+        .await?;
         let mut times = Vec::new();
         for query in [
             "SELECT renewed_at AS at FROM thread_subscriptions UNION ALL SELECT ended_at FROM thread_subscriptions WHERE ended_at IS NOT NULL",
             "SELECT opened_at AS at FROM subscription_windows UNION ALL SELECT last_arrival_at FROM subscription_windows UNION ALL SELECT held_since FROM subscription_windows WHERE held_since IS NOT NULL",
         ] {
-            let mut statement = source.prepare(query)?;
-            for value in statement.query_map([], |row| row.get::<_, String>("at"))? {
-                times.push(value?.parse::<chrono::DateTime<chrono::Utc>>()?);
+            for value in sqlx::query_scalar::<_, String>(sqlx::AssertSqlSafe(query))
+                .fetch_all(&mut source)
+                .await?
+            {
+                times.push(value.parse::<chrono::DateTime<chrono::Utc>>()?);
             }
         }
-        let mut cooldowns = source.prepare("SELECT last_post_at_ms FROM actor_board_cooldowns")?;
-        for value in cooldowns.query_map([], |row| row.get::<_, i64>("last_post_at_ms"))? {
-            times.push(
-                chrono::DateTime::from_timestamp_millis(value?).ok_or("invalid source time")?,
-            );
+        for value in
+            sqlx::query_scalar::<_, i64>("SELECT last_post_at_ms FROM actor_board_cooldowns")
+                .fetch_all(&mut source)
+                .await?
+        {
+            times
+                .push(chrono::DateTime::from_timestamp_millis(value).ok_or("invalid source time")?);
         }
+        source.close().await?;
         let expected = times
             .into_iter()
             .max()

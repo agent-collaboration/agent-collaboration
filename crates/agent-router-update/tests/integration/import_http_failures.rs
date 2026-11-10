@@ -2,6 +2,7 @@
 use crate::central_fixture;
 use crate::support;
 use crate::upload_support;
+use sqlx::Connection as _;
 
 use agent_router_update::{PreparedUpgrade, UpgradePublisher, UpgradeUploadError};
 use collaboration_central_admin_protocol::OwnerOperationFailure;
@@ -92,9 +93,18 @@ async fn arm_full(server: &TokioServer, header: &AdminImportHeader) -> TestResul
 )]
 async fn retired_import_returns_gone_with_the_owner_body() -> TestResult {
     let (_source_directory, source) = fixture_copy("legacy-complete.sqlite")?;
-    let legacy = rusqlite::Connection::open(&source)?;
-    legacy.execute("UPDATE project_boards SET state='archived'", [])?;
-    legacy.close().map_err(|(_, error)| error)?;
+    let mut legacy = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&source)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
+    sqlx::query("UPDATE project_boards SET state='archived'")
+        .execute(&mut legacy)
+        .await
+        .map(|result| result.rows_affected())?;
+    legacy.close().await?;
     let prepared = prepare_path(&source).await?;
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start()

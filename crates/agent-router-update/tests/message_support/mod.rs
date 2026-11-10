@@ -1,4 +1,3 @@
-use rusqlite::{Connection, params};
 use serde_json::json;
 use sqlx::Connection as _;
 use std::path::Path;
@@ -26,7 +25,13 @@ pub async fn source(path: &Path, version: i64) -> TestResult {
 
 pub async fn seeded_source(path: &Path) -> TestResult<Vec<String>> {
     source(path, BEFORE_DROP).await?;
-    let connection = Connection::open(path)?;
+    let mut connection = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
     let ids = vec![
         uuid::Uuid::now_v7().to_string(),
         uuid::Uuid::now_v7().to_string(),
@@ -45,7 +50,7 @@ pub async fn seeded_source(path: &Path) -> TestResult<Vec<String>> {
         } else {
             ("held", Some(serde_json::to_string(&receipt)?))
         };
-        connection.execute("INSERT INTO router_pushes(push_id,kind,origin_kind,target_service_id,target_endpoint_id,target_session_id,dm_delivery_mode,header_facts_json,body,delivery_state,last_outcome_json,created_at) VALUES (?,'direct-message','owner','550e8400-e29b-41d4-a716-446655440000','codex-local','legacy-recipient','auto',?, ?, ?, ?, '2026-10-21T12:34:56.123456789Z')", params![id, " {\"kind\": \"directMessage\", \"senderDisplayName\":null} ", "  preserved message\n", state, outcome])?;
+        sqlx::query("INSERT INTO router_pushes(push_id,kind,origin_kind,target_service_id,target_endpoint_id,target_session_id,dm_delivery_mode,header_facts_json,body,delivery_state,last_outcome_json,created_at) VALUES (?,'direct-message','owner','550e8400-e29b-41d4-a716-446655440000','codex-local','legacy-recipient','auto',?, ?, ?, ?, '2026-10-21T12:34:56.123456789Z')").bind(id).bind(" {\"kind\": \"directMessage\", \"senderDisplayName\":null} ").bind("  preserved message\n").bind(state).bind(&outcome).execute(&mut connection).await.map(|result|result.rows_affected())?;
     }
     let project = uuid::Uuid::now_v7().to_string();
     let membership = uuid::Uuid::now_v7().to_string();
@@ -58,37 +63,53 @@ pub async fn seeded_source(path: &Path) -> TestResult<Vec<String>> {
             "selected":null,"heldSince":"2026-10-21T12:35:00Z","nextRetryAt":"2026-10-21T12:36:00Z","retryAttempts":3
         }}]
     });
-    connection.execute(
-        "INSERT INTO subscription_delivery_progress VALUES (?,?,1,1,?)",
-        params![project, membership, serde_json::to_string(&payload)?],
-    )?;
-    connection.execute(
-        "INSERT INTO board_intent_progress VALUES (?,?,2,5)",
-        params![project, uuid::Uuid::now_v7().to_string()],
-    )?;
-    connection.execute(
-        "INSERT INTO board_intent_scan_cursors VALUES (?,2,6)",
-        params![project],
-    )?;
-    connection.close().map_err(|(_, error)| error)?;
+    sqlx::query("INSERT INTO subscription_delivery_progress VALUES (?,?,1,1,?)")
+        .bind(&project)
+        .bind(&membership)
+        .bind(&serde_json::to_string(&payload)?)
+        .execute(&mut connection)
+        .await
+        .map(|result| result.rows_affected())?;
+    sqlx::query("INSERT INTO board_intent_progress VALUES (?,?,2,5)")
+        .bind(&project)
+        .bind(uuid::Uuid::now_v7().to_string())
+        .execute(&mut connection)
+        .await
+        .map(|result| result.rows_affected())?;
+    sqlx::query("INSERT INTO board_intent_scan_cursors VALUES (?,2,6)")
+        .bind(&project)
+        .execute(&mut connection)
+        .await
+        .map(|result| result.rows_affected())?;
+    connection.close().await?;
     Ok(ids)
 }
 
-pub fn text_rows(path: &Path, sql: &str) -> TestResult<Vec<String>> {
-    let connection = Connection::open_with_flags(path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
-    let result = connection
-        .prepare(sql)?
-        .query_map([], |row| row.get("value"))?
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(result)
+pub async fn text_rows(path: &Path, sql: &str) -> TestResult<Vec<String>> {
+    let mut connection = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(path)
+            .read_only(true)
+            .create_if_missing(false)
+            .foreign_keys(false),
+    )
+    .await?;
+    let result = sqlx::query_scalar::<_, String>(sqlx::AssertSqlSafe(sql))
+        .fetch_all(&mut connection)
+        .await;
+    let close_result = connection.close().await;
+    let rows = result?;
+    close_result?;
+    Ok(rows)
 }
+
 pub const IDS: &str = "SELECT progress_id AS value FROM subscription_delivery_progress UNION ALL SELECT progress_id AS value FROM board_intent_progress ORDER BY value";
 pub const RANGE_ROOT: &str = "019a0000-0000-7000-8000-000000000065";
 pub const RANGE_PROJECT: &str = "019a0000-0000-7000-8000-000000000015";
 pub const RANGES: &str =
     "SELECT ranges_json AS value FROM router_pushes WHERE ranges_json IS NOT NULL ORDER BY push_id";
 
-pub fn activity_push(path: &Path, root: &str, from: u64, through: u64) -> TestResult<String> {
+pub async fn activity_push(path: &Path, root: &str, from: u64, through: u64) -> TestResult<String> {
     let target = serde_json::from_value(
         json!({"endpoint":{"serviceId":"550e8400-e29b-41d4-a716-446655440000","endpointId":"codex-local"},"sessionId":"legacy-recipient"}),
     )?;
@@ -98,14 +119,19 @@ pub fn activity_push(path: &Path, root: &str, from: u64, through: u64) -> TestRe
     }
     .canonical_string()?;
     let id = uuid::Uuid::now_v7().to_string();
-    let connection = Connection::open(path)?;
-    connection.execute("INSERT INTO router_pushes(push_id,kind,origin_kind,origin_router_ref,target_service_id,target_endpoint_id,target_session_id,header_facts_json,ranges_json,delivery_state,created_at) VALUES (?,'subscription-activity','router',?,'550e8400-e29b-41d4-a716-446655440000','codex-local','legacy-recipient',?,?,'pending','2026-10-21T12:34:56Z')", params![id, origin,
-        json!({"kind":"subscriptionActivity","rootCount":1,"messageCount":1,"heldSince":null,"threadResolved":false}).to_string(),
-        json!({"ranges":[{"rootMessageId":root,"fromActivitySequence":from,"throughActivitySequence":through}],"held":false,"draining":true}).to_string()])?;
+    let mut connection = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
+    sqlx::query("INSERT INTO router_pushes(push_id,kind,origin_kind,origin_router_ref,target_service_id,target_endpoint_id,target_session_id,header_facts_json,ranges_json,delivery_state,created_at) VALUES (?,'subscription-activity','router',?,'550e8400-e29b-41d4-a716-446655440000','codex-local','legacy-recipient',?,?,'pending','2026-10-21T12:34:56Z')").bind(&id).bind(&origin).bind(json!({"kind":"subscriptionActivity","rootCount":1,"messageCount":1,"heldSince":null,"threadResolved":false}).to_string()).bind(json!({"ranges":[{"rootMessageId":root,"fromActivitySequence":from,"throughActivitySequence":through}],"held":false,"draining":true}).to_string()).execute(&mut connection).await.map(|result|result.rows_affected())?;
+    connection.close().await?;
     Ok(id)
 }
 pub const ORIGINS: &str = "SELECT origin_router_ref AS value FROM router_pushes WHERE origin_router_ref IS NOT NULL ORDER BY push_id";
-pub fn expiry_push(path: &Path, scope: serde_json::Value) -> TestResult<String> {
+pub async fn expiry_push(path: &Path, scope: serde_json::Value) -> TestResult<String> {
     let target: collaboration_protocol::SessionRef = serde_json::from_value(
         json!({"endpoint":{"serviceId":"550e8400-e29b-41d4-a716-446655440000","endpointId":"codex-local"},"sessionId":"legacy-recipient"}),
     )?;
@@ -135,18 +161,23 @@ pub fn expiry_push(path: &Path, scope: serde_json::Value) -> TestResult<String> 
         scope
     );
     let id_value = uuid::Uuid::now_v7().to_string();
-    let connection = Connection::open(path)?;
-    connection.execute("INSERT INTO router_pushes(push_id,kind,origin_kind,origin_router_ref,target_service_id,target_endpoint_id,target_session_id,header_facts_json,body,delivery_state,created_at) VALUES (?,'subscription-expiry','router',?,'550e8400-e29b-41d4-a716-446655440000','codex-local','legacy-recipient',?,?,'pending','2026-10-21T12:34:56Z')", params![id_value, origin,
-        json!({"kind":"subscriptionExpiry","scope":format!("{kind} {id}")}).to_string(),
-        format!("Renew with: agent-collaboration board thread subscribe {argument} {id}")])?;
+    let mut connection = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
+    sqlx::query("INSERT INTO router_pushes(push_id,kind,origin_kind,origin_router_ref,target_service_id,target_endpoint_id,target_session_id,header_facts_json,body,delivery_state,created_at) VALUES (?,'subscription-expiry','router',?,'550e8400-e29b-41d4-a716-446655440000','codex-local','legacy-recipient',?,?,'pending','2026-10-21T12:34:56Z')").bind(&id_value).bind(&origin).bind(json!({"kind":"subscriptionExpiry","scope":format!("{kind} {id}")}).to_string()).bind(format!("Renew with: agent-collaboration board thread subscribe {argument} {id}")).execute(&mut connection).await.map(|result|result.rows_affected())?;
+    connection.close().await?;
     Ok(id_value)
 }
 pub const HISTORY: &str = "SELECT json_object('id',request_id,'record',record_json,'created',created_at) AS value FROM typed_interaction_history UNION ALL SELECT json_object('revision',revision) AS value FROM interaction_history_revision ORDER BY value";
-pub fn source_tables(path: &Path) -> TestResult<Vec<String>> {
+pub async fn source_tables(path: &Path) -> TestResult<Vec<String>> {
     text_rows(
         path,
         "SELECT name AS value FROM sqlite_schema WHERE type='table' AND name IN ('router_pushes','subscription_delivery_progress','board_intent_progress','board_intent_scan_cursors','mail_items') ORDER BY name",
-    )
+    ).await
 }
 pub async fn history(path: &Path) -> TestResult<Vec<String>> {
     use interaction_storage::{
@@ -182,5 +213,5 @@ pub async fn history(path: &Path) -> TestResult<Vec<String>> {
         .map_err(|_| "history retained its owner")?
         .close()
         .await?;
-    text_rows(path, HISTORY)
+    text_rows(path, HISTORY).await
 }

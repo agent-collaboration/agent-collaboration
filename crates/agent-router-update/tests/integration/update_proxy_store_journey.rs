@@ -18,6 +18,7 @@ use codex_router_state::{
     sqlite::AsyncSqliteStateStore,
 };
 use message_board_storage::{RouterUpdateStep, read_update_ledger};
+use sqlx::Connection as _;
 use std::path::{Path, PathBuf};
 
 const ACCOUNT: &str = "acct-update-proof";
@@ -246,15 +247,23 @@ async fn a_log_kept_open_by_a_reader_stops_the_rename_and_keeps_the_store_under_
     let (_directory, root) = populated_root()?;
     let _values = seed_old_proxy_store(&root).await?;
     let old = root.join("state.sqlite");
-    let reader = rusqlite::Connection::open(&old)?;
-    reader.execute_batch("BEGIN; SELECT count(*) FROM sqlite_master;")?;
+    let mut reader = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&old)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
+    sqlx::raw_sql("BEGIN; SELECT count(*) FROM sqlite_master;")
+        .execute(&mut reader)
+        .await?;
 
     // Act
     let output = run_update(&root_argument(&root)).await?;
 
     // Assert
-    reader.execute_batch("COMMIT;")?;
-    drop(reader);
+    sqlx::raw_sql("COMMIT;").execute(&mut reader).await?;
+    reader.close().await?;
     assert_ne!(output.status.code(), Some(0));
     let error = String::from_utf8_lossy(&output.stderr);
     assert!(error.contains(&old.display().to_string()), "{error}");

@@ -115,10 +115,10 @@ async fn actual_cli_upload_copies_and_verifies_messages_before_applying_the_real
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
         );
-        assert!(source_tables(&source)?.is_empty());
-        let ids = text_rows(&destination, IDS)?;
+        assert!(source_tables(&source).await?.is_empty());
+        let ids = text_rows(&destination, IDS).await?;
         assert_eq!(ids.len(), 2);
-        assert_eq!(text_rows(&destination, HISTORY)?, before);
+        assert_eq!(text_rows(&destination, HISTORY).await?, before);
         let value: serde_json::Value = serde_json::from_slice(&std::fs::read(&report)?)?;
         assert_eq!(
             value.pointer("/messages/kind"),
@@ -142,8 +142,8 @@ async fn actual_cli_upload_copies_and_verifies_messages_before_applying_the_real
             value.pointer("/messages/kind"),
             Some(&serde_json::json!("alreadyMoved"))
         );
-        assert_eq!(text_rows(&destination, IDS)?, ids);
-        assert_eq!(text_rows(&destination, HISTORY)?, before);
+        assert_eq!(text_rows(&destination, IDS).await?, ids);
+        assert_eq!(text_rows(&destination, HISTORY).await?, before);
         Ok(())
     }
     .await;
@@ -166,7 +166,7 @@ async fn missing_thread_refuses_dry_and_real_cli_before_publication_or_message_d
     let stores = codex_router_host::router_collaboration_directory(directory.path());
     let source = stores.join("automation.sqlite");
     seeded_source(&source).await?;
-    activity_push(&source, "019a0000-0000-7000-8000-00000000ffff", 3, 9)?;
+    activity_push(&source, "019a0000-0000-7000-8000-00000000ffff", 3, 9).await?;
     let before = std::fs::read(&source)?;
     let report = directory.path().join("refused.json");
     for central in [None, Some("http://127.0.0.1:1")] {

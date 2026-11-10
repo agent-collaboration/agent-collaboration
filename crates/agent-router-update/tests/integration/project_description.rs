@@ -1,6 +1,7 @@
 use crate::support;
 use agent_router_update::UpgradeError;
 use message_board::*;
+use sqlx::Connection as _;
 use support::*;
 
 #[tokio::test]
@@ -21,12 +22,20 @@ async fn descriptions_roundtrip_exactly_in_native_project_state_and_title_only_d
         ("019a0000-0000-7000-8000-000000000016", maximum),
     ] {
         let (_directory, path) = fixture_copy("role-history.sqlite")?;
-        let source = rusqlite::Connection::open(&path)?;
-        source.execute(
-            "UPDATE board_topics SET description=? WHERE topic_id=?",
-            [&description, topic],
-        )?;
-        source.close().map_err(|(_, error)| error)?;
+        let mut source = sqlx::SqliteConnection::connect_with(
+            &sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(&path)
+                .create_if_missing(true)
+                .foreign_keys(false),
+        )
+        .await?;
+        sqlx::query("UPDATE board_topics SET description=? WHERE topic_id=?")
+            .bind(&description)
+            .bind(topic)
+            .execute(&mut source)
+            .await
+            .map(|result| result.rows_affected())?;
+        source.close().await?;
         let bytes = std::fs::read(&path)?;
         let prepared = prepare_path(&path).await?;
         let project = prepared
@@ -76,12 +85,20 @@ async fn invalid_legacy_description_is_a_topic_named_typed_refusal_without_trunc
 {
     let (_directory, path) = fixture_copy("role-history.sqlite")?;
     let topic = "019a0000-0000-7000-8000-000000000016";
-    let source = rusqlite::Connection::open(&path)?;
-    source.execute(
-        "UPDATE board_topics SET description=? WHERE topic_id=?",
-        [&"x".repeat(MAX_DESCRIPTION_BYTES + 1), topic],
-    )?;
-    source.close().map_err(|(_, error)| error)?;
+    let mut source = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
+    sqlx::query("UPDATE board_topics SET description=? WHERE topic_id=?")
+        .bind("x".repeat(MAX_DESCRIPTION_BYTES + 1))
+        .bind(topic)
+        .execute(&mut source)
+        .await
+        .map(|result| result.rows_affected())?;
+    source.close().await?;
     let bytes = std::fs::read(&path)?;
     let modified = path.metadata()?.modified()?;
     match prepare_path(&path).await {

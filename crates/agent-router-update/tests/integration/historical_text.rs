@@ -1,5 +1,6 @@
 use crate::support;
 use message_board::*;
+use sqlx::Connection as _;
 use support::*;
 
 #[tokio::test]
@@ -11,12 +12,21 @@ async fn historical_control_text_and_derived_subject_keep_the_shipped_visible_es
 {
     let (_directory, path) = fixture_copy("role-history.sqlite")?;
     // The retained legacy test arranges this pre-write-boundary historical value.
-    let source = rusqlite::Connection::open(&path)?;
-    source.execute(
+    let mut source = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
+    sqlx::query(
         "UPDATE board_messages SET text=? WHERE message_id='019a0000-0000-7000-8000-000000000065'",
-        ["before\u{0007}after\nsecond line"],
-    )?;
-    source.close().map_err(|(_, error)| error)?;
+    )
+    .bind("before\u{0007}after\nsecond line")
+    .execute(&mut source)
+    .await
+    .map(|result| result.rows_affected())?;
+    source.close().await?;
     let bytes = std::fs::read(&path)?;
     let prepared = prepare_path(&path).await?;
     let project = prepared
@@ -63,12 +73,15 @@ async fn imported_subject_uses_first_line_unicode_characters_and_empty_line_fall
         ),
     ] {
         let (_directory, path) = fixture_copy("role-history.sqlite")?;
-        let source = rusqlite::Connection::open(&path)?;
-        source.execute(
-            "UPDATE board_messages SET text=? WHERE message_id='019a0000-0000-7000-8000-000000000065'",
-            [&text],
-        )?;
-        source.close().map_err(|(_, error)| error)?;
+        let mut source = sqlx::SqliteConnection::connect_with(
+            &sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(&path)
+                .create_if_missing(true)
+                .foreign_keys(false),
+        )
+        .await?;
+        sqlx::query("UPDATE board_messages SET text=? WHERE message_id='019a0000-0000-7000-8000-000000000065'").bind(&text).execute(&mut source).await.map(|result|result.rows_affected())?;
+        source.close().await?;
         let prepared = prepare_path(&path).await?;
         let project = prepared
             .projects

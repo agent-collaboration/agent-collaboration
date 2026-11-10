@@ -2,6 +2,7 @@
 use crate::central_fixture;
 use crate::support;
 use crate::upload_support;
+use sqlx::Connection as _;
 
 use agent_router_update::UpgradePublisher;
 use board_sync_protocol::BoardConsumerProtocol;
@@ -98,12 +99,18 @@ async fn imported_copy_is_readable_unheld_then_real_claims_have_one_epoch_and_pr
     // No Registry/Copy bootstrap or stand-in supplies the imported state.
     let prepared = prepare("legacy-complete.sqlite").await?;
     let (_changed_source, changed_path) = fixture_copy("legacy-complete.sqlite")?;
-    let changed_source = rusqlite::Connection::open(&changed_path)?;
-    changed_source.execute(
-        "UPDATE board_messages SET text=text || ' Changed import content.'",
-        [],
-    )?;
-    changed_source.close().map_err(|(_, error)| error)?;
+    let mut changed_source = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&changed_path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
+    sqlx::query("UPDATE board_messages SET text=text || ' Changed import content.'")
+        .execute(&mut changed_source)
+        .await
+        .map(|result| result.rows_affected())?;
+    changed_source.close().await?;
     let changed = prepare_path(&changed_path).await?;
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start()
@@ -232,9 +239,18 @@ async fn retirement_precedes_old_claim_and_completed_import_replay_after_server_
     // Arrange: import a genuinely archived legacy board through D's real path.
     // A prior unknown Claim supplies the recorded answer Retired must override.
     let (_source_directory, source) = fixture_copy("legacy-complete.sqlite")?;
-    let legacy = rusqlite::Connection::open(&source)?;
-    legacy.execute("UPDATE project_boards SET state='archived'", [])?;
-    legacy.close().map_err(|(_, error)| error)?;
+    let mut legacy = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&source)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
+    sqlx::query("UPDATE project_boards SET state='archived'")
+        .execute(&mut legacy)
+        .await
+        .map(|result| result.rows_affected())?;
+    legacy.close().await?;
     let prepared = prepare_path(&source).await?;
     let report = prepared.report.projects.first().ok_or("project missing")?;
     let database = report.manifest.database;

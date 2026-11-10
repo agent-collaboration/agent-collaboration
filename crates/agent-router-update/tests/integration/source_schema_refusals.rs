@@ -1,12 +1,21 @@
 use crate::support;
 use agent_router_update::UpgradeError;
+use sqlx::Connection as _;
 use support::*;
 
 async fn refuses_unchanged_source_after(sql: &str) -> TestResult {
     let (_directory, path) = fixture_copy("role-history.sqlite")?;
-    let source = rusqlite::Connection::open(&path)?;
-    source.execute_batch(sql)?;
-    source.close().map_err(|(_, error)| error)?;
+    let mut source = sqlx::SqliteConnection::connect_with(
+        &sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&path)
+            .create_if_missing(true)
+            .foreign_keys(false),
+    )
+    .await?;
+    sqlx::raw_sql(sqlx::AssertSqlSafe(sql))
+        .execute(&mut source)
+        .await?;
+    source.close().await?;
     let bytes = std::fs::read(&path)?;
     let modified = std::fs::metadata(&path)?.modified()?;
 

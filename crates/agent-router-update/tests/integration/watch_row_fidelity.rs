@@ -1,6 +1,8 @@
 use crate::support;
 use fleet_sync_protocol::SqlValue;
+use futures_util::TryStreamExt as _;
 use message_board::*;
+use sqlx::{Connection as _, Row as _};
 use std::collections::{BTreeMap, BTreeSet};
 use support::*;
 
@@ -35,10 +37,14 @@ async fn native_watch_rows_keep_exact_scopes_choices_and_starts_without_syntheti
     ] {
         let (_directory, path) = fixture_copy(name)?;
         let prepared = prepare_path(&path).await?;
-        let source = rusqlite::Connection::open_with_flags(
-            &path,
-            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-        )?;
+        let mut source = sqlx::SqliteConnection::connect_with(
+            &sqlx::sqlite::SqliteConnectOptions::new()
+                .filename(&path)
+                .read_only(true)
+                .create_if_missing(false)
+                .foreign_keys(false),
+        )
+        .await?;
         for project in &prepared.projects {
             let report = prepared
                 .report
@@ -51,21 +57,22 @@ async fn native_watch_rows_keep_exact_scopes_choices_and_starts_without_syntheti
                 "SELECT reader_key,NULL AS thread,starts_after_activity,active FROM topic_watches WHERE topic_id=?",
                 "SELECT w.reader_key,w.root_id AS thread,w.starts_after_activity,w.active FROM thread_watches w JOIN board_messages m ON m.message_id=w.root_id WHERE m.topic_id=?",
             ] {
-                let mut statement = source.prepare(sql)?;
-                let mut rows = statement.query([project.store.project_id().as_str()])?;
-                while let Some(row) = rows.next()? {
-                    let old = u64::try_from(row.get::<_, i64>("starts_after_activity")?)?;
+                let mut rows = sqlx::query(sqlx::AssertSqlSafe(sql))
+                    .bind(project.store.project_id().as_str())
+                    .fetch(&mut source);
+                while let Some(row) = rows.try_next().await? {
+                    let old = u64::try_from(row.try_get::<i64, _>("starts_after_activity")?)?;
                     let position = report
                         .old_to_new
                         .range(..=old)
                         .next_back()
                         .map_or(0, |(_, cursor)| cursor.position.get());
                     expected.insert((
-                        row.get::<_, String>("reader_key")?,
-                        row.get::<_, Option<String>>("thread")?,
+                        row.try_get::<String, _>("reader_key")?,
+                        row.try_get::<Option<String>, _>("thread")?,
                         1,
                         position,
-                        row.get::<_, bool>("active")?,
+                        row.try_get::<bool, _>("active")?,
                     ));
                 }
             }
@@ -152,6 +159,7 @@ async fn native_watch_rows_keep_exact_scopes_choices_and_starts_without_syntheti
                 project.store.project_id().as_str()
             );
         }
+        source.close().await?;
         prepared.close().await;
     }
     Ok(())
