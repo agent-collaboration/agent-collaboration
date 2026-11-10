@@ -9,13 +9,20 @@ import { registerCommandRoot } from "../../../machines/command-ledger.ts";
 import { identifier, routerTarget } from "./contracts.ts";
 import { readPrivateJson } from "./record.ts";
 
-const expectation = z.object({ peer: identifier, origin: z.url().startsWith("https://") }).strict();
+const expectation = z
+  .object({
+    peer: identifier,
+    origin: z.url().startsWith("https://"),
+    endpoint: z.url().startsWith("https://"),
+  })
+  .strict();
 export function qualifyConnectedHost(
   text: string,
   rawExpected: unknown,
 ): {
   peer: string;
   origin: string;
+  endpoint: string;
   instance: bigint;
   connection: bigint;
   revision: bigint;
@@ -41,20 +48,32 @@ export function qualifyConnectedHost(
   )
     throw new Error("Host does not report a current connected Session");
   const endpoint = new URL(identity[2]),
-    origin = new URL(expected.origin);
+    origin = new URL(expected.origin),
+    enrolled = new URL(expected.endpoint);
   if (
     identity[1] !== expected.peer ||
     endpoint.origin !== origin.origin ||
-    endpoint.pathname !== "/" ||
+    endpoint.href !== enrolled.href ||
+    enrolled.origin !== origin.origin ||
+    origin.pathname !== "/" ||
+    origin.search !== "" ||
+    origin.hash !== "" ||
+    origin.username !== "" ||
+    origin.password !== "" ||
+    enrolled.search !== "" ||
+    enrolled.hash !== "" ||
+    enrolled.username !== "" ||
+    enrolled.password !== "" ||
     endpoint.search !== "" ||
     endpoint.hash !== "" ||
     endpoint.username !== "" ||
     endpoint.password !== ""
   )
-    throw new Error("connected Host peer or staging origin mismatch");
+    throw new Error("connected Host peer or enrolled Session endpoint mismatch");
   return {
     peer: expected.peer,
     origin: endpoint.origin,
+    endpoint: endpoint.href,
     instance: BigInt(connected[1]),
     connection: BigInt(connected[2]),
     revision: BigInt(connected[3]),
