@@ -18,9 +18,7 @@ use codex_router_selection::selection_outcome::SelectionAccountRestriction;
 use codex_router_state::account::AccountRecord;
 use codex_router_state::account::AccountStatus;
 use codex_router_state::account_routing_policy::WeeklyQuotaFloorBasisPoints;
-use codex_router_state::repositories::AccountStateRepository;
 use codex_router_state::sqlite::AsyncWeeklyQuotaFloorMutationStore;
-use codex_router_state::sqlite::SqliteStateStore;
 use codex_router_state::window_observation::WindowObservation;
 use codex_router_state::window_observation::WindowObservationProps;
 
@@ -30,20 +28,19 @@ async fn source_assessment_preserves_openai_credit_with_claude_state_in_snapshot
     let fixture = CreditTurnFixture::new(&directory).await;
     let claude_account_id = codex_router_core::ids::AccountId::new("acct_a_claude_credit_sidecar")
         .expect("Claude sidecar account id should parse");
-    let synchronous_state =
-        SqliteStateStore::open(&fixture.database_path).expect("mixed-provider state should open");
-    AccountStateRepository::upsert_account(
-        &synchronous_state,
-        &AccountRecord::new(
-            Provider::Claude,
-            claude_account_id.clone(),
-            "claude-sidecar",
-            AccountStatus::Enabled,
+    fixture
+        .writer
+        .upsert_account(
+            &AccountRecord::new(
+                Provider::Claude,
+                claude_account_id.clone(),
+                "claude-sidecar",
+                AccountStatus::Enabled,
+            )
+            .with_active_credential_generation(2),
         )
-        .with_active_credential_generation(2),
-    )
-    .expect("Claude sidecar account should persist");
-    drop(synchronous_state);
+        .await
+        .expect("Claude sidecar account should persist");
 
     let claude_observation = WindowObservation::new(
         WindowObservationProps::new(
@@ -227,8 +224,6 @@ async fn source_assessment_rejects_pending_or_replaced_credit_generations() {
         "a pending latest attempt must suppress the previous observation"
     );
 
-    let synchronous_state = SqliteStateStore::open(&fixture.database_path)
-        .expect("generation replacement state should open");
     let replaced_account = AccountRecord::new(
         Provider::Openai,
         fixture.account_id.clone(),
@@ -236,9 +231,11 @@ async fn source_assessment_rejects_pending_or_replaced_credit_generations() {
         AccountStatus::Enabled,
     )
     .with_active_credential_generation(2);
-    AccountStateRepository::upsert_account(&synchronous_state, &replaced_account)
+    fixture
+        .writer
+        .upsert_account(&replaced_account)
+        .await
         .expect("credential generation should rotate");
-    drop(synchronous_state);
     assert_eq!(
         fixture
             .assessor
@@ -365,17 +362,17 @@ async fn source_assessment_preserves_included_quota_and_existing_runtime_guards(
         .set_account_status_by_label("credit-turn-source", AccountStatus::Enabled)
         .await
         .expect("account should re-enable");
-    let synchronous_state =
-        SqliteStateStore::open(&fixture.database_path).expect("credential state should open");
     let credentialless_account = AccountRecord::new(
         Provider::Openai,
         fixture.account_id.clone(),
         "credit-turn-source",
         AccountStatus::Enabled,
     );
-    AccountStateRepository::upsert_account(&synchronous_state, &credentialless_account)
+    fixture
+        .writer
+        .upsert_account(&credentialless_account)
+        .await
         .expect("credential should be removed");
-    drop(synchronous_state);
     assert_eq!(
         fixture
             .assessor

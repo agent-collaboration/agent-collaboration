@@ -81,14 +81,13 @@ async fn persist_credit_account_with_availability_async(
     availability: codex_router_core::credit_usage::CreditAvailability,
 ) {
     let account_with_generation = account.clone().with_active_credential_generation(1);
-    let sync_state = SqliteStateStore::open(database_path)
-        .unwrap_or_else(|error| panic!("state should open for credit account: {error}"));
-    AccountStateRepository::upsert_account(&sync_state, &account_with_generation)
-        .unwrap_or_else(|error| panic!("credit account should persist: {error}"));
-
     let async_state = AsyncSqliteStateStore::open(database_path)
         .await
         .unwrap_or_else(|error| panic!("credit state should open: {error}"));
+    async_state
+        .upsert_account(&account_with_generation)
+        .await
+        .unwrap_or_else(|error| panic!("credit account should persist: {error}"));
     async_state
         .save_account_credit_usage_policy(
             account.account_id(),
