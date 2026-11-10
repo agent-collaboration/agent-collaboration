@@ -97,6 +97,13 @@ impl Client {
     }
 }
 
+fn receiver_migration_count() -> usize {
+    fleet_sync_receiver::RECEIVER_MIGRATOR
+        .iter()
+        .filter(|migration| migration.migration_type.is_up_migration())
+        .count()
+}
+
 fn schemas() -> [(&'static str, EngineSchema, usize, Option<BootstrapProbe>); 4] {
     let delivery_migration_count = fleet_sync_delivery::DELIVERY_MIGRATOR
         .iter()
@@ -109,7 +116,12 @@ fn schemas() -> [(&'static str, EngineSchema, usize, Option<BootstrapProbe>); 4]
             8,
             Some(BootstrapProbe::Registry),
         ),
-        ("copy", EngineSchema::Copy, 3, Some(BootstrapProbe::Copy)),
+        (
+            "copy",
+            EngineSchema::Copy,
+            receiver_migration_count(),
+            Some(BootstrapProbe::Copy),
+        ),
         ("session", EngineSchema::Session, 5, None),
         (
             "delivery",
@@ -295,7 +307,9 @@ async fn first_process(client: &Client) -> ConformanceResult<String> {
     {
         return Err("real receiver SQL error was not rollback-confirmed unavailable".into());
     }
-    client.initialize("damaged", EngineSchema::Copy, 3).await?;
+    client
+        .initialize("damaged", EngineSchema::Copy, receiver_migration_count())
+        .await?;
     if !matches!(client.call("damaged", BootstrapCommand::CopyStatus { database }).await?, BootstrapReply::CopyStatus(answer) if matches!(*answer, ReplicationAnswer::CopyStatus(CopyStatusAnswer::NotInitialized)))
     {
         return Err("receiver did not recover after real bootstrap".into());
