@@ -101,7 +101,11 @@ jobs:
       # qualification can keep its existing 10 s test deadline.
       - name: Test TypeScript tooling, fixtures and observations
         id: verification_tests
-        run: pnpm --dir verification test
+        run: |
+          # Stopped-root fixtures retain the declared macOS-shaped staging path.
+          # Ubuntu lacks its parent; children still enforce private ownership.
+          sudo install -d -m 1777 /private/tmp
+          pnpm --dir verification test
       - name: Check embedded Claude ACP metadata package
         run: |
           pnpm --dir providers/claude-acp install --frozen-lockfile
