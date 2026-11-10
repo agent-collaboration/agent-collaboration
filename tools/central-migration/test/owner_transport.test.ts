@@ -5,11 +5,15 @@
 //   file refuses the run with no request sent.
 
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { createServer, type IncomingMessage, type Server } from "node:http";
+import { createServer as createTlsServer } from "node:https";
 import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import {
   OutputExists,
   RedirectRefused,
@@ -161,3 +165,107 @@ test("a direct answer is written once to a new private --out file, with the toke
     await origin.close();
   }
 });
+
+for (const status of [307, 308]) {
+  test(
+    `Copy migration CLI refuses a ${status} redirect without sending the owner token onward`,
+    { timeout: 20_000 },
+    async () => {
+      await withDirectory(async (directory) => {
+        // Arrange: trust only this fixture certificate in the child CLI process.
+        const key = join(directory, "key.pem");
+        const certificate = join(directory, "certificate.pem");
+        const config = join(directory, "certificate.conf");
+        await writeFile(
+          config,
+          "[req]\nprompt=no\ndistinguished_name=subject\nx509_extensions=extensions\n[subject]\nCN=127.0.0.1\n[extensions]\nsubjectAltName=IP:127.0.0.1\nbasicConstraints=critical,CA:TRUE\nkeyUsage=critical,digitalSignature,keyEncipherment,keyCertSign\nextendedKeyUsage=serverAuth\n",
+        );
+        await promisify(execFile)(
+          "/usr/bin/openssl",
+          [
+            "req",
+            "-x509",
+            "-newkey",
+            "rsa:2048",
+            "-nodes",
+            "-keyout",
+            key,
+            "-out",
+            certificate,
+            "-days",
+            "1",
+            "-config",
+            config,
+          ],
+          { timeout: 10_000 },
+        );
+        const target = await server(() => ({
+          status: 200,
+          body: '{"results":[],"nextAfter":null}',
+        }));
+        let originRequests = 0;
+        const origin = createTlsServer(
+          {
+            key: await readFile(key),
+            cert: await readFile(certificate),
+          },
+          (_request, response) => {
+            originRequests += 1;
+            response.writeHead(status, {
+              location: `${target.origin}/admin/v1/copies/migrate?limit=25`,
+            });
+            response.end();
+          },
+        );
+        await new Promise<void>((resolve) => origin.listen(0, "127.0.0.1", resolve));
+        const address = origin.address();
+        if (address === null || typeof address === "string") throw new Error("TLS listener absent");
+        const inventory = join(directory, "inventory.json");
+        await writeFile(inventory, '{"projects":[]}');
+        try {
+          // Act: use the actual operator entrypoint, native fetch and redirect handling.
+          const result = await new Promise<{ exit: number | null; stdout: string; stderr: string }>(
+            (resolve) => {
+              execFile(
+                process.execPath,
+                [
+                  fileURLToPath(new URL("../scripts/run_copy_migration.ts", import.meta.url)),
+                  `https://127.0.0.1:${address.port}`,
+                  inventory,
+                  "--receiver-version",
+                  "4",
+                ],
+                {
+                  env: {
+                    ...process.env,
+                    CENTRAL_OWNER_ACCESS_TOKEN: "fixture-owner-token",
+                    NODE_EXTRA_CA_CERTS: certificate,
+                  },
+                  timeout: 10_000,
+                },
+                (error, stdout, stderr) => {
+                  resolve({
+                    exit: error === null ? 0 : typeof error.code === "number" ? error.code : null,
+                    stdout,
+                    stderr,
+                  });
+                },
+              );
+            },
+          );
+
+          // Assert: the redirect target never receives the token or mutation.
+          assert.deepEqual(target.seen, []);
+          assert.equal(originRequests, 1);
+          assert.equal(result.exit, 1, result.stderr);
+          assert.match(result.stderr, /owner calls never follow a redirect/);
+          assert.doesNotMatch(result.stdout, /"outcome":"complete"/);
+        } finally {
+          origin.closeAllConnections();
+          await new Promise<void>((resolve) => origin.close(() => resolve()));
+          await target.close();
+        }
+      });
+    },
+  );
+}

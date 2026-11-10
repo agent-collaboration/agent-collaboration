@@ -8,6 +8,7 @@
 
 import { readFile } from "node:fs/promises";
 import { CopyMigrationStopped, migrateCopies, type InventoryProject } from "./copy_migration.ts";
+import { ownerFetch } from "./owner_transport.ts";
 
 const [origin, inventoryPath, flag, versionText] = process.argv.slice(2);
 if (
@@ -30,9 +31,8 @@ const inventory = JSON.parse(await readFile(inventoryPath, "utf8")) as {
 try {
   const result = await migrateCopies(
     async (method, path) => {
-      const response = await fetch(new URL(path, origin), {
+      const response = await ownerFetch(new URL(path, origin), token, {
         method,
-        headers: { "cf-access-token": token },
       });
       const text = await response.text();
       return { status: response.status, body: text === "" ? null : (JSON.parse(text) as unknown) };
