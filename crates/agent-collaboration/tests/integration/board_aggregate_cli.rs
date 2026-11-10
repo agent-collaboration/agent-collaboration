@@ -22,10 +22,7 @@ type TestError = Box<dyn std::error::Error + Send + Sync>;
 )]
 async fn aggregate_cli_pages_and_batch_acknowledgements_keep_project_keys() -> Result<(), TestError>
 {
-    let clock = std::sync::Arc::new(router_clock::ManualClock::new(
-        chrono::DateTime::from_timestamp_millis(1792432800000)
-            .ok_or_else(|| std::io::Error::other("fixed fixture time"))?,
-    ));
+    let clock = Arc::new(router_clock::SystemRuntimeClock::new());
 
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;

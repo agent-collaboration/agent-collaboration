@@ -1,4 +1,5 @@
 use agent_automation::{EventId, InstructionText, OperationId};
+use runtime_primitives::Clock;
 use sqlx::Connection;
 use tokio::sync::Mutex;
 
@@ -13,8 +14,18 @@ use sqlx_turso::{TursoConnectOptions, TursoConnection};
 use std::sync::Arc;
 use tokio_util::sync::CancellationToken;
 
+fn manual_clock() -> Arc<router_clock::ManualClock> {
+    Arc::new(
+        router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+            1792432800000,
+        ))
+        .expect("fixed retention clock"),
+    )
+}
+
 #[tokio::test]
 async fn minute_worker_prunes_expired_events_without_touching_current_or_instruction_rows() {
+    let clock = manual_clock();
     let path = std::env::temp_dir().join(format!(
         "automation-retention-worker-{}.sqlite",
         OperationId::generate().as_str()
@@ -31,7 +42,7 @@ async fn minute_worker_prunes_expired_events_without_touching_current_or_instruc
         )
         .await
         .unwrap_or_else(|error| panic!("instruction should persist: {error}"));
-    let now = 1_800_000_000_000_i64;
+    let now = clock.now().unix_millis();
     let expired = now - 90_i64 * 24 * 60 * 60 * 1000;
     let mut observer = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new()
@@ -54,16 +65,8 @@ async fn minute_worker_prunes_expired_events_without_touching_current_or_instruc
     let shared_store = Arc::new(Mutex::new(store));
     let shutdown = CancellationToken::new();
     let task = tokio::spawn(
-        AutomationRetentionWorker::new(
-            Arc::clone(&shared_store),
-            Arc::new(
-                router_clock::ManualClock::starting_at(
-                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
-                )
-                .unwrap(),
-            ),
-        )
-        .run(shutdown.clone()),
+        AutomationRetentionWorker::new(Arc::clone(&shared_store), clock.clone())
+            .run(shutdown.clone()),
     );
     (async {
         loop {
@@ -109,6 +112,7 @@ async fn minute_worker_prunes_expired_events_without_touching_current_or_instruc
 
 #[tokio::test]
 async fn automation_prune_trims_one_incremental_batch_then_skips_empty_pass() {
+    let clock = manual_clock();
     let directory = tempfile::tempdir().expect("automation fixture directory");
     let path = directory.path().join("automation.sqlite");
     let store = AutomationStore::open(&path)
@@ -121,7 +125,7 @@ async fn automation_prune_trims_one_incremental_batch_then_skips_empty_pass() {
     )
     .await
     .expect("WAL observer should open");
-    let now_ms = 1_800_000_000_000_i64;
+    let now_ms = clock.now().unix_millis();
     let expired_at_ms = now_ms - 120_i64 * 24 * 60 * 60 * 1000;
     let old_payload = format!("{{\"payload\":\"{}\"}}", "x".repeat(8 * 1024));
 
@@ -163,18 +167,10 @@ async fn automation_prune_trims_one_incremental_batch_then_skips_empty_pass() {
     assert_eq!(before_freelist, 0);
 
     let shared_store = Arc::new(Mutex::new(store));
-    let removed = AutomationRetentionWorker::new(
-        Arc::clone(&shared_store),
-        Arc::new(
-            router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
-                1792432800000,
-            ))
-            .unwrap(),
-        ),
-    )
-    .prune_batch(now_ms)
-    .await
-    .expect("automation prune batch should complete");
+    let removed = AutomationRetentionWorker::new(Arc::clone(&shared_store), clock.clone())
+        .prune_batch(now_ms)
+        .await
+        .expect("automation prune batch should complete");
     let after_pages: i64 = sqlx::query_scalar("PRAGMA page_count")
         .fetch_one(&mut observer)
         .await
@@ -196,18 +192,10 @@ async fn automation_prune_trims_one_incremental_batch_then_skips_empty_pass() {
     assert!(after_freelist > 0);
 
     assert_eq!(
-        AutomationRetentionWorker::new(
-            Arc::clone(&shared_store),
-            Arc::new(
-                router_clock::ManualClock::starting_at(
-                    runtime_primitives::SyncTime::from_unix_millis(1792432800000)
-                )
-                .unwrap()
-            )
-        )
-        .prune_batch(now_ms)
-        .await
-        .expect("empty automation prune batch should complete"),
+        AutomationRetentionWorker::new(Arc::clone(&shared_store), clock.clone())
+            .prune_batch(now_ms)
+            .await
+            .expect("empty automation prune batch should complete"),
         0
     );
     let after_empty_pass_pages: i64 = sqlx::query_scalar("PRAGMA page_count")
@@ -263,6 +251,7 @@ fn expired_push(now_ms: i64) -> PushRecordDraft {
 
 #[tokio::test]
 async fn retention_worker_prunes_expired_push_records() {
+    let clock = manual_clock();
     let directory = tempfile::tempdir().expect("retention fixture");
     let path = directory.path().join("automation.sqlite");
     let interaction_path = directory.path().join("interaction.sqlite");
@@ -274,7 +263,7 @@ async fn retention_worker_prunes_expired_push_records() {
             .await
             .expect("native push owner"),
     );
-    let now_ms = 1_800_000_000_000_i64;
+    let now_ms = clock.now().unix_millis();
     let draft = expired_push(now_ms);
     let push_id = draft.push_id.clone();
     interactions
@@ -298,19 +287,11 @@ async fn retention_worker_prunes_expired_push_records() {
         .expect("close fixture writer");
     let shared_store = Arc::new(Mutex::new(store));
     assert_eq!(
-        AutomationRetentionWorker::new(
-            shared_store.clone(),
-            Arc::new(
-                router_clock::ManualClock::starting_at(
-                    runtime_primitives::SyncTime::from_unix_millis(1792432800000)
-                )
-                .unwrap()
-            )
-        )
-        .with_native_push_store(interactions.clone())
-        .prune_batch(now_ms)
-        .await
-        .expect("bounded retention"),
+        AutomationRetentionWorker::new(shared_store.clone(), clock.clone())
+            .with_native_push_store(interactions.clone())
+            .prune_batch(now_ms)
+            .await
+            .expect("bounded retention"),
         1
     );
     assert!(
@@ -335,6 +316,7 @@ async fn retention_worker_prunes_expired_push_records() {
 
 #[tokio::test]
 async fn failed_push_prune_does_not_stop_expired_event_pruning() {
+    let clock = manual_clock();
     let directory = tempfile::tempdir().expect("retention fixture");
     let path = directory.path().join("automation.sqlite");
     let store = AutomationStore::open(&path)
@@ -345,7 +327,7 @@ async fn failed_push_prune_does_not_stop_expired_event_pruning() {
             .await
             .expect("native push owner"),
     );
-    let now_ms = 1_800_000_000_000_i64;
+    let now_ms = clock.now().unix_millis();
     let draft = expired_push(now_ms);
     let push_id = draft.push_id.clone();
     interactions
@@ -362,19 +344,11 @@ async fn failed_push_prune_does_not_stop_expired_event_pruning() {
     observer.close().await.expect("close observer");
     native_retention_faults::execute(interactions.clone(), "CREATE TRIGGER fail_push_prune BEFORE DELETE ON router_pushes BEGIN SELECT RAISE(FAIL, 'push prune failure'); END", None).await.expect("native push fault");
     let shared_store = Arc::new(Mutex::new(store));
-    let removed = AutomationRetentionWorker::new(
-        shared_store.clone(),
-        Arc::new(
-            router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
-                1792432800000,
-            ))
-            .unwrap(),
-        ),
-    )
-    .with_native_push_store(interactions.clone())
-    .prune_batch(now_ms)
-    .await
-    .expect("independent prune succeeds");
+    let removed = AutomationRetentionWorker::new(shared_store.clone(), clock.clone())
+        .with_native_push_store(interactions.clone())
+        .prune_batch(now_ms)
+        .await
+        .expect("independent prune succeeds");
     assert_eq!(removed, 1);
     assert!(
         interactions

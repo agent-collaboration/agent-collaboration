@@ -13,6 +13,7 @@ use collaboration_protocol::{
     CodexGeneration, DeliveryNextAction, DeliveryOutcome, DeliveryReceipt, DeliveryRejection,
     DeliveryRejectionReason, SavedMessage, SessionReachability, SessionRef,
 };
+use runtime_primitives::Clock;
 use serde_json::json;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -52,6 +53,12 @@ impl SessionMessageDelivery for ProviderSessionNotFound {
 
 #[tokio::test]
 async fn provider_session_not_found_finishes_wake_after_one_attempt() {
+    let clock = Arc::new(
+        router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+            1792432800000,
+        ))
+        .expect("fixed wake sender clock"),
+    );
     let root = tempfile::tempdir().expect("automation root");
     let store = Arc::new(Mutex::new(
         AutomationStore::open(&root.path().join("automation.sqlite"))
@@ -63,7 +70,7 @@ async fn provider_session_not_found_finishes_wake_after_one_attempt() {
             .await
             .expect("interaction store"),
     );
-    let now_ms = 1_800_000_000_000_i64 - 10_000;
+    let now_ms = clock.now().unix_millis() - 10_000;
     let message: SavedMessage = serde_json::from_value(json!({
         "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"empty-session"},
         "content":{"kind":"humanUser","text":"wake fixture"},
@@ -110,12 +117,7 @@ async fn provider_session_not_found_finishes_wake_after_one_attempt() {
         .await
         .expect("wake push handoff");
     let sender = WakeDeliverySender {
-        clock: Arc::new(
-            router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
-                1792432800000,
-            ))
-            .unwrap(),
-        ),
+        clock: clock.clone(),
         interactions,
         delivery: Arc::new(ProviderSessionNotFound),
         configuration: AutomationConfigurationHandle::default(),
@@ -154,7 +156,7 @@ async fn provider_session_not_found_finishes_wake_after_one_attempt() {
         store
             .lock()
             .await
-            .eligible_delivery_ids(1_800_000_000_000_i64 + 60_000, 4)
+            .eligible_delivery_ids(clock.now().unix_millis() + 60_000, 4)
             .await
             .expect("future eligible deliveries")
             .is_empty()

@@ -2,8 +2,12 @@ use super::*;
 use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
-#[tokio::test]
-async fn a_journal_write_signal_releases_the_pending_prompt_read() -> FixtureResult {
+#[test]
+fn a_journal_write_signal_releases_the_pending_prompt_read() -> FixtureResult {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_io()
+        .build()?
+        .block_on(async {
     let directory = tempfile::tempdir()?;
     let recipient = AcpRecipient::arm(directory.path(), &identity(), "journal-signal-reader")?;
     let mut provider = tokio::process::Command::new(node_test_fixture::node_executable()?)
@@ -37,31 +41,42 @@ async fn a_journal_write_signal_releases_the_pending_prompt_read() -> FixtureRes
     }});
     input.write_all(format!("{line}\n").as_bytes()).await?;
 
-    assert_eq!(waiting.await?, "literal journal signal");
-    assert_eq!(recipient.count()?, 1);
     response.clear();
     output.read_line(&mut response).await?;
     assert_eq!(
         serde_json::from_str::<Value>(&response)?.get("id"),
         Some(&json!(2))
     );
+    assert_eq!(
+        recipient.count()?,
+        1,
+        "the acknowledged prompt was not journaled"
+    );
+    assert_eq!(waiting.await?, "literal journal signal");
     drop(input);
     assert!(provider.wait().await?.success());
     Ok(())
+        })
 }
 
-#[tokio::test]
-async fn an_already_written_prompt_needs_no_later_notification() -> FixtureResult {
-    let directory = tempfile::tempdir()?;
-    let recipient = AcpRecipient::arm(directory.path(), &identity(), "journal-existing-reader")?;
-    let line = json!({"method":"session/prompt","params": {
-        "sessionId":recipient.target.session_id,
-        "prompt":[{"type":"text","text":"existing literal prompt"}]
-    }});
-    std::fs::write(&recipient.journal, format!("{line}\n"))?;
-    assert_eq!(
-        recipient.expect_text("existing literal").await?,
-        "existing literal prompt"
-    );
-    Ok(())
+#[test]
+fn an_already_written_prompt_needs_no_later_notification() -> FixtureResult {
+    tokio::runtime::Builder::new_current_thread()
+        .enable_io()
+        .build()?
+        .block_on(async {
+            let directory = tempfile::tempdir()?;
+            let recipient =
+                AcpRecipient::arm(directory.path(), &identity(), "journal-existing-reader")?;
+            let line = json!({"method":"session/prompt","params": {
+                "sessionId":recipient.target.session_id,
+                "prompt":[{"type":"text","text":"existing literal prompt"}]
+            }});
+            std::fs::write(&recipient.journal, format!("{line}\n"))?;
+            assert_eq!(
+                recipient.expect_text("existing literal").await?,
+                "existing literal prompt"
+            );
+            Ok(())
+        })
 }

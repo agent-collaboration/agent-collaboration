@@ -18,6 +18,10 @@ cargo nextest run --locked --profile ci -p agent-collaboration --features quota-
   declares each shared helper implementation once. Colocated `*_test.rs`
   files retain helper unit cases; test-only namespace modules preserve every
   former root's unit-case identity while sharing the helper implementation.
+  The ACP recipient helper cases run the real Node journal fixture and prove
+  that a pending prompt read wakes on its write notice, including a write
+  already present before the read starts. Their Rust runtime enables I/O
+  without a timer driver, so polling with a native timer fails immediately.
 
 A former binary `<root>` and test `<case>` becomes binary `integration` or
 `e2e` and test `<root>::<case>`. Library and binary unit tests keep their names.

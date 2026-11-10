@@ -5538,7 +5538,7 @@ dependencies = [
 
 [[package]]
 name = "router-clock"
-version = "0.1.136"
+version = "0.1.142"
 dependencies = [
  "chrono",
  "runtime-primitives",

@@ -17,6 +17,9 @@ use tokio::sync::Mutex;
 #[cfg(test)]
 #[path = "summary_deadline_tests.rs"]
 mod summary_deadline_tests;
+#[cfg(test)]
+#[path = "summary_native_worker_test.rs"]
+mod tests;
 pub(crate) struct SummaryStep<'a> {
     pub work: SummaryWork,
     pub store: &'a Arc<Mutex<AutomationStore>>,
