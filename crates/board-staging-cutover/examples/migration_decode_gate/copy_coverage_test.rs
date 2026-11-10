@@ -8,6 +8,8 @@ use fleet_sync_writer::ReplicatedSchema;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha384};
 
+type CopySummaryDamageCase = (&'static str, fn(&mut Value));
+
 const LIVE: &str = "01a1c070-0000-7000-8000-000000000001";
 const RETIRED: &str = "01a1c070-0000-7000-8000-000000000003";
 const SUMMARY_SQL: &str =
@@ -115,7 +117,7 @@ async fn a_missing_summary_table_requires_the_hook_to_actually_create_it() {
 
 #[tokio::test]
 async fn malformed_or_mismatched_copy_summaries_are_refused_by_the_reader() {
-    let cases: [(&str, fn(&mut Value)); 6] = [
+    let cases: [CopySummaryDamageCase; 6] = [
         ("extra field", |summary| summary["unexpected"] = json!(true)),
         ("different database", |summary| {
             summary["database"] = json!(RETIRED)
@@ -158,7 +160,7 @@ async fn malformed_or_mismatched_copy_summaries_are_refused_by_the_reader() {
 
 #[tokio::test]
 async fn copy_summary_storage_shape_identity_and_cardinality_are_checked() {
-    let cases: [(&str, fn(&mut Value)); 7] = [
+    let cases: [CopySummaryDamageCase; 7] = [
         ("row database mismatch", |table| {
             table["rows"][0][0] = text(RETIRED)
         }),
