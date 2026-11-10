@@ -12,6 +12,17 @@ impl StoredApprovalRoute {
     }
 }
 
+/// The last use of the oldest approval route; every route is eligible once unused long enough.
+pub(crate) async fn oldest_approval_route_use_ms(
+    connection: &mut sqlx_turso::TursoConnection,
+) -> Result<Option<i64>, sqlx::Error> {
+    sqlx::query_scalar::<sqlx_turso::Turso, Option<i64>>(
+        "SELECT MIN(last_used_at_ms) FROM approval_routes",
+    )
+    .fetch_one(connection)
+    .await
+}
+
 pub(crate) async fn prune_expired(
     connection: &mut sqlx_turso::TursoConnection,
     cutoff_ms: i64,

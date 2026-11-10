@@ -542,7 +542,7 @@ async fn loaded_only_queue_refuses_not_loaded_session_before_enqueue() {
 }
 
 #[tokio::test]
-async fn provider_and_absent_peer_presence_aggregates_to_unreachable() {
+async fn provider_and_absent_peer_presence_aggregates_to_not_running() {
     let root = tempfile::tempdir().expect("fixture root");
     let mut target = target();
     target.endpoint.endpoint_id =
@@ -585,11 +585,10 @@ async fn provider_and_absent_peer_presence_aggregates_to_unreachable() {
     let routes: Vec<Arc<dyn SessionDeliveryRoute>> = vec![provider_route.clone(), peer_route];
     let router = SessionDeliveryRouter::new(routes);
 
+    // The provider cannot load this session and the peer's terminal isn't open.
     assert_eq!(
         router.presence(&target).await.expect("router presence"),
-        TargetPresence::Unreachable {
-            reason: "no route holds or can load this session".to_owned(),
-        }
+        TargetPresence::NotRunning
     );
     provider_route.shutdown_queue().await;
     supervisor.shutdown().await.expect("supervisor shutdown");

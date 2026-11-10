@@ -9,7 +9,7 @@ use collaboration_service::IntentRecipientEnrollment;
 use collaboration_service::MailPushDeliveryProps;
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
-use collaboration_service::SystemSubscriptionClock;
+
 use fleet_sync_protocol::{ItemId, PeerId};
 use interaction_storage::InteractionStore;
 use tokio::sync::Mutex;
@@ -93,7 +93,7 @@ async fn an_acknowledged_remote_handoff_is_published_without_another_board_write
         delivery: carrier.clone(),
         presence: carrier.clone(),
         machine_identity: machine.clone(),
-        clock: Arc::new(SystemSubscriptionClock),
+        clock: Arc::new(router_clock::SystemRuntimeClock::new()),
     });
     actors.start().await?;
 
@@ -115,7 +115,7 @@ async fn an_acknowledged_remote_handoff_is_published_without_another_board_write
             actors: actors.clone(),
             presence: carrier,
             machine,
-            clock: Arc::new(SystemSubscriptionClock),
+            clock: actors.runtime_clock(),
         },
         board.mail_session(),
     )?;

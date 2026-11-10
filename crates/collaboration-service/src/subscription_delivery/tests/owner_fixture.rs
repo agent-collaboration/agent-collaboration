@@ -1,6 +1,4 @@
-#[path = "owner_clock.rs"]
-mod owner_clock;
-pub use owner_clock::{RuntimeTimerClock, TestClock};
+pub use router_clock::{ManualClock, RuntimeClock};
 #[path = "scripted_delivery.rs"]
 mod scripted_delivery;
 use super::super::*;
@@ -37,13 +35,94 @@ pub struct OwnerFixture {
     pub project: ProjectId,
     pub discussion_subject: ThreadSubject,
     pub root: ThreadId,
-    pub clock: Arc<TestClock>,
+    pub clock: Arc<ManualClock>,
     pub presence: Arc<ScriptedPresence>,
+    /// The signals every runtime's readers wake on while they hold mail.
+    pub held_mail: HeldMailTestSignals,
+}
+
+/// What a test sends to say a held message's target may have loaded.
+pub struct HeldMailTestSignals {
+    pub provider_completions: tokio::sync::watch::Sender<u64>,
+    pub observation_rechecks: tokio::sync::watch::Sender<u64>,
+    /// A real lifecycle journal, for tests that record a Codex thread load.
+    pub journal: StdMutex<Option<Arc<lifecycle_observation::LifecycleStore>>>,
+    /// How many of the readers' next journal position captures fail.
+    pub failed_captures: Arc<std::sync::atomic::AtomicUsize>,
+}
+
+impl Default for HeldMailTestSignals {
+    fn default() -> Self {
+        Self {
+            provider_completions: tokio::sync::watch::channel(0).0,
+            observation_rechecks: tokio::sync::watch::channel(0).0,
+            journal: StdMutex::new(None),
+            failed_captures: Arc::default(),
+        }
+    }
+}
+
+impl HeldMailTestSignals {
+    /// The provider supervisor published an operation's result, such as a load.
+    pub fn provider_completed(&self) {
+        self.provider_completions
+            .send_modify(|revision| *revision = revision.wrapping_add(1));
+    }
+
+    /// Lifecycle observation retried while it is unavailable.
+    pub fn observation_retried(&self) {
+        self.observation_rechecks
+            .send_modify(|revision| *revision = revision.wrapping_add(1));
+    }
+
+    /// The next journal position capture fails, as an unreadable journal would.
+    pub fn fail_next_capture(&self) {
+        self.failed_captures
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    fn signals(&self) -> crate::HeldMailSignals {
+        crate::HeldMailSignals {
+            journal: self.journal.lock().unwrap().clone(),
+            provider_completions: Some(self.provider_completions.subscribe()),
+            observation_rechecks: Some(self.observation_rechecks.subscribe()),
+            failed_captures: Arc::clone(&self.failed_captures),
+        }
+    }
 }
 #[path = "owner_setup.rs"]
 mod owner_setup;
 
 impl OwnerFixture {
+    /// A real lifecycle journal, prepared and handed to readers this fixture starts.
+    pub async fn attach_journal(&self) -> Arc<lifecycle_observation::LifecycleStore> {
+        let journal = Arc::new(lifecycle_observation::LifecycleStore::new(
+            lifecycle_observation::ObservationJournal::open(
+                &self.directory.path().join("session-registry.sqlite"),
+                SERVICE_ID.to_owned().try_into().unwrap(),
+            )
+            .await
+            .unwrap(),
+        ));
+        journal
+            .prepare(self.clock.utc_now().timestamp())
+            .await
+            .unwrap();
+        *self.held_mail.journal.lock().unwrap() = Some(Arc::clone(&journal));
+        journal
+    }
+
+    /// Asserts the readers took every capture fault the test injected.
+    pub fn assert_capture_faults_taken(&self) {
+        assert_eq!(
+            self.held_mail
+                .failed_captures
+                .load(std::sync::atomic::Ordering::SeqCst),
+            0,
+            "the injected capture fault fired"
+        );
+    }
+
     pub async fn assert_no_legacy_message_tables(&self) {
         use sqlx::Connection as _;
         let mut read = sqlx::SqliteConnection::connect_with(
@@ -91,7 +170,7 @@ impl OwnerFixture {
                 watch: false,
                 addressees: Vec::new(),
             },
-            self.clock.now(),
+            self.clock.utc_now(),
         )
         .await;
     }
@@ -114,7 +193,7 @@ impl OwnerFixture {
                 replace,
                 note: None,
             },
-            self.clock.now(),
+            self.clock.utc_now(),
         )
         .await;
     }
@@ -214,13 +293,13 @@ impl OwnerFixture {
                     lifetime_seconds: None,
                 },
             },
-            self.clock.now(),
+            self.clock.utc_now(),
         )
         .await
         .unwrap();
     }
     pub async fn post(&self, root: &ThreadId, body: &str) -> FeedCursor {
-        self.post_at(root, body, self.clock.now()).await
+        self.post_at(root, body, self.clock.utc_now()).await
     }
     pub async fn post_at(&self, root: &ThreadId, body: &str, now: DateTime<Utc>) -> FeedCursor {
         let post = PostId::generate();
@@ -267,7 +346,10 @@ impl OwnerFixture {
     pub async fn runtime(&self) -> OwnerRuntime {
         self.runtime_with_clock(self.clock.clone()).await
     }
-    pub async fn runtime_with_clock(&self, clock: Arc<dyn SubscriptionClock>) -> OwnerRuntime {
+    pub async fn runtime_with_clock(
+        &self,
+        clock: Arc<dyn router_clock::RuntimeClock>,
+    ) -> OwnerRuntime {
         self.runtime_with_availability(
             clock,
             collaboration_protocol::SessionReachability::CodexAppServer,
@@ -292,7 +374,7 @@ impl OwnerFixture {
     }
     async fn runtime_with_availability(
         &self,
-        clock: Arc<dyn SubscriptionClock>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
         reachability: collaboration_protocol::SessionReachability,
         board_availability: BoardAvailability,
     ) -> OwnerRuntime {
@@ -303,7 +385,7 @@ impl OwnerFixture {
     }
     fn prepare_runtime_with_availability(
         &self,
-        clock: Arc<dyn SubscriptionClock>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
         reachability: collaboration_protocol::SessionReachability,
         board_availability: BoardAvailability,
     ) -> OwnerRuntime {
@@ -339,6 +421,9 @@ impl OwnerFixture {
             )
             .unwrap(),
         });
+        service
+            .attach_held_mail_signals(self.held_mail.signals())
+            .unwrap();
         let observations = service.observe_owners();
         let publisher = Arc::new(crate::NotificationPublisher::new(
             self.admission.clone(),
@@ -427,7 +512,7 @@ impl OwnerRuntime {
                 .last()
                 .cloned()
                 .expect("native request precedes its completion");
-            tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            (async {
                 loop {
                     if native
                         .interactions
@@ -444,8 +529,7 @@ impl OwnerRuntime {
                     tokio::task::yield_now().await;
                 }
             })
-            .await
-            .expect("native delivery outcome did not commit");
+            .await;
             return;
         }
         self.observe(|event| {
@@ -492,11 +576,64 @@ impl OwnerRuntime {
     }
 }
 
-pub struct ScriptedPresence(pub StdMutex<TargetPresence>);
+/// The presence a test sets, how many checks read it, an optional pause (the next check
+/// tells the test it read, then waits for the test to let it answer), and how many of
+/// the next checks fail.
+pub struct ScriptedPresence(
+    pub StdMutex<TargetPresence>,
+    pub std::sync::atomic::AtomicUsize,
+    pub StdMutex<Option<PresencePause>>,
+    pub std::sync::atomic::AtomicUsize,
+);
+
+pub struct PresencePause {
+    pub read: oneshot::Sender<()>,
+    pub answer: oneshot::Receiver<()>,
+}
+
+impl ScriptedPresence {
+    pub fn new(presence: TargetPresence) -> Self {
+        Self(
+            StdMutex::new(presence),
+            std::sync::atomic::AtomicUsize::new(0),
+            StdMutex::new(None),
+            std::sync::atomic::AtomicUsize::new(0),
+        )
+    }
+
+    /// The next check fails, as a probe that cannot reach its route would.
+    pub fn fail_next_check(&self) {
+        self.3.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn checks(&self) -> usize {
+        self.1.load(std::sync::atomic::Ordering::SeqCst)
+    }
+}
+
 impl TargetPresenceProbe for ScriptedPresence {
     fn presence(&self, _: &SessionRef) -> DeliveryFuture<'_, TargetPresence> {
+        self.1.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let presence = self.0.lock().unwrap().clone();
-        Box::pin(async move { Ok(presence) })
+        let pause = self.2.lock().unwrap().take();
+        let fails = self
+            .3
+            .fetch_update(
+                std::sync::atomic::Ordering::SeqCst,
+                std::sync::atomic::Ordering::SeqCst,
+                |remaining| remaining.checked_sub(1),
+            )
+            .is_ok();
+        Box::pin(async move {
+            if let Some(pause) = pause {
+                let _ = pause.read.send(());
+                let _ = pause.answer.await;
+            }
+            if fails {
+                return Err(collaboration_contracts::DeliveryContractError::ClientOperation);
+            }
+            Ok(presence)
+        })
     }
 }
 

@@ -55,6 +55,12 @@ impl FleetStore {
         CursorStore::over(Arc::clone(&self.database))
     }
 
+    /// A receiver that wakes after each committed transaction that changed Fleet rows.
+    #[must_use]
+    pub fn subscribe_commits(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.database.subscribe_commits()
+    }
+
     /// Closes the one connection; views still held fail their next call.
     pub async fn close(&self) {
         self.database.pool.close().await;

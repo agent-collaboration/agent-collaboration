@@ -8,14 +8,17 @@ use std::{path::Path, sync::Arc};
 
 type FixtureError = Box<dyn std::error::Error + Send + Sync>;
 
-pub(crate) fn registry(root: &Path) -> Result<Arc<ProjectStoreRegistry>, FixtureError> {
+pub(crate) fn registry(
+    root: &Path,
+    clock: Arc<dyn runtime_primitives::Clock>,
+) -> Result<Arc<ProjectStoreRegistry>, FixtureError> {
     let peer = fleet_sync_protocol::PeerId::new(uuid::Uuid::parse_str(
         "0192a1b2-c3d4-7000-8000-000000000001",
     )?)?;
     Ok(Arc::new(ProjectStoreRegistry::new(
         root,
         Some(peer),
-        Arc::new(runtime_primitives::SystemClock),
+        clock,
         message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])?,
     )))
 }
@@ -48,9 +51,10 @@ impl ProjectRegistration for PendingRegistration {
 pub(crate) async fn prepare_registered_creation(
     admission: &crate::ProjectAdmission,
     input: &ProjectCreateRequest,
+    clock: &dyn runtime_primitives::Clock,
 ) -> Result<(), FixtureError> {
     use fleet_admission::{FleetOperation, FleetRequest};
-    use runtime_primitives::{Clock, SystemClock};
+
     let Some(Record::Board(board)) = admission
         .fleet
         .record(&input.board_id.clone().into())
@@ -86,7 +90,7 @@ pub(crate) async fn prepare_registered_creation(
         .settle_central_reply(&input.request_id, &decision)
         .await?;
     admission.registry.open_project(&input.project_id).await?;
-    let now = SystemClock.now();
+    let now = clock.now();
     admission
         .registry
         .database(&input.project_id)
@@ -118,9 +122,10 @@ pub(crate) async fn prepare_registered_creation(
 pub(crate) async fn expire_lease(
     registry: &ProjectStoreRegistry,
     project: &ProjectId,
+    clock: &dyn runtime_primitives::Clock,
 ) -> Result<fleet_sync_protocol::LeaseStatus, FixtureError> {
     use fleet_sync_protocol::{LeaseState, LeaseStatus};
-    use runtime_primitives::{Clock, SystemClock};
+
     let database = registry.database(project).await?;
     let epoch = match database.writer_state().await? {
         fleet_sync_lease::WriterState::Writing { epoch }
@@ -129,7 +134,7 @@ pub(crate) async fn expire_lease(
     };
     // A fresh zero-remaining answer expires authority immediately. Backdating
     // the request would now correctly lose to the saved newer observation.
-    let started = SystemClock.now();
+    let started = clock.now();
     let lease = LeaseStatus {
         database: fleet_sync_protocol::DatabaseId::new(uuid::Uuid::parse_str(project.as_str())?)?,
         epoch,
@@ -167,10 +172,11 @@ pub(crate) async fn renew_lease(
     registry: &ProjectStoreRegistry,
     project: &ProjectId,
     previous: fleet_sync_protocol::LeaseStatus,
+    clock: &dyn runtime_primitives::Clock,
 ) -> Result<(), FixtureError> {
     use fleet_sync_protocol::{RenewAnswer, RenewResult};
-    use runtime_primitives::{Clock, SystemClock};
-    let started = SystemClock.now();
+
+    let started = clock.now();
     let expires_at = started.after(board_fleet_sync::BOARD_LEASE_POLICY.lease_duration);
     registry
         .database(project)

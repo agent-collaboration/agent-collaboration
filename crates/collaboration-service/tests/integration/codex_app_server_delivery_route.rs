@@ -248,7 +248,10 @@ async fn exercise_held_empty_thread(
         gate,
         codex_home: root.clone(),
     };
+    let runtime_clock =
+        std::sync::Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH));
     let route = Arc::new(CodexAppServerDeliveryRoute::new(
+        runtime_clock.clone(),
         service_id.clone(),
         directory,
         backend_config.clone(),
@@ -441,6 +444,7 @@ async fn exercise_held_empty_thread(
                 "executionTimeoutSeconds":120,"model":"gpt-5.6-sol","effort":"medium"}
         }))?;
         let route = collaboration_runtime::CodexAppServerScheduledRuns::new(
+            runtime_clock.clone(),
             backend_config.clone(),
             Arc::clone(&holder),
         );
@@ -585,7 +589,7 @@ async fn exercise_held_empty_thread(
             delivery: Arc::clone(&delivery),
             presence: Arc::clone(&presence),
             machine_identity: machine_identity.clone(),
-            clock: Arc::new(collaboration_service::SystemSubscriptionClock),
+            clock: runtime_clock.clone(),
         },
     );
     subscription_delivery.start().await?;
@@ -607,7 +611,7 @@ async fn exercise_held_empty_thread(
             actors: subscription_delivery.clone(),
             presence,
             machine: machine_identity,
-            clock: Arc::new(collaboration_service::SystemSubscriptionClock),
+            clock: runtime_clock.clone(),
         },
     )?;
     let served = served_api::ServedApi::start(identity)?;

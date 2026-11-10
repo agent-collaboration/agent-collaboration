@@ -88,12 +88,13 @@ impl ServedCollaborationApi {
             router_proxy_endpoint: options.router_proxy_endpoint,
         };
         let shutdown = CancellationToken::new();
-        let (_sender, relation) = tokio::sync::watch::channel(RouterExecutableRelation::Match);
         let config = CollaborationApiConfig {
             application,
             service_directory: directory.to_owned(),
             native_definitions: None,
-            router_executable_relation: relation,
+            router_executable_check: Arc::new(crate::FixedRouterExecutableRelation(
+                RouterExecutableRelation::Match,
+            )),
             concurrent_requests: options
                 .concurrent_requests
                 .unwrap_or(DEFAULT_CONCURRENT_REQUESTS),

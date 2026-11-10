@@ -328,3 +328,94 @@ async fn assert_mail_admission_tasks(connection: &mut sqlx_turso::TursoConnectio
         "custody admission needs exactly its submit and 60-day removal, and failed admission leaves neither"
     );
 }
+
+fn commit_bumped(commits: &mut tokio::sync::watch::Receiver<u64>) -> bool {
+    let changed = commits.has_changed().unwrap_or(false);
+    commits.borrow_and_update();
+    changed
+}
+
+/// Q2 through the sync library's one `AtomicStore::transaction` entry: the real engine's
+/// own reads (`due`, `earliest` for rearm, `operation` for the status of an operation
+/// that exists, which commits) commit without a signal; status for a missing operation
+/// errors and rolls back without one; a library write that commits signals; one that wrote
+/// rows and then rolled back on a real insert failure does not.
+#[tokio::test]
+async fn the_real_engine_signals_only_for_library_writes_that_commit() {
+    let directory = tempfile::tempdir().expect("native atomic fixture");
+    let owner = Arc::new(
+        InteractionStore::open(directory.path().join("interaction.sqlite"))
+            .await
+            .expect("composed owner"),
+    );
+    let adapter = Arc::new(InteractionAtomicStore::new(
+        owner.clone(),
+        Arc::new(NoDispatchHost),
+    ));
+    let engine = durable_steps::Engine::new(Arc::clone(&adapter), Arc::new(NoDispatchHost));
+    let mut commits = owner.subscribe_commits();
+
+    let report = engine.drive_due().await.expect("empty drive");
+    let missing = engine
+        .status(&durable_steps::OperationId::new(uuid::Uuid::now_v7()).expect("v7 id"))
+        .await;
+    let engine_reads_bumped = commit_bumped(&mut commits);
+    let (item, push) = native_item_and_push();
+    enqueue_and_project(&adapter, item, push)
+        .await
+        .expect("library write commits");
+    let library_write_bumped = commit_bumped(&mut commits);
+    let existing: String = sqlx::query_scalar(
+        "SELECT operation_id FROM _fleet_sync_operations ORDER BY operation_id LIMIT 1",
+    )
+    .fetch_one(&mut *owner.writer.lock().await)
+    .await
+    .expect("the library write admitted an operation");
+    let existing = durable_steps::OperationId::new(
+        uuid::Uuid::parse_str(&existing).expect("stored operation id is a UUID"),
+    )
+    .expect("stored operation id is UUIDv7");
+    let existing_status = engine.status(&existing).await;
+    let existing_status_bumped = commit_bumped(&mut commits);
+    let mut connection = owner.writer.lock().await;
+    sqlx::raw_sql("CREATE TRIGGER reject_atomic_push BEFORE INSERT ON router_pushes BEGIN SELECT RAISE(ABORT, 'fixture atomic push rejection'); END")
+        .execute(&mut *connection).await.expect("real native insertion fault");
+    drop(connection);
+    let (rejected_item, rejected_push) = native_item_and_push();
+    enqueue_and_project(&adapter, rejected_item, rejected_push)
+        .await
+        .expect_err("custody and journal rows roll back with the failed push");
+    let rolled_back_bumped = commit_bumped(&mut commits);
+
+    assert!(report.completed.is_empty() && report.failed.is_empty());
+    assert!(matches!(missing, Err(StoreError::MissingOperation { .. })));
+    assert!(
+        existing_status.is_ok(),
+        "status of an existing operation commits its read: {existing_status:?}"
+    );
+    // Each flag is named so a failure shows every path at once.
+    assert_eq!(
+        [
+            (
+                "empty drive, rearm and missing-id status",
+                engine_reads_bumped
+            ),
+            ("committed library write", library_write_bumped),
+            (
+                "existing-operation status that commits",
+                existing_status_bumped
+            ),
+            (
+                "library write rolled back after writing rows",
+                rolled_back_bumped
+            ),
+        ],
+        [
+            ("empty drive, rearm and missing-id status", false),
+            ("committed library write", true),
+            ("existing-operation status that commits", false),
+            ("library write rolled back after writing rows", false),
+        ],
+        "only the committed library write signals"
+    );
+}

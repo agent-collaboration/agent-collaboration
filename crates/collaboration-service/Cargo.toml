@@ -7,12 +7,13 @@ license.workspace = true
 publish.workspace = true
 [features]
 # Application assembly fixtures for this crate and downstream tests.
-test-support = ["runtime-test-support"]
+test-support = ["runtime-test-support", "router-clock/test-support"]
 runtime-test-support = ["interaction-storage/runtime-test-support", "collaboration-runtime/runtime-test-support"]
 
 [lints]
 workspace = true
 [dependencies]
+router-clock.workspace = true
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
 board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
@@ -55,6 +56,7 @@ tracing.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+router-clock = { workspace = true, features = ["test-support"] }
 message-board-storage = { path = "../message-board-storage", version = "0.1.20", features = ["test-support"] }
 codex-acp-adapter = { path = "../codex-acp-adapter", version = "0.1.14", features = ["test-support"] }
 collaboration-application-test-support = { path = "../collaboration-application-test-support", version = "0.1.126" }

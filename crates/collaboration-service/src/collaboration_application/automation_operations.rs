@@ -25,6 +25,7 @@ use tokio::sync::Mutex;
 
 /// Automation operations over automation storage, the Host's configuration and scheduled runs.
 pub struct AutomationOperations {
+    pub(super) clock: Arc<dyn router_clock::RuntimeClock>,
     pub(super) identity: collaboration_contracts::RouterIdentity,
     pub(super) automation:
         Option<std::sync::Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>>,
@@ -45,6 +46,7 @@ impl AutomationOperations {
         reason = "Constructor injection keeps each independently owned capability explicit instead of recreating a service locator."
     )]
     pub fn new(
+        clock: Arc<dyn router_clock::RuntimeClock>,
         identity: collaboration_contracts::RouterIdentity,
         automation: Option<std::sync::Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>>,
         configuration: collaboration_runtime::AutomationConfigurationHandle,
@@ -61,6 +63,7 @@ impl AutomationOperations {
         native_backend: Option<collaboration_runtime::NativeControlBackend>,
     ) -> Self {
         Self {
+            clock,
             identity,
             automation,
             configuration,
@@ -83,7 +86,7 @@ impl AutomationOperations {
             store
                 .lock()
                 .await
-                .automation_event_floor(chrono::Utc::now().timestamp_millis())
+                .automation_event_floor(self.clock.utc_now().timestamp_millis())
                 .await
                 .ok()
                 .flatten()
@@ -161,7 +164,13 @@ impl AutomationOperations {
             timeout_seconds: u32::from(configuration.summary_timeout_seconds),
         };
         // The admission lease holds the configuration steady until the Run is projected.
-        let recovered = recover_summary(store, request, action).await;
+        let recovered = recover_summary(
+            store,
+            request,
+            action,
+            self.clock.utc_now().timestamp_millis(),
+        )
+        .await;
         let projected = project_run(recovered, context, RunAccess::Recover);
         drop(lease);
         projected
@@ -177,7 +186,13 @@ impl AutomationOperations {
             Some(request.run_id.clone()),
         );
         let store = self.run_store(&mut context)?;
-        let recovered = recover_summary(store, request, SummaryRecoveryAction::Skip).await;
+        let recovered = recover_summary(
+            store,
+            request,
+            SummaryRecoveryAction::Skip,
+            self.clock.utc_now().timestamp_millis(),
+        )
+        .await;
         project_run(recovered, context, RunAccess::Recover)
     }
 
@@ -200,7 +215,7 @@ impl AutomationOperations {
     ) -> Result<InstructionSnapshot, InstructionFailure> {
         let mut context = InstructionContext::mutation(Some(request.operation_id.clone()), None);
         let store = self.instruction_store(&context)?;
-        let now = chrono::Utc::now().timestamp_millis();
+        let now = self.clock.utc_now().timestamp_millis();
         let created = store
             .lock()
             .await
@@ -219,7 +234,7 @@ impl AutomationOperations {
             Some(request.instruction_id.clone()),
         );
         let store = self.instruction_store(&context)?;
-        let now = chrono::Utc::now().timestamp_millis();
+        let now = self.clock.utc_now().timestamp_millis();
         let updated = store
             .lock()
             .await
@@ -308,6 +323,7 @@ async fn recover_summary(
     store: &Arc<Mutex<AutomationStore>>,
     request: RunRecoveryRequest,
     action: SummaryRecoveryAction,
+    now_ms: i64,
 ) -> Result<StoredRun, StorageError> {
     store
         .lock()
@@ -317,7 +333,7 @@ async fn recover_summary(
                 operation_id: request.operation_id,
                 run_id: request.run_id,
                 action,
-                now_ms: chrono::Utc::now().timestamp_millis(),
+                now_ms,
             },
         )
         .await

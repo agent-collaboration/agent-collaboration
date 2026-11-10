@@ -81,7 +81,7 @@ impl ProjectAdmission {
                 reason: ReadMarkNotAdvanced::StandDownUnacknowledged {},
             });
         }
-        let now = chrono::Utc::now();
+        let now = self.clock.utc_now();
         let (current, normalized) = write.normalize_read_mark(reader, &scope, now).await?;
         if current
             .as_ref()

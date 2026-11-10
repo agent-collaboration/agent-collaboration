@@ -5,9 +5,8 @@ pub use super::follow_fixture::{
 use super::{
     central_pair::{SecondHost, await_writer, central, settled_view},
     fixture::{BoardFixture, at, fields, identity},
-    takeover_controls::{self as controls, BOUND},
-    takeover_readbacks as readbacks,
-    takeover_recipients::{self as recipients, Recipients},
+    takeover_controls as controls, takeover_readbacks as readbacks,
+    takeover_recipients::{self as recipients, AcpRecipients},
 };
 use board_central_test_support::{DispatchCallSelector, ObjectAddress};
 use board_sync_protocol::BoardDeliveryTypes;
@@ -26,7 +25,7 @@ pub async fn transfer(
     second: &mut SecondHost,
     kind: TransferKind,
 ) -> FixtureResult {
-    recipients::scenario(fixture, second, async move |fixture, second, peers| {
+    recipients::acp_scenario(fixture, second, async move |fixture, second, peers| {
         Box::pin(controls::scenario(
             fixture,
             second,
@@ -40,12 +39,12 @@ pub async fn transfer(
 async fn prove_transfer(
     fixture: &mut BoardFixture,
     second: &mut SecondHost,
-    peers: &mut Recipients,
+    peers: &mut AcpRecipients,
     kind: TransferKind,
 ) -> FixtureResult {
     fixture.create().await?;
-    let follow =
-        FollowMembership::arrange(fixture, recipients::session(second.host()?).await?).await?;
+    let target = peers.arm_second(second).await?;
+    let follow = FollowMembership::arrange(fixture, target).await?;
     settled_view(fixture.host()?, &fixture.project).await?;
     controls::hold_selected(
         fixture,
@@ -76,10 +75,7 @@ async fn prove_transfer(
     let copied = controls::copy_ack(fixture).await?;
     transfer_unallocated_range(fixture, second, kind, &range, copied).await?;
     peers.start_second(second, 1).await?;
-    let recipient_line = peers
-        .second()?
-        .expect_text_with_timeout("router://", BOUND)
-        .await?;
+    let recipient_line = peers.second()?.expect_text("router://").await?;
     let stopped = second.stop_for_readback().await?;
     let original = only_item(readbacks::deliveries(
         readbacks::handoffs(&stopped, &fixture.project, 2).await?,
@@ -109,7 +105,7 @@ async fn prove_transfer(
     );
     follow.assert_frozen(&inherited, &range)?;
     readbacks::assert_no_wake(&stopped).await?;
-    assert_eq!(peers.second()?.count_after_barrier().await?, 1);
+    assert_eq!(peers.second()?.count()?, 1);
     Ok(())
 }
 

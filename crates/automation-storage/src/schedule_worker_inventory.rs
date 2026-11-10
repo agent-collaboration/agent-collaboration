@@ -26,4 +26,26 @@ impl AutomationStore {
             .map(|id| id.try_into().map_err(|_| StorageError::InvalidRecord))
             .collect()
     }
+    /// The scheduler's next due time strictly after `now_ms`, read with the same rules
+    /// its steps act on: an enabled schedule's next occurrence; an executing or uncertain
+    /// Run's execution deadline; a running summary's deadline unless it is already
+    /// stopping. A deadline at or before `now_ms` has been acted on, or waits for its
+    /// next cause, so it never arms the timer again.
+    pub async fn scheduler_next_due_at_ms(
+        &mut self,
+        now_ms: i64,
+    ) -> Result<Option<i64>, StorageError> {
+        Ok(sqlx::query_scalar(
+            "SELECT MIN(due) FROM (
+                SELECT t.next_due_at_ms AS due FROM schedule_definitions s JOIN schedule_timing_state t ON t.schedule_id=s.schedule_id WHERE s.enabled=1 AND t.next_due_at_ms>?
+                UNION ALL SELECT execution_deadline_at_ms FROM workflow_runs WHERE run_status IN ('executing','uncertain') AND execution_deadline_at_ms>?
+                UNION ALL SELECT json_extract(summary_attempt_json,'$.deadlineAtMs') FROM workflow_runs WHERE run_status='summaryRunning' AND json_extract(summary_attempt_json,'$.phase')<>'stopping' AND json_extract(summary_attempt_json,'$.deadlineAtMs')>?
+            )",
+        )
+        .bind(now_ms)
+        .bind(now_ms)
+        .bind(now_ms)
+        .fetch_one(&mut self.connection)
+        .await?)
+    }
 }

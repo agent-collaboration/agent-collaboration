@@ -268,6 +268,124 @@ async fn independently_stale_settlement_attempts_have_one_durable_winner() {
 }
 
 #[tokio::test]
+async fn a_durable_settlement_arms_retention_before_its_cache_is_published() {
+    let directory = tempfile::tempdir().expect("durable history due fixture");
+    let store = Arc::new(
+        InteractionHistoryStore::load(directory.path().join("interaction.sqlite"))
+            .await
+            .expect("history owner"),
+    );
+    let request_id = "00000000-0000-7000-8000-000000000001";
+    let created_at = "2001-01-01T00:00:00Z".parse().expect("fixed creation");
+    let approver = Identity::Session {
+        session: session_ref("approver"),
+    };
+    let pending = InteractionHistoryRecord::Question {
+        requester: session_ref("requester"),
+        approver: approver.clone(),
+        request: question(request_id),
+        state: QuestionHistoryState::Pending,
+    };
+    store
+        .mutate_history(|data| {
+            let mut next = data.clone();
+            next.insert_with_timestamp(request_id.to_owned(), pending, created_at);
+            Ok((next, ()))
+        })
+        .await
+        .expect("acknowledged pending question");
+    let (committed, observed_commit) = tokio::sync::oneshot::channel();
+    let (_resume, resume) = tokio::sync::oneshot::channel();
+    *store.cache_publication_pause.lock().await = Some(CachePublicationPause { committed, resume });
+    let task_store = store.clone();
+    let mutation = tokio::spawn(async move {
+        task_store
+            .respond_question(request_id, &approver, &QuestionResponse::Declined)
+            .await
+    });
+    observed_commit.await.expect("settlement durably committed");
+    let mut independent = observer(directory.path()).await;
+    let (record_json, stored_creation): (String, String) = sqlx::query_as(
+        "SELECT record_json, created_at FROM typed_interaction_history WHERE request_id = ?",
+    )
+    .bind(request_id)
+    .fetch_one(&mut independent)
+    .await
+    .expect("independent durable settlement read");
+    assert!(matches!(
+        serde_json::from_str::<InteractionHistoryRecord>(&record_json).expect("durable record"),
+        InteractionHistoryRecord::Question {
+            state: QuestionHistoryState::Declined,
+            ..
+        }
+    ));
+    assert_eq!(stored_creation, "2001-01-01T00:00:00.000000000Z");
+    mutation.abort();
+    assert!(mutation.await.expect_err("caller cancelled").is_cancelled());
+    assert!(matches!(
+        store.interaction(request_id).await,
+        Some(InteractionHistoryRecord::Question {
+            state: QuestionHistoryState::Pending,
+            ..
+        })
+    ));
+
+    let due = store
+        .prune_due("2001-02-01T00:00:00Z".parse().expect("fixed read time"))
+        .await
+        .expect("durable retention inventory");
+    assert_eq!(
+        due,
+        Some(
+            "2001-03-01T00:00:00.001Z"
+                .parse()
+                .expect("literal due time")
+        )
+    );
+    assert!(matches!(
+        store.interaction(request_id).await,
+        Some(InteractionHistoryRecord::Question {
+            state: QuestionHistoryState::Pending,
+            ..
+        })
+    ));
+}
+
+#[tokio::test]
+async fn a_history_due_read_reports_storage_failure_without_changing_acknowledged_cache() {
+    let directory = tempfile::tempdir().expect("history due read failure");
+    let store = InteractionHistoryStore::load(directory.path().join("interaction.sqlite"))
+        .await
+        .expect("history owner");
+    let request_id = "00000000-0000-7000-8000-000000000002";
+    let record = refused_approval(request_id);
+    store
+        .mutate_history(|data| {
+            let mut next = data.clone();
+            next.insert_with_timestamp(
+                request_id.to_owned(),
+                record.clone(),
+                "2001-01-01T00:00:00Z".parse().expect("fixed creation"),
+            );
+            Ok((next, ()))
+        })
+        .await
+        .expect("acknowledged record");
+    let mut independent = native_observer(directory.path()).await;
+    sqlx::query("ALTER TABLE typed_interaction_history RENAME TO unavailable_typed_history")
+        .execute(&mut independent)
+        .await
+        .expect("real inventory read failure");
+
+    let due = store
+        .prune_due("2001-02-01T00:00:00Z".parse().expect("fixed read time"))
+        .await;
+
+    assert!(matches!(due, Err(InteractionHistoryError::Unavailable)));
+    assert_eq!(store.interaction(request_id).await, Some(record));
+}
+
+#[tokio::test]
 async fn aborted_commit_before_cache_publication_recovers_on_same_store_next_mutation() {
     let directory = tempfile::tempdir().expect("commit/cache fixture");
     let source = directory.path().join("interaction.sqlite");

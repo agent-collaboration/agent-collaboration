@@ -33,7 +33,10 @@ pub struct SubscriptionFixture {
 impl SubscriptionFixture {
     pub async fn empty() -> Result<Self, TestError> {
         let directory = tempfile::tempdir()?;
-        let registry = crate::test_project_runtime::registry(directory.path())?;
+        let clock = Arc::new(router_clock::ManualClock::new(
+            "2026-10-19T18:00:00Z".parse()?,
+        ));
+        let registry = crate::test_project_runtime::registry(directory.path(), clock.clone())?;
         let origin = ActorOrigin {
             installation: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
             machine: MachineLabel::try_from("subscription proof".to_owned())?,
@@ -41,6 +44,7 @@ impl SubscriptionFixture {
         let (requests, fleet_runtime) =
             board_central_test_support::machine_session(directory.path(), &origin).await?;
         let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
+            clock: clock.clone(),
             registry: registry.clone(),
             fleet: Arc::new(FleetClient::new(
                 &message_board_storage::FleetStore::open(
@@ -61,7 +65,8 @@ impl SubscriptionFixture {
             "00000000-0000-4000-8000-000000000001",
             "00000000-0000-4000-8000-000000000002",
         )?
-        .with_project_admission(admission.clone()))
+        .with_project_admission(admission.clone())
+        .with_runtime_clock(clock.clone()))
         .build();
         let workspace = WorkspaceId::generate();
         let board = BoardId::generate();
@@ -97,13 +102,17 @@ impl SubscriptionFixture {
                 .clone(),
         );
         let request = serde_json::from_value(request)?;
-        crate::test_project_runtime::prepare_registered_creation(&admission, &request).await?;
+        crate::test_project_runtime::prepare_registered_creation(
+            &admission,
+            &request,
+            clock.as_ref(),
+        )
+        .await?;
         assert_accepted(&admission.create_project(&request).await?);
         let interactions =
             Arc::new(InteractionStore::open(directory.path().join("progress.sqlite")).await?);
         let windows = admission.subscription_window_store(interactions.clone());
-        let now = DateTime::from_timestamp_millis(Utc::now().timestamp_millis())
-            .ok_or("time outside bound")?;
+        let now = router_clock::RuntimeClock::utc_now(clock.as_ref());
         let discussion_subject =
             crate::test_subject_workstream::create(&registry, &project).await?;
         let fixture = Self {

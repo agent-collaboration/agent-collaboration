@@ -2,7 +2,6 @@
 use super::*;
 use durable_steps::OperationFailure;
 use fleet_sync_protocol::RecipientOutcome;
-use std::sync::atomic::Ordering;
 
 #[tokio::test]
 async fn interrupted_sdk_dispatch_reopens_as_uncertain_without_repeating_the_native_call() {
@@ -43,7 +42,8 @@ async fn interrupted_sdk_dispatch_reopens_as_uncertain_without_repeating_the_nat
         .fixture
         .host
         .clock
-        .fetch_add(1_000_000, Ordering::SeqCst);
+        .advance(std::time::Duration::from_millis(1_000_000))
+        .unwrap();
     let engine = runtime.fixture.engine();
     let recovered = tokio::time::timeout(std::time::Duration::from_secs(10), engine.drive_due())
         .await

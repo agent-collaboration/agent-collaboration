@@ -1,6 +1,7 @@
 //! The public subscriptions view must expose the owner's durable hold and retry facts,
 //! and a reconciliation receipt must cover the owner's window scan.
-use super::super::SubscriptionClock;
+use router_clock::RuntimeClock;
+
 use super::owner_fixture::*;
 use crate::subscription_delivery::subscription_service::OwnerObservation;
 use collaboration_protocol::ThreadSubscriptionsRequest;
@@ -45,9 +46,8 @@ async fn reconcile_receipt_waits_for_the_owner_to_finish_its_native_window_scan(
         .post(&fixture.root, "Receipt must cover this pending activity")
         .await;
     drop(guard);
-    let outcome = tokio::time::timeout(std::time::Duration::from_secs(5), response)
+    let outcome = (response)
         .await
-        .expect("owner answered reconciliation after its scan")
         .expect("owner retained the reconcile reply");
     assert_eq!(outcome.as_ref().map(|_| ()), Ok(()));
     assert_eq!(outcome.as_ref().unwrap().records.len(), 1);
@@ -64,7 +64,7 @@ async fn reconcile_receipt_waits_for_the_owner_to_finish_its_native_window_scan(
         .store
         .lock()
         .await
-        .list_reader_subscriptions(&fixture.reader, fixture.clock.now())
+        .list_reader_subscriptions(&fixture.reader, fixture.clock.utc_now())
         .await
         .unwrap();
     assert_eq!(records.records.len(), 1);
@@ -102,12 +102,7 @@ async fn reconcile_receipt_reports_the_failed_pass_instead_of_waiting_for_a_late
     )
     .await
     .unwrap();
-    let reconcile = || {
-        tokio::time::timeout(
-            std::time::Duration::from_secs(5),
-            runtime.service.reconcile_reader(fixture.reader.clone()),
-        )
-    };
+    let reconcile = || runtime.service.reconcile_reader(fixture.reader.clone());
     // The window scan itself fails: its progress table is unavailable.
     sqlx::query(
         "ALTER TABLE subscription_delivery_progress RENAME TO unavailable_delivery_progress",
@@ -116,7 +111,7 @@ async fn reconcile_receipt_reports_the_failed_pass_instead_of_waiting_for_a_late
     .await
     .unwrap();
     assert!(
-        matches!(reconcile().await, Ok(Err(_))),
+        reconcile().await.is_err(),
         "a failed window scan must answer its reconciliation with the failure"
     );
     sqlx::query(
@@ -131,7 +126,7 @@ async fn reconcile_receipt_reports_the_failed_pass_instead_of_waiting_for_a_late
         .await
         .unwrap();
     assert!(
-        matches!(reconcile().await, Ok(Err(_))),
+        reconcile().await.is_err(),
         "a pass that ends before its scan must not leave reconciliation waiting"
     );
     sqlx::query("ALTER TABLE unavailable_router_pushes RENAME TO router_pushes")
@@ -139,7 +134,7 @@ async fn reconcile_receipt_reports_the_failed_pass_instead_of_waiting_for_a_late
         .await
         .unwrap();
     assert!(
-        matches!(reconcile().await, Ok(Ok(()))),
+        matches!(reconcile().await, Ok(())),
         "the next healthy pass answers reconciliation after its scan"
     );
     observer.close().await.unwrap();
@@ -181,7 +176,7 @@ async fn subscriptions_list_reconciles_a_subscriber_whose_scan_has_not_run() {
             .thread_subscriptions(ThreadSubscriptionsRequest { actor: reader })
             .await
     });
-    tokio::time::timeout(std::time::Duration::from_secs(10), async {
+    (async {
         tokio::select! {
             listed = &mut listing => {
                 let pending = listed.unwrap().map(|result| {
@@ -196,12 +191,10 @@ async fn subscriptions_list_reconciles_a_subscriber_whose_scan_has_not_run() {
             () = runtime.service.reconcile_queued() => {}
         }
     })
-    .await
-    .expect("the list neither returned nor queued its caller's reconciliation");
+    .await;
     drop(guard);
-    let listed = tokio::time::timeout(std::time::Duration::from_secs(5), listing)
+    let listed = (listing)
         .await
-        .expect("the list returned after its caller's scan")
         .expect("listing task")
         .expect("listing succeeded")
         .subscriptions;

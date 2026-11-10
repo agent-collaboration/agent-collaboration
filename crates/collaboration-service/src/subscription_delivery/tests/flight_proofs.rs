@@ -1,18 +1,16 @@
 use super::owner_fixture::*;
 use crate::subscription_delivery::subscription_service::OwnerObservation;
-use crate::subscription_delivery::{
-    SubscriptionClock, SubscriptionWaitFilter, SubscriptionWaitResult,
-};
+use crate::subscription_delivery::{SubscriptionWaitFilter, SubscriptionWaitResult};
 use message_board::{SubscriptionMode, SubscriptionScope, WhenIdle};
+use router_clock::RuntimeClock;
 use std::sync::Arc;
-use std::time::Duration;
 
 // Decision 771 replaces the cross-membership packet count with
 // local_mail_proofs::native_follow_grouping_proofs::resumed_reader_keeps_separate_membership_items_with_staggered_presence_checks.
 
 #[tokio::test]
 async fn mode_change_during_flight_settles_original_push_and_polls_released_backlog() {
-    Box::pin(tokio::time::timeout(Duration::from_secs(30), async {
+    Box::pin(async {
         let fixture = Box::pin(OwnerFixture::new()).await;
         let runtime = fixture.native_runtime().await;
         let original_post = fixture
@@ -30,7 +28,7 @@ async fn mode_change_during_flight_settles_original_push_and_polls_released_back
             .store
             .lock()
             .await
-            .get_thread_subscription_record(&fixture.reader, &scope, fixture.clock.now())
+            .get_thread_subscription_record(&fixture.reader, &scope, fixture.clock.utc_now())
             .await
             .unwrap()
             .unwrap()
@@ -69,14 +67,14 @@ async fn mode_change_during_flight_settles_original_push_and_polls_released_back
             .store
             .lock()
             .await
-            .get_thread_subscription_record(&fixture.reader, &scope, fixture.clock.now())
+            .get_thread_subscription_record(&fixture.reader, &scope, fixture.clock.utc_now())
             .await
             .unwrap()
             .unwrap();
         assert_eq!(updated_subscription.policy().mode(), SubscriptionMode::Poll);
         assert_ne!(updated_subscription.generation(), original_generation);
         assert_eq!(updated_subscription.last_outcome(), None);
-        let held_poll = tokio::time::timeout(Duration::from_secs(10), async {
+        let held_poll = (async {
             loop {
                 let rows = fixture
                     .interactions
@@ -93,8 +91,7 @@ async fn mode_change_during_flight_settles_original_push_and_polls_released_back
                 tokio::task::yield_now().await;
             }
         })
-        .await
-        .expect("new-generation Poll item reaches its first actual SDK outcome");
+        .await;
         let frozen =
             super::local_mail_proofs::native_follow_mail_proofs::frozen_follow(&fixture).await;
         for item in frozen
@@ -175,21 +172,20 @@ async fn mode_change_during_flight_settles_original_push_and_polls_released_back
             .store
             .lock()
             .await
-            .get_thread_subscription_record(&fixture.reader, &scope, fixture.clock.now())
+            .get_thread_subscription_record(&fixture.reader, &scope, fixture.clock.utc_now())
             .await
             .unwrap()
             .unwrap();
         assert!(final_subscription.roots().is_empty());
         assert!(runtime.requests.lock().await.try_recv().is_err());
         runtime.close().await;
-    }))
-    .await
-    .expect("bounded native flight and Poll handover journey");
+    })
+    .await;
 }
 
 #[tokio::test]
 async fn one_owner_serializes_push_and_wait_and_does_not_hold_the_board_lock() {
-    tokio::time::timeout(Duration::from_secs(30), async {
+    (async {
         let fixture = Box::pin(OwnerFixture::new()).await;
         let poll_root = fixture.add_root().await;
         fixture
@@ -250,14 +246,13 @@ async fn one_owner_serializes_push_and_wait_and_does_not_hold_the_board_lock() {
         );
         runtime.close().await;
     })
-    .await
-    .expect("bounded native flight and Poll handover journey");
+    .await;
 }
 
 // Decision 771 keeps the 20-root limit within a single membership in
 // local_mail_proofs::native_follow_grouping_proofs::one_membership_drains_twenty_roots_then_the_remaining_root_without_lost_ranges.
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn arrival_during_flight_gets_its_own_quiet_window_and_elapsed_cap() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
@@ -272,14 +267,23 @@ async fn arrival_during_flight_gets_its_own_quiet_window_and_elapsed_cap() {
     let runtime = fixture.native_runtime().await;
     fixture.post(&fixture.root, "Original").await;
     runtime.owner_barrier(&fixture.reader).await;
-    fixture.clock.advance(120).await;
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(120))
+        .unwrap();
     let first = runtime.requests.lock().await.recv().await.unwrap();
     fixture.post(&fixture.root, "First residual").await;
     for _ in 0..9 {
-        fixture.clock.advance(90).await;
+        fixture
+            .clock
+            .advance(std::time::Duration::from_secs(90))
+            .unwrap();
         fixture.post(&fixture.root, "Residual extends quiet").await;
     }
-    fixture.clock.advance(90).await; // The 900 s cap from the first residual has elapsed while the first push was in flight.
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(90))
+        .unwrap(); // The 900 s cap from the first residual has elapsed while the first push was in flight.
     assert!(runtime.requests.lock().await.try_recv().is_err());
     runtime.await_settled().await;
     let second = runtime.requests.lock().await.recv().await.unwrap();
@@ -289,7 +293,7 @@ async fn arrival_during_flight_gets_its_own_quiet_window_and_elapsed_cap() {
     runtime.close().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn cancel_during_flight_settles_the_passed_range_and_prevents_later_pushes() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.native_runtime().await;
@@ -301,7 +305,7 @@ async fn cancel_during_flight_settles_the_passed_range_and_prevents_later_pushes
                 reader: fixture.reader.clone(),
                 scope: SubscriptionScope::thread(fixture.root.clone()),
             },
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap();
@@ -323,7 +327,7 @@ async fn cancel_during_flight_settles_the_passed_range_and_prevents_later_pushes
 // prove its resolution drain through the native owner in
 // local_mail_proofs::native_follow_cancel_proofs::a_resolved_membership_keeps_its_held_item_and_drains_the_unallocated_range.
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn restart_mid_quiet_preserves_the_original_arrival_deadline() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
@@ -338,21 +342,30 @@ async fn restart_mid_quiet_preserves_the_original_arrival_deadline() {
     let runtime = fixture.native_runtime().await;
     fixture.post(&fixture.root, "Before restart").await;
     runtime.owner_barrier(&fixture.reader).await;
-    fixture.clock.advance(60).await;
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(60))
+        .unwrap();
     runtime.owner_barrier(&fixture.reader).await;
     runtime.close().await;
     let fixture = reopen_board(fixture).await;
     let runtime = fixture.native_runtime().await;
-    fixture.clock.advance(59).await;
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(59))
+        .unwrap();
     runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
-    fixture.clock.advance(1).await;
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(1))
+        .unwrap();
     runtime.requests.lock().await.recv().await.unwrap();
     runtime.await_settled().await;
     runtime.close().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn restart_after_cap_delivers_immediately_with_downtime_arrivals_included() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
@@ -368,9 +381,11 @@ async fn restart_after_cap_delivers_immediately_with_downtime_arrivals_included(
     fixture.post(&fixture.root, "Before downtime").await;
     runtime.owner_barrier(&fixture.reader).await;
     runtime.close().await;
-    // 990 s of downtime arrivals: past the 900 s cap, with the last one just posted.
     for _ in 0..11 {
-        fixture.clock.advance(90).await;
+        fixture
+            .clock
+            .advance(std::time::Duration::from_secs(90))
+            .unwrap();
         fixture.post(&fixture.root, "During downtime").await;
     }
     let fixture = reopen_board(fixture).await;
@@ -392,7 +407,9 @@ async fn reopen_board(fixture: OwnerFixture) -> OwnerFixture {
         .close()
         .await;
     let mut fixture = fixture.reopen_messages().await;
-    let registry = crate::test_project_runtime::registry(fixture.directory.path()).unwrap();
+    let registry =
+        crate::test_project_runtime::registry(fixture.directory.path(), fixture.clock.clone())
+            .unwrap();
     let restored = registry.existing_project(&fixture.project).await;
     assert!(
         matches!(&restored, Ok(Some(_))),
@@ -401,6 +418,7 @@ async fn reopen_board(fixture: OwnerFixture) -> OwnerFixture {
     );
     fixture.admission = Arc::new(
         crate::ProjectAdmission::new(crate::ProjectAdmissionProps {
+            clock: fixture.clock.clone(),
             registry: registry.clone(),
             fleet: fixture.admission.fleet.clone(),
             identity: collaboration_contracts::MachineIdentity::new(

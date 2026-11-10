@@ -18,13 +18,11 @@ use fleet_sync_protocol::{
 };
 use fleet_sync_tokio_runner::{CallEnvelope, CallRouter, TokioHost, TokioRunner};
 use interaction_storage::{InteractionAtomicStore, mark_mail_push_attempted_in_scope};
+use router_clock::{ManualClock, RuntimeClock};
 use runtime_primitives::{Clock, SyncTime, WakeScheduler};
 use serde_json::Value;
 use std::{
-    sync::{
-        Arc, OnceLock, Weak,
-        atomic::{AtomicI64, Ordering},
-    },
+    sync::{Arc, OnceLock, Weak},
     time::Duration,
 };
 use tokio::sync::watch;
@@ -42,20 +40,20 @@ type RunnerTask = DeliverLocally<
 
 const BOUNDARY_DEADLINE: Duration = Duration::from_secs(10);
 
-struct RunnerClock(Arc<AtomicI64>);
+struct RunnerClock(Arc<ManualClock>);
 impl Clock for RunnerClock {
     fn now(&self) -> SyncTime {
-        SyncTime::from_unix_millis(self.0.load(Ordering::SeqCst))
+        self.0.now()
     }
 }
 
 struct RunnerConsumer {
     carrier: Arc<MailPushDelivery>,
-    clock: Arc<AtomicI64>,
+    clock: Arc<ManualClock>,
 }
 impl RunnerConsumer {
     fn now(&self) -> chrono::DateTime<chrono::Utc> {
-        chrono::DateTime::from_timestamp_millis(self.clock.load(Ordering::SeqCst)).unwrap()
+        self.clock.utc_now()
     }
 }
 impl DeliveryConsumer<TursoScope<'_, RunnerHost>> for RunnerConsumer {

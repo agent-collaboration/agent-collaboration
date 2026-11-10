@@ -5,7 +5,7 @@ use agent_automation::{
     ProviderSettlementEffect, RouteEffectEvidence, SubmissionEffect,
 };
 use serde::{Serialize, de::DeserializeOwned};
-use sqlx::{Connection, Row};
+use sqlx::Row;
 pub struct DeliveryPreparation<TTarget, TGeneration> {
     pub delivery_id: DeliveryId,
     pub attempt_id: AttemptId,
@@ -19,7 +19,9 @@ impl AutomationStore {
         &mut self,
         request: DeliveryPreparation<TTarget, TGeneration>,
     ) -> Result<bool, StorageError> {
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         let row=sqlx::query("SELECT latest_attempt_json FROM mailbox_deliveries WHERE delivery_id=? AND delivery_status='dispatching'").bind(request.delivery_id.as_str()).fetch_optional(&mut *transaction).await?;
         let Some(row) = row else {
             transaction.commit().await?;

@@ -3,9 +3,9 @@ use message_board::{
     BoardError, ProjectId, SubscriptionBatch, SubscriptionMode, SubscriptionScope, ThreadId,
     ThreadRef,
 };
+use router_clock::ClockInstant;
 use std::{collections::HashSet, sync::Arc};
 use tokio::sync::{Mutex, oneshot};
-use tokio::time::Instant;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum SubscriptionWaitFilter {
@@ -110,7 +110,7 @@ impl SubscriptionWaitFilter {
 
 pub(super) struct PollWaiter {
     pub filter: SubscriptionWaitFilter,
-    pub deadline: Instant,
+    pub deadline: ClockInstant,
     pub maximum_root_notice_bytes: usize,
     pub reply: oneshot::Sender<Result<Option<SubscriptionWaitResult>, BoardError>>,
     // Only immutable frozen-filter misses survive a rescan. Temporary gate

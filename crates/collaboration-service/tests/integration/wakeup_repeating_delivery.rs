@@ -10,7 +10,8 @@ use collaboration_protocol::{
     UuidIdentity,
 };
 use collaboration_runtime::CodexAppServerDeliveryRoute;
-use collaboration_service::{ApplicationFixture, SubscriptionClock};
+use collaboration_service::ApplicationFixture;
+use router_clock::{ManualClock, RuntimeClock};
 
 use collaboration_runtime::NativeControlBackend;
 use collaboration_runtime::NativeGenerationGate;
@@ -23,10 +24,7 @@ use sqlx::Connection as _;
 use std::{
     collections::{BTreeMap, HashSet},
     error::Error,
-    sync::{
-        Arc,
-        atomic::{AtomicI64, Ordering},
-    },
+    sync::Arc,
     time::Duration,
 };
 use tokio::sync::mpsc;
@@ -47,43 +45,35 @@ struct NativeQueueObservation {
     observed_at_ms: i64,
 }
 
-struct ManualWakeClock(AtomicI64);
-
-impl ManualWakeClock {
-    fn set(&self, now_ms: i64) {
-        self.0.store(now_ms, Ordering::SeqCst);
-    }
-}
-
-impl SubscriptionClock for ManualWakeClock {
-    #[expect(
-        clippy::expect_used,
-        reason = "Fail invalid timestamps in the controlled test clock rather than substitute time."
-    )]
-    fn now(&self) -> chrono::DateTime<chrono::Utc> {
-        chrono::DateTime::from_timestamp_millis(self.0.load(Ordering::SeqCst))
-            .expect("controlled wake timestamp is valid")
-    }
-    fn monotonic_now(&self) -> tokio::time::Instant {
-        tokio::time::Instant::now()
-    }
-}
-
-async fn advance_wake_clock(clock: &ManualWakeClock, now_ms: i64) {
-    tokio::time::pause();
-    clock.set(now_ms);
-    tokio::time::advance(Duration::from_millis(250)).await;
-    // Real socket/database work keeps its causal waits on elapsed time rather
-    // than allowing paused-time auto-advance to consume its I/O deadlines.
-    tokio::time::resume();
+/// Waits until the wake worker is asleep with no task running and its one timer armed
+/// for `due_ms`: nothing else is pending, so only that timer can fire the next delivery.
+/// The nextest profile supplies the outer hang bound.
+async fn asleep_with_timer_armed_for(
+    observation: &collaboration_runtime::WorkerObservation,
+    due_ms: i64,
+) {
+    (async {
+        loop {
+            let snapshot = observation.snapshot();
+            if snapshot.asleep
+                && snapshot.tasks_running == 0
+                && snapshot
+                    .armed_deadline
+                    .map(runtime_primitives::SyncTime::unix_millis)
+                    == Some(due_ms)
+            {
+                return;
+            }
+            observation.asleep_at_least(snapshot.sleeps + 1).await;
+        }
+    })
+    .await;
 }
 
 #[tokio::test]
 async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
-    let initial_time = chrono::Utc::now();
-    let clock = Arc::new(ManualWakeClock(AtomicI64::new(
-        initial_time.timestamp_millis(),
-    )));
+    let initial_time: chrono::DateTime<chrono::Utc> = "2026-11-04T00:00:00Z".parse().unwrap();
+    let clock = Arc::new(ManualClock::new(initial_time));
     let root = tempfile::tempdir_in("/tmp").expect("fixture temp directory");
     let database = root.path().join("automation.sqlite");
     let store = Arc::new(tokio::sync::Mutex::new(
@@ -141,7 +131,7 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
             .expect("validate native schemas"),
     );
     let endpoint_observed_at = clock
-        .now()
+        .utc_now()
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let description: EndpointDescription = serde_json::from_value(json!({
         "endpoint": target.endpoint,
@@ -209,11 +199,12 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         .with_endpoints(vec![description])
         .expect("add native endpoint")
         .with_automation_store(Arc::clone(&store))
-        .with_subscription_clock(clock.clone())
+        .with_runtime_clock(clock.clone())
         .with_interaction_store(Arc::clone(&interactions))
         .with_native_backend(native_backend.clone())
         .expect("add native backend");
     let route: Arc<dyn SessionDeliveryRoute> = Arc::new(CodexAppServerDeliveryRoute::new(
+        clock.clone(),
         service_identity,
         identity.endpoint_directory(),
         native_backend,
@@ -235,23 +226,26 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         .wake_timing_worker()
         .expect("wake timing worker is available");
     let mut completions = wake_worker.observe_accepted_deliveries();
+    let wake_observation = wake_worker.observation();
     let handoff_worker = tokio::spawn(
         identity
             .push_handoff_worker()
             .expect("push handoff worker is available")
-            .run(shutdown.clone()),
+            .run(clock.clone(), shutdown.clone()),
     );
     let worker = tokio::spawn(wake_worker.run(shutdown.clone()));
     drop(identity);
 
     let first_due_ms = anchor.timestamp_millis() + i64::from(REPEAT_INTERVAL_SECONDS) * 1000;
-    advance_wake_clock(&clock, first_due_ms).await;
+    asleep_with_timer_armed_for(&wake_observation, first_due_ms).await;
+    clock
+        .advance_to(runtime_primitives::SyncTime::from_unix_millis(first_due_ms))
+        .unwrap();
     let first_delivery = next_native_queue_delivery(&mut observation_receiver)
         .await
         .expect("first native queue delivery arrives");
-    let first_completion = tokio::time::timeout(Duration::from_secs(2), completions.recv())
+    let first_completion = (completions.recv())
         .await
-        .expect("first delivery acceptance commits")
         .expect("wake worker retains its completion sender");
     let next_due_at_ms = store
         .lock()
@@ -265,11 +259,16 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
         Some(first_due_ms + MINIMUM_REPEAT_GAP_MILLIS),
         "the stored next wake must be scheduled exactly 300 logical seconds after the first"
     );
-    advance_wake_clock(&clock, first_due_ms + 300_000).await;
+    asleep_with_timer_armed_for(&wake_observation, first_due_ms + 300_000).await;
+    clock
+        .advance_to(runtime_primitives::SyncTime::from_unix_millis(
+            first_due_ms + 300_000,
+        ))
+        .unwrap();
     let second_delivery = next_native_queue_delivery(&mut observation_receiver)
         .await
         .expect("second native queue delivery arrives");
-    tokio::time::timeout(Duration::from_secs(2), async {
+    (async {
         loop {
             let completed = completions
                 .recv()
@@ -280,15 +279,13 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
             }
         }
     })
-    .await
-    .expect("second delivery acceptance commits");
+    .await;
     assert!(
         second_delivery.observed_at_ms - first_delivery.observed_at_ms >= MINIMUM_REPEAT_GAP_MILLIS,
         "recurring wake gap must be at least 300 logical seconds"
     );
-    tokio::time::timeout(Duration::from_secs(2), native_server)
+    (native_server)
         .await
-        .expect("native server exits")
         .expect("native server task succeeds")
         .expect("native server handles both deliveries");
 
@@ -365,14 +362,8 @@ async fn recurring_wake_stores_and_dispatches_two_distinct_pushes() {
     connection.close().await.expect("close mailbox database");
 
     shutdown.cancel();
-    tokio::time::timeout(Duration::from_secs(2), worker)
-        .await
-        .expect("wake worker shuts down")
-        .expect("wake worker task succeeds");
-    tokio::time::timeout(Duration::from_secs(2), handoff_worker)
-        .await
-        .expect("push handoff worker shuts down")
-        .expect("push handoff task succeeds");
+    (worker).await.expect("wake worker task succeeds");
+    (handoff_worker).await.expect("push handoff task succeeds");
     Arc::try_unwrap(interactions)
         .unwrap_or_else(|_| panic!("wake interaction owner remained shared after shutdown"))
         .close()
@@ -456,7 +447,7 @@ async fn serve_two_queue_deliveries(
     listener: tokio::net::UnixListener,
     expected_thread_id: String,
     observations: mpsc::Sender<NativeQueueObservation>,
-    clock: Arc<dyn SubscriptionClock>,
+    clock: Arc<dyn router_clock::RuntimeClock>,
 ) -> TestResult<()> {
     for delivery_number in 1..=2 {
         let (stream, _) = tokio::time::timeout(
@@ -519,7 +510,7 @@ async fn serve_two_queue_deliveries(
             .send(NativeQueueObservation {
                 client_user_message_id,
                 prompt_text,
-                observed_at_ms: clock.now().timestamp_millis(),
+                observed_at_ms: clock.utc_now().timestamp_millis(),
             })
             .await
             .map_err(|_| "test stopped reading native queue observations")?;

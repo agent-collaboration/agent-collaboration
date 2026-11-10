@@ -1,7 +1,7 @@
 //! Retained prior attempts merge with a pinned latest attempt; owner evidence outlives events.
 use crate::{AutomationStore, StorageError};
 use agent_automation::{AttemptId, DeliveryId, RunId, RunPhase};
-use sqlx::{Connection, Row, SqliteConnection};
+use sqlx::{Row, SqliteConnection};
 
 pub enum AttemptCollection {
     Delivery(DeliveryId),
@@ -73,7 +73,9 @@ impl AutomationStore {
                 StorageError::RunNotFound,
             ),
         };
-        let mut transaction = self.connection.begin().await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Deferred)
+            .await?;
         let owner = sqlx::query(sql)
             .bind(id)
             .fetch_optional(&mut *transaction)

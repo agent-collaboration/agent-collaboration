@@ -116,3 +116,62 @@ async fn cursor_key_is_stable_and_signed_payloads_refuse_tampering() -> TestResu
     reopened_store.close().await;
     Ok(())
 }
+
+fn commit_bumped(commits: &mut tokio::sync::watch::Receiver<u64>) -> bool {
+    let changed = commits.has_changed().unwrap_or(false);
+    commits.borrow_and_update();
+    changed
+}
+
+/// Q2 at the Fleet store: an enqueue and a decision signal; a replayed enqueue, reads,
+/// a refused conflicting enqueue and an empty prune don't.
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Assertions must fail this test while fixture errors propagate through Result."
+)]
+#[tokio::test]
+async fn fleet_writes_signal_their_commit_and_reads_do_not() -> TestResult {
+    let directory = tempfile::tempdir()?;
+    let store = crate::FleetStore::open(&directory.path().join("fleet.sqlite")).await?;
+    let outbox = store.outbox();
+    let mut commits = outbox.subscribe_commits();
+    let original = request(WorkspaceId::generate())?;
+
+    outbox.enqueue(&original).await?;
+    let enqueue_bumped = commit_bumped(&mut commits);
+    outbox.enqueue(&original).await?;
+    outbox.pending().await?;
+    outbox.request(&original.request_id).await?;
+    let mut conflicting = original.clone();
+    conflicting.operation = FleetOperation::WorkspaceCreate {
+        name: ResourceName::try_from("different".to_owned())?,
+        description: Description::try_from("local stores".to_owned())?,
+    };
+    let refused = outbox.enqueue(&conflicting).await;
+    let pruned = outbox.prune_expired(0, 16).await?;
+    let quiet_bumped = commit_bumped(&mut commits);
+    outbox
+        .mark_decided(
+            &original.request_id,
+            &RequestDecision::Rejected {
+                reasons: vec![Refusal::Archived],
+            },
+            1_000,
+        )
+        .await?;
+    let decision_bumped = commit_bumped(&mut commits);
+
+    assert!(enqueue_bumped, "a committed enqueue must signal");
+    assert!(matches!(
+        refused,
+        Err(RouterLocalStorageError::ConflictingRequest)
+    ));
+    assert_eq!(pruned, 0);
+    assert!(
+        !quiet_bumped,
+        "replay, reads, a refusal and an empty prune must not signal"
+    );
+    assert!(decision_bumped, "a committed decision must signal");
+    store.close().await;
+    Ok(())
+}

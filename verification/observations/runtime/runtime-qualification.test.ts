@@ -7,6 +7,7 @@ import { join } from "node:path";
 import {
   qualifyGlobalClaude,
   qualifyNormalBinaries,
+  qualifyWorkerHost,
   resolveGlobalClaude,
 } from "./runtime-qualification.ts";
 
@@ -17,6 +18,96 @@ function executable(directory: string): string {
   chmodSync(path, 0o700);
   return path;
 }
+
+test("the worker proof example is bound to its normal build path, exact signing identity and declared features", (): void => {
+  const root = createFixtureDirectory("worker-host-qualification");
+  try {
+    const directory = join(root, "target/debug/examples");
+    mkdirSync(directory, { recursive: true });
+    const path = join(directory, "provider-only-debug-host");
+    writeFileSync(path, "owned proof Host bytes");
+    const qualification = join(root, "qualification.json");
+    const record = {
+      target: "provider-only-debug-host",
+      path,
+      sha256: createHash("sha256").update("owned proof Host bytes").digest("hex"),
+      testGuardFeatures: ["codex-router-host/runtime-test-support"],
+    };
+    writeFileSync(qualification, JSON.stringify({ binaries: [record] }));
+    const signatureProbe = (): string =>
+      "Identifier=dev.shravansunder.test.provider-only-debug-host\nTeamIdentifier=974QD84WVC\n";
+    assert.deepEqual(
+      qualifyWorkerHost({ qualification, repository: root, signatureProbe }),
+      record,
+    );
+    assert.throws(
+      () =>
+        qualifyWorkerHost({
+          qualification,
+          repository: root,
+          signatureProbe: (): string =>
+            "Identifier=dev.shravansunder.test.provider-only-debug-host-other\nTeamIdentifier=974QD84WVC\n",
+        }),
+      /signing identity mismatch/,
+    );
+    writeFileSync(path, "different bytes");
+    assert.throws(
+      () => qualifyWorkerHost({ qualification, repository: root, signatureProbe }),
+      /path or hash mismatch/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("a Router-only startup qualification still requires its debug team and returns only verified targets", (): void => {
+  const root = createFixtureDirectory("router-only-qualification");
+  try {
+    const path = join(root, "codex-router");
+    writeFileSync(path, "owned Router bytes");
+    const qualification = join(root, "qualification.json");
+    writeFileSync(
+      qualification,
+      JSON.stringify({
+        binaries: [
+          {
+            target: "codex-router",
+            path,
+            sha256: createHash("sha256").update("owned Router bytes").digest("hex"),
+            testGuardFeatures: [],
+          },
+          {
+            target: "agent-sessions",
+            path: "/never-opened",
+            sha256: "0".repeat(64),
+            testGuardFeatures: [],
+          },
+        ],
+      }),
+    );
+    const signature = (): string =>
+      "Identifier=dev.shravansunder.codex-router.debug\nTeamIdentifier=974QD84WVC\n";
+    assert.deepEqual(
+      [...qualifyNormalBinaries(qualification, signature, ["codex-router"]).keys()],
+      ["codex-router"],
+    );
+    assert.throws(
+      () =>
+        qualifyNormalBinaries(
+          qualification,
+          (): string => "Identifier=dev.shravansunder.codex-router.debug\nTeamIdentifier=wrong\n",
+          ["codex-router"],
+        ),
+      /debug signing identity mismatch/,
+    );
+    assert.throws(
+      () => qualifyNormalBinaries(qualification, signature),
+      /qualified binary missing: agent-collaboration/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("global Claude qualification records the canonical executable and exact hash without executing it", (): void => {
   const root = createFixtureDirectory("global-qualification");

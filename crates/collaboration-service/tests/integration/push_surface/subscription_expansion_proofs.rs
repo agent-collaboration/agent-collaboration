@@ -27,10 +27,15 @@ fn header(actor: &Identity) -> Value {
 impl SubscriptionExpansionFixture {
     #[expect(clippy::expect_used, reason = "Fail malformed fixed fixtures.")]
     async fn start() -> Self {
+        let clock = std::sync::Arc::new(router_clock::ManualClock::new(
+            chrono::DateTime::UNIX_EPOCH + chrono::Duration::seconds(1_792_432_800),
+        ));
+
         let directory = tempfile::tempdir().expect("native databases");
-        let registry = crate::native_registry::new_registry(directory.path())
-            .await
-            .expect("fixture enrollment");
+        let registry =
+            crate::native_registry::new_registry_with_clock(directory.path(), clock.clone())
+                .await
+                .expect("fixture enrollment");
         let origin = message_board::ActorOrigin {
             installation: message_board::ServiceId::try_from(SERVICE_ID.to_owned())
                 .expect("fixture service"),
@@ -47,6 +52,7 @@ impl SubscriptionExpansionFixture {
         let fleet = Arc::new(fleet);
         let admission = Arc::new(
             ProjectAdmission::new(ProjectAdmissionProps {
+                clock: clock.clone(),
                 registry: registry.clone(),
                 fleet: fleet.clone(),
                 identity: MachineIdentity::new(

@@ -13,6 +13,7 @@ use collaboration_contracts::RunObservationContext;
 use collaboration_contracts::RunSubmission;
 use collaboration_contracts::ScheduleDestination;
 use collaboration_contracts::ScheduledRunExecution;
+use collaboration_contracts::StopRequestOutcome;
 use collaboration_protocol::PushRecordDraft;
 use collaboration_protocol::{
     CodexGeneration, DeliveryNextAction, DeliveryOutcome, DeliveryReceipt, DeliveryRejection,
@@ -62,6 +63,18 @@ enum SchedulePushPreparation {
     Recover(Box<PushRecord>),
 }
 
+/// What one Run step achieved.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum StepProgress {
+    /// The step did what it could, including finding a turn still running.
+    Stepped,
+    /// Its client could not be reached; only a retry would step the Run again.
+    ClientUnavailable,
+    /// A stopped turn is not in its history yet and no deadline remains to step the Run
+    /// again; only a retry reads it again.
+    SettlementNotObserved,
+}
+
 #[derive(Clone)]
 pub struct ScheduledRunWorker {
     pub store: Arc<Mutex<AutomationStore>>,
@@ -70,10 +83,27 @@ pub struct ScheduledRunWorker {
     pub backend: Option<NativeControlBackend>,
     pub configuration: crate::AutomationConfigurationHandle,
     pub machine_identity: collaboration_contracts::MachineIdentity,
+    /// The wall clock deadlines and record times compare against.
+    pub clock: Arc<dyn router_clock::RuntimeClock>,
 }
 
 impl ScheduledRunWorker {
+    fn now_ms(&self) -> i64 {
+        self.clock.now().unix_millis()
+    }
+
+    #[cfg(any(test, feature = "test-support"))]
     pub async fn step(&self, id: RunId) -> Result<(), StorageError> {
+        Box::pin(self.step_reporting_client(id)).await.map(|_| ())
+    }
+
+    /// One step of a Run, saying whether its client could not be reached. The scheduler
+    /// retries such a step on its backoff: nothing else would re-step a Run whose
+    /// observation or stop request could not reach its client.
+    pub(crate) async fn step_reporting_client(
+        &self,
+        id: RunId,
+    ) -> Result<StepProgress, StorageError> {
         let record = self
             .store
             .lock()
@@ -95,35 +125,36 @@ impl ScheduledRunWorker {
                     .await?
             {
                 // A lost acknowledgement must be replayed before another attempt can clear its outcome.
-                return Ok(());
+                return Ok(StepProgress::Stepped);
             }
         }
         if matches!(
             record.phase,
             RunPhase::SummaryRequired | RunPhase::SummaryRunning | RunPhase::SummaryBlocked
         ) {
-            return self.step_summary(record).await;
+            return Box::pin(self.step_summary(record)).await;
         }
         match record.phase {
             RunPhase::Preparing => Box::pin(self.step_preparation(record)).await,
             RunPhase::Executing | RunPhase::Stopping | RunPhase::Uncertain => {
                 self.step_observation(record).await
             }
-            _ => Ok(()),
+            _ => Ok(StepProgress::Stepped),
         }
     }
 
-    async fn step_summary(&self, record: StoredRun) -> Result<(), StorageError> {
+    async fn step_summary(&self, record: StoredRun) -> Result<StepProgress, StorageError> {
+        // No admitted backend or configuration: their publication wakes the scheduler.
         let Some(backend) = &self.backend else {
-            return Ok(());
+            return Ok(StepProgress::Stepped);
         };
         let Ok(admission) = backend.gate.acquire() else {
-            return Ok(());
+            return Ok(StepProgress::Stepped);
         };
         let seconds = if record.phase == RunPhase::SummaryRequired {
             let lease = self.configuration.admission_lease().await;
             let Some(configuration) = lease.configuration() else {
-                return Ok(());
+                return Ok(StepProgress::Stepped);
             };
             u32::from(configuration.summary_timeout_seconds)
         } else {
@@ -163,11 +194,12 @@ impl ScheduledRunWorker {
             source,
             record,
             timeout_seconds: seconds,
+            clock: &*self.clock,
         })
         .await
     }
 
-    async fn step_observation(&self, record: StoredRun) -> Result<(), StorageError> {
+    async fn step_observation(&self, record: StoredRun) -> Result<StepProgress, StorageError> {
         let Some(recorded) = record.evidence.route.clone() else {
             return Err(StorageError::InvalidRecord);
         };
@@ -180,21 +212,41 @@ impl ScheduledRunWorker {
         };
         let settlement = match self.execution.observe_settlement(context).await {
             Ok(settlement) => settlement,
-            Err(DeliveryContractError::ClientOperation) => return Ok(()),
+            Err(DeliveryContractError::ClientOperation) => {
+                return Ok(StepProgress::ClientUnavailable);
+            }
             Err(_) => return Err(StorageError::InvalidRecord),
         };
-        if crate::run_reconciliation::persist_settlement(&self.store, &record, settlement).await? {
-            return Ok(());
+        if matches!(
+            settlement,
+            collaboration_contracts::RunSettlement::NotObserved
+        ) {
+            // A stopped turn absent from its history: nothing is written and the stop is
+            // not sent again; only a retry reads the history again.
+            return Ok(StepProgress::SettlementNotObserved);
+        }
+        if crate::run_reconciliation::persist_settlement(
+            &self.store,
+            &record,
+            settlement,
+            self.now_ms(),
+        )
+        .await?
+        {
+            return Ok(StepProgress::Stepped);
         }
         if record.phase == RunPhase::Stopping
-            || !record.evidence.timing.as_ref().is_some_and(|timing| {
-                timing.deadline_at_ms <= chrono::Utc::now().timestamp_millis()
-            })
+            || !record
+                .evidence
+                .timing
+                .as_ref()
+                .is_some_and(|timing| timing.deadline_at_ms <= self.now_ms())
         {
-            return Ok(());
+            return Ok(StepProgress::Stepped);
         }
         let sink = crate::scheduled_run_evidence_sink::StoredRunEvidenceSink::new(
             Arc::clone(&self.store),
+            self.clock.clone(),
             self.configuration.clone(),
             record.run_id.clone(),
             record.schedule_id.clone(),
@@ -207,13 +259,19 @@ impl ScheduledRunWorker {
             inputs: record.inputs.ok_or(StorageError::InvalidRecord)?,
         };
         match self.execution.request_stop(context, &sink).await {
-            Ok(_) | Err(DeliveryContractError::ClientOperation) => {}
-            Err(_) => return Err(StorageError::InvalidRecord),
+            Ok(StopRequestOutcome::Requested | StopRequestOutcome::Unsupported) => {
+                Ok(StepProgress::Stepped)
+            }
+            // The stop never reached the client (an unknown outcome is a failed connection
+            // before any stop intent was stored, or a lost reply after it was): try again.
+            Ok(StopRequestOutcome::Unknown) | Err(DeliveryContractError::ClientOperation) => {
+                Ok(StepProgress::ClientUnavailable)
+            }
+            Err(_) => Err(StorageError::InvalidRecord),
         }
-        Ok(())
     }
 
-    async fn step_preparation(&self, record: StoredRun) -> Result<(), StorageError> {
+    async fn step_preparation(&self, record: StoredRun) -> Result<StepProgress, StorageError> {
         let id = record.run_id.clone();
         let inputs = record.inputs.clone().ok_or(StorageError::InvalidRecord)?;
         if record.evidence.timing.is_some()
@@ -226,7 +284,7 @@ impl ScheduledRunWorker {
             if record.evidence.timing.is_some()
                 && self.recover_started_schedule_push(&record).await?
             {
-                return Ok(());
+                return Ok(StepProgress::Stepped);
             }
             if let Some(RouteEffectEvidence::CodexAppServer(mut native)) = record.evidence.route {
                 native.submission = agent_automation::SubmissionEffect::Unknown;
@@ -238,7 +296,7 @@ impl ScheduledRunWorker {
                     )
                     .await?;
             }
-            return Ok(());
+            return Ok(StepProgress::Stepped);
         }
         let selected_evidence = if let Some(recorded) = record.evidence.route.clone() {
             recorded
@@ -254,7 +312,9 @@ impl ScheduledRunWorker {
             };
             match self.execution.initial_evidence(&destination).await {
                 Ok(evidence) => evidence,
-                Err(DeliveryContractError::ClientOperation) => return Ok(()),
+                Err(DeliveryContractError::ClientOperation) => {
+                    return Ok(StepProgress::ClientUnavailable);
+                }
                 Err(_) => return Err(StorageError::InvalidRecord),
             }
         };
@@ -272,10 +332,10 @@ impl ScheduledRunWorker {
                         run_id: id,
                         effects: selected_evidence,
                         explanation: "Combined instructions and continuity exceed the supported request size; no input was submitted; any earlier preparation effects remain recorded. Shorten instructions or continuity for future runs.".into(),
-                        now_ms: chrono::Utc::now().timestamp_millis(),
+                        now_ms: self.now_ms(),
                     },
                 ).await?;
-                return Ok(());
+                return Ok(StepProgress::Stepped);
             }
         };
         if record.evidence.route.is_none() {
@@ -291,6 +351,7 @@ impl ScheduledRunWorker {
         };
         let sink = crate::scheduled_run_evidence_sink::StoredRunEvidenceSink::new(
             Arc::clone(&self.store),
+            self.clock.clone(),
             self.configuration.clone(),
             id.clone(),
             record.schedule_id.clone(),
@@ -319,7 +380,7 @@ impl ScheduledRunWorker {
                         if push.delivery_state == PushDeliveryState::Attempted {
                             self.recover_schedule_push_attempt(&record, *push).await?;
                         }
-                        return Ok(());
+                        return Ok(StepProgress::Stepped);
                     }
                 }
             }
@@ -352,11 +413,14 @@ impl ScheduledRunWorker {
             Err(DeliveryContractError::ClientOperation) if schedule_push_identity.is_some() => {
                 collaboration_contracts::RunSubmission::Unknown
             }
-            Err(DeliveryContractError::ClientOperation) => return Ok(()),
+            Err(DeliveryContractError::ClientOperation) => {
+                return Ok(StepProgress::ClientUnavailable);
+            }
             Err(_) => return Err(StorageError::InvalidRecord),
         };
         self.persist_submission(id, latest, submitted, schedule_push_identity)
             .await
+            .map(|()| StepProgress::Stepped)
     }
 
     async fn recover_started_schedule_push(
@@ -445,7 +509,8 @@ impl ScheduledRunWorker {
             },
             body: Some(body),
             activity: None,
-            created_at: chrono::Utc::now(),
+            created_at: chrono::DateTime::from_timestamp_millis(self.now_ms())
+                .ok_or(StorageError::InvalidRecord)?,
         };
         let record = self
             .interactions
@@ -570,10 +635,11 @@ impl ScheduledRunWorker {
         record: StoredRun,
         inputs: agent_automation::CapturedRunInputs<SessionRef, EndpointRef>,
         text: String,
-    ) -> Result<(), StorageError> {
+    ) -> Result<StepProgress, StorageError> {
         let destination = preparation_destination(&inputs)?;
         let sink = crate::scheduled_run_evidence_sink::StoredRunEvidenceSink::new(
             Arc::clone(&self.store),
+            self.clock.clone(),
             self.configuration.clone(),
             record.run_id.clone(),
             record.schedule_id.clone(),
@@ -601,10 +667,10 @@ impl ScheduledRunWorker {
             DestinationPreparation::Fork { .. } => return Err(StorageError::InvalidRecord),
         };
         match prepared {
-            Ok(_) => Ok(()),
+            Ok(_) => Ok(StepProgress::Stepped),
             Err(DeliveryContractError::ClientOperation) => {
                 let Some(evidence) = sink.latest().await else {
-                    return Ok(());
+                    return Ok(StepProgress::ClientUnavailable);
                 };
                 if let RouteEffectEvidence::CodexAppServer(native) = &evidence
                     && route_preparation_unknown(&evidence)
@@ -618,11 +684,11 @@ impl ScheduledRunWorker {
                             run_id: record.run_id,
                             effects: evidence,
                             explanation: "Route preparation could not confirm its target; no worker input was submitted.".into(),
-                            now_ms: chrono::Utc::now().timestamp_millis(),
+                            now_ms: self.now_ms(),
                         },
                     ).await?;
                 }
-                Ok(())
+                Ok(StepProgress::Stepped)
             }
             Err(_) => Err(StorageError::InvalidRecord),
         }

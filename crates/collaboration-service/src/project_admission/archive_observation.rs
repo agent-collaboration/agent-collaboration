@@ -1,6 +1,5 @@
 //! A holder records one internal archive fact under its ordinary native project lock.
 use super::{ProjectAdmission, ProjectAdmissionError};
-use chrono::Utc;
 use collaboration_runtime::NativeProjectStore;
 use message_board::{
     BoardId, BoardState, Fact, FactId, FactKind, FeedCursor, LifecycleFact, ProjectId, Record,
@@ -70,7 +69,7 @@ impl ProjectAdmission {
             position: high_water.position.successor()?,
         };
         let fact_id = FactId::generate();
-        let now = Utc::now();
+        let now = self.clock.utc_now();
         write
             .append_record(Record::Fact(Fact {
                 envelope: RecordEnvelope {

@@ -4,8 +4,7 @@ use chrono::{DateTime, Utc};
 use collaboration_mail_protocol::{CancelCause, CarrierAcceptance, MailItemId};
 use durable_steps::{Host, storage::TransactionScope, turso_store::TursoScope};
 use fleet_sync_protocol::RecipientOutcome;
-use sqlx::Transaction;
-use sqlx_turso::{Turso, TursoConnection};
+use sqlx_turso::TursoConnection;
 
 #[derive(Clone, Debug)]
 pub struct LocalCancelDelivery {
@@ -105,13 +104,37 @@ async fn read_cancel(
         .map(LocalCancelRow::decode).transpose()
 }
 
+// A settled cancel goes once neither of its items has a live push, a scheduled retry, a
+// poll hand-off or an unanswered send.
+macro_rules! settled_cancels_eligible {
+    () => {
+        "NOT EXISTS (SELECT 1 FROM router_pushes p WHERE p.push_id IN (local_cancel_deliveries.item_id,local_cancel_deliveries.target_item) AND p.delivery_state IN ('pending','held','attempted')) AND NOT EXISTS (SELECT 1 FROM local_delivery_retries r WHERE r.item_id IN (local_cancel_deliveries.item_id,local_cancel_deliveries.target_item) AND r.scheduled_retry_at IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM pending_poll_mail poll WHERE poll.item_id IN (local_cancel_deliveries.item_id,local_cancel_deliveries.target_item)) AND NOT EXISTS (SELECT 1 FROM message_send_answers answer WHERE answer.item_id=local_cancel_deliveries.target_item AND answer.result IS NULL)"
+    };
+}
+
+/// The settle time of the oldest cancel the rule may ever delete.
+pub(crate) async fn oldest_settled_local_cancel_ms(
+    connection: &mut sqlx_turso::TursoConnection,
+) -> Result<Option<i64>, StorageError> {
+    Ok(sqlx::query_scalar::<sqlx_turso::Turso, Option<i64>>(concat!(
+        "SELECT MIN(settled_at_ms) FROM local_cancel_deliveries WHERE settled_at_ms IS NOT NULL AND ",
+        settled_cancels_eligible!()
+    ))
+    .fetch_one(connection)
+    .await?)
+}
+
 pub(crate) async fn prune_settled_local_cancels(
-    transaction: &mut Transaction<'_, Turso>,
+    transaction: &mut sqlite_storage_maintenance::SignaledTransaction<'_, sqlx_turso::Turso>,
     cutoff_ms: i64,
     batch_size: i64,
 ) -> Result<u64, StorageError> {
     let candidates = sqlx::query_as::<sqlx_turso::Turso, LocalCancelRow>(
-        "SELECT item_id,target_item,attribution_json,outcome_json,recorded_at,settled_at_ms,typeof(settled_at_ms) AS settled_at_storage FROM local_cancel_deliveries WHERE settled_at_ms<? AND NOT EXISTS (SELECT 1 FROM router_pushes p WHERE p.push_id IN (local_cancel_deliveries.item_id,local_cancel_deliveries.target_item) AND p.delivery_state IN ('pending','held','attempted')) AND NOT EXISTS (SELECT 1 FROM local_delivery_retries r WHERE r.item_id IN (local_cancel_deliveries.item_id,local_cancel_deliveries.target_item) AND r.scheduled_retry_at IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM pending_poll_mail poll WHERE poll.item_id IN (local_cancel_deliveries.item_id,local_cancel_deliveries.target_item)) AND NOT EXISTS (SELECT 1 FROM message_send_answers answer WHERE answer.item_id=local_cancel_deliveries.target_item AND answer.result IS NULL) ORDER BY settled_at_ms,item_id LIMIT ?",
+        concat!(
+            "SELECT item_id,target_item,attribution_json,outcome_json,recorded_at,settled_at_ms,typeof(settled_at_ms) AS settled_at_storage FROM local_cancel_deliveries WHERE settled_at_ms<? AND ",
+            settled_cancels_eligible!(),
+            " ORDER BY settled_at_ms,item_id LIMIT ?"
+        ),
     )
         .bind(cutoff_ms)
         .bind(batch_size)

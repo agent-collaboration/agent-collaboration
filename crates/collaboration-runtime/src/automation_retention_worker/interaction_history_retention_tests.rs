@@ -19,7 +19,7 @@ use sqlx_turso::{TursoConnectOptions, TursoConnection};
 use std::{collections::BTreeMap, path::Path, sync::Arc};
 use tokio::sync::Mutex;
 
-type TestResult<TValue = ()> = Result<TValue, Box<dyn std::error::Error + Send + Sync>>;
+pub(super) type TestResult<TValue = ()> = Result<TValue, Box<dyn std::error::Error + Send + Sync>>;
 const SERVICE_ID: &str = "018f47d2-24d5-7a68-b9ec-6f759c39458f";
 const INITIAL_REQUEST: &str = "initial-interaction";
 
@@ -31,7 +31,7 @@ fn ensure(condition: bool, detail: &'static str) -> TestResult {
     }
 }
 
-fn session(session_id: &str) -> TestResult<SessionRef> {
+pub(super) fn session(session_id: &str) -> TestResult<SessionRef> {
     Ok(SessionRef {
         endpoint: EndpointRef {
             service_id: UuidIdentity::try_from(SERVICE_ID.to_owned())?,
@@ -41,7 +41,7 @@ fn session(session_id: &str) -> TestResult<SessionRef> {
     })
 }
 
-fn history_value(
+pub(super) fn history_value(
     request_id: &str,
     body: &str,
     created_at: Option<DateTime<Utc>>,
@@ -104,7 +104,7 @@ fn creation_stamp(history: &BTreeMap<String, Value>) -> TestResult<String> {
         .to_owned())
 }
 
-async fn load_broker(
+pub(super) async fn load_broker(
     directory: &Path,
     gate: &NativeGenerationGate,
 ) -> TestResult<Arc<ServiceInteractionBroker>> {
@@ -300,7 +300,9 @@ async fn retention_worker_prunes_real_broker_history_and_sqlite_payloads_with_on
     let mut seed =
         TursoConnection::connect_with(&TursoConnectOptions::new().filename(&history_path)).await?;
     let initial_record = history_value(INITIAL_REQUEST, "initial-history-body", None)?;
-    let initial_stamp = Utc::now().to_rfc3339_opts(SecondsFormat::Nanos, true);
+    let initial_stamp = "2026-01-15T08:00:00.123456789Z"
+        .parse::<DateTime<Utc>>()?
+        .to_rfc3339_opts(SecondsFormat::Nanos, true);
     let mut transaction = seed.begin().await?;
     sqlx::query(
         "INSERT INTO typed_interaction_history (request_id,record_json,created_at) VALUES (?,?,?)",
@@ -408,9 +410,17 @@ async fn retention_worker_prunes_real_broker_history_and_sqlite_payloads_with_on
     )
     .await?;
     let shared_store = Arc::new(Mutex::new(store));
-    let worker = AutomationRetentionWorker::new(shared_store.clone())
-        .with_interaction_broker(broker.clone())
-        .with_native_push_store(native.clone());
+    let worker = AutomationRetentionWorker::new(
+        shared_store.clone(),
+        std::sync::Arc::new(
+            router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+                1792432800000,
+            ))
+            .unwrap(),
+        ),
+    )
+    .with_interaction_broker(broker.clone())
+    .with_native_push_store(native.clone());
     let first_maintenance_ms = DateTime::<Utc>::from_timestamp_millis(cutoff_ms)
         .ok_or("valid retained cutoff")?
         .checked_add_months(chrono::Months::new(2))

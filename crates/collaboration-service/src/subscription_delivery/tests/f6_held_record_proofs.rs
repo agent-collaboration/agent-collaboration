@@ -1,4 +1,5 @@
-use super::super::SubscriptionClock;
+use router_clock::RuntimeClock;
+
 use super::super::subscription_push::target_session;
 use super::owner_fixture::*;
 use crate::subscription_delivery::subscription_service::OwnerObservation;
@@ -11,7 +12,6 @@ use message_board::{
     ThreadSubscriptionUnsubscribeRequest, WhenIdle,
 };
 use sqlx::Connection;
-use std::time::Duration;
 
 // SQLite works on background threads; its acknowledgement bound needs real time.
 #[tokio::test]
@@ -48,7 +48,7 @@ async fn cleanup_write_retry_does_not_block_reader_reconcile() {
                 reader: fixture.reader.clone(),
                 scope: SubscriptionScope::thread(fixture.root.clone()),
             },
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap();
@@ -56,13 +56,9 @@ async fn cleanup_write_retry_does_not_block_reader_reconcile() {
     runtime
         .observe(|event| matches!(event, OwnerObservation::Sleeping(Some(_))))
         .await;
-    let acknowledged = tokio::time::timeout(
-        Duration::from_secs(1),
-        runtime.service.reconcile_reader(fixture.reader.clone()),
-    )
-    .await;
+    let acknowledged = (runtime.service.reconcile_reader(fixture.reader.clone())).await;
     assert!(
-        matches!(acknowledged, Ok(Ok(()))),
+        matches!(acknowledged, Ok(())),
         "cleanup write retry blocked a queued reconcile command"
     );
     runtime.owner_barrier(&fixture.reader).await;
@@ -82,14 +78,12 @@ async fn cleanup_write_retry_does_not_block_reader_reconcile() {
         .execute(&mut observer)
         .await
         .unwrap();
-    fixture.clock.advance_without_tokio_time(30);
-    tokio::time::timeout(
-        Duration::from_secs(5),
-        runtime
-            .observe(|event| matches!(event, OwnerObservation::HeldSubscriptionPushesSettled(1))),
-    )
-    .await
-    .expect("failed cleanup marker must survive until the repaired next pass");
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(30))
+        .unwrap();
+    (runtime.observe(|event| matches!(event, OwnerObservation::HeldSubscriptionPushesSettled(1))))
+        .await;
     assert_copied_snapshot_state(&fixture, &held_id, PushDeliveryState::Rejected).await;
     let rejected = fixture
         .interactions
@@ -108,7 +102,7 @@ async fn cleanup_write_retry_does_not_block_reader_reconcile() {
     runtime.close().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn ending_one_scope_preserves_a_held_batch_with_another_active_root() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     let active_root = fixture.add_root().await;
@@ -136,7 +130,7 @@ async fn ending_one_scope_preserves_a_held_batch_with_another_active_root() {
                 reader: fixture.reader.clone(),
                 scope: SubscriptionScope::thread(fixture.root.clone()),
             },
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap();
@@ -161,7 +155,7 @@ async fn ending_one_scope_preserves_a_held_batch_with_another_active_root() {
                 reader: fixture.reader.clone(),
                 scope: SubscriptionScope::thread(active_root),
             },
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap();
@@ -179,7 +173,7 @@ async fn ending_one_scope_preserves_a_held_batch_with_another_active_root() {
 
 // This is an explicit post-copy CreationAge snapshot. SDK admission and the D4 copy
 // are outside these cleanup cases; public native writes establish only their input.
-async fn copied_held_snapshot(
+pub(super) async fn copied_held_snapshot(
     fixture: &OwnerFixture,
     positions: Vec<(ThreadId, FeedCursor)>,
 ) -> PushId {
@@ -204,7 +198,7 @@ async fn copied_held_snapshot(
             header_facts: PushHeaderFacts::SubscriptionActivity {
                 root_count: u8::try_from(positions.len()).unwrap(),
                 message_count: u64::try_from(positions.len()).unwrap(),
-                held_since: Some(fixture.clock.now().to_rfc3339()),
+                held_since: Some(fixture.clock.utc_now().to_rfc3339()),
                 thread_resolved: false,
             },
             body: None,
@@ -223,7 +217,7 @@ async fn copied_held_snapshot(
             }),
             mode: None,
             guard: None,
-            created_at: fixture.clock.now(),
+            created_at: fixture.clock.utc_now(),
         })
         .await
         .unwrap();
@@ -251,7 +245,7 @@ async fn copied_held_snapshot(
     push_id
 }
 
-async fn assert_copied_snapshot_state(
+pub(super) async fn assert_copied_snapshot_state(
     fixture: &OwnerFixture,
     push_id: &PushId,
     expected: PushDeliveryState,

@@ -95,7 +95,11 @@ async fn outcome_and_recorded_answer_roll_back_together_and_replay_without_anoth
     );
     fixture.sql("DROP TRIGGER reject_mail_outcome").await;
     drop(engine);
-    fixture.host.clock.fetch_add(100_000, Ordering::SeqCst);
+    fixture
+        .host
+        .clock
+        .advance(std::time::Duration::from_millis(100_000))
+        .unwrap();
     let engine = fixture.engine();
     let report = engine.drive_due().await.unwrap();
     assert_eq!(report.completed.len(), 1, "{report:?}");
@@ -171,7 +175,11 @@ async fn oversized_real_task_answer_projects_uncertain_without_an_observation_or
         DeliveryOutcome::Unknown
     );
     assert!(serde_json::to_vec(&answer).unwrap().len() < 1024);
-    fixture.host.clock.fetch_add(100_000, Ordering::SeqCst);
+    fixture
+        .host
+        .clock
+        .advance(std::time::Duration::from_millis(100_000))
+        .unwrap();
     engine.drive_due().await.unwrap();
     assert_eq!(fixture.host.calls.load(Ordering::SeqCst), 1);
     drop(engine);
@@ -296,7 +304,11 @@ async fn remote_outcome_and_owed_report_share_the_native_push_transaction() {
         PushDeliveryState::Attempted
     );
     fixture.sql("DROP TRIGGER reject_remote_outcome").await;
-    fixture.host.clock.fetch_add(100_000, Ordering::SeqCst);
+    fixture
+        .host
+        .clock
+        .advance(std::time::Duration::from_millis(100_000))
+        .unwrap();
     assert_eq!(engine.drive_due().await.unwrap().completed.len(), 1);
     assert_eq!(fixture.counts().await, vec![1, 1, 1, 0]);
     assert!(matches!(
@@ -348,7 +360,11 @@ async fn too_late_cancel_marks_target_without_rewriting_receipt_answer_or_first_
     // Decision614 permits only the new metadata column to change.
     fixture.sql("CREATE TRIGGER reject_terminal_push_rewrite BEFORE UPDATE OF push_id,retention,kind,origin_kind,origin_service_id,origin_endpoint_id,origin_session_id,origin_router_ref,target_service_id,target_endpoint_id,target_session_id,reply_to_push_id,header_facts_json,body,ranges_json,delivery_state,last_outcome_json,created_at,settled_at,read_at,dm_delivery_mode,dm_generation_guard_json ON router_pushes BEGIN SELECT RAISE(ABORT, 'terminal native push rewritten'); END").await;
     fixture.sql("CREATE TRIGGER reject_terminal_answer_rewrite BEFORE UPDATE ON message_send_answers BEGIN SELECT RAISE(ABORT, 'terminal RPC answer rewritten'); END").await;
-    fixture.host.clock.fetch_add(100_000, Ordering::SeqCst);
+    fixture
+        .host
+        .clock
+        .advance(std::time::Duration::from_millis(100_000))
+        .unwrap();
     let cancel = fixture.receive_cancel(&draft).await;
     assert!(matches!(
         fixture.report(cancel).await,

@@ -24,7 +24,9 @@ import { saveRecord, type RuntimePlan } from "./runtime-plan.ts";
 
 export class HealthUnavailable extends Error {}
 
-export async function healthCheck(plan: RuntimePlan): Promise<JsonObject> {
+export async function healthCheck(
+  plan: Pick<RuntimePlan, "port" | "expected_version">,
+): Promise<JsonObject> {
   let health: JsonObject;
   try {
     const response = await fetch(`http://127.0.0.1:${plan.port}/healthz`, {

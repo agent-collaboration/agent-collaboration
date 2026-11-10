@@ -1,3 +1,4 @@
+use router_clock::RuntimeClock;
 #[path = "follow_admission_port.rs"]
 mod follow_admission_port;
 #[cfg(test)]
@@ -21,7 +22,7 @@ mod subscription_startup_recovery;
 use super::ReaderSubscriptionSnapshot;
 use super::reader_scan_scope::ReaderScanScope;
 use super::{
-    BoardAvailability, SubscriptionClock,
+    BoardAvailability,
     reader_delivery_owner::{
         ReaderDeliveryCommand, ReaderDeliveryOwner, ReaderDeliveryOwnerProps,
         ReaderReconcilePurpose,
@@ -45,7 +46,7 @@ pub struct SubscriptionDeliveryServiceProps {
     pub delivery: Arc<dyn SessionMessageDelivery>,
     pub presence: Arc<dyn TargetPresenceProbe>,
     pub machine_identity: MachineIdentity,
-    pub clock: Arc<dyn SubscriptionClock>,
+    pub clock: Arc<dyn RuntimeClock>,
 }
 
 #[cfg(test)]
@@ -62,12 +63,22 @@ pub(super) enum OwnerObservation {
     WaitQueued,
     ReconcileRequested,
     ActivityLagged,
-    Sleeping(Option<tokio::time::Instant>),
+    Sleeping(Option<router_clock::ClockInstant>),
     DirectMessageQueued,
     MailAttemptQueued(PushId),
     PollCancellationDeferred(fleet_sync_protocol::ItemId),
     PollPublisherUnavailable(fleet_sync_protocol::ItemId),
-    NativeHeldChecked { item: PushId, running: bool },
+    NativeHeldChecked {
+        item: PushId,
+        running: bool,
+    },
+    /// The reader took a signal that its held mail's target may have loaded, and
+    /// whether it owed another presence check.
+    HeldMailSignalTaken {
+        owed: bool,
+    },
+    /// A pass failed at this stage and armed its backoff retry.
+    PassFailed(&'static str),
     DirectMessageHeld,
     DirectMessageSettled,
     HeldSubscriptionPushesSettled(u64),
@@ -81,11 +92,14 @@ struct ServiceInner {
     #[cfg(test)]
     poll_handover_probe: PollHandoverProbeSlot,
     native_mail: NativeMailReadiness,
+    /// Set by the Host before start; readers created without it check held mail only
+    /// when they first see it.
+    held_mail_signals: std::sync::OnceLock<super::HeldMailSignals>,
     follow_admission: FollowAdmissionSlot,
     board_availability: BoardAvailability,
     push: Arc<SubscriptionPushStore>,
     presence: Arc<dyn TargetPresenceProbe>,
-    clock: Arc<dyn SubscriptionClock>,
+    clock: Arc<dyn RuntimeClock>,
     owners: Mutex<HashMap<Identity, mpsc::Sender<ReaderDeliveryCommand>>>,
     start_gate: Mutex<bool>,
     shutdown: CancellationToken,
@@ -97,6 +111,9 @@ struct ServiceInner {
     reconcile_queued: tokio::sync::Notify,
     #[cfg(test)]
     startup_passes: tokio::sync::broadcast::Sender<Vec<ProjectId>>,
+    /// Each deadline the startup recovery task arms before its next attempt.
+    #[cfg(test)]
+    startup_retry_deadlines: tokio::sync::broadcast::Sender<router_clock::ClockInstant>,
 }
 
 #[derive(Clone)]
@@ -112,8 +129,17 @@ pub struct SubscriptionDeliveryService {
 }
 
 impl SubscriptionDeliveryService {
+    /// Gives readers the signals that a held message's target may have loaded. Set once,
+    /// before start.
+    pub fn attach_held_mail_signals(&self, signals: super::HeldMailSignals) -> Result<(), String> {
+        self.inner
+            .held_mail_signals
+            .set(signals)
+            .map_err(|_| "reader held-mail signals are already attached".to_owned())
+    }
+
     #[must_use]
-    pub fn subscription_clock(&self) -> Arc<dyn SubscriptionClock> {
+    pub fn runtime_clock(&self) -> Arc<dyn RuntimeClock> {
         Arc::clone(&self.inner.clock)
     }
 
@@ -136,6 +162,7 @@ impl SubscriptionDeliveryService {
                 #[cfg(test)]
                 poll_handover_probe: Arc::new(std::sync::Mutex::new(None)),
                 native_mail: Arc::new(std::sync::OnceLock::new()),
+                held_mail_signals: std::sync::OnceLock::new(),
                 follow_admission: Arc::new(std::sync::RwLock::new(None)),
                 board_availability: props.board_availability,
                 push,
@@ -151,6 +178,8 @@ impl SubscriptionDeliveryService {
                 reconcile_queued: tokio::sync::Notify::new(),
                 #[cfg(test)]
                 startup_passes: tokio::sync::broadcast::channel(32).0,
+                #[cfg(test)]
+                startup_retry_deadlines: tokio::sync::broadcast::channel(32).0,
             }),
         }
     }
@@ -167,7 +196,7 @@ impl SubscriptionDeliveryService {
             BoardAvailability::Available(store) => {
                 let mut store = store.lock().await;
                 let restored = store
-                    .restore_active_and_draining(self.inner.clock.now())
+                    .restore_active_and_draining(self.inner.clock.utc_now())
                     .await?;
                 // Windows contain only shared storage handles. Deferred native reads must
                 // not hold the service's window-store gate across another pool timeout.
@@ -556,6 +585,14 @@ impl SubscriptionDeliveryService {
                 shutdown: self.inner.shutdown.clone(),
                 commands,
                 activity,
+                held_mail: super::held_mail_signals::HeldMailWatch::new(
+                    &self
+                        .inner
+                        .held_mail_signals
+                        .get()
+                        .cloned()
+                        .unwrap_or_default(),
+                ),
                 #[cfg(test)]
                 observations: self.inner.observations.clone(),
             });
@@ -577,6 +614,20 @@ impl SubscriptionDeliveryService {
             );
             return Ok(sender);
         }
+    }
+
+    #[cfg(test)]
+    pub(super) fn observe_startup_passes(
+        &self,
+    ) -> tokio::sync::broadcast::Receiver<Vec<ProjectId>> {
+        self.inner.startup_passes.subscribe()
+    }
+
+    #[cfg(test)]
+    pub(super) fn observe_startup_retry_deadlines(
+        &self,
+    ) -> tokio::sync::broadcast::Receiver<router_clock::ClockInstant> {
+        self.inner.startup_retry_deadlines.subscribe()
     }
 
     #[cfg(test)]

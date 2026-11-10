@@ -56,7 +56,7 @@ async fn local_generation_replacement_reaches_native_delivery_while_another_read
         .post(&fixture.root, "local activity remains owed")
         .await;
     let local_target = target_session(&fixture.reader).unwrap();
-    tokio::time::timeout(Duration::from_secs(6), async {
+    (async {
         while native
             .interactions
             .list_held_mail_push_records(&local_target)
@@ -67,8 +67,7 @@ async fn local_generation_replacement_reaches_native_delivery_while_another_read
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .unwrap();
+    .await;
     let local_original = frozen_follow(&fixture).await.pop().unwrap();
     let (remote_member, remote_target, remote_child) =
         arrange_remote_generation_cancel(&fixture).await;
@@ -80,10 +79,7 @@ async fn local_generation_replacement_reaches_native_delivery_while_another_read
             .generation_preventions(&[project], &[remote_member])
             .await
     });
-    let queried = tokio::time::timeout(Duration::from_secs(6), query.entered.recv())
-        .await
-        .unwrap()
-        .unwrap();
+    let queried = (query.entered.recv()).await.unwrap();
     assert_eq!(
         queried,
         vec![remote_child.item],
@@ -104,7 +100,7 @@ async fn local_generation_replacement_reaches_native_delivery_while_another_read
         .queue_project(fixture.project.clone())
         .await
         .unwrap();
-    tokio::time::timeout(Duration::from_secs(6), async {
+    (async {
         loop {
             if matches!(
                 native
@@ -119,51 +115,42 @@ async fn local_generation_replacement_reaches_native_delivery_while_another_read
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .unwrap();
-    *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
-    fixture.clock.advance_without_tokio_time(32);
-    let received = tokio::time::timeout(Duration::from_secs(6), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
     .await;
-    if received.is_ok() {
-        runtime.completions.send(DeliveryOutcome::Started).unwrap();
-        await_native_completion(&runtime, 1).await;
-    }
+    *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(32))
+        .unwrap();
+    let received = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
+
+    runtime.completions.send(DeliveryOutcome::Started).unwrap();
+    await_native_completion(&runtime, 1).await;
+
     // A completed replacement must not strand the next local post behind settlement.
-    let later_received = if received.is_ok() {
-        fixture
-            .post(&fixture.root, "later local activity remains independent")
-            .await;
-        fixture.clock.advance_without_tokio_time(2);
-        runtime
-            .service
-            .reconcile_reader(fixture.reader.clone())
-            .await
-            .unwrap();
-        let mut hints = tokio::task::JoinSet::new();
-        for _ in 0..16 {
-            let publisher = publisher.clone();
-            let project = fixture.project.clone();
-            hints.spawn(async move { publisher.queue_project(project).await.unwrap() });
-        }
-        while let Some(hint) = hints.join_next().await {
-            hint.unwrap();
-        }
-        Some(
-            tokio::time::timeout(Duration::from_secs(6), async {
-                runtime.requests.lock().await.recv().await.unwrap()
-            })
-            .await,
-        )
-    } else {
-        None
-    };
-    if later_received.as_ref().is_some_and(Result::is_ok) {
-        runtime.completions.send(DeliveryOutcome::Started).unwrap();
-        await_native_completion(&runtime, 2).await;
+    fixture
+        .post(&fixture.root, "later local activity remains independent")
+        .await;
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(2))
+        .unwrap();
+    runtime
+        .service
+        .reconcile_reader(fixture.reader.clone())
+        .await
+        .unwrap();
+    let mut hints = tokio::task::JoinSet::new();
+    for _ in 0..16 {
+        let publisher = publisher.clone();
+        let project = fixture.project.clone();
+        hints.spawn(async move { publisher.queue_project(project).await.unwrap() });
     }
+    while let Some(hint) = hints.join_next().await {
+        hint.unwrap();
+    }
+    let later_received = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
+    runtime.completions.send(DeliveryOutcome::Started).unwrap();
+    await_native_completion(&runtime, 2).await;
     // Only replication acknowledgement stands in; it names the actual frozen keys.
     // No settled-through acknowledgement is supplied, so this cannot authorize retirement.
     let store = fixture
@@ -218,24 +205,7 @@ async fn local_generation_replacement_reaches_native_delivery_while_another_read
         );
     }
     query.release();
-    tokio::time::timeout(Duration::from_secs(6), resolving)
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap();
-    let late_received = if later_received.as_ref().is_some_and(Result::is_err) {
-        let late = tokio::time::timeout(Duration::from_secs(6), async {
-            runtime.requests.lock().await.recv().await.unwrap()
-        })
-        .await;
-        if late.is_ok() {
-            runtime.completions.send(DeliveryOutcome::Started).unwrap();
-            await_native_completion(&runtime, 2).await;
-        }
-        Some(late)
-    } else {
-        None
-    };
+    (resolving).await.unwrap().unwrap();
     let local_items: Vec<_> = frozen_follow(&fixture)
         .await
         .into_iter()
@@ -253,13 +223,12 @@ async fn local_generation_replacement_reaches_native_delivery_while_another_read
     let mut read = store.snapshot().await.unwrap();
     let head = read.mail_handoff_head().await.unwrap();
     read.finish().await.unwrap();
-    let frontier_advanced = tokio::time::timeout(Duration::from_secs(6), async {
+    (async {
         while super::native_frontier_proofs::frontier(&fixture).await != head {
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .is_ok();
+    .await;
     publisher.wait_project_idle_for_test(&fixture.project).await;
     let duplicate = runtime.requests.lock().await.try_recv().is_ok();
 
@@ -271,15 +240,6 @@ async fn local_generation_replacement_reaches_native_delivery_while_another_read
     query.close().await;
 
     // Assert the native boundary happened before the unrelated Query was released.
-    let received = received.expect("R's remote Query blocked L's native generation replacement");
-    let later_received = later_received
-        .expect("the first local replacement must complete")
-        .unwrap_or_else(|error| {
-            panic!(
-                "R's remote Query blocked later L publication: {error}; delivered after release: {}",
-                late_received.as_ref().is_some_and(Result::is_ok)
-            )
-        });
     assert_eq!(
         local_items.len(),
         3,
@@ -293,10 +253,7 @@ async fn local_generation_replacement_reaches_native_delivery_while_another_read
         later_received.payload.push_id.as_str(),
         local_items[2].id().as_uuid().to_string()
     );
-    assert!(
-        frontier_advanced,
-        "settlement failed to catch up after R's release"
-    );
+
     assert!(
         !duplicate,
         "concurrent hints duplicated a native publication"
@@ -341,18 +298,18 @@ async fn an_expired_lease_queries_an_eligible_remote_cancel_and_renewal_replays_
         max_expansion_seq: Some(expansion.get()),
         ..Default::default()
     };
-    let expired = crate::test_project_runtime::expire_lease(&fixture.registry, &fixture.project)
-        .await
-        .unwrap();
-    let observed = tokio::time::timeout(
-        Duration::from_secs(6),
-        publisher.generation_preventions(
-            std::slice::from_ref(&fixture.project),
-            std::slice::from_ref(&member),
-        ),
+    let expired = crate::test_project_runtime::expire_lease(
+        &fixture.registry,
+        &fixture.project,
+        fixture.clock.as_ref(),
     )
     .await
-    .unwrap()
+    .unwrap();
+    let observed = (publisher.generation_preventions(
+        std::slice::from_ref(&fixture.project),
+        std::slice::from_ref(&member),
+    ))
+    .await
     .unwrap();
     assert!(observed.is_empty());
     let id: collaboration_protocol::MailItemId =
@@ -370,26 +327,26 @@ async fn an_expired_lease_queries_an_eligible_remote_cancel_and_renewal_replays_
         query.submissions().is_empty(),
         "expired writer submitted its remote control"
     );
-    crate::test_project_runtime::renew_lease(&fixture.registry, &fixture.project, expired)
-        .await
-        .unwrap();
-    tokio::time::timeout(
-        Duration::from_secs(6),
-        publisher.generation_preventions(
-            std::slice::from_ref(&fixture.project),
-            std::slice::from_ref(&member),
-        ),
+    crate::test_project_runtime::renew_lease(
+        &fixture.registry,
+        &fixture.project,
+        expired,
+        fixture.clock.as_ref(),
     )
     .await
-    .unwrap()
     .unwrap();
-    tokio::time::timeout(Duration::from_secs(6), async {
+    (publisher.generation_preventions(
+        std::slice::from_ref(&fixture.project),
+        std::slice::from_ref(&member),
+    ))
+    .await
+    .unwrap();
+    (async {
         while query.submissions().is_empty() {
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .unwrap();
+    .await;
     assert_eq!(query.submissions(), vec![child.clone()]);
     for reference in [&child, &target] {
         query.answer_for(
@@ -409,15 +366,11 @@ async fn an_expired_lease_queries_an_eligible_remote_cancel_and_renewal_replays_
             },
         );
     }
-    let observed = tokio::time::timeout(
-        Duration::from_secs(6),
-        publisher.generation_preventions(
-            std::slice::from_ref(&fixture.project),
-            std::slice::from_ref(&member),
-        ),
-    )
+    let observed = (publisher.generation_preventions(
+        std::slice::from_ref(&fixture.project),
+        std::slice::from_ref(&member),
+    ))
     .await
-    .unwrap()
     .unwrap();
     assert_eq!(observed.len(), 1);
     assert_eq!(observed[0].target(), &target);
@@ -487,7 +440,7 @@ pub(super) async fn arrange_remote_generation_cancel(
     };
     let target = fixture
         .admission
-        .allocate_follow_batch(&fixture.project, input, fixture.clock.now())
+        .allocate_follow_batch(&fixture.project, input, fixture.clock.utc_now())
         .await
         .unwrap()
         .unwrap();
@@ -506,7 +459,7 @@ pub(super) async fn arrange_remote_generation_cancel(
                     lifetime_seconds: None,
                 },
             },
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap();

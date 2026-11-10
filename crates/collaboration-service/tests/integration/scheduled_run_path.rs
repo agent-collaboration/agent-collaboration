@@ -96,6 +96,18 @@ async fn exercise_scheduled_run(
     let store = Arc::new(tokio::sync::Mutex::new(
         AutomationStore::open(&database).await?,
     ));
+    // The lifecycle journal the native observer appends to; a thread that stops being
+    // busy reaches the scheduler as one of its commits.
+    let journal = Arc::new(lifecycle_observation::LifecycleStore::new(
+        lifecycle_observation::ObservationJournal::open(
+            &root.join("session-registry.sqlite"),
+            "00000000-0000-4000-8000-000000000001"
+                .to_owned()
+                .try_into()?,
+        )
+        .await?,
+    ));
+    journal.prepare(100).await?;
     let interaction_database = root.join("interaction.sqlite");
     let interactions =
         Arc::new(interaction_storage::InteractionStore::open(&interaction_database).await?);
@@ -139,12 +151,17 @@ async fn exercise_scheduled_run(
         gate,
         codex_home: root.clone(),
     };
+    let runtime_clock = std::sync::Arc::new(router_clock::ManualClock::new(
+        chrono::DateTime::UNIX_EPOCH + chrono::Duration::seconds(1_792_432_800),
+    ));
     let identity = ApplicationFixture::new(service_id, service_id)?
         .with_endpoints(vec![description])?
         .with_automation_store(store.clone())
         .with_interaction_store(interactions.clone())
+        .with_runtime_clock(runtime_clock.clone())
         .with_scheduled_run_execution(Arc::new(
             collaboration_runtime::CodexAppServerScheduledRuns::new(
+                runtime_clock.clone(),
                 native_backend.clone(),
                 Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
             ),
@@ -153,7 +170,8 @@ async fn exercise_scheduled_run(
     let shutdown = tokio_util::sync::CancellationToken::new();
     let schedule_worker = identity
         .schedule_timing_worker()
-        .ok_or("scheduler missing")?;
+        .ok_or("scheduler missing")?
+        .wake_on_completions(journal.subscribe_commits());
     let served = served_api::ServedApi::start(identity)?;
     let client = served.client("scheduled-run-fixture").await?;
     let instruction = client
@@ -163,15 +181,21 @@ async fn exercise_scheduled_run(
         })
         .await?;
     let backend_store = Arc::clone(&store);
+    let backend_journal = Arc::clone(&journal);
+    let target_endpoint = target.endpoint.clone();
+    let backend_scope = json!({"endpoint":target.endpoint,"generation":{"serviceEpoch":service_id,"generation":1},"observerId":"00000000-0000-4000-8000-000000000003"});
     let resume_uncertainty_observed = Arc::new(tokio::sync::Notify::new());
     let backend_resume_uncertainty_observed = Arc::clone(&resume_uncertainty_observed);
-    let backend = tokio::spawn(async move {
+    let mut backend = tokio::spawn(async move {
         for stage in 0..if busy_first || resume_rejected { 8 } else { 7 } {
             let logical_stage = if (busy_first || resume_rejected) && stage >= 2 {
                 stage - 1
             } else {
                 stage
             };
+            eprintln!(
+                "scheduled native fixture stage {stage}/{logical_stage}: waiting for connection"
+            );
             let (stream, _) = listener.accept().await?;
             let mut socket = tokio_tungstenite::accept_async(stream).await?;
             let init: Value =
@@ -184,6 +208,10 @@ async fn exercise_scheduled_run(
             let _initialized = socket.next().await.ok_or("missing initialized")??;
             let request: Value =
                 serde_json::from_str(socket.next().await.ok_or("missing request")??.to_text()?)?;
+            eprintln!(
+                "scheduled native fixture stage {stage}/{logical_stage}: request {:?}",
+                request.get("method")
+            );
             let expected = match logical_stage {
                 0 | 3 => "thread/start",
                 1 | 2 => "thread/read",
@@ -335,14 +363,20 @@ async fn exercise_scheduled_run(
                     Duration::from_secs(6),
                     backend_resume_uncertainty_observed.notified(),
                 )
-                .await?;
+                .await
+                .map_err(|error| format!("scheduled native stage {stage}: resume uncertainty signal timed out: {error}"))?;
                 socket.send(Message::Text(json!({"id":resume.get("id"),"error":{"code":-32602,"message":"known resume rejection"}}).to_string().into())).await?;
                 continue;
             }
             if busy_first && stage == 1 {
-                if let Some(Ok(message)) =
-                    tokio::time::timeout(Duration::from_secs(2), socket.next()).await?
-                    && !message.is_close()
+                if let Some(Ok(message)) = tokio::time::timeout(
+                    Duration::from_secs(2),
+                    socket.next(),
+                )
+                .await
+                .map_err(|error| {
+                    format!("scheduled native stage {stage}: busy socket wait timed out: {error}")
+                })? && !message.is_close()
                 {
                     return Err("busy target received native mutation".into());
                 }
@@ -352,6 +386,16 @@ async fn exercise_scheduled_run(
                 if run.evidence.timing.is_some() {
                     return Err("busy wait consumed execution budget".into());
                 }
+                // The thread finished its turn: the observer records it, and that commit
+                // is what makes the scheduler look again.
+                let idle: collaboration_protocol::LifecycleObservation = serde_json::from_value(
+                    json!({
+                        "observedAt":"2026-09-08T00:00:01Z","source":"nativeNotification","scope":backend_scope,
+                        "subject":{"kind":"thread","address":{"endpoint":target_endpoint,"nativeThreadId":"scheduled-new-thread"}},
+                        "change":{"kind":"threadStatus","status":{"type":"idle"},"ordering":"established"},
+                    }),
+                )?;
+                backend_journal.append(&idle, 101).await?;
                 continue;
             }
             if logical_stage == 1 {
@@ -401,7 +445,7 @@ async fn exercise_scheduled_run(
     let schedule=client.create_schedule(serde_json::from_value::<ScheduleCreateRequest>(json!({"operationId":OperationId::generate(),"definition":{"instructionId":instruction.instruction_id,"timing":{"kind":"at","at":"2026-01-01T00:00:00.000Z"},"enabled":true,"destination":{"kind":"freshEachRun","endpoint":target.endpoint,"cwd":"/fresh-fixture"},"executionTimeoutSeconds":120,"model":"gpt-5.6-sol","effort":"medium"}}))?).await?;
     if frozen_inputs {
         // Admit with the original fresh-thread definition, then edit only future work.
-        let now = chrono::Utc::now().timestamp_millis();
+        let now = router_clock::RuntimeClock::utc_now(runtime_clock.as_ref()).timestamp_millis();
         store
             .lock()
             .await
@@ -448,7 +492,8 @@ async fn exercise_scheduled_run(
         old.close().await?;
     }
     let worker = tokio::spawn(schedule_worker.run(shutdown.clone()));
-    let record=tokio::time::timeout(Duration::from_secs(6),async{
+    let mut last_observed_phase = None;
+    let record_result=tokio::time::timeout(Duration::from_secs(6),async{
         let mut poll=tokio::time::interval(Duration::from_millis(20));
         let mut known_run=None;
         loop{
@@ -461,6 +506,7 @@ async fn exercise_scheduled_run(
             }
             if let Some(run_id)=&known_run{
                 let run=store.lock().await.read_run::<SessionRef,collaboration_protocol::EndpointRef,CodexGeneration,collaboration_protocol::DeliveryReceipt>(run_id).await?;
+                last_observed_phase = Some(run.phase);
                 if resume_rejected && run.phase == agent_automation::RunPhase::Uncertain {
                     resume_uncertainty_observed.notify_one();
                 }
@@ -477,7 +523,21 @@ async fn exercise_scheduled_run(
                 {return Ok::<_,automation_storage::StorageError>(run);}
             }
         }
-    }).await??;
+    }).await;
+    if record_result.is_err() {
+        eprintln!(
+            "scheduled outcome wait timed out: last phase {last_observed_phase:?}, worker finished {}, native fixture finished {}",
+            worker.is_finished(),
+            backend.is_finished()
+        );
+        if backend.is_finished() {
+            eprintln!(
+                "scheduled native fixture result: {:?}",
+                (&mut backend).await
+            );
+        }
+    }
+    let record = record_result??;
     if !matches!(preparation, PreparationOutcome::Accepted) {
         let expected = if matches!(preparation, PreparationOutcome::Rejected) {
             agent_automation::RunPhase::PreparationFailed

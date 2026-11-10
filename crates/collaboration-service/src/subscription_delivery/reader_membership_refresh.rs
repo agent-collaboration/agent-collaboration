@@ -65,7 +65,7 @@ impl ReaderDeliveryOwner {
                         store
                             .restore_project_subscription_windows(
                                 &self.reader,
-                                self.clock.now(),
+                                self.clock.utc_now(),
                                 &restoring,
                                 &preventions,
                             )
@@ -75,7 +75,7 @@ impl ReaderDeliveryOwner {
                         store
                             .rescan_project_subscription_windows(
                                 &self.reader,
-                                self.clock.now(),
+                                self.clock.utc_now(),
                                 &projects,
                                 &preventions,
                             )
@@ -84,7 +84,7 @@ impl ReaderDeliveryOwner {
                     let mut records = store
                         .project_subscription_records(
                             &self.reader,
-                            self.clock.now(),
+                            self.clock.utc_now(),
                             &projects,
                             &preventions,
                         )

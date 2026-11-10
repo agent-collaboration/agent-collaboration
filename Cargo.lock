@@ -238,6 +238,7 @@ dependencies = [
  "owned-process-test-support",
  "reqwest 0.12.28",
  "rmcp",
+ "router-clock",
  "runtime-primitives",
  "rustls",
  "serde",
@@ -1548,6 +1549,7 @@ dependencies = [
  "owned-process-test-support",
  "reqwest 0.12.28",
  "reqwest-websocket",
+ "router-clock",
  "runtime-primitives",
  "rustix 1.1.4",
  "serde",
@@ -1795,6 +1797,7 @@ dependencies = [
  "interaction-storage",
  "message-board",
  "message-board-storage",
+ "router-clock",
  "runtime-primitives",
  "serde_json",
  "tempfile",
@@ -1988,6 +1991,7 @@ dependencies = [
  "message-board-storage",
  "reqwest 0.12.28",
  "rmcp",
+ "router-clock",
  "runtime-primitives",
  "schemars 1.2.2",
  "serde",
@@ -2070,6 +2074,7 @@ dependencies = [
  "node-test-fixture",
  "reqwest 0.12.28",
  "rmcp",
+ "router-clock",
  "runtime-primitives",
  "schemars 1.2.2",
  "serde",
@@ -2135,6 +2140,7 @@ dependencies = [
  "message-board",
  "message-board-storage",
  "nix",
+ "router-clock",
  "runtime-primitives",
  "serde",
  "serde_json",
@@ -2148,6 +2154,7 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util",
  "tracing",
+ "tracing-subscriber",
  "uuid",
 ]
 
@@ -2191,6 +2198,7 @@ dependencies = [
  "node-test-fixture",
  "petgraph",
  "proptest",
+ "router-clock",
  "runtime-primitives",
  "serde",
  "serde_json",
@@ -3983,6 +3991,7 @@ dependencies = [
  "serde",
  "serde_json",
  "session-event-model",
+ "sqlite-storage-maintenance",
  "sqlx",
  "sqlx-turso",
  "tempfile",
@@ -4274,6 +4283,8 @@ dependencies = [
  "codex-native-integration",
  "collaboration-protocol",
  "futures-util",
+ "router-clock",
+ "runtime-primitives",
  "serde",
  "serde_json",
  "sqlite-storage-maintenance",
@@ -4284,6 +4295,7 @@ dependencies = [
  "tokio-tungstenite",
  "tokio-util",
  "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -4448,6 +4460,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sqlite-storage-maintenance",
  "sqlx",
  "sqlx-turso",
  "tempfile",
@@ -5508,6 +5521,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "router-clock"
+version = "0.1.145"
+dependencies = [
+ "chrono",
+ "runtime-primitives",
+ "thiserror 2.0.18",
+ "tokio",
+]
+
+[[package]]
 name = "runtime-primitives"
 version = "0.4.0"
 source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687#b75d072c116afa46cfa82facd34db6317f380687"
@@ -6149,7 +6172,9 @@ dependencies = [
 name = "sqlite-storage-maintenance"
 version = "0.1.145"
 dependencies = [
+ "chrono",
  "fs2",
+ "runtime-primitives",
  "sqlx",
  "tempfile",
  "thiserror 2.0.18",

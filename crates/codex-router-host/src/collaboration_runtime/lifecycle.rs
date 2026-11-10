@@ -136,6 +136,11 @@ impl CollaborationRuntime {
         {
             failure.get_or_insert(io::Error::other("schedule worker shutdown failed"));
         }
+        if let Some(task) = self.journal_unavailable_rechecks.take()
+            && task.await.is_err()
+        {
+            failure.get_or_insert(io::Error::other("observation re-check shutdown failed"));
+        }
         if let Some(task) = self.automation_maintenance.take()
             && task.await.is_err()
         {

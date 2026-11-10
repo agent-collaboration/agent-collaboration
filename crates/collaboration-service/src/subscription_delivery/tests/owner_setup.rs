@@ -6,9 +6,11 @@ impl OwnerFixture {
         Box::pin(Self::with_reader(reader_identity())).await
     }
     pub async fn with_reader(reader: Identity) -> Self {
-        Box::pin(super::owner_clock::complete_real_setup(async {
+        Box::pin(async {
             let directory = tempfile::tempdir().unwrap();
-            let registry = crate::test_project_runtime::registry(directory.path()).unwrap();
+            let clock = Arc::new(ManualClock::new("2026-10-19T18:00:00Z".parse().unwrap()));
+            let registry =
+                crate::test_project_runtime::registry(directory.path(), clock.clone()).unwrap();
             let origin = ActorOrigin {
                 installation: ServiceId::try_from(SERVICE_ID.to_owned()).unwrap(),
                 machine: MachineLabel::try_from("Owner-test-machine".to_owned()).unwrap(),
@@ -19,6 +21,7 @@ impl OwnerFixture {
                     .unwrap();
             let admission = Arc::new(
                 ProjectAdmission::new(ProjectAdmissionProps {
+                    clock: clock.clone(),
                     registry: registry.clone(),
                     fleet: Arc::new(FleetClient::new(
                         &message_board_storage::FleetStore::open(
@@ -52,7 +55,6 @@ impl OwnerFixture {
                 .await
                 .unwrap(),
             );
-            let clock = Arc::new(TestClock::new(Utc::now()));
             let workspace = WorkspaceId::generate();
             let board = BoardId::generate();
             let project = ProjectId::generate();
@@ -61,7 +63,8 @@ impl OwnerFixture {
                 "00000000-0000-4000-8000-000000000002",
             )
             .unwrap()
-            .with_project_admission(admission.clone()))
+            .with_project_admission(admission.clone())
+            .with_runtime_clock(clock.clone()))
             .build();
             let header = || {
                 json!({"requestId":RequestId::generate(),"protocolVersion":1,
@@ -96,9 +99,13 @@ impl OwnerFixture {
             request["projectId"] = json!(project);
             request["title"] = json!("Owner project");
             let request = serde_json::from_value(request).unwrap();
-            crate::test_project_runtime::prepare_registered_creation(&admission, &request)
-                .await
-                .unwrap();
+            crate::test_project_runtime::prepare_registered_creation(
+                &admission,
+                &request,
+                clock.as_ref(),
+            )
+            .await
+            .unwrap();
             assert_accepted(&admission.create_project(&request).await.unwrap());
             let discussion_subject = crate::test_subject_workstream::create(&registry, &project)
                 .await
@@ -117,7 +124,8 @@ impl OwnerFixture {
                 project,
                 root: ThreadId::generate(),
                 clock,
-                presence: Arc::new(ScriptedPresence(StdMutex::new(TargetPresence::Running))),
+                presence: Arc::new(ScriptedPresence::new(TargetPresence::Running)),
+                held_mail: HeldMailTestSignals::default(),
             };
             fixture
                 .create_root(&fixture.root, human("board-owner"))
@@ -146,13 +154,13 @@ impl OwnerFixture {
                 .await;
             fleet_runtime.shutdown().await.unwrap();
             fixture
-        }))
+        })
         .await
     }
 
     /// Reopen the real setup owner only while arranging another native project.
     pub async fn prepare_additional_project(&self, request: &ProjectCreateRequest) {
-        Box::pin(super::owner_clock::complete_real_setup(async {
+        Box::pin(async {
             let (requests, runtime) = board_central_test_support::machine_session(
                 self.directory.path(),
                 &self.admission.record_origin(),
@@ -171,6 +179,7 @@ impl OwnerFixture {
                 Some(requests),
             ));
             let admission = ProjectAdmission::new(ProjectAdmissionProps {
+                clock: self.clock.clone(),
                 registry: self.registry.clone(),
                 fleet: fleet.clone(),
                 identity: collaboration_contracts::MachineIdentity::new(
@@ -180,15 +189,19 @@ impl OwnerFixture {
                 .unwrap(),
             })
             .unwrap();
-            crate::test_project_runtime::prepare_registered_creation(&admission, request)
-                .await
-                .unwrap();
+            crate::test_project_runtime::prepare_registered_creation(
+                &admission,
+                request,
+                self.clock.as_ref(),
+            )
+            .await
+            .unwrap();
             drop(admission);
             runtime.shutdown().await.unwrap();
             drop(Arc::try_unwrap(fleet).unwrap_or_else(|_| {
                 panic!("additional-project setup still owns its Fleet client")
             }));
-        }))
+        })
         .await;
     }
 }

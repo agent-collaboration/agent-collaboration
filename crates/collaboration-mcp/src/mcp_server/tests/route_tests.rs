@@ -134,6 +134,10 @@ async fn message_server(
             .await
             .expect("native carrier owner"),
     );
+    let identity = crate::api_test_harness::test_identity()
+        .with_automation_store(store)
+        .with_session_delivery(delivery.clone());
+    let clock = identity.runtime_clock();
     let owner = collaboration_service::SubscriptionDeliveryService::new(
         collaboration_service::SubscriptionDeliveryServiceProps {
             board_availability: collaboration_service::BoardAvailability::Unavailable,
@@ -146,14 +150,11 @@ async fn message_server(
                 Some("mcp-message-test"),
             )
             .expect("machine identity"),
-            clock: std::sync::Arc::new(collaboration_service::SystemSubscriptionClock),
+            clock: clock.clone(),
         },
     );
     owner.start().await.expect("delivery owner starts");
-    let identity = crate::api_test_harness::test_identity()
-        .with_automation_store(store)
-        .with_session_delivery(delivery)
-        .with_subscription_delivery_service(owner.clone(), presence.clone());
+    let identity = identity.with_subscription_delivery_service(owner.clone(), presence.clone());
     let (identity, native) = crate::native_mail_owner::start(
         identity,
         crate::native_board_test_fixture::fixture_peer().expect("fixture peer"),
@@ -166,7 +167,7 @@ async fn message_server(
                 Some("mcp-message-test"),
             )
             .expect("machine"),
-            clock: std::sync::Arc::new(collaboration_service::SystemSubscriptionClock),
+            clock: clock.clone(),
         },
     )
     .expect("native mail owner");

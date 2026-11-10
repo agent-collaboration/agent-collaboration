@@ -6,7 +6,7 @@ use agent_automation::{
     WakeRecord, WakeState, WakeupId,
 };
 use serde::de::DeserializeOwned;
-use sqlx::{Connection, Row, SqliteConnection};
+use sqlx::{Row, SqliteConnection};
 
 pub struct WakeCreate<TMessage> {
     pub operation_id: OperationId,
@@ -39,7 +39,9 @@ impl AutomationStore {
             request.replace,
         ))
         .map_err(|_| StorageError::InvalidRecord)?;
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         if let Some(existing) = local_operation_receipts::replay(
             &mut transaction,
             LocalOperation {

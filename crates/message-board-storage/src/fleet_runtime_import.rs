@@ -117,7 +117,7 @@ impl FleetCache {
             return Ok(Vec::new());
         }
         let _writer = self.database.writer.lock().await;
-        let mut transaction = self.database.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self.database.write_transaction().await?;
         let mut imported = Vec::new();
         let existing = if session.is_some() {
             read_session(&mut transaction).await?

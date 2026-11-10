@@ -44,7 +44,10 @@ use collaboration_service::conversation_operation_snapshot as snapshot_from_reco
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     path::PathBuf,
-    sync::{Arc, Mutex as StdMutex},
+    sync::{
+        Arc, Mutex as StdMutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::Duration,
 };
 use tokio::sync::{Mutex, Notify, mpsc};
@@ -65,6 +68,9 @@ struct SupervisorInner {
     bindings: HashMap<EndpointRef, RuntimeBinding>,
     store: Arc<Mutex<ProviderOperationStore>>,
     live_operations: StdMutex<LiveOperations>,
+    /// Moves each time a live operation publishes its result, so schedulers and
+    /// provider retention wake on an ACP completion that writes no row.
+    completions: tokio::sync::watch::Sender<u64>,
     queued_operations: ProviderQueueOperationRegistry,
     hub: Option<Arc<collaboration_runtime::ProviderSessionEventHub>>,
     history_unavailable: Mutex<HashSet<SessionRef>>,
@@ -94,13 +100,29 @@ struct LiveOperations {
 
 struct LiveOperation {
     result: Mutex<Option<Result<ConversationOperationSettlement, ConversationOperationFailure>>>,
+    /// Set once the result is published. Retention reads it without the result lock, which
+    /// a reader of the result may be holding.
+    published: AtomicBool,
     changed: Notify,
+}
+
+/// A held operation's result, for a test that locks it as a reader would.
+#[cfg(test)]
+pub(crate) struct HeldResult(Arc<LiveOperation>);
+
+#[cfg(test)]
+impl HeldResult {
+    /// Takes the result lock now, without waiting, or `None` when it is taken.
+    pub(crate) fn try_hold(&self) -> Option<impl Sized + '_> {
+        self.0.result.try_lock().ok()
+    }
 }
 
 impl LiveOperation {
     fn pending() -> Self {
         Self {
             result: Mutex::new(None),
+            published: AtomicBool::new(false),
             changed: Notify::new(),
         }
     }
@@ -121,6 +143,68 @@ impl ExternalProviderSupervisor {
             .map(|entry| Arc::clone(&entry.runtime))
     }
 
+    /// Announces a completion as a live operation publishing its result does.
+    #[cfg(test)]
+    pub(crate) fn announce_completion(&self) {
+        self.inner
+            .completions
+            .send_modify(|revision| *revision = revision.wrapping_add(1));
+    }
+
+    /// Holds `operation_id` live, as admitting it to a provider does.
+    #[cfg(test)]
+    pub(crate) fn hold_live_operation(&self, operation_id: OperationId) {
+        self.inner
+            .live_operations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .operations
+            .insert(operation_id, Arc::new(LiveOperation::pending()));
+    }
+
+    /// The result lock of a held operation, which a test holds as a reader of the result
+    /// would.
+    #[cfg(test)]
+    pub(crate) fn held_result_for_test(&self, operation_id: &OperationId) -> Option<HeldResult> {
+        self.inner
+            .live_operations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .operations
+            .get(operation_id)
+            .cloned()
+            .map(HeldResult)
+    }
+
+    /// Publishes a held operation's result through the path a finished operation takes,
+    /// with no store write. Returns whether the operation was held.
+    #[cfg(test)]
+    pub(crate) async fn publish_held_result(&self, operation_id: &OperationId) -> bool {
+        let live = self
+            .inner
+            .live_operations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .operations
+            .get(operation_id)
+            .cloned();
+        let Some(live) = live else {
+            return false;
+        };
+        let result = Err(unavailable_failure(operation_id.clone(), None));
+        self.inner
+            .publish_result(operation_id.clone(), &live, result)
+            .await;
+        true
+    }
+
+    /// A receiver that wakes after each live operation publishes its result. Subscribe
+    /// before checking an operation, so a completion in between is not missed.
+    #[must_use]
+    pub fn subscribe_completions(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.inner.completions.subscribe()
+    }
+
     #[must_use]
     pub fn live_operation_ids(&self) -> std::collections::HashSet<OperationId> {
         self.inner
@@ -129,12 +213,8 @@ impl ExternalProviderSupervisor {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .operations
             .iter()
-            .filter_map(|(operation_id, operation)| {
-                operation.result.try_lock().map_or_else(
-                    |_| Some(operation_id.clone()),
-                    |result| result.is_none().then(|| operation_id.clone()),
-                )
-            })
+            .filter(|(_, operation)| !operation.published.load(Ordering::Acquire))
+            .map(|(operation_id, _)| operation_id.clone())
             .collect()
     }
     pub fn new(
@@ -191,6 +271,7 @@ impl ExternalProviderSupervisor {
                 bindings: runtimes,
                 store,
                 live_operations: StdMutex::new(LiveOperations::default()),
+                completions: tokio::sync::watch::channel(0).0,
                 queued_operations: ProviderQueueOperationRegistry::default(),
                 hub,
                 history_unavailable: Mutex::new(HashSet::new()),
@@ -561,8 +642,22 @@ impl SupervisorInner {
                 }
             }
         };
+        self.publish_result(operation_id, &live, result).await;
+    }
+
+    /// Publishes a live operation's result. Its protection from retention ends here, with
+    /// no store write, so the completion signal moves only after the result is set.
+    async fn publish_result(
+        &self,
+        operation_id: OperationId,
+        live: &LiveOperation,
+        result: Result<ConversationOperationSettlement, ConversationOperationFailure>,
+    ) {
         *live.result.lock().await = Some(result);
+        live.published.store(true, Ordering::Release);
         live.changed.notify_waiters();
+        self.completions
+            .send_modify(|revision| *revision = revision.wrapping_add(1));
         let mut operations = self
             .live_operations
             .lock()

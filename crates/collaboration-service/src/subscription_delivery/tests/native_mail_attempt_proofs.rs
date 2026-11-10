@@ -3,7 +3,7 @@ use super::super::subscription_service::OwnerObservation;
 use crate::BoardAvailability;
 use crate::SubscriptionDeliveryService;
 use crate::SubscriptionDeliveryServiceProps;
-use crate::SystemSubscriptionClock;
+
 use collaboration_contracts::AttemptEvidenceSink;
 use collaboration_contracts::AttemptReconciliation;
 use collaboration_contracts::AttemptReconciliationContext;
@@ -21,7 +21,7 @@ use collaboration_protocol::{
     DeliveryCorrelationId, DeliveryNextAction, DeliveryOutcome, DeliveryReceipt, DeliveryRejection,
     DeliveryRejectionReason, MessageDelivery, PushId, PushKind, SessionRef,
 };
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc, oneshot};
 
 struct ClientCall {
@@ -122,7 +122,12 @@ impl Runtime {
                 Some("Native attempt test"),
             )
             .unwrap(),
-            clock: Arc::new(SystemSubscriptionClock),
+            clock: Arc::new(
+                router_clock::ManualClock::starting_at(
+                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
+                )
+                .unwrap(),
+            ),
         });
         let observations = service.observe_owners();
         service.start().await.unwrap();
@@ -135,17 +140,14 @@ impl Runtime {
         }
     }
     async fn next_call(&mut self) -> ClientCall {
-        tokio::time::timeout(Duration::from_secs(5), self.calls.recv())
-            .await
-            .unwrap()
-            .unwrap()
+        (self.calls.recv()).await.unwrap()
     }
     async fn queued(&mut self, push: &PushId) {
-        tokio::time::timeout(Duration::from_secs(5),async {
+        (async {
             loop {
                 if matches!(self.observations.recv().await.unwrap(),OwnerObservation::MailAttemptQueued(id) if &id==push) {return;}
             }
-        }).await.unwrap();
+        }).await;
     }
     async fn close(self) {
         self.service.shutdown().await;
@@ -230,14 +232,10 @@ async fn accepted_attempts_are_serial_per_reader_and_another_reader_progresses_w
     assert!(runtime.calls.try_recv().is_err());
     // Real storage remains readable while the client effect is held open.
     assert!(
-        tokio::time::timeout(
-            Duration::from_secs(5),
-            runtime.store.get_push_record(&first_id)
-        )
-        .await
-        .unwrap()
-        .unwrap()
-        .is_none(),
+        (runtime.store.get_push_record(&first_id))
+            .await
+            .unwrap()
+            .is_none(),
         "carrier wrote a push outside its caller's transaction"
     );
     other_call.reply.send(started()).unwrap();

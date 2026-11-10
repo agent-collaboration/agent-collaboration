@@ -24,7 +24,7 @@ impl MailDeliveryRuntime {
         items: Vec<collaboration_protocol::PushId>,
     ) -> Result<(), StoreError> {
         let config = self.config;
-        let now = SyncTime::from_unix_millis(self.clock.now().timestamp_millis());
+        let now = SyncTime::from_unix_millis(self.clock.utc_now().timestamp_millis());
         let admitted = self
             .store
             .transaction({

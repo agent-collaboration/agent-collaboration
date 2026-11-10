@@ -1,7 +1,7 @@
 use super::*;
 use crate::{
     BoardAvailability, MailPushDeliveryProps, SubscriptionDeliveryService,
-    SubscriptionDeliveryServiceProps, SystemSubscriptionClock,
+    SubscriptionDeliveryServiceProps,
 };
 use board_fleet_sync::{AccessServiceToken, MachineSessionStore, ReqwestSessionTransport};
 use board_sync_protocol::BoardConsumerProtocol;
@@ -76,7 +76,12 @@ async fn full_push_inbox_returns_wire_capacity_refusal_without_admitting_custody
         delivery: carrier.clone(),
         presence: carrier.clone(),
         machine_identity: machine.clone(),
-        clock: Arc::new(SystemSubscriptionClock),
+        clock: Arc::new(
+            router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+                1792432800000,
+            ))
+            .unwrap(),
+        ),
     });
     let limits = DeliveryLimits::new::<RouterDeliveryTypes>(
         8 * 1024 * 1024,
@@ -91,7 +96,7 @@ async fn full_push_inbox_returns_wire_capacity_refusal_without_admitting_custody
             actors: actors.clone(),
             presence: carrier,
             machine,
-            clock: Arc::new(SystemSubscriptionClock),
+            clock: actors.runtime_clock(),
         },
         limits,
         Some(session),

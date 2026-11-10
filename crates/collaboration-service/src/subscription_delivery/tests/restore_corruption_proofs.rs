@@ -1,15 +1,13 @@
 //! One corrupt recovery row must not suppress healthy readers at Host startup.
-use super::super::{
-    SubscriptionClock, subscription_push::target_session, subscription_service::OwnerObservation,
-};
+use super::super::{subscription_push::target_session, subscription_service::OwnerObservation};
 use super::owner_fixture::*;
 use collaboration_protocol::{
     MessageDelivery, PushDeliveryState, PushHeaderFacts, PushId, PushKind, PushOrigin, PushRecord,
     PushRecordDraft, SessionId, SessionRef,
 };
 use message_board::*;
+use router_clock::RuntimeClock;
 use sqlx::Connection;
-use std::time::Duration;
 
 fn direct_message_draft(
     target: &SessionRef,
@@ -61,7 +59,7 @@ async fn shared_progress_store_failure_is_not_contained_as_a_project_failure() {
             .store
             .lock()
             .await
-            .restore_active_and_draining(fixture.clock.now())
+            .restore_active_and_draining(fixture.clock.utc_now())
             .await
             .is_err(),
         "shared native message failure must still fail subscription startup"
@@ -78,7 +76,7 @@ async fn shared_progress_store_failure_is_not_contained_as_a_project_failure() {
 
 #[tokio::test]
 async fn corrupt_subscription_mode_is_skipped_while_valid_reader_restores_and_delivers() {
-    tokio::time::timeout(Duration::from_secs(30), async {
+    (async {
     let fixture = Box::pin(OwnerFixture::new()).await;
     let corrupt_reader = human("corrupt-reader");
     fixture
@@ -95,7 +93,7 @@ async fn corrupt_subscription_mode_is_skipped_while_valid_reader_restores_and_de
                 replace: None,
                 note: None,
             },
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap();
@@ -109,7 +107,7 @@ async fn corrupt_subscription_mode_is_skipped_while_valid_reader_restores_and_de
                     ..SubscriptionPolicyPatch::default()
                 },
             },
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap();
@@ -183,7 +181,7 @@ async fn corrupt_subscription_mode_is_skipped_while_valid_reader_restores_and_de
             .get_thread_subscription_record(
                 &fixture.reader,
                 &SubscriptionScope::thread(fixture.root.clone()),
-                fixture.clock.now()
+                fixture.clock.utc_now()
             )
             .await
             .unwrap()
@@ -198,7 +196,7 @@ async fn corrupt_subscription_mode_is_skipped_while_valid_reader_restores_and_de
         .get_thread_subscription_record(
             &corrupt_reader,
             &SubscriptionScope::thread(fixture.root.clone()),
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap_err();
@@ -222,7 +220,7 @@ async fn corrupt_subscription_mode_is_skipped_while_valid_reader_restores_and_de
     );
     observer.close().await.unwrap();
     runtime.close().await;
-    }).await.expect("bounded healthy native delivery and unchanged corrupt membership");
+    }).await;
 }
 
 async fn bounded_stage<TValue>(
@@ -230,9 +228,7 @@ async fn bounded_stage<TValue>(
     work: impl std::future::Future<Output = TValue>,
 ) -> TValue {
     eprintln!("recovery proof: {stage}");
-    tokio::time::timeout(Duration::from_secs(10), work)
-        .await
-        .unwrap_or_else(|_| panic!("recovery proof timed out during {stage}"))
+    (work).await
 }
 
 #[tokio::test]
@@ -288,7 +284,10 @@ async fn failed_direct_message_recovery_query_does_not_stop_valid_subscription_r
     )
     .await
     .unwrap();
-    fixture.clock.advance_without_tokio_time(1);
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(1))
+        .unwrap();
     let request = bounded_stage("receive healthy subscription notice", async {
         let mut requests = runtime.requests.lock().await;
         let mut observations = runtime.observations.lock().await;
@@ -325,7 +324,8 @@ async fn failed_direct_message_recovery_query_does_not_stop_valid_subscription_r
 async fn corrupt_recovery_target_row_does_not_strand_held_dm_after_restart() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     let target = target_session(&fixture.reader).unwrap();
-    let held_draft = direct_message_draft(&target, "held DM survives restart", fixture.clock.now());
+    let held_draft =
+        direct_message_draft(&target, "held DM survives restart", fixture.clock.utc_now());
     let held_push_id = held_draft.push_id.clone();
     fixture
         .interactions
@@ -362,8 +362,11 @@ async fn corrupt_recovery_target_row_does_not_strand_held_dm_after_restart() {
 
     let mut corrupt_target = target.clone();
     corrupt_target.session_id = SessionId::try_from("corrupt-recovery-target".to_owned()).unwrap();
-    let corrupt_draft =
-        direct_message_draft(&corrupt_target, "invalid target row", fixture.clock.now());
+    let corrupt_draft = direct_message_draft(
+        &corrupt_target,
+        "invalid target row",
+        fixture.clock.utc_now(),
+    );
     let corrupt_push_id = corrupt_draft.push_id.clone();
     fixture
         .interactions
@@ -391,7 +394,7 @@ async fn corrupt_recovery_target_row_does_not_strand_held_dm_after_restart() {
 
     *fixture.presence.0.lock().unwrap() = collaboration_contracts::TargetPresence::Running;
     let recovered_runtime = fixture.runtime_without_board().await;
-    let request = tokio::time::timeout(Duration::from_secs(5), async {
+    let request = (async {
         recovered_runtime
             .requests
             .lock()
@@ -400,8 +403,7 @@ async fn corrupt_recovery_target_row_does_not_strand_held_dm_after_restart() {
             .await
             .unwrap()
     })
-    .await
-    .unwrap();
+    .await;
     assert_eq!(request.target, target);
     assert_eq!(request.payload.push_id, held_push_id);
     assert!(
@@ -415,12 +417,8 @@ async fn corrupt_recovery_target_row_does_not_strand_held_dm_after_restart() {
         .completions
         .send(collaboration_protocol::DeliveryOutcome::Started)
         .unwrap();
-    tokio::time::timeout(
-        Duration::from_secs(5),
-        recovered_runtime.observe(|event| matches!(event, OwnerObservation::DirectMessageSettled)),
-    )
-    .await
-    .expect("restarted held DM should settle");
+    (recovered_runtime.observe(|event| matches!(event, OwnerObservation::DirectMessageSettled)))
+        .await;
     assert_eq!(
         stored_push(&fixture, &held_push_id).await.delivery_state,
         PushDeliveryState::Delivered

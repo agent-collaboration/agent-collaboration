@@ -8,7 +8,7 @@ use fleet_sync_receiver::SnapshotInstall;
 use fleet_sync_tokio_runner::StagingStore;
 use fleet_sync_writer::{BootstrapGrant, ReplicatedDatabase};
 use message_board::{EpochNumber, FeedCursor, ProjectId};
-use runtime_primitives::{Clock, SystemClock};
+use runtime_primitives::SystemClock;
 use std::sync::Arc;
 
 struct NoCalls;
@@ -148,7 +148,7 @@ async fn bootstrap_with_readiness(
         .join("projects")
         .join(project.as_str());
     tokio::fs::create_dir_all(&directory).await?;
-    let now = SystemClock.now();
+    let now = target.clock.now();
     let policy = board_fleet_sync::BOARD_LEASE_POLICY;
     let target_database = Arc::new(
         ReplicatedDatabase::seeding(

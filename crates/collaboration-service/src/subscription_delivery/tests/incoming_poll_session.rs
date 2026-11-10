@@ -137,13 +137,12 @@ impl IncomingPollSession {
                 }
             }
         });
-        tokio::time::timeout(bound, async {
+        (async {
             while !*readiness.borrow_and_update() {
                 readiness.changed().await.unwrap();
             }
         })
-        .await
-        .unwrap();
+        .await;
         Self {
             session: collaboration_runtime::MailDeliverySession {
                 requests,

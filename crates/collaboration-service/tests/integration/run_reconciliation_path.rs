@@ -173,10 +173,15 @@ async fn exercise(
         gate,
         codex_home: root.clone(),
     };
+    let runtime_clock = std::sync::Arc::new(router_clock::ManualClock::new(
+        chrono::DateTime::UNIX_EPOCH + chrono::Duration::seconds(1_792_432_800),
+    ));
     let identity = ApplicationFixture::new(service_id, service_id)?
         .with_automation_store(store.clone())
+        .with_runtime_clock(runtime_clock.clone())
         .with_scheduled_run_execution(Arc::new(
             collaboration_runtime::CodexAppServerScheduledRuns::new(
+                runtime_clock.clone(),
                 native_backend.clone(),
                 Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
             ),

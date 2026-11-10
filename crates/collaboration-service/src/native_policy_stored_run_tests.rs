@@ -75,6 +75,7 @@ impl StoredPolicyRun {
     {
         collaboration_runtime::test_support::scheduled_run_evidence_sink::StoredRunEvidenceSink::new(
             self.store.clone(),
+            std::sync::Arc::new(runtime_primitives::SystemClock),
             collaboration_runtime::AutomationConfigurationHandle::default(),
             self.run_id.clone(),
             self.schedule_id.clone(),
@@ -114,6 +115,7 @@ async fn stored_two_attempts(
         collaboration_runtime::EndpointDirectory::new(fixture.backend.endpoint.service_id.clone());
     directory.publish(fixture.endpoint.clone())?;
     let route = collaboration_runtime::CodexAppServerDeliveryRoute::new(
+        fixture.clock.clone(),
         fixture.backend.endpoint.service_id.clone(),
         directory,
         fixture.backend.clone(),

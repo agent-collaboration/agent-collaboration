@@ -1,12 +1,12 @@
 //! Real Board/automation storage and authenticated Claude peer composition for resume proof.
 use crate::board_fixture::native_mail_owner;
 use crate::board_fixture::native_registry;
+use router_clock::RuntimeClock;
 #[path = "claude_peer_subscription_clock.rs"]
 mod observed_clock;
 #[path = "claude_peer_subscription_transport.rs"]
 mod peer_transport;
 use automation_storage::AutomationStore;
-use chrono::Utc;
 use claude_code_peer_messaging::{
     ClaudeCodePeerSocket, ClaudeCodeSessionRegistry, PeerSessionLookup, PeerSessionRecord,
 };
@@ -31,14 +31,13 @@ use collaboration_service::ProjectAdmissionProps;
 use collaboration_service::BoardAvailability;
 use collaboration_service::SubscriptionWindowStore;
 
-use collaboration_service::SubscriptionClock;
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
 
 use message_board::public_replies::{RequestDecision, RequestResult, WriteReply};
 use message_board::{SessionId as BoardSessionId, SessionRef as BoardSessionRef, *};
 use native_mail_owner::NativeMailOwner;
-use observed_clock::ManualSubscriptionClock;
+use router_clock::ManualClock;
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
 use std::{
@@ -82,7 +81,7 @@ pub struct ClaudePeerSubscriptionFixture {
     writer: Identity,
     thread_id: ThreadId,
     project_id: ProjectId,
-    clock: Arc<ManualSubscriptionClock>,
+    clock: Arc<ManualClock>,
     peer_registry: Arc<ClaudeCodeSessionRegistry>,
     peer_route: Arc<ClaudeCodePeerDeliveryRoute>,
     router: Arc<SessionDeliveryRouter>,
@@ -104,9 +103,10 @@ impl ClaudePeerSubscriptionFixture {
         let registry_directory = directory.path().join("claude-sessions");
         std::fs::create_dir(&registry_directory)?;
 
-        let clock = ManualSubscriptionClock::new(Utc::now());
+        let clock = ManualClock::new("2026-11-04T00:00:00Z".parse()?);
         let clock = Arc::new(clock);
-        let project_registry = native_registry::new_registry(directory.path()).await?;
+        let project_registry =
+            native_registry::new_registry_with_clock(directory.path(), clock.clone()).await?;
         let origin = ActorOrigin {
             installation: ServiceId::try_from(SERVICE_ID.to_owned())?,
             machine: MachineLabel::try_from("claude-peer-resume-fixture".to_owned())?,
@@ -119,6 +119,7 @@ impl ClaudePeerSubscriptionFixture {
         .await?;
         let fleet = Arc::new(fleet);
         let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
+            clock: clock.clone(),
             registry: project_registry.clone(),
             fleet: fleet.clone(),
             identity: MachineIdentity::new(
@@ -239,7 +240,8 @@ impl ClaudePeerSubscriptionFixture {
     }
 
     pub fn advance(&self, amount: Duration) -> ProofResult {
-        self.clock.advance(amount)
+        self.clock.advance(amount)?;
+        Ok(())
     }
 
     pub async fn presence(&self) -> ProofResult<TargetPresence> {
@@ -304,7 +306,7 @@ impl ClaudePeerSubscriptionFixture {
         let RecordTime::Router(recorded_at) = post.envelope.time else {
             return Err("a live fixture post has unknown record time".into());
         };
-        let elapsed = recorded_at.signed_duration_since(self.clock.now());
+        let elapsed = recorded_at.signed_duration_since(self.clock.utc_now());
         if elapsed > chrono::Duration::zero() {
             self.clock.advance(elapsed.to_std()?)?;
         }
@@ -376,7 +378,7 @@ impl ClaudePeerSubscriptionFixture {
             .board_store
             .lock()
             .await
-            .due_subscription_roots(&self.reader, self.clock.now())
+            .due_subscription_roots(&self.reader, self.clock.utc_now())
             .await?)
     }
 

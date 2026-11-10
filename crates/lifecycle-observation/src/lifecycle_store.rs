@@ -2,11 +2,8 @@
 use crate::{JournalError, JournalPage, JournalPosition, JournalRow, ObservationJournal};
 use collaboration_protocol::{EndpointRef, LifecycleObservation};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-#[cfg(test)]
-use tokio::sync::mpsc;
+use std::time::Duration;
 use tokio::sync::{Mutex, watch};
-use tokio_util::sync::CancellationToken;
 
 pub struct LifecycleStore {
     journal: Mutex<ObservationJournal>,
@@ -14,25 +11,6 @@ pub struct LifecycleStore {
     coverage: std::sync::Mutex<crate::ObservationCoverage>,
     snapshots: Mutex<crate::AddressSnapshotCache>,
     available: AtomicBool,
-}
-
-enum MaintenanceTickSource {
-    Interval(tokio::time::Interval),
-    #[cfg(test)]
-    Test(mpsc::Receiver<()>),
-}
-
-impl MaintenanceTickSource {
-    async fn wait_for_tick(&mut self) -> bool {
-        match self {
-            Self::Interval(interval) => {
-                interval.tick().await;
-                true
-            }
-            #[cfg(test)]
-            Self::Test(receiver) => receiver.recv().await.is_some(),
-        }
-    }
 }
 
 impl LifecycleStore {
@@ -91,6 +69,12 @@ impl LifecycleStore {
             .apply(observation)?;
         self.signal_commit();
         Ok(row)
+    }
+    /// A receiver that wakes after each journal append or maintenance that removed rows,
+    /// including a native `turn/completed` observation.
+    #[must_use]
+    pub fn subscribe_commits(&self) -> watch::Receiver<u64> {
+        self.commits.subscribe()
     }
     fn signal_commit(&self) {
         self.commits
@@ -186,50 +170,28 @@ impl LifecycleStore {
         self.signal_commit();
         Ok(())
     }
+    /// Expires old history; it signals journal readers only when it removed rows.
     pub async fn maintain(&self, now: i64) -> Result<(), JournalError> {
+        self.expire_history_reporting_removal(now).await.map(|_| ())
+    }
+    /// Expires history like [`Self::maintain`] and says whether it removed rows.
+    async fn expire_history_reporting_removal(&self, now: i64) -> Result<bool, JournalError> {
         let mut journal = self.journal.lock().await;
-        let result = journal.expire_history(now).await;
+        let result = journal.expire_history_reporting_removal(now).await;
         self.observe_storage_result(&result)?;
-        result?;
+        let expiry = result?;
         journal.incremental_vacuum_step().await?;
-        self.signal_commit();
-        Ok(())
-    }
-    /// Internal retention maintenance only; this does not schedule agent work.
-    pub async fn run_maintenance(&self, shutdown: CancellationToken) -> Result<(), JournalError> {
-        let mut interval = tokio::time::interval(Duration::from_secs(3600));
-        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        self.run_maintenance_with_ticks(shutdown, MaintenanceTickSource::Interval(interval))
-            .await
-    }
-
-    async fn run_maintenance_with_ticks(
-        &self,
-        shutdown: CancellationToken,
-        mut ticks: MaintenanceTickSource,
-    ) -> Result<(), JournalError> {
-        loop {
-            tokio::select! {
-                _=shutdown.cancelled()=>return Ok(()),
-                tick_available = ticks.wait_for_tick()=>{
-                    if !tick_available {
-                        return Ok(());
-                    }
-                    let now=SystemTime::now().duration_since(UNIX_EPOCH).map_err(|_|JournalError::InvalidRecord)?.as_secs();
-                    if let Err(error) = self
-                        .maintain(i64::try_from(now).map_err(|_| JournalError::InvalidRecord)?)
-                        .await
-                    {
-                        tracing::warn!(
-                            component = "lifecycle_store",
-                            maintenance_class = "lifecycle_journal_retention",
-                            error_class = lifecycle_maintenance_error_class(&error),
-                            "lifecycle_observation.maintenance_degraded"
-                        );
-                    }
-                }
-            }
+        if expiry.removed_rows {
+            self.signal_commit();
         }
+        Ok(expiry.removed_rows)
+    }
+    /// When expiry next removes something, read like any journal read.
+    async fn retention_due_ms(&self, now_ms: i64) -> Result<Option<i64>, JournalError> {
+        let mut journal = self.journal.lock().await;
+        let result = journal.retention_due_ms(now_ms).await;
+        self.observe_storage_result(&result)?;
+        result
     }
     pub async fn close(self) {
         self.journal.into_inner().close().await;
@@ -293,26 +255,25 @@ impl LifecycleStore {
     }
 }
 
+#[path = "lifecycle_store/retention_worker.rs"]
+mod retention_worker;
+
 #[cfg(test)]
 mod tests {
     use collaboration_protocol::LifecycleObservation;
-    use sqlx::Connection;
-    use sqlx::SqliteConnection;
-    use sqlx::sqlite::SqliteConnectOptions;
     use std::env;
-    use std::sync::Arc;
     use std::sync::atomic::AtomicUsize;
     use std::sync::atomic::Ordering;
-    use tokio::sync::mpsc;
-    use tokio_util::sync::CancellationToken;
 
     use super::LifecycleStore;
-    use super::MaintenanceTickSource;
     use crate::JournalError;
     use crate::ObservationJournal;
 
     #[path = "wal_mode_tests.rs"]
     mod wal_mode_tests;
+
+    #[path = "maintenance_signal_tests.rs"]
+    mod maintenance_signal_tests;
 
     #[tokio::test]
     async fn new_journal_database_uses_incremental_auto_vacuum() {
@@ -334,132 +295,6 @@ mod tests {
     }
 
     static TEMP_COUNTER: AtomicUsize = AtomicUsize::new(0);
-
-    #[tokio::test]
-    async fn failed_hourly_maintenance_continues_to_next_tick_without_restoring_availability() {
-        let path = test_database_path("hourly_maintenance_failure_continues");
-        let journal = ObservationJournal::open(&path, identity())
-            .await
-            .unwrap_or_else(|error| panic!("journal should open: {error}"));
-        let store = Arc::new(LifecycleStore::new(journal));
-        store
-            .append(&observation(), 1)
-            .await
-            .unwrap_or_else(|error| panic!("fixture row should append: {error}"));
-        let mut fixture =
-            SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(&path))
-                .await
-                .unwrap_or_else(|error| panic!("fixture connection should open: {error}"));
-        sqlx::query("DROP TABLE lifecycle_records")
-            .execute(&mut fixture)
-            .await
-            .unwrap_or_else(|error| {
-                panic!("fixture should inject one maintenance failure: {error}")
-            });
-
-        let shutdown = CancellationToken::new();
-        let (tick_sender, tick_receiver) = mpsc::channel(2);
-        let task = tokio::spawn({
-            let store = Arc::clone(&store);
-            let shutdown = shutdown.clone();
-            async move {
-                store
-                    .run_maintenance_with_ticks(
-                        shutdown,
-                        MaintenanceTickSource::Test(tick_receiver),
-                    )
-                    .await
-            }
-        });
-        tick_sender
-            .send(())
-            .await
-            .unwrap_or_else(|error| panic!("first maintenance tick should send: {error}"));
-        tokio::time::timeout(std::time::Duration::from_secs(1), async {
-            while store.available.load(Ordering::Acquire) {
-                tokio::task::yield_now().await;
-            }
-        })
-        .await
-        .unwrap_or_else(|_elapsed| {
-            panic!("first maintenance failure should invalidate journal availability")
-        });
-        assert!(
-            !store.available.load(Ordering::Acquire),
-            "failed first hourly maintenance tick should leave the journal unavailable"
-        );
-
-        sqlx::query(
-            "CREATE TABLE lifecycle_records (sequence INTEGER PRIMARY KEY, retention_at INTEGER NOT NULL, observation_json TEXT NOT NULL)",
-        )
-        .execute(&mut fixture)
-        .await
-        .unwrap_or_else(|error| panic!("fixture should restore the one failed storage seam: {error}"));
-        let restored_observation = serde_json::to_string(&observation()).unwrap_or_else(|error| {
-            panic!("expired fixture observation should serialize: {error}")
-        });
-        sqlx::query(
-            "INSERT INTO lifecycle_records (sequence, retention_at, observation_json) VALUES (1, 1, ?)",
-        )
-        .bind(restored_observation)
-        .execute(&mut fixture)
-        .await
-        .unwrap_or_else(|error| panic!("fixture should restore one expired record: {error}"));
-        let before_second_tick: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM lifecycle_records")
-            .fetch_one(&mut fixture)
-            .await
-            .unwrap_or_else(|error| {
-                panic!("fixture should contain the expired record before tick two: {error}")
-            });
-        assert_eq!(before_second_tick, 1);
-        tick_sender
-            .send(())
-            .await
-            .unwrap_or_else(|error| panic!("later maintenance tick should send: {error}"));
-
-        let retained = tokio::time::timeout(std::time::Duration::from_secs(1), async {
-            loop {
-                let retained: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM lifecycle_records")
-                    .fetch_one(&mut fixture)
-                    .await
-                    .unwrap_or_else(|error| {
-                        panic!("later maintenance tick should query fixture rows: {error}")
-                    });
-                if retained == 0 {
-                    return retained;
-                }
-                tokio::task::yield_now().await;
-            }
-        })
-        .await
-        .unwrap_or_else(|_elapsed| panic!("later maintenance tick should clean expired rows"));
-        assert_eq!(
-            retained, 0,
-            "later existing hourly tick should clean expired rows"
-        );
-        assert!(matches!(
-            store.bounds().await,
-            Err(JournalError::InvalidStorage)
-        ));
-
-        shutdown.cancel();
-        assert!(
-            task.await
-                .unwrap_or_else(|error| panic!("maintenance task should join: {error}"))
-                .is_ok(),
-            "shutdown should end the still-running maintenance task successfully"
-        );
-        fixture
-            .close()
-            .await
-            .unwrap_or_else(|error| panic!("fixture should close: {error}"));
-        Arc::try_unwrap(store)
-            .unwrap_or_else(|_| panic!("maintenance task should release its store reference"))
-            .close()
-            .await;
-        std::fs::remove_file(path)
-            .unwrap_or_else(|error| panic!("fixture database should be removed: {error}"));
-    }
 
     #[test]
     fn lifecycle_maintenance_error_class_excludes_raw_storage_details() {

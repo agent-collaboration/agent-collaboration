@@ -1,5 +1,7 @@
 //! Original test roots retain their case namespaces.
 
+#[path = "../board_e2e/acp_recipient.rs"]
+mod acp_recipient;
 #[path = "../board_e2e/central_pair.rs"]
 mod central_pair;
 #[path = "../board_e2e/fixture.rs"]

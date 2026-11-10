@@ -1,4 +1,5 @@
 use super::*;
+use sqlx::Connection;
 
 fn binding(number: u64) -> InstallationPeerBinding {
     InstallationPeerBinding {

@@ -3,7 +3,7 @@ use crate::{AutomationStore, StorageError};
 use agent_automation::{
     EventId, InstructionDocument, InstructionId, InstructionText, OperationId, RevisionId,
 };
-use sqlx::{Connection, Row};
+use sqlx::Row;
 
 impl AutomationStore {
     pub async fn create_instruction(
@@ -16,7 +16,9 @@ impl AutomationStore {
             return Err(StorageError::InvalidRecord);
         }
         let request = serde_json::to_vec(text).map_err(|_| StorageError::InvalidRecord)?;
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         if let Some(row) = sqlx::query("SELECT method_name,canonical_request,operation_status,final_result_json FROM operation_receipts WHERE operation_id=?")
             .bind(operation_id.as_str()).fetch_optional(&mut *transaction).await? {
             let method: String = row.try_get("method_name")?;

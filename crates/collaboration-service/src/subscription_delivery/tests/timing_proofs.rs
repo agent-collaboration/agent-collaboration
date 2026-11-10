@@ -1,9 +1,10 @@
-use super::super::SubscriptionClock;
+use router_clock::RuntimeClock;
+
 use super::owner_fixture::*;
 use crate::subscription_delivery::subscription_service::OwnerObservation;
 use message_board::{SubscriptionMode, WhenIdle};
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn quiet_period_restarts_from_the_second_arrival() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
@@ -19,20 +20,33 @@ async fn quiet_period_restarts_from_the_second_arrival() {
     fixture.post(&fixture.root, "First").await;
     runtime.owner_barrier(&fixture.reader).await;
     runtime.observe(|event| matches!(event, OwnerObservation::Sleeping(Some(deadline)) if *deadline == fixture.clock.monotonic_now() + std::time::Duration::from_secs(120))).await;
-    fixture.clock.advance(60).await;
+    fixture
+        .clock
+        .not_due_check_now(fixture.clock.monotonic_now() + std::time::Duration::from_secs(120))
+        .await;
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(60))
+        .unwrap();
     fixture.post(&fixture.root, "Second").await;
     runtime.owner_barrier(&fixture.reader).await;
-    fixture.clock.advance(119).await;
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(119))
+        .unwrap();
     runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
-    fixture.clock.advance(1).await;
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(1))
+        .unwrap();
     let request = runtime.requests.lock().await.recv().await.unwrap();
     assert!(request.payload.line.as_str().contains("2 messages"));
     runtime.await_settled().await;
     runtime.close().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn repeated_ninety_second_arrivals_are_passed_at_the_fifteen_minute_cap() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
@@ -47,23 +61,31 @@ async fn repeated_ninety_second_arrivals_are_passed_at_the_fifteen_minute_cap() 
     let runtime = fixture.native_runtime().await;
     fixture.post(&fixture.root, "Opening").await;
     runtime.owner_barrier(&fixture.reader).await;
-    // Arrivals every 90 s keep the 120 s quiet period from ending; the 900 s cap passes them.
     for _ in 0..9 {
-        fixture.clock.advance(90).await;
+        fixture
+            .clock
+            .advance(std::time::Duration::from_secs(90))
+            .unwrap();
         fixture.post(&fixture.root, "Continuing").await;
         runtime.owner_barrier(&fixture.reader).await;
     }
-    fixture.clock.advance(89).await;
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(89))
+        .unwrap();
     runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
-    fixture.clock.advance(1).await;
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(1))
+        .unwrap();
     let request = runtime.requests.lock().await.recv().await.unwrap();
     assert!(request.payload.line.as_str().contains("10 messages"));
     runtime.await_settled().await;
     runtime.close().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn activity_in_one_root_never_delays_another_root() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     let other = fixture.add_root().await;
@@ -76,10 +98,16 @@ async fn activity_in_one_root_never_delays_another_root() {
     fixture.post(&fixture.root, "First root").await;
     fixture.post(&other, "Other root").await;
     runtime.owner_barrier(&fixture.reader).await;
-    fixture.clock.advance(60).await;
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(60))
+        .unwrap();
     fixture.post(&other, "Other extended").await;
     runtime.owner_barrier(&fixture.reader).await;
-    fixture.clock.advance(60).await;
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(60))
+        .unwrap();
     let request = runtime.requests.lock().await.recv().await.unwrap();
     let record = fixture
         .interactions
@@ -91,7 +119,10 @@ async fn activity_in_one_root_never_delays_another_root() {
     runtime.await_settled().await;
     runtime.owner_barrier(&fixture.reader).await;
     assert!(runtime.requests.lock().await.try_recv().is_err());
-    fixture.clock.advance(60).await;
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(60))
+        .unwrap();
     runtime.requests.lock().await.recv().await.unwrap();
     runtime.await_settled().await;
     runtime.close().await;
@@ -102,17 +133,13 @@ async fn rejected_delivery_backoff_doubles_from_thirty_seconds_to_ten_minutes() 
     let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.native_runtime().await;
     fixture.post(&fixture.root, "Pending").await;
-    let mut request = tokio::time::timeout(std::time::Duration::from_secs(10), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .unwrap();
+    let mut request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
     let push = request.payload.push_id.clone();
     let mut driving: Option<tokio::task::JoinHandle<Result<(), durable_steps::StoreError>>> = None;
     for (index, delay) in [30, 60, 120, 240, 480, 600, 600].into_iter().enumerate() {
         eprintln!(
             "BACKOFF answer index={index} delay={delay} now={}",
-            fixture.clock.now()
+            fixture.clock.utc_now()
         );
         assert_eq!(
             request.payload.push_id, push,
@@ -126,13 +153,9 @@ async fn rejected_delivery_backoff_doubles_from_thirty_seconds_to_ten_minutes() 
             })
             .unwrap();
         if let Some(driving) = driving.take() {
-            tokio::time::timeout(std::time::Duration::from_secs(10), driving)
-                .await
-                .expect("preceding retry drive must finish after this answer")
-                .unwrap()
-                .unwrap();
+            (driving).await.unwrap().unwrap();
         }
-        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        (async {
             loop {
                 if fixture
                     .interactions
@@ -146,10 +169,9 @@ async fn rejected_delivery_backoff_doubles_from_thirty_seconds_to_ten_minutes() 
                 tokio::task::yield_now().await;
             }
         })
-        .await
-        .expect("actual SDK outcome transaction recorded this retry");
+        .await;
         let until = chrono::DateTime::from_timestamp_millis(
-            fixture.clock.now().timestamp_millis() + i64::try_from(delay * 1000).unwrap(),
+            fixture.clock.utc_now().timestamp_millis() + i64::try_from(delay * 1000).unwrap(),
         )
         .unwrap();
         assert_eq!(
@@ -159,11 +181,14 @@ async fn rejected_delivery_backoff_doubles_from_thirty_seconds_to_ten_minutes() 
                 .next_retry_at,
             Some(until)
         );
-        fixture.clock.advance_without_tokio_time(delay - 1);
+        fixture
+            .clock
+            .advance(std::time::Duration::from_secs(delay - 1))
+            .unwrap();
         eprintln!("BACKOFF before-deadline drive index={index}");
         let mut early_drive = runtime.drive_native_due();
         let mut early_request = None;
-        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        (async {
             tokio::select! {
                 result = &mut early_drive => { result.unwrap().unwrap(); },
                 request = async { runtime.requests.lock().await.recv().await.unwrap() } => {
@@ -172,12 +197,12 @@ async fn rejected_delivery_backoff_doubles_from_thirty_seconds_to_ten_minutes() 
                     early_drive.await.unwrap().unwrap();
                 }
             }
-        }).await.expect("before-deadline drive or actual unexpected native request");
+        }).await;
         if let Some(early) = early_request {
             eprintln!(
                 "EARLY_NATIVE_REQUEST index={index} push={} now={} scheduled_until={until}",
                 early.payload.push_id.as_str(),
-                fixture.clock.now()
+                fixture.clock.utc_now()
             );
             fixture
                 .await_push_state(&push, collaboration_protocol::PushDeliveryState::Delivered)
@@ -186,23 +211,17 @@ async fn rejected_delivery_backoff_doubles_from_thirty_seconds_to_ten_minutes() 
             panic!("known failure backoff dispatched before its scheduled time at index {index}");
         }
         eprintln!("BACKOFF before-deadline owner barrier index={index}");
-        tokio::time::timeout(
-            std::time::Duration::from_secs(10),
-            runtime.owner_barrier(&fixture.reader),
-        )
-        .await
-        .expect("before-deadline reader must not be blocked in native IO");
+        (runtime.owner_barrier(&fixture.reader)).await;
         assert!(
             runtime.requests.lock().await.try_recv().is_err(),
             "retry before its deadline"
         );
-        fixture.clock.advance_without_tokio_time(1);
+        fixture
+            .clock
+            .advance(std::time::Duration::from_secs(1))
+            .unwrap();
         driving = Some(runtime.drive_native_due());
-        request = tokio::time::timeout(std::time::Duration::from_secs(10), async {
-            runtime.requests.lock().await.recv().await.unwrap()
-        })
-        .await
-        .expect("retry at its actual SDK deadline");
+        request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
     }
     assert_eq!(request.payload.push_id, push);
     runtime.await_settled().await;

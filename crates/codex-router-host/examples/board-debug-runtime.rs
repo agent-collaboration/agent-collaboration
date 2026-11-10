@@ -1,4 +1,6 @@
-//! Opt-in real board listeners and stores, without native or provider processes.
+//! Opt-in real board listeners and stores, without a native process. With the
+//! runtime-test-support feature, a `fixture-provider-acp.json` in the directory starts
+//! one fixture ACP provider on the Cursor endpoint, as an e2e recipient that can be held for.
 //!
 //! Run with `<directory> <MCP port> [<private fixture session JSON>]`.
 //! Port 0 asks the OS for a free port. Read the published service.json for its URL.
@@ -6,6 +8,9 @@
 //! or Ctrl-C; restart on the same directory to exercise durable board recovery.
 use codex_router_host::{CollaborationRuntime, CollaborationRuntimeInputs, load_fleet_enrollment};
 use collaboration_protocol::ServiceManifest;
+#[cfg(feature = "runtime-test-support")]
+#[path = "board-debug-runtime/fixture_provider.rs"]
+mod fixture_provider;
 #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
 #[path = "board-debug-runtime/local_cancel_observation.rs"]
 mod local_cancel_observation;
@@ -73,7 +78,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     let home = PathBuf::from(std::env::var_os("HOME").ok_or("HOME unavailable")?);
     // Keep the normal Codex state path. No native process or stored-session read
     // is requested by this launcher; the native endpoint remains unavailable.
-    let mut runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
+    let inputs = CollaborationRuntimeInputs {
         board_session,
         owner_human_id: None,
         directory: directory.clone(),
@@ -83,8 +88,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         native_schema: None,
         peer_registry_directory: Some(directory.join("absent-peer-registry")),
         remote_control_server_name: None,
-    })
-    .await?;
+    };
+    #[cfg(feature = "runtime-test-support")]
+    let providers = fixture_provider::startups(&directory)?;
+    #[cfg(not(feature = "runtime-test-support"))]
+    let providers = Vec::new();
+    let mut runtime =
+        CollaborationRuntime::start_with_external_providers(inputs, providers).await?;
     #[cfg(feature = "runtime-test-support")]
     if let Err(error) = mail_faults::install(&runtime, &directory).await {
         return match runtime.shutdown().await {

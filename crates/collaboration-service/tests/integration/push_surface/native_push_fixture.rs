@@ -196,6 +196,11 @@ pub(super) async fn setup() -> (
     )
     .expect("machine identity");
     let presence = Arc::new(RunningPresence);
+    let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
+        .expect("service identity")
+        .with_automation_store(automation.clone())
+        .with_session_delivery(delivery.clone());
+    let clock = identity.runtime_clock();
     let actors = collaboration_service::SubscriptionDeliveryService::new(
         collaboration_service::SubscriptionDeliveryServiceProps {
             board_availability: collaboration_service::BoardAvailability::Unavailable,
@@ -203,15 +208,11 @@ pub(super) async fn setup() -> (
             delivery: delivery.clone(),
             presence: presence.clone(),
             machine_identity: machine.clone(),
-            clock: Arc::new(collaboration_service::SystemSubscriptionClock),
+            clock: clock.clone(),
         },
     );
     actors.start().await.expect("single owner starts");
-    let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_ID)
-        .expect("service identity")
-        .with_automation_store(automation.clone())
-        .with_session_delivery(delivery.clone())
-        .with_subscription_delivery_service(actors.clone(), presence.clone());
+    let identity = identity.with_subscription_delivery_service(actors.clone(), presence.clone());
     let (identity, mail) = native_mail_owner::start(
         identity,
         fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7()).expect("installation peer"),
@@ -220,7 +221,7 @@ pub(super) async fn setup() -> (
             actors: actors.clone(),
             presence,
             machine,
-            clock: Arc::new(collaboration_service::SystemSubscriptionClock),
+            clock,
         },
     )
     .expect("compose native mail");

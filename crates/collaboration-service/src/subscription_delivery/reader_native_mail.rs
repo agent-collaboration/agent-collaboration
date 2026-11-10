@@ -1,5 +1,10 @@
 //! The existing reader cadence prompts the native custody owner; it never delivers a second copy.
-use super::{BoardError, PRESENCE_INTERVAL, ReaderDeliveryOwner, TargetPresence};
+//!
+//! A held item's target is checked once when the reader first sees the item, and again
+//! only after a signal that it may have loaded; there is no presence timer. Items are
+//! marked checked only when a check succeeds and leaves them held; a failed check, journal
+//! capture or release fails the pass, and its backoff checks again.
+use super::{BoardError, ReaderDeliveryOwner, TargetPresence};
 #[cfg(test)]
 use crate::subscription_delivery::subscription_service::OwnerObservation;
 
@@ -9,7 +14,7 @@ impl ReaderDeliveryOwner {
         target: &collaboration_protocol::SessionRef,
     ) -> Result<bool, BoardError> {
         let Some(runtime) = self.native_mail.get().and_then(std::sync::Weak::upgrade) else {
-            self.native_checked_presence.clear();
+            self.native_checked.clear();
             return Ok(false);
         };
         let items = runtime
@@ -20,50 +25,44 @@ impl ReaderDeliveryOwner {
                 BoardError::board_unavailable()
             })?;
         let held_ids = items.iter().collect::<std::collections::HashSet<_>>();
-        self.native_checked_presence
-            .retain(|id, _| held_ids.contains(id));
-        let mut running = false;
-        for item in &items {
-            if self
-                .native_checked_presence
-                .get(item)
-                .is_some_and(|checked| {
-                    self.clock.monotonic_now().duration_since(*checked) < PRESENCE_INTERVAL
-                })
-            {
-                continue;
-            }
-            self.native_checked_presence
-                .insert(item.clone(), self.clock.monotonic_now());
-            let is_running = matches!(
-                self.presence.presence(target).await,
-                Ok(TargetPresence::Running)
-            );
-            #[cfg(test)]
-            self.observe(OwnerObservation::NativeHeldChecked {
-                item: item.clone(),
-                running: is_running,
-            });
-            if is_running {
-                // Presence belongs to this reader, so one positive check also
-                // releases its items whose checks were staggered on earlier passes.
-                running = true;
-                break;
-            }
-        }
-        if running {
-            let ready = items
-                .iter()
-                .map(|item| {
-                    self.native_checked_presence
-                        .insert(item.clone(), self.clock.monotonic_now());
-                    item.clone()
-                })
-                .collect();
-            runtime.release_held_mail(ready).await.map_err(|error| {
-                tracing::warn!(%error, "native held-mail release failed");
-                BoardError::board_unavailable()
-            })?;
+        self.native_checked.retain(|id| held_ids.contains(id));
+        let Some(item) = items
+            .iter()
+            .find(|item| !self.native_checked.contains(*item))
+        else {
+            return Ok(!items.is_empty());
+        };
+        // Presence belongs to this reader: one check answers for all its held items, so
+        // none stays marked unless the whole check succeeds.
+        self.native_checked.clear();
+        let recorded = self.held_mail.record_position(self.holds_mail()).await;
+        let presence = self.presence.presence(target).await.map_err(|error| {
+            tracing::warn!(%error, "native held-mail presence check failed");
+            BoardError::board_unavailable()
+        })?;
+        let running = matches!(presence, TargetPresence::Running);
+        #[cfg(test)]
+        self.observe(OwnerObservation::NativeHeldChecked {
+            item: item.clone(),
+            running,
+        });
+        #[cfg(not(test))]
+        let _ = item;
+        // A target that is not running and that nothing can start, a closed Claude Code
+        // terminal, is not held for: its mail goes back through delivery, whose route refuses
+        // it at once.
+        if running || matches!(presence, TargetPresence::NotRunning) {
+            runtime
+                .release_held_mail(items.clone())
+                .await
+                .map_err(|error| {
+                    tracing::warn!(%error, "native held-mail release failed");
+                    BoardError::board_unavailable()
+                })?;
+        } else {
+            // Mail stays held only where a journal position says when to check again.
+            recorded?;
+            self.native_checked.extend(items.iter().cloned());
         }
         Ok(!items.is_empty())
     }

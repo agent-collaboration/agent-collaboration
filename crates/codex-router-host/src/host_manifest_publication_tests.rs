@@ -109,8 +109,6 @@ async fn host_startup_publishes_the_configured_router_proxy_port() {
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private runtime root");
     let router_proxy_endpoint: SocketAddr = "127.0.0.1:18787".parse().expect("custom Router port");
-    let (_relation_sender, relation_receiver) =
-        tokio::sync::watch::channel(RouterExecutableRelation::Match);
 
     let runtime = CollaborationRuntime::start_for_host_with_router_proxy_endpoint(
         HostCollaborationInputs {
@@ -120,7 +118,9 @@ async fn host_startup_publishes_the_configured_router_proxy_port() {
             router_proxy_endpoint,
         },
         Vec::new(),
-        relation_receiver,
+        std::sync::Arc::new(collaboration_mcp::FixedRouterExecutableRelation(
+            RouterExecutableRelation::Match,
+        )),
     )
     .await
     .expect("Host collaboration runtime");

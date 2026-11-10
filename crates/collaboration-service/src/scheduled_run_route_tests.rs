@@ -44,6 +44,7 @@ async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestR
             target: target.clone(),
             interactions: Arc::clone(&interactions),
             observed_push_ids: Arc::new(std::sync::Mutex::new(Vec::new())),
+            submit_calls: Arc::default(),
             generation,
             attempt_id: AttemptId::generate(),
             submissions: AtomicUsize::new(0),
@@ -97,6 +98,9 @@ async fn provider_and_peer_routes_drive_run_show_without_native_turns() -> TestR
             execution: Arc::clone(&fake),
             backend: None,
             configuration: collaboration_runtime::AutomationConfigurationHandle::default(),
+            clock: std::sync::Arc::new(router_clock::ManualClock::new(
+                chrono::DateTime::UNIX_EPOCH,
+            )),
             machine_identity: collaboration_contracts::MachineIdentity::new(
                 target.endpoint.service_id.clone(),
                 Some("Schedule Fixture"),
@@ -194,6 +198,7 @@ async fn provider_existing_preparation_is_inspectable_and_fresh_activation_is_re
         target: target.clone(),
         interactions: Arc::clone(&interactions),
         observed_push_ids: Arc::new(std::sync::Mutex::new(Vec::new())),
+        submit_calls: Arc::default(),
         generation,
         attempt_id: AttemptId::generate(),
         submissions: AtomicUsize::new(0),

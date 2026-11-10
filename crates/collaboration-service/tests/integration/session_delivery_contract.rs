@@ -126,6 +126,7 @@ fn scheduled_submission_and_settlement_keep_distinct_recovery_outcomes()
     }
     for settlement in [
         RunSettlement::Pending,
+        RunSettlement::NotObserved,
         RunSettlement::Failed {
             reason: "native turn failed".into(),
         },

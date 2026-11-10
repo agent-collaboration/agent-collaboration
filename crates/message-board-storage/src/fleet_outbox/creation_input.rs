@@ -16,7 +16,7 @@ impl FleetOutbox {
         validate_directory(input, directory)?;
         let hash = creation_hash(input).map_err(|_| RouterLocalStorageError::InvalidRecord)?;
         let _guard = self.database.writer.lock().await;
-        let mut transaction = self.database.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self.database.write_transaction().await?;
         let result = async {
             let queued = enqueue_request(&mut transaction, directory).await?;
             let id = input.request_id.as_str();
@@ -73,12 +73,14 @@ impl FleetOutbox {
         request: &RequestId,
     ) -> Result<(), RouterLocalStorageError> {
         let _guard = self.database.writer.lock().await;
+        let mut transaction = self.database.write_transaction().await?;
         sqlx::query::<sqlx_turso::Turso>(
             "DELETE FROM fleet_project_creation_inputs WHERE request_id=?",
         )
         .bind(request.as_str())
-        .execute(&self.database.pool)
+        .execute(&mut *transaction)
         .await?;
+        transaction.commit().await?;
         Ok(())
     }
 

@@ -45,6 +45,8 @@ type TestResult<TValue> = Result<TValue, Box<dyn std::error::Error>>;
 
 impl SaturatedApi {
     async fn start() -> TestResult<Self> {
+        let clock = Arc::new(router_clock::SystemRuntimeClock::new());
+
         use std::os::unix::fs::PermissionsExt;
         let directory = tempfile::Builder::new()
             .permissions(std::fs::Permissions::from_mode(0o700))
@@ -61,7 +63,8 @@ impl SaturatedApi {
         .await
         .map_err(|error| std::io::Error::other(error.to_string()))?;
         let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
-            registry: native_registry::new_registry(directory.path())
+            clock: clock.clone(),
+            registry: native_registry::new_registry_with_clock(directory.path(), clock.clone())
                 .await
                 .map_err(|error| std::io::Error::other(error.to_string()))?,
             fleet: Arc::new(fleet),

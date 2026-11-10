@@ -242,3 +242,120 @@ async fn wrong_native_schedule_state_refuses_handoff_and_keeps_the_owed_input() 
     drop(automation);
     close_fixture(&root, worker).await
 }
+
+/// A SQLite busy error, as a locked writer gives once the insert's busy window ends.
+fn is_busy_database(error: &automation_storage::StorageError) -> bool {
+    let automation_storage::StorageError::Database(source) = error else {
+        return false;
+    };
+    source
+        .as_database_error()
+        .and_then(|database| database.code())
+        .is_some_and(|code| {
+            code.starts_with("SQLITE_BUSY")
+                || code.parse::<i32>().is_ok_and(|code| code & 0xff == 5)
+        })
+}
+
+/// Q10: with the interaction writer locked by another connection, the Run's push
+/// admission gives up within the insert's busy bound and makes no native attempt; once
+/// the lock is gone the next step stores the push and submits it once.
+#[tokio::test]
+async fn a_locked_interaction_writer_fails_the_schedule_push_admission_before_any_native_attempt()
+-> TestResult<()> {
+    let (root, automation, worker, run_id, validated_calls, submit_calls) =
+        crate::scheduled_route_fixture::provider_worker_fixture_counting_submits(
+            FakeSubmissionPlan::Accept,
+            FakeSettlementPlan::Pending,
+            crate::scheduled_route_fixture::FixtureTiming {
+                anchor_ms: 0,
+                interval_seconds: 60,
+            },
+        )
+        .await?;
+    let mut lock_holder = TursoConnection::connect_with(
+        &TursoConnectOptions::new().filename(root.join("interaction.sqlite")),
+    )
+    .await?;
+    sqlx::query("BEGIN IMMEDIATE")
+        .execute(&mut lock_holder)
+        .await?;
+    // The Run steps toward submission; the step that admits its push meets the lock. The
+    // insert retries a busy database only within its inherited 5 s window; nextest
+    // supplies the outer process bound.
+    let mut locked_error = None;
+    for _ in 0..4 {
+        let locked_step = (Box::pin(worker.step(run_id.clone()))).await;
+        if let Err(error) = locked_step {
+            locked_error = Some(error);
+            break;
+        }
+    }
+    // The native witness first: calls to the route, counted before the fake checks
+    // anything, whatever the step's error turns out to be.
+    let calls = submit_calls.load(std::sync::atomic::Ordering::SeqCst);
+    if calls != 0 {
+        return Err(
+            format!("{calls} route call(s) while the interaction writer was locked").into(),
+        );
+    }
+    let Some(error) = locked_error else {
+        return Err("no step met the locked interaction writer".into());
+    };
+    // The step stopped on the busy database, not on anything the route said.
+    if !is_busy_database(&error) {
+        return Err(format!("the locked step failed for another reason: {error:?}").into());
+    }
+    let validated = validated_calls
+        .lock()
+        .map_err(|_| "validated-call witness poisoned")?
+        .len();
+    if validated != 0 {
+        return Err(format!("{validated} validated route call(s) under the lock").into());
+    }
+    let origin = super::schedule_run_origin_reference(
+        &worker
+            .store
+            .lock()
+            .await
+            .read_run::<SessionRef, EndpointRef, CodexGeneration, crate::stored_run_receipt::StoredRunReceipt>(&run_id)
+            .await?
+            .schedule_id,
+        &run_id,
+    );
+    if worker
+        .interactions
+        .get_push_record_by_origin_reference(&origin)
+        .await?
+        .is_some()
+    {
+        return Err("a push was stored under the lock".into());
+    }
+
+    sqlx::query("ROLLBACK").execute(&mut lock_holder).await?;
+    lock_holder.close().await?;
+    Box::pin(worker.step(run_id.clone())).await?;
+    let calls = submit_calls.load(std::sync::atomic::Ordering::SeqCst);
+    if calls != 1 {
+        return Err(format!("expected one route call after the lock, got {calls}").into());
+    }
+    // The fake records the call it validated; its first answer is NotStartedBusy, so this
+    // is one call seen with its stored push, not an accepted provider effect.
+    let validated = validated_calls
+        .lock()
+        .map_err(|_| "validated-call witness poisoned")?
+        .len();
+    if validated != 1 {
+        return Err(format!("expected one validated route call, got {validated}").into());
+    }
+    if worker
+        .interactions
+        .get_push_record_by_origin_reference(&origin)
+        .await?
+        .is_none()
+    {
+        return Err("the submitted push was not stored first".into());
+    }
+    drop(automation);
+    close_fixture(&root, worker).await
+}

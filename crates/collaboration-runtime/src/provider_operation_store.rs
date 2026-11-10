@@ -16,7 +16,8 @@ use sqlx::{
 use std::{collections::HashSet, num::NonZeroU32, path::Path, time::Duration};
 
 use sqlite_storage_maintenance::{
-    configure_new_database_options, incremental_vacuum_step, prepare_existing_database,
+    CommitSignal, SignaledTransaction, TransactionStart, configure_new_database_options,
+    incremental_vacuum_step, prepare_existing_database, sqlite_total_changes,
 };
 
 static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
@@ -43,10 +44,39 @@ pub fn provider_operation_retention_cutoff_ms(
     }
     let now = chrono::DateTime::<chrono::Utc>::from_timestamp_millis(now_ms)
         .ok_or(ProviderOperationStoreError::InvalidRecord)?;
-    let cutoff = now
-        .checked_sub_months(chrono::Months::new(PROVIDER_OPERATION_RETENTION_MONTHS))
-        .ok_or(ProviderOperationStoreError::InvalidRecord)?;
+    let cutoff =
+        sqlite_storage_maintenance::months_before(now, PROVIDER_OPERATION_RETENTION_MONTHS)
+            .ok_or(ProviderOperationStoreError::InvalidRecord)?;
     Ok(cutoff.timestamp_millis())
+}
+
+/// The first moment at or after `now_ms` when [`provider_operation_retention_cutoff_ms`]
+/// passes an operation that settled at `terminal_at_ms`: its cutoff must be strictly after
+/// the settlement.
+fn first_retention_ms(
+    terminal_at_ms: i64,
+    retention_days_override: Option<NonZeroU32>,
+    now_ms: i64,
+) -> Result<i64, ProviderOperationStoreError> {
+    if let Some(days) = retention_days_override {
+        return i64::from(days.get())
+            .checked_mul(24 * 60 * 60 * 1_000)
+            .and_then(|duration_ms| terminal_at_ms.checked_add(duration_ms))
+            .and_then(|cutoff_equals_stamp_ms| cutoff_equals_stamp_ms.checked_add(1))
+            .map(|first_ms| first_ms.max(now_ms))
+            .ok_or(ProviderOperationStoreError::InvalidRecord);
+    }
+    let moment = |millis: i64| {
+        chrono::DateTime::<chrono::Utc>::from_timestamp_millis(millis)
+            .ok_or(ProviderOperationStoreError::InvalidRecord)
+    };
+    sqlite_storage_maintenance::first_deletable_at(
+        moment(terminal_at_ms)?,
+        PROVIDER_OPERATION_RETENTION_MONTHS,
+        moment(now_ms)?,
+    )
+    .map(|due| due.timestamp_millis())
+    .ok_or(ProviderOperationStoreError::InvalidRecord)
 }
 const EXPECTED_COLUMNS: [&str; 14] = [
     "operation_id",
@@ -115,6 +145,31 @@ pub enum ProviderOperationAdmissionResult {
 
 pub struct ProviderOperationStore {
     pub(crate) connection: SqliteConnection,
+    commits: CommitSignal,
+}
+
+/// Runs one write statement as a one-statement transaction through
+/// [`ProviderOperationStore::transaction`], so it signals like every other write.
+pub(crate) trait OneStatementWrite {
+    async fn execute_as_transaction(
+        self,
+        store: &mut ProviderOperationStore,
+    ) -> Result<sqlx::sqlite::SqliteQueryResult, sqlx::Error>;
+}
+
+impl<'q, TArguments> OneStatementWrite for sqlx::query::Query<'q, sqlx::Sqlite, TArguments>
+where
+    TArguments: sqlx::IntoArguments<sqlx::Sqlite> + 'q,
+{
+    async fn execute_as_transaction(
+        self,
+        store: &mut ProviderOperationStore,
+    ) -> Result<sqlx::sqlite::SqliteQueryResult, sqlx::Error> {
+        let mut transaction = store.transaction(TransactionStart::Immediate).await?;
+        let result = self.execute(&mut *transaction).await?;
+        transaction.commit().await?;
+        Ok(result)
+    }
 }
 
 struct StoredProviderOperationRow {
@@ -152,7 +207,26 @@ impl ProviderOperationStore {
         MIGRATOR.run_direct(None, &mut *transaction, false).await?;
         transaction.commit().await?;
         validate_schema(&mut connection).await?;
-        Ok(Self { connection })
+        Ok(Self {
+            connection,
+            commits: CommitSignal::new(),
+        })
+    }
+
+    /// The one transaction function: every write goes through it and signals
+    /// [`Self::subscribe_commits`] only after a commit that changed rows.
+    pub(crate) async fn transaction(
+        &mut self,
+        start: TransactionStart,
+    ) -> Result<SignaledTransaction<'_, sqlx::Sqlite>, sqlx::Error> {
+        let transaction = self.connection.begin_with(start.statement()).await?;
+        SignaledTransaction::counting(transaction, sqlite_total_changes, &self.commits).await
+    }
+
+    /// A receiver that wakes after each committed transaction that changed rows.
+    #[must_use]
+    pub fn subscribe_commits(&self) -> tokio::sync::watch::Receiver<u64> {
+        self.commits.subscribe()
     }
 
     /// Releases one bounded batch of free pages after provider-operation retention.
@@ -186,7 +260,7 @@ impl ProviderOperationStore {
             admission.admitted_at_ms,
             admission.admitted_at_ms,
         )
-        .execute(&mut self.connection)
+        .execute_as_transaction(self)
         .await?;
         let record = self
             .inspect(&admission.operation_id)
@@ -285,7 +359,7 @@ impl ProviderOperationStore {
              dispatched_at_ms, operation_id.as_str(),
              encode_enum(ProviderOperationStage::Admitted)?,
         )
-        .execute(&mut self.connection)
+        .execute_as_transaction(self)
         .await?;
         self.transition_result(operation_id, result.rows_affected(), |record| {
             record.stage == ProviderOperationStage::MayHaveDispatched
@@ -314,7 +388,7 @@ impl ProviderOperationStore {
              target_service_id, target_endpoint_id, target_session_id, observed_at_ms,
              operation_id.as_str(), target_service_id, target_endpoint_id, target_session_id,
         )
-        .execute(&mut self.connection)
+        .execute_as_transaction(self)
         .await?;
         self.transition_result(operation_id, result.rows_affected(), |record| {
             record.target.as_ref() == Some(target)
@@ -339,7 +413,7 @@ impl ProviderOperationStore {
              encode_enum(reconciliation_state)?, encoded_stop_reason, terminal_at_ms, terminal_at_ms,
              operation_id.as_str(), encode_enum(ProviderOperationStage::Terminal)?,
         )
-        .execute(&mut self.connection)
+        .execute_as_transaction(self)
         .await?;
         self.transition_result(operation_id, result.rows_affected(), |record| {
             record.stage == ProviderOperationStage::Terminal
@@ -365,7 +439,7 @@ impl ProviderOperationStore {
              observed_at_ms, operation_id.as_str(),
              encode_enum(ProviderReconciliationState::Unresolved)?,
         )
-        .execute(&mut self.connection)
+        .execute_as_transaction(self)
         .await?;
         self.transition_result(operation_id, result.rows_affected(), |record| {
             record.stage == ProviderOperationStage::Terminal
@@ -396,7 +470,7 @@ impl ProviderOperationStore {
             encode_enum(ProviderOperationStage::Admitted)?,
             encode_enum(ProviderReconciliationState::Confirmed)?,
         )
-        .execute(&mut self.connection)
+        .execute_as_transaction(self)
         .await?;
         self.transition_result(operation_id, result.rows_affected(), |record| {
             record.stage == ProviderOperationStage::Terminal
@@ -407,31 +481,85 @@ impl ProviderOperationStore {
         .await
     }
 
+    /// Terminal operations retention may delete, oldest first, settled before `before_ms`:
+    /// the one rule the prune deletes by and the due read arms by.
+    async fn retention_candidates(
+        &mut self,
+        before_ms: i64,
+        limit: i64,
+    ) -> Result<Vec<(OperationId, i64)>, ProviderOperationStoreError> {
+        sqlx::query!(
+            r#"SELECT operation_id, terminal_at_ms AS "terminal_at_ms!" FROM provider_operations
+             WHERE stage=? AND reconciliation_state!=? AND effect!=? AND terminal_at_ms<?
+             ORDER BY terminal_at_ms,operation_id LIMIT ?"#,
+            encode_enum(ProviderOperationStage::Terminal)?,
+            encode_enum(ProviderReconciliationState::Unresolved)?,
+            encode_enum(ProviderOperationEffect::Unknown)?,
+            before_ms,
+            limit,
+        )
+        .fetch_all(&mut self.connection)
+        .await?
+        .into_iter()
+        .map(|row| {
+            OperationId::try_from(row.operation_id)
+                .map(|operation_id| (operation_id, row.terminal_at_ms))
+                .map_err(|_| ProviderOperationStoreError::InvalidRecord)
+        })
+        .collect()
+    }
+
+    /// The first moment at or after `now_ms` when retention may delete an operation the
+    /// store holds now, or `None` when it holds none retention could ever delete. An
+    /// operation in `protected_operation_ids` is still live in the supervisor and is
+    /// skipped; the supervisor's completion signal tells the caller when that ends.
+    pub async fn retention_due_ms(
+        &mut self,
+        now_ms: i64,
+        retention_days_override: Option<NonZeroU32>,
+        protected_operation_ids: &HashSet<OperationId>,
+    ) -> Result<Option<i64>, ProviderOperationStoreError> {
+        if now_ms < 0 {
+            return Err(ProviderOperationStoreError::InvalidRecord);
+        }
+        // Only protected operations can come before the oldest one retention may take.
+        let limit = i64::try_from(protected_operation_ids.len())
+            .ok()
+            .and_then(|protected| protected.checked_add(1))
+            .ok_or(ProviderOperationStoreError::InvalidRecord)?;
+        self.retention_candidates(i64::MAX, limit)
+            .await?
+            .into_iter()
+            .find(|(operation_id, _)| !protected_operation_ids.contains(operation_id))
+            .map(|(_, terminal_at_ms)| {
+                first_retention_ms(terminal_at_ms, retention_days_override, now_ms)
+            })
+            .transpose()
+    }
+
     pub async fn prune_terminal_before(
         &mut self,
         cutoff_ms: i64,
         protected_operation_ids: &HashSet<OperationId>,
     ) -> Result<u64, ProviderOperationStoreError> {
-        let candidates = sqlx::query_scalar!(
-            "SELECT operation_id FROM provider_operations
-             WHERE stage=? AND reconciliation_state!=? AND effect!=? AND terminal_at_ms<?
-             ORDER BY terminal_at_ms,operation_id LIMIT ?",
-            encode_enum(ProviderOperationStage::Terminal)?,
-            encode_enum(ProviderReconciliationState::Unresolved)?,
-            encode_enum(ProviderOperationEffect::Unknown)?,
-            cutoff_ms,
-            RETENTION_BATCH_LIMIT,
-        )
-        .fetch_all(&mut self.connection)
-        .await?;
-        let mut transaction = self.connection.begin().await?;
+        // Protected operations are read past, so they can never use up the batch: the
+        // operation the due read found is always among the candidates. A batch still
+        // removes at most RETENTION_BATCH_LIMIT operations.
+        let limit = i64::try_from(protected_operation_ids.len())
+            .ok()
+            .and_then(|protected| protected.checked_add(RETENTION_BATCH_LIMIT))
+            .ok_or(ProviderOperationStoreError::InvalidRecord)?;
+        let batch = usize::try_from(RETENTION_BATCH_LIMIT)
+            .map_err(|_| ProviderOperationStoreError::InvalidRecord)?;
+        let candidates = self.retention_candidates(cutoff_ms, limit).await?;
+        let mut transaction = self.transaction(TransactionStart::Deferred).await?;
         let mut removed = 0_u64;
-        for operation_id in candidates {
-            let typed_id = OperationId::try_from(operation_id.clone())
-                .map_err(|_| ProviderOperationStoreError::InvalidRecord)?;
-            if protected_operation_ids.contains(&typed_id) {
-                continue;
-            }
+        for (typed_id, _) in candidates
+            .into_iter()
+            .filter(|(operation_id, _)| !protected_operation_ids.contains(operation_id))
+            .take(batch)
+        {
+            let operation_id = typed_id.as_str();
             removed = removed.saturating_add(
                 sqlx::query!(
                     "DELETE FROM provider_operations

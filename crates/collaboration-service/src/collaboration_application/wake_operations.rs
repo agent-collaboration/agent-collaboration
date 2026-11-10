@@ -25,28 +25,40 @@ pub(crate) use failure::{WakeFailureContext, wake_failure};
 use failure::{invalid_field, storage_reason};
 
 pub struct WakeOperations {
+    clock: Arc<dyn router_clock::RuntimeClock>,
     service_id: UuidIdentity,
     remote: Option<Arc<crate::MailDeliveryRuntime>>,
     store: Option<Arc<Mutex<AutomationStore>>>,
     /// Concurrent first-fire waits share these permits; a handle without them cannot wait.
     wait_permits: Option<Arc<Semaphore>>,
+    /// Reports a first-fire wait's reads and sleeps; production keeps nothing.
+    wait_observation: collaboration_runtime::WorkerObservation,
 }
-
-/// How often a first-fire wait checks for new automation events.
-const WAKE_WAIT_POLL_INTERVAL: Duration = Duration::from_millis(50);
 /// How long a first-fire wait runs when the caller names no timeout.
 const DEFAULT_WAKE_WAIT_SECONDS: u32 = 60;
 /// The longest a single first-fire wait may run.
 const MAX_WAKE_WAIT_SECONDS: u32 = 1500;
 
 impl WakeOperations {
-    pub fn new(service_id: &UuidIdentity, store: Option<&Arc<Mutex<AutomationStore>>>) -> Self {
+    pub fn new(
+        clock: Arc<dyn router_clock::RuntimeClock>,
+        service_id: &UuidIdentity,
+        store: Option<&Arc<Mutex<AutomationStore>>>,
+    ) -> Self {
         Self {
+            clock,
             service_id: service_id.clone(),
             remote: None,
             store: store.cloned(),
             wait_permits: None,
+            wait_observation: collaboration_runtime::WorkerObservation::default(),
         }
+    }
+
+    /// A first-fire wait's reads and sleeps, for a test.
+    #[cfg(test)]
+    pub(crate) fn wait_observation(&self) -> collaboration_runtime::WorkerObservation {
+        self.wait_observation.clone()
     }
 
     /// Lets this handle run first-fire waits, sharing `wait_permits` with every other wait.
@@ -77,7 +89,7 @@ impl WakeOperations {
     ) -> Result<WakeSnapshot, WakeFailure> {
         let context = WakeFailureContext::operation(request.operation_id.clone());
         let store = self.store(&context)?;
-        let now_ms = chrono::Utc::now().timestamp_millis();
+        let now_ms = self.clock.utc_now().timestamp_millis();
         let timing = serde_json::to_value(request.timing).and_then(serde_json::from_value);
         let expiry = serde_json::to_value(request.expiry).and_then(serde_json::from_value);
         let (Ok(timing), Ok(expiry)) = (timing, expiry) else {
@@ -136,7 +148,7 @@ impl WakeOperations {
     ) -> Result<WakeSnapshot, WakeFailure> {
         let context = WakeFailureContext::wakeup(request.wakeup_id.clone());
         let store = self.store(&context)?;
-        let now_ms = chrono::Utc::now().timestamp_millis();
+        let now_ms = self.clock.utc_now().timestamp_millis();
         let read = store
             .lock()
             .await
@@ -209,7 +221,7 @@ impl WakeOperations {
             .wake_listing_keys(after, u32::from(request.limit))
             .await
             .map_err(|_| fail(WakeFailureReason::AutomationUnavailable))?;
-        let now = chrono::Utc::now().timestamp_millis();
+        let now = self.clock.utc_now().timestamp_millis();
         let mut snapshots = Vec::new();
         for key in page.records {
             let shown = if key.remote {
@@ -333,7 +345,7 @@ impl WakeOperations {
             wakeup_id: Some(request.wakeup_id.clone()),
         };
         let store = self.store(&context)?;
-        let now = chrono::Utc::now().timestamp_millis();
+        let now = self.clock.utc_now().timestamp_millis();
         let mutated = store
             .lock()
             .await
@@ -423,17 +435,29 @@ impl WakeOperations {
                 constraint: "Wait between 1 and 1500 seconds.",
             });
         }
-        let deadline =
-            tokio::time::Instant::now() + Duration::from_secs(u64::from(timeout_seconds));
+        let deadline = self.clock.monotonic_now() + Duration::from_secs(u64::from(timeout_seconds));
         let timed_out = |wakeup_id, cursor| WakeWaitResult {
             wakeup_id,
             outcome: WakeWaitOutcome::TimedOut,
             cursor,
         };
         let (store, permit) = self.wait_admission(&wakeup_id)?;
+        // Subscribe before the first read, so a commit that lands after it still wakes the
+        // wait. Reaching the store counts against the bound like every read the wait makes.
+        let subscribed = router_clock::timeout_at(self.clock.as_ref(), deadline, async {
+            store.lock().await.subscribe_commits()
+        })
+        .await;
+        let mut commits = match (subscribed, &request.after) {
+            (Ok(commits), _) => commits,
+            (Err(_), None) => return Err(WakeWaitFailure::unavailable(wakeup_id.clone())),
+            (Err(_), Some(cursor)) => return Ok(timed_out(wakeup_id, cursor.clone())),
+        };
+        commits.borrow_and_update();
         let mut observation = match request.after {
             None => {
-                let started = tokio::time::timeout_at(
+                let started = router_clock::timeout_at(
+                    self.clock.as_ref(),
                     deadline,
                     crate::wakeup_subscription::start(
                         Arc::clone(store),
@@ -460,7 +484,8 @@ impl WakeOperations {
                 observation
             }
             Some(cursor) => {
-                let resumed = tokio::time::timeout_at(
+                let resumed = router_clock::timeout_at(
+                    self.clock.as_ref(),
                     deadline,
                     WakeSubscriptionState::resume(
                         Arc::clone(store),
@@ -488,7 +513,10 @@ impl WakeOperations {
             }
         };
         loop {
-            let read = tokio::time::timeout_at(deadline, observation.next_changes()).await;
+            self.wait_observation.record_read("wake_wait.next_changes");
+            let read =
+                router_clock::timeout_at(self.clock.as_ref(), deadline, observation.next_changes())
+                    .await;
             let changes = match read {
                 Ok(changes) => {
                     changes.map_err(|_| WakeWaitFailure::unavailable(wakeup_id.clone()))?
@@ -502,16 +530,22 @@ impl WakeOperations {
                     cursor: changed.cursor,
                 });
             }
-            if tokio::time::Instant::now() >= deadline {
+            if self.clock.monotonic_now() >= deadline {
                 let cursor = observation
                     .cursor()
                     .map_err(|_| WakeWaitFailure::unavailable(wakeup_id.clone()))?;
                 return Ok(timed_out(wakeup_id, cursor));
             }
-            tokio::time::sleep_until(
-                (tokio::time::Instant::now() + WAKE_WAIT_POLL_INTERVAL).min(deadline),
+            self.wait_observation.read_found_nothing(deadline).await;
+            let ended = collaboration_runtime::wait_for_commit_or_timer(
+                &mut commits,
+                self.clock.sleep_until(deadline),
             )
             .await;
+            if ended == collaboration_runtime::CommitWaitEnd::StoreClosed {
+                return Err(WakeWaitFailure::unavailable(wakeup_id.clone()));
+            }
+            commits.borrow_and_update();
         }
     }
 
@@ -543,3 +577,7 @@ fn settled_outcome(snapshot: &WakeSnapshot) -> Option<WakeWaitOutcome> {
         WakeState::Finished => Some(WakeWaitOutcome::FinishedWithoutFiring),
     }
 }
+
+#[cfg(test)]
+#[path = "wake_operations_test.rs"]
+pub(crate) mod tests;

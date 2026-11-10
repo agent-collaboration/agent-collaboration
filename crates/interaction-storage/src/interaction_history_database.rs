@@ -2,8 +2,8 @@
 use super::interaction_history_codec::decode_stored_record;
 use super::{InteractionHistoryData, InteractionHistoryError};
 use chrono::{DateTime, Utc};
-use sqlx::{Connection, Transaction};
-use sqlx_turso::{Turso, TursoConnectOptions, TursoConnection};
+use sqlx::Connection;
+use sqlx_turso::{TursoConnectOptions, TursoConnection};
 use std::{
     ops::{Deref, DerefMut},
     path::Path,
@@ -227,7 +227,7 @@ enum HistoryRowDelta<'record> {
 }
 
 pub(super) async fn commit_delta(
-    transaction: &mut Transaction<'_, Turso>,
+    transaction: &mut sqlite_storage_maintenance::SignaledTransaction<'_, sqlx_turso::Turso>,
     previous: &InteractionHistoryData,
     next: &InteractionHistoryData,
     revision: i64,

@@ -2,6 +2,7 @@
 use super::*;
 
 pub(super) struct RecordedPolicyFixture {
+    pub(super) clock: Arc<router_clock::ManualClock>,
     pub(super) directory: tempfile::TempDir,
     pub(super) backend: NativeControlBackend,
     pub(super) generation: CodexGeneration,
@@ -61,6 +62,12 @@ impl RecordedPolicyFixture {
         )
         .await?;
         Ok(Self {
+            clock: Arc::new(
+                router_clock::ManualClock::starting_at(
+                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
+                )
+                .unwrap(),
+            ),
             filesystem: expected_filesystem(&scratch)?,
             directory,
             backend,

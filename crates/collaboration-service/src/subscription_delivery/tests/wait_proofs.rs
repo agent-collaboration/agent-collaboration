@@ -1,12 +1,12 @@
 use super::super::{
-    SubscriptionClock, SubscriptionWaitFilter, SubscriptionWaitResult,
-    subscription_service::OwnerObservation,
+    SubscriptionWaitFilter, SubscriptionWaitResult, subscription_service::OwnerObservation,
 };
 use super::owner_fixture::*;
 use message_board::*;
+use router_clock::RuntimeClock;
 use sqlx::Connection;
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn concurrent_session_waits_are_fifo_and_never_receive_the_same_range() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
@@ -88,7 +88,7 @@ async fn concurrent_session_waits_are_fifo_and_never_receive_the_same_range() {
     runtime.close().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn human_poll_returns_bodyless_ranges_without_storing_or_pushing() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     fixture
@@ -110,7 +110,7 @@ async fn human_poll_returns_bodyless_ranges_without_storing_or_pushing() {
                     replace: None,
                     note: None,
                 },
-                fixture.clock.now(),
+                fixture.clock.utc_now(),
             )
             .await
             .unwrap();
@@ -129,7 +129,7 @@ async fn human_poll_returns_bodyless_ranges_without_storing_or_pushing() {
                         lifetime_seconds: None,
                     },
                 },
-                fixture.clock.now(),
+                fixture.clock.utc_now(),
             )
             .await
             .unwrap();
@@ -172,7 +172,7 @@ async fn human_poll_returns_bodyless_ranges_without_storing_or_pushing() {
     runtime.close().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn poll_wait_timeout_is_empty_and_non_poll_wait_is_rejected() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.runtime().await;
@@ -214,15 +214,21 @@ async fn poll_wait_timeout_is_empty_and_non_poll_wait_is_rejected() {
         .observe(|event| matches!(event, OwnerObservation::WaitQueued))
         .await;
     runtime.owner_barrier(&fixture.reader).await;
-    fixture.clock.advance(59).await;
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(59))
+        .unwrap();
     runtime.owner_barrier(&fixture.reader).await;
     assert!(!waiter.is_finished());
-    fixture.clock.advance(1).await;
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(1))
+        .unwrap();
     assert!(waiter.await.unwrap().is_none());
     runtime.close().await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn dropping_the_last_service_handle_cancels_its_owned_tasks() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     let runtime = fixture.runtime().await;
@@ -242,7 +248,7 @@ async fn dropping_the_last_service_handle_cancels_its_owned_tasks() {
             .get_thread_subscription_record(
                 &fixture.reader,
                 &SubscriptionScope::thread(fixture.root.clone()),
-                fixture.clock.now()
+                fixture.clock.utc_now()
             )
             .await
             .unwrap()
@@ -252,8 +258,6 @@ async fn dropping_the_last_service_handle_cancels_its_owned_tasks() {
 
 #[tokio::test]
 async fn finite_wait_budget_hands_oldest_root_then_preserves_remaining_due_root() {
-    use std::time::Duration;
-
     let fixture = Box::pin(OwnerFixture::new()).await;
     let oldest_root = fixture.root.clone();
     let later_root = fixture.add_root().await;
@@ -277,17 +281,13 @@ async fn finite_wait_budget_hands_oldest_root_then_preserves_remaining_due_root(
         .unwrap()
         .len();
 
-    let first_result = tokio::time::timeout(
-        Duration::from_secs(30),
-        runtime.service.wait(
-            fixture.reader.clone(),
-            SubscriptionWaitFilter::All,
-            60,
-            maximum_root_notice_bytes,
-        ),
-    )
+    let first_result = (runtime.service.wait(
+        fixture.reader.clone(),
+        SubscriptionWaitFilter::All,
+        60,
+        maximum_root_notice_bytes,
+    ))
     .await
-    .unwrap()
     .unwrap()
     .unwrap();
     let SubscriptionWaitResult::Notice {
@@ -310,7 +310,7 @@ async fn finite_wait_budget_hands_oldest_root_then_preserves_remaining_due_root(
     // First delivery does not join publication of the later root. Observe that
     // root's frozen item reaching SDK custody before checking its pending state.
     let target = super::super::subscription_push::target_session(&fixture.reader).unwrap();
-    let still_pending = tokio::time::timeout(Duration::from_secs(30), async {
+    let still_pending = (async {
         loop {
             let frozen =
                 super::local_mail_proofs::native_follow_mail_proofs::frozen_follow(&fixture).await;
@@ -331,9 +331,7 @@ async fn finite_wait_budget_hands_oldest_root_then_preserves_remaining_due_root(
             }
             tokio::task::yield_now().await;
         }
-    })
-    .await
-    .expect("the later root's frozen item reached SDK custody");
+    }).await;
     assert_eq!(still_pending.len(), 1);
     let pending_push: collaboration_protocol::PushId = still_pending[0]
         .item
@@ -351,17 +349,13 @@ async fn finite_wait_budget_hands_oldest_root_then_preserves_remaining_due_root(
             .is_none()
     );
 
-    let second_result = tokio::time::timeout(
-        Duration::from_secs(30),
-        runtime.service.wait(
-            fixture.reader.clone(),
-            SubscriptionWaitFilter::All,
-            60,
-            maximum_root_notice_bytes,
-        ),
-    )
+    let second_result = (runtime.service.wait(
+        fixture.reader.clone(),
+        SubscriptionWaitFilter::All,
+        60,
+        maximum_root_notice_bytes,
+    ))
     .await
-    .unwrap()
     .unwrap()
     .unwrap();
     let SubscriptionWaitResult::Notice {
@@ -396,7 +390,7 @@ async fn finite_wait_budget_hands_oldest_root_then_preserves_remaining_due_root(
             .store
             .lock()
             .await
-            .due_subscription_roots(&fixture.reader, fixture.clock.now())
+            .due_subscription_roots(&fixture.reader, fixture.clock.utc_now())
             .await
             .unwrap()
             .is_empty()

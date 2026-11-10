@@ -22,9 +22,12 @@ type TestError = Box<dyn std::error::Error + Send + Sync>;
 )]
 async fn aggregate_cli_pages_and_batch_acknowledgements_keep_project_keys() -> Result<(), TestError>
 {
+    let clock = Arc::new(router_clock::SystemRuntimeClock::new());
+
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
-    let registry = native_registry::new_registry(directory.path()).await?;
+    let registry =
+        native_registry::new_registry_with_clock(directory.path(), clock.clone()).await?;
     let origin = message_board::ActorOrigin {
         installation: message_board::ServiceId::try_from(
             "00000000-0000-4000-8000-000000000001".to_owned(),
@@ -39,6 +42,7 @@ async fn aggregate_cli_pages_and_batch_acknowledgements_keep_project_keys() -> R
     .await?;
     let fleet = Arc::new(fleet);
     let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
+        clock: clock.clone(),
         registry: registry.clone(),
         fleet: fleet.clone(),
         identity: MachineIdentity::new(

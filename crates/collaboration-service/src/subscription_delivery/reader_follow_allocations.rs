@@ -21,7 +21,7 @@ impl ReaderDeliveryOwner {
                 .membership_expiry_candidates(&self.reader, &projects)
                 .await?
         };
-        let now = self.clock.now();
+        let now = self.clock.utc_now();
         let monotonic = self.clock.monotonic_now();
         self.membership_expiry_deadline = candidates
             .iter()
@@ -47,7 +47,7 @@ impl ReaderDeliveryOwner {
         };
         for (project, proposal) in proposals {
             if admission
-                .expire_follow_membership(&project, proposal, self.clock.now())
+                .expire_follow_membership(&project, proposal, self.clock.utc_now())
                 .await
                 .map_err(|error| {
                     tracing::warn!(%error, project = project.as_str(), "membership expiry admission delayed");
@@ -108,7 +108,7 @@ impl ReaderDeliveryOwner {
             .propose_follow_batches(
                 &self.reader,
                 &roots,
-                self.clock.now(),
+                self.clock.utc_now(),
                 &self.pass_projects,
                 &self.pass_preventions,
             )
@@ -126,7 +126,7 @@ impl ReaderDeliveryOwner {
                 preventions: proposal.preventions,
             };
             if admission
-                .allocate_follow_batch(&proposal.project, input, self.clock.now())
+                .allocate_follow_batch(&proposal.project, input, self.clock.utc_now())
                 .await
                 .map_err(|_| BoardError::board_unavailable())?
                 .is_some()

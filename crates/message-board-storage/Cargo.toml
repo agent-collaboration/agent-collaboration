@@ -34,9 +34,11 @@ thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 turso_parser.workspace = true
+sqlite-storage-maintenance = { path = "../sqlite-storage-maintenance", version = "0.1.118" }
 uuid.workspace = true
 
 [dev-dependencies]
+sqlite-storage-maintenance = { path = "../sqlite-storage-maintenance", version = "0.1.118", features = ["test-support"] }
 board-fleet-sync = { path = "../board-fleet-sync", version = "0.1.96" }
 tempfile = "3.27.0"
 runtime-primitives.workspace = true

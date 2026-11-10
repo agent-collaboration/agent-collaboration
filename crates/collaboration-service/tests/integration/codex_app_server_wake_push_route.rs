@@ -162,6 +162,7 @@ async fn stored_wake_push_resumes_unloaded_codex_thread_with_its_push_identity()
     let gate = NativeGenerationGate::default();
     gate.activate(generation, socket_path.clone(), Some(schemas))?;
     let route = CodexAppServerDeliveryRoute::new(
+        std::sync::Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
         service_id.clone(),
         endpoints,
         NativeControlBackend {

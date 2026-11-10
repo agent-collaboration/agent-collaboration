@@ -22,7 +22,7 @@ async fn addressed_post(fixture: &OwnerFixture, recipient: Identity) -> NotifyIn
         "text":"addressed work","references":[],"addressees":[{"kind":"actor","recipient":recipient}]
     })).unwrap();
     let reply = fixture
-        .write_as(human("writer"), operation, fixture.clock.now())
+        .write_as(human("writer"), operation, fixture.clock.utc_now())
         .await;
     let RequestResult::Decided(RequestDecision::Accepted { effects, .. }) = reply.result else {
         panic!("post accepted");
@@ -217,15 +217,14 @@ async fn deleting_the_derived_cursor_preserves_exactly_once_consumption() {
         .unwrap();
     // Another publisher pass can already own delivery after custody commits.
     // Observe both real requests before checking their identities.
-    let delivered = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+    let delivered = (async {
         let mut requests = runtime.requests.lock().await;
         let first = requests.recv().await.unwrap();
         let second = requests.recv().await.unwrap();
         assert_ne!(first.payload.push_id, second.payload.push_id);
         vec![first, second]
     })
-    .await
-    .expect("both addressed intent requests must reach the native client");
+    .await;
     let mut delivered_intents = BTreeSet::new();
     for request in delivered {
         let push = fixture
@@ -378,16 +377,14 @@ async fn a_recorded_push_refusal_is_settled_after_a_transient_lease_failure() {
     let service = runtime.publisher.clone();
     let project = fixture.project.clone();
     let pass = tokio::spawn(async move { service.consume_project_intents(&project).await });
-    let request = tokio::time::timeout(
-        std::time::Duration::from_secs(5),
-        runtime.requests.lock().await.recv(),
+    let request = (runtime.requests.lock().await.recv()).await.unwrap();
+    let expired = crate::test_project_runtime::expire_lease(
+        &fixture.registry,
+        &fixture.project,
+        fixture.clock.as_ref(),
     )
     .await
-    .unwrap()
     .unwrap();
-    let expired = crate::test_project_runtime::expire_lease(&fixture.registry, &fixture.project)
-        .await
-        .unwrap();
     runtime
         .completions
         .send(collaboration_protocol::DeliveryOutcome::Rejected(
@@ -473,9 +470,14 @@ async fn a_recorded_push_refusal_is_settled_after_a_transient_lease_failure() {
     read.finish().await.unwrap();
     assert!(expired_frontier.is_err());
     assert_eq!(runtime.local_mail_outcome(item).await, terminal);
-    crate::test_project_runtime::renew_lease(&fixture.registry, &fixture.project, expired)
-        .await
-        .unwrap();
+    crate::test_project_runtime::renew_lease(
+        &fixture.registry,
+        &fixture.project,
+        expired,
+        fixture.clock.as_ref(),
+    )
+    .await
+    .unwrap();
     runtime
         .publisher
         .advance_project_frontier_for_test(&fixture.project)

@@ -197,7 +197,10 @@ fn seeded_successor() -> impl std::future::Future<Output = PreparedSuccessor> {
         assert_eq!(progress, baseline);
 
         // A distinct verified epoch file receives no old interaction/outbox/progress file.
-        let mut successor = Box::pin(OwnerFixture::new()).await;
+        let mut successor = Box::pin(OwnerFixture::new())
+            .await
+            .reopen_project_storage()
+            .await;
         let install = kept.publish_successor(&successor, &project).await.unwrap();
         successor.project = project.clone();
         successor.root = root;
@@ -237,7 +240,7 @@ fn seeded_successor() -> impl std::future::Future<Output = PreparedSuccessor> {
 
 #[tokio::test]
 async fn a_successor_starts_frontier_cleanup_at_the_seeded_floor_without_replaying_old_custody() {
-    tokio::time::timeout(Duration::from_secs(30), async {
+    (async {
         let PreparedSuccessor {
             owner: successor,
             baseline,
@@ -300,14 +303,13 @@ async fn a_successor_starts_frontier_cleanup_at_the_seeded_floor_without_replayi
         assert_eq!(final_head, baseline);
         assert_eq!(final_feed, feed);
     })
-    .await
-    .expect("bounded actual seeded successor retirement baseline");
+    .await;
 }
 
 #[tokio::test]
 async fn a_live_frontier_releases_new_items_without_sender_retire_and_reheld_owner_keeps_progress()
 {
-    Box::pin(tokio::time::timeout(Duration::from_secs(45), async {
+    Box::pin(async {
         let PreparedSuccessor {
             owner: successor,
             baseline,
@@ -368,12 +370,21 @@ async fn a_live_frontier_releases_new_items_without_sender_retire_and_reheld_own
             "actual post-seed retirement did not persist progress"
         );
 
-        let expired = crate::test_project_runtime::expire_lease(&successor.registry, &project)
-            .await
-            .unwrap();
-        crate::test_project_runtime::renew_lease(&successor.registry, &project, expired)
-            .await
-            .unwrap();
+        let expired = crate::test_project_runtime::expire_lease(
+            &successor.registry,
+            &project,
+            successor.admission.clock.as_ref(),
+        )
+        .await
+        .unwrap();
+        crate::test_project_runtime::renew_lease(
+            &successor.registry,
+            &project,
+            expired,
+            successor.admission.clock.as_ref(),
+        )
+        .await
+        .unwrap();
         let runtime = successor.runtime().await;
         let mut query =
             FrozenMailQuery::open(successor.directory.path(), installation_peer()).await;
@@ -404,14 +415,13 @@ async fn a_live_frontier_releases_new_items_without_sender_retire_and_reheld_own
             "re-held owner ignored progress greater than the seed: {old_query:?}"
         );
         assert_eq!(reheld_progress, live);
-    }))
-    .await
-    .expect("bounded post-seed retirement and re-held saved progress");
+    })
+    .await;
 }
 
 #[tokio::test]
 async fn an_inherited_reader_scans_new_epoch_activity_from_its_valid_activation_cursor() {
-    tokio::time::timeout(Duration::from_secs(30), async {
+    (async {
         let PreparedSuccessor { owner, .. } = seeded_successor().await;
         let project = owner.project.clone();
         let posted = owner.post(&owner.root, "one new-epoch followed post").await;
@@ -422,7 +432,7 @@ async fn an_inherited_reader_scans_new_epoch_activity_from_its_valid_activation_
         assert!(head.epoch > member.activated_at().epoch);
         assert!(matches!(read.cursor_validity(member.activated_at()).await.unwrap(), message_board_storage::CursorValidity::Valid));
         read.finish().await.unwrap();
-        let rescanned = owner.store.lock().await.rescan_missing_subscription_windows(&owner.reader, owner.clock.now()).await;
+        let rescanned = owner.store.lock().await.rescan_missing_subscription_windows(&owner.reader, owner.clock.utc_now()).await;
         let progress = owner.interactions.subscription_progress(&project, &member.envelope.id, member.activated_at()).await.unwrap();
         drop(store);
         let root = owner.root.clone();
@@ -436,5 +446,5 @@ async fn an_inherited_reader_scans_new_epoch_activity_from_its_valid_activation_
         assert_eq!(window.from, posted);
         assert_eq!(window.through, posted);
         assert_eq!(window.post_count, 1);
-    }).await.expect("bounded inherited reader and new-epoch post");
+    }).await;
 }

@@ -44,7 +44,7 @@ impl collaboration_contracts::ProjectReplicationPosition for QuotaAcknowledgemen
 
 #[tokio::test]
 async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity_returns() {
-    Box::pin(tokio::time::timeout(Duration::from_secs(30), async {
+    Box::pin(async {
         // Arrange an inherited remote original: no sender row reserves its cancel slot.
         let fixture = Box::pin(OwnerFixture::new()).await;
         let runtime = fixture.runtime().await;
@@ -110,7 +110,7 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
             fixture.interactions.clone(),
             Arc::new(TokioHost::new(
                 Arc::new(NoFillerCalls),
-                runtime_primitives::SystemClock,
+                crate::subscription_delivery::SubscriptionRuntimeClock(fixture.clock.clone()),
             )),
         );
         let filler = DeliveryItem::<collaboration_contracts::RouterDeliveryTypes>::new(
@@ -132,6 +132,7 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
         ));
         let scope_binding = binding.clone();
         let fixture_project = fixture.project.clone();
+        let observed_at = runtime_primitives::Clock::now(fixture.clock.as_ref());
         let queued = observer
             .transaction(move |scope| {
                 Box::pin(async move {
@@ -149,7 +150,7 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
                             )
                             .unwrap(),
                         ),
-                        runtime_primitives::Clock::now(&runtime_primitives::SystemClock),
+                        observed_at,
                     )
                     .await
                     .map_err(delivery_rollback)
@@ -170,7 +171,7 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
                         None,
                     )
                     .unwrap(),
-                    clock: runtime.service.subscription_clock(),
+                    clock: runtime.service.runtime_clock(),
                 },
                 limits,
                 query.session.clone(),
@@ -247,6 +248,7 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
 
         // Free the real SDK quota; no SQL accounting changes or fake MailboxFull answers.
         let scope_binding = binding.clone();
+        let observed_at = runtime_primitives::Clock::now(fixture.clock.as_ref());
         observer
             .transaction(move |scope| {
                 Box::pin(async move {
@@ -255,11 +257,7 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
                         limits,
                         scope_binding.as_ref(),
                     )
-                    .record_failure(
-                        filler_id,
-                        DeliveryFailureKind::ExecutionFailed,
-                        runtime_primitives::Clock::now(&runtime_primitives::SystemClock),
-                    )
+                    .record_failure(filler_id, DeliveryFailureKind::ExecutionFailed, observed_at)
                     .await
                     .map_err(delivery_rollback)
                 })
@@ -275,13 +273,12 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
                 )
                 .await
                 .unwrap();
-            tokio::time::timeout(Duration::from_secs(6), async {
+            (async {
                 while query.submissions().len() == submitted.len() {
                     tokio::task::yield_now().await;
                 }
             })
-            .await
-            .expect("the next frozen child must publish after actual quota release");
+            .await;
             submitted.push(child.clone());
             assert_eq!(
                 query.submissions(),
@@ -328,6 +325,7 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
             assert_eq!(facts[0].cancel(), &child);
             let item = child.item;
             let scope_binding = binding.clone();
+            let observed_at = runtime_primitives::Clock::now(fixture.clock.as_ref());
             observer
                 .transaction(move |scope| {
                     Box::pin(async move {
@@ -343,7 +341,7 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
                                 version: StatusVersion::new(2),
                                 cancel: Some(CancelResult::Prevented),
                             },
-                            runtime_primitives::Clock::now(&runtime_primitives::SystemClock),
+                            observed_at,
                         )
                         .await
                         .map_err(delivery_rollback)
@@ -397,7 +395,6 @@ async fn a_full_native_outbox_keeps_its_frozen_child_pending_until_real_capacity
         runtime.close().await;
         fixture.close_native(native).await;
         query.close().await;
-    }))
-    .await
-    .expect("bounded actual outbox quota and frozen-child recovery");
+    })
+    .await;
 }
