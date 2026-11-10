@@ -64,7 +64,51 @@ impl PlatformIo for CloudflareObjectIo {
             let original_destination = address.clone();
             #[cfg(feature = "conformance")]
             let original_request = body.clone();
-            let answer = cloudflare_transport::call(&self.env, address, body).await?;
+            // Temporary S1 diagnosis: classify publication outcomes without
+            // exposing payloads or changing the call's bytes or result.
+            let publication = serde_json::from_slice::<serde_json::Value>(&body)
+                .ok()
+                .filter(|envelope| {
+                    matches!(
+                        envelope.get("kind").and_then(serde_json::Value::as_str),
+                        Some("central.lease-projection" | "central.lease-incarnation")
+                    )
+                });
+            let result = cloudflare_transport::call(&self.env, address, body).await;
+            if let Some(publication) = publication {
+                let reply = result
+                    .as_ref()
+                    .ok()
+                    .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(bytes).ok());
+                let outcome = match &result {
+                    Err(CallFailure::NotSent { .. }) => "not_sent",
+                    Err(CallFailure::AnswerLost) => "answer_lost",
+                    Err(CallFailure::Retryable { .. }) => "retryable",
+                    Ok(_) => reply
+                        .as_ref()
+                        .and_then(|value| value.get("kind"))
+                        .and_then(serde_json::Value::as_str)
+                        .filter(|kind| {
+                            matches!(
+                                *kind,
+                                "applied" | "duplicate" | "older" | "fenced" | "conflict"
+                            )
+                        })
+                        .unwrap_or("numeric_or_unclassified"),
+                };
+                let database = publication
+                    .pointer("/request/snapshot/database")
+                    .and_then(serde_json::Value::as_str)
+                    .and_then(|value| durable_steps::Uuid::parse_str(value).ok());
+                let incarnation = publication
+                    .pointer("/request/incarnation")
+                    .and_then(serde_json::Value::as_u64);
+                let returned_incarnation = reply.as_ref().and_then(serde_json::Value::as_u64);
+                worker::console_log!(
+                    "S1 lease publication diagnostic database={database:?} requested_incarnation={incarnation:?} returned_incarnation={returned_incarnation:?} outcome={outcome}"
+                );
+            }
+            let answer = result?;
             #[cfg(feature = "conformance")]
             if self
                 .faults
