@@ -1,8 +1,8 @@
 /** The operator releases a stopped, checkpointed staging upgrade explicitly. */
 import { z } from "zod";
-import { watch } from "node:fs";
+import { unwatchFile, watchFile } from "node:fs";
 import { constants, lstat, open } from "node:fs/promises";
-import { basename, dirname, resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { decodeAuthoredJson } from "../../../exact-json.ts";
 import { privateDirectory } from "../../../machines/owned-process.ts";
 
@@ -78,10 +78,11 @@ async function awaitRelease(input: {
     signal.throwIfAborted();
     done.resolve();
   };
-  const watcher = watch(directory, (_event, filename) => {
-    if (filename !== null && filename.toString() !== basename(release.path)) return;
+  // Native directory notifications can be lost; the private target's state is authoritative.
+  const changed = (): void => {
     void inspect().catch(done.reject);
-  });
+  };
+  const watcher = watchFile(release.path, { interval: 100 }, changed);
   watcher.on("error", done.reject);
   const aborted = (): void => {
     done.reject(signal.reason);
@@ -96,7 +97,7 @@ async function awaitRelease(input: {
     await done.promise;
     signal.throwIfAborted();
   } finally {
-    watcher.close();
+    unwatchFile(release.path, changed);
     signal.removeEventListener("abort", aborted);
   }
 }

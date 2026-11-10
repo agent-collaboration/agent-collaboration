@@ -30,7 +30,12 @@ export const stoppedFleetCheckpointPlan = z
       .object({
         artifact: z.string().startsWith("/"),
         sha256: z.string().regex(/^[a-f0-9]{64}$/),
-        oldFleetHead: z.bigint().nonnegative(),
+        // Authored plans decode JSON integers as numbers; runtime revalidation keeps bigint.
+        oldFleetHead: z.preprocess(
+          (value: unknown): unknown =>
+            typeof value === "number" && Number.isSafeInteger(value) ? BigInt(value) : value,
+          z.bigint().nonnegative(),
+        ),
         oldCentralSourceHead: z.string().regex(/^[a-f0-9]{40}$/),
       })
       .strict(),

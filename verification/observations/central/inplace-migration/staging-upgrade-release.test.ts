@@ -215,6 +215,8 @@ test("release nonce, strict shape, permissions and symlinks are checked at the a
                 ...(damage === "shape" ? { extra: true } : {}),
               });
         await writeFile(`${f.path}.partial`, body, { mode: damage === "public" ? 0o644 : 0o600 });
+        // Establish the invalid public mode even when the test process has a private umask.
+        await chmod(`${f.path}.partial`, damage === "public" ? 0o644 : 0o600);
         await rename(`${f.path}.partial`, f.path);
       }
       await rejected;
