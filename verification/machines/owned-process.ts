@@ -6,6 +6,7 @@ import { setTimeout } from "node:timers/promises";
 import { createInterface } from "node:readline";
 import type { Artifact } from "../declaration.ts";
 import { Receipt } from "../receipt.ts";
+import { beginCommandLedger } from "./command-ledger.ts";
 
 export function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
@@ -47,12 +48,20 @@ export async function command(
     environment?: NodeJS.ProcessEnv;
   } = {},
 ): Promise<{ stdout: string; stderr: string; exit: number | null }> {
+  const ledger = beginCommandLedger({
+    executable,
+    arguments: arguments_,
+    cwd: options.cwd ?? process.cwd(),
+    environment: options.environment ?? process.env,
+    mode: "command",
+  });
   const child = spawn(executable, arguments_, {
     stdio: ["pipe", "pipe", "pipe"],
     signal: AbortSignal.timeout((options.timeoutSeconds ?? 30) * 1000),
     ...(options.environment === undefined ? {} : { env: options.environment }),
     ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
   });
+  if (child.pid !== undefined) ledger?.spawned(child.pid);
   let stdout = "";
   let stderr = "";
   child.stdin.on("error", (): void => {});
@@ -66,8 +75,21 @@ export async function command(
     if (stderr.length > 1024 * 1024) child.kill("SIGTERM");
   });
   const exit = await new Promise<number | null>((resolve, reject): void => {
-    child.once("error", reject);
-    child.once("close", resolve);
+    let ended = false;
+    child.once("error", (error): void => {
+      if (!ended) {
+        ended = true;
+        ledger?.ended({ pid: child.pid ?? null, exit: null, signal: null, error: error.name });
+      }
+      reject(error);
+    });
+    child.once("close", (code, signal): void => {
+      if (!ended) {
+        ended = true;
+        ledger?.ended({ pid: child.pid ?? null, exit: code, signal, error: null });
+      }
+      resolve(code);
+    });
   });
   return { stdout, stderr, exit };
 }
@@ -111,11 +133,19 @@ export class OwnedProcess {
       stream.on("error", (): void => {
         this.outputOverflow = true;
       });
+    const ledger = beginCommandLedger({
+      executable: input.executable,
+      arguments: input.arguments,
+      cwd: input.cwd,
+      environment: input.environment,
+      mode: "daemon",
+    });
     this.child = spawn(input.executable, input.arguments, {
       cwd: input.cwd,
       env: input.environment,
       stdio: ["pipe", "pipe", "pipe"],
     });
+    if (this.child.pid !== undefined) ledger?.spawned(this.child.pid);
     this.child.stdout?.pipe(output);
     this.child.stderr?.pipe(error);
     if (this.child.stdout !== null)
@@ -131,8 +161,26 @@ export class OwnedProcess {
       { encoding: "utf8" },
     );
     this.done = new Promise<number | null>((resolve, reject): void => {
-      this.child.once("error", reject);
-      this.child.once("exit", resolve);
+      let ended = false;
+      this.child.once("error", (error): void => {
+        if (!ended) {
+          ended = true;
+          ledger?.ended({
+            pid: this.child.pid ?? null,
+            exit: null,
+            signal: null,
+            error: error.name,
+          });
+        }
+        reject(error);
+      });
+      this.child.once("exit", (code, signal): void => {
+        if (!ended) {
+          ended = true;
+          ledger?.ended({ pid: this.child.pid ?? null, exit: code, signal, error: null });
+        }
+        resolve(code);
+      });
     });
   }
   get pid(): number {

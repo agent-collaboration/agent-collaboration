@@ -17,7 +17,17 @@ import {
   fingerprint,
 } from "./owned-process.ts";
 import { Remote, type RemoteProcess } from "./remote.ts";
-import { CodexHomeGuard, type ConfigurationEligibility } from "./codex-home.ts";
+import {
+  CodexHomeGuard,
+  type ConfigurationEligibility,
+  type CodexHomePurpose,
+} from "./codex-home.ts";
+import {
+  registerCommandRoot,
+  markCommandBaseline,
+  enrollInvocationsSince,
+} from "./command-ledger.ts";
+import { validateStagingUserHome, observeRuntimeHomeIsolation } from "./user-home-isolation.ts";
 
 type Child =
   | { readonly kind: "local"; readonly process: OwnedProcess }
@@ -39,15 +49,54 @@ const identitySchema = z.object({
   peerId: z.string().regex(/^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/),
 });
 export type InstallationIdentity = z.infer<typeof identitySchema>;
+const upgradeBaselineSchema = z
+  .object({
+    root: z.string(),
+    installationId: z.uuid(),
+    machineId: z.uuidv7(),
+    endpoint: z.url(),
+    enrollmentSha256: z.string().regex(/^[a-f0-9]{64}$/),
+    baselineId: z.uuidv7(),
+  })
+  .strict();
+export type UpgradeBaseline = z.infer<typeof upgradeBaselineSchema>;
+const enrollmentStatus = z.object({
+  status: z.object({
+    kind: z.literal("valid"),
+    enrollment: z.object({ peer: z.uuidv7(), endpoint: z.url() }),
+  }),
+});
+export function validateUpgradeEnrollment(input: {
+  expected: UpgradeBaseline;
+  identity: InstallationIdentity;
+  status: unknown;
+  enrollmentSha256: string;
+}): void {
+  const observed = enrollmentStatus.parse(input.status).status.enrollment;
+  if (
+    input.identity.serviceId !== input.expected.installationId ||
+    input.identity.peerId !== input.expected.machineId ||
+    observed.peer !== input.expected.machineId ||
+    new URL(observed.endpoint).href !== new URL(input.expected.endpoint).href ||
+    input.enrollmentSha256 !== input.expected.enrollmentSha256
+  )
+    throw new Error("existing root identity or enrollment differs from the recorded baseline");
+}
 export class Installation {
   readonly machine: Machine;
   readonly remote: Remote | undefined;
   readonly cli: RouterCli;
-  private readonly input: { repository: string; productVersion: string; receipt: Receipt };
+  private readonly input: {
+    repository: string;
+    productVersion: string;
+    receipt: Receipt;
+    stagingHome?: string;
+  };
   private readonly guard: CodexHomeGuard;
   private readonly children = new Set<Child>();
   private state: State = { kind: "prepared" };
   private generation = 0;
+  private readonly releaseCommandRoot: () => void;
   private constructor(input: {
     machine: Machine;
     remote: Remote | undefined;
@@ -55,11 +104,14 @@ export class Installation {
     repository: string;
     productVersion: string;
     receipt: Receipt;
+    releaseCommandRoot: () => void;
+    stagingHome?: string;
   }) {
     this.machine = input.machine;
     this.remote = input.remote;
     this.guard = input.guard;
     this.input = input;
+    this.releaseCommandRoot = input.releaseCommandRoot;
     this.cli = new RouterCli(
       input.machine.cli,
       `${input.machine.root}/agent-communication`,
@@ -71,6 +123,8 @@ export class Installation {
     repository: string;
     productVersion: string;
     receipt: Receipt;
+    codexHomePurpose?: CodexHomePurpose;
+    stagingHome?: string;
   }): Promise<Installation> {
     const { machine } = input;
     if (
@@ -83,7 +137,13 @@ export class Installation {
     await qualifyArtifact(machine.router);
     await qualifyArtifact(machine.cli);
     const remote = machine.kind === "ssh" ? new Remote(machine) : undefined;
-    const guard = await CodexHomeGuard.capture(machine, remote);
+    if (input.codexHomePurpose === "staging-isolated") {
+      if (input.stagingHome === undefined)
+        throw new Error("staging isolation requires a private child HOME");
+      await validateStagingUserHome({ machine, home: input.stagingHome });
+    } else if (input.stagingHome !== undefined)
+      throw new Error("private child HOME requires explicit staging-isolated purpose");
+    const guard = await CodexHomeGuard.capture(machine, remote, input.codexHomePurpose);
     if (remote === undefined) {
       await privateDirectory(machine.temporaryParent);
       await mkdir(machine.root, { mode: 0o700 });
@@ -109,7 +169,9 @@ export class Installation {
     if (remote === undefined)
       await writeFile(`${machine.root}/providers.json`, providers, { mode: 0o600, flag: "wx" });
     else await remote.writePrivate("providers.json", providers);
-    return new Installation({ ...input, remote, guard });
+    const releaseCommandRoot =
+      remote === undefined ? await registerCommandRoot(machine.root) : (): void => {};
+    return new Installation({ ...input, remote, guard, releaseCommandRoot });
   }
   get mcp(): RouterMcp {
     if (this.state.kind !== "ready") throw new Error("installation Host is not ready");
@@ -144,6 +206,7 @@ export class Installation {
       CODEX_HOME: machine.codexHome,
       RUST_LOG: "off",
       DIRENV_DISABLE: "1",
+      ...(this.input.stagingHome === undefined ? {} : { HOME: this.input.stagingHome }),
     };
     let owned: Child;
     if (this.remote !== undefined)
@@ -323,6 +386,131 @@ export class Installation {
   async identity(): Promise<InstallationIdentity> {
     return identitySchema.parse(await this.mcp.call("installation_show", {}));
   }
+  async runRouterCommand(
+    arguments_: readonly string[],
+    environment: Readonly<Record<string, string>> = {},
+  ): Promise<Awaited<ReturnType<typeof command>>> {
+    if (this.state.kind === "closed") throw new Error("closed installation cannot run commands");
+    const childEnvironment: NodeJS.ProcessEnv = {
+      ...process.env,
+      ...environment,
+      CODEX_HOME: this.machine.codexHome,
+      ...(this.input.stagingHome === undefined ? {} : { HOME: this.input.stagingHome }),
+    };
+    delete childEnvironment.CODEX_ROUTER_HOST_INHERITED_LOCK;
+    delete childEnvironment.CODEX_ROUTER_USE_HOME_DEFAULT;
+    if (this.remote !== undefined)
+      return this.remote.output([this.remote.pathFor(this.machine.router), ...arguments_], {
+        environment,
+        timeoutSeconds: 60,
+      });
+    return command(this.machine.router.path, arguments_, {
+      environment: childEnvironment,
+      timeoutSeconds: 60,
+      cwd: this.input.repository,
+    });
+  }
+  async markUpgradeBaseline(): Promise<UpgradeBaseline> {
+    if (this.remote !== undefined || this.state.kind !== "ready")
+      throw new Error(
+        "upgrade baseline requires a ready local owned installation; run each Mac's launcher locally",
+      );
+    const identity = await this.identity();
+    const result = await this.runRouterCommand([
+      "fleet",
+      "status",
+      "--router-root",
+      this.machine.root,
+    ]);
+    if (result.exit !== 0) throw new Error("existing enrollment status unavailable");
+    const enrolled = enrollmentStatus.parse(decode(result.stdout)).status.enrollment;
+    if (enrolled.peer !== identity.peerId)
+      throw new Error("enrolled peer differs from running installation");
+    const baselineId = await markCommandBaseline(this.machine.root);
+    const baseline = upgradeBaselineSchema.parse({
+      root: this.machine.root,
+      installationId: identity.serviceId,
+      machineId: identity.peerId,
+      endpoint: enrolled.endpoint,
+      enrollmentSha256: await fingerprint(`${this.machine.root}/fleet/enrollment.json`),
+      baselineId,
+    });
+    await this.input.receipt.save(`upgrade-baseline-${baselineId}.json`, baseline);
+    return baseline;
+  }
+  async upgrade(input: {
+    baseline: UpgradeBaseline;
+    router: Machine["router"];
+    cli: Machine["cli"];
+    productVersion: string;
+    sourceHead: string;
+  }): Promise<Installation> {
+    if (this.remote !== undefined || this.state.kind !== "ready")
+      throw new Error("upgrade requires the ready owned local installation");
+    const baseline = upgradeBaselineSchema.parse(input.baseline);
+    z.string()
+      .regex(/^[a-f0-9]{40}$/)
+      .parse(input.sourceHead);
+    if (baseline.root !== this.machine.root)
+      throw new Error("upgrade root differs from expected enrolled root");
+    const verifyEnrollment = async (installation: Installation): Promise<void> => {
+      const status = await installation.runRouterCommand([
+        "fleet",
+        "status",
+        "--router-root",
+        installation.machine.root,
+      ]);
+      if (status.exit !== 0) throw new Error("upgrade enrollment status unavailable");
+      validateUpgradeEnrollment({
+        expected: baseline,
+        identity: await installation.identity(),
+        status: decode(status.stdout),
+        enrollmentSha256: await fingerprint(`${installation.machine.root}/fleet/enrollment.json`),
+      });
+      if ((await enrollInvocationsSince(installation.machine.root, baseline.baselineId)) !== 0)
+        throw new Error("fleet enroll ran after the recorded baseline");
+    };
+    await verifyEnrollment(this);
+    await qualifyArtifact(input.router);
+    await qualifyArtifact(input.cli);
+    await this.input.receipt.record("installationUpgradeRequested", {
+      root: this.machine.root,
+      sourceHead: input.sourceHead,
+      productVersion: input.productVersion,
+      router: input.router,
+      cli: input.cli,
+      baselineId: baseline.baselineId,
+    });
+    // close owns only this instance's Host/Router children. The root and enrollment stay in place.
+    await this.close();
+    const releaseCommandRoot = await registerCommandRoot(this.machine.root);
+    const replacement = new Installation({
+      machine: { ...this.machine, router: input.router, cli: input.cli },
+      remote: undefined,
+      guard: this.guard,
+      repository: this.input.repository,
+      productVersion: input.productVersion,
+      receipt: this.input.receipt,
+      releaseCommandRoot,
+      ...(this.input.stagingHome === undefined ? {} : { stagingHome: this.input.stagingHome }),
+    });
+    replacement.generation = this.generation;
+    try {
+      await replacement.start();
+      await verifyEnrollment(replacement);
+      await this.input.receipt.record("installationUpgradeObserved", {
+        root: this.machine.root,
+        sourceHead: input.sourceHead,
+        productVersion: input.productVersion,
+        baselineId: baseline.baselineId,
+        enrollInvocations: 0,
+      });
+      return replacement;
+    } catch (error: unknown) {
+      await replacement.close();
+      throw error;
+    }
+  }
   async stopHost(): Promise<void> {
     if (this.state.kind !== "ready") throw new Error("no ready Host to stop");
     const { host, router } = this.state;
@@ -364,6 +552,21 @@ export class Installation {
       }
     }
     await this.guard.verify(this.input.receipt, [...new Set(ownedPids)]);
+    if (
+      this.input.stagingHome !== undefined &&
+      (this.state.kind === "ready" || this.state.kind === "hostStarting")
+    ) {
+      const observation = await observeRuntimeHomeIsolation({
+        hostPid: this.state.host.process.pid,
+        ownedPids: [...new Set(ownedPids)],
+        expectedHome: this.input.stagingHome,
+        expectedCodexHome: this.machine.codexHome,
+        root: this.machine.root,
+      });
+      await this.input.receipt.record("runtimeHomeIsolation", observation);
+      if (observation.forbiddenFiles.length !== 0)
+        throw new Error("owned Host or child opened a real Codex/Claude home path");
+    }
   }
   async close(): Promise<void> {
     const failures: unknown[] = [];
@@ -383,5 +586,6 @@ export class Installation {
     }
     if (failures.length > 0)
       throw new AggregateError(failures, "installation cleanup or configuration unverified");
+    this.releaseCommandRoot();
   }
 }
