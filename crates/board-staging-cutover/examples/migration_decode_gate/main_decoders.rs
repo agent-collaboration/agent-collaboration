@@ -43,6 +43,11 @@ pub struct Refusal {
     pub reason: String,
 }
 
+pub struct DecodedCopy {
+    pub refusals: Vec<Refusal>,
+    pub status: Option<CopyStatusAnswer>,
+}
+
 /// Graph tables and the record kind main reads each row as, by its id column.
 const RECORD_TABLES: [(&str, &str, RecordKind); 4] = [
     ("fleet_workspaces", "workspace_id", RecordKind::Workspace),
@@ -205,7 +210,7 @@ pub async fn decode_copy(
     project: &str,
     image: &ObjectImage,
     connection: &mut TursoConnection,
-) -> Result<Vec<Refusal>, sqlx_core::Error> {
+) -> Result<DecodedCopy, sqlx_core::Error> {
     let object = format!("copy {project}");
     let mut refusals = Vec::new();
     let mut refuse = |row: &str, reason: String| {
@@ -216,6 +221,12 @@ pub async fn decode_copy(
         });
     };
     let mut transaction = connection.begin().await?;
+    if let Err(error) = decode_copy_summary(project, image) {
+        refuse(
+            "_copy_summary",
+            format!("main's Copy summary reader refuses: {error}"),
+        );
+    }
     // As main's post-deploy Copy migration does before main reads it: the
     // pinned receiver corpus, recorded in central's own set (its checksum
     // check also validates the candidate's recorded versions), then the Copy's
@@ -286,13 +297,18 @@ pub async fn decode_copy(
             ),
         ),
     }
-    match status {
-        Ok(CopyStatusAnswer::Status(_) | CopyStatusAnswer::Retired) => {}
-        Ok(CopyStatusAnswer::NotInitialized) => {
-            refuse("_fleet_sync_copy", "main reads no Copy record".into())
+    let status = match status {
+        Ok(answer) => {
+            if matches!(answer, CopyStatusAnswer::NotInitialized) {
+                refuse("_fleet_sync_copy", "main reads no Copy record".into());
+            }
+            Some(answer)
         }
-        Err(error) => refuse("_fleet_sync_copy", error.to_string()),
-    }
+        Err(error) => {
+            refuse("_fleet_sync_copy", error.to_string());
+            None
+        }
+    };
     match inspection {
         fleet_sync_receiver::CopyInspection::Damaged { detail } => {
             refuse(
@@ -330,5 +346,47 @@ pub async fn decode_copy(
             ),
         }
     }
-    Ok(refusals)
+    Ok(DecodedCopy { refusals, status })
+}
+
+/// ReadCopySummary's SQL cardinality and identity rules, followed by its public
+/// Serde decoder. Read every raw row so missing columns and non-text cells
+/// cannot disappear through the image's text-only convenience readers.
+fn decode_copy_summary(project: &str, image: &ObjectImage) -> Result<(), String> {
+    let Some(table) = image.tables.get("_copy_summary") else {
+        // Main's initialize_hook creates an empty summary table when absent.
+        return Ok(());
+    };
+    let column = |name: &str| {
+        table
+            .columns
+            .iter()
+            .position(|column| column == name)
+            .ok_or_else(|| format!("missing {name} column"))
+    };
+    let database_column = column("database_id")?;
+    let record_column = column("record")?;
+    if table.rows.len() > 1 {
+        return Err("copy contains multiple summaries".into());
+    }
+    let database = DatabaseId::new(
+        project
+            .parse::<uuid::Uuid>()
+            .map_err(|error| error.to_string())?,
+    )
+    .map_err(|error| error.to_string())?;
+    for row in &table.rows {
+        let Some(TypedValue::Text(stored_database)) = row.get(database_column) else {
+            return Err("copy.summary.database is missing or is not text".into());
+        };
+        let Some(TypedValue::Text(record)) = row.get(record_column) else {
+            return Err("copy.summary is missing or is not text".into());
+        };
+        let summary: collaboration_central_core::CopyDirectorySummary =
+            serde_json::from_str(record).map_err(|error| error.to_string())?;
+        if stored_database != &database.as_uuid().to_string() || summary.database != database {
+            return Err("stored copy summary database differs".into());
+        }
+    }
+    Ok(())
 }

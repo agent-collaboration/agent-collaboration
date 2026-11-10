@@ -10,6 +10,9 @@ use sha2::{Digest, Sha256};
 
 const FIXTURE: &str = include_str!("candidate_fixture.json");
 
+#[path = "copy_coverage_test.rs"]
+mod copy_coverage;
+
 fn fixture() -> Value {
     serde_json::from_str(FIXTURE).expect("the committed fixture parses")
 }

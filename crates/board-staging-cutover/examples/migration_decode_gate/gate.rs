@@ -6,6 +6,9 @@ use crate::candidate_image::{Candidate, InventoryAnswer};
 use crate::main_decoders::{Refusal, decode_copy, decode_fleet};
 use crate::object_rebuild::rebuild;
 use crate::table_coverage::{COPY, Coverage, FLEET, coverage};
+use board_fleet_sync::BoardProjectSchema;
+use fleet_sync_protocol::{CopyStatusAnswer, TableName};
+use fleet_sync_writer::ReplicatedSchema;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
@@ -72,10 +75,7 @@ pub async fn run_gate(inventory_text: &str) -> GateReport {
         Ok(candidate) => candidate,
         Err(error) => return refused(Some(digest), run_time, "candidate", error.to_string()),
     };
-    let mut refusals = covered("fleet", &candidate.fleet, FLEET);
-    for (project, image) in &candidate.copies {
-        refusals.extend(covered(&format!("copy {project}"), image, COPY));
-    }
+    let mut refusals = covered("fleet", &candidate.fleet, FLEET, &[]);
     match rebuild(&candidate.fleet).await {
         Ok(mut connection) => match decode_fleet(&candidate.fleet, &mut connection).await {
             Ok(found) => refusals.extend(found),
@@ -87,7 +87,29 @@ pub async fn run_gate(inventory_text: &str) -> GateReport {
         let object = format!("copy {project}");
         match rebuild(image).await {
             Ok(mut connection) => match decode_copy(project, image, &mut connection).await {
-                Ok(found) => refusals.extend(found),
+                Ok(decoded) => {
+                    // Retirement removes project rows and replicated membership,
+                    // but keeps their SQL definitions. Only the actual receiver
+                    // status permits the exact Board catalog's empty tables.
+                    let retired_tables =
+                        if matches!(decoded.status, Some(CopyStatusAnswer::Retired)) {
+                            match BoardProjectSchema::new() {
+                                Ok(schema) => schema.replicated_tables(),
+                                Err(error) => {
+                                    refusals.push(Refusal {
+                                        object: object.clone(),
+                                        row: "Board schema catalog".into(),
+                                        reason: error.to_string(),
+                                    });
+                                    &[]
+                                }
+                            }
+                        } else {
+                            &[]
+                        };
+                    refusals.extend(covered(&object, image, COPY, retired_tables));
+                    refusals.extend(decoded.refusals);
+                }
                 Err(error) => refusals.push(storage_refusal(&object, &error)),
             },
             Err(error) => refusals.push(storage_refusal(&object, &error)),
@@ -110,12 +132,19 @@ fn covered(
     object: &str,
     image: &crate::candidate_image::ObjectImage,
     map: &[(&str, Coverage)],
+    retired_board_tables: &[TableName],
 ) -> Vec<Refusal> {
     image
         .tables
         .iter()
         .filter_map(|(table, rows)| {
             match coverage(map, table) {
+                None if retired_board_tables.iter().any(|known| known.as_str() == table) => {
+                    (!rows.rows.is_empty()).then(|| format!(
+                        "{table} holds {} rows; a retired Board application table must be empty",
+                        rows.rows.len()
+                    ))
+                }
                 None => Some(format!("{table} has no gate coverage")),
                 Some(Coverage::MustBeEmpty(what)) if !rows.rows.is_empty() => Some(format!(
                     "{table} holds {} {what} rows; main decodes them and the gate doesn't",

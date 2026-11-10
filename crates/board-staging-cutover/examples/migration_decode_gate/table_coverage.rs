@@ -159,6 +159,10 @@ pub const FLEET: &[(&str, Coverage)] = &[
 
 pub const COPY: &[(&str, Coverage)] = &[
     (
+        "_copy_summary",
+        Coverage::Decoded("ReadCopySummary's row rules and public CopyDirectorySummary decoder"),
+    ),
+    (
         "_fleet_sync_copy",
         Coverage::Decoded("copy_status and inspect_copy, after main's receiver migration"),
     ),
