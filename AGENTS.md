@@ -57,6 +57,10 @@ After reducing cycles or their edges, update `architecture/module-cycle-baseline
    - an Advisor check before it's built.
 6. **Proof never changes in a move:** ignores, scheduling groups, priorities, deadlines, per-case process isolation and zero-match checks stay as they are.
 
+## Time
+
+No wall-clock testing. Time comes from one injected clock, created in one place and passed down; production code and tests never read or sleep on the system clock or Tokio's time directly, and tests advance only that one clock.
+
 ## Verification Tooling
 
 - Install tooling dependencies with `pnpm --dir verification install --frozen-lockfile`.
@@ -107,7 +111,7 @@ After reducing cycles or their edges, update `architecture/module-cycle-baseline
   through `scripts/cargo_debug_signing_runner.sh`, which signs every
   executable it runs with the same certificate, without a secure timestamp so
   it works offline: `codex-router`, `agent-collaboration`, `agent-sessions`,
-  `codex-router-board-upgrade` and `board-debug-runtime` under
+  `agent-router-update` and `board-debug-runtime` under
   `dev.shravansunder.<executable>.debug`, and test, example and helper
   binaries under `dev.shravansunder.test.<name>`. Never execute a freshly
   built binary unsigned: macOS verifies each new ad-hoc-signed executable,

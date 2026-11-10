@@ -95,7 +95,10 @@ async fn compiled_account_removal_journey_on_encrypted_and_plaintext_debug_roots
             open_encrypted_credential_store(&secret_root)?.into()
         };
         let account_id = AccountId::new("acct_removal_fixture")?;
-        let state = AsyncSqliteStateStore::open(&router_root.join("state.sqlite")).await?;
+        let state = AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        ))
+        .await?;
         import_codex_auth_from_request_async(
             &state,
             &secrets,
@@ -170,8 +173,10 @@ async fn compiled_account_removal_journey_on_encrypted_and_plaintext_debug_roots
             secrets.read_secret(&key).is_err(),
             "secret store must no longer contain the fixture credential",
         )?;
-        let state =
-            AsyncSqliteStateStore::open_read_only(&router_root.join("state.sqlite")).await?;
+        let state = AsyncSqliteStateStore::open_read_only(
+            &codex_router_state::provider_proxy_database_path(&router_root),
+        )
+        .await?;
         check(
             state.load_account(&account_id).await?.is_none(),
             "owning state reopen must show the account absent",

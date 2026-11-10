@@ -73,7 +73,7 @@ async fn received_grant_record_failure_defers_later_notices_then_reconnect_recov
     let second_fleet = second_board.fleet.upgrade().ok_or("second Fleet")?;
     let mut completions = second_projects.notice_completions.subscribe();
     let second_admission = second_board.admission.clone();
-    let second_running = second_board.start().ok_or("second runtime")?;
+    let second_running = second_board.start().session.ok_or("second runtime")?;
     wait_welcome(second_projects.welcomed.clone()).await?;
     second_fleet.synchronize().await?;
     let failure = CacheWriteFailure::hold(&second_root, CacheWriteTarget::InstallAttempt).await?;
@@ -126,7 +126,7 @@ async fn received_grant_record_failure_defers_later_notices_then_reconnect_recov
         let later_position = timeout(BOUND, superseded_notice.wait_held()).await??;
         superseded_notice.release()?;
         assert_eq!(wait_notice_completion(&mut completions, later_position).await?, NoticeHandling::Failed);
-        let session = board_fleet_sync::MachineSessionStore::open(&second_root).await?;
+        let session = board_fleet_sync::MachineSessionStore::from_cache(std::sync::Arc::new(message_board_storage::FleetStore::open(&second_root.join(message_board_storage::FleetStore::FILE_NAME)).await?.cache()));
         let cursor = SessionClientStore::load(&session).await?.ok_or("real session state")?.notice_cursor;
         assert!(cursor < failed_position, "failed grant was acknowledged: cursor={cursor:?}, failure={failed_position:?}");
         assert_eq!(attempt_count(&second_root).await?, 0);
@@ -224,13 +224,13 @@ async fn recovered_prefix(
         .clone();
     let registry = projects.registry()?;
     let admission = board.admission.clone();
-    let running = board.start().ok_or("reopened running session")?;
+    let running = board.start().session.ok_or("reopened running session")?;
     let result = async {
         wait_welcome(projects.welcomed.clone()).await?;
         println!("NOTICE_ACK_CASE recovery_welcomed");
         let store = super::received_grants::wait_published_project(&registry, project, 3).await?;
         println!("NOTICE_ACK_CASE recovery_writer_published");
-        let session = board_fleet_sync::MachineSessionStore::open(root).await?;
+        let session = board_fleet_sync::MachineSessionStore::from_cache(std::sync::Arc::new(message_board_storage::FleetStore::open(&root.join(message_board_storage::FleetStore::FILE_NAME)).await?.cache()));
         if SessionClientStore::load(&session).await?.ok_or("reopened session state")?.notice_cursor < through {
             // Welcome recovers the inner machine-read prefix. A fresh real
             // notice proves that transport ACK progress can then pass X/Y;

@@ -7,8 +7,11 @@ use serde::{Deserialize, Serialize};
 #[serde(rename_all = "snake_case")]
 pub enum HostPortSource {
     Flag,
+    /// The `ports` section of `settings.jsonc`. The wire code keeps its earlier
+    /// value so a CLI and a running Host of different versions still read each
+    /// other's status.
     #[serde(rename = "ports.json")]
-    PortsFile,
+    SettingsPorts,
     Default,
 }
 
@@ -17,7 +20,7 @@ impl HostPortSource {
     pub const fn label(self) -> &'static str {
         match self {
             Self::Flag => "flag",
-            Self::PortsFile => "ports.json",
+            Self::SettingsPorts => "settings.jsonc ports",
             Self::Default => "default",
         }
     }

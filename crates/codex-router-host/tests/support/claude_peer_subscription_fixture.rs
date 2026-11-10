@@ -106,7 +106,7 @@ impl ClaudePeerSubscriptionFixture {
 
         let clock = ManualSubscriptionClock::new(Utc::now());
         let clock = Arc::new(clock);
-        let project_registry = native_registry::new_registry(directory.path())?;
+        let project_registry = native_registry::new_registry(directory.path()).await?;
         let origin = ActorOrigin {
             installation: ServiceId::try_from(SERVICE_ID.to_owned())?,
             machine: MachineLabel::try_from("claude-peer-resume-fixture".to_owned())?,

@@ -26,14 +26,16 @@ async fn welcome_publishes_an_eligible_remote_handoff_after_its_acknowledgement_
     let mut harness =
         MailHarness::open_configured(directory.path(), None, false, true, None, Some(central))
             .await?;
-    let fleet = Arc::new(
-        FleetClient::open(
-            &harness.root,
-            harness.projects.clone(),
-            Some(harness.requests.clone()),
+    let fleet = Arc::new(FleetClient::new(
+        &message_board_storage::FleetStore::open(
+            &harness
+                .root
+                .join(message_board_storage::FleetStore::FILE_NAME),
         )
         .await?,
-    );
+        harness.projects.clone(),
+        Some(harness.requests.clone()),
+    ));
     let machine = MachineIdentity::new(
         "00000000-0000-4000-8000-000000000001"
             .to_owned()

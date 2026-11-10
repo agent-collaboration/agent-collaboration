@@ -158,7 +158,7 @@ impl PreparedMachineSession {
             },
         ));
         projects.prepare_existing().await?;
-        let notices = MachineNoticeReactions::open(directory).await?;
+        let notices = MachineNoticeReactions::open(link.cache.as_ref().clone()).await?;
         Ok(Self {
             link_failures,
             pump,

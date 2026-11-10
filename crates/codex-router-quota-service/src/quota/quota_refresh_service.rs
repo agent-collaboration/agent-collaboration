@@ -105,7 +105,7 @@ where
 {
     refresh_quota_store_paths_with_dependencies(
         stdout,
-        &router_root.join("state.sqlite"),
+        &codex_router_state::provider_proxy_database_path(&router_root),
         &router_root.join("secrets"),
         base_url,
         credential_resolver,

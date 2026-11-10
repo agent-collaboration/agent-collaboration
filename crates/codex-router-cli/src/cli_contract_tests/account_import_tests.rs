@@ -31,7 +31,7 @@ fn explicit_auth_file_account_entrypoints_are_unknown() {
 fn openai_auth_import_refuses_an_existing_claude_account_before_writing() {
     let test_root = TestRoot::new("openai-import-provider-guard");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let runtime = test_async_runtime();
     let state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(&state_path)));
@@ -109,7 +109,7 @@ impl SecretStore for FailingWriteOnlySecretStore {
 fn device_login_commit_preserves_old_secret_and_invalidates_quota() {
     let test_root = TestRoot::new("device-login-existing-credential");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let runtime = test_async_runtime();
     let state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(&state_path)));
@@ -217,7 +217,7 @@ impl CredentialRefreshClient for HeldLoginRaceRefreshClient {
 fn device_relogin_waits_for_claimed_refresh_then_wins_the_active_generation() {
     let test_root = TestRoot::new("device-relogin-refresh-race");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let state = must_ok(SqliteStateStore::open(&state_path));
     let account_id = account_id("device-refresh-race");
@@ -322,7 +322,7 @@ fn device_relogin_waits_for_claimed_refresh_then_wins_the_active_generation() {
 fn refresh_claim_cannot_reenable_an_account_disabled_during_provider_refresh() {
     let test_root = TestRoot::new("refresh-disabled-account-race");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let state = must_ok(SqliteStateStore::open(&state_path));
     let account_id = account_id("refresh-disable-race");
@@ -412,7 +412,7 @@ fn failed_device_login_secret_commit_leaves_new_account_disabled() {
     must_ok(fs::create_dir(test_root.path()));
     let runtime = test_async_runtime();
     let state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(
-        &test_root.path().join("state.sqlite"),
+        &codex_router_state::provider_proxy_database_path(test_root.path()),
     )));
     let account_id = account_id("device-write-failure");
     let secrets = FailingWriteOnlySecretStore {

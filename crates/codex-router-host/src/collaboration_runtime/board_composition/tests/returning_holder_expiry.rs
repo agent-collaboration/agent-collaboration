@@ -59,7 +59,10 @@ async fn membership_expiry_during_a_returning_install_does_not_quarantine_the_pr
         .clone();
     let second_registry = second_projects.registry()?;
     let second_admission = second_board.admission.clone();
-    let second_running = second_board.start().ok_or("second running session")?;
+    let second_running = second_board
+        .start()
+        .session
+        .ok_or("second running session")?;
     wait_welcome(second_projects.welcomed.clone()).await?;
     let connection = ObjectAddress::Fleet;
     let proof = async {

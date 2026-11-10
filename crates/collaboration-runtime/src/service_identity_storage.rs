@@ -29,25 +29,10 @@ pub fn read_service_identity(directory: &Path) -> io::Result<Option<UuidIdentity
     }
 }
 
-/// Generates an independent epoch/identity from OS randomness.
+/// Mints a new Router-owned identifier as a UUIDv7: a millisecond timestamp
+/// followed by OS randomness, so ids sort by creation time.
 pub fn new_service_uuid() -> io::Result<UuidIdentity> {
-    let mut bytes = [0_u8; 16];
-    getrandom::fill(&mut bytes).map_err(|_| io::Error::other("identity randomness unavailable"))?;
-    if let Some(value) = bytes.get_mut(6) {
-        *value = (*value & 0x0f) | 0x40;
-    }
-    if let Some(value) = bytes.get_mut(8) {
-        *value = (*value & 0x3f) | 0x80;
-    }
-    let mut encoded = String::with_capacity(36);
-    for (index, byte) in bytes.iter().enumerate() {
-        if matches!(index, 4 | 6 | 8 | 10) {
-            encoded.push('-');
-        }
-        use std::fmt::Write as _;
-        write!(encoded, "{byte:02x}").map_err(|_| io::Error::other("identity encoding"))?;
-    }
-    UuidIdentity::try_from(encoded).map_err(io::Error::other)
+    UuidIdentity::try_from(uuid::Uuid::now_v7().to_string()).map_err(io::Error::other)
 }
 
 pub fn load_service_identity(directory: &Path) -> io::Result<UuidIdentity> {

@@ -25,7 +25,7 @@ pub(super) fn interactive_quota_refresher(
         let base_url = base_url.clone();
         Box::pin(async move {
             let resolver = match crate::credential_runtime::AsyncCliCredentialResolver::open(
-                &router_root.join("state.sqlite"),
+                &codex_router_state::provider_proxy_database_path(&router_root),
                 &router_root.join("secrets"),
             )
             .await

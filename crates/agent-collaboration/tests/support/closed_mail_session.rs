@@ -15,7 +15,7 @@ pub async fn closed_session(
     let bound = Duration::from_secs(5);
     let client = SessionClient::<_, _, BoardConsumerProtocol>::load(
         ReqwestSessionTransport::new(AccessServiceToken::new("fixture", "fixture")?, bound, bound)?,
-        MachineSessionStore::open(root).await?,
+        MachineSessionStore::from_cache(std::sync::Arc::new(message_board_storage::FleetStore::open(&root.join(message_board_storage::FleetStore::FILE_NAME)).await?.cache())),
         &UuidV7Ids,
         SchemaSupport { max_version: 1 },
         Backoff {

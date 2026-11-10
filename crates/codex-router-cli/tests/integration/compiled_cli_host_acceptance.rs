@@ -26,6 +26,10 @@ mod compiled_cli_host_fixture;
 use compiled_cli_host_fixture::{kill_fixture_processes, sign_debug_binary};
 #[path = "compiled_cli_host_fixture_test.rs"]
 mod fixture_tests;
+#[path = "compiled_cli_host_updated_root_test.rs"]
+mod updated_root_tests;
+#[path = "compiled_cli_host_whole_update_test.rs"]
+mod whole_update_tests;
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -232,17 +236,8 @@ async fn run_host_install_journey(atomic_install: bool) -> Result<(), Box<dyn st
     install_curl_fixture(&curl_executable)?;
     let port = reserve_loopback_port()?;
     install_debug_profile(&codex_home, port)?;
-    // This journey owns Codex replacement, not ambient Claude/Cursor admission.
-    // Keep installed provider executables from changing its startup prerequisites.
-    std::fs::create_dir_all(&router_root)?;
-    let provider_configuration = serde_json::to_vec(&serde_json::json!({
-        "version": 1,
-        "providers": {
-            "claude": { "enabled": false, "executable": null, "arguments": [] },
-            "cursor": { "enabled": false, "executable": null, "arguments": [] }
-        }
-    }))?;
-    std::fs::write(router_root.join("providers.json"), &provider_configuration)?;
+    write_providers_disabled(&router_root)?;
+    let provider_configuration = std::fs::read(router_root.join("settings.jsonc"))?;
     let candidate_binary = PathBuf::from(env!("CARGO_BIN_EXE_codex-router"));
     let prior_binary = std::env::var_os("CODEX_ROUTER_RESTART_PRIOR_BINARY").map(PathBuf::from);
     let old_install = directory.path().join("old-install");
@@ -513,7 +508,7 @@ async fn run_host_install_journey(atomic_install: bool) -> Result<(), Box<dyn st
         ).await?;
         check(String::from_utf8_lossy(&after.stderr).contains("no shared Codex host is running"), "status did not report absence after stop")?;
         check(
-            std::fs::read(router_root.join("providers.json"))? == provider_configuration,
+            std::fs::read(router_root.join("settings.jsonc"))? == provider_configuration,
             "Host replacement changed the fixture's provider configuration",
         )?;
         Ok::<(), Box<dyn std::error::Error>>(())
@@ -780,6 +775,24 @@ fn prepend_path(directory: &Path) -> std::io::Result<std::ffi::OsString> {
     let mut paths = std::env::split_paths(&existing).collect::<Vec<_>>();
     paths.insert(0, directory.to_owned());
     std::env::join_paths(paths).map_err(std::io::Error::other)
+}
+
+/// Writes `settings.jsonc` with both providers disabled, before any Host starts on
+/// `router_root`. A Host that finds no providers section writes defaults that enable
+/// Claude and Cursor from the real PATH, and a logged-out real provider opens a login
+/// page; a failed fixture would also leave it running.
+pub(crate) fn write_providers_disabled(router_root: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+    std::fs::DirBuilder::new()
+        .recursive(true)
+        .mode(0o700)
+        .create(router_root)?;
+    let settings = router_root.join("settings.jsonc");
+    std::fs::write(
+        &settings,
+        "{\n  \"providers\": {\"version\": 1, \"providers\": {\n    \"claude\": {\"enabled\": false, \"executable\": null, \"arguments\": []},\n    \"cursor\": {\"enabled\": false, \"executable\": null, \"arguments\": []}\n  }}\n}\n",
+    )?;
+    std::fs::set_permissions(settings, std::fs::Permissions::from_mode(0o600))
 }
 
 fn install_debug_profile(codex_home: &Path, port: u16) -> std::io::Result<()> {

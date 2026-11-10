@@ -30,8 +30,9 @@ impl BoardControlFixture {
     )]
     async fn start() -> Self {
         let directory = tempfile::tempdir().expect("isolated Control databases");
-        let registry =
-            crate::native_registry::new_registry(directory.path()).expect("fixture enrollment");
+        let registry = crate::native_registry::new_registry(directory.path())
+            .await
+            .expect("fixture enrollment");
         let origin = message_board::ActorOrigin {
             installation: message_board::ServiceId::try_from(SERVICE_ID.to_owned())
                 .expect("fixture service"),

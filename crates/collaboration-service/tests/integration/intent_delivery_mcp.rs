@@ -82,7 +82,7 @@ async fn explicit_intent_is_claimed_and_sent_as_a_stored_board_notification()
 -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
-    let registry = crate::native_registry::new_registry(directory.path())?;
+    let registry = crate::native_registry::new_registry(directory.path()).await?;
     let origin = ActorOrigin {
         installation: ServiceId::try_from("00000000-0000-4000-8000-000000000001".to_owned())?,
         machine: MachineLabel::try_from("intent proof".to_owned())?,

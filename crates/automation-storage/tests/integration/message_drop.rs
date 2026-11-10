@@ -168,7 +168,11 @@ async fn normal_startup_refuses_each_populated_message_table_without_changing_ro
             matches!(&error, StorageError::MessageUpgradeRequired { tables } if tables == &vec![table]),
             "{error:?}"
         );
-        assert!(error.to_string().contains("codex-router-board-upgrade"));
+        assert!(
+            error
+                .to_string()
+                .contains("agent-router-update board-import")
+        );
         assert_eq!(snapshot(&path).await?, before);
     }
     Ok(())

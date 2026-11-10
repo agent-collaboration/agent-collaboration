@@ -112,7 +112,11 @@ async fn await_archived(reader: &SecondHost, board: &str) -> FixtureResult<Value
 }
 
 async fn notice_position(directory: &Path) -> FixtureResult<Option<u64>> {
-    match observe_machine_notice_progress(&directory.join("fleet-cache.sqlite")).await? {
+    match observe_machine_notice_progress(
+        &directory.join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?
+    {
         MachineNoticeProgressObservation::NotYet => Ok(None),
         MachineNoticeProgressObservation::Present { handled_through } => {
             Ok(Some(handled_through.value()))

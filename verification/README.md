@@ -36,7 +36,7 @@ The wrappers retired in 0.1.102 have these retained entries:
 | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
 | Local board records and reopen                       | `crates/agent-collaboration/tests/e2e/board_records_e2e.rs` and `tests/board_e2e/`                                   |
 | Local central replication, holders and forwarding    | `crates/agent-collaboration/tests/e2e/board_central_e2e.rs`                                                          |
-| Upgrade preparation, publication, replay and restart | `cargo nextest run --locked --profile ci -p board-legacy-upgrade --test e2e --test-threads 1`                        |
+| Upgrade preparation, publication, replay and restart | `cargo nextest run --locked --profile ci -p agent-router-update --test e2e --test-threads 1`                         |
 | Native central conformance                           | `crates/collaboration-central-tokio/tests/`, with explicit targets and `conformance` where required                  |
 | Local Worker conformance                             | `composed_scope_workerd` and `session_scope_workerd` examples; use CI's pinned tools and scenario selections         |
 | Two-machine Tokio, workerd or staging                | `node verification/run.ts "$PRIVATE_DECLARATION"`; schema in `declaration.ts`, selected cases in `case-registry.ts`  |

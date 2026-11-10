@@ -84,13 +84,13 @@ fn live_metadata_lifecycle_has_no_transcript_frames_and_preserves_real_content()
                 item_id: item.item_id.clone(),
             },
         ] {
-            assert!(
-                forwarding
-                    .project(&session, &HubEvent { sequence: 2, event })
-                    .is_empty(),
-                "metadata {} became a transcript frame",
-                item.item_id
-            );
+            let expects_usage = item.kind == SessionItemKind::Usage
+                && !matches!(event, SessionEvent::ItemCompleted { .. });
+            let frames = forwarding.project(&session, &HubEvent { sequence: 2, event });
+            assert_eq!(frames.len(), usize::from(expects_usage));
+            for frame in frames {
+                assert_eq!(frame["method"], "thread/tokenUsage/updated");
+            }
         }
     }
     for item in display_items() {

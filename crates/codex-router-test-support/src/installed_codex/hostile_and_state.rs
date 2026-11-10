@@ -14,7 +14,7 @@ use super::{
 pub fn run_hostile_no_token_smoke() -> Result<(), String> {
     let smoke_root = SmokeTempRoot::new("hostile-no-token")?;
     let router_root = smoke_root.path().join("router");
-    let state_path = router_root.join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(&router_root);
     let secret_root = router_root.join("secrets");
     fs::create_dir_all(&router_root).map_err(|error| {
         format!(

@@ -36,7 +36,15 @@ async fn full_push_inbox_returns_wire_capacity_refusal_without_admitting_custody
             bound,
             bound,
         )?,
-        MachineSessionStore::open(directory.path()).await?,
+        MachineSessionStore::from_cache(std::sync::Arc::new(
+            message_board_storage::FleetStore::open(
+                &directory
+                    .path()
+                    .join(message_board_storage::FleetStore::FILE_NAME),
+            )
+            .await?
+            .cache(),
+        )),
         &UuidV7Ids,
         SchemaSupport { max_version: 1 },
         Backoff {

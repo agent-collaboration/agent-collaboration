@@ -190,15 +190,16 @@ impl OwnerFixture {
         let admission = Arc::new(
             ProjectAdmission::new(ProjectAdmissionProps {
                 registry: registry.clone(),
-                fleet: Arc::new(
-                    FleetClient::open(
-                        fixture.directory.path(),
-                        Arc::new(crate::test_project_runtime::PendingRegistration),
-                        None,
+                fleet: Arc::new(FleetClient::new(
+                    &message_board_storage::FleetStore::open(
+                        &(fixture.directory.path())
+                            .join(message_board_storage::FleetStore::FILE_NAME),
                     )
                     .await
                     .unwrap(),
-                ),
+                    Arc::new(crate::test_project_runtime::PendingRegistration),
+                    None,
+                )),
                 identity: collaboration_contracts::MachineIdentity::new(
                     collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned()).unwrap(),
                     Some("Owner-test-machine"),

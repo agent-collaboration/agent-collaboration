@@ -27,7 +27,9 @@ async fn malformed_and_extra_field_orphans_are_discarded_without_logging_raw_byt
             .path()
             .join("machine-session/machine-notice-progress.json");
         tokio::fs::write(&source, contents).await?;
-        let cache = FleetCache::open(&root.path().join("fleet-cache.sqlite")).await?;
+        let cache_store =
+            crate::FleetStore::open(&root.path().join(crate::FleetStore::FILE_NAME)).await?;
+        let cache = cache_store.cache();
         let capture = WarningCapture::default();
         let result = cache
             .import_legacy_runtime(root.path())
@@ -52,7 +54,7 @@ async fn malformed_and_extra_field_orphans_are_discarded_without_logging_raw_byt
                 )));
             assert!(!format!("{events:?}").contains("fixture-secret"));
         }
-        cache.close().await;
+        cache_store.close().await;
     }
     Ok(())
 }
@@ -112,7 +114,9 @@ async fn killed_importer_after_commit_reopens_without_losing_rows_or_overwriting
         "import child was not actually killed"
     );
     assert!(source.exists() && progress.exists());
-    let cache = FleetCache::open(&root.path().join("fleet-cache.sqlite")).await?;
+    let cache_store =
+        crate::FleetStore::open(&root.path().join(crate::FleetStore::FILE_NAME)).await?;
+    let cache = cache_store.cache();
     cache.import_legacy_runtime(root.path()).await?;
     assert_eq!(
         cache
@@ -135,7 +139,7 @@ async fn killed_importer_after_commit_reopens_without_losing_rows_or_overwriting
         NoticePosition::new(29)
     );
     assert!(!source.exists() && !progress.exists());
-    cache.close().await;
+    cache_store.close().await;
     Ok(())
 }
 
@@ -144,7 +148,8 @@ async fn killed_importer_after_commit_reopens_without_losing_rows_or_overwriting
 async fn import_crash_child() -> TestResult {
     use std::io::Write as _;
     let root = PathBuf::from(std::env::var_os(CRASH_ROOT).ok_or("import crash root missing")?);
-    let cache = FleetCache::open(&root.join("fleet-cache.sqlite")).await?;
+    let cache_store = crate::FleetStore::open(&root.join(crate::FleetStore::FILE_NAME)).await?;
+    let cache = cache_store.cache();
     let pending = cache.commit_legacy_runtime(&root).await?;
     if pending.len() != 2 {
         return Err("child fixture did not import both files".into());
@@ -193,7 +198,9 @@ async fn failed_attempt_insert_rolls_back_every_legacy_row_and_preserves_all_fil
     tokio::fs::write(&session, serde_json::to_vec(&state)?).await?;
     tokio::fs::write(&progress, br#"{"handledThrough":5}"#).await?;
     tokio::fs::write(&install, serde_json::to_vec(&attempt)?).await?;
-    let cache = FleetCache::open(&root.path().join("fleet-cache.sqlite")).await?;
+    let cache_store =
+        crate::FleetStore::open(&root.path().join(crate::FleetStore::FILE_NAME)).await?;
+    let cache = cache_store.cache();
     sqlx::raw_sql("CREATE TRIGGER fixture_import_failure BEFORE INSERT ON fleet_install_attempts BEGIN SELECT RAISE(ABORT,'fixture import commit failure'); END").execute(&cache.database.pool).await?;
     assert!(cache.import_legacy_runtime(root.path()).await.is_err());
     assert_eq!(cache.machine_session_state().await?, None);
@@ -218,7 +225,7 @@ async fn failed_attempt_insert_rolls_back_every_legacy_row_and_preserves_all_fil
         attempt.attempt
     );
     assert!(!session.exists() && !progress.exists() && !install.exists());
-    cache.close().await;
+    cache_store.close().await;
     Ok(())
 }
 
@@ -254,8 +261,9 @@ async fn interrupted_import_cleanup_retries_without_overwriting_newer_committed_
     tokio::fs::write(&session, serde_json::to_vec(&original)?).await?;
     tokio::fs::write(&progress, br#"{"handledThrough":73}"#).await?;
     tokio::fs::write(&install, serde_json::to_vec(&attempt)?).await?;
-    let path = root.path().join("fleet-cache.sqlite");
-    let cache = FleetCache::open(&path).await?;
+    let path = root.path().join(crate::FleetStore::FILE_NAME);
+    let cache_store = crate::FleetStore::open(&path).await?;
+    let cache = cache_store.cache();
 
     // Act: stop at the actual commit/cleanup boundary, exactly the durable
     // state left by a process dying after commit and before unlinking files.
@@ -275,8 +283,9 @@ async fn interrupted_import_cleanup_retries_without_overwriting_newer_committed_
     cache
         .save_machine_notice_progress(NoticePosition::new(91))
         .await?;
-    cache.close().await;
-    let cache = FleetCache::open(&path).await?;
+    cache_store.close().await;
+    let cache_store = crate::FleetStore::open(&path).await?;
+    let cache = cache_store.cache();
     cache.import_legacy_runtime(root.path()).await?;
 
     // Assert real reopen/retry preserves both cursors and the exact attempt.
@@ -292,7 +301,7 @@ async fn interrupted_import_cleanup_retries_without_overwriting_newer_committed_
         attempt.attempt
     );
     assert!(!session.exists() && !progress.exists() && !install.exists());
-    cache.close().await;
+    cache_store.close().await;
     Ok(())
 }
 
@@ -308,7 +317,9 @@ async fn orphan_import_warns_with_its_value_and_leaves_no_session_row() -> TestR
         .path()
         .join("machine-session/machine-notice-progress.json");
     tokio::fs::write(&source, br#"{"handledThrough":18446744073709551615}"#).await?;
-    let cache = FleetCache::open(&root.path().join("fleet-cache.sqlite")).await?;
+    let cache_store =
+        crate::FleetStore::open(&root.path().join(crate::FleetStore::FILE_NAME)).await?;
+    let cache = cache_store.cache();
     let capture = WarningCapture::default();
     cache
         .import_legacy_runtime(root.path())
@@ -341,7 +352,7 @@ async fn orphan_import_warns_with_its_value_and_leaves_no_session_row() -> TestR
         NoticePosition::new(0)
     );
     assert!(!source.exists());
-    cache.close().await;
+    cache_store.close().await;
     Ok(())
 }
 

@@ -135,9 +135,10 @@ async fn failed_session_preparation_keeps_its_typed_failure_on_both_status_surfa
             OperatorFrame::Progress(_) => None,
         }).ok_or("Host hid failed configured link")?;
         require(central == &record, "Host and MCP retained different failed-start records")?;
-        let reopened = message_board_storage::FleetCache::open(&fixture.directory.join("fleet-cache.sqlite")).await?;
+        let reopened_store = message_board_storage::FleetStore::open(&fixture.directory.join(message_board_storage::FleetStore::FILE_NAME)).await?;
+    let reopened = reopened_store.cache();
         require(reopened.fleet_link().await? == Some(record), "failed-start owner did not persist its final record")?;
-        reopened.close().await;
+        reopened_store.close().await;
         require(std::fs::read(fixture.directory.join("machine-session/state.json"))? == b"{truncated", "failed import changed the legacy source")?;
         Ok::<_, Box<dyn Error>>(())
     }).await

@@ -50,9 +50,11 @@ impl QuotaRefreshProvider for AdapterFixtureProvider {
 
 async fn run_adapter_case(labels: &[&str]) -> QuotaRefreshResult {
     let root = tempfile::tempdir().unwrap();
-    let store = AsyncSqliteStateStore::open(&root.path().join("state.sqlite"))
-        .await
-        .unwrap();
+    let store = AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+        root.path(),
+    ))
+    .await
+    .unwrap();
     for label in labels {
         store
             .upsert_account(
@@ -80,9 +82,11 @@ async fn run_adapter_case(labels: &[&str]) -> QuotaRefreshResult {
     )
     .await;
     assert_eq!(provider.0.load(Ordering::SeqCst), labels.len() * 2);
-    let stored = AsyncSqliteStateStore::open_read_only(&root.path().join("state.sqlite"))
-        .await
-        .unwrap();
+    let stored = AsyncSqliteStateStore::open_read_only(
+        &codex_router_state::provider_proxy_database_path(root.path()),
+    )
+    .await
+    .unwrap();
     for label in labels.iter().filter(|label| label.starts_with("healthy")) {
         assert_eq!(
             stored

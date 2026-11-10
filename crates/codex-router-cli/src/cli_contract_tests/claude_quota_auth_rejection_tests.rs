@@ -224,7 +224,7 @@ fn claude_usage_401_after_renewal_preserves_account_for_upkeep_and_records_failu
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state_path = router_root.join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(&router_root);
     let secret_root = router_root.join("secrets");
     let account_id = account_id("acct_claude_usage_401");
     let runtime = test_async_runtime();

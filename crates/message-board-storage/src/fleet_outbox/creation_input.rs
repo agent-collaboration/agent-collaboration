@@ -20,7 +20,7 @@ impl FleetOutbox {
         let result = async {
             let queued = enqueue_request(&mut transaction, directory).await?;
             let id = input.request_id.as_str();
-            if let Some(row) = sqlx_turso::query!(r#"SELECT canonical_hash AS "canonical_hash!: String", input AS "input!: String" FROM project_creation_inputs WHERE request_id = ?"#, id)
+            if let Some(row) = sqlx_turso::query!(r#"SELECT canonical_hash AS "canonical_hash!: String", input AS "input!: String" FROM fleet_project_creation_inputs WHERE request_id = ?"#, id)
                 .fetch_optional(&mut *transaction).await? {
                 decode_input(&row.input, &row.canonical_hash, &queued)?;
                 if row.canonical_hash != hash.as_str() {
@@ -29,7 +29,7 @@ impl FleetOutbox {
             } else if matches!(queued.state, super::FleetOutboxState::Pending {}) {
                 let hash = hash.as_str();
                 let encoded = serde_json::to_string(input)?;
-                sqlx_turso::query!("INSERT INTO project_creation_inputs(request_id, canonical_hash, input) VALUES (?, ?, ?)", id, hash, encoded)
+                sqlx_turso::query!("INSERT INTO fleet_project_creation_inputs(request_id, canonical_hash, input) VALUES (?, ?, ?)", id, hash, encoded)
                     .execute(&mut *transaction).await?;
             }
             Ok(queued)
@@ -51,7 +51,7 @@ impl FleetOutbox {
         request: &RequestId,
     ) -> Result<Option<ProjectCreateRequest>, RouterLocalStorageError> {
         let id = request.as_str();
-        let row = sqlx_turso::query!(r#"SELECT canonical_hash AS "canonical_hash!: String", input AS "input!: String" FROM project_creation_inputs WHERE request_id = ?"#, id)
+        let row = sqlx_turso::query!(r#"SELECT canonical_hash AS "canonical_hash!: String", input AS "input!: String" FROM fleet_project_creation_inputs WHERE request_id = ?"#, id)
             .fetch_optional(&self.database.pool).await?;
         let Some(row) = row else {
             return Ok(None);
@@ -73,10 +73,12 @@ impl FleetOutbox {
         request: &RequestId,
     ) -> Result<(), RouterLocalStorageError> {
         let _guard = self.database.writer.lock().await;
-        sqlx::query::<sqlx_turso::Turso>("DELETE FROM project_creation_inputs WHERE request_id=?")
-            .bind(request.as_str())
-            .execute(&self.database.pool)
-            .await?;
+        sqlx::query::<sqlx_turso::Turso>(
+            "DELETE FROM fleet_project_creation_inputs WHERE request_id=?",
+        )
+        .bind(request.as_str())
+        .execute(&self.database.pool)
+        .await?;
         Ok(())
     }
 
@@ -86,7 +88,7 @@ impl FleetOutbox {
         limit: u64,
     ) -> Result<Vec<ProjectCreateRequest>, RouterLocalStorageError> {
         let limit = i64::try_from(limit).map_err(|_| RouterLocalStorageError::InvalidRecord)?;
-        let rows = sqlx::query::<sqlx_turso::Turso>("SELECT c.canonical_hash AS creation_hash,c.input,r.request_id,r.canonical_hash,r.request,r.state,r.settled_at_ms FROM project_creation_inputs c JOIN fleet_outbox_requests r ON r.request_id=c.request_id WHERE c.request_id>? AND json_extract(r.state,'$.kind')='decided' AND json_extract(r.state,'$.decision.kind')='accepted' ORDER BY c.request_id LIMIT ?")
+        let rows = sqlx::query::<sqlx_turso::Turso>("SELECT c.canonical_hash AS creation_hash,c.input,r.request_id,r.canonical_hash,r.request,r.state,r.settled_at_ms FROM fleet_project_creation_inputs c JOIN fleet_outbox_requests r ON r.request_id=c.request_id WHERE c.request_id>? AND json_extract(r.state,'$.kind')='decided' AND json_extract(r.state,'$.decision.kind')='accepted' ORDER BY c.request_id LIMIT ?")
             .bind(after)
             .bind(limit)
             .fetch_all(&self.database.pool)
@@ -113,7 +115,7 @@ impl FleetOutbox {
     }
 }
 
-fn decode_input(
+pub(crate) fn decode_input(
     encoded: &str,
     hash: &str,
     queued: &FleetOutboxEntry,

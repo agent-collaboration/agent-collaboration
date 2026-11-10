@@ -77,3 +77,39 @@ fn reported_credential_expiry_matches_the_signed_jwt_and_its_adopted_lifetime()
     }
     Ok(())
 }
+
+#[test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
+fn minted_enrollment_credential_names_a_uuidv7_access_client()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let root = directory.path().to_owned();
+    configuration::initialize(&ServeArguments {
+        root: root.clone(),
+        listen: "127.0.0.1:29844".parse()?,
+        public_url: None,
+        owner_identity: None,
+        #[cfg(debug_assertions)]
+        allow_plaintext_file_secrets: true,
+    })?;
+    let store = crate::secret_store_factory::open_cli_secret_store(&root.join("secrets"))?;
+
+    mint(MintArguments {
+        root,
+        kind: CredentialKind::Enrollment,
+        out: None,
+        machine_valid_for_days: 365,
+    })?;
+
+    let encoded = store.read_secret(&CentralSecretKind::EnrollmentCredential.secret_key()?)?;
+    let CentralCredential::Enrollment { client_id, .. } =
+        CentralCredential::decode_secret(&encoded)?
+    else {
+        return Err("an enrollment mint stores an enrollment credential".into());
+    };
+    assert_eq!(uuid::Uuid::parse_str(&client_id)?.get_version_num(), 7);
+    Ok(())
+}

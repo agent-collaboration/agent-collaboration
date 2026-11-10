@@ -11,7 +11,9 @@ type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 )]
 async fn approved_runtime_schema_uses_three_typed_tables_without_blob_or_checks() -> TestResult {
     let directory = tempfile::tempdir()?;
-    let cache = FleetCache::open(&directory.path().join("fleet-cache.sqlite")).await?;
+    let cache_store =
+        crate::FleetStore::open(&directory.path().join(crate::FleetStore::FILE_NAME)).await?;
+    let cache = cache_store.cache();
     let definitions: Vec<String> = sqlx::query_scalar(
         "SELECT sql FROM sqlite_master WHERE type='table' AND name IN ('fleet_session','fleet_link_state','fleet_install_attempts') ORDER BY name"
     ).fetch_all(&cache.database.pool).await?;
@@ -90,7 +92,7 @@ async fn approved_runtime_schema_uses_three_typed_tables_without_blob_or_checks(
             );
         }
     }
-    cache.close().await;
+    cache_store.close().await;
     Ok(())
 }
 
@@ -109,8 +111,9 @@ struct ApprovedColumn {
 )]
 async fn reenrollment_clears_session_and_link_but_retains_unfinished_attempt() -> TestResult {
     let directory = tempfile::tempdir()?;
-    let path = directory.path().join("fleet-cache.sqlite");
-    let cache = FleetCache::open(&path).await?;
+    let path = directory.path().join(crate::FleetStore::FILE_NAME);
+    let cache_store = crate::FleetStore::open(&path).await?;
+    let cache = cache_store.cache();
     let state = ClientSessionState {
         session_id: fleet_sync_protocol::SessionId::new(uuid::Uuid::now_v7())?,
         notice_cursor: NoticePosition::new(u64::MAX),
@@ -123,8 +126,9 @@ async fn reenrollment_clears_session_and_link_but_retains_unfinished_attempt() -
     let epoch = Epoch::new(u64::MAX)?;
     let attempt = cache.snapshot_install_attempt(&project, epoch).await?;
     cache.clear_machine_runtime().await?;
-    cache.close().await;
-    let cache = FleetCache::open(&path).await?;
+    cache_store.close().await;
+    let cache_store = crate::FleetStore::open(&path).await?;
+    let cache = cache_store.cache();
     assert_eq!(cache.machine_session_state().await?, None);
     assert_eq!(
         cache.machine_notice_progress().await?,
@@ -136,7 +140,7 @@ async fn reenrollment_clears_session_and_link_but_retains_unfinished_attempt() -
         attempt,
         "re-enrollment discarded an unfinished install identity"
     );
-    cache.close().await;
+    cache_store.close().await;
     Ok(())
 }
 
@@ -152,7 +156,9 @@ async fn orphan_progress_is_discarded_without_creating_a_session_or_blocking_sta
         .path()
         .join("machine-session/machine-notice-progress.json");
     tokio::fs::write(&source, br#"{"handledThrough":73}"#).await?;
-    let cache = FleetCache::open(&directory.path().join("fleet-cache.sqlite")).await?;
+    let cache_store =
+        crate::FleetStore::open(&directory.path().join(crate::FleetStore::FILE_NAME)).await?;
+    let cache = cache_store.cache();
     cache.import_legacy_runtime(directory.path()).await?;
     assert_eq!(cache.machine_session_state().await?, None);
     assert_eq!(
@@ -167,7 +173,7 @@ async fn orphan_progress_is_discarded_without_creating_a_session_or_blocking_sta
     };
     cache.save_machine_session_state(&state).await?;
     assert_eq!(cache.machine_session_state().await?, Some(state));
-    cache.close().await;
+    cache_store.close().await;
     Ok(())
 }
 
@@ -184,8 +190,9 @@ fn instant(second: u32) -> DateTime<Utc> {
 )]
 async fn link_state_and_last_contact_reopen_with_the_original_drop() -> TestResult {
     let directory = tempfile::tempdir()?;
-    let path = directory.path().join("fleet-cache.sqlite");
-    let cache = FleetCache::open(&path).await?;
+    let path = directory.path().join(crate::FleetStore::FILE_NAME);
+    let cache_store = crate::FleetStore::open(&path).await?;
+    let cache = cache_store.cache();
     let peer = PeerId::new(uuid::Uuid::now_v7())?;
     let dropped = FleetLinkRecord {
         peer,
@@ -204,8 +211,9 @@ async fn link_state_and_last_contact_reopen_with_the_original_drop() -> TestResu
         last_failure: None,
     };
     cache.save_fleet_link(&dropped).await?;
-    cache.close().await;
-    let cache = FleetCache::open(&path).await?;
+    cache_store.close().await;
+    let cache_store = crate::FleetStore::open(&path).await?;
+    let cache = cache_store.cache();
     assert_eq!(cache.fleet_link().await?, Some(dropped.clone()));
     let mut connected = dropped.clone();
     connected.state = FleetLinkState::Connected {
@@ -225,7 +233,9 @@ async fn link_state_and_last_contact_reopen_with_the_original_drop() -> TestResu
 )]
 async fn malformed_stored_link_is_refused_instead_of_coerced() -> TestResult {
     let directory = tempfile::tempdir()?;
-    let cache = FleetCache::open(&directory.path().join("fleet-cache.sqlite")).await?;
+    let cache_store =
+        crate::FleetStore::open(&directory.path().join(crate::FleetStore::FILE_NAME)).await?;
+    let cache = cache_store.cache();
     let peer = PeerId::new(uuid::Uuid::now_v7())?;
     cache
         .save_fleet_link(&FleetLinkRecord {
@@ -302,10 +312,11 @@ async fn legacy_import_validates_the_whole_set_before_committing_or_deleting() -
     };
     let attempt_path = attempt_home.join(format!("{}-e2.json", record.project.as_str()));
     tokio::fs::write(&attempt_path, b"{truncated").await?;
-    let database = directory.path().join("fleet-cache.sqlite");
-    let cache = FleetCache::open(&database).await?;
+    let database = directory.path().join(crate::FleetStore::FILE_NAME);
+    let cache_store = crate::FleetStore::open(&database).await?;
+    let cache = cache_store.cache();
     assert!(cache.import_legacy_runtime(directory.path()).await.is_err());
-    cache.close().await;
+    cache_store.close().await;
     assert!(session_path.exists());
     let mut observer = sqlx_turso::TursoConnection::connect_with(
         &sqlx_turso::TursoConnectOptions::new().filename(&database),
@@ -317,7 +328,8 @@ async fn legacy_import_validates_the_whole_set_before_committing_or_deleting() -
     assert_eq!(count, 0);
     observer.close().await?;
     tokio::fs::write(&attempt_path, serde_json::to_vec(&record)?).await?;
-    let cache = FleetCache::open(&database).await?;
+    let cache_store = crate::FleetStore::open(&database).await?;
+    let cache = cache_store.cache();
     cache.import_legacy_runtime(directory.path()).await?;
     assert_eq!(cache.machine_session_state().await?, Some(session));
     assert_eq!(
@@ -341,13 +353,15 @@ use sqlx::Connection;
 async fn snapshot_attempt_preserves_the_native_epoch_domain_without_signed_narrowing() -> TestResult
 {
     let directory = tempfile::tempdir()?;
-    let path = directory.path().join("fleet-cache.sqlite");
-    let cache = FleetCache::open(&path).await?;
+    let path = directory.path().join(crate::FleetStore::FILE_NAME);
+    let cache_store = crate::FleetStore::open(&path).await?;
+    let cache = cache_store.cache();
     let project = ProjectId::generate();
     let epoch = Epoch::new(u64::MAX)?;
     let original = cache.snapshot_install_attempt(&project, epoch).await?;
-    cache.close().await;
-    let reopened = FleetCache::open(&path).await?;
+    cache_store.close().await;
+    let reopened_store = crate::FleetStore::open(&path).await?;
+    let reopened = reopened_store.cache();
     assert_eq!(
         reopened.snapshot_install_attempt(&project, epoch).await?,
         original
@@ -362,7 +376,9 @@ async fn snapshot_attempt_preserves_the_native_epoch_domain_without_signed_narro
 )]
 async fn malformed_attempt_epoch_is_rejected_without_selecting_a_second_identity() -> TestResult {
     let root = tempfile::tempdir()?;
-    let cache = FleetCache::open(&root.path().join("fleet-cache.sqlite")).await?;
+    let cache_store =
+        crate::FleetStore::open(&root.path().join(crate::FleetStore::FILE_NAME)).await?;
+    let cache = cache_store.cache();
     let project = ProjectId::generate();
     let epoch = Epoch::new(1)?;
     cache.snapshot_install_attempt(&project, epoch).await?;
@@ -380,7 +396,7 @@ async fn malformed_attempt_epoch_is_rejected_without_selecting_a_second_identity
         .fetch_one(&cache.database.pool)
         .await?;
     assert_eq!(count, 1);
-    cache.close().await;
+    cache_store.close().await;
     Ok(())
 }
 
@@ -391,7 +407,9 @@ async fn malformed_attempt_epoch_is_rejected_without_selecting_a_second_identity
 )]
 async fn malformed_session_columns_and_duplicate_singletons_are_rejected() -> TestResult {
     let root = tempfile::tempdir()?;
-    let cache = FleetCache::open(&root.path().join("fleet-cache.sqlite")).await?;
+    let cache_store =
+        crate::FleetStore::open(&root.path().join(crate::FleetStore::FILE_NAME)).await?;
+    let cache = cache_store.cache();
     let state = ClientSessionState {
         session_id: fleet_sync_protocol::SessionId::new(uuid::Uuid::now_v7())?,
         notice_cursor: NoticePosition::new(u64::MAX),
@@ -421,6 +439,6 @@ async fn malformed_session_columns_and_duplicate_singletons_are_rejected() -> Te
     sqlx::query("INSERT INTO fleet_session SELECT ?, notice_cursor, handled_through, created_at, updated_at FROM fleet_session").bind(second).execute(&cache.database.pool).await?;
     assert!(cache.machine_session_state().await.is_err());
     assert!(cache.save_machine_session_state(&state).await.is_err());
-    cache.close().await;
+    cache_store.close().await;
     Ok(())
 }

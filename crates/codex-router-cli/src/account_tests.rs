@@ -43,7 +43,7 @@ mod account_provider_cli_tests {
         let runtime = account_command_runtime().unwrap();
         let state = runtime
             .block_on(AsyncSqliteStateStore::open(
-                &root.path().join("state.sqlite"),
+                &codex_router_state::provider_proxy_database_path(root.path()),
             ))
             .unwrap();
         for (id, provider) in [("acct_a_existing", first), ("acct_b_existing", second)] {
@@ -82,7 +82,7 @@ mod account_provider_cli_tests {
         let runtime = account_command_runtime().unwrap();
         let state = runtime
             .block_on(AsyncSqliteStateStore::open(
-                &root.path().join("state.sqlite"),
+                &codex_router_state::provider_proxy_database_path(root.path()),
             ))
             .unwrap();
         for provider in [Provider::Openai, Provider::Claude] {
@@ -116,7 +116,7 @@ mod account_provider_cli_tests {
         let runtime = account_command_runtime().expect("test runtime should initialize");
         let state = runtime
             .block_on(AsyncSqliteStateStore::open(
-                &temporary_root.path().join("state.sqlite"),
+                &codex_router_state::provider_proxy_database_path(temporary_root.path()),
             ))
             .expect("test state should open");
         let existing_account = AccountRecord::new(
@@ -156,7 +156,7 @@ mod account_provider_cli_tests {
         let runtime = account_command_runtime().expect("test runtime should initialize");
         let state = runtime
             .block_on(AsyncSqliteStateStore::open(
-                &temporary_root.path().join("state.sqlite"),
+                &codex_router_state::provider_proxy_database_path(temporary_root.path()),
             ))
             .expect("test state should open");
         for (label, provider) in [
@@ -297,7 +297,7 @@ mod claude_login_glue_tests {
         let runtime = account_command_runtime().unwrap();
         let state = runtime
             .block_on(AsyncSqliteStateStore::open(
-                &root.path().join("state.sqlite"),
+                &codex_router_state::provider_proxy_database_path(root.path()),
             ))
             .unwrap();
         let stored_id = AccountId::new("acct_imported_claude_identity").unwrap();
@@ -337,7 +337,7 @@ mod claude_login_glue_tests {
         );
         let reopened = runtime
             .block_on(AsyncSqliteStateStore::open(
-                &root.path().join("state.sqlite"),
+                &codex_router_state::provider_proxy_database_path(root.path()),
             ))
             .unwrap();
         let accounts = runtime.block_on(reopened.list_accounts()).unwrap();

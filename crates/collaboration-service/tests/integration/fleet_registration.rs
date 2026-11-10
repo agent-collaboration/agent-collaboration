@@ -91,7 +91,13 @@ async fn settled_directory_requests_are_durable_before_registration_and_recovere
         machine: MachineLabel::try_from("registration fixture".to_owned())?,
     };
     let port = Arc::new(RecordingRegistration {
-        outbox: FleetOutbox::open(&directory.path().join("fleet-outbox.sqlite")).await?,
+        outbox: message_board_storage::FleetStore::open(
+            &directory
+                .path()
+                .join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await?
+        .outbox(),
         requests: requests.clone(),
         attempted: Mutex::new(Vec::new()),
         interrupt_once: AtomicBool::new(true),
@@ -180,16 +186,22 @@ async fn settled_directory_requests_are_durable_before_registration_and_recovere
         matches!(port.outbox.request(&rejected_id).await?.ok_or("rejected outbox")?.state,
         FleetOutboxState::Decided { decision } if decision == rejected_decision)
     );
-    client.close().await;
+    drop(client);
     runtime.shutdown().await?;
-    Arc::try_unwrap(port)
-        .map_err(|_| "registration port still owned")?
-        .outbox
-        .close()
-        .await;
+    drop(
+        Arc::try_unwrap(port)
+            .map_err(|_| "registration port still owned")?
+            .outbox,
+    );
 
     let port = Arc::new(RecordingRegistration {
-        outbox: FleetOutbox::open(&directory.path().join("fleet-outbox.sqlite")).await?,
+        outbox: message_board_storage::FleetStore::open(
+            &directory
+                .path()
+                .join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await?
+        .outbox(),
         requests,
         attempted: Mutex::new(Vec::new()),
         interrupt_once: AtomicBool::new(false),
@@ -207,12 +219,12 @@ async fn settled_directory_requests_are_durable_before_registration_and_recovere
         FleetOutboxState::Decided { decision } if decision == accepted_decision)
     );
     assert!(reopened.pending_requests().await?.is_empty());
-    reopened.close().await;
+    drop(reopened);
     runtime.shutdown().await?;
-    Arc::try_unwrap(port)
-        .map_err(|_| "registration port still owned")?
-        .outbox
-        .close()
-        .await;
+    drop(
+        Arc::try_unwrap(port)
+            .map_err(|_| "registration port still owned")?
+            .outbox,
+    );
     Ok(())
 }

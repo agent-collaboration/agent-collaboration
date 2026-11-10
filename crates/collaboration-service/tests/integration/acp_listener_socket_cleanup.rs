@@ -52,6 +52,7 @@ async fn acp_listener_cleans_its_owned_socket_after_shutdown() {
         Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         Arc::new(UnmaterializedThreadHolder::new()),
         Arc::new(collaboration_runtime::UnavailableConversationOperationRecorder),
+        Arc::new(codex_acp_adapter::test_support::recording_scratch_scopes::RecordingScratchScopes::default()),
     )
     .unwrap();
     let stop = CancellationToken::new();

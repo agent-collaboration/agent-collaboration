@@ -7,20 +7,24 @@ type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
 async fn prepared() -> TestSetup {
     let directory = tempfile::tempdir().unwrap();
-    let cache = Arc::new(
-        FleetCache::open(&directory.path().join("fleet-cache.sqlite"))
-            .await
-            .unwrap(),
-    );
+    let store = message_board_storage::FleetStore::open(
+        &directory
+            .path()
+            .join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await
+    .unwrap();
+    let cache = Arc::new(store.cache());
     let peer = PeerId::new(uuid::Uuid::now_v7()).unwrap();
     let (publisher, reader, owner) =
         FleetLinkOwner::prepare(cache.clone(), peer, "wss://central.example/session")
             .await
             .unwrap();
-    (directory, cache, publisher, reader, owner)
+    ((directory, store), cache, publisher, reader, owner)
 }
+/// The temporary root with the one Fleet database the link owner's cache is a view of.
 type TestSetup = (
-    tempfile::TempDir,
+    (tempfile::TempDir, message_board_storage::FleetStore),
     Arc<FleetCache>,
     FleetLinkPublisher,
     FleetLinkReader,
@@ -111,12 +115,17 @@ async fn native_final_drop_is_flushed_and_readable_after_owner_shutdown_and_reop
         FleetLinkDropReason::IdleTimeout
     );
     drop(reader);
-    Arc::try_unwrap(cache)
-        .map_err(|_| "cache still owned")?
-        .close()
-        .await;
-    let reopened = FleetCache::open(&directory.path().join("fleet-cache.sqlite")).await?;
-    assert_eq!(reopened.fleet_link().await?, Some(record));
+    drop(cache);
+    let (directory, store) = directory;
+    store.close().await;
+    let reopened = message_board_storage::FleetStore::open(
+        &directory
+            .path()
+            .join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?;
+    assert_eq!(reopened.cache().fleet_link().await?, Some(record));
+    reopened.close().await;
     Ok(())
 }
 

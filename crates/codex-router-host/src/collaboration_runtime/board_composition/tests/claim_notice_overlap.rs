@@ -54,7 +54,7 @@ async fn claim_and_received_notice_join_one_record_and_publication_while_seed_is
     let registry = projects.registry()?;
     let admission = board.admission.clone();
     let fleet = board.fleet.upgrade().ok_or("Fleet client")?;
-    let running = board.start().ok_or("session not started")?;
+    let running = board.start().session.ok_or("session not started")?;
     wait_welcome(welcomed).await?;
     fleet.synchronize().await?;
     let second_board = open_board_admission(
@@ -81,7 +81,7 @@ async fn claim_and_received_notice_join_one_record_and_publication_while_seed_is
         .projects
         .clone();
     let second_admission = second_board.admission.clone();
-    let second_running = second_board.start().ok_or("second runtime")?;
+    let second_running = second_board.start().session.ok_or("second runtime")?;
     wait_welcome(second_welcome).await?;
     let request = ProjectClaimRequest {
         request_id: message_board::RequestId::generate(),
@@ -181,7 +181,7 @@ async fn claim_and_received_notice_join_one_record_and_publication_while_seed_is
         let record_bytes = attempt_bytes(&record_path).await?;
         assert!(matches!(registry.existing_project(&project).await, Err(collaboration_runtime::ProjectRegistryError::Installing { .. })));
         gate.release()?;
-        let session_store = board_fleet_sync::MachineSessionStore::open(&root).await?;
+        let session_store = board_fleet_sync::MachineSessionStore::from_cache(std::sync::Arc::new(message_board_storage::FleetStore::open(&root.join(message_board_storage::FleetStore::FILE_NAME)).await?.cache()));
         timeout(BOUND, async {
             loop {
                 if session_store.load().await?.is_some_and(|state| state.notice_cursor >= position) { return Ok::<_, fleet_sync_session::StoreError>(()); }

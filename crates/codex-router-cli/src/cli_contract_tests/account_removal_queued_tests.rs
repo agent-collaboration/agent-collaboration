@@ -17,8 +17,12 @@ fn account_remove_discards_queued_account_owned_writes() {
     let secondary_before = fixture.dependent_row_counts("acct_secondary");
     must_ok(fixture.remove());
     test_async_runtime().block_on(async {
-        let state =
-            must_ok(AsyncSqliteStateStore::open(&fixture.root.path().join("state.sqlite")).await);
+        let state = must_ok(
+            AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+                fixture.root.path(),
+            ))
+            .await,
+        );
         let removed_account = account_id("acct_primary");
         let snapshot = PersistedQuotaSnapshot::new(
             removed_account.clone(),

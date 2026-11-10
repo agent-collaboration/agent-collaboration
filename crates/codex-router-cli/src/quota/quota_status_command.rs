@@ -147,8 +147,12 @@ async fn render_interactive_quota_once(
         .credential_store()
         .map(|credential_store| reset_session_factory.create(&router_root, credential_store))
         .transpose()?;
-    let weekly_floor_saver = weekly_quota_floor_saver(router_root.join("state.sqlite"));
-    let credit_policy_saver = credit_usage_policy_saver(router_root.join("state.sqlite"));
+    let weekly_floor_saver = weekly_quota_floor_saver(
+        codex_router_state::provider_proxy_database_path(&router_root),
+    );
+    let credit_policy_saver = credit_usage_policy_saver(
+        codex_router_state::provider_proxy_database_path(&router_root),
+    );
     let credit_usage_refresher =
         interactive_credit_usage_refresher(router_root.clone(), credit_usage_base_url.to_owned());
     let (reset_session_ports, shutdown_sender, session_task) = match reset_session {
@@ -253,7 +257,7 @@ pub(crate) fn interactive_credit_usage_refresher(
         Box::pin(async move {
             credit_usage_refresh_target_preflight(&router_root, &account_id, credential_generation)
                 .await?;
-            let state_db = router_root.join("state.sqlite");
+            let state_db = codex_router_state::provider_proxy_database_path(&router_root);
             let resolver = crate::credential_runtime::AsyncCliCredentialResolver::open(
                 &state_db,
                 &router_root.join("secrets"),
@@ -295,7 +299,7 @@ async fn credit_usage_refresh_target_preflight(
     account_id: &AccountId,
     expected_credential_generation: Option<u64>,
 ) -> Result<(), CreditUsageRefreshError> {
-    let state_db = router_root.join("state.sqlite");
+    let state_db = codex_router_state::provider_proxy_database_path(router_root);
     let store = AsyncSqliteStateStore::open_read_only(&state_db)
         .await
         .map_err(|_| CreditUsageRefreshError::Failed)?;

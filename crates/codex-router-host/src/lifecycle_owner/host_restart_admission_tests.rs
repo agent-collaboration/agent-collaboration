@@ -71,7 +71,7 @@ async fn assert_restart_admission(scenario: AdmissionCase) {
     if scenario == AdmissionCase::FreeMcp {
         drop(competing_listener);
     }
-    let path = root.path().join("ports.json");
+    let path = root.path().join("settings.jsonc");
     let file = if matches!(
         scenario,
         AdmissionCase::Malformed | AdmissionCase::MalformedRouterOnly
@@ -99,25 +99,27 @@ async fn assert_restart_admission(scenario: AdmissionCase) {
         } else {
             https.port()
         };
-        format!("{{\"router\":{next_router},\"mcp\":{next_mcp},\"tailscaleHttps\":{next_https}}}")
+        format!(
+            "{{\"ports\":{{\"router\":{next_router},\"mcp\":{next_mcp},\"tailscaleHttps\":{next_https}}}}}"
+        )
     };
     std::fs::write(&path, file).expect("file");
     let selection = crate::HostPortSelection {
         router: crate::SelectedHostPort {
             port: router.port(),
-            source: crate::HostPortSource::PortsFile,
+            source: crate::HostPortSource::SettingsPorts,
         },
         mcp: crate::SelectedHostPort {
             port: mcp.port(),
             source: if scenario == AdmissionCase::ExplicitMcp {
                 crate::HostPortSource::Flag
             } else {
-                crate::HostPortSource::PortsFile
+                crate::HostPortSource::SettingsPorts
             },
         },
         tailscale_https: crate::SelectedHostPort {
             port: https.port(),
-            source: crate::HostPortSource::PortsFile,
+            source: crate::HostPortSource::SettingsPorts,
         },
     };
     let executable = PathBuf::from("/bin/sh");

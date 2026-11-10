@@ -53,7 +53,8 @@ fn accepted_decision() -> Result<RequestDecision, Box<dyn std::error::Error + Se
 async fn complete_creation_input_and_identity_survive_pending_conflict_and_reopen() -> TestResult {
     let temporary = tempfile::tempdir()?;
     let path = temporary.path().join("outbox.sqlite");
-    let outbox = FleetOutbox::open(&path).await?;
+    let outbox_store = crate::FleetStore::open(&path).await?;
+    let outbox = outbox_store.outbox();
     let (input, directory) = inputs()?;
     let queued = outbox.enqueue_creation(&directory, &input).await?;
     let mut conflicting = input.clone();
@@ -67,8 +68,9 @@ async fn complete_creation_input_and_identity_survive_pending_conflict_and_reope
         Some(input.clone())
     );
     assert!(outbox.accepted_creation_page("", 100).await?.is_empty());
-    outbox.close().await;
-    let outbox = FleetOutbox::open(&path).await?;
+    outbox_store.close().await;
+    let outbox_store = crate::FleetStore::open(&path).await?;
+    let outbox = outbox_store.outbox();
     assert_eq!(outbox.request(&input.request_id).await?, Some(queued));
     assert_eq!(
         outbox.creation_input(&input.request_id).await?,
@@ -79,7 +81,7 @@ async fn complete_creation_input_and_identity_survive_pending_conflict_and_reope
         .mark_decided(&input.request_id, &accepted, 1_000)
         .await?;
     assert_eq!(outbox.accepted_creation_page("", 100).await?, vec![input]);
-    outbox.close().await;
+    outbox_store.close().await;
     Ok(())
 }
 
@@ -90,15 +92,16 @@ async fn complete_creation_input_and_identity_survive_pending_conflict_and_reope
 #[tokio::test]
 async fn creation_input_failure_rolls_back_its_directory_request() -> TestResult {
     let temporary = tempfile::tempdir()?;
-    let outbox = FleetOutbox::open(&temporary.path().join("outbox.sqlite")).await?;
+    let outbox_store = crate::FleetStore::open(&temporary.path().join("outbox.sqlite")).await?;
+    let outbox = outbox_store.outbox();
     let (input, directory) = inputs()?;
     // A fault at the second table must not leave the first half enqueued.
-    sqlx::query("DROP TABLE project_creation_inputs")
+    sqlx::query("DROP TABLE fleet_project_creation_inputs")
         .execute(&outbox.database.pool)
         .await?;
     assert!(outbox.enqueue_creation(&directory, &input).await.is_err());
     assert!(outbox.request(&input.request_id).await?.is_none());
-    outbox.close().await;
+    outbox_store.close().await;
     Ok(())
 }
 
@@ -109,12 +112,13 @@ async fn creation_input_failure_rolls_back_its_directory_request() -> TestResult
 #[tokio::test]
 async fn authoritative_creation_decode_rejects_changed_input_and_pair_identity() -> TestResult {
     let temporary = tempfile::tempdir()?;
-    let outbox = FleetOutbox::open(&temporary.path().join("outbox.sqlite")).await?;
+    let outbox_store = crate::FleetStore::open(&temporary.path().join("outbox.sqlite")).await?;
+    let outbox = outbox_store.outbox();
     let (input, directory) = inputs()?;
     outbox.enqueue_creation(&directory, &input).await?;
     let mut changed = input.clone();
     changed.description = Some(Description::try_from("corrupt description".to_owned())?);
-    sqlx::query("UPDATE project_creation_inputs SET input = ? WHERE request_id = ?")
+    sqlx::query("UPDATE fleet_project_creation_inputs SET input = ? WHERE request_id = ?")
         .bind(serde_json::to_string(&changed)?)
         .bind(input.request_id.as_str())
         .execute(&outbox.database.pool)
@@ -127,7 +131,7 @@ async fn authoritative_creation_decode_rejects_changed_input_and_pair_identity()
     changed.project_id = ProjectId::generate();
     let hash = request_canonical::creation_hash(&changed)?;
     sqlx::query(
-        "UPDATE project_creation_inputs SET input = ?, canonical_hash = ? WHERE request_id = ?",
+        "UPDATE fleet_project_creation_inputs SET input = ?, canonical_hash = ? WHERE request_id = ?",
     )
     .bind(serde_json::to_string(&changed)?)
     .bind(hash.as_str())
@@ -138,7 +142,7 @@ async fn authoritative_creation_decode_rejects_changed_input_and_pair_identity()
         outbox.creation_input(&input.request_id).await,
         Err(RouterLocalStorageError::InvalidRecord)
     ));
-    outbox.close().await;
+    outbox_store.close().await;
     Ok(())
 }
 
@@ -149,7 +153,8 @@ async fn authoritative_creation_decode_rejects_changed_input_and_pair_identity()
 #[tokio::test]
 async fn completed_creation_and_pending_requests_keep_their_outbox_retention_rules() -> TestResult {
     let temporary = tempfile::tempdir()?;
-    let outbox = FleetOutbox::open(&temporary.path().join("outbox.sqlite")).await?;
+    let outbox_store = crate::FleetStore::open(&temporary.path().join("outbox.sqlite")).await?;
+    let outbox = outbox_store.outbox();
     let (finished_input, finished_request) = inputs()?;
     outbox
         .enqueue_creation(&finished_request, &finished_input)
@@ -207,7 +212,7 @@ async fn completed_creation_and_pending_requests_keep_their_outbox_retention_rul
         outbox.creation_input(&pending_request.request_id).await?,
         Some(pending_input)
     );
-    outbox.close().await;
+    outbox_store.close().await;
     Ok(())
 }
 
@@ -218,7 +223,8 @@ async fn completed_creation_and_pending_requests_keep_their_outbox_retention_rul
 #[tokio::test]
 async fn accepted_creation_input_blocks_retention_until_local_completion() -> TestResult {
     let temporary = tempfile::tempdir()?;
-    let outbox = FleetOutbox::open(&temporary.path().join("outbox.sqlite")).await?;
+    let outbox_store = crate::FleetStore::open(&temporary.path().join("outbox.sqlite")).await?;
+    let outbox = outbox_store.outbox();
     let (input, directory) = inputs()?;
     outbox.enqueue_creation(&directory, &input).await?;
     outbox
@@ -237,7 +243,7 @@ async fn accepted_creation_input_blocks_retention_until_local_completion() -> Te
     assert_eq!(outbox.prune_expired(after_retention, 500).await?, 1);
     assert!(outbox.request(&input.request_id).await?.is_none());
     assert!(outbox.creation_input(&input.request_id).await?.is_none());
-    outbox.close().await;
+    outbox_store.close().await;
     Ok(())
 }
 
@@ -248,7 +254,8 @@ async fn accepted_creation_input_blocks_retention_until_local_completion() -> Te
 #[tokio::test]
 async fn replayed_rejection_releases_orphaned_input_without_refreshing_settlement() -> TestResult {
     let temporary = tempfile::tempdir()?;
-    let outbox = FleetOutbox::open(&temporary.path().join("outbox.sqlite")).await?;
+    let outbox_store = crate::FleetStore::open(&temporary.path().join("outbox.sqlite")).await?;
+    let outbox = outbox_store.outbox();
     let (input, directory) = inputs()?;
     outbox.enqueue_creation(&directory, &input).await?;
     let rejected = RequestDecision::Rejected {
@@ -261,7 +268,7 @@ async fn replayed_rejection_releases_orphaned_input_without_refreshing_settlemen
 
     let hash = request_canonical::creation_hash(&input)?;
     sqlx::query(
-        "INSERT INTO project_creation_inputs(request_id,canonical_hash,input) VALUES (?,?,?)",
+        "INSERT INTO fleet_project_creation_inputs(request_id,canonical_hash,input) VALUES (?,?,?)",
     )
     .bind(input.request_id.as_str())
     .bind(hash.as_str())
@@ -279,7 +286,7 @@ async fn replayed_rejection_releases_orphaned_input_without_refreshing_settlemen
             .fetch_one(&outbox.database.pool)
             .await?;
     assert_eq!(settled_at, 1_000);
-    outbox.close().await;
+    outbox_store.close().await;
     Ok(())
 }
 
@@ -297,7 +304,11 @@ async fn migrated_decided_rows_age_from_migration_and_pending_rows_stay_unpruned
             .create_if_missing(true),
     )
     .await?;
-    let earlier_migrations = OUTBOX_MIGRATOR.iter().take(4).cloned().collect();
+    let earlier_migrations = crate::legacy_fleet_sources::LEGACY_OUTBOX_MIGRATOR
+        .iter()
+        .take(4)
+        .cloned()
+        .collect();
     sqlx::migrate::Migrator::with_migrations(earlier_migrations)
         .run(&mut legacy)
         .await?;
@@ -341,7 +352,16 @@ async fn migrated_decided_rows_age_from_migration_and_pending_rows_stay_unpruned
     .await?;
     legacy.close().await?;
 
-    let outbox = FleetOutbox::open(&path).await?;
+    // Step 0005 carries the older outbox: its own last migration backfills settled_at
+    // first, as the old Host would have, and the rows land in the Fleet database.
+    let fleet_path = temporary.path().join("fleet-cache.sqlite");
+    let ledger = crate::UpdateLedger::create(&fleet_path).await?;
+    ledger
+        .carry_legacy_source(crate::LegacyFleetSource::Outbox, &path)
+        .await?;
+    ledger.close().await;
+    let outbox_store = crate::FleetStore::open(&fleet_path).await?;
+    let outbox = outbox_store.outbox();
     let migrated_settlement: i64 =
         sqlx::query_scalar("SELECT settled_at_ms FROM fleet_outbox_requests WHERE request_id=?")
             .bind(finished_request.request_id.as_str())
@@ -383,7 +403,7 @@ async fn migrated_decided_rows_age_from_migration_and_pending_rows_stay_unpruned
         outbox.creation_input(&pending_request.request_id).await?,
         Some(pending_input)
     );
-    outbox.close().await;
+    outbox_store.close().await;
     Ok(())
 }
 
@@ -394,7 +414,8 @@ async fn migrated_decided_rows_age_from_migration_and_pending_rows_stay_unpruned
 #[tokio::test]
 async fn outbox_decoder_rejects_state_and_settlement_timestamp_mismatches() -> TestResult {
     let temporary = tempfile::tempdir()?;
-    let outbox = FleetOutbox::open(&temporary.path().join("outbox.sqlite")).await?;
+    let outbox_store = crate::FleetStore::open(&temporary.path().join("outbox.sqlite")).await?;
+    let outbox = outbox_store.outbox();
     let (_, pending) = inputs()?;
     outbox.enqueue(&pending).await?;
     sqlx::query::<sqlx_turso::Turso>(
@@ -423,7 +444,7 @@ async fn outbox_decoder_rejects_state_and_settlement_timestamp_mismatches() -> T
         Err(RouterLocalStorageError::InvalidOutboxRetentionState { request_id })
             if request_id == decided_without_time.request_id.as_str()
     ));
-    outbox.close().await;
+    outbox_store.close().await;
     Ok(())
 }
 
@@ -436,7 +457,8 @@ async fn reopened_legacy_rejection_prunes_its_input_without_replaying_the_reques
     // Arrange: the previous writer could settle a rejection without releasing its input.
     let temporary = tempfile::tempdir()?;
     let path = temporary.path().join("outbox.sqlite");
-    let outbox = FleetOutbox::open(&path).await?;
+    let outbox_store = crate::FleetStore::open(&path).await?;
+    let outbox = outbox_store.outbox();
     let (rejected_input, rejected_directory) = inputs()?;
     let (accepted_input, accepted_directory) = inputs()?;
     let rejection = RequestDecision::Rejected {
@@ -459,8 +481,9 @@ async fn reopened_legacy_rejection_prunes_its_input_without_replaying_the_reques
             .execute(&outbox.database.pool)
             .await?;
     }
-    outbox.close().await;
-    let reopened = FleetOutbox::open(&path).await?;
+    outbox_store.close().await;
+    let reopened_store = crate::FleetStore::open(&path).await?;
+    let reopened = reopened_store.outbox();
     assert_eq!(
         reopened.creation_input(&rejected_input.request_id).await?,
         Some(rejected_input.clone())
@@ -501,6 +524,6 @@ async fn reopened_legacy_rejection_prunes_its_input_without_replaying_the_reques
         Some(accepted_input)
     );
     assert_eq!(reopened.prune_expired(after_retention, 1).await?, 0);
-    reopened.close().await;
+    reopened_store.close().await;
     Ok(())
 }

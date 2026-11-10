@@ -25,6 +25,7 @@ collaboration-central-conformance = { version = "0.1.96", path = "../collaborati
 collaboration-central-tokio = { version = "0.1.96", path = "../collaboration-central-tokio", features = ["conformance"] }
 collaboration-service = { version = "0.1.96", path = "../collaboration-service" }
 message-board = { version = "0.1.96", path = "../message-board" }
+message-board-storage = { path = "../message-board-storage", version = "0.1.20" }
 axum = { workspace = true, features = ["ws"] }
 fleet-sync-lease.workspace = true
 fleet-sync-protocol.workspace = true

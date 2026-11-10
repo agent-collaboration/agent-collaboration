@@ -16,7 +16,8 @@ impl CacheWriteFailure {
         target: CacheWriteTarget,
     ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let mut connection = sqlx_turso::TursoConnection::connect_with(
-            &sqlx_turso::TursoConnectOptions::new().filename(root.join("fleet-cache.sqlite")),
+            &sqlx_turso::TursoConnectOptions::new()
+                .filename(root.join(message_board_storage::FleetStore::FILE_NAME)),
         )
         .await?;
         let trigger = match target {

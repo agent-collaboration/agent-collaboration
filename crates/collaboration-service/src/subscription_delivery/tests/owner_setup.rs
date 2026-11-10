@@ -20,15 +20,15 @@ impl OwnerFixture {
             let admission = Arc::new(
                 ProjectAdmission::new(ProjectAdmissionProps {
                     registry: registry.clone(),
-                    fleet: Arc::new(
-                        FleetClient::open(
-                            directory.path(),
-                            Arc::new(crate::test_project_runtime::PendingRegistration),
-                            Some(requests),
+                    fleet: Arc::new(FleetClient::new(
+                        &message_board_storage::FleetStore::open(
+                            &(directory.path()).join(message_board_storage::FleetStore::FILE_NAME),
                         )
                         .await
                         .unwrap(),
-                    ),
+                        Arc::new(crate::test_project_runtime::PendingRegistration),
+                        Some(requests),
+                    )),
                     identity: collaboration_contracts::MachineIdentity::new(
                         collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned())
                             .unwrap(),
@@ -161,15 +161,15 @@ impl OwnerFixture {
             .unwrap();
             // Unit tests construct their own crate type with the shared session;
             // the support crate's compiled FleetClient is a distinct Rust type.
-            let fleet = Arc::new(
-                FleetClient::open(
-                    self.directory.path(),
-                    Arc::new(crate::test_project_runtime::PendingRegistration),
-                    Some(requests),
+            let fleet = Arc::new(FleetClient::new(
+                &message_board_storage::FleetStore::open(
+                    &(self.directory.path()).join(message_board_storage::FleetStore::FILE_NAME),
                 )
                 .await
                 .unwrap(),
-            );
+                Arc::new(crate::test_project_runtime::PendingRegistration),
+                Some(requests),
+            ));
             let admission = ProjectAdmission::new(ProjectAdmissionProps {
                 registry: self.registry.clone(),
                 fleet: fleet.clone(),
@@ -185,10 +185,9 @@ impl OwnerFixture {
                 .unwrap();
             drop(admission);
             runtime.shutdown().await.unwrap();
-            Arc::try_unwrap(fleet)
-                .unwrap_or_else(|_| panic!("additional-project setup still owns its Fleet client"))
-                .close()
-                .await;
+            drop(Arc::try_unwrap(fleet).unwrap_or_else(|_| {
+                panic!("additional-project setup still owns its Fleet client")
+            }));
         }))
         .await;
     }

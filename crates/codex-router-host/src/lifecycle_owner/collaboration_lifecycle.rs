@@ -205,6 +205,12 @@ impl CollaborationLifecycle {
                 "providerRetentionConfigured",
                 retention_started_at,
             );
+            if let Err(error) = runtime.start_scratch_sweep(
+                std::sync::Arc::new(crate::SystemScratchSweepClock),
+                std::sync::Arc::new(crate::LoggedScratchSweepEvents),
+            ) {
+                tracing::warn!(%error, "scratch sweep not started; folders are kept");
+            }
             self.runtime = Some(runtime);
             self.schema_digest = digest;
         }

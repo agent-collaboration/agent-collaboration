@@ -1,5 +1,4 @@
 use super::*;
-use crate::FleetCache;
 use fleet_sync_session::ClientSessionState;
 
 #[tokio::test]
@@ -11,7 +10,7 @@ async fn observer_reads_known_handled_progress_without_creating_missing_state()
 -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Arrange: the database and session have not been created by their owner yet.
     let directory = tempfile::tempdir()?;
-    let path = directory.path().join("fleet-cache.sqlite");
+    let path = directory.path().join(crate::FleetStore::FILE_NAME);
 
     // Act / Assert: observing missing state never creates or synthesizes it.
     assert_eq!(
@@ -19,7 +18,8 @@ async fn observer_reads_known_handled_progress_without_creating_missing_state()
         MachineNoticeProgressObservation::NotYet
     );
     assert!(!path.exists());
-    let cache = FleetCache::open(&path).await?;
+    let cache_store = crate::FleetStore::open(&path).await?;
+    let cache = cache_store.cache();
     assert_eq!(
         observe_machine_notice_progress(&path).await?,
         MachineNoticeProgressObservation::NotYet
@@ -53,6 +53,6 @@ async fn observer_reads_known_handled_progress_without_creating_missing_state()
             field: "machineNoticeProgress"
         })
     ));
-    cache.close().await;
+    cache_store.close().await;
     Ok(())
 }

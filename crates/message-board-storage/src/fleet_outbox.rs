@@ -4,13 +4,13 @@ use fleet_admission::{FleetRequest, canonical_hash};
 use message_board::{RequestDecision, RequestId};
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
-use std::path::Path;
+use std::sync::Arc;
 
 mod creation_input;
+pub(crate) use creation_input::decode_input;
 #[cfg(test)]
 mod creation_tests;
 
-static OUTBOX_MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./fleet_outbox_migrations");
 const MAX_FLEET_OUTBOX_PRUNE_BATCH: u32 = 500;
 
 /// Retains completed fleet requests for two months; accepted creation inputs stay until local commit.
@@ -40,10 +40,15 @@ pub struct FleetOutboxEntry {
     pub state: FleetOutboxState,
 }
 
+/// The Fleet outbox: a view over the Router's one Fleet database (`FleetStore`).
+#[derive(Clone)]
 pub struct FleetOutbox {
-    database: RouterLocalDatabase,
+    database: Arc<RouterLocalDatabase>,
 }
 impl FleetOutbox {
+    pub(crate) const fn over(database: Arc<RouterLocalDatabase>) -> Self {
+        Self { database }
+    }
     pub async fn request(
         &self,
         request: &RequestId,
@@ -85,15 +90,7 @@ impl FleetOutbox {
         &self,
         workspace: &message_board::WorkspaceId,
     ) -> Result<Vec<message_board::ProjectId>, RouterLocalStorageError> {
-        let workspace = workspace.as_str();
-        let state = serde_json::to_string(&FleetOutboxState::Pending {})?;
-        let rows = sqlx_turso::query_scalar!(r#"SELECT json_extract(request, '$.operation.project') AS "project!: String" FROM fleet_outbox_requests WHERE state = ? AND json_extract(request, '$.workspace') = ? AND json_extract(request, '$.operation.kind') = 'projectDirectoryCreate' ORDER BY request_id"#, state, workspace).fetch_all(&self.database.pool).await?;
-        rows.into_iter()
-            .map(|id| {
-                message_board::ProjectId::try_from(id)
-                    .map_err(|_| RouterLocalStorageError::InvalidRecord)
-            })
-            .collect()
+        pending_project_ids_on(&self.database.pool, workspace).await
     }
     pub async fn pending_scoped_projects(
         &self,
@@ -113,11 +110,6 @@ impl FleetOutbox {
                     .map_err(|_| RouterLocalStorageError::InvalidRecord)
             })
             .collect()
-    }
-    pub async fn open(path: &Path) -> Result<Self, RouterLocalStorageError> {
-        Ok(Self {
-            database: RouterLocalDatabase::open(path, &OUTBOX_MIGRATOR).await?,
-        })
     }
     pub async fn enqueue(
         &self,
@@ -173,7 +165,7 @@ impl FleetOutbox {
             FleetOutboxState::Decided { decision: existing } if existing == *decision => {
                 if matches!(decision, RequestDecision::Rejected { .. }) {
                     sqlx::query::<sqlx_turso::Turso>(
-                        "DELETE FROM project_creation_inputs WHERE request_id=?",
+                        "DELETE FROM fleet_project_creation_inputs WHERE request_id=?",
                     )
                     .bind(id)
                     .execute(&mut *transaction)
@@ -206,7 +198,7 @@ impl FleetOutbox {
                 }
                 if matches!(decision, RequestDecision::Rejected { .. }) {
                     sqlx::query::<sqlx_turso::Turso>(
-                        "DELETE FROM project_creation_inputs WHERE request_id=?",
+                        "DELETE FROM fleet_project_creation_inputs WHERE request_id=?",
                     )
                     .bind(id)
                     .execute(&mut *transaction)
@@ -244,7 +236,7 @@ impl FleetOutbox {
             return Err(error);
         }
         let candidates = sqlx::query::<sqlx_turso::Turso>(
-            "SELECT request_id,canonical_hash,request,state,settled_at_ms FROM fleet_outbox_requests AS outbox WHERE json_extract(state,'$.kind')='decided' AND (settled_at_ms IS NULL OR settled_at_ms<?) AND (json_extract(state,'$.decision.kind')='rejected' OR NOT EXISTS (SELECT 1 FROM project_creation_inputs AS creation WHERE creation.request_id=outbox.request_id)) ORDER BY COALESCE(settled_at_ms,0),request_id LIMIT ?",
+            "SELECT request_id,canonical_hash,request,state,settled_at_ms FROM fleet_outbox_requests AS outbox WHERE json_extract(state,'$.kind')='decided' AND (settled_at_ms IS NULL OR settled_at_ms<?) AND (json_extract(state,'$.decision.kind')='rejected' OR NOT EXISTS (SELECT 1 FROM fleet_project_creation_inputs AS creation WHERE creation.request_id=outbox.request_id)) ORDER BY COALESCE(settled_at_ms,0),request_id LIMIT ?",
         )
         .bind(cutoff_ms)
         .bind(i64::from(batch_size))
@@ -260,7 +252,7 @@ impl FleetOutbox {
             let request_id = entry.request.request_id.as_str();
             if matches!(decision, RequestDecision::Rejected { .. }) {
                 sqlx::query::<sqlx_turso::Turso>(
-                    "DELETE FROM project_creation_inputs WHERE request_id=?",
+                    "DELETE FROM fleet_project_creation_inputs WHERE request_id=?",
                 )
                 .bind(request_id)
                 .execute(&mut *transaction)
@@ -284,10 +276,6 @@ impl FleetOutbox {
         transaction.commit().await?;
         Ok(removed)
     }
-
-    pub async fn close(self) {
-        self.database.close().await;
-    }
 }
 
 fn decode_outbox_row(
@@ -307,7 +295,7 @@ fn decode_outbox_row(
     )
 }
 
-fn decode_entry(
+pub(crate) fn decode_entry(
     id: &str,
     hash: &str,
     request: &str,
@@ -364,4 +352,21 @@ async fn enqueue_request(
         request: request.clone(),
         state: FleetOutboxState::Pending {},
     })
+}
+
+/// Projects whose creation is still pending in the outbox for `workspace`, read on the
+/// given executor: the pool, or a Fleet read snapshot's own transaction.
+pub(crate) async fn pending_project_ids_on<'executor>(
+    executor: impl sqlx::Executor<'executor, Database = sqlx_turso::Turso>,
+    workspace: &message_board::WorkspaceId,
+) -> Result<Vec<message_board::ProjectId>, RouterLocalStorageError> {
+    let workspace = workspace.as_str();
+    let state = serde_json::to_string(&FleetOutboxState::Pending {})?;
+    let rows = sqlx_turso::query_scalar!(r#"SELECT json_extract(request, '$.operation.project') AS "project!: String" FROM fleet_outbox_requests WHERE state = ? AND json_extract(request, '$.workspace') = ? AND json_extract(request, '$.operation.kind') = 'projectDirectoryCreate' ORDER BY request_id"#, state, workspace).fetch_all(executor).await?;
+    rows.into_iter()
+        .map(|id| {
+            message_board::ProjectId::try_from(id)
+                .map_err(|_| RouterLocalStorageError::InvalidRecord)
+        })
+        .collect()
 }

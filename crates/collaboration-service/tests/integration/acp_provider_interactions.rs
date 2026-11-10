@@ -133,6 +133,7 @@ async fn only_the_approver_receives_and_decides_exact_provider_options() -> Test
         Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         Arc::new(UnmaterializedThreadHolder::new()),
         Arc::new(collaboration_runtime::UnavailableConversationOperationRecorder),
+        Arc::new(codex_acp_adapter::test_support::recording_scratch_scopes::RecordingScratchScopes::default()),
     )?
     .with_provider_session_backend(
         endpoint,
@@ -317,6 +318,7 @@ async fn approver_question_form_returns_typed_answers_to_the_agent() -> TestResu
         Arc::new(codex_acp_adapter::RejectingApprovalBroker),
         Arc::new(UnmaterializedThreadHolder::new()),
         Arc::new(collaboration_runtime::UnavailableConversationOperationRecorder),
+        Arc::new(codex_acp_adapter::test_support::recording_scratch_scopes::RecordingScratchScopes::default()),
     )?
     .with_provider_session_backend(
         provider.endpoint.clone(),

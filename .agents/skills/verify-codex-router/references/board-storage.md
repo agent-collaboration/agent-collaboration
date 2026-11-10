@@ -42,7 +42,7 @@ The caller's `artifacts` JSON array contains `path`, `sha256`, `identifier`, `te
 and `strictSignatureVerified` for each artifact. Retain actual build/signing
 receipts. The driver checks bytes before and after use, and never infers source
 provenance from a filename. The `joint` scenario also consumes the qualified
-`target/debug/codex-router-board-upgrade`; other scenarios exclude that artifact.
+`target/debug/agent-router-update` (its `agent-router-update board-import` command); other scenarios exclude that artifact.
 A changed consumed hash stops the run. Build every consumed artifact at the
 declared pin and finish Cargo before signing and hashing: later Cargo commands
 may replace a signed executable with a linker-signed cached artifact.

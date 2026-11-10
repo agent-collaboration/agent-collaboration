@@ -108,6 +108,20 @@ pub enum AccountCommand {
     },
 }
 
+impl AccountCommand {
+    /// The Router root the command works on; help has none.
+    fn router_root(&self) -> Option<&Path> {
+        match self {
+            Self::Help(_) => None,
+            Self::Remove { router_root, .. }
+            | Self::Login { router_root, .. }
+            | Self::List { router_root }
+            | Self::SetStatus { router_root, .. }
+            | Self::SetWeeklyFloor { router_root, .. } => Some(router_root),
+        }
+    }
+}
+
 /// Provider-specific OAuth flow selected by `account login --provider`.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProviderLoginFlow {
@@ -323,6 +337,9 @@ pub enum AccountCommandError {
     /// Stdout write failed.
     #[error("failed to write stdout: {0}")]
     Stdout(std::io::Error),
+    /// The Router root needs agent-router-update before account commands may use it.
+    #[error(transparent)]
+    UpdateGuard(#[from] crate::router_update_guard::RouterUpdateGuardError),
 }
 
 /// Runs an account command.
@@ -425,6 +442,9 @@ fn run_account_command_with_input_and_provider_flows_and_store_overrides(
     claude_flow_override: Option<&dyn AccountLoginFlow<PendingLogin = PendingClaudeOAuthLogin>>,
     claude_secret_store_override: Option<RuntimeCredentialStore>,
 ) -> Result<(), AccountCommandError> {
+    if let Some(router_root) = command.router_root() {
+        crate::router_update_guard::refuse_root_needing_update_blocking(router_root)?;
+    }
     match command {
         AccountCommand::Remove {
             router_root,
@@ -504,7 +524,7 @@ fn login_with_openai_device_auth(
 
     create_router_root(&router_root)?;
     let state = runtime.block_on(AsyncSqliteStateStore::open(
-        &router_root.join("state.sqlite"),
+        &codex_router_state::provider_proxy_database_path(&router_root),
     ))?;
     if resolve_login_account_id(&state, &label, Provider::Openai, &runtime)? != account_id {
         return Err(AccountCommandError::DuplicateAccountLabel { label });
@@ -616,7 +636,7 @@ fn login_with_claude_oauth(
     create_router_root(&router_root)?;
     let runtime = account_command_runtime()?;
     let state = runtime.block_on(AsyncSqliteStateStore::open(
-        &router_root.join("state.sqlite"),
+        &codex_router_state::provider_proxy_database_path(&router_root),
     ))?;
     if resolve_login_account_id(&state, &label, Provider::Claude, &runtime)? != account_id {
         return Err(AccountCommandError::DuplicateAccountLabel { label });
@@ -747,7 +767,7 @@ fn list_accounts(stdout: &mut impl Write, router_root: PathBuf) -> Result<(), Ac
         ))
         .map_err(|_| AccountCommandError::CredentialStoreInitialization)?;
     let state = runtime.block_on(AsyncSqliteStateStore::open_read_only(
-        &router_root.join("state.sqlite"),
+        &codex_router_state::provider_proxy_database_path(&router_root),
     ))?;
     let accounts = runtime.block_on(state.list_accounts())?;
     let policies = runtime.block_on(state.list_account_routing_policies())?;
@@ -806,7 +826,7 @@ fn set_weekly_floor(
     percent: u16,
 ) -> Result<(), AccountCommandError> {
     let runtime = account_command_runtime()?;
-    let database_path = router_root.join("state.sqlite");
+    let database_path = codex_router_state::provider_proxy_database_path(&router_root);
     let floor = if percent == 0 {
         None
     } else {
@@ -847,7 +867,7 @@ fn set_account_status(
     let runtime = account_command_runtime()?;
     let mutation = runtime
         .block_on(AsyncWeeklyQuotaFloorMutationStore::open(
-            &router_root.join("state.sqlite"),
+            &codex_router_state::provider_proxy_database_path(&router_root),
         ))
         .map_err(redacted_account_status_state_error)?;
     let mutation_result =

@@ -7,7 +7,7 @@ use crate::{
 };
 use fleet_admission::FleetFeedEntry;
 use message_board::{FleetPosition, Record, RecordRef};
-use std::path::Path;
+use std::sync::Arc;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FleetRecordSnapshot {
@@ -30,8 +30,6 @@ pub use runtime::SnapshotInstallAttempt;
 #[cfg(feature = "test-support")]
 pub use runtime::{MachineNoticeProgressObservation, observe_machine_notice_progress};
 
-static CACHE_MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./fleet_cache_migrations");
-
 // Projection replacement preserves machine-owned state. Enrollment reset calls
 // clear_machine_runtime separately to discard the old session and link observation;
 // unfinished install attempts survive re-enrollment.
@@ -45,11 +43,17 @@ const CENTRAL_CACHE_DELETIONS: [&str; 3] = [
 #[path = "fleet_cache_reset_test.rs"]
 mod reset_tests;
 
+/// The Fleet cache: a view over the Router's one Fleet database (`FleetStore`).
+#[derive(Clone)]
 pub struct FleetCache {
-    database: RouterLocalDatabase,
+    database: Arc<RouterLocalDatabase>,
 }
 
 impl FleetCache {
+    pub(crate) const fn over(database: Arc<RouterLocalDatabase>) -> Self {
+        Self { database }
+    }
+
     /// Scope selection reads keys only; bodies are validated when a consumer needs them.
     pub async fn workspace_project_ids(
         &self,
@@ -90,12 +94,6 @@ impl FleetCache {
     ) -> Result<message_board::FleetPosition, RouterLocalStorageError> {
         cache_checkpoint(&mut *self.database.pool.acquire().await?).await
     }
-    pub async fn open(path: &Path) -> Result<Self, RouterLocalStorageError> {
-        Ok(Self {
-            database: RouterLocalDatabase::open(path, &CACHE_MIGRATOR).await?,
-        })
-    }
-
     /// Forget learned Fleet data while preserving every non-cache table.
     pub async fn clear_central_derived_cache(&self) -> Result<(), RouterLocalStorageError> {
         let _writer = self.database.writer.lock().await;
@@ -233,9 +231,6 @@ impl FleetCache {
             .collect::<Result<Vec<_>, _>>()?;
         transaction.commit().await?;
         Ok(FleetRecordSnapshot { through, records })
-    }
-    pub async fn close(self) {
-        self.database.close().await;
     }
 }
 

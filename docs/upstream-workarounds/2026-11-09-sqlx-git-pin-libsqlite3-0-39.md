@@ -1,5 +1,10 @@
 # SQLx pin for patched bundled SQLite
 
+**Status: removed.** Owner decision 2026-11-09: stay on crates.io SQLx 0.9.0
+with rusqlite 0.37.0 and ignore RUSTSEC-2026-0459 instead; see
+[UW-14](2026-11-09-rustsec-2026-0459-advisory-ignore.md). The record below
+describes the pin as it was.
+
 The workspace patches the seven locked upstream SQLx crates to
 [`10462fa4414c6c7f1ed1d39bb31678e3b726878c`](https://github.com/launchbadge/sqlx/commit/10462fa4414c6c7f1ed1d39bb31678e3b726878c)
 while retaining their `=0.9.0` dependency declarations. Together with rusqlite

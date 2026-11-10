@@ -179,7 +179,14 @@ impl FrozenMailQuery {
                 bound,
             )
             .unwrap(),
-            MachineSessionStore::open(root).await.unwrap(),
+            MachineSessionStore::from_cache(std::sync::Arc::new(
+                message_board_storage::FleetStore::open(
+                    &root.join(message_board_storage::FleetStore::FILE_NAME),
+                )
+                .await
+                .unwrap()
+                .cache(),
+            )),
             &UuidV7Ids,
             SchemaSupport { max_version: 1 },
             Backoff {

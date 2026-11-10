@@ -6,7 +6,7 @@ fn quota_status_projects_held_switch_and_distinct_saved_floor_thresholds() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state_path = router_root.join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(&router_root);
     let state = must_ok(SqliteStateStore::open(&state_path));
     let protected_id = account_id("acct_status_floor_source");
     let peer_id = account_id("acct_status_floor_peer");
@@ -113,7 +113,9 @@ fn quota_status_json_exposes_burndown_debug_fields_without_secret_material() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     let primary_account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
         account_id("acct_primary"),
@@ -171,7 +173,7 @@ fn quota_status_json_exposes_burndown_debug_fields_without_secret_material() {
     let runtime = test_async_runtime();
     let primary_account_id = primary_account.account_id().clone();
     let native_state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(
-        &router_root.join("state.sqlite"),
+        &codex_router_state::provider_proxy_database_path(&router_root),
     )));
     let credit_attempt = must_ok(
         runtime.block_on(native_state.begin_credit_refresh_attempt(&primary_account_id, 1)),
@@ -259,7 +261,7 @@ fn quota_status_json_exposes_burndown_debug_fields_without_secret_material() {
     must_ok(runtime.block_on(native_state.close()));
     let policy_mutation = must_ok(runtime.block_on(
         codex_router_state::credit_store::AsyncCreditUsagePolicyMutationStore::open(
-            &router_root.join("state.sqlite"),
+            &codex_router_state::provider_proxy_database_path(&router_root),
         ),
     ));
     must_ok(
@@ -304,7 +306,7 @@ fn quota_status_json_exposes_burndown_debug_fields_without_secret_material() {
     assert!(account_list.stdout.contains("unknown"));
     assert!(!account_list.stdout.contains("re-login required"));
     let maintenance_store = must_ok(runtime.block_on(AsyncSqliteStateStore::open(
-        &router_root.join("state.sqlite"),
+        &codex_router_state::provider_proxy_database_path(&router_root),
     )));
     assert!(must_ok(runtime.block_on(
         maintenance_store.finish_credential_refresh_claim(
@@ -464,7 +466,7 @@ fn quota_status_selection_uses_active_session_count() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state_path = router_root.join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(&router_root);
     let state = must_ok(SqliteStateStore::open(&state_path));
     let busy_account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
@@ -581,7 +583,7 @@ fn quota_status_marks_active_client_mirror_unavailable_when_rows_are_corrupt() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state_path = router_root.join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(&router_root);
     let state = must_ok(SqliteStateStore::open(&state_path));
     let account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
@@ -738,7 +740,7 @@ fn quota_status_plain_uses_persisted_history_for_run_rate() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state_path = router_root.join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(&router_root);
     let state = must_ok(SqliteStateStore::open(&state_path));
     let primary_account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
