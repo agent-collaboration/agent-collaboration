@@ -125,7 +125,7 @@ opentelemetry_sdk = { version = "0.31.0", features = ["logs", "metrics", "rt-tok
 proptest = "1.11.0"
 reqwest = { version = "0.12.24", default-features = false, features = ["blocking", "rustls-tls"] }
 rustix = { version = "1.1.4", features = ["fs", "process", "stdio"] }
-rusqlite = { version = "0.41.1", default-features = false, features = ["bundled"] }
+rusqlite = { version = "0.37.0", default-features = false, features = ["bundled"] }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
 serde_json_canonicalizer = "0.3.2"
@@ -229,14 +229,3 @@ opt-level = 3
 # Optimize its interpreter while retaining debug assertions and checked arithmetic.
 [profile.dev.package.turso_core]
 opt-level = 3
-
-# Remove when a released SQLx permits libsqlite3-sys 0.39 or newer.
-# See docs/upstream-workarounds/2026-11-09-sqlx-git-pin-libsqlite3-0-39.md.
-[patch.crates-io]
-sqlx = { git = "https://github.com/launchbadge/sqlx", rev = "10462fa4414c6c7f1ed1d39bb31678e3b726878c" }
-sqlx-core = { git = "https://github.com/launchbadge/sqlx", rev = "10462fa4414c6c7f1ed1d39bb31678e3b726878c" }
-sqlx-macros = { git = "https://github.com/launchbadge/sqlx", rev = "10462fa4414c6c7f1ed1d39bb31678e3b726878c" }
-sqlx-macros-core = { git = "https://github.com/launchbadge/sqlx", rev = "10462fa4414c6c7f1ed1d39bb31678e3b726878c" }
-sqlx-mysql = { git = "https://github.com/launchbadge/sqlx", rev = "10462fa4414c6c7f1ed1d39bb31678e3b726878c" }
-sqlx-postgres = { git = "https://github.com/launchbadge/sqlx", rev = "10462fa4414c6c7f1ed1d39bb31678e3b726878c" }
-sqlx-sqlite = { git = "https://github.com/launchbadge/sqlx", rev = "10462fa4414c6c7f1ed1d39bb31678e3b726878c" }
