@@ -96,6 +96,7 @@ export class SyntheticCli {
       | "archiveDiagnosis"
       | "retirement"
       | "retirementContinuation" = "create",
+    receiptAttempt?: string,
   ): Promise<SyntheticCli> {
     const baseline = baselineSchema.parse(
       decodeAuthoredJson(
@@ -119,7 +120,11 @@ export class SyntheticCli {
           sessionId: randomUUIDv7(),
         },
       } as const;
-      const directory = mode === "create" ? syntheticReceipts : `${syntheticReceipts}/${mode}`;
+      if (receiptAttempt !== undefined && mode !== "retirementContinuation")
+        throw new Error("named attempts are limited to the commissioned retirement continuation");
+      const suffix = receiptAttempt === undefined ? "" : `-${z.uuidv7().parse(receiptAttempt)}`;
+      const directory =
+        mode === "create" ? syntheticReceipts : `${syntheticReceipts}/${mode}${suffix}`;
       if (mode !== "create") {
         // No retirement request existed when this continuation was commissioned.
         // A fresh subdirectory preserves the failed read and refuses a second continuation.
