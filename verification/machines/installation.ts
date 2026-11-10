@@ -28,8 +28,23 @@ import {
   enrollInvocationsSince,
 } from "./command-ledger.ts";
 import { validateStagingUserHome, observeRuntimeHomeIsolation } from "./user-home-isolation.ts";
+import {
+  identitySchema,
+  upgradeBaselineSchema,
+  enrollmentStatus,
+  validateUpgradeEnrollment,
+  type InstallationIdentity,
+  type UpgradeBaseline,
+} from "./installation-baseline.ts";
 import { observeInstallationStopWindow } from "./installation-stop-window.ts";
 import { qualifyRootUpdater, updateStoppedInstallationRoot } from "./installation-root-update.ts";
+import {
+  loadStoppedOwnedRoot,
+  inspectStoppedOwnedRoot,
+  assertStoppedFileIdentities,
+  assertContinuationController,
+  type StoppedOwnedRootDeclaration,
+} from "./installation-stopped-root.ts";
 
 type Child =
   | { readonly kind: "local"; readonly process: OwnedProcess }
@@ -45,45 +60,6 @@ type State =
       readonly host: Child;
       readonly mcp: RouterMcp;
     };
-const identitySchema = z.object({
-  serviceId: z.uuid(),
-  machineLabel: z.string(),
-  peerId: z.string().regex(/^[a-f0-9]{8}-[a-f0-9]{4}-7[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/),
-});
-export type InstallationIdentity = z.infer<typeof identitySchema>;
-const upgradeBaselineSchema = z
-  .object({
-    root: z.string(),
-    installationId: z.uuid(),
-    machineId: z.uuidv7(),
-    endpoint: z.url(),
-    enrollmentSha256: z.string().regex(/^[a-f0-9]{64}$/),
-    baselineId: z.uuidv7(),
-  })
-  .strict();
-export type UpgradeBaseline = z.infer<typeof upgradeBaselineSchema>;
-const enrollmentStatus = z.object({
-  status: z.object({
-    kind: z.literal("valid"),
-    enrollment: z.object({ peer: z.uuidv7(), endpoint: z.url() }),
-  }),
-});
-export function validateUpgradeEnrollment(input: {
-  expected: UpgradeBaseline;
-  identity: InstallationIdentity;
-  status: unknown;
-  enrollmentSha256: string;
-}): void {
-  const observed = enrollmentStatus.parse(input.status).status.enrollment;
-  if (
-    input.identity.serviceId !== input.expected.installationId ||
-    input.identity.peerId !== input.expected.machineId ||
-    observed.peer !== input.expected.machineId ||
-    new URL(observed.endpoint).href !== new URL(input.expected.endpoint).href ||
-    input.enrollmentSha256 !== input.expected.enrollmentSha256
-  )
-    throw new Error("existing root identity or enrollment differs from the recorded baseline");
-}
 /** Releases before 0.1.142 read provider settings from providers.json, not settings.jsonc. */
 export function readsLegacyProvidersFile(productVersion: string): boolean {
   const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(productVersion);
@@ -106,6 +82,13 @@ export class Installation {
   private state: State = { kind: "prepared" };
   private generation = 0;
   private readonly releaseCommandRoot: () => void;
+  private continuation:
+    | {
+        kind: "stopped" | "owned";
+        declaration: StoppedOwnedRootDeclaration;
+        baseline: UpgradeBaseline;
+      }
+    | undefined;
   private constructor(input: {
     machine: Machine;
     remote: Remote | undefined;
@@ -115,12 +98,18 @@ export class Installation {
     receipt: Receipt;
     releaseCommandRoot: () => void;
     stagingHome?: string;
+    continuation?: {
+      kind: "stopped" | "owned";
+      declaration: StoppedOwnedRootDeclaration;
+      baseline: UpgradeBaseline;
+    };
   }) {
     this.machine = input.machine;
     this.remote = input.remote;
     this.guard = input.guard;
     this.input = input;
     this.releaseCommandRoot = input.releaseCommandRoot;
+    this.continuation = input.continuation;
     this.cli = new RouterCli(
       input.machine.cli,
       `${input.machine.root}/agent-communication`,
@@ -191,6 +180,47 @@ export class Installation {
   get mcp(): RouterMcp {
     if (this.state.kind !== "ready") throw new Error("installation Host is not ready");
     return this.state.mcp;
+  }
+  /** Continue only a declared historical root whose original owner has already settled. */
+  static async continueStoppedOwned(input: {
+    declaration: unknown;
+    receipt: Receipt;
+  }): Promise<Installation> {
+    const initial = await loadStoppedOwnedRoot(input.declaration);
+    const release = await registerCommandRoot(initial.declaration.root);
+    try {
+      const context = await inspectStoppedOwnedRoot(initial.declaration);
+      const guard = await CodexHomeGuard.captureExistingStaging({
+        machine: context.machine,
+        home: context.original.stagingHome,
+        expected: context.declaration.homes,
+      });
+      await input.receipt.record("stoppedOwnedContinuationPrepared", {
+        declaration: context.declaration,
+        originalBaseline: context.baseline,
+        originalHostWindow: context.declaration.original.hostWindow,
+        historicalInodeProofClaimed: false,
+        ownedChildren: [],
+      });
+      return new Installation({
+        machine: context.machine,
+        remote: undefined,
+        guard,
+        repository: context.original.repository,
+        productVersion: context.declaration.execution.productVersion,
+        receipt: input.receipt,
+        releaseCommandRoot: release,
+        stagingHome: context.original.stagingHome,
+        continuation: {
+          kind: "stopped",
+          declaration: context.declaration,
+          baseline: context.baseline,
+        },
+      });
+    } catch (error: unknown) {
+      release();
+      throw error;
+    }
   }
   configurationEligibility(): ConfigurationEligibility {
     return this.guard.eligibility;
@@ -301,6 +331,16 @@ export class Installation {
   }
   async start(): Promise<void> {
     if (this.state.kind !== "prepared") throw new Error("installation already started");
+    if (this.continuation?.kind === "stopped") {
+      await inspectStoppedOwnedRoot(this.continuation.declaration);
+      await this.input.receipt.record("continuationHostWindowRequested", {
+        originalBaseline: this.continuation.baseline,
+        originalWindow: this.continuation.declaration.original.hostWindow,
+        currentExecution: this.continuation.declaration.execution,
+        controller: this.continuation.declaration.controller,
+      });
+    } else if (this.continuation !== undefined)
+      await assertStoppedFileIdentities(this.continuation.declaration);
     if (
       this.remote !== undefined &&
       (await this.remote.listenerAddresses(this.machine.port)).length > 0
@@ -335,6 +375,40 @@ export class Installation {
       this.state = { kind: "routerRunning", router };
       await this.awaitReady((): Promise<void> => this.health());
       await this.startHost();
+      if (this.continuation !== undefined) {
+        await assertStoppedFileIdentities(this.continuation.declaration);
+        const status = await this.runRouterCommand([
+          "fleet",
+          "status",
+          "--router-root",
+          this.machine.root,
+        ]);
+        if (status.exit !== 0) throw new Error("continued root enrollment status unavailable");
+        validateUpgradeEnrollment({
+          expected: this.continuation.baseline,
+          identity: await this.identity(),
+          status: decode(status.stdout),
+          enrollmentSha256: await fingerprint(`${this.machine.root}/fleet/enrollment.json`),
+        });
+        if (
+          (await enrollInvocationsSince(
+            this.machine.root,
+            this.continuation.baseline.baselineId,
+          )) !== 0
+        )
+          throw new Error("enrollment occurred after original baseline marker");
+        this.continuation = { ...this.continuation, kind: "owned" };
+        await this.input.receipt.record("continuationOwnedChildrenReady", {
+          originalBaseline: this.continuation.baseline,
+          currentExecution: {
+            router: this.machine.router,
+            cli: this.machine.cli,
+            productVersion: this.input.productVersion,
+          },
+          fileIdentityDeclaration: this.continuation.declaration.files,
+          originalPidsAdopted: false,
+        });
+      }
     } catch (error: unknown) {
       await this.close();
       throw error;
@@ -430,6 +504,10 @@ export class Installation {
       throw new Error(
         "upgrade baseline requires a ready local owned installation; run each Mac's launcher locally",
       );
+    if (this.continuation !== undefined) {
+      await this.verifyOriginalEnrollment(this.continuation.baseline);
+      return structuredClone(this.continuation.baseline);
+    }
     const identity = await this.identity();
     const result = await this.runRouterCommand([
       "fleet",
@@ -453,6 +531,23 @@ export class Installation {
     await this.input.receipt.save(`upgrade-baseline-${baselineId}.json`, baseline);
     return baseline;
   }
+  private async verifyOriginalEnrollment(baseline: UpgradeBaseline): Promise<void> {
+    const status = await this.runRouterCommand([
+      "fleet",
+      "status",
+      "--router-root",
+      this.machine.root,
+    ]);
+    if (status.exit !== 0) throw new Error("original enrollment status unavailable");
+    validateUpgradeEnrollment({
+      expected: baseline,
+      identity: await this.identity(),
+      status: decode(status.stdout),
+      enrollmentSha256: await fingerprint(`${this.machine.root}/fleet/enrollment.json`),
+    });
+    if ((await enrollInvocationsSince(this.machine.root, baseline.baselineId)) !== 0)
+      throw new Error("enrollment occurred after original baseline marker");
+  }
   async upgrade(input: {
     baseline: UpgradeBaseline;
     router: Machine["router"];
@@ -466,31 +561,23 @@ export class Installation {
     if (this.remote !== undefined || this.state.kind !== "ready")
       throw new Error("upgrade requires the ready owned local installation");
     const baseline = upgradeBaselineSchema.parse(input.baseline);
+    if (
+      this.continuation !== undefined &&
+      baseline.baselineId !== this.continuation.baseline.baselineId
+    )
+      throw new Error("continued root must use its original baseline marker");
+    if (this.continuation !== undefined)
+      await assertStoppedFileIdentities(this.continuation.declaration);
+    if (this.continuation !== undefined)
+      await assertContinuationController(this.continuation.declaration);
     z.string()
       .regex(/^[a-f0-9]{40}$/)
       .parse(input.sourceHead);
     if (baseline.root !== this.machine.root)
       throw new Error("upgrade root differs from expected enrolled root");
-    const verifyEnrollment = async (installation: Installation): Promise<void> => {
-      const status = await installation.runRouterCommand([
-        "fleet",
-        "status",
-        "--router-root",
-        installation.machine.root,
-      ]);
-      if (status.exit !== 0) throw new Error("upgrade enrollment status unavailable");
-      validateUpgradeEnrollment({
-        expected: baseline,
-        identity: await installation.identity(),
-        status: decode(status.stdout),
-        enrollmentSha256: await fingerprint(`${installation.machine.root}/fleet/enrollment.json`),
-      });
-      if ((await enrollInvocationsSince(installation.machine.root, baseline.baselineId)) !== 0)
-        throw new Error("fleet enroll ran after the recorded baseline");
-    };
-    await verifyEnrollment(this);
-    await qualifyArtifact(input.router);
-    await qualifyArtifact(input.cli);
+    await this.verifyOriginalEnrollment(baseline);
+    await qualifyArtifact(input.router, this.machine.root);
+    await qualifyArtifact(input.cli, this.machine.root);
     await qualifyRootUpdater({
       root: this.machine.root,
       updater: input.updater,
@@ -537,11 +624,12 @@ export class Installation {
       receipt: this.input.receipt,
       releaseCommandRoot,
       ...(this.input.stagingHome === undefined ? {} : { stagingHome: this.input.stagingHome }),
+      ...(this.continuation === undefined ? {} : { continuation: this.continuation }),
     });
     replacement.generation = this.generation;
     try {
       await replacement.start();
-      await verifyEnrollment(replacement);
+      await replacement.verifyOriginalEnrollment(baseline);
       await this.input.receipt.record("installationUpgradeObserved", {
         root: this.machine.root,
         sourceHead: input.sourceHead,
@@ -584,12 +672,11 @@ export class Installation {
         if (this.remote === undefined) throw new Error("SSH owner absent");
         ownedPids.push(...(await this.remote.capture(child.process)));
       } else {
-        const observed = await command("/bin/ps", [
-          "-p",
-          String(child.process.pid),
-          "-o",
-          "pid=,lstart=,comm=",
-        ]);
+        const observed = await command(
+          "/bin/ps",
+          ["-p", String(child.process.pid), "-o", "pid=,lstart=,comm="],
+          { cwd: this.machine.root },
+        );
         if (observed.stdout !== child.process.identity)
           throw new Error("owned installation PID changed or ended");
         ownedPids.push(...child.process.capture());

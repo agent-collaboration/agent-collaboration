@@ -11,6 +11,7 @@ import {
   chmod,
 } from "node:fs/promises";
 import { constants } from "node:fs";
+import { isDeepStrictEqual } from "node:util";
 import { parse } from "smol-toml";
 import { z } from "zod";
 import { userInfo } from "node:os";
@@ -20,7 +21,12 @@ import { ObservationOpen, type Receipt } from "../receipt.ts";
 import type { Remote } from "./remote.ts";
 import { shellQuote, privateDirectory, qualifyArtifact, fingerprint } from "./owned-process.ts";
 import { sampleConfigAccess } from "./config-access.ts";
-import { hashRealClaudeRegistry } from "./user-home-isolation.ts";
+import {
+  hashRealClaudeRegistry,
+  privateTreeSchema,
+  snapshotExistingPrivateTree,
+  snapshotExistingStagingUserHome,
+} from "./user-home-isolation.ts";
 
 const files = ["config.toml", "codex-router-debug.config.toml"];
 interface GuardSnapshot {
@@ -33,6 +39,33 @@ export interface ConfigurationEligibility {
   readonly ownedWriteAccessDuringChange: boolean;
 }
 export type CodexHomePurpose = "normal" | "staging-isolated";
+export const existingStagingHomesSchema = z
+  .object({
+    home: z.string(),
+    codexHome: z.string(),
+    nativeCwd: z.string(),
+    privateHomeTree: privateTreeSchema,
+    codexHomeTree: privateTreeSchema,
+  })
+  .strict();
+export type ExistingStagingHomes = z.infer<typeof existingStagingHomesSchema>;
+const existingCodexEntries = [
+  ".sqlite-maintenance.lock",
+  ".tmp",
+  "app-server-control",
+  "codex-router-debug.config.toml",
+  "config.toml",
+  "goals_1.sqlite",
+  "installation_id",
+  "logs_2.sqlite",
+  "logs_2.sqlite-shm",
+  "logs_2.sqlite-wal",
+  "memories_1.sqlite",
+  "packages",
+  "queue_1.sqlite",
+  "skills",
+  "state_5.sqlite",
+] as const;
 function stagingConfiguration(machine: Machine): { config: string; profile: string } {
   const trust = `[projects.${JSON.stringify(machine.nativeCwd)}]\ntrust_level = "trusted"\n`;
   return {
@@ -61,6 +94,10 @@ export async function validateStagingCodexHome(machine: Machine): Promise<void> 
       throw new Error(
         "staging Codex home contains state, sessions, auth or other unapproved input",
       );
+  await validateStagingConfigurationFiles(machine);
+}
+
+async function validateStagingConfigurationFiles(machine: Machine): Promise<void> {
   const expected = stagingConfiguration(machine);
   for (const [name, content] of [
     ["config.toml", expected.config],
@@ -82,6 +119,39 @@ export async function validateStagingCodexHome(machine: Machine): Promise<void> 
         "fresh minimal staging configuration required; production configuration is not copied",
       );
   }
+}
+
+/** Existing stopped private state is inventoried exactly; fresh-root guards retain their stricter contract. */
+export async function snapshotExistingStagingHomes(input: {
+  machine: Machine;
+  home: string;
+}): Promise<ExistingStagingHomes> {
+  checkStagingHomePath(input.machine);
+  await privateDirectory(input.machine.codexHome);
+  await validateStagingConfigurationFiles(input.machine);
+  const privateHomeTree = await snapshotExistingStagingUserHome(input);
+  const codexHomeTree = await snapshotExistingPrivateTree(
+    input.machine.codexHome,
+    existingCodexEntries,
+  );
+  return {
+    home: input.home,
+    codexHome: input.machine.codexHome,
+    nativeCwd: input.machine.nativeCwd,
+    privateHomeTree,
+    codexHomeTree,
+  };
+}
+
+export async function validateExistingStagingHomes(input: {
+  machine: Machine;
+  home: string;
+  expected: ExistingStagingHomes;
+}): Promise<void> {
+  const expected = existingStagingHomesSchema.parse(input.expected);
+  const actual = await snapshotExistingStagingHomes(input);
+  if (!isDeepStrictEqual(actual, expected))
+    throw new Error("existing private-home declaration changed before continuation");
 }
 export async function prepareStagingCodexHome(input: {
   machine: Machine;
@@ -120,7 +190,9 @@ export class CodexHomeGuard {
   private ownedWriteAccessDuringChange = false;
   private userIsolation:
     | { kind: "normal" }
-    | { kind: "staging-isolated"; claudeRegistrySha256: string } = { kind: "normal" };
+    | { kind: "staging-isolated"; claudeRegistrySha256: string; allocatedMachine: Machine } = {
+    kind: "normal",
+  };
   private constructor(machine: Machine, remote: Remote | undefined, before: GuardSnapshot) {
     this.machine = machine;
     this.remote = remote;
@@ -188,6 +260,28 @@ export class CodexHomeGuard {
         throw new Error("staging isolated Host must run through its local named agent");
       await validateStagingCodexHome(machine);
     } else if (machine.codexHome !== normalHome) throw new Error("normal Codex home required");
+    return CodexHomeGuard.captureValidated({ machine, remote, purpose, normalHome });
+  }
+  static async captureExistingStaging(input: {
+    machine: Machine;
+    home: string;
+    expected: ExistingStagingHomes;
+  }): Promise<CodexHomeGuard> {
+    await validateExistingStagingHomes(input);
+    return CodexHomeGuard.captureValidated({
+      machine: input.machine,
+      remote: undefined,
+      purpose: "staging-isolated",
+      normalHome: `${userInfo().homedir}/.codex`,
+    });
+  }
+  private static async captureValidated(input: {
+    machine: Machine;
+    remote: Remote | undefined;
+    purpose: CodexHomePurpose;
+    normalHome: string;
+  }): Promise<CodexHomeGuard> {
+    const { machine, remote, purpose, normalHome } = input;
     const guardedMachine = { ...machine, codexHome: normalHome };
     const guard = new CodexHomeGuard(guardedMachine, remote, { hashes: [], modifiedAt: [] });
     const cwd =
@@ -216,6 +310,7 @@ export class CodexHomeGuard {
       ready.userIsolation = {
         kind: "staging-isolated",
         claudeRegistrySha256: await hashRealClaudeRegistry(),
+        allocatedMachine: machine,
       };
     await ready.verify();
     return ready;
@@ -225,6 +320,8 @@ export class CodexHomeGuard {
     receipt?: Receipt,
     ownedPids: readonly number[] = [],
   ): Promise<void> {
+    if (this.userIsolation.kind === "staging-isolated")
+      await validateStagingConfigurationFiles(this.userIsolation.allocatedMachine);
     const baseline = {
       hashes: [this.before.hashes[0], this.hostWindow?.hashes[1] ?? this.before.hashes[1]],
       modifiedAt: [

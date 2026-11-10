@@ -13,6 +13,17 @@ import { Receipt } from "../../../receipt.ts";
 import type { CliOutcome } from "../../../clients/router-cli.ts";
 import { backupDatabase, hashFile } from "./project-backups.ts";
 import { readPrivateText } from "./record.ts";
+import {
+  inspectStoppedOwnedRoot,
+  stoppedOwnedRootSchema,
+} from "../../../machines/installation-stopped-root.ts";
+import { readStoppedReference } from "../../../machines/installation-stopped-root.ts";
+import { upgradeBaselineSchema } from "../../../machines/installation-baseline.ts";
+import {
+  observeStoppedFleetCheckpoint,
+  stoppedFleetCheckpointPlan,
+} from "./stopped-fleet-checkpoint.ts";
+import { qualifyConnectedHost } from "./host-status.ts";
 
 const original = z
   .object({
@@ -309,9 +320,156 @@ async function run(plan: BaselinePlan): Promise<void> {
   }
   if (failure !== undefined) throw failure;
 }
+const continuationControl = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("stop") }).strict(),
+  z.object({ kind: z.literal("upgrade"), planFile: z.string().startsWith("/") }).strict(),
+]);
+const ownedUpgradePlan = z
+  .object({
+    router: artifactSchema,
+    cli: artifactSchema,
+    updater: artifactSchema,
+    productVersion: z.string(),
+    sourceHead: z.string().regex(/^[a-f0-9]{40}$/),
+    checkpoint: stoppedFleetCheckpointPlan,
+  })
+  .strict();
+
+async function continueStopped(raw: unknown): Promise<void> {
+  process.umask(0o077);
+  const declaration = stoppedOwnedRootSchema.parse(raw);
+  await mkdir(declaration.evidenceDirectory, { mode: 0o700 });
+  await privateDirectory(declaration.evidenceDirectory);
+  const receipt = new Receipt(declaration.evidenceDirectory);
+  await receipt.save("continuation-plan.json", declaration);
+  let installation = await Installation.continueStoppedOwned({ declaration, receipt });
+  const originalBaseline = upgradeBaselineSchema.parse(
+    decodeAuthoredJson(await readStoppedReference(declaration.original.baseline)),
+  );
+  const controls = createInterface({ input: process.stdin, crlfDelay: Infinity });
+  let active = true,
+    phase: "old" | "new" = "old",
+    failure: unknown;
+  let turn: Promise<unknown> = Promise.resolve();
+  const exclusive = <TValue>(operation: () => Promise<TValue>): Promise<TValue> => {
+    const result = turn.then(operation);
+    turn = result.catch((): void => {});
+    return result;
+  };
+  const stop = (): void => {
+    controls.close();
+  };
+  process.once("SIGTERM", stop);
+  process.once("SIGINT", stop);
+  let monitor = Promise.resolve();
+  try {
+    await receipt.save("continuation-host-window.json", {
+      openedAt: new Date().toISOString(),
+      originalWindow: declaration.original.hostWindow,
+      originalBaseline: declaration.original.baseline,
+      controller: declaration.controller,
+    });
+    await installation.start();
+    await receipt.record("continuationOriginalMarker", {
+      baselineId: originalBaseline.baselineId,
+      newMarkerCreated: false,
+    });
+    monitor = (async (): Promise<void> => {
+      while (active) {
+        try {
+          await exclusive(() => installation.check());
+        } catch (error: unknown) {
+          failure = error;
+          controls.close();
+          return;
+        }
+        await setTimeout(500);
+      }
+    })();
+    process.stdout.write(
+      `${encode({ kind: "ownedOldRootContinued", root: declaration.root, originalBaselineId: originalBaseline.baselineId })}\n`,
+    );
+    for await (const line of controls) {
+      const request = continuationControl.parse(decodeAuthoredJson(line));
+      if (request.kind === "stop") break;
+      if (phase !== "old")
+        throw new Error("this continuation permits one old-to-new S7 upgrade only");
+      const plan = ownedUpgradePlan.parse(
+        decodeAuthoredJson(await readPrivateText(request.planFile)),
+      );
+      if (plan.checkpoint.root !== declaration.root)
+        throw new Error("checkpoint plan belongs to another root");
+      installation = await exclusive(() =>
+        installation.upgrade({
+          ...plan,
+          baseline: originalBaseline,
+          observeStoppedOld: (): Promise<void> => observeStoppedFleetCheckpoint(plan.checkpoint),
+        }),
+      );
+      phase = "new";
+      const status = await installation.runRouterCommand([
+        "host",
+        "status",
+        "--router-root",
+        declaration.root,
+      ]);
+      await receipt.record("continuedUpgradeHostStatus", status);
+      if (status.exit !== 0) throw new Error("new owned Host status unavailable");
+      qualifyConnectedHost(status.stdout, {
+        peer: originalBaseline.machineId,
+        origin: new URL(originalBaseline.endpoint).origin,
+        endpoint: originalBaseline.endpoint,
+      });
+      process.stdout.write(
+        `${encode({ kind: "ownedRootUpgraded", root: declaration.root, originalBaselineId: originalBaseline.baselineId, target: plan.productVersion })}\n`,
+      );
+    }
+  } finally {
+    active = false;
+    controls.close();
+    process.removeListener("SIGTERM", stop);
+    process.removeListener("SIGINT", stop);
+    await monitor;
+    await turn;
+    await installation.close();
+  }
+  if (failure !== undefined) throw failure;
+}
+
 if (import.meta.main) {
   const path = process.argv[2];
-  if (path === undefined || process.argv.length !== 3) process.exitCode = 3;
+  if (
+    path === "--continue-stopped-owned" &&
+    process.argv.length === 4 &&
+    process.argv[3] !== undefined
+  ) {
+    void readPrivateText(process.argv[3])
+      .then((text): unknown => decodeAuthoredJson(text))
+      .then(continueStopped)
+      .catch((): void => {
+        process.stderr.write(
+          "stopped owned-root continuation refused; private evidence retained\n",
+        );
+        process.exitCode = 1;
+      });
+  } else if (
+    path === "--validate-stopped-owned" &&
+    process.argv.length === 4 &&
+    process.argv[3] !== undefined
+  ) {
+    void readPrivateText(process.argv[3])
+      .then((text): unknown => decodeAuthoredJson(text))
+      .then(inspectStoppedOwnedRoot)
+      .then((context): void => {
+        process.stdout.write(
+          `${encode({ kind: "stoppedOwnedRootPlanValidated", root: context.declaration.root, launched: false })}\n`,
+        );
+      })
+      .catch((): void => {
+        process.stderr.write("stopped owned-root plan validation refused\n");
+        process.exitCode = 1;
+      });
+  } else if (path === undefined || process.argv.length !== 3) process.exitCode = 3;
   else
     void readPrivateText(path)
       .then((text): BaselinePlan => planSchema.parse(decodeAuthoredJson(text)))

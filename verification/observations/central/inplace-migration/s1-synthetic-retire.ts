@@ -323,11 +323,16 @@ async function observeLocal(
 
 async function run(): Promise<void> {
   process.umask(0o077);
-  const [mode, attemptFlag, rawAttempt] = process.argv.slice(2);
+  const [mode, attemptFlag, rawAttempt, overlayFlag, executionOverlay] = process.argv.slice(2);
   if (
     mode !== "--continue-after-archived" ||
     attemptFlag !== "--receipt-attempt" ||
-    process.argv.length !== 5
+    !(
+      process.argv.length === 5 ||
+      (process.argv.length === 7 &&
+        overlayFlag === "--execution-overlay" &&
+        executionOverlay?.startsWith("/"))
+    )
   )
     throw new Error(
       "use --continue-after-archived --receipt-attempt SAVED_UUIDv7 for the dedicated project only",
@@ -348,7 +353,7 @@ async function run(): Promise<void> {
     .parse(
       decodeAuthoredJson(await readPrivateText(`${syntheticReceipts}/retirement/manifest.json`)),
     );
-  const cli = await SyntheticCli.open("retirementContinuation", attempt);
+  const cli = await SyntheticCli.open("retirementContinuation", attempt, executionOverlay);
   try {
     await cli.save("commission", {
       leadPush: "01a1c34d-3edf-70e0-a848-d08074cd0c51",

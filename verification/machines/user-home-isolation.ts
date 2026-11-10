@@ -3,13 +3,119 @@ import { mkdir, readdir, lstat, realpath, readFile } from "node:fs/promises";
 import { resolve, join } from "node:path";
 import { userInfo } from "node:os";
 import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { z } from "zod";
 import { privateDirectory, command } from "./owned-process.ts";
 import type { Machine } from "../declaration.ts";
 
-export async function validateStagingUserHome(input: {
+const nodeBase = z.object({
+  path: z.string(),
+  uid: z.number().int().nonnegative(),
+  mode: z.number().int().nonnegative(),
+});
+export const privateTreeSchema = z.array(
+  z.discriminatedUnion("kind", [
+    nodeBase.extend({ kind: z.literal("directory") }),
+    nodeBase.extend({ kind: z.literal("file"), sha256: z.string().regex(/^[a-f0-9]{64}$/) }),
+    nodeBase.extend({ kind: z.literal("socket") }),
+    nodeBase.extend({ kind: z.literal("symlink"), target: z.string() }),
+  ]),
+);
+
+/** Exact, bounded stopped-state inventory beneath a known private allocation, never a fresh-root waiver. */
+export async function snapshotExistingPrivateTree(
+  directory: string,
+  allowedTopEntries: readonly string[],
+): Promise<z.infer<typeof privateTreeSchema>> {
+  if (
+    directory === userInfo().homedir ||
+    directory === `${userInfo().homedir}/.codex` ||
+    directory === `${userInfo().homedir}/.claude`
+  )
+    throw new Error("real user home cannot be a continuation allocation");
+  await privateDirectory(directory);
+  const result: z.infer<typeof privateTreeSchema> = [];
+  let bytes = 0;
+  async function visit(path: string, relative: string): Promise<void> {
+    if (result.length >= 10_000) throw new Error("existing private-home inventory exceeds bound");
+    const info = await lstat(path),
+      mode = info.mode & 0o777;
+    if (info.uid !== process.getuid?.()) throw new Error("foreign private-home entry refused");
+    const name = relative.split("/").at(-1)?.toLowerCase();
+    if (
+      [
+        "auth.json",
+        "auth_tokens.json",
+        "credentials",
+        "credentials.json",
+        ".claude.json",
+        "settings.local.json",
+      ].includes(name ?? "")
+    )
+      throw new Error("authentication import refused in private continuation home");
+    const common = { path: relative, uid: info.uid, mode };
+    if (info.isSymbolicLink()) {
+      const target = await realpath(path);
+      if (!target.startsWith(`${directory}/`))
+        throw new Error("private-home symlink escapes its allocation");
+      result.push({ ...common, kind: "symlink", target: target.slice(directory.length + 1) });
+    } else if (info.isDirectory()) {
+      result.push({ ...common, kind: "directory" });
+      for (const child of (await readdir(path)).sort())
+        await visit(join(path, child), `${relative}/${child}`);
+    } else if (info.isFile()) {
+      bytes += info.size;
+      // The pinned standalone Codex is 268,972,064 bytes; keep a bounded reader
+      // while allowing that declared artifact. Every file still has an exact hash.
+      if (info.size > 512 * 1024 * 1024 || bytes > 1024 * 1024 * 1024)
+        throw new Error("existing private-home byte bound exceeded");
+      const hash = createHash("sha256");
+      for await (const chunk of createReadStream(path)) hash.update(chunk);
+      result.push({ ...common, kind: "file", sha256: hash.digest("hex") });
+    } else if (info.isSocket()) result.push({ ...common, kind: "socket" });
+    else throw new Error("unsupported private-home continuation entry");
+  }
+  for (const name of (await readdir(directory)).sort()) {
+    if (!allowedTopEntries.includes(name))
+      throw new Error("unknown existing private-home entry refused");
+    await visit(join(directory, name), name);
+  }
+  return result;
+}
+
+const existingUserHomeEntries = [
+  ".bun",
+  ".cache",
+  ".cargo",
+  ".claude",
+  ".gradle",
+  ".local",
+  ".m2",
+  ".npm",
+  ".pnpm-store",
+  ".rustup",
+  ".swiftpm",
+  ".yarn",
+  "Library",
+  "go",
+] as const;
+
+export async function snapshotExistingStagingUserHome(input: {
   machine: Machine;
   home: string;
-}): Promise<void> {
+}): Promise<z.infer<typeof privateTreeSchema>> {
+  checkStagingUserHomePath(input);
+  await privateDirectory(input.machine.temporaryParent);
+  await privateDirectory(`${input.home}/.claude`);
+  if ((await readdir(`${input.home}/.claude`)).some((entry): boolean => entry !== "sessions"))
+    throw new Error("unexpected private Claude context");
+  await privateDirectory(`${input.home}/.claude/sessions`);
+  if ((await readdir(`${input.home}/.claude/sessions`)).length !== 0)
+    throw new Error("private Claude context must remain empty");
+  return snapshotExistingPrivateTree(input.home, existingUserHomeEntries);
+}
+
+function checkStagingUserHomePath(input: { machine: Machine; home: string }): void {
   const { machine, home } = input;
   if (
     machine.kind !== "local" ||
@@ -22,6 +128,14 @@ export async function validateStagingUserHome(input: {
     home === userInfo().homedir
   )
     throw new Error("separate child-only private staging HOME required");
+}
+
+export async function validateStagingUserHome(input: {
+  machine: Machine;
+  home: string;
+}): Promise<void> {
+  const { machine, home } = input;
+  checkStagingUserHomePath(input);
   await privateDirectory(machine.temporaryParent);
   await privateDirectory(home);
   if ((await readdir(home)).some((entry): boolean => entry !== ".claude"))

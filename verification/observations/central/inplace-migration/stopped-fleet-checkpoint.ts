@@ -14,7 +14,7 @@ const checkpoint = z.object({
   untouchedBeforeSha256: z.string(),
   untouchedAfterSha256: z.string(),
 });
-const plan = z
+export const stoppedFleetCheckpointPlan = z
   .object({
     root: z.string().startsWith("/private/tmp/2026-11-s1-"),
     oldHostVersion: z.literal("0.1.125"),
@@ -49,7 +49,7 @@ export function validateStoppedCheckpoint(
 
 /** Pass this pre-bound callback as Installation.upgrade({ observeStoppedOld: ... }). */
 export async function observeStoppedFleetCheckpoint(raw: unknown): Promise<void> {
-  const input = plan.parse(raw);
+  const input = stoppedFleetCheckpointPlan.parse(raw);
   const release = await registerCommandRoot(input.root);
   try {
     await qualifyArtifact(input.reader);

@@ -27,12 +27,23 @@ export async function privateDirectory(path: string): Promise<void> {
   )
     throw new Error("canonical owner-private directory required");
 }
-export async function qualifyArtifact(artifact: Artifact): Promise<void> {
+export async function qualifyArtifact(artifact: Artifact, cwd?: string): Promise<void> {
   if ((await fingerprint(artifact.path)) !== artifact.sha256)
     throw new Error("artifact hash mismatch");
-  execFileSync("/usr/bin/codesign", ["--verify", "--strict", artifact.path], { stdio: "pipe" });
-  const metadata = await command("/usr/bin/codesign", ["-d", "--verbose=4", artifact.path]);
+  const options = cwd === undefined ? {} : { cwd };
+  const verified = await command(
+    "/usr/bin/codesign",
+    ["--verify", "--strict", artifact.path],
+    options,
+  );
+  if (verified.exit !== 0) throw new Error("artifact signature verification failed");
+  const metadata = await command(
+    "/usr/bin/codesign",
+    ["-d", "--verbose=4", artifact.path],
+    options,
+  );
   if (
+    metadata.exit !== 0 ||
     !metadata.stderr.includes(`Identifier=${artifact.identifier}\n`) ||
     !metadata.stderr.includes(`TeamIdentifier=${artifact.team}\n`)
   )

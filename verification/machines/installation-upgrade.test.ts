@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { validateUpgradeEnrollment } from "./installation.ts";
+import { validateUpgradeEnrollment } from "./installation-baseline.ts";
 const installationId = "01900000-0000-7000-8000-000000000001",
   machineId = "01900000-0000-7000-8000-000000000002";
 const expected = {

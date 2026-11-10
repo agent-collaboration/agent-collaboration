@@ -8,6 +8,7 @@ import { decode, decodeAuthoredJson, encode } from "../../../exact-json.ts";
 import { registerCommandRoot } from "../../../machines/command-ledger.ts";
 import { command, privateDirectory, qualifyArtifact } from "../../../machines/owned-process.ts";
 import { readPrivateText } from "./record.ts";
+import { loadStoppedOwnedRoot } from "../../../machines/installation-stopped-root.ts";
 
 export const stagingRoot = "/private/tmp/2026-11-s1-baseline-sunbook-3/router";
 export const stagingOrigin = "https://s1-migration.agent-collaboration.com";
@@ -97,22 +98,47 @@ export class SyntheticCli {
       | "retirement"
       | "retirementContinuation" = "create",
     receiptAttempt?: string,
+    executionOverlayFile?: string,
   ): Promise<SyntheticCli> {
-    const baseline = baselineSchema.parse(
+    const originalBaseline = baselineSchema.parse(
       decodeAuthoredJson(
         await readPrivateText("/private/tmp/2026-11-s1-staging/s7/sunbook-baseline-plan-3.json"),
       ),
     );
+    const overlay =
+      executionOverlayFile === undefined
+        ? undefined
+        : await loadStoppedOwnedRoot(
+            decodeAuthoredJson(await readPrivateText(executionOverlayFile)),
+          );
+    if (
+      overlay !== undefined &&
+      (overlay.declaration.root !== stagingRoot ||
+        overlay.baseline.installationId !== originalBaseline.installationId ||
+        overlay.baseline.machineId !== originalBaseline.peerId)
+    )
+      throw new Error("execution overlay belongs to another original baseline");
+    const baseline =
+      overlay === undefined
+        ? originalBaseline
+        : {
+            ...originalBaseline,
+            machine: { ...originalBaseline.machine, cli: overlay.machine.cli },
+          };
     const release = await registerCommandRoot(stagingRoot);
     try {
       await mkdir(syntheticReceipts, { mode: 0o700, recursive: true });
       await privateDirectory(syntheticReceipts);
-      await qualifyArtifact(baseline.machine.cli);
+      await qualifyArtifact(baseline.machine.cli, stagingRoot);
       if (
+        overlay === undefined &&
         baseline.machine.cli.sha256 !==
-        "693485f0c83b7e84bbeb0b1bac5c9f02a3511928da0b251136c6010d782feef7"
+          "693485f0c83b7e84bbeb0b1bac5c9f02a3511928da0b251136c6010d782feef7"
       )
         throw new Error("old125 CLI hash differs");
+      if (overlay !== undefined) {
+        await qualifyOverlayVersion(baseline);
+      }
       const actor = {
         kind: "session",
         session: {
@@ -135,7 +161,18 @@ export class SyntheticCli {
           throw new Error("prior retirement requires reconciliation, no replay");
         await mkdir(directory, { mode: 0o700 });
       }
-      return new SyntheticCli(baseline, actor, release, directory);
+      const cli = new SyntheticCli(baseline, actor, release, directory);
+      if (overlay !== undefined)
+        await cli.save("execution-overlay", {
+          declarationFile: executionOverlayFile,
+          originalPlan: overlay.declaration.original.plan,
+          originalCli: originalBaseline.machine.cli,
+          executionCli: baseline.machine.cli,
+          sourceHead: overlay.declaration.execution.sourceHead,
+          productVersion: "0.1.125",
+          historicalBytesEqual: false,
+        });
+      return cli;
     } catch (error: unknown) {
       release();
       throw error;
@@ -247,4 +284,23 @@ export class SyntheticCli {
   close(): void {
     this.release();
   }
+}
+
+async function qualifyOverlayVersion(baseline: z.infer<typeof baselineSchema>): Promise<void> {
+  const version = await command(baseline.machine.cli.path, ["--version"], {
+    cwd: stagingRoot,
+    environment: {
+      ...process.env,
+      HOME: baseline.stagingHome,
+      CODEX_HOME: baseline.machine.codexHome,
+    },
+    timeoutSeconds: 30,
+  });
+  if (
+    baseline.machine.cli.identifier !== "dev.shravansunder.agent-collaboration.debug" ||
+    baseline.machine.cli.team !== "974QD84WVC" ||
+    version.exit !== 0 ||
+    version.stdout.trim() !== "agent-collaboration 0.1.125"
+  )
+    throw new Error("qualified old125 execution overlay required");
 }

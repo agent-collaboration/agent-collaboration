@@ -312,15 +312,32 @@ async function observeIndependent(cli: SyntheticCli, ids: SyntheticIds): Promise
   }).parse(adr);
 }
 
-async function run(): Promise<void> {
-  process.umask(0o077);
+function parseSyntheticArguments(arguments_: readonly string[]) {
+  const overlayAt = arguments_.indexOf("--execution-overlay");
+  const executionOverlay = overlayAt === -1 ? undefined : arguments_[overlayAt + 1];
+  const modeArguments = overlayAt === -1 ? arguments_ : arguments_.slice(0, overlayAt);
+  if (
+    (overlayAt !== -1 &&
+      (executionOverlay === undefined ||
+        !executionOverlay.startsWith("/") ||
+        overlayAt + 2 !== arguments_.length)) ||
+    modeArguments.length > 1 ||
+    (modeArguments[0] !== undefined &&
+      !["--independent-reads", "--observe-created"].includes(modeArguments[0]))
+  )
+    throw new Error("use an optional read mode followed by --execution-overlay PRIVATE_PLAN");
   const mode =
-    process.argv[2] === "--independent-reads"
+    modeArguments[0] === "--independent-reads"
       ? "independent"
-      : process.argv[2] === "--observe-created"
+      : modeArguments[0] === "--observe-created"
         ? "observeCreated"
         : "create";
-  const cli = await SyntheticCli.open(mode);
+  return { mode, executionOverlay } as const;
+}
+async function run(): Promise<void> {
+  process.umask(0o077);
+  const { mode, executionOverlay } = parseSyntheticArguments(process.argv.slice(2));
+  const cli = await SyntheticCli.open(mode, undefined, executionOverlay);
   try {
     const ids =
       mode !== "create"
