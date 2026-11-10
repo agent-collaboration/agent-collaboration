@@ -79,6 +79,8 @@ mod local_runtime;
 mod materialized_session;
 #[path = "remote_mail_assembly_tests.rs"]
 mod remote_assembly;
+#[path = "remote_wake_wait_tests.rs"]
+mod remote_wake_wait;
 #[path = "remote_wake_replay_tests.rs"]
 mod remote_wakes;
 #[path = "mail_removal_backfill_test.rs"]

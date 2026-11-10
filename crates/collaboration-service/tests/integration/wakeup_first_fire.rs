@@ -21,6 +21,7 @@ async fn dedicated_wait_observes_pause_after_immediate_resume()
     )
     .map_err(std::io::Error::other)?
     .with_automation_store(store.clone());
+    let clock = identity.runtime_clock();
     let served = served_api::ServedApi::start(identity)?;
     let client = served.client("wake-control").await?;
     let request: WakeSendRequest = serde_json::from_value(
@@ -59,7 +60,7 @@ async fn dedicated_wait_observes_pause_after_immediate_resume()
         .await
         .evaluate_wakeup::<collaboration_protocol::SavedMessage>(
             &wake.definition.wakeup_id,
-            chrono::Utc::now().timestamp_millis() + 300000,
+            clock.utc_now().timestamp_millis() + 300000,
             wake_push_test_support::build_test_wake_push_draft,
         )
         .await?;

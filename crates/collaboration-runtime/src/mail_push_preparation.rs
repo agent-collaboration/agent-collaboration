@@ -103,6 +103,16 @@ pub fn prepare_mail_push_with_load_policy(
                 }
                 match (presence, policy.when_idle()) {
                     (TargetPresence::Running, _) => LoadPolicy::LoadedOnly,
+                    // Nothing will start the target or say it started: refused at once,
+                    // whatever the policy. The posts stay unread on the board.
+                    (TargetPresence::NotRunning, _) => {
+                        return Ok(Some(MailPushPreparation::Drop {
+                            receipt: not_submitted(
+                                false,
+                                "target is not running; follow batch refused",
+                            ),
+                        }));
+                    }
                     (_, WhenIdle::Drop) => {
                         return Ok(Some(MailPushPreparation::Drop {
                             receipt: not_submitted(false, "mail dropped by recipient policy"),

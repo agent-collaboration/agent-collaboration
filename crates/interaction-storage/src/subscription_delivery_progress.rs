@@ -6,7 +6,6 @@ use message_board::{
     SubscriptionWindowId, ThreadId,
 };
 use serde::{Deserialize, Serialize};
-use sqlx::Connection;
 use sqlx_turso::TursoConnection;
 use std::collections::HashSet;
 
@@ -212,7 +211,12 @@ impl InteractionStore {
             return Ok(());
         }
         let mut connection = self.writer.lock().await;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                sqlite_storage_maintenance::TransactionStart::Immediate,
+            )
+            .await?;
         let written = async {
             for record in progress {
                 write_subscription_progress(&mut transaction, record).await?;

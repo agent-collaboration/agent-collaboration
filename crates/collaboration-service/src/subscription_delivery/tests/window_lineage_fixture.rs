@@ -21,7 +21,7 @@ pub(super) async fn copied_reader() -> CopiedReader {
         .store
         .lock()
         .await
-        .rescan_missing_subscription_windows(&source.reader, source.clock.now())
+        .rescan_missing_subscription_windows(&source.reader, source.clock.utc_now())
         .await
         .unwrap();
     let source_store = source
@@ -40,7 +40,7 @@ pub(super) async fn copied_reader() -> CopiedReader {
         .store
         .lock()
         .await
-        .rescan_missing_subscription_windows(&source.reader, source.clock.now())
+        .rescan_missing_subscription_windows(&source.reader, source.clock.utc_now())
         .await
         .unwrap();
     let (_, selection) = source
@@ -50,7 +50,7 @@ pub(super) async fn copied_reader() -> CopiedReader {
         .select_subscription_notice(
             &source.reader,
             std::slice::from_ref(&source.root),
-            source.clock.now(),
+            source.clock.utc_now(),
             usize::MAX,
         )
         .await

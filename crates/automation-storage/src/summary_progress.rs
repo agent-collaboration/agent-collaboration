@@ -2,7 +2,7 @@
 use crate::{AutomationStore, StorageError};
 use agent_automation::{AttemptId, NativeEffectEvidence, RunId, SummaryAttempt, SummaryPhase};
 use serde::{Serialize, de::DeserializeOwned};
-use sqlx::{Connection, Row};
+use sqlx::Row;
 pub struct SummaryProgress<TTarget, TGeneration> {
     pub run_id: RunId,
     pub attempt_id: AttemptId,
@@ -20,7 +20,9 @@ impl AutomationStore {
         &mut self,
         request: SummaryProgress<TTarget, TGeneration>,
     ) -> Result<bool, StorageError> {
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         let row=sqlx::query("SELECT summary_attempt_json FROM workflow_runs WHERE run_id=? AND run_status IN ('summaryRunning','summaryBlocked')").bind(request.run_id.as_str()).fetch_optional(&mut *transaction).await?;
         let Some(row) = row else {
             transaction.commit().await?;

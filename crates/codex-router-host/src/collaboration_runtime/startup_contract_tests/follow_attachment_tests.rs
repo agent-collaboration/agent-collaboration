@@ -1,11 +1,14 @@
-use super::{Arc, BOUND, client, registered_route_project, route_fixture, start_host, target};
+use super::{
+    Arc, BOUND, client, codex_target, registered_route_project, route_fixture, start_host, target,
+};
 use collaboration_protocol::PushKind;
 
 #[tokio::test]
 async fn host_follow_attachment_allocates_a_notice_and_retains_only_weak_owners() {
     let fixture = start_host(true).await;
     let api = client(&fixture).await;
-    let reader = target(&fixture.runtime, "follow-reader");
+    // Held by choice, so the Host's follow attachment leaves a stored notice to inspect.
+    let reader = codex_target(&fixture.runtime, "follow-reader");
     let actors = fixture
         .runtime
         .subscription_delivery

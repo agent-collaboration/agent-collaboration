@@ -15,10 +15,14 @@ mod follow_attachment_tests;
 #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
 #[path = "startup_mail_retention_test.rs"]
 mod mail_retention;
+#[path = "startup_contract_tests/observation_recheck_tests.rs"]
+mod observation_recheck_tests;
 #[path = "../../tests/support/registered_route_project.rs"]
 mod registered_route_project;
 #[path = "../../tests/support/session_follow_fixture.rs"]
 mod route_fixture;
+#[path = "startup_contract_tests/scheduler_completion_tests.rs"]
+mod scheduler_completion_tests;
 #[path = "startup_contract_tests/status_cancellation_test.rs"]
 mod status_cancellation_test;
 #[path = "startup_contract_tests/wake_capacity_tests.rs"]
@@ -75,6 +79,15 @@ async fn start_host(enrolled: bool) -> StartupFixture {
 }
 
 async fn start_host_in(enrolled: bool, directory: tempfile::TempDir) -> StartupFixture {
+    start_host_with_providers(enrolled, directory, Vec::new()).await
+}
+
+/// Starts the Host with these provider entries; an unavailable one launches nothing.
+async fn start_host_with_providers(
+    enrolled: bool,
+    directory: tempfile::TempDir,
+    provider_launches: Vec<crate::ExternalProviderStartup>,
+) -> StartupFixture {
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private permissions");
     std::fs::create_dir(directory.path().join("peers")).expect("peer registry");
@@ -107,11 +120,12 @@ async fn start_host_in(enrolled: bool, directory: tempfile::TempDir) -> StartupF
     } else {
         None
     };
-    let runtime = start_runtime(
+    let runtime = start_runtime_with_providers(
         directory.path(),
         central
             .as_ref()
             .map(|central| central.session_inputs().expect("session")),
+        provider_launches,
     )
     .await;
     StartupFixture {
@@ -119,6 +133,16 @@ async fn start_host_in(enrolled: bool, directory: tempfile::TempDir) -> StartupF
         runtime,
         _central: central,
     }
+}
+
+/// A Codex session: with no native backend in this Host its follow batches are held by
+/// choice, unlike a closed Claude Code peer's, which are refused.
+fn codex_target(runtime: &CollaborationRuntime, session: &str) -> SessionRef {
+    serde_json::from_value(serde_json::json!({
+        "endpoint":{"serviceId":runtime.service_id(),"endpointId":"codex-local"},
+        "sessionId":session
+    }))
+    .expect("local Codex target")
 }
 
 fn target(runtime: &CollaborationRuntime, session: &str) -> SessionRef {
@@ -139,17 +163,29 @@ async fn start_runtime(
     directory: &std::path::Path,
     board_session: Option<board_fleet_sync::BoardSessionInputs>,
 ) -> CollaborationRuntime {
-    Box::pin(CollaborationRuntime::start(CollaborationRuntimeInputs {
-        board_session,
-        owner_human_id: None,
-        directory: directory.to_owned(),
-        codex_home: directory.to_owned(),
-        backend_socket: directory.join("missing-native.sock"),
-        mcp_bind: ([127, 0, 0, 1], 0).into(),
-        native_schema: None,
-        peer_registry_directory: Some(directory.join("peers")),
-        remote_control_server_name: None,
-    }))
+    start_runtime_with_providers(directory, board_session, Vec::new()).await
+}
+
+/// Starts the actual Host runtime in `directory` with these provider entries.
+async fn start_runtime_with_providers(
+    directory: &std::path::Path,
+    board_session: Option<board_fleet_sync::BoardSessionInputs>,
+    provider_launches: Vec<crate::ExternalProviderStartup>,
+) -> CollaborationRuntime {
+    Box::pin(CollaborationRuntime::start_with_external_providers(
+        CollaborationRuntimeInputs {
+            board_session,
+            owner_human_id: None,
+            directory: directory.to_owned(),
+            codex_home: directory.to_owned(),
+            backend_socket: directory.join("missing-native.sock"),
+            mcp_bind: ([127, 0, 0, 1], 0).into(),
+            native_schema: None,
+            peer_registry_directory: Some(directory.join("peers")),
+            remote_control_server_name: None,
+        },
+        provider_launches,
+    ))
     .await
     .expect("actual Host construction")
 }

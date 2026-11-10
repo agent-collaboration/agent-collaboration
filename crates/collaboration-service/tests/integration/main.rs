@@ -21,7 +21,7 @@ mod timed_board_posts;
 #[path = "../support/wake_push_draft.rs"]
 mod wake_push_test_support;
 
-use board_fixture::{controlled_clock, native_mail_owner, native_registry};
+use board_fixture::{native_mail_owner, native_registry};
 use read_cost_counter::sql_cost_classification;
 
 mod accepted_prefix_admission;

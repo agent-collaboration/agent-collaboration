@@ -3,8 +3,7 @@ use crate::{InteractionStore, StorageError, push_record_rows};
 use chrono::{DateTime, Utc};
 use collaboration_protocol::{MailItemId, MessageSendResult, RouterLink};
 use durable_steps::{Host, storage::TransactionScope, turso_store::TursoScope};
-use sqlx::Transaction;
-use sqlx_turso::{Turso, TursoConnection};
+use sqlx_turso::TursoConnection;
 
 // session_identity renders at most 120 display-name characters, or the 64-byte
 // endpoint and eight session characters, plus its emoji. This leaves headroom
@@ -116,13 +115,37 @@ async fn read_answer(
         .map(MessageSendAnswerRow::decode).transpose()
 }
 
+// A settled answer goes once no live push, scheduled retry, poll hand-off or unsettled
+// cancel still names its item.
+macro_rules! settled_answers_eligible {
+    () => {
+        "NOT EXISTS (SELECT 1 FROM router_pushes p WHERE p.push_id=message_send_answers.item_id AND p.delivery_state IN ('pending','held','attempted')) AND NOT EXISTS (SELECT 1 FROM local_delivery_retries r WHERE r.item_id=message_send_answers.item_id AND r.scheduled_retry_at IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM pending_poll_mail poll WHERE poll.item_id=message_send_answers.item_id) AND NOT EXISTS (SELECT 1 FROM local_cancel_deliveries c WHERE (c.item_id=message_send_answers.item_id OR c.target_item=message_send_answers.item_id) AND c.outcome_json IS NULL)"
+    };
+}
+
+/// The settle time of the oldest answer the rule may ever delete.
+pub(crate) async fn oldest_settled_message_send_answer_ms(
+    connection: &mut sqlx_turso::TursoConnection,
+) -> Result<Option<i64>, StorageError> {
+    Ok(sqlx::query_scalar::<sqlx_turso::Turso, Option<i64>>(concat!(
+        "SELECT MIN(settled_at_ms) FROM message_send_answers WHERE settled_at_ms IS NOT NULL AND ",
+        settled_answers_eligible!()
+    ))
+    .fetch_one(connection)
+    .await?)
+}
+
 pub(crate) async fn prune_settled_message_send_answers(
-    transaction: &mut Transaction<'_, Turso>,
+    transaction: &mut sqlite_storage_maintenance::SignaledTransaction<'_, sqlx_turso::Turso>,
     cutoff_ms: i64,
     batch_size: i64,
 ) -> Result<u64, StorageError> {
     let candidates = sqlx::query_as::<sqlx_turso::Turso, MessageSendAnswerRow>(
-        "SELECT item_id,target_identity,result,recorded_at,settled_at_ms,typeof(settled_at_ms) AS settled_at_storage FROM message_send_answers WHERE settled_at_ms<? AND NOT EXISTS (SELECT 1 FROM router_pushes p WHERE p.push_id=message_send_answers.item_id AND p.delivery_state IN ('pending','held','attempted')) AND NOT EXISTS (SELECT 1 FROM local_delivery_retries r WHERE r.item_id=message_send_answers.item_id AND r.scheduled_retry_at IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM pending_poll_mail poll WHERE poll.item_id=message_send_answers.item_id) AND NOT EXISTS (SELECT 1 FROM local_cancel_deliveries c WHERE (c.item_id=message_send_answers.item_id OR c.target_item=message_send_answers.item_id) AND c.outcome_json IS NULL) ORDER BY settled_at_ms,item_id LIMIT ?",
+        concat!(
+            "SELECT item_id,target_identity,result,recorded_at,settled_at_ms,typeof(settled_at_ms) AS settled_at_storage FROM message_send_answers WHERE settled_at_ms<? AND ",
+            settled_answers_eligible!(),
+            " ORDER BY settled_at_ms,item_id LIMIT ?"
+        ),
     )
         .bind(cutoff_ms)
         .bind(batch_size)

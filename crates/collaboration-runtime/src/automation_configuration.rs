@@ -3,10 +3,12 @@ use collaboration_protocol::{
     AutomationConfiguration, AutomationConfigureRequest, ConfigurationFailure,
 };
 use std::{future::Future, pin::Pin, sync::Arc};
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, watch};
 #[derive(Clone)]
 pub struct AutomationConfigurationHandle {
     state: Arc<RwLock<ConfigurationState>>,
+    /// Moves on every publish or suspend, so workers waiting for readiness wake on it.
+    changes: watch::Sender<u64>,
 }
 struct ConfigurationState {
     value: AutomationConfiguration,
@@ -19,6 +21,7 @@ impl Default for AutomationConfigurationHandle {
                 value: AutomationConfiguration::default(),
                 ready: true,
             })),
+            changes: watch::channel(0).0,
         }
     }
 }
@@ -42,11 +45,22 @@ impl AutomationConfigurationHandle {
     }
     pub async fn suspend(&self) {
         self.state.write().await.ready = false;
+        self.changes
+            .send_modify(|revision| *revision = revision.wrapping_add(1));
     }
     pub async fn publish(&self, value: AutomationConfiguration) {
-        let mut state = self.state.write().await;
-        state.value = value;
-        state.ready = true;
+        {
+            let mut state = self.state.write().await;
+            state.value = value;
+            state.ready = true;
+        }
+        self.changes
+            .send_modify(|revision| *revision = revision.wrapping_add(1));
+    }
+    /// A receiver that wakes after each publish or suspend.
+    #[must_use]
+    pub fn subscribe_changes(&self) -> watch::Receiver<u64> {
+        self.changes.subscribe()
     }
 }
 pub trait AutomationConfigurationBackend: Send + Sync {

@@ -2,7 +2,6 @@
 use crate::{AutomationStore, StorageError};
 use agent_automation::{AttemptId, ProviderSettlementEffect, RouteEffectEvidence, RunId, RunPhase};
 use serde::{Serialize, de::DeserializeOwned};
-use sqlx::Connection;
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum RunStopIdentity {
     NativeTurn(String),
@@ -20,7 +19,9 @@ impl AutomationStore {
         id: &RunId,
         identity: RunStopIdentity,
     ) -> Result<bool, StorageError> {
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         let mut record =
             crate::run_inspection::read_current::<TTarget, TEndpoint, TGeneration, TReceipt>(
                 &mut transaction,

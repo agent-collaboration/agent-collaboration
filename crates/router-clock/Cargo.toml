@@ -1,0 +1,19 @@
+[package]
+name = "router-clock"
+autotests = false
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+test-support = []
+
+[dependencies]
+chrono.workspace = true
+runtime-primitives.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync", "time"] }
+
+[lints]
+workspace = true

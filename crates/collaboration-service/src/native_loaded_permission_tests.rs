@@ -162,6 +162,7 @@ async fn scheduled_route_reports_narrowing_but_refuses_missing_directory() {
         );
         directory.publish(fixture.endpoint.clone()).unwrap();
         let route = collaboration_runtime::CodexAppServerDeliveryRoute::new(
+            fixture.clock.clone(),
             fixture.backend.endpoint.service_id.clone(),
             directory,
             fixture.backend.clone(),
@@ -393,6 +394,7 @@ async fn scheduled_matching_loaded_policy_preserves_idle_admission_and_intent_or
         collaboration_runtime::EndpointDirectory::new(fixture.backend.endpoint.service_id.clone());
     directory.publish(fixture.endpoint.clone()).unwrap();
     let route = collaboration_runtime::CodexAppServerDeliveryRoute::new(
+        fixture.clock.clone(),
         fixture.backend.endpoint.service_id.clone(),
         directory,
         fixture.backend.clone(),
@@ -464,6 +466,7 @@ async fn scheduled_generation_retired_during_loaded_validation_never_submits_inp
         collaboration_runtime::EndpointDirectory::new(fixture.backend.endpoint.service_id.clone());
     directory.publish(fixture.endpoint.clone()).unwrap();
     let route = collaboration_runtime::CodexAppServerDeliveryRoute::new(
+        fixture.clock.clone(),
         fixture.backend.endpoint.service_id.clone(),
         directory,
         fixture.backend.clone(),

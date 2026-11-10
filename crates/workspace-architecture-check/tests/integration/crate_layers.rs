@@ -9,7 +9,8 @@ use serde::Deserialize;
 #[path = "test_support_policy.rs"]
 mod test_support_policy;
 
-const LAYER_POLICY: [(&str, &[&str]); 17] = [
+const LAYER_POLICY: [(&str, &[&str]); 18] = [
+    ("router-clock", &[]),
     ("node-test-fixture", &[]),
     ("ui-preference-store", &[]),
     ("sqlite-storage-maintenance", &[]),
@@ -35,11 +36,19 @@ const LAYER_POLICY: [(&str, &[&str]); 17] = [
     ("collaboration-contracts", &[]),
     (
         "collaboration-runtime",
-        &["collaboration-contracts", "sqlite-storage-maintenance"],
+        &[
+            "collaboration-contracts",
+            "sqlite-storage-maintenance",
+            "router-clock",
+        ],
     ),
     (
         "collaboration-service",
-        &["collaboration-contracts", "collaboration-runtime"],
+        &[
+            "collaboration-contracts",
+            "collaboration-runtime",
+            "router-clock",
+        ],
     ),
     (
         "agent-session-inventory",
@@ -75,6 +84,7 @@ const LAYER_POLICY: [(&str, &[&str]); 17] = [
     (
         "codex-router-host",
         &[
+            "router-clock",
             "collaboration-contracts",
             "collaboration-runtime",
             "collaboration-service",

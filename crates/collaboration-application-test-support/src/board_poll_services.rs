@@ -23,7 +23,8 @@ pub async fn fixture_poll_services(
         automation_storage::AutomationStore::open(&directory.join("automation.sqlite")).await?,
     ));
     let routes = Arc::new(collaboration_runtime::SessionDeliveryRouter::new(Vec::new()));
-    let delivery = fixture_subscription_service(admission, &interactions, &routes)?;
+    let clock = identity.runtime_clock();
+    let delivery = fixture_subscription_service(admission, &interactions, &routes, clock.clone())?;
     let identity = identity
         .with_automation_store(automation)
         .with_subscription_delivery_service(delivery.clone(), routes.clone());
@@ -35,7 +36,7 @@ pub async fn fixture_poll_services(
             actors: delivery.clone(),
             presence: routes,
             machine: fixture_machine_identity()?,
-            clock: Arc::new(collaboration_service::SystemSubscriptionClock),
+            clock,
         },
     )?;
     let publisher = Arc::new(collaboration_service::NotificationPublisher::new(

@@ -22,6 +22,7 @@ pub async fn reconcile(
     store: &Arc<Mutex<AutomationStore>>,
     execution: Option<&Arc<dyn ScheduledRunExecution>>,
     backend: Option<&NativeControlBackend>,
+    clock: &dyn router_clock::RuntimeClock,
     record: StoredRun,
 ) -> Result<(), StorageError> {
     match record.phase {
@@ -43,7 +44,8 @@ pub async fn reconcile(
                 .await;
             match observation {
                 Ok(RunReconciliation::Settled { settlement }) => {
-                    persist_settlement(store, &record, settlement).await?;
+                    persist_settlement(store, &record, settlement, clock.now().unix_millis())
+                        .await?;
                 }
                 Ok(RunReconciliation::KnownNotSubmitted | RunReconciliation::StillUnknown)
                 | Err(DeliveryContractError::ClientOperation) => {}
@@ -76,6 +78,7 @@ pub async fn reconcile(
                 record,
                 timeout_seconds,
                 work: crate::summary_native_worker::SummaryWork::ObserveOnly,
+                clock,
             })
             .await?;
         }
@@ -88,9 +91,10 @@ pub(crate) async fn persist_settlement(
     store: &Arc<Mutex<AutomationStore>>,
     record: &StoredRun,
     settlement: RunSettlement,
+    now_ms: i64,
 ) -> Result<bool, StorageError> {
     let outcome = match settlement {
-        RunSettlement::Pending => return Ok(false),
+        RunSettlement::Pending | RunSettlement::NotObserved => return Ok(false),
         RunSettlement::Completed { .. } => WorkerOutcome::Completed { explanation: None },
         RunSettlement::Failed { reason } => WorkerOutcome::Failed {
             explanation: Some(reason),
@@ -131,7 +135,7 @@ pub(crate) async fn persist_settlement(
                 run_id: record.run_id.clone(),
                 settlement: identity,
                 outcome,
-                now_ms: chrono::Utc::now().timestamp_millis(),
+                now_ms,
             },
         )
         .await

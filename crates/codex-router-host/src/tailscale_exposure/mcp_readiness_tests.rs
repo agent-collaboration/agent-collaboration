@@ -305,14 +305,16 @@ async fn actual_mcp_readiness(
         .with_endpoints(inventory.endpoints)
         .expect("endpoint");
     let directory = tempfile::tempdir().expect("service directory");
-    let (_, relation) =
-        tokio::sync::watch::channel(collaboration_protocol::RouterExecutableRelation::Match);
     let shutdown = CancellationToken::new();
     let config = CollaborationApiConfig {
         application: (identity).build(),
         service_directory: directory.path().to_owned(),
         native_definitions: None,
-        router_executable_relation: relation,
+        router_executable_check: std::sync::Arc::new(
+            collaboration_mcp::FixedRouterExecutableRelation(
+                collaboration_protocol::RouterExecutableRelation::Match,
+            ),
+        ),
         concurrent_requests: collaboration_mcp::DEFAULT_CONCURRENT_REQUESTS,
         shutdown: shutdown.clone(),
     };

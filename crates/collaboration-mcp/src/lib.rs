@@ -6,6 +6,7 @@ mod local_collaboration;
 mod loopback_bind_address;
 mod mcp_server;
 mod native_schema_definitions;
+mod router_executable_check;
 mod tool_call_registry;
 
 pub use collaboration_api_router::{
@@ -15,6 +16,7 @@ pub use collaboration_api_router::{
 };
 pub use loopback_bind_address::{LoopbackBindAddress, LoopbackBindAddressError};
 pub use native_schema_definitions::NativeSchemaDefinitions;
+pub use router_executable_check::{FixedRouterExecutableRelation, RouterExecutableCheck};
 #[cfg(feature = "test-support")]
 pub mod test_support;
 

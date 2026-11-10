@@ -124,8 +124,24 @@ mod interaction_storage_failure;
 pub mod stored_inventory_observation;
 mod wakeup_timing_worker;
 pub(crate) use interaction_storage_failure::map_interaction_storage_error;
+#[cfg(test)]
+mod captured_warnings_test_support;
+mod commit_or_timer_wait;
+mod keyed_worker_tasks;
 mod push_handoff_worker;
+#[cfg(test)]
+mod worker_test_support;
+pub use commit_or_timer_wait::{CommitWaitEnd, wait_for_commit_or_timer};
+/// The failed-pass retry lives with SQLite store maintenance; the layers above this crate
+/// reach it here.
+pub use sqlite_storage_maintenance::{FAILED_PASS_BACKOFF, FailedPassBackoff, FailureRetry};
+mod wake_driven_worker_loop;
+mod wake_driven_worker_observation;
 pub use push_handoff_worker::{PushHandoffError, PushHandoffWorker};
+pub use wake_driven_worker_loop::{BatchOutcome, WakeDrivenWorkerLoop, WakeSource, WorkerPass};
+pub use wake_driven_worker_observation::WorkerObservation;
+#[cfg(any(test, feature = "test-support"))]
+pub use wake_driven_worker_observation::{LoopSnapshot, SleepGate};
 pub mod received_mail_push;
 pub use received_mail_push::received_mail_push;
 mod outgoing_mail_message;

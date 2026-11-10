@@ -1,5 +1,6 @@
 //! Membership cancellation starts with the real frozen follow and its replicated cause.
 use super::native_follow_mail_proofs::{follow_application, frozen_follow};
+use super::native_held_mail_proofs::checked_while_wakeable_then_loaded;
 use super::*;
 use board_sync_protocol::BoardDeliveryBody;
 use collaboration_mail_protocol::NotificationSource;
@@ -28,9 +29,12 @@ async fn a_resolved_membership_keeps_its_held_item_and_drains_the_unallocated_ra
         .post(&fixture.root, "the already allocated resolved batch")
         .await;
     runtime.owner_barrier(&fixture.reader).await;
-    fixture.clock.advance_without_tokio_time(10);
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(10))
+        .unwrap();
     let target = target_session(&fixture.reader).unwrap();
-    tokio::time::timeout(Duration::from_secs(6), async {
+    (async {
         loop {
             if !native
                 .interactions
@@ -44,12 +48,14 @@ async fn a_resolved_membership_keeps_its_held_item_and_drains_the_unallocated_ra
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .unwrap();
+    .await;
     let first = frozen_follow(&fixture).await;
     assert_eq!(first.len(), 1);
     let original_item = serde_json::to_value(&first[0]).unwrap();
-    fixture.clock.advance_without_tokio_time(1);
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(1))
+        .unwrap();
     let second_position = fixture
         .post(
             &fixture.root,
@@ -72,23 +78,21 @@ async fn a_resolved_membership_keeps_its_held_item_and_drains_the_unallocated_ra
                 actor: human("board-owner"),
                 acting_for: None,
             },
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap();
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
-    fixture.clock.advance_without_tokio_time(30);
+    // The owed drain's quiet window reaches its 30 s cap.
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(30))
+        .unwrap();
+    // Held mail waits for a signal that its target loaded, not for the clock.
+    fixture.held_mail.observation_retried();
     let mut received = std::collections::BTreeSet::new();
-    let mut timed_out = false;
     for completed in 1..=2 {
-        let request = tokio::time::timeout(Duration::from_secs(6), async {
-            runtime.requests.lock().await.recv().await.unwrap()
-        })
-        .await;
-        let Ok(request) = request else {
-            timed_out = true;
-            break;
-        };
+        let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
         received.insert(request.payload.push_id.as_str().to_owned());
         runtime.completions.send(DeliveryOutcome::Started).unwrap();
         await_native_completion(&runtime, completed).await;
@@ -121,34 +125,30 @@ async fn a_resolved_membership_keeps_its_held_item_and_drains_the_unallocated_ra
         .get_thread_subscription_record(
             &fixture.reader,
             &SubscriptionScope::thread(fixture.root.clone()),
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap()
         .unwrap();
-    if !timed_out {
-        for item in &frozen {
-            await_compaction(
-                &native,
-                DeliveryItemRef {
-                    item: item.id(),
-                    digest: item.digest().clone(),
-                },
-            )
-            .await;
-        }
-        tokio::time::timeout(
-            Duration::from_secs(6),
-            runtime.observe(|event| {
-                matches!(
-                    event,
-                    crate::subscription_delivery::subscription_service::OwnerObservation::Stopped
-                )
-            }),
+
+    for item in &frozen {
+        await_compaction(
+            &native,
+            DeliveryItemRef {
+                item: item.id(),
+                digest: item.digest().clone(),
+            },
         )
-        .await
-        .unwrap();
+        .await;
     }
+    (runtime.observe(|event| {
+        matches!(
+            event,
+            crate::subscription_delivery::subscription_service::OwnerObservation::Stopped
+        )
+    }))
+    .await;
+
     let mut outcomes = Vec::new();
     for item in &frozen {
         let push = item.id().as_uuid().to_string().try_into().unwrap();
@@ -168,10 +168,7 @@ async fn a_resolved_membership_keeps_its_held_item_and_drains_the_unallocated_ra
     drop(app);
     runtime.close().await;
     fixture.close_native(native).await;
-    assert!(
-        !timed_out,
-        "resolution cancelled or lost the held batch or its owed drain: {outcomes:?}"
-    );
+
     assert!(
         outcomes
             .iter()
@@ -223,7 +220,7 @@ async fn a_real_membership_end_prevents_its_held_follow_through_a_frozen_child()
         )
         .await;
     let target = target_session(&fixture.reader).unwrap();
-    tokio::time::timeout(Duration::from_secs(6), async {
+    (async {
         loop {
             if native
                 .interactions
@@ -238,8 +235,7 @@ async fn a_real_membership_end_prevents_its_held_follow_through_a_frozen_child()
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .unwrap();
+    .await;
     let frozen = frozen_follow(&fixture).await;
     assert_eq!(frozen.len(), 1);
     let push_id: collaboration_protocol::PushId =
@@ -275,7 +271,7 @@ async fn a_real_membership_end_prevents_its_held_follow_through_a_frozen_child()
                 reader: fixture.reader.clone(),
                 scope: SubscriptionScope::thread(fixture.root.clone()),
             },
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap();
@@ -315,8 +311,26 @@ async fn a_real_membership_end_prevents_its_held_follow_through_a_frozen_child()
     }
     // Local controls need no central ACK (840). Readiness reaches the real
     // pre-injection publisher check; no fixture releases custody or fabricates outcomes.
-    *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
-    fixture.clock.advance_without_tokio_time(30);
+    // The target loads after the reader checked it, unless the membership end already
+    // settled the held follow, which then needs no load.
+    let already_settled = async {
+        loop {
+            if let Some(outcome) = native
+                .runtime()
+                .local_outcome_for_test(frozen[0].id())
+                .await
+                .unwrap()
+                && !matches!(outcome, fleet_sync_protocol::RecipientOutcome::Held)
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    };
+    tokio::select! {
+        () = checked_while_wakeable_then_loaded(&fixture, &runtime, &push_id) => {}
+        () = already_settled => {}
+    }
     let settled = async {
         loop {
             let outcome = native
@@ -333,7 +347,7 @@ async fn a_real_membership_end_prevents_its_held_follow_through_a_frozen_child()
         }
     };
     let mut native_called = false;
-    let outcome = tokio::time::timeout(Duration::from_secs(6), async {
+    let outcome = (async {
         tokio::pin!(settled);
         tokio::select! {
             outcome = &mut settled => outcome,
@@ -378,10 +392,8 @@ async fn a_real_membership_end_prevents_its_held_follow_through_a_frozen_child()
     };
     assert!(child.sequence > CancelExpansionSeq::ZERO);
     assert_eq!(child.expansion.target_item.as_str(), push_id.as_str());
-    assert!(
-        matches!(outcome.expect("membership end never reached SDK settlement"),
-        fleet_sync_protocol::RecipientOutcome::Prevented { cancel } if cancel == child.expansion.envelope.id())
-    );
+    assert!(matches!(outcome,
+        fleet_sync_protocol::RecipientOutcome::Prevented { cancel } if cancel == child.expansion.envelope.id()));
     assert!(matches!(child_outcomes.as_slice(),
         [Some(fleet_sync_protocol::RecipientOutcome::Prevented { cancel })] if *cancel == child.expansion.envelope.id()));
     assert_eq!(

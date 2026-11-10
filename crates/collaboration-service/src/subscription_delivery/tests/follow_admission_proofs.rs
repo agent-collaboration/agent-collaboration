@@ -83,7 +83,7 @@ async fn follow_admission_rechecks_generation_and_activation_before_allocating()
     assert!(
         fixture
             .admission
-            .allocate_follow_batch(&fixture.project, stale_activation, fixture.clock.now())
+            .allocate_follow_batch(&fixture.project, stale_activation, fixture.clock.utc_now())
             .await
             .unwrap()
             .is_none()
@@ -103,7 +103,7 @@ async fn follow_admission_rechecks_generation_and_activation_before_allocating()
     );
     let refused = fixture
         .admission
-        .allocate_follow_batch(&fixture.project, original, fixture.clock.now())
+        .allocate_follow_batch(&fixture.project, original, fixture.clock.utc_now())
         .await
         .unwrap();
     assert!(
@@ -125,7 +125,7 @@ async fn follow_admission_does_not_allocate_a_missing_membership() {
     assert!(
         fixture
             .admission
-            .allocate_follow_batch(&fixture.project, missing, fixture.clock.now())
+            .allocate_follow_batch(&fixture.project, missing, fixture.clock.utc_now())
             .await
             .unwrap()
             .is_none()
@@ -148,7 +148,7 @@ async fn follow_admission_refuses_overlapping_ranges_within_and_across_handoffs(
     assert!(
         fixture
             .admission
-            .allocate_follow_batch(&fixture.project, internal_overlap, fixture.clock.now())
+            .allocate_follow_batch(&fixture.project, internal_overlap, fixture.clock.utc_now())
             .await
             .unwrap()
             .is_none()
@@ -157,7 +157,7 @@ async fn follow_admission_refuses_overlapping_ranges_within_and_across_handoffs(
     assert!(
         fixture
             .admission
-            .allocate_follow_batch(&fixture.project, original.clone(), fixture.clock.now())
+            .allocate_follow_batch(&fixture.project, original.clone(), fixture.clock.utc_now())
             .await
             .unwrap()
             .is_some()
@@ -167,7 +167,7 @@ async fn follow_admission_refuses_overlapping_ranges_within_and_across_handoffs(
     assert!(
         fixture
             .admission
-            .allocate_follow_batch(&fixture.project, second, fixture.clock.now())
+            .allocate_follow_batch(&fixture.project, second, fixture.clock.utc_now())
             .await
             .unwrap()
             .is_none()
@@ -188,7 +188,7 @@ async fn poll_project_membership_freezes_one_handoff_per_root_and_rechecks_shape
         .store
         .lock()
         .await
-        .rescan_missing_subscription_windows(&fixture.reader, fixture.clock.now())
+        .rescan_missing_subscription_windows(&fixture.reader, fixture.clock.utc_now())
         .await
         .unwrap();
     let proposed = fixture
@@ -198,7 +198,7 @@ async fn poll_project_membership_freezes_one_handoff_per_root_and_rechecks_shape
         .propose_follow_batches(
             &fixture.reader,
             &roots,
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
             std::slice::from_ref(&fixture.project),
             &[],
         )
@@ -232,7 +232,7 @@ async fn poll_project_membership_freezes_one_handoff_per_root_and_rechecks_shape
     assert!(
         fixture
             .admission
-            .allocate_follow_batch(&fixture.project, combined, fixture.clock.now())
+            .allocate_follow_batch(&fixture.project, combined, fixture.clock.utc_now())
             .await
             .is_err(),
         "the locked Poll policy admitted a multi-root item"
@@ -241,7 +241,7 @@ async fn poll_project_membership_freezes_one_handoff_per_root_and_rechecks_shape
         assert!(
             fixture
                 .admission
-                .allocate_follow_batch(&fixture.project, input, fixture.clock.now())
+                .allocate_follow_batch(&fixture.project, input, fixture.clock.utc_now())
                 .await
                 .unwrap()
                 .is_some()
@@ -275,7 +275,7 @@ pub(super) async fn project_poll_roots(fixture: &OwnerFixture) -> Vec<message_bo
         .write_as(
             fixture.reader.clone(),
             message_board::BoardOperation::ProjectWatch {},
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await;
     fixture
@@ -293,7 +293,7 @@ pub(super) async fn project_poll_roots(fixture: &OwnerFixture) -> Vec<message_bo
                     lifetime_seconds: None,
                 },
             },
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap();

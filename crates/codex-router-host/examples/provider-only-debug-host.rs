@@ -14,6 +14,12 @@ type ExampleResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 #[tokio::main]
 async fn main() -> ExampleResult<()> {
+    // Debug apparatus: worker and loop events (target worker_loop and the rest) go to
+    // stderr, filtered by RUST_LOG.
+    tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
     let arguments = std::env::args().skip(1).collect::<Vec<_>>();
     if arguments == ["--help"] {
         println!(
@@ -96,6 +102,14 @@ async fn main() -> ExampleResult<()> {
         vec![ExternalProviderStartup::Launch(provider)],
     )
     .await?;
+    // Provider retention uses the clock the Host already composed.
+    if let Err(error) = runtime.configure_provider_operation_retention(None).await {
+        let cleanup = runtime.shutdown().await;
+        return Err(match cleanup {
+            Ok(()) => error.into(),
+            Err(cleanup) => format!("{error}; startup cleanup: {cleanup}").into(),
+        });
+    }
     println!(
         "{}",
         serde_json::json!({

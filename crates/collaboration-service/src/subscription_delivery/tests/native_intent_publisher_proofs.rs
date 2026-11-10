@@ -18,7 +18,7 @@ pub(super) async fn create_addressed_intent(fixture: &OwnerFixture) -> NotifyInt
                 references: Vec::new(),
                 addressees: vec![NotifyTarget::Actor(fixture.reader.clone())],
             },
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await;
     let store = fixture
@@ -101,11 +101,7 @@ async fn a_frozen_local_intent_uses_native_custody_and_replay_does_not_recreate_
         .queue_project(fixture.project.clone())
         .await
         .unwrap();
-    let request = tokio::time::timeout(Duration::from_secs(10), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .unwrap();
+    let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
     let frozen = frozen_item(&fixture, &intent).await;
     let reference = DeliveryItemRef {
         item: frozen.id(),
@@ -134,7 +130,7 @@ async fn a_frozen_local_intent_uses_native_custody_and_replay_does_not_recreate_
     fixture.assert_no_legacy_message_tables().await;
     let prune_at = fixture
         .clock
-        .now()
+        .utc_now()
         .checked_add_months(chrono::Months::new(2))
         .unwrap()
         + chrono::Duration::milliseconds(1);
@@ -198,14 +194,14 @@ async fn a_held_local_intent_keeps_its_frozen_item_and_link_until_the_reader_run
         .queue_project(fixture.project.clone())
         .await
         .unwrap();
-    let held = tokio::time::timeout(Duration::from_secs(10), async {
+    let held = (async {
         loop {
             let target = target_session(&fixture.reader).unwrap();
             let held = native.interactions.list_held_mail_push_records(&target).await.unwrap();
             if let Some(record) = held.into_iter().find(|record| matches!(&record.header_facts, PushHeaderFacts::BoardNotification { intent: delivered, .. } if delivered == &intent.intent_id)) { break record; }
             tokio::task::yield_now().await;
         }
-    }).await.unwrap();
+    }).await;
     let frozen = frozen_item(&fixture, &intent).await;
     let frozen_value = serde_json::to_value(&frozen).unwrap();
     let reference = DeliveryItemRef {
@@ -223,12 +219,13 @@ async fn a_held_local_intent_keeps_its_frozen_item_and_link_until_the_reader_run
     assert_eq!(first.record.delivery_state, PushDeliveryState::Held);
     assert!(runtime.requests.lock().await.try_recv().is_err());
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
-    fixture.clock.advance_without_tokio_time(30);
-    let request = tokio::time::timeout(Duration::from_secs(10), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .unwrap();
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(30))
+        .unwrap();
+    // Held mail waits for a signal that its target loaded, not for the clock.
+    fixture.held_mail.observation_retried();
+    let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
     assert_eq!(request.payload.push_id, held.push_id);
     runtime.completions.send(DeliveryOutcome::Started).unwrap();
     await_native_completion(&runtime, 1).await;

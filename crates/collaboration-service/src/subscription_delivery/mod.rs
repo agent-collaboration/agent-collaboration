@@ -1,5 +1,7 @@
 mod board_availability;
 mod direct_message_push;
+mod held_mail_signals;
+pub use held_mail_signals::HeldMailSignals;
 mod native_mail_attempt;
 mod reader_delivery_owner;
 mod reader_scan_scope;
@@ -17,7 +19,6 @@ pub use subscription_windows::{
 
 pub use board_availability::BoardAvailability;
 pub(crate) use subscription_clock::SubscriptionRuntimeClock;
-pub use subscription_clock::{SubscriptionClock, SystemSubscriptionClock};
 pub use subscription_service::{SubscriptionDeliveryService, SubscriptionDeliveryServiceProps};
 pub use subscription_wait::{SubscriptionWaitFilter, SubscriptionWaitResult};
 

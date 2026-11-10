@@ -4,7 +4,7 @@ use durable_steps::{
     AtomicStore, BoxFuture, Host, ReborrowScope, StoreError,
     turso_store::{TursoScope, TursoStore},
 };
-use sqlx::Connection;
+use sqlite_storage_maintenance::TransactionStart;
 use std::sync::Arc;
 
 pub struct InteractionAtomicStore<THost: Host> {
@@ -32,8 +32,11 @@ impl<THost: Host> AtomicStore for InteractionAtomicStore<THost> {
             + 'static,
     {
         let mut connection = self.owner.writer.lock().await;
-        let mut transaction = connection
-            .begin_with("BEGIN IMMEDIATE")
+        // Pure reads by the engine (due, earliest, operation) change no rows, so they
+        // commit here without signalling; the library's contract is unchanged.
+        let mut transaction = self
+            .owner
+            .transaction(&mut connection, TransactionStart::Immediate)
             .await
             .map_err(StoreError::backend)?;
         let mut scope = TursoScope::new(&mut transaction, &*self.host);

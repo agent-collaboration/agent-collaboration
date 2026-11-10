@@ -236,7 +236,7 @@ async fn read_cursor_keys(
 /// already there with the same values was carried by an earlier run; one with
 /// different values is a conflict, never overwritten.
 pub(crate) async fn carry_legacy_rows(
-    transaction: &mut sqlx::Transaction<'_, Turso>,
+    transaction: &mut crate::router_local_database::LocalTransaction<'_>,
     rows: &LegacyRows,
 ) -> Result<(), RouterLocalStorageError> {
     match rows {

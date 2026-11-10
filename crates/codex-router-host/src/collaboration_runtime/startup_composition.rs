@@ -18,25 +18,12 @@ impl CollaborationRuntime {
         inputs: CollaborationRuntimeInputs,
         provider_launches: Vec<crate::ExternalProviderStartup>,
     ) -> io::Result<Self> {
-        let (_relation_sender, relation_receiver) =
-            tokio::sync::watch::channel(RouterExecutableRelation::Match);
-        Self::start_with_external_providers_and_router_relation(
-            inputs,
-            provider_launches,
-            relation_receiver,
-        )
-        .await
-    }
-
-    pub async fn start_with_external_providers_and_router_relation(
-        inputs: CollaborationRuntimeInputs,
-        provider_launches: Vec<crate::ExternalProviderStartup>,
-        relation_receiver: tokio::sync::watch::Receiver<RouterExecutableRelation>,
-    ) -> io::Result<Self> {
         Box::pin(Self::start_with_optional_router_proxy_endpoint(
             inputs,
             provider_launches,
-            relation_receiver,
+            std::sync::Arc::new(collaboration_mcp::FixedRouterExecutableRelation(
+                RouterExecutableRelation::Match,
+            )),
             None,
             None,
             None,
@@ -47,7 +34,7 @@ impl CollaborationRuntime {
     pub(crate) async fn start_for_host_with_router_proxy_endpoint(
         host_inputs: HostCollaborationInputs,
         provider_launches: Vec<crate::ExternalProviderStartup>,
-        relation_receiver: tokio::sync::watch::Receiver<RouterExecutableRelation>,
+        router_executable_check: std::sync::Arc<dyn collaboration_mcp::RouterExecutableCheck>,
     ) -> io::Result<Self> {
         let prepared_exposure = crate::tailscale_exposure::PreparedTailscaleExposure::prepare(
             host_inputs.remote_access,
@@ -56,7 +43,7 @@ impl CollaborationRuntime {
         Box::pin(Self::start_with_optional_router_proxy_endpoint(
             host_inputs.collaboration_runtime,
             provider_launches,
-            relation_receiver,
+            router_executable_check,
             Some(host_inputs.router_proxy_endpoint),
             prepared_exposure,
             Some(host_inputs.enrollment_reset_directory),
@@ -67,12 +54,24 @@ impl CollaborationRuntime {
     pub(super) async fn start_with_optional_router_proxy_endpoint(
         inputs: CollaborationRuntimeInputs,
         provider_launches: Vec<crate::ExternalProviderStartup>,
-        relation_receiver: tokio::sync::watch::Receiver<RouterExecutableRelation>,
+        router_executable_check: std::sync::Arc<dyn collaboration_mcp::RouterExecutableCheck>,
         router_proxy_endpoint: Option<SocketAddr>,
         prepared_exposure: Option<crate::tailscale_exposure::PreparedTailscaleExposure>,
         enrollment_reset_directory: Option<std::path::PathBuf>,
     ) -> io::Result<Self> {
         let mut owner_human_id = inputs.owner_human_id.clone();
+        #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+        let mail_clock_control =
+            crate::debug_mail_clock::PreparedMailClock::load(&inputs.directory).await?;
+        #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+        let worker_clock: std::sync::Arc<dyn router_clock::RuntimeClock> = match &mail_clock_control
+        {
+            Some(control) => control.clock(),
+            None => std::sync::Arc::new(router_clock::SystemRuntimeClock::new()),
+        };
+        #[cfg(not(all(debug_assertions, feature = "runtime-test-support")))]
+        let worker_clock: std::sync::Arc<dyn router_clock::RuntimeClock> =
+            std::sync::Arc::new(router_clock::SystemRuntimeClock::new());
         let service_id = load_service_identity(&inputs.directory)?;
         let installation_peer = load_installation_peer(&inputs.directory)?;
         if inputs
@@ -153,6 +152,7 @@ impl CollaborationRuntime {
         > = std::sync::Arc::new(collaboration_contracts::UnacknowledgedProjectReplication);
         let mut configuration = collaboration_runtime::AutomationConfigurationHandle::default();
         let (opened_board, fleet_link) = board_composition::open_observed_board_admission(
+            worker_clock.clone(),
             &inputs.directory,
             machine_identity.clone(),
             inputs.board_session,
@@ -299,6 +299,7 @@ impl CollaborationRuntime {
         let message_routes =
             crate::session_message_route_composition::compose_session_message_routes(
                 crate::session_message_route_composition::SessionMessageRouteInputs {
+                    clock: worker_clock.clone(),
                     provider_endpoints,
                     directory: endpoint_directory.clone(),
                     native_backend: native_backend.clone(),
@@ -318,16 +319,9 @@ impl CollaborationRuntime {
             dyn collaboration_contracts::ScheduledRunExecution,
         > = message_routes.router.clone();
         let provider_delivery_route = message_routes.provider_route;
-        #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
-        let mail_clock_control =
-            crate::debug_mail_clock::PreparedMailClock::load(&inputs.directory).await?;
-        let subscription_clock: std::sync::Arc<dyn collaboration_service::SubscriptionClock> =
-            std::sync::Arc::new(collaboration_service::SystemSubscriptionClock);
-        #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
-        let subscription_clock = mail_clock_control
-            .as_ref()
-            .map_or(subscription_clock, |control| control.clock());
         let interactions = approval_broker.interaction_store();
+        // Created before the readers and the scheduler that subscribe to it.
+        let observation_rechecks = super::observation_recheck::ObservationRechecks::new();
         let subscription_delivery = automation_store.as_ref().map(|_| {
             let board_availability = match project_admission.as_ref() {
                 Some(admission) => collaboration_service::BoardAvailability::Available(
@@ -344,10 +338,24 @@ impl CollaborationRuntime {
                     delivery: std::sync::Arc::clone(&session_delivery),
                     presence: std::sync::Arc::clone(&subscription_presence),
                     machine_identity: machine_identity.clone(),
-                    clock: std::sync::Arc::clone(&subscription_clock),
+                    clock: std::sync::Arc::clone(&worker_clock),
                 },
             )
         });
+        if let Some(service) = &subscription_delivery {
+            // Held mail is checked again when its target may have loaded: a Codex thread
+            // load in the journal, an ACP load through the supervisor, or an observation
+            // retry while observation is unavailable.
+            service
+                .attach_held_mail_signals(collaboration_service::HeldMailSignals {
+                    journal: journal.clone(),
+                    provider_completions: external_provider_supervisor
+                        .as_ref()
+                        .map(|supervisor| supervisor.subscribe_completions()),
+                    observation_rechecks: Some(observation_rechecks.subscribe()),
+                })
+                .map_err(io::Error::other)?;
+        }
         if let Some(supervisor) = &external_provider_supervisor {
             supervisor
                 .install_approval_broker(std::sync::Arc::clone(&approval_broker))
@@ -371,7 +379,7 @@ impl CollaborationRuntime {
                         actors: actors.clone(),
                         presence: subscription_presence.clone(),
                         machine: machine_identity.clone(),
-                        clock: subscription_clock.clone(),
+                        clock: worker_clock.clone(),
                     },
                     mail_session,
                     &inputs.directory,
@@ -421,6 +429,7 @@ impl CollaborationRuntime {
                 std::sync::Arc::downgrade(publisher),
             );
         }
+        // The one wall clock every Host worker compares due times against.
         let wake_worker = automation_store.as_ref().map(|store| {
             collaboration_runtime::WakeTimingWorker::new(
                 store.clone(),
@@ -428,26 +437,44 @@ impl CollaborationRuntime {
                 configuration.clone(),
                 machine_identity.clone(),
                 interactions.clone(),
-                std::sync::Arc::new(runtime_primitives::SystemClock),
+                std::sync::Arc::clone(&worker_clock),
             )
         });
         let push_handoff_worker = automation_store.as_ref().map(|store| {
             collaboration_runtime::PushHandoffWorker::new(store.clone(), interactions.clone())
         });
         let schedule_worker = automation_store.as_ref().map(|store| {
-            collaboration_runtime::ScheduleTimingWorker::new(
+            let worker = collaboration_runtime::ScheduleTimingWorker::new(
                 store.clone(),
                 interactions.clone(),
                 scheduled_run_execution.clone(),
                 Some(native_backend.clone()),
                 configuration.clone(),
                 machine_identity.clone(),
-            )
+                std::sync::Arc::clone(&worker_clock),
+            );
+            // Subscribed here, before the scheduler starts, so no completion is missed.
+            let worker = worker.wake_on_completions(observation_rechecks.subscribe());
+            let worker = match &journal {
+                Some(journal) => worker.wake_on_completions(journal.subscribe_commits()),
+                None => worker,
+            };
+            match &external_provider_supervisor {
+                Some(supervisor) => worker.wake_on_completions(supervisor.subscribe_completions()),
+                None => worker,
+            }
         });
+        #[cfg(test)]
+        let schedule_observation = schedule_worker
+            .as_ref()
+            .map(collaboration_runtime::ScheduleTimingWorker::observation);
         let retention_worker = automation_store.as_ref().map(|store| {
-            collaboration_runtime::AutomationRetentionWorker::new(store.clone())
-                .with_native_push_store(interactions.clone())
-                .with_interaction_broker(approval_broker.clone())
+            collaboration_runtime::AutomationRetentionWorker::new(
+                store.clone(),
+                std::sync::Arc::clone(&worker_clock),
+            )
+            .with_native_push_store(interactions.clone())
+            .with_interaction_broker(approval_broker.clone())
         });
         let codex_recorder = crate::codex_conversation_recording_composition::recording_for_store(
             provider_store.as_ref(),
@@ -514,7 +541,7 @@ impl CollaborationRuntime {
                 subscription_delivery
                     .as_ref()
                     .map(|_| subscription_presence.clone()),
-                subscription_clock.clone(),
+                worker_clock.clone(),
                 Some(interactions.clone()),
                 project_replication,
                 session_context,
@@ -549,6 +576,7 @@ impl CollaborationRuntime {
                 );
             let automation =
                 collaboration_service::collaboration_application::AutomationOperations::new(
+                    worker_clock.clone(),
                     identity.clone(),
                     automation_store.clone(),
                     configuration.clone(),
@@ -568,6 +596,7 @@ impl CollaborationRuntime {
                     approval_broker.clone(),
                 ));
             let wakes = collaboration_service::collaboration_application::WakeOperations::new(
+                worker_clock.clone(),
                 &service_id.clone(),
                 automation_store.clone().as_ref(),
             )
@@ -756,14 +785,15 @@ impl CollaborationRuntime {
             .and_then(board_composition::BoardComposition::fleet_client)
             .map(|fleet| {
                 let shutdown = shutdown.clone();
-                tokio::spawn(async move { fleet.run_outbox_retention(shutdown).await })
+                let clock = std::sync::Arc::clone(&worker_clock);
+                tokio::spawn(async move { fleet.run_outbox_retention(clock, shutdown).await })
             });
         let collaboration_api =
             collaboration_api.serve(&collaboration_mcp::CollaborationApiConfig {
                 application,
                 service_directory: inputs.directory.clone(),
                 native_definitions,
-                router_executable_relation: relation_receiver,
+                router_executable_check,
                 concurrent_requests: collaboration_mcp::DEFAULT_CONCURRENT_REQUESTS,
                 shutdown: shutdown.clone(),
             });
@@ -785,8 +815,9 @@ impl CollaborationRuntime {
         }
         if let Some(worker) = push_handoff_worker {
             let handoff_shutdown = shutdown.clone();
+            let clock = std::sync::Arc::clone(&worker_clock);
             tasks.spawn(async move {
-                worker.run(handoff_shutdown).await;
+                worker.run(clock, handoff_shutdown).await;
                 Ok(())
             });
         }
@@ -814,12 +845,27 @@ impl CollaborationRuntime {
                 directory.publish(description)
             });
         }
+        let journal_unavailable_rechecks = journal.is_none().then(|| {
+            tokio::spawn(
+                super::observation_recheck::recheck_while_journal_unavailable(
+                    observation_rechecks.clone(),
+                    worker_clock.clone(),
+                    shutdown.clone(),
+                ),
+            )
+        });
         let maintenance = journal.as_ref().map(|journal| {
             let maintenance_store = std::sync::Arc::clone(journal);
             let maintenance_stop = shutdown.clone();
-            tokio::spawn(async move { maintenance_store.run_maintenance(maintenance_stop).await })
+            let clock = std::sync::Arc::clone(&worker_clock);
+            tokio::spawn(async move {
+                maintenance_store
+                    .run_maintenance(clock, maintenance_stop)
+                    .await
+            })
         });
         let mut runtime = Self {
+            clock: worker_clock,
             fleet_link,
             interactions: interactions_reader,
             #[cfg(test)]
@@ -862,6 +908,10 @@ impl CollaborationRuntime {
             fleet_outbox_maintenance,
             current_generation: None,
             observer_task: None,
+            observation_rechecks,
+            journal_unavailable_rechecks,
+            #[cfg(test)]
+            schedule_observation,
             collaboration_api,
             tailscale_exposure: None,
         };

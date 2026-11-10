@@ -99,7 +99,7 @@ impl CallRouter for MailCallRouter {
             crate::mail_push_outcome::local_follow_outcome(
                 observed.into_local_observation(),
                 0,
-                SyncTime::from_unix_millis(self.consumer.clock.now().timestamp_millis()),
+                SyncTime::from_unix_millis(self.consumer.clock.utc_now().timestamp_millis()),
             )
         } else {
             self.consumer

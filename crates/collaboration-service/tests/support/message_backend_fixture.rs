@@ -295,6 +295,7 @@ async fn exercise_message(
         .with_endpoints(vec![description])?
         .with_native_backend(native_backend.clone())?;
     let route = CodexAppServerDeliveryRoute::new(
+        identity.runtime_clock(),
         service_id.to_owned().try_into()?,
         identity.endpoint_directory(),
         native_backend,
@@ -315,8 +316,7 @@ async fn exercise_message(
         service_id.to_owned().try_into()?,
         Some("message-backend-fixture"),
     )?;
-    let clock: Arc<dyn collaboration_service::SubscriptionClock> =
-        Arc::new(collaboration_service::SystemSubscriptionClock);
+    let clock = identity.runtime_clock();
     let interactions = match &broker {
         Some(broker) => broker.interaction_store(),
         None => Arc::new(

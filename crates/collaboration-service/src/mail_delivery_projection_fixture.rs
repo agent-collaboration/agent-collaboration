@@ -25,6 +25,7 @@ use interaction_storage::{
     InteractionAtomicStore, InteractionStore, insert_mail_push_in_scope,
     mark_mail_push_attempted_in_scope, record_message_send_admission,
 };
+use router_clock::{ManualClock, RuntimeClock};
 use runtime_primitives::{Clock, IdSource, WakeFailure, WakeScheduler};
 use serde_json::json;
 use sqlx::Row;
@@ -32,7 +33,7 @@ use std::{
     collections::VecDeque,
     sync::{
         Arc, Mutex, OnceLock, Weak,
-        atomic::{AtomicI64, AtomicUsize, Ordering},
+        atomic::{AtomicUsize, Ordering},
     },
 };
 
@@ -57,11 +58,11 @@ type ProjectionReport = fleet_sync_delivery::ReportOutcome<
 pub struct ProjectionConsumer {
     pub answers: Mutex<VecDeque<LocalDelivery<RouterDeliveryTypes>>>,
     pub native: Mutex<Option<Arc<crate::MailPushDelivery>>>,
-    clock: Arc<AtomicI64>,
+    clock: Arc<ManualClock>,
 }
 impl ProjectionConsumer {
     fn now(&self) -> DateTime<Utc> {
-        DateTime::from_timestamp_millis(self.clock.load(Ordering::SeqCst)).unwrap()
+        self.clock.utc_now()
     }
 }
 impl DeliveryConsumer<TursoScope<'_, ProjectionHost>> for ProjectionConsumer {
@@ -127,7 +128,7 @@ impl DeliveryConsumer<TursoScope<'_, ProjectionHost>> for ProjectionConsumer {
 
 pub struct ProjectionHost {
     pub binding: Arc<crate::MachineSenderBinding>,
-    pub clock: Arc<AtomicI64>,
+    pub clock: Arc<ManualClock>,
     pub calls: AtomicUsize,
     pub consumer: Arc<ProjectionConsumer>,
     pub store: OnceLock<Weak<ProjectionStore>>,
@@ -144,7 +145,7 @@ pub struct DispatchWitness {
 }
 impl Clock for ProjectionHost {
     fn now(&self) -> SyncTime {
-        SyncTime::from_unix_millis(self.clock.load(Ordering::SeqCst))
+        self.clock.now()
     }
 }
 impl IdSource for ProjectionHost {
@@ -243,9 +244,14 @@ impl Fixture {
 
     pub async fn new() -> Self {
         let owner = PeerId::new(uuid::Uuid::now_v7()).unwrap();
-        Self::open(tempfile::tempdir().unwrap(), owner).await
+        Self::open(
+            tempfile::tempdir().unwrap(),
+            owner,
+            Arc::new(ManualClock::new(recorded_at())),
+        )
+        .await
     }
-    async fn open(directory: tempfile::TempDir, peer: PeerId) -> Self {
+    async fn open(directory: tempfile::TempDir, peer: PeerId, clock: Arc<ManualClock>) -> Self {
         let owner = Arc::new(
             InteractionStore::open(directory.path().join("interaction.sqlite"))
                 .await
@@ -258,7 +264,6 @@ impl Fixture {
             minimum_settlement_allowance::<RouterDeliveryTypes>().unwrap(),
         )
         .unwrap();
-        let clock = Arc::new(AtomicI64::new(recorded_at().timestamp_millis()));
         let host = Arc::new(ProjectionHost {
             binding: Arc::new(crate::MachineSenderBinding::new(
                 "00000000-0000-4000-8000-000000000001"
@@ -442,8 +447,9 @@ impl Fixture {
     }
     pub async fn reopen(self) -> Self {
         let peer = self.host.config.local.owner;
+        let clock = self.host.clock.clone();
         let directory = self.close().await;
-        Self::open(directory, peer).await
+        Self::open(directory, peer, clock).await
     }
     pub async fn close(self) -> tempfile::TempDir {
         let Self {

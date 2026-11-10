@@ -5,13 +5,15 @@ use agent_automation::{
     ScheduleRecord,
 };
 use serde::de::DeserializeOwned;
-use sqlx::{Connection, Row};
+use sqlx::Row;
 impl AutomationStore {
     pub async fn export_schedule<TTarget: DeserializeOwned, TEndpoint: DeserializeOwned>(
         &mut self,
         id: &ScheduleId,
     ) -> Result<PortableSchedulePackage<TTarget, TEndpoint>, StorageError> {
-        let mut transaction = self.connection.begin().await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Deferred)
+            .await?;
         let record: ScheduleRecord<TTarget, TEndpoint> =
             crate::schedule_inspection::read_current(&mut transaction, id).await?;
         let instruction=sqlx::query("SELECT current_revision_id,instruction_text FROM instruction_documents WHERE instruction_id=?").bind(record.definition.instruction_id.as_str()).fetch_one(&mut *transaction).await?;

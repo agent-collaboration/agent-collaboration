@@ -5,12 +5,8 @@ use std::os::unix::fs::{MetadataExt, PermissionsExt};
 async fn same_file_is_a_match() {
     let path = std::env::current_exe().expect("test executable");
     let mut observer = RouterExecutableObserver::capture(Ok(path), "test-running".to_owned());
-    let mut relation_receiver = observer.subscribe();
     assert_eq!(observer.observe().await, RouterExecutableRelation::Match);
-    assert_eq!(
-        relation_receiver.borrow_and_update().clone(),
-        RouterExecutableRelation::Match
-    );
+    assert_eq!(observer.relation(), RouterExecutableRelation::Match);
 }
 
 #[tokio::test]
@@ -150,4 +146,94 @@ fn write_version_script(path: &std::path::Path, version: &str) {
     .expect("write version script");
     std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
         .expect("make script executable");
+}
+
+/// A fresh client initializes the real collaboration API, which asks the Host's observer.
+async fn mcp_initialize_instructions(address: std::net::SocketAddr) -> Option<String> {
+    let response: serde_json::Value = reqwest::Client::new()
+        .post(format!(
+            "http://{address}{}",
+            collaboration_mcp::COLLABORATION_API_PATH
+        ))
+        .header(
+            reqwest::header::ACCEPT,
+            "application/json, text/event-stream",
+        )
+        .header("mcp-protocol-version", "2025-11-25")
+        .json(&serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2025-11-25",
+                "capabilities": {},
+                "clientInfo": {"name": "stale-banner-proof", "version": "1"}
+            }
+        }))
+        .send()
+        .await
+        .expect("POST initialize")
+        .json()
+        .await
+        .expect("initialize JSON");
+    response["result"]["instructions"]
+        .as_str()
+        .map(str::to_owned)
+}
+
+#[tokio::test]
+async fn a_fresh_mcp_initialize_reports_an_atomically_replaced_router_as_stale() {
+    let directory = tempfile::tempdir().expect("temporary directory");
+    let launch_path = directory.path().join("codex-router");
+    write_version_script(&launch_path, "0.1.36");
+    let observer = std::sync::Arc::new(tokio::sync::Mutex::new(RouterExecutableObserver::capture(
+        Ok(launch_path.clone()),
+        "0.1.36".to_owned(),
+    )));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bound listener");
+    let address = listener.local_addr().expect("listener address");
+    let shutdown = tokio_util::sync::CancellationToken::new();
+    let config = collaboration_mcp::CollaborationApiConfig {
+        application: collaboration_service::ApplicationFixture::new(
+            "00000000-0000-4000-8000-000000000001",
+            "00000000-0000-4000-8000-000000000002",
+        )
+        .expect("identity")
+        .build(),
+        service_directory: directory.path().to_owned(),
+        native_definitions: None,
+        router_executable_check: std::sync::Arc::new(SharedRouterExecutableCheck(
+            std::sync::Arc::clone(&observer),
+        )),
+        concurrent_requests: collaboration_mcp::DEFAULT_CONCURRENT_REQUESTS,
+        shutdown: shutdown.clone(),
+    };
+    let router = collaboration_mcp::collaboration_api_router(
+        &config,
+        collaboration_mcp::CollaborationApiListener::LoopbackTcp {
+            address,
+            proxy_authority: None,
+        },
+    );
+    let server = tokio::spawn(collaboration_mcp::serve_collaboration_api(
+        listener,
+        router,
+        shutdown.clone(),
+    ));
+    let before = mcp_initialize_instructions(address).await;
+
+    replace_version_script(&launch_path, "0.1.37");
+    let after = mcp_initialize_instructions(address).await;
+
+    assert_eq!(before, None);
+    assert_eq!(
+        after.as_deref(),
+        Some(
+            "⚠ Router Host is stale (running 0.1.36, installed 0.1.37); run `codex-router host restart`"
+        )
+    );
+    shutdown.cancel();
+    server.await.expect("server task").expect("server shutdown");
 }

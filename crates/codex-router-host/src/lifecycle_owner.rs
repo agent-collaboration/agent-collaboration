@@ -363,13 +363,15 @@ impl HostRuntime {
             }
             emit(None);
         }
-        let router_executable_relation = router_executable_observer.lock().await.subscribe();
+        let router_executable_check: Arc<dyn collaboration_mcp::RouterExecutableCheck> = Arc::new(
+            crate::SharedRouterExecutableCheck(Arc::clone(&router_executable_observer)),
+        );
         let mut collaboration = match collaboration_lifecycle::CollaborationLifecycle::start(
             &config,
             &instance,
             &app_server,
             readiness.remote_control_server_name().cloned(),
-            router_executable_relation,
+            router_executable_check,
         )
         .await
         {
@@ -405,10 +407,6 @@ impl HostRuntime {
         let mut active_status = None::<request_admission::ActiveStatusObservation>;
         let mut pending_identity = None::<codex_native_integration::ExecutableIdentityTask>;
         let mut retained_updater = None::<ProcessGroupChild>;
-        let mut router_executable_check =
-            tokio::time::interval(std::time::Duration::from_secs(120));
-        router_executable_check.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-        router_executable_check.tick().await;
         loop {
             if let Some(owner) = &mut collaboration {
                 let result = if active_host_replacement.is_some() {
@@ -530,10 +528,6 @@ impl HostRuntime {
                         update_drain_active,
                         router_executable_observer: std::sync::Arc::clone(&router_executable_observer),
                     }).await;
-                }
-                _ = router_executable_check.tick() => {
-                    let relation = router_executable_observer.lock().await.observe().await;
-                    state.observe_router_executable(relation);
                 }
                 completed = connection_tasks.join_next(), if !connection_tasks.is_empty() => {
                     let _completed_connection = completed;

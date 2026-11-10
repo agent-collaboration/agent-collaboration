@@ -1,7 +1,7 @@
 //! One ordered handoff queue retains automation's push effects until interaction commits.
 use crate::{AutomationStore, OwedPushOperation, PushOperation, PushOperationId, StorageError};
 use chrono::{DateTime, SecondsFormat, Utc};
-use sqlx::{Connection, SqliteConnection};
+use sqlx::SqliteConnection;
 
 pub const MAX_OWED_PUSH_OPERATION_BATCH: u32 = 100;
 struct OwedPushOperationRow {
@@ -69,7 +69,9 @@ impl AutomationStore {
         expected: &OwedPushOperation,
     ) -> Result<(), StorageError> {
         expected.validate()?;
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         let acknowledged = async {
             let row = sqlx::query_as!(
                 OwedPushOperationRow,

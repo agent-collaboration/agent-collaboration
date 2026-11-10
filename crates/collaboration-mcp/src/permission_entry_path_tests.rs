@@ -100,6 +100,7 @@ impl ApprovalFixture {
         typed_notice: bool,
     ) -> Self {
         let directory = tempfile::tempdir_in("/tmp").expect("private service directory");
+        let clock = Arc::new(router_clock::SystemRuntimeClock::new());
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
@@ -179,6 +180,7 @@ impl ApprovalFixture {
         .expect("approval broker");
         let route: Arc<dyn collaboration_contracts::SessionDeliveryRoute> =
             Arc::new(collaboration_runtime::CodexAppServerDeliveryRoute::new(
+                clock.clone(),
                 service_id.clone(),
                 endpoints,
                 native_backend.clone(),
@@ -218,6 +220,7 @@ impl ApprovalFixture {
         ));
         let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_EPOCH)
             .expect("service identity")
+            .with_runtime_clock(clock)
             .with_endpoints(vec![description])
             .expect("service endpoint")
             .with_machine_identity(machine_identity)

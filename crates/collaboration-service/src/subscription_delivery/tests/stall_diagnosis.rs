@@ -1,13 +1,13 @@
-use super::super::{SubscriptionClock, subscription_service::OwnerObservation};
+use super::super::subscription_service::OwnerObservation;
 use super::owner_fixture::*;
+use router_clock::RuntimeClock;
 use sqlx::Connection;
-use std::sync::Arc;
 
 #[tokio::test]
 async fn a_failed_scan_returns_typed_unavailable_at_the_pending_waiters_deadline() {
     let fixture = Box::pin(OwnerFixture::new()).await;
-    let clock = Arc::new(RuntimeTimerClock::new(fixture.clock.clone()));
-    let runtime = fixture.runtime_with_clock(clock).await;
+    let clock = fixture.clock.clone();
+    let runtime = fixture.runtime_with_clock(clock.clone()).await;
     let mut observer = sqlx_turso::TursoConnection::connect_with(
         &sqlx_turso::TursoConnectOptions::new()
             .filename(fixture.directory.path().join("interaction.sqlite")),
@@ -19,22 +19,26 @@ async fn a_failed_scan_returns_typed_unavailable_at_the_pending_waiters_deadline
         .await
         .unwrap();
     observer.close().await.unwrap();
-    let response = tokio::time::timeout(
-        std::time::Duration::from_secs(3),
-        runtime.service.wait(
-            fixture.reader.clone(),
-            super::super::SubscriptionWaitFilter::All,
-            1,
-            usize::MAX,
-        ),
-    )
-    .await;
-    tokio::time::timeout(std::time::Duration::from_secs(10), runtime.close())
+    let deadline = clock.monotonic_now() + std::time::Duration::from_secs(1);
+    let service = runtime.service.clone();
+    let reader = fixture.reader.clone();
+    let waiting = tokio::spawn(async move {
+        service
+            .wait(
+                reader,
+                super::super::SubscriptionWaitFilter::All,
+                1,
+                usize::MAX,
+            )
+            .await
+    });
+    clock.not_due_check_now(deadline).await;
+    clock.advance(std::time::Duration::from_secs(1)).unwrap();
+    let refusal = waiting
         .await
-        .unwrap();
-    let refusal = response
-        .expect("a failing scan stranded its pending waiter beyond the deadline")
+        .unwrap()
         .expect_err("an unsuccessful scan must not report no new activity");
+    runtime.close().await;
     assert_eq!(
         refusal.kind,
         message_board::BoardFailureKind::BoardUnavailable
@@ -44,12 +48,16 @@ async fn a_failed_scan_returns_typed_unavailable_at_the_pending_waiters_deadline
 
 #[tokio::test]
 async fn runtime_timer_clock_reaches_due_selection_and_prepared_delivery() {
-    tokio::time::timeout(std::time::Duration::from_secs(30), async {
+    (async {
         let fixture = Box::pin(OwnerFixture::new()).await;
-        let clock = Arc::new(RuntimeTimerClock::new(fixture.clock.clone()));
+        let clock = fixture.clock.clone();
         let runtime = fixture.native_runtime_with_clock(clock.clone()).await;
         fixture
-            .post_at(&fixture.root, "Timeout-free original clock", clock.now())
+            .post_at(
+                &fixture.root,
+                "Timeout-free original clock",
+                clock.utc_now(),
+            )
             .await;
         let mut observed = Vec::new();
         {
@@ -80,11 +88,10 @@ async fn runtime_timer_clock_reaches_due_selection_and_prepared_delivery() {
         runtime.await_settled().await;
         runtime.close().await;
     })
-    .await
-    .expect("bounded runtime-timer native allocation and delivery");
+    .await;
 }
 
-#[tokio::test(start_paused = true)]
+#[tokio::test]
 async fn virtual_timeout_can_expire_while_the_due_query_waits_for_a_native_project_reader() {
     let fixture = Box::pin(OwnerFixture::new()).await;
     fixture.post(&fixture.root, "Due before query").await;
@@ -92,7 +99,7 @@ async fn virtual_timeout_can_expire_while_the_due_query_waits_for_a_native_proje
         .store
         .lock()
         .await
-        .rescan_missing_subscription_windows(&fixture.reader, fixture.clock.now())
+        .rescan_missing_subscription_windows(&fixture.reader, fixture.clock.utc_now())
         .await
         .unwrap();
     let project = fixture
@@ -101,10 +108,12 @@ async fn virtual_timeout_can_expire_while_the_due_query_waits_for_a_native_proje
         .await
         .unwrap()
         .unwrap();
+    tokio::time::pause();
     let held = super::startup_fixture::exhaust_project_readers(&project).await;
+    tokio::time::resume();
     let store = fixture.store.clone();
     let reader = fixture.reader.clone();
-    let now = fixture.clock.now();
+    let now = fixture.clock.utc_now();
     let (started, started_receiver) = tokio::sync::oneshot::channel();
     let mut query = tokio::spawn(async move {
         let store = store.lock().await;
@@ -112,22 +121,21 @@ async fn virtual_timeout_can_expire_while_the_due_query_waits_for_a_native_proje
         store.due_subscription_roots(&reader, now).await
     });
     started_receiver.await.unwrap();
-    let before = tokio::time::Instant::now();
-    let timeout = tokio::time::timeout(std::time::Duration::from_secs(1), &mut query).await;
-    assert!(timeout.is_err());
+    {
+        let bound = router_clock::timeout(
+            fixture.clock.as_ref(),
+            std::time::Duration::from_secs(1),
+            &mut query,
+        );
+        tokio::pin!(bound);
+        assert!(futures_util::poll!(&mut bound).is_pending());
+        fixture
+            .clock
+            .advance(std::time::Duration::from_secs(1))
+            .unwrap();
+        assert!(bound.await.is_err());
+    }
     assert!(!query.is_finished());
-    println!(
-        "virtual timer elapsed {:?} while SQLite query was still pending",
-        tokio::time::Instant::now().duration_since(before)
-    );
     super::startup_fixture::release_project_readers(held).await;
-    tokio::time::resume();
-    assert_eq!(
-        tokio::time::timeout(std::time::Duration::from_secs(10), query)
-            .await
-            .expect("released native project readers unblock the same due query")
-            .unwrap()
-            .unwrap(),
-        vec![fixture.root.clone()]
-    );
+    assert_eq!((query).await.unwrap().unwrap(), vec![fixture.root.clone()]);
 }

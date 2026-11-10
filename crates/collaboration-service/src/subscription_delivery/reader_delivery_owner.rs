@@ -1,3 +1,4 @@
+use router_clock::RuntimeClock;
 #[path = "reader_delivery_actions.rs"]
 mod reader_delivery_actions;
 #[path = "reader_direct_messages.rs"]
@@ -19,10 +20,8 @@ use super::reader_scan_scope::ReaderScanScope;
 use super::subscription_service::OwnerObservation;
 use super::subscription_windows::{ProjectSubscriptionRecord, ReaderSubscriptionSnapshot};
 use super::{
-    BoardAvailability, SubscriptionClock,
-    subscription_facts::{
-        PRESENCE_INTERVAL, RootSubscriptionFacts, STORAGE_RETRY_INTERVAL, root_facts, wall_deadline,
-    },
+    BoardAvailability,
+    subscription_facts::{RootSubscriptionFacts, root_facts, wall_deadline},
     subscription_push::{SubscriptionPushStore, target_session},
     subscription_wait::{PollWaiter, SubscriptionWaitFilter, SubscriptionWaitResult},
 };
@@ -35,13 +34,13 @@ use message_board::{
     SubscriptionDeliveryOutcome, SubscriptionMode, SubscriptionScope, ThreadId,
     ThreadSubscriptionRecord,
 };
+use router_clock::ClockInstant;
 use std::{
     collections::{HashMap, VecDeque},
     sync::Arc,
     time::Duration,
 };
 use tokio::sync::{Mutex, broadcast, mpsc, oneshot};
-use tokio::time::Instant;
 use tokio_util::sync::CancellationToken;
 
 type DirectMessageReply = oneshot::Sender<Result<PushRecord, BoardError>>;
@@ -89,10 +88,32 @@ pub(super) enum ReaderDeliveryCommand {
     },
     Wait {
         filter: SubscriptionWaitFilter,
-        deadline: Instant,
+        deadline: ClockInstant,
         maximum_root_notice_bytes: usize,
         reply: oneshot::Sender<Result<Option<SubscriptionWaitResult>, BoardError>>,
     },
+}
+
+/// The step of an owner pass whose failure armed the retry.
+#[derive(Clone, Copy)]
+enum FailedPassStage {
+    MembershipExpiry,
+    DirectMessages,
+    SubscriptionRecords,
+    SubscriptionPush,
+    WaitSelection,
+}
+
+impl FailedPassStage {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::MembershipExpiry => "membership_expiry",
+            Self::DirectMessages => "direct_messages",
+            Self::SubscriptionRecords => "subscription_records",
+            Self::SubscriptionPush => "subscription_push",
+            Self::WaitSelection => "wait_selection",
+        }
+    }
 }
 
 pub(super) struct ReaderDeliveryOwnerProps {
@@ -105,10 +126,11 @@ pub(super) struct ReaderDeliveryOwnerProps {
     pub board_availability: BoardAvailability,
     pub push: Arc<SubscriptionPushStore>,
     pub presence: Arc<dyn TargetPresenceProbe>,
-    pub clock: Arc<dyn SubscriptionClock>,
+    pub clock: Arc<dyn RuntimeClock>,
     pub shutdown: CancellationToken,
     pub commands: mpsc::Receiver<ReaderDeliveryCommand>,
     pub activity: Option<broadcast::Receiver<ProjectId>>,
+    pub held_mail: super::held_mail_signals::HeldMailWatch,
     #[cfg(test)]
     pub observations: broadcast::Sender<OwnerObservation>,
 }
@@ -118,13 +140,16 @@ pub(super) struct ReaderDeliveryOwner {
     poll_handover_probe: super::subscription_service::PollHandoverProbeSlot,
     native_mail: super::subscription_service::NativeMailReadiness,
     follow_admission: super::subscription_service::FollowAdmissionSlot,
-    native_checked_presence: HashMap<PushId, Instant>,
-    membership_expiry_deadline: Option<Instant>,
+    /// Held native items whose target was checked since the last signal it may have loaded.
+    native_checked: std::collections::HashSet<PushId>,
+    /// Signals that the target of held mail may have loaded.
+    held_mail: super::held_mail_signals::HeldMailWatch,
+    membership_expiry_deadline: Option<ClockInstant>,
     reader: Identity,
     board_availability: BoardAvailability,
     push: Arc<SubscriptionPushStore>,
     presence: Arc<dyn TargetPresenceProbe>,
-    clock: Arc<dyn SubscriptionClock>,
+    clock: Arc<dyn RuntimeClock>,
     shutdown: CancellationToken,
     commands: mpsc::Receiver<ReaderDeliveryCommand>,
     activity: Option<broadcast::Receiver<ProjectId>>,
@@ -136,10 +161,16 @@ pub(super) struct ReaderDeliveryOwner {
     pass_preventions: Vec<crate::notification_publisher::GenerationPreventedFollow>,
     pending_waiters: VecDeque<PollWaiter>,
     pending_ended_push_cleanup: Option<String>,
+    /// When a failed clean-up of ended subscriptions is next retried, on its own backoff.
+    held_cleanup_retry_at: Option<ClockInstant>,
+    held_cleanup_backoff: collaboration_runtime::FailedPassBackoff,
     rescan: bool,
     reconcile_replies: Vec<ReconcileReply>,
-    dm_checked_presence: HashMap<PushId, Instant>,
+    /// Held DMs whose target was checked since the last signal it may have loaded.
+    dm_checked: std::collections::HashSet<PushId>,
     dm_replies: HashMap<PushId, Vec<DirectMessageReply>>,
+    /// A failed pass retries on this backoff; the next pass that completes clears it.
+    failed_pass_backoff: collaboration_runtime::FailedPassBackoff,
     #[cfg(test)]
     barriers: Vec<oneshot::Sender<()>>,
     #[cfg(test)]
@@ -162,6 +193,7 @@ impl ReaderDeliveryOwner {
             shutdown,
             commands,
             activity,
+            held_mail,
             #[cfg(test)]
             observations,
         } = props;
@@ -170,7 +202,8 @@ impl ReaderDeliveryOwner {
             poll_handover_probe,
             native_mail,
             follow_admission,
-            native_checked_presence: HashMap::new(),
+            native_checked: std::collections::HashSet::new(),
+            held_mail,
             membership_expiry_deadline: None,
             reader,
             board_availability,
@@ -188,10 +221,13 @@ impl ReaderDeliveryOwner {
             pass_preventions: Vec::new(),
             pending_waiters: VecDeque::new(),
             pending_ended_push_cleanup: None,
+            held_cleanup_retry_at: None,
+            held_cleanup_backoff: collaboration_runtime::FailedPassBackoff::default(),
             rescan: true,
             reconcile_replies: Vec::new(),
-            dm_checked_presence: HashMap::new(),
+            dm_checked: std::collections::HashSet::new(),
             dm_replies: HashMap::new(),
+            failed_pass_backoff: collaboration_runtime::FailedPassBackoff::default(),
             #[cfg(test)]
             barriers: Vec::new(),
             #[cfg(test)]
@@ -208,9 +244,10 @@ impl ReaderDeliveryOwner {
                 self.handle_command(command).await;
             }
             if let Err(error) = self.expire_due_follow_memberships().await {
+                let retry = self.failed_pass_retry(FailedPassStage::MembershipExpiry, &error);
                 self.answer_reconcile_requests(&Err(error));
                 self.refuse_expired_pending_waiters();
-                if !self.wait_for_input(Some(self.retry_deadline())).await {
+                if !self.wait_for_input(Some(retry)).await {
                     break;
                 }
                 continue;
@@ -219,10 +256,10 @@ impl ReaderDeliveryOwner {
             let pending_dms = match self.deliver_direct_messages().await {
                 Ok(pending) => pending,
                 Err(error) => {
-                    tracing::warn!(%error, "direct-message reload or delivery failed");
+                    let retry = self.failed_pass_retry(FailedPassStage::DirectMessages, &error);
                     self.answer_reconcile_requests(&Err(error));
                     self.refuse_expired_pending_waiters();
-                    if !self.wait_for_input(Some(self.retry_deadline())).await {
+                    if !self.wait_for_input(Some(retry)).await {
                         break;
                     }
                     continue;
@@ -234,9 +271,11 @@ impl ReaderDeliveryOwner {
             let current = match self.refresh_subscription_records().await {
                 Ok(records) => records,
                 Err(error) => {
+                    let retry =
+                        self.failed_pass_retry(FailedPassStage::SubscriptionRecords, &error);
                     self.answer_reconcile_requests(&Err(error));
                     self.refuse_expired_pending_waiters();
-                    if !self.wait_for_input(Some(self.retry_deadline())).await {
+                    if !self.wait_for_input(Some(retry)).await {
                         break;
                     }
                     continue;
@@ -252,7 +291,7 @@ impl ReaderDeliveryOwner {
             if reconsider_poll && let Err(error) = self.resume_poll_waiters().await {
                 tracing::warn!(%error, "Poll readiness discovery failed");
             }
-            let now = self.clock.now();
+            let now = self.clock.utc_now();
             #[cfg(test)]
             self.observe(OwnerObservation::RowsLoaded(records.len()));
             self.expiry_notices(&records).await;
@@ -310,8 +349,8 @@ impl ReaderDeliveryOwner {
                 Ok(true) => continue,
                 Ok(false) => {}
                 Err(error) => {
-                    tracing::warn!(%error, "subscription push failed before effect");
-                    if !self.wait_for_input(Some(self.retry_deadline())).await {
+                    let retry = self.failed_pass_retry(FailedPassStage::SubscriptionPush, &error);
+                    if !self.wait_for_input(Some(retry)).await {
                         break;
                     }
                     continue;
@@ -321,24 +360,21 @@ impl ReaderDeliveryOwner {
                 Ok(true) => continue,
                 Ok(false) => {}
                 Err(error) => {
-                    tracing::warn!(%error, "subscription wait selection failed");
-                    if !self.wait_for_input(Some(self.retry_deadline())).await {
+                    let retry = self.failed_pass_retry(FailedPassStage::WaitSelection, &error);
+                    if !self.wait_for_input(Some(retry)).await {
                         break;
                     }
                     continue;
                 }
             }
+            if self.failed_pass_backoff.record_success() {
+                tracing::info!(
+                    subscription_owner_retry = "recovered",
+                    "subscription owner pass recovered"
+                );
+            }
+            // Held mail adds no deadline: its target's load is a signal.
             let deadline = self.next_deadline(&records, &facts);
-            let dm_deadline = self
-                .dm_checked_presence
-                .values()
-                .chain(self.native_checked_presence.values())
-                .filter_map(|checked| checked.checked_add(PRESENCE_INTERVAL))
-                .min();
-            let deadline = match (deadline, dm_deadline) {
-                (Some(left), Some(right)) => Some(left.min(right)),
-                (left, right) => left.or(right),
-            };
             if !self.wait_for_input(deadline).await {
                 break;
             }
@@ -388,8 +424,8 @@ impl ReaderDeliveryOwner {
         &self,
         records: &[ThreadSubscriptionRecord],
         facts: &HashMap<ThreadId, RootSubscriptionFacts>,
-    ) -> Option<Instant> {
-        let now = self.clock.now();
+    ) -> Option<ClockInstant> {
+        let now = self.clock.utc_now();
         let monotonic = self.clock.monotonic_now();
         let mut next_deadline = self
             .waiters
@@ -402,15 +438,14 @@ impl ReaderDeliveryOwner {
                     .map(|record| wall_deadline(record.expires_at(), now, monotonic)),
             )
             .min();
-        if self.pending_ended_push_cleanup.is_some() {
-            let cleanup_deadline = monotonic
-                .checked_add(PRESENCE_INTERVAL)
-                .unwrap_or(monotonic);
+        if self.pending_ended_push_cleanup.is_some()
+            && let Some(cleanup_deadline) = self.held_cleanup_retry_at
+        {
             next_deadline = Some(
                 next_deadline.map_or(cleanup_deadline, |current| current.min(cleanup_deadline)),
             );
         }
-        let mut include_deadline = |deadline: Instant| {
+        let mut include_deadline = |deadline: ClockInstant| {
             next_deadline = Some(next_deadline.map_or(deadline, |current| current.min(deadline)));
         };
         for (root, facts) in facts {
@@ -443,7 +478,7 @@ impl ReaderDeliveryOwner {
         next_deadline
     }
 
-    async fn wait_for_input(&mut self, deadline: Option<Instant>) -> bool {
+    async fn wait_for_input(&mut self, deadline: Option<ClockInstant>) -> bool {
         let deadline = deadline
             .into_iter()
             .chain(
@@ -459,6 +494,8 @@ impl ReaderDeliveryOwner {
         }
         #[cfg(test)]
         self.observe(OwnerObservation::Sleeping(deadline));
+        // Only a reader holding mail wakes on the signals that its target may have loaded.
+        let holding = self.holds_mail();
         let clock = self.clock.clone();
         let timer = async {
             match deadline {
@@ -489,6 +526,18 @@ impl ReaderDeliveryOwner {
                 }
                 true
             },
+            () = self.held_mail.changed(), if holding => {
+                if let Ok(target) = target_session(&self.reader) {
+                    let owed = self.held_mail.take_owed_check(&target).await;
+                    if owed {
+                        self.dm_checked.clear();
+                        self.native_checked.clear();
+                    }
+                    #[cfg(test)]
+                    self.observe(OwnerObservation::HeldMailSignalTaken { owed });
+                }
+                true
+            },
             () = timer => true,
         }
     }
@@ -509,7 +558,7 @@ impl ReaderDeliveryOwner {
                     }
                 }
                 if !matches!(purpose, ReaderReconcilePurpose::NativeMail) {
-                    self.native_checked_presence.clear();
+                    self.native_checked.clear();
                 }
                 // Acceptance is not reconciliation: the reply waits for the scan it requested.
                 self.request_scan(scope);
@@ -518,7 +567,7 @@ impl ReaderDeliveryOwner {
                 self.observe(OwnerObservation::ReconcileRequested);
             }
             ReaderDeliveryCommand::DmQueued { push_id, reply } => {
-                self.dm_checked_presence.remove(&push_id);
+                self.dm_checked.remove(&push_id);
                 self.dm_replies.entry(push_id).or_default().push(reply);
             }
             ReaderDeliveryCommand::MailAttempt {
@@ -612,11 +661,26 @@ impl ReaderDeliveryOwner {
         self.board_availability.require_store()
     }
 
-    fn retry_deadline(&self) -> Instant {
-        self.clock
-            .monotonic_now()
-            .checked_add(STORAGE_RETRY_INTERVAL)
-            .unwrap_or_else(|| self.clock.monotonic_now())
+    /// Whether mail this reader checked is still held, waiting for a load signal.
+    pub(super) fn holds_mail(&self) -> bool {
+        !self.dm_checked.is_empty() || !self.native_checked.is_empty()
+    }
+
+    /// Arms the failed pass's retry on the backoff, logging only the failure that starts a run.
+    fn failed_pass_retry(&mut self, stage: FailedPassStage, error: &BoardError) -> ClockInstant {
+        let retry = self.failed_pass_backoff.record_failure();
+        #[cfg(test)]
+        self.observe(OwnerObservation::PassFailed(stage.as_str()));
+        if retry.starts_run {
+            tracing::warn!(
+                %error,
+                stage = stage.as_str(),
+                subscription_owner_retry = "failing",
+                "subscription owner pass failed; retrying with backoff"
+            );
+        }
+        let now = self.clock.monotonic_now();
+        now.checked_add(retry.delay).unwrap_or(now)
     }
     #[cfg(test)]
     fn observe(&self, observation: OwnerObservation) {

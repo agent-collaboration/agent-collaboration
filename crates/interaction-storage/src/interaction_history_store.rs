@@ -5,7 +5,7 @@ use super::{
     QuestionHistoryState, QuestionRequest, QuestionResponse, RefusedTypedApproval, SessionRef,
     validate_question_response_record,
 };
-use chrono::{DateTime, Months, Utc};
+use chrono::{DateTime, Utc};
 use std::{
     collections::BTreeMap,
     ops::{Deref, DerefMut},
@@ -69,7 +69,6 @@ pub(crate) mod interaction_history_database;
 use interaction_history_database::{
     HistoryDatabaseState, commit_delta, read_records, read_revision,
 };
-use sqlx::Connection;
 
 #[cfg(test)]
 struct CachePublicationPause {
@@ -91,9 +90,15 @@ impl InteractionHistoryStore {
         owner: Arc<crate::InteractionStore>,
     ) -> Result<Self, InteractionHistoryError> {
         let mut connection = owner.writer.lock().await;
-        let mut transaction = connection.begin().await.map_err(|_| {
-            InteractionHistoryError::from_storage(crate::StorageError::StorageUnavailable, true)
-        })?;
+        let mut transaction = owner
+            .transaction(
+                &mut connection,
+                sqlite_storage_maintenance::TransactionStart::Deferred,
+            )
+            .await
+            .map_err(|_| {
+                InteractionHistoryError::from_storage(crate::StorageError::StorageUnavailable, true)
+            })?;
         let revision = read_revision(&mut transaction)
             .await
             .map_err(|failure| InteractionHistoryError::from_storage(failure, true))?;
@@ -157,8 +162,12 @@ impl InteractionHistoryStore {
         let previous_revision = state.revision;
         let previous_cache = state.cache.clone();
         let mut connection = self.owner.writer.lock().await;
-        let mut transaction = connection
-            .begin_with("BEGIN IMMEDIATE")
+        let mut transaction = self
+            .owner
+            .transaction(
+                &mut connection,
+                sqlite_storage_maintenance::TransactionStart::Immediate,
+            )
             .await
             .map_err(|_| {
                 InteractionHistoryError::from_storage(
@@ -511,6 +520,40 @@ impl InteractionHistoryStore {
         .await
     }
 
+    /// The first moment retention allows deleting a durably settled record, or `None`
+    /// when no settled record has a representable due time. Pending records are not counted; settling one
+    /// commits and wakes the worker. Unreadable or invalid durable rows return an error.
+    pub async fn prune_due(
+        &self,
+        now: DateTime<Utc>,
+    ) -> Result<Option<DateTime<Utc>>, InteractionHistoryError> {
+        // Caller cancellation can leave durable history ahead of the acknowledged
+        // cache. Retention reads that history without publishing it to the cache.
+        let data = {
+            let mut connection = self.owner.writer.lock().await;
+            read_records(&mut connection)
+                .await
+                .map_err(|_| InteractionHistoryError::Unavailable)?
+        };
+        Ok(data
+            .created_at
+            .iter()
+            .filter(|(request_id, _)| {
+                data.records
+                    .get(*request_id)
+                    .is_some_and(is_settled_history_record)
+            })
+            .map(|(_, created_at)| *created_at)
+            .min()
+            .and_then(|oldest| {
+                sqlite_storage_maintenance::first_deletable_at(
+                    oldest,
+                    crate::INTERACTION_RETENTION_MONTHS,
+                    now,
+                )
+            }))
+    }
+
     pub async fn prune_expired(
         &self,
         now: DateTime<Utc>,
@@ -519,9 +562,9 @@ impl InteractionHistoryStore {
         if !(1..=500).contains(&batch_size) {
             return Err(InteractionHistoryError::Unavailable);
         }
-        let cutoff = now
-            .checked_sub_months(Months::new(crate::INTERACTION_RETENTION_MONTHS))
-            .ok_or(InteractionHistoryError::Unavailable)?;
+        let cutoff =
+            sqlite_storage_maintenance::months_before(now, crate::INTERACTION_RETENTION_MONTHS)
+                .ok_or(InteractionHistoryError::Unavailable)?;
         self.mutate_history(|data| {
             let mut expired = data
                 .created_at

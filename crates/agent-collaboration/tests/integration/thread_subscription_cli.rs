@@ -11,7 +11,7 @@ use collaboration_service::ApplicationFixture;
 use collaboration_service::BoardAvailability;
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
-use collaboration_service::SystemSubscriptionClock;
+
 use collaboration_service::{ProjectAdmission, ProjectAdmissionProps};
 use serde_json::Value;
 use serde_json::json;
@@ -32,10 +32,16 @@ type TestResult = Result<(), TestError>;
 
 #[tokio::test]
 async fn subscribe_join_wait_and_cancel_use_the_real_api_and_sqlite_paths() -> TestResult {
+    let clock = std::sync::Arc::new(router_clock::ManualClock::new(
+        chrono::DateTime::from_timestamp_millis(1792432800000)
+            .ok_or_else(|| std::io::Error::other("fixed fixture time"))?,
+    ));
+
     let directory = tempfile::tempdir_in("/tmp")?;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
     let service_directory = directory.path();
-    let registry = native_registry::new_registry(service_directory).await?;
+    let registry =
+        native_registry::new_registry_with_clock(service_directory, clock.clone()).await?;
     let origin = message_board::ActorOrigin {
         installation: message_board::ServiceId::try_from(SERVICE_ID.to_owned())?,
         machine: message_board::MachineLabel::try_from("CLI subscription proof".to_owned())?,
@@ -48,6 +54,7 @@ async fn subscribe_join_wait_and_cancel_use_the_real_api_and_sqlite_paths() -> T
     .await?;
     let fleet = Arc::new(fleet);
     let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
+        clock: clock.clone(),
         registry: registry.clone(),
         fleet: fleet.clone(),
         identity: MachineIdentity::new(
@@ -80,7 +87,7 @@ async fn subscribe_join_wait_and_cancel_use_the_real_api_and_sqlite_paths() -> T
             delivery,
             presence: Arc::clone(&presence),
             machine_identity,
-            clock: Arc::new(SystemSubscriptionClock),
+            clock: clock.clone(),
         });
     let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_EPOCH)
         .map_err(std::io::Error::other)?
@@ -96,7 +103,7 @@ async fn subscribe_join_wait_and_cancel_use_the_real_api_and_sqlite_paths() -> T
             actors: subscription_delivery.clone(),
             presence,
             machine: MachineIdentity::new(SERVICE_ID.to_owned().try_into()?, None)?,
-            clock: Arc::new(SystemSubscriptionClock),
+            clock: clock.clone(),
         },
     )?;
     let publisher = Arc::new(collaboration_service::NotificationPublisher::new(

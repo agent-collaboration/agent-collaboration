@@ -113,7 +113,10 @@ async fn exercise_delivery(
     let message: SavedMessage = serde_json::from_value(
         json!({"target":target,"content":{"kind":"agent","sender":target,"text":"A durable finding"},"delivery":"queue","generationGuard":null}),
     )?;
-    let anchor_ms = chrono::Utc::now().timestamp_millis() - 5_000;
+    let clock = std::sync::Arc::new(router_clock::ManualClock::new(
+        chrono::DateTime::UNIX_EPOCH + chrono::Duration::seconds(1_792_432_800),
+    ));
+    let anchor_ms = router_clock::RuntimeClock::utc_now(clock.as_ref()).timestamp_millis() - 5_000;
     let wake = store
         .lock()
         .await
@@ -179,7 +182,10 @@ async fn exercise_delivery(
     let recovered_delivery_ids = store
         .lock()
         .await
-        .eligible_delivery_ids(chrono::Utc::now().timestamp_millis(), 16)
+        .eligible_delivery_ids(
+            router_clock::RuntimeClock::utc_now(clock.as_ref()).timestamp_millis(),
+            16,
+        )
         .await?;
     if !recovered_delivery_ids.contains(&delivery_id) {
         return Err("restart did not expose the committed wake for dispatch".into());
@@ -188,8 +194,10 @@ async fn exercise_delivery(
         .with_endpoints(vec![description])?
         .with_automation_store(store.clone())
         .with_interaction_store(interactions.clone())
-        .with_native_backend(native_backend.clone())?;
+        .with_native_backend(native_backend.clone())?
+        .with_runtime_clock(clock.clone());
     let route: Arc<dyn SessionDeliveryRoute> = Arc::new(CodexAppServerDeliveryRoute::new(
+        identity.runtime_clock(),
         service_id.to_owned().try_into()?,
         identity.endpoint_directory(),
         native_backend,
@@ -434,7 +442,10 @@ async fn exercise_delivery(
             if !store
                 .lock()
                 .await
-                .eligible_delivery_ids(chrono::Utc::now().timestamp_millis() + 100000, 100)
+                .eligible_delivery_ids(
+                    router_clock::RuntimeClock::utc_now(clock.as_ref()).timestamp_millis() + 100000,
+                    100,
+                )
                 .await?
                 .is_empty()
             {

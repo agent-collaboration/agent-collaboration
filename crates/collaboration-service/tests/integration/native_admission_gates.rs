@@ -1,12 +1,12 @@
 //! Public MCP replies come from actual persisted library authority, without local grants.
 use crate::board_fixture;
-use crate::controlled_clock::ControlledClock;
 use board_fixture::{BoardFixture, TestError, accepted, fixture_peer};
 use fleet_sync_protocol::{
     DatabaseId, Epoch, LeaseRefusal, LeaseState, LeaseStatus, RenewAnswer, RenewResult,
 };
 use message_board::*;
-use runtime_primitives::{Clock, SystemClock};
+use router_clock::ManualClock;
+use runtime_primitives::Clock;
 use serde_json::{Value, json};
 use std::sync::Arc;
 
@@ -38,7 +38,9 @@ async fn assert_unrecorded(
 )]
 async fn actual_expiry_names_the_deadline_keeps_reads_and_same_epoch_renewal_admits_the_same_key()
 -> Result<(), TestError> {
-    let clock = Arc::new(ControlledClock::at(SystemClock.now()));
+    let clock = Arc::new(ManualClock::starting_at(
+        runtime_primitives::SyncTime::from_unix_millis(1_800_000_000_000),
+    )?);
     let initial = clock.now();
     let fixture = BoardFixture::start_with_clock(clock.clone()).await?;
     let (project, workstream) = fixture.project().await?;
@@ -65,7 +67,7 @@ async fn actual_expiry_names_the_deadline_keeps_reads_and_same_epoch_renewal_adm
         expires_at,
         remaining_ms: 14_400_000,
     };
-    clock.set(expires_at);
+    clock.advance_to(expires_at)?;
     let expected_expiry =
         chrono::DateTime::from_timestamp_millis(expires_at.unix_millis()).ok_or("expiry UTC")?;
     let response = fixture.api.call("task_create", request.clone()).await?;
@@ -164,7 +166,7 @@ async fn an_actual_superseding_renewal_keeps_the_write_refusal_and_stops_public_
     let high = read.high_water();
     read.finish().await?;
     let database = fixture._registry.database(&project).await?;
-    let now = SystemClock.now();
+    let now = runtime_primitives::SyncTime::from_unix_millis(1_800_000_000_000);
     database
         .observe_renewal(
             RenewAnswer::Refused(LeaseRefusal::NotWriter {
@@ -232,7 +234,7 @@ async fn an_unregistered_native_owner_refuses_the_first_write_and_registration_e
         }
     }
     let database = fixture._registry.database(&project).await?;
-    let now = SystemClock.now();
+    let now = runtime_primitives::SyncTime::from_unix_millis(1_800_000_000_000);
     database
         .observe_registration(
             LeaseStatus {

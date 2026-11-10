@@ -18,7 +18,6 @@ use collaboration_service::BoardAvailability;
 
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
-use collaboration_service::SystemSubscriptionClock;
 
 use serde_json::{Value, json};
 use std::{
@@ -134,21 +133,23 @@ impl Surfaces {
             interaction_storage::InteractionStore::open(root.path().join("interaction.sqlite"))
                 .await?,
         );
+        let mut identity =
+            ApplicationFixture::new(SERVICE, SERVICE)?.with_session_delivery(carrier.clone());
+        if let Some(admission) = admission {
+            identity = identity.with_project_admission(admission);
+        }
+        let clock = identity.runtime_clock();
         let delivery = SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
             board_availability: BoardAvailability::Unavailable,
             push_store: interactions.clone(),
             delivery: carrier.clone(),
             presence: carrier.clone(),
             machine_identity: machine_identity.clone(),
-            clock: Arc::new(SystemSubscriptionClock),
+            clock: clock.clone(),
         });
         delivery.start().await?;
-        let mut identity = ApplicationFixture::new(SERVICE, SERVICE)?
-            .with_session_delivery(carrier.clone())
-            .with_subscription_delivery_service(delivery.clone(), carrier.clone());
-        if let Some(admission) = admission {
-            identity = identity.with_project_admission(admission);
-        }
+        let identity =
+            identity.with_subscription_delivery_service(delivery.clone(), carrier.clone());
         let peer = match &session {
             Some(session) => session.peer,
             None => fleet_sync_protocol::PeerId::new(uuid::Uuid::now_v7())?,
@@ -161,7 +162,7 @@ impl Surfaces {
                 actors: delivery.clone(),
                 presence: carrier.clone(),
                 machine: machine_identity,
-                clock: Arc::new(SystemSubscriptionClock),
+                clock,
             },
             session,
         )?;

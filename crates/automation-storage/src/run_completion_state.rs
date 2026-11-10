@@ -5,7 +5,6 @@ use agent_automation::{
     ProviderSettlementEffect, RouteEffectEvidence, RunId, SubmissionEffect, WorkerOutcome,
 };
 use serde::{Serialize, de::DeserializeOwned};
-use sqlx::Connection;
 pub struct RunCompletion {
     pub run_id: RunId,
     pub settlement: RunStopIdentity,
@@ -28,7 +27,9 @@ impl AutomationStore {
         {
             return Err(StorageError::InvalidRecord);
         }
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         let mut record =
             crate::run_inspection::read_current::<TTarget, TEndpoint, TGeneration, TReceipt>(
                 &mut transaction,

@@ -2,7 +2,7 @@
 use super::*;
 use futures_util::{SinkExt, StreamExt};
 use sqlx::Connection;
-use std::{collections::BTreeMap, time::Duration};
+use std::collections::BTreeMap;
 use tokio_tungstenite::tungstenite::Message;
 type TestResult<TValue> = Result<TValue, Box<dyn std::error::Error + Send + Sync>>;
 #[path = "summary_timeout_crash_tests.rs"]
@@ -13,13 +13,13 @@ pub(super) fn crash_checkpoint(stage: &str) {
 
 #[tokio::test]
 async fn expired_summary_requests_interrupt_when_history_is_rejected() -> TestResult<()> {
-    exercise_timeout_connection(false).await
+    Box::pin(exercise_timeout_connection(false)).await
 }
 
 #[tokio::test]
 async fn summary_connection_failure_preserves_timeout_retry_without_stopping_intent()
 -> TestResult<()> {
-    exercise_timeout_connection(true).await
+    Box::pin(exercise_timeout_connection(true)).await
 }
 
 #[tokio::test]
@@ -49,7 +49,7 @@ async fn unavailable_native_source_blocks_summary_and_keeps_worker_outcome() -> 
     let schedule_id = agent_automation::ScheduleId::generate();
     let instruction_id = agent_automation::InstructionId::generate();
     let revision_id = agent_automation::RevisionId::generate();
-    let now_ms = chrono::Utc::now().timestamp_millis();
+    let now_ms = 1_800_000_000_000_i64;
     let worker_outcome = agent_automation::WorkerOutcome::Completed { explanation: None };
     let attempt = SummaryAttempt {
         attempt_id: agent_automation::AttemptId::generate(),
@@ -179,6 +179,10 @@ async fn unavailable_native_source_blocks_summary_and_keeps_worker_outcome() -> 
         source: None,
         record,
         timeout_seconds: 900,
+        clock: &router_clock::ManualClock::starting_at(
+            runtime_primitives::SyncTime::from_unix_millis(1792432800000),
+        )
+        .unwrap(),
     })
     .await
     .map_err(|error| format!("unavailable source step: {error}"))?;
@@ -422,9 +426,13 @@ async fn exercise_timeout_connection(fail_connection: bool) -> TestResult<()> {
         source: None,
         record,
         timeout_seconds: 1,
+        clock: &router_clock::ManualClock::starting_at(
+            runtime_primitives::SyncTime::from_unix_millis(1792432800000),
+        )
+        .unwrap(),
     })
     .await?;
-    tokio::time::timeout(Duration::from_secs(2), server).await???;
+    server.await??;
     let mut inspection = sqlx::SqliteConnection::connect_with(
         &sqlx::sqlite::SqliteConnectOptions::new().filename(&path),
     )

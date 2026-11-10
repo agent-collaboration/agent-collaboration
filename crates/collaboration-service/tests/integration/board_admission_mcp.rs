@@ -19,6 +19,10 @@ type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
     reason = "Assertions prove the test contract; Result propagates fixture errors."
 )]
 async fn native_mcp_admission_replays_decisions_and_isolates_project_authority() -> TestResult {
+    let clock = std::sync::Arc::new(router_clock::ManualClock::new(
+        chrono::DateTime::UNIX_EPOCH + chrono::Duration::seconds(1_792_432_800),
+    ));
+
     let directory = tempfile::tempdir()?;
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))?;
@@ -36,11 +40,12 @@ async fn native_mcp_admission_replays_decisions_and_isolates_project_authority()
     let registry = Arc::new(ProjectStoreRegistry::new(
         directory.path(),
         Some(fixture_peer()?),
-        Arc::new(runtime_primitives::SystemClock),
+        clock.clone(),
         message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
             .expect("32-byte fixture cursor key"),
     ));
     let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
+        clock: clock.clone(),
         registry: registry.clone(),
         fleet: fleet.clone(),
         identity: MachineIdentity::new(

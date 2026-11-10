@@ -1,10 +1,10 @@
 //! Caller-keyed poll renewals use independent native ledgers and expose partial outcomes.
 use crate::board_fixture;
-use crate::controlled_clock::ControlledClock;
 use crate::native_authority;
 use board_fixture::{BoardFixture, TestError, accepted, fixture_peer};
 use message_board::*;
-use runtime_primitives::{Clock, SystemClock};
+use router_clock::ManualClock;
+use runtime_primitives::Clock;
 use serde_json::json;
 use std::{sync::Arc, time::Duration};
 #[tokio::test]
@@ -14,13 +14,16 @@ async fn wait_renewals_replay_each_project_and_keep_partial_refusals_visible()
 }
 
 async fn exercise_wait_renewals() -> Result<(), TestError> {
-    let clock = Arc::new(ControlledClock::at(SystemClock.now()));
+    let clock = Arc::new(ManualClock::starting_at(
+        runtime_primitives::SyncTime::from_unix_millis(1_800_000_000_000),
+    )?);
     let initial = clock.now();
     let fixture = BoardFixture::start_poll_with_clock(clock.clone()).await?;
     let (second, _) = fixture.project().await?;
     // Different genuine grant deadlines make only the second project expired.
-    clock.set(initial.after(Duration::from_millis(1)));
+    clock.advance_to(initial.after(Duration::from_millis(1)))?;
     let (first, _) = fixture.project().await?;
+    // These scopes stay live across the four-hour native lease expiry below.
     for project in [&first, &second] {
         let mut subscribe = fixture.header();
         let fields = subscribe
@@ -30,7 +33,7 @@ async fn exercise_wait_renewals() -> Result<(), TestError> {
             "scope".to_owned(),
             json!({"kind":"project","projectId":project}),
         );
-        fields.insert("policy".to_owned(), json!({"mode":"poll","whenIdle":null,"quietSeconds":0,"capSeconds":900,"lifetimeSeconds":3600}));
+        fields.insert("policy".to_owned(), json!({"mode":"poll","whenIdle":null,"quietSeconds":0,"capSeconds":900,"lifetimeSeconds":28800}));
         accepted(&fixture.api.call("thread_subscribe", subscribe).await?);
     }
     let first_id = RequestId::generate();
@@ -48,7 +51,26 @@ async fn exercise_wait_renewals() -> Result<(), TestError> {
         expires_at: expires,
         remaining_ms: 14_400_000,
     };
-    clock.set(expires);
+    clock.advance_to(expires)?;
+    let reader: Identity = serde_json::from_value(fixture.actor.clone())?;
+    for project in [&first, &second] {
+        let store = fixture
+            ._registry
+            .existing_project(project)
+            .await?
+            .ok_or("scope project")?;
+        let mut read = store.snapshot().await?;
+        let membership = read
+            .membership(&reader, &SubscriptionScope::project(project.clone()))
+            .await?
+            .ok_or("live poll scope")?;
+        assert!(
+            membership.ended().is_none()
+                && membership.expires_at() > router_clock::RuntimeClock::utc_now(clock.as_ref()),
+            "the native lease expiry probe requires both poll scopes to remain live"
+        );
+        read.finish().await?;
+    }
     let partial = fixture.api.call("thread_wait", request.clone()).await?;
     assert_eq!(
         partial.pointer("/result/renewals/0/requestId"),

@@ -1,4 +1,5 @@
 //! Follow allocation uses the project transaction and native custody, including held work.
+use super::native_held_mail_proofs::checked_while_wakeable_then_loaded;
 use super::*;
 use board_sync_protocol::{BoardDeliveryBody, BoardDeliveryTypes};
 use collaboration_mail_protocol::NotificationSource;
@@ -64,7 +65,7 @@ pub(super) async fn follow_application_with_replication(
                 None,
             )
             .unwrap(),
-            clock: runtime.service.subscription_clock(),
+            clock: runtime.service.runtime_clock(),
         },
         session,
     )
@@ -108,7 +109,7 @@ async fn held_follow_keeps_its_frozen_item_ranges_and_link_until_one_native_acce
         .post(&fixture.root, "same-generation native follow")
         .await;
     let target = target_session(&fixture.reader).unwrap();
-    let held = tokio::time::timeout(Duration::from_secs(6), async {
+    let held = (async {
         loop {
             let records = native
                 .interactions
@@ -125,18 +126,6 @@ async fn held_follow_keeps_its_frozen_item_ranges_and_link_until_one_native_acce
         }
     })
     .await;
-    // Clean up even when today's legacy C5 cannot allocate native follow mail.
-    let held = match held {
-        Ok(held) => held,
-        Err(error) => {
-            publisher.shutdown().await;
-            drop(publisher);
-            drop(app);
-            runtime.close().await;
-            fixture.close_native(native).await;
-            panic!("native follow handoff missing: {error}");
-        }
-    };
     let frozen = frozen_follow(&fixture).await;
     if frozen.len() != 1 {
         let count = frozen.len();
@@ -183,14 +172,9 @@ async fn held_follow_keeps_its_frozen_item_ranges_and_link_until_one_native_acce
     );
     assert!(runtime.requests.lock().await.try_recv().is_err());
 
-    // Act through the existing readiness cadence, without calling release_held.
-    *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
-    fixture.clock.advance_without_tokio_time(30);
-    let request = tokio::time::timeout(Duration::from_secs(10), async {
-        runtime.requests.lock().await.recv().await.unwrap()
-    })
-    .await
-    .unwrap();
+    // The target loads after the reader checked it, without calling release_held.
+    checked_while_wakeable_then_loaded(&fixture, &runtime, &held.push_id).await;
+    let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
     assert_eq!(request.payload.push_id, held.push_id);
     runtime.completions.send(DeliveryOutcome::Started).unwrap();
     await_native_completion(&runtime, 1).await;

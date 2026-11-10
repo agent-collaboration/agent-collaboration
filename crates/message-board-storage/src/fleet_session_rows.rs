@@ -74,7 +74,7 @@ impl FleetCache {
         state: &ClientSessionState,
     ) -> Result<(), RouterLocalStorageError> {
         let _writer = self.database.writer.lock().await;
-        let mut transaction = self.database.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self.database.write_transaction().await?;
         if read_session(&mut transaction).await?.is_some() {
             let session = state.session_id.to_string();
             let cursor = state.notice_cursor.value().to_string();
@@ -99,7 +99,7 @@ impl FleetCache {
         position: NoticePosition,
     ) -> Result<(), RouterLocalStorageError> {
         let _writer = self.database.writer.lock().await;
-        let mut transaction = self.database.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self.database.write_transaction().await?;
         if read_session(&mut transaction).await?.is_none() {
             return Err(invalid("machineNoticeProgress.sessionMissing"));
         }

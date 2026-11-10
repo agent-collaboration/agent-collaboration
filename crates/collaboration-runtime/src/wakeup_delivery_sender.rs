@@ -48,6 +48,7 @@ impl WakeDeliverySender {
 
     #[cfg(feature = "test-support")]
     pub fn new(
+        clock: Arc<dyn runtime_primitives::Clock>,
         interactions: Arc<interaction_storage::InteractionStore>,
         delivery: Arc<dyn SessionMessageDelivery>,
         configuration: crate::AutomationConfigurationHandle,
@@ -58,7 +59,7 @@ impl WakeDeliverySender {
             delivery,
             configuration,
             machine_identity,
-            clock: Arc::new(runtime_primitives::SystemClock),
+            clock,
         }
     }
 }

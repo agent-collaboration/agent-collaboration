@@ -401,3 +401,19 @@ fn intent_is_loaded_only_and_mismatched_push_or_router_is_refused_before_dispatc
     );
     assert_eq!(working(&item).delivery_state, PushDeliveryState::Pending);
 }
+
+#[test]
+fn a_follow_batch_for_a_target_its_route_cannot_start_is_refused_whatever_its_idle_policy() {
+    for idle in [WhenIdle::Hold, WhenIdle::Wake, WhenIdle::Drop] {
+        let item = follow(SubscriptionMode::Deliver, idle);
+        let MailPushPreparation::Drop { receipt } = prepare(&item, TargetPresence::NotRunning)
+        else {
+            panic!("a closed Claude Code peer's batch must be refused, not held or attempted");
+        };
+        assert!(matches!(
+            &receipt.outcome,
+            collaboration_protocol::DeliveryOutcome::NotSubmitted { retryable: false, reason }
+                if reason == "target is not running; follow batch refused"
+        ));
+    }
+}

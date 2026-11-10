@@ -72,7 +72,7 @@ async fn owed_wake_process_loss_replays_before_admission_and_before_acknowledgem
             identity
                 .push_handoff_worker()
                 .ok_or("handoff worker missing")?
-                .run(stop.clone()),
+                .run(identity.runtime_clock(), stop.clone()),
         );
         let wake = tokio::spawn(
             identity

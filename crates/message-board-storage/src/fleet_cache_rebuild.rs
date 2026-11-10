@@ -35,7 +35,7 @@ impl FleetCache {
         snapshot_at: FleetPosition,
     ) -> Result<FleetCacheRebuild<'_>, RouterLocalStorageError> {
         let writer = self.database.writer.lock().await;
-        let mut transaction = self.database.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self.database.write_transaction().await?;
         let result = async {
             let _ = cache_checkpoint(&mut transaction).await?;
             // There is one rebuild writer. Rows left by a dropped or crashed
@@ -93,12 +93,7 @@ impl FleetCacheRebuild<'_> {
         {
             return Err(RouterLocalStorageError::InvalidCursor);
         }
-        let mut transaction = self
-            .cache
-            .database
-            .pool
-            .begin_with("BEGIN IMMEDIATE")
-            .await?;
+        let mut transaction = self.cache.database.write_transaction().await?;
         let result = async {
             for record in records {
                 put_staged_record(&mut transaction, record).await?;
@@ -158,12 +153,7 @@ impl FleetCacheRebuild<'_> {
         if previous != through {
             return Err(RouterLocalStorageError::PositionGap);
         }
-        let mut transaction = self
-            .cache
-            .database
-            .pool
-            .begin_with("BEGIN IMMEDIATE")
-            .await?;
+        let mut transaction = self.cache.database.write_transaction().await?;
         let result = async {
             // A snapshot page may contain a newer current row than its cut.
             // Replay is deliberately last-write-wins inside private staging.
@@ -191,12 +181,7 @@ impl FleetCacheRebuild<'_> {
         let RebuildStage::Ready { through } = self.stage else {
             return Err(RouterLocalStorageError::InvalidCursor);
         };
-        let mut transaction = self
-            .cache
-            .database
-            .pool
-            .begin_with("BEGIN IMMEDIATE")
-            .await?;
+        let mut transaction = self.cache.database.write_transaction().await?;
         let result = async {
             validate_staged_records(&mut transaction, through).await?;
             let _ = cache_checkpoint(&mut transaction).await?;

@@ -1,13 +1,12 @@
 //! Row16 process case: a real held follow survives actual native history pruning.
 #![deny(clippy::too_many_lines)]
 use super::{
+    acp_recipient::AcpRecipient,
     fixture::{BoardFixture, identity},
     follow_fixture::{FollowMembership, delivered, native_state, only_item},
-    notification_peer::NotificationPeer,
     takeover_readbacks::{deliveries, handoffs},
 };
 use codex_router_test_support::FixtureResult;
-use collaboration_client::protocol::{EndpointId, EndpointRef};
 use collaboration_protocol::{PushDeliveryState, PushRecord, PushRecordShowResult};
 use owned_process_test_support::scenario_finalization::run_scenario;
 use serde_json::json;
@@ -18,42 +17,27 @@ const FOLLOW_SUMMARY: &str = "Router: new thread activity";
 pub async fn held_follow_survives_history_pruning(fixture: &mut BoardFixture) -> FixtureResult {
     fixture.create().await?;
     let installation = fixture.installation.as_ref().ok_or("installation absent")?;
-    let endpoint = EndpointRef {
-        service_id: installation.service_id.clone(),
-        endpoint_id: EndpointId::try_from("claude-local".to_owned())?,
-    };
-    let session: collaboration_client::protocol::SessionId = identity().try_into()?;
-    run_scenario(
-        None,
-        async |peer: &mut Option<NotificationPeer>| {
-            *peer = Some(
-                NotificationPeer::start(&fixture.directory, endpoint.clone(), session.clone())
-                    .await?,
-            );
-            let target = peer.as_ref().ok_or("initial peer absent")?.target.clone();
-            let control =
-                terminal_control(fixture, peer.as_mut().ok_or("initial peer absent")?).await?;
-            peer.take().ok_or("initial peer absent")?.shutdown().await?;
-            let held = hold_and_prune(fixture, &target, &control).await?;
-            *peer = Some(
-                NotificationPeer::start(&fixture.directory, endpoint.clone(), session.clone())
-                    .await?,
-            );
-            deliver_after_prune(
-                fixture,
-                peer.as_mut().ok_or("resumed peer absent")?,
-                &control,
-                &held,
-            )
-            .await
-        },
-        async |peer: Option<NotificationPeer>| match peer {
-            Some(peer) => peer.shutdown().await,
-            None => Ok(()),
-        },
-        || Ok(()),
-    )
-    .await
+    // The recipient is a session the Router holds for while it is not loaded and later
+    // loads: a Cursor-endpoint session on the fixture provider this Host now runs.
+    let recipient = AcpRecipient::arm(
+        &fixture.directory,
+        &String::from(installation.service_id.clone()),
+        &identity(),
+    )?;
+    fixture.stop_host().await?;
+    fixture.reopen_host().await?;
+    let target = recipient.target.clone();
+    // Present for the control message: the provider loads the session, which also gives
+    // the Router its record, so later it can tell a held session from an unknown one.
+    recipient.load(fixture.host()?).await?;
+    let control = terminal_control(fixture, &recipient).await?;
+    // The recipient goes absent: a fresh Host's provider has not loaded its session.
+    fixture.stop_host().await?;
+    fixture.reopen_host().await?;
+    let held = hold_and_prune(fixture, &target, &control).await?;
+    // It comes back: the provider loads the session, and only that load releases the follow.
+    recipient.come_back(fixture.host()?).await?;
+    deliver_after_prune(fixture, &recipient, &control, &held).await
 }
 
 async fn hold_and_prune(
@@ -122,17 +106,10 @@ async fn hold_and_prune(
 
 async fn deliver_after_prune(
     fixture: &BoardFixture,
-    peer: &mut NotificationPeer,
+    peer: &AcpRecipient,
     control: &PushRecord,
     held: &PushRecord,
 ) -> FixtureResult {
-    fixture
-        .host()?
-        .mcp(
-            "thread_subscriptions",
-            json!({"actor":{"kind":"session","session":peer.target}}),
-        )
-        .await?;
     let text = peer.expect_text(FOLLOW_SUMMARY).await?;
     assert!(
         text.contains(held.push_id.as_str()),
@@ -148,7 +125,7 @@ async fn deliver_after_prune(
             .map(|activity| &activity.ranges),
         held.activity.as_ref().map(|activity| &activity.ranges)
     );
-    assert_eq!(peer.count_matching(FOLLOW_SUMMARY).await?, 1);
+    assert_eq!(peer.count_matching(FOLLOW_SUMMARY)?, 1);
     let unavailable = fixture
         .host()?
         .mcp_reply(
@@ -165,7 +142,7 @@ async fn deliver_after_prune(
 
 async fn terminal_control(
     fixture: &BoardFixture,
-    peer: &mut NotificationPeer,
+    peer: &AcpRecipient,
 ) -> FixtureResult<PushRecord> {
     let item = identity();
     let sent = fixture
@@ -178,7 +155,7 @@ async fn terminal_control(
         .await?;
     assert_eq!(
         sent.pointer("/receipt/outcome/kind"),
-        Some(&json!("peerMessageWritten"))
+        Some(&json!("started"))
     );
     peer.expect_text(CONTROL_BODY).await?;
     let shown = fixture

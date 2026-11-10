@@ -43,7 +43,8 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
     let message: SavedMessage = serde_json::from_value(
         json!({"target":target(),"content":{"kind":"agent","sender":target(),"text":"Policy queue witness"},"delivery":"queue"}),
     )?;
-    let anchor_ms = chrono::Utc::now().timestamp_millis() - 1000;
+    let anchor_ms =
+        router_clock::RuntimeClock::utc_now(fixture.clock.as_ref()).timestamp_millis() - 1000;
     let wake = store
         .lock()
         .await
@@ -87,6 +88,7 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
     directory.publish(fixture.endpoint.clone())?;
     let route = Arc::new(
         collaboration_runtime::CodexAppServerDeliveryRoute::new(
+            fixture.clock.clone(),
             fixture.backend.endpoint.service_id.clone(),
             directory,
             fixture.backend.clone(),
@@ -97,6 +99,7 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
     let delivery: Arc<dyn SessionMessageDelivery> =
         Arc::new(SessionDeliveryRouter::new(vec![route]));
     let sender = WakeDeliverySender::new(
+        fixture.clock.clone(),
         interactions,
         delivery.clone(),
         collaboration_runtime::AutomationConfigurationHandle::default(),

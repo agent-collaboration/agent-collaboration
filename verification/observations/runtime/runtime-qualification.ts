@@ -21,25 +21,62 @@ function readDebugSignature(path: string): string {
   return signature.stderr;
 }
 
+function requireSigningIdentity(
+  path: string,
+  identifier: string,
+  signatureProbe: (path: string) => string,
+): void {
+  const fields = signatureProbe(path).split("\n");
+  if (!fields.includes(`Identifier=${identifier}`) || !fields.includes("TeamIdentifier=974QD84WVC"))
+    throw new Error("debug signing identity mismatch");
+}
+
 export function qualifyNormalBinaries(
   qualification: string,
   signatureProbe: (path: string) => string = readDebugSignature,
+  requiredTargets: readonly ("codex-router" | "agent-collaboration" | "agent-sessions")[] = [
+    "codex-router",
+    "agent-collaboration",
+    "agent-sessions",
+  ],
 ): Map<string, QualifiedBinary> {
   const records = binaryQualificationSchema.parse(decode(readFileSync(qualification, "utf8")));
   const binaries = new Map(records.binaries.map((record) => [record.target, record]));
-  for (const name of ["codex-router", "agent-collaboration", "agent-sessions"]) {
+  const verified = new Map<string, QualifiedBinary>();
+  for (const name of requiredTargets) {
     const item = binaries.get(name);
     if (item === undefined) throw new Error(`qualified binary missing: ${name}`);
     if (sha256(item.path) !== item.sha256 || item.testGuardFeatures.length > 0)
       throw new Error("binary hash or normal-build mismatch");
-    const signature = signatureProbe(item.path);
-    if (
-      !signature.includes(`Identifier=dev.shravansunder.${name}.debug`) ||
-      !signature.includes("TeamIdentifier=974QD84WVC")
-    )
-      throw new Error("debug signing identity mismatch");
+    requireSigningIdentity(item.path, `dev.shravansunder.${name}.debug`, signatureProbe);
+    verified.set(name, item);
   }
-  return binaries;
+  return verified;
+}
+
+/** The declared proof example carries its real Cargo feature list, unlike a product binary. */
+export function qualifyWorkerHost(input: {
+  readonly qualification: string;
+  readonly repository: string;
+  readonly signatureProbe?: (path: string) => string;
+}): QualifiedBinary {
+  const records = binaryQualificationSchema.parse(
+    decode(readFileSync(input.qualification, "utf8")),
+  );
+  const host = records.binaries.find((item) => item.target === "provider-only-debug-host");
+  if (host === undefined) throw new Error("qualified provider-only proof Host missing");
+  const expected = join(
+    realpathSync(input.repository),
+    "target/debug/examples/provider-only-debug-host",
+  );
+  if (realpathSync(host.path) !== expected || sha256(host.path) !== host.sha256)
+    throw new Error("proof Host source/build path or hash mismatch");
+  requireSigningIdentity(
+    host.path,
+    "dev.shravansunder.test.provider-only-debug-host",
+    input.signatureProbe ?? readDebugSignature,
+  );
+  return host;
 }
 
 export function packageSearchPath(path: string): boolean {

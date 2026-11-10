@@ -112,6 +112,7 @@ pub enum CollaborationFailure {
     TailnetExposure(#[source] io::Error),
 }
 pub struct CollaborationRuntime {
+    clock: std::sync::Arc<dyn router_clock::RuntimeClock>,
     fleet_link: board_fleet_sync::FleetLinkObservation,
     interactions: std::sync::Weak<interaction_storage::InteractionStore>,
     #[cfg(test)]
@@ -159,6 +160,13 @@ pub struct CollaborationRuntime {
     fleet_outbox_maintenance: Option<tokio::task::JoinHandle<()>>,
     current_generation: Option<CodexGeneration>,
     observer_task: Option<tokio::task::JoinHandle<()>>,
+    /// One re-check per observation retry while lifecycle observation is unavailable.
+    observation_rechecks: observation_recheck::ObservationRechecks,
+    /// Re-checks on the observation backoff when the journal failed to open.
+    journal_unavailable_rechecks: Option<tokio::task::JoinHandle<()>>,
+    /// What the scheduler loop reports, for composition tests.
+    #[cfg(test)]
+    schedule_observation: Option<collaboration_runtime::WorkerObservation>,
     manifest: Option<collaboration_runtime::ManifestPublication>,
     collaboration_api: ServedCollaborationApi,
     tailscale_exposure: Option<crate::tailscale_exposure::TailscaleExposure>,
@@ -166,6 +174,13 @@ pub struct CollaborationRuntime {
 pub(crate) use fleet_observation::FleetObservationFuture;
 
 impl CollaborationRuntime {
+    #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
+    #[must_use]
+    pub fn runtime_test_sleep_was_checked(&self, delay: std::time::Duration) -> bool {
+        self.clock
+            .has_not_due_check_now(self.clock.monotonic_now() + delay)
+    }
+
     pub(crate) fn observe_fleet(&self) -> FleetObservationFuture {
         let link = self.fleet_link.clone();
         let interactions = self.interactions.clone();
@@ -278,6 +293,7 @@ mod lifecycle;
 mod mail_delivery_composition;
 #[path = "collaboration_runtime/native_backend.rs"]
 mod native_backend;
+mod observation_recheck;
 #[path = "collaboration_runtime/schema_bundle_retention.rs"]
 mod schema_bundle_retention;
 #[path = "collaboration_runtime/startup_composition.rs"]

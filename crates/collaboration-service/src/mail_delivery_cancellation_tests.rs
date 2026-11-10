@@ -8,7 +8,6 @@ use collaboration_protocol::{
 use durable_steps::{AtomicStore, JournalScope, StoreError};
 use fleet_sync_delivery::{Inbox, LocalCancelAdmission, LocalOutcome, delivery_rollback};
 use fleet_sync_protocol::{CancelBody, DeliveryCancel, ItemId};
-use runtime_primitives::SyncTime;
 use serde_json::json;
 use std::sync::atomic::Ordering;
 
@@ -257,7 +256,10 @@ async fn assert_terminal_local_cancel(
     fixture
         .host
         .clock
-        .store(clock.timestamp_millis(), Ordering::SeqCst);
+        .advance_to(runtime_primitives::SyncTime::from_unix_millis(
+            clock.timestamp_millis(),
+        ))
+        .unwrap();
 
     // Act: the public Local cancel intake must run the actual SDK outcome hook.
     let admitted = admit_cancel(&fixture, cancel).await.unwrap();
@@ -315,7 +317,11 @@ async fn assert_terminal_local_cancel(
     );
 
     // A new proposed ID must keep the SDK's first canonical cancel and first mark.
-    fixture.host.clock.fetch_add(100_000, Ordering::SeqCst);
+    fixture
+        .host
+        .clock
+        .advance(std::time::Duration::from_millis(100_000))
+        .unwrap();
     let second = admit_cancel(
         &fixture,
         cancel_for(&fixture, &draft, ItemId::new(uuid::Uuid::now_v7()).unwrap()),
@@ -408,7 +414,7 @@ async fn admit_cancel(
     let config = fixture.host.config.local;
     let binding = fixture.host.binding.clone();
     let consumer = fixture.host.consumer.clone();
-    let now = SyncTime::from_unix_millis(fixture.host.clock.load(Ordering::SeqCst));
+    let now = runtime_primitives::Clock::now(fixture.host.clock.as_ref());
     fixture
         .store
         .transaction(move |scope| {

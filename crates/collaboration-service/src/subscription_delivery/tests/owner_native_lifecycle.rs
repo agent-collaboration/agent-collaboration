@@ -9,7 +9,7 @@ impl OwnerRuntime {
     ) -> fleet_sync_protocol::RecipientOutcome<collaboration_mail_protocol::CarrierAcceptance> {
         let item = fleet_sync_protocol::ItemId::new(uuid::Uuid::parse_str(push.as_str()).unwrap())
             .unwrap();
-        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        (async {
             loop {
                 if let Some(outcome) = self.local_mail_outcome(item).await
                     && !matches!(outcome, fleet_sync_protocol::RecipientOutcome::Held)
@@ -20,7 +20,6 @@ impl OwnerRuntime {
             }
         })
         .await
-        .expect("the exact SDK item must reach its terminal handover outcome")
     }
 
     pub async fn local_mail_outcome(
@@ -50,12 +49,48 @@ impl OwnerRuntime {
 }
 
 impl OwnerFixture {
+    /// Stand in for Fleet's lease renewals while a subscription-only proof advances days.
+    /// Each renewal precedes its clock step; the final step has no later lease write.
+    pub async fn advance_while_renewing_native_lease(&self, duration: std::time::Duration) {
+        use fleet_sync_protocol::{DatabaseId, LeaseState, LeaseStatus, PeerId};
+        let mut remaining = duration;
+        let step_limit = board_fleet_sync::BOARD_LEASE_POLICY.lease_duration / 2;
+        while !remaining.is_zero() {
+            let database = self.registry.database(&self.project).await.unwrap();
+            let epoch = match database.writer_state().await.unwrap() {
+                fleet_sync_lease::WriterState::Writing { epoch }
+                | fleet_sync_lease::WriterState::Paused { epoch, .. } => epoch,
+                state => panic!("subscription fixture lost its native authority: {state:?}"),
+            };
+            let previous = LeaseStatus {
+                database: DatabaseId::try_from(self.project.as_str().to_owned()).unwrap(),
+                epoch,
+                holder: PeerId::try_from("0192a1b2-c3d4-7000-8000-000000000001".to_owned())
+                    .unwrap(),
+                state: LeaseState::Held,
+                expires_at: runtime_primitives::Clock::now(self.clock.as_ref()),
+                remaining_ms: 0,
+            };
+            crate::test_project_runtime::renew_lease(
+                &self.registry,
+                &self.project,
+                previous,
+                self.clock.as_ref(),
+            )
+            .await
+            .unwrap();
+            let step = remaining.min(step_limit);
+            self.clock.advance(step).unwrap();
+            remaining -= step;
+        }
+    }
+
     pub async fn await_push_state(
         &self,
         push: &collaboration_protocol::PushId,
         state: collaboration_protocol::PushDeliveryState,
     ) -> collaboration_protocol::PushRecord {
-        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        (async {
             loop {
                 let record = self
                     .interactions
@@ -70,7 +105,6 @@ impl OwnerFixture {
             }
         })
         .await
-        .expect("native outcome transaction reached the expected projection state")
     }
 
     pub async fn held_native_pushes(
@@ -78,7 +112,7 @@ impl OwnerFixture {
         count: usize,
     ) -> Vec<collaboration_protocol::PushRecord> {
         let target = super::super::super::subscription_push::target_session(&self.reader).unwrap();
-        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+        (async {
             loop {
                 let held = self
                     .interactions
@@ -92,7 +126,6 @@ impl OwnerFixture {
             }
         })
         .await
-        .expect("actual SDK Held projections")
     }
 
     pub async fn public_subscription_view(
@@ -131,7 +164,7 @@ impl OwnerFixture {
 
     pub async fn native_runtime_with_clock(
         &self,
-        clock: Arc<dyn SubscriptionClock>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> OwnerRuntime {
         let runtime = self.prepare_runtime_with_availability(
             clock,
@@ -178,7 +211,14 @@ impl OwnerFixture {
     }
 
     pub async fn reopen_project_and_native(self, native: NativeMailOwner) -> Self {
-        let mut fixture = self.reopen_native(native).await;
+        self.reopen_native(native)
+            .await
+            .reopen_project_storage()
+            .await
+    }
+
+    pub async fn reopen_project_storage(self) -> Self {
+        let mut fixture = self;
         drop(fixture.store);
         drop(fixture.registry);
         Arc::try_unwrap(fixture.admission)
@@ -186,9 +226,16 @@ impl OwnerFixture {
             .close()
             .await
             .unwrap();
-        let registry = crate::test_project_runtime::registry(fixture.directory.path()).unwrap();
+        // C-only seeding uses an SDK-owned system clock. Preserve its native domain until
+        // that constructor can take the subscription driver's injected clock too.
+        let native_clock: Arc<dyn router_clock::RuntimeClock> =
+            Arc::new(router_clock::SystemRuntimeClock::new());
+        let registry =
+            crate::test_project_runtime::registry(fixture.directory.path(), native_clock.clone())
+                .unwrap();
         let admission = Arc::new(
             ProjectAdmission::new(ProjectAdmissionProps {
+                clock: native_clock,
                 registry: registry.clone(),
                 fleet: Arc::new(FleetClient::new(
                     &message_board_storage::FleetStore::open(
@@ -234,6 +281,7 @@ impl OwnerFixture {
             root,
             clock,
             presence,
+            held_mail,
         } = self;
         drop(store);
         if let Some(native) = native {
@@ -269,6 +317,7 @@ impl OwnerFixture {
             root,
             clock,
             presence,
+            held_mail,
         }
     }
 }

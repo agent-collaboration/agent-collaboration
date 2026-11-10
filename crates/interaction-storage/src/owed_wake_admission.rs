@@ -1,7 +1,6 @@
 //! Wake admission reuses the automation-owned push identity after an interrupted handoff.
 use crate::{InteractionStore, PushRecord, PushRecordDraft, StorageError};
 use collaboration_protocol::{PushKind, PushOrigin};
-use sqlx::Connection;
 
 impl InteractionStore {
     /// Admits an automation-owed wake push or returns its previously committed record.
@@ -22,7 +21,12 @@ impl InteractionStore {
             pending.origin_router_ref.as_deref(),
         )?;
         let mut connection = self.writer.lock().await;
-        let mut transaction = connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(
+                &mut connection,
+                sqlite_storage_maintenance::TransactionStart::Immediate,
+            )
+            .await?;
         let admission = async {
             if let Some(stored) =
                 crate::push_records::read_push_with_connection(&mut transaction, &pending.push_id)

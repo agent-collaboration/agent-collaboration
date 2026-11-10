@@ -1,6 +1,6 @@
 //! Event navigation validates retained boundaries independently of physical cleanup timing.
 use crate::{AutomationStore, StorageError};
-use sqlx::{Connection, Row};
+use sqlx::Row;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct EventPosition {
@@ -39,7 +39,9 @@ impl AutomationStore {
             return Err(StorageError::InvalidEventCursor);
         }
         let cutoff = crate::automation_event_bounds::retention_cutoff(request.now_ms)?;
-        let mut transaction = self.connection.begin().await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Deferred)
+            .await?;
         let maximum: i64 = sqlx::query_scalar(
             "SELECT COALESCE((SELECT seq FROM sqlite_sequence WHERE name='automation_events'),0)",
         )

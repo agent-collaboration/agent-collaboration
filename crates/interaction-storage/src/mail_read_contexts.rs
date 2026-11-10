@@ -3,8 +3,7 @@ use crate::{InteractionStore, StorageError, push_record_rows};
 use chrono::{DateTime, Utc};
 use collaboration_protocol::{MailItemId, MailReadContext, PushOrigin, SessionRef};
 use durable_steps::{Host, storage::TransactionScope, turso_store::TursoScope};
-use sqlx::Transaction;
-use sqlx_turso::{Turso, TursoConnection};
+use sqlx_turso::TursoConnection;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StoredMailReadContext {
@@ -75,13 +74,39 @@ async fn read_context(
     sqlx_turso::query_as!(ReadContextRow, "SELECT item_id AS \"item_id!: String\",context_json AS \"context_json!: String\",conversation_key,recorded_at AS \"recorded_at!: String\" FROM mail_read_contexts WHERE item_id=?", item.as_str()).fetch_optional(connection).await?.map(ReadContextRow::decode).transpose()
 }
 
+// A read context goes once its item has no live push, scheduled retry, poll hand-off,
+// unanswered send or unsettled cancel.
+macro_rules! read_contexts_eligible {
+    () => {
+        "NOT EXISTS (SELECT 1 FROM router_pushes p WHERE p.push_id=mail_read_contexts.item_id AND p.delivery_state IN ('pending','held','attempted')) AND NOT EXISTS (SELECT 1 FROM local_delivery_retries r WHERE r.item_id=mail_read_contexts.item_id AND r.scheduled_retry_at IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM pending_poll_mail poll WHERE poll.item_id=mail_read_contexts.item_id) AND NOT EXISTS (SELECT 1 FROM message_send_answers answer WHERE answer.item_id=mail_read_contexts.item_id AND answer.result IS NULL) AND NOT EXISTS (SELECT 1 FROM local_cancel_deliveries c WHERE (c.item_id=mail_read_contexts.item_id OR c.target_item=mail_read_contexts.item_id) AND c.outcome_json IS NULL)"
+    };
+}
+
+/// The record time of the oldest read context the rule may ever delete.
+pub(crate) async fn oldest_mail_read_context(
+    connection: &mut sqlx_turso::TursoConnection,
+) -> Result<Option<String>, StorageError> {
+    Ok(
+        sqlx::query_scalar::<sqlx_turso::Turso, Option<String>>(concat!(
+            "SELECT MIN(recorded_at) FROM mail_read_contexts WHERE ",
+            read_contexts_eligible!()
+        ))
+        .fetch_one(connection)
+        .await?,
+    )
+}
+
 pub(crate) async fn prune_old_mail_read_contexts(
-    transaction: &mut Transaction<'_, Turso>,
+    transaction: &mut sqlite_storage_maintenance::SignaledTransaction<'_, sqlx_turso::Turso>,
     cutoff: &str,
     batch_size: i64,
 ) -> Result<u64, StorageError> {
     let candidates = sqlx::query_as::<sqlx_turso::Turso, ReadContextRow>(
-        "SELECT item_id,context_json,conversation_key,recorded_at FROM mail_read_contexts WHERE recorded_at<? AND NOT EXISTS (SELECT 1 FROM router_pushes p WHERE p.push_id=mail_read_contexts.item_id AND p.delivery_state IN ('pending','held','attempted')) AND NOT EXISTS (SELECT 1 FROM local_delivery_retries r WHERE r.item_id=mail_read_contexts.item_id AND r.scheduled_retry_at IS NOT NULL) AND NOT EXISTS (SELECT 1 FROM pending_poll_mail poll WHERE poll.item_id=mail_read_contexts.item_id) AND NOT EXISTS (SELECT 1 FROM message_send_answers answer WHERE answer.item_id=mail_read_contexts.item_id AND answer.result IS NULL) AND NOT EXISTS (SELECT 1 FROM local_cancel_deliveries c WHERE (c.item_id=mail_read_contexts.item_id OR c.target_item=mail_read_contexts.item_id) AND c.outcome_json IS NULL) ORDER BY recorded_at,item_id LIMIT ?",
+        concat!(
+            "SELECT item_id,context_json,conversation_key,recorded_at FROM mail_read_contexts WHERE recorded_at<? AND ",
+            read_contexts_eligible!(),
+            " ORDER BY recorded_at,item_id LIMIT ?"
+        ),
     )
         .bind(cutoff)
         .bind(batch_size)

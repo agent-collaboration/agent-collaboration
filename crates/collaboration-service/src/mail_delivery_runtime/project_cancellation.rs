@@ -74,7 +74,7 @@ impl MailDeliveryRuntime {
         );
         let config = self.config;
         let consumer = self.consumer.clone();
-        let now = self.clock.now();
+        let now = self.clock.utc_now();
         #[cfg(test)]
         let probe = self.project_admission_probe.clone();
         let (admission, has_effects) = self

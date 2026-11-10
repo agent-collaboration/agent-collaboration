@@ -8,7 +8,7 @@ use collaboration_service::ApplicationFixture;
 use collaboration_service::BoardAvailability;
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
-use collaboration_service::SystemSubscriptionClock;
+
 use serde_json::json;
 use std::sync::Arc;
 
@@ -31,6 +31,11 @@ async fn message_to_missing_endpoint_reports_no_native_effects() {
             .await
             .unwrap(),
     );
+    let identity = ApplicationFixture::new(id, id)
+        .unwrap()
+        .with_automation_store(Arc::clone(&automation_store))
+        .with_session_delivery(delivery.clone());
+    let clock = identity.runtime_clock();
     let subscription_delivery =
         SubscriptionDeliveryService::new(SubscriptionDeliveryServiceProps {
             board_availability: BoardAvailability::Unavailable,
@@ -38,13 +43,10 @@ async fn message_to_missing_endpoint_reports_no_native_effects() {
             delivery: Arc::clone(&delivery),
             presence: Arc::clone(&presence),
             machine_identity: machine_identity.clone(),
-            clock: Arc::new(SystemSubscriptionClock),
+            clock: clock.clone(),
         });
     subscription_delivery.start().await.unwrap();
-    let identity = ApplicationFixture::new(id, id)
-        .unwrap()
-        .with_automation_store(Arc::clone(&automation_store))
-        .with_session_delivery(delivery)
+    let identity = identity
         .with_subscription_delivery_service(subscription_delivery.clone(), presence.clone());
 
     let (identity, native_mail) = native_mail_owner::start(
@@ -55,7 +57,7 @@ async fn message_to_missing_endpoint_reports_no_native_effects() {
             actors: subscription_delivery.clone(),
             presence,
             machine: machine_identity,
-            clock: Arc::new(SystemSubscriptionClock),
+            clock: clock.clone(),
         },
     )
     .unwrap();

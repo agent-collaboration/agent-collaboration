@@ -10,7 +10,7 @@ use fleet_sync_tokio_runner::{CallEnvelope, CallRouter, TokioHost};
 async fn committed_handoff_recovers_the_same_item_after_reopen_before_outbox_admission() {
     let mut fixture = Box::pin(OwnerFixture::new()).await;
     let intent = create_addressed_intent(&fixture).await;
-    let now = fixture.clock.now();
+    let now = fixture.clock.utc_now();
     let timestamp = uuid::Timestamp::from_unix(
         uuid::NoContext,
         u64::try_from(now.timestamp()).unwrap(),

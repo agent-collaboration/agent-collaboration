@@ -13,15 +13,15 @@ async fn restart_after_reinstatement_commit_does_not_lose_an_already_consumed_id
             .write_as(
                 owner.clone(),
                 serde_json::from_value(operation).unwrap(),
-                fixture.clock.now(),
+                fixture.clock.utc_now(),
             )
             .await;
     }
     let stream = WorkstreamId::generate();
-    fixture.write_as(owner.clone(), serde_json::from_value(json!({"kind":"workstreamCreate","workstreamId":stream,"name":"recovery","goal":"reinstated intent"})).unwrap(), fixture.clock.now()).await;
-    fixture.write_as(owner, serde_json::from_value(json!({"kind":"roleGrant","subject":{"kind":"workstream","subject":stream},"role":"reviewer","holder":fixture.reader,"model":null,"lineage":null,"expectedRevision":0,"ownerGrant":null})).unwrap(), fixture.clock.now()).await;
+    fixture.write_as(owner.clone(), serde_json::from_value(json!({"kind":"workstreamCreate","workstreamId":stream,"name":"recovery","goal":"reinstated intent"})).unwrap(), fixture.clock.utc_now()).await;
+    fixture.write_as(owner, serde_json::from_value(json!({"kind":"roleGrant","subject":{"kind":"workstream","subject":stream},"role":"reviewer","holder":fixture.reader,"model":null,"lineage":null,"expectedRevision":0,"ownerGrant":null})).unwrap(), fixture.clock.utc_now()).await;
     let post = PostId::generate();
-    fixture.write_as(human("writer"), serde_json::from_value(json!({"kind":"threadPost","postId":post,"threadId":fixture.root,"text":"reinstated receiver","references":[],"addressees":[{"kind":"role","recipient":{"kind":"reviewer","subject":stream}}]})).unwrap(), fixture.clock.now()).await;
+    fixture.write_as(human("writer"), serde_json::from_value(json!({"kind":"threadPost","postId":post,"threadId":fixture.root,"text":"reinstated receiver","references":[],"addressees":[{"kind":"role","recipient":{"kind":"reviewer","subject":stream}}]})).unwrap(), fixture.clock.utc_now()).await;
     let store = fixture
         .registry
         .existing_project(&fixture.project)

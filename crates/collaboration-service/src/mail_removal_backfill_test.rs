@@ -68,10 +68,14 @@ async fn startup_backfills_legacy_custody_once_and_retains_it_until_day60() {
         .iter()
         .fold(0_i64, |time, byte| (time << 8) | i64::from(*byte));
     for (day, expected) in [(59, 1), (60, 0)] {
-        runtime.fixture.host.clock.store(
-            created + day * 86_400_000,
-            std::sync::atomic::Ordering::SeqCst,
-        );
+        runtime
+            .fixture
+            .host
+            .clock
+            .advance_to(runtime_primitives::SyncTime::from_unix_millis(
+                created + day * 86_400_000,
+            ))
+            .unwrap();
         mail.drive_due_for_test().await.unwrap();
         assert_eq!(
             runtime

@@ -141,20 +141,32 @@ async fn exercise_input_validation(
         backend.endpoint.service_id.clone(),
         Some("Validation Fixture"),
     )?;
+    let clock = Arc::new(
+        router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+            1792432800000,
+        ))
+        .unwrap(),
+    );
     let worker = ScheduledRunWorker {
         store: store.clone(),
         interactions: Arc::new(
             interaction_storage::InteractionStore::open(root.join("interaction.sqlite")).await?,
         ),
         execution: Arc::new(crate::CodexAppServerScheduledRuns::new(
+            clock.clone(),
             backend.clone(),
             Arc::new(crate::UnmaterializedThreadHolder::new()),
         )),
         backend: Some(backend),
         configuration: crate::AutomationConfigurationHandle::default(),
         machine_identity,
+        clock: clock.clone(),
     };
-    Box::pin(worker.step(run.clone())).await?;
+    tokio::select! {
+        biased;
+        _ = listener.accept() => return Err("invalid assembled input contacted native backend".into()),
+        result = Box::pin(worker.step(run.clone())) => result?,
+    }
     let failed = store
         .lock()
         .await
@@ -182,10 +194,7 @@ async fn exercise_input_validation(
     if failed_native.target.is_some() != prepared {
         return Err("local validation lost earlier preparation evidence".into());
     }
-    if tokio::time::timeout(std::time::Duration::from_millis(50), listener.accept())
-        .await
-        .is_ok()
-    {
+    if futures_util::FutureExt::now_or_never(listener.accept()).is_some() {
         return Err("invalid assembled input contacted native backend".into());
     }
     let next_instruction = store

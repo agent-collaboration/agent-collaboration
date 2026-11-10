@@ -1,8 +1,9 @@
 //! Configuration-file recovery uses durable command receipts, without adding a settings table.
+use crate::automation_connection::OneStatementWrite;
 use crate::{AutomationStore, StorageError};
 use agent_automation::OperationId;
 use serde::{Serialize, de::DeserializeOwned};
-use sqlx::{Connection, Row};
+use sqlx::Row;
 pub struct ConfigurationOperation<TConfiguration> {
     pub operation_id: OperationId,
     pub configuration: TConfiguration,
@@ -33,7 +34,7 @@ impl AutomationStore {
         };
         let evidence = serde_json::json!({"kind":"configuration","fileState":file_state,"intended":configuration});
         let updated = sqlx::query("UPDATE operation_receipts SET operation_status=?,effect_evidence_json=? WHERE operation_id=? AND method_name='automation/configure' AND canonical_request=? AND operation_status IN ('admitted','inProgress','uncertain')")
-            .bind(status).bind(evidence.to_string()).bind(id.as_str()).bind(canonical).execute(&mut self.connection).await?.rows_affected();
+            .bind(status).bind(evidence.to_string()).bind(id.as_str()).bind(canonical).execute_as_transaction(self).await?.rows_affected();
         Ok(updated == 1)
     }
     pub async fn admit_configuration<TConfiguration: Serialize + DeserializeOwned>(
@@ -44,7 +45,9 @@ impl AutomationStore {
     ) -> Result<ConfigurationAdmission<TConfiguration>, StorageError> {
         let canonical =
             serde_json::to_vec(configuration).map_err(|_| StorageError::InvalidRecord)?;
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         let existing=sqlx::query("SELECT method_name,canonical_request,operation_status,final_result_json FROM operation_receipts WHERE operation_id=?").bind(id.as_str()).fetch_optional(&mut *transaction).await?;
         if let Some(row) = existing {
             if row.try_get::<String, _>("method_name")? != "automation/configure"
@@ -132,7 +135,9 @@ impl AutomationStore {
         let canonical =
             serde_json::to_vec(configuration).map_err(|_| StorageError::InvalidRecord)?;
         let evidence = serde_json::json!({"kind":"configuration","fileState":"replaced","intended":configuration});
-        let mut transaction = self.connection.begin_with("BEGIN IMMEDIATE").await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Immediate)
+            .await?;
         let changed=sqlx::query("UPDATE operation_receipts SET operation_status='succeeded',effect_evidence_json=?,final_result_json=? WHERE operation_id=? AND method_name='automation/configure' AND canonical_request=? AND operation_status IN ('admitted','inProgress','uncertain')")
             .bind(evidence.to_string()).bind(encoded).bind(id.as_str()).bind(canonical).execute(&mut *transaction).await?.rows_affected();
         if changed != 1 {

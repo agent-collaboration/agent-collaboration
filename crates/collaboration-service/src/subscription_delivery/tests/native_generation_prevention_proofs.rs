@@ -1,5 +1,6 @@
 //! SDK prevention leaves the frozen range owed under the reader's new generation.
 use super::native_follow_mail_proofs::{follow_application, frozen_follow};
+use super::native_held_mail_proofs::checked_while_wakeable_then_loaded;
 use super::*;
 use board_sync_protocol::BoardDeliveryBody;
 use collaboration_mail_protocol::NotificationSource;
@@ -16,7 +17,7 @@ async fn forged_prevention_references_are_refused_before_the_locked_replacement_
         .post(&fixture.root, "one frozen range for locked validation")
         .await;
     let target = target_session(&fixture.reader).unwrap();
-    tokio::time::timeout(Duration::from_secs(6), async {
+    (async {
         while native
             .interactions
             .list_held_mail_push_records(&target)
@@ -27,8 +28,7 @@ async fn forged_prevention_references_are_refused_before_the_locked_replacement_
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .unwrap();
+    .await;
     runtime.service.shutdown().await;
     fixture
         .policy(
@@ -44,7 +44,7 @@ async fn forged_prevention_references_are_refused_before_the_locked_replacement_
         .await
         .unwrap();
     let member = current_membership(&fixture).await;
-    let facts = tokio::time::timeout(Duration::from_secs(6), async {
+    let facts = (async {
         loop {
             let facts = publisher
                 .generation_preventions(
@@ -59,8 +59,7 @@ async fn forged_prevention_references_are_refused_before_the_locked_replacement_
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .unwrap();
+    .await;
     assert_eq!(facts.len(), 1);
     let fact = &facts[0];
     let mut other_cancel = fact.cancel().clone();
@@ -84,7 +83,7 @@ async fn forged_prevention_references_are_refused_before_the_locked_replacement_
             matches!(
                 fixture
                     .admission
-                    .allocate_follow_batch(&fixture.project, input, fixture.clock.now())
+                    .allocate_follow_batch(&fixture.project, input, fixture.clock.utc_now())
                     .await,
                 Err(crate::ProjectAdmissionError::InvalidRecord(_))
             ),
@@ -97,7 +96,7 @@ async fn forged_prevention_references_are_refused_before_the_locked_replacement_
     assert!(
         fixture
             .admission
-            .allocate_follow_batch(&fixture.project, correct.clone(), fixture.clock.now())
+            .allocate_follow_batch(&fixture.project, correct.clone(), fixture.clock.utc_now())
             .await
             .unwrap()
             .is_some()
@@ -109,7 +108,7 @@ async fn forged_prevention_references_are_refused_before_the_locked_replacement_
                 reader: fixture.reader.clone(),
                 scope: message_board::SubscriptionScope::thread(fixture.root.clone()),
             },
-            fixture.clock.now(),
+            fixture.clock.utc_now(),
         )
         .await
         .unwrap();
@@ -117,7 +116,7 @@ async fn forged_prevention_references_are_refused_before_the_locked_replacement_
     assert!(
         fixture
             .admission
-            .allocate_follow_batch(&fixture.project, correct, fixture.clock.now())
+            .allocate_follow_batch(&fixture.project, correct, fixture.clock.utc_now())
             .await
             .unwrap()
             .is_none(),
@@ -142,7 +141,7 @@ async fn a_generation_prevented_range_is_replaced_once_and_reaches_the_native_cl
         .post(&fixture.root, "still owed after a policy change")
         .await;
     let target = target_session(&fixture.reader).unwrap();
-    tokio::time::timeout(Duration::from_secs(6), async {
+    (async {
         while native
             .interactions
             .list_held_mail_push_records(&target)
@@ -153,8 +152,7 @@ async fn a_generation_prevented_range_is_replaced_once_and_reaches_the_native_cl
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .unwrap();
+    .await;
     let original = frozen_follow(&fixture).await;
     assert_eq!(original.len(), 1);
 
@@ -172,7 +170,7 @@ async fn a_generation_prevented_range_is_replaced_once_and_reaches_the_native_cl
         .queue_project(fixture.project.clone())
         .await
         .unwrap();
-    tokio::time::timeout(Duration::from_secs(6), async {
+    (async {
         loop {
             if matches!(
                 native
@@ -187,10 +185,12 @@ async fn a_generation_prevented_range_is_replaced_once_and_reaches_the_native_cl
             tokio::task::yield_now().await;
         }
     })
-    .await
-    .unwrap();
-    fixture.clock.advance_without_tokio_time(2);
-    let replacements = tokio::time::timeout(Duration::from_secs(6), async {
+    .await;
+    fixture
+        .clock
+        .advance(std::time::Duration::from_secs(2))
+        .unwrap();
+    let replacements = (async {
         loop {
             let items = frozen_follow(&fixture).await;
             if items.len() >= 2 {
@@ -200,19 +200,18 @@ async fn a_generation_prevented_range_is_replaced_once_and_reaches_the_native_cl
         }
     })
     .await;
-    let mut received = None;
-    if replacements.is_ok() {
-        *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
-        fixture.clock.advance_without_tokio_time(30);
-        let request = tokio::time::timeout(Duration::from_secs(6), async {
-            runtime.requests.lock().await.recv().await.unwrap()
-        })
-        .await
-        .unwrap();
-        received = Some(request.payload.push_id);
+    let received = {
+        let items = &replacements;
+        // The target loads after the reader checked the held replacement.
+        let replacement: collaboration_protocol::PushId =
+            items[1].id().as_uuid().to_string().try_into().unwrap();
+        checked_while_wakeable_then_loaded(&fixture, &runtime, &replacement).await;
+        let request = (async { runtime.requests.lock().await.recv().await.unwrap() }).await;
+        let received = request.payload.push_id;
         runtime.completions.send(DeliveryOutcome::Started).unwrap();
         await_native_completion(&runtime, 1).await;
-    }
+        received
+    };
     publisher.shutdown().await;
     drop(publisher);
     drop(app);
@@ -220,7 +219,7 @@ async fn a_generation_prevented_range_is_replaced_once_and_reaches_the_native_cl
     fixture.close_native(native).await;
 
     // Assert literal contract debt, distinct generation and the actual client boundary.
-    let items = replacements.expect("generation-prevented activity was counted as covered");
+    let items = replacements;
     assert_eq!(items.len(), 2, "one owed range allocated more than once");
     let mut generations = Vec::new();
     for item in &items {
@@ -240,8 +239,5 @@ async fn a_generation_prevented_range_is_replaced_once_and_reaches_the_native_cl
         generations.push(*generation);
     }
     assert_ne!(generations[0], generations[1]);
-    assert_eq!(
-        received.unwrap().as_str(),
-        items[1].id().as_uuid().to_string()
-    );
+    assert_eq!(received.as_str(), items[1].id().as_uuid().to_string());
 }

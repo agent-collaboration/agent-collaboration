@@ -2,7 +2,7 @@
 use crate::{AutomationStore, StorageError};
 use agent_automation::{RunId, ScheduleId, ScheduleRecord};
 use serde::de::DeserializeOwned;
-use sqlx::{Connection, Row, SqliteConnection};
+use sqlx::{Row, SqliteConnection};
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
 pub struct ScheduleInspection<TTarget, TEndpoint> {
     pub record: ScheduleRecord<TTarget, TEndpoint>,
@@ -14,7 +14,9 @@ impl AutomationStore {
         &mut self,
         id: &ScheduleId,
     ) -> Result<ScheduleInspection<TTarget, TEndpoint>, StorageError> {
-        let mut transaction = self.connection.begin().await?;
+        let mut transaction = self
+            .transaction(crate::automation_connection::TransactionStart::Deferred)
+            .await?;
         let record = read_current(&mut transaction, id).await?;
         let inventory = crate::run_inventory::load(&mut transaction, id).await?;
         transaction.commit().await?;

@@ -10,7 +10,7 @@ use collaboration_service::MailDeliveryRuntime;
 use collaboration_service::MailPushDeliveryProps;
 use collaboration_service::SubscriptionDeliveryService;
 use collaboration_service::SubscriptionDeliveryServiceProps;
-use collaboration_service::SystemSubscriptionClock;
+
 use durable_steps::{AtomicStore, CallFailure, StoreError};
 use durable_steps::{storage::TransactionScope, turso_store::TursoScope};
 use fleet_sync_delivery::{
@@ -145,7 +145,7 @@ impl MailOwner {
             delivery: delivery.clone(),
             presence: delivery.clone(),
             machine_identity: machine.clone(),
-            clock: Arc::new(SystemSubscriptionClock),
+            clock: Arc::new(router_clock::SystemRuntimeClock::new()),
         });
         actors.start().await?;
         let mail = Arc::new(MailDeliveryRuntime::new(
@@ -155,7 +155,7 @@ impl MailOwner {
                 actors: actors.clone(),
                 presence: delivery,
                 machine,
-                clock: Arc::new(SystemSubscriptionClock),
+                clock: actors.runtime_clock(),
             },
             Some(session),
         )?);
