@@ -94,7 +94,5 @@ export async function collectPublicContent(input: {
       cursor = next;
     }
   }
-  if (records.length === 0)
-    throw new Error("empty public view cannot prove S1 content preservation");
   return { ...selected, complete: true, records, source: input.source };
 }

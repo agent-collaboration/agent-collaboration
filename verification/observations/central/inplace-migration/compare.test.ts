@@ -360,6 +360,25 @@ test("R3 row content changes fail despite identical schema fingerprint and posit
     ),
   );
 });
+test("R3 preserves complete empty public views without treating them as missing", (): void => {
+  const before = observation("before"),
+    after = observation("after");
+  for (const observed of [before, after])
+    for (const router of observed.routers) for (const view of router.content) view.records = [];
+  assert.equal(compareSnapshots(before, after).status, "preserved");
+});
+for (const emptyPhase of ["before", "after"] as const) {
+  test(`R3 detects content changes when only ${emptyPhase} is empty`, (): void => {
+    const before = observation("before"),
+      after = observation("after"),
+      view = (emptyPhase === "before" ? before : after).routers[0]?.content[0];
+    assert.ok(view);
+    view.records = [];
+    const result = compareSnapshots(before, after);
+    assert.equal(result.status, "changed");
+    assert.ok(result.differences.some((difference): boolean => difference.rule === "R3 content"));
+  });
+}
 for (const field of ["workspaces", "boards", "folders"] as const) {
   test(`R5 changed ${field} facts fail`, (): void => {
     const before = observation("before"),

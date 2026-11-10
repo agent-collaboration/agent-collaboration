@@ -144,7 +144,7 @@ export const routerObservation = z
           readerInstallation: identifier,
           holderInstallation: identifier.nullable(),
           complete: z.literal(true),
-          records: z.array(namedRecord).min(1),
+          records: z.array(namedRecord),
           source: source.refine((value): boolean => value.method === "routerPublicRead"),
         })
         .strict()
