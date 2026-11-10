@@ -25,6 +25,7 @@ import {
 } from "./stopped-fleet-checkpoint.ts";
 import { qualifyConnectedHost } from "./host-status.ts";
 import { recordInstallationFailure } from "../../../machines/installation-failure.ts";
+import { checkpointAndAwaitUpgradeRelease, upgradeReleasePlan } from "./staging-upgrade-release.ts";
 
 const original = z
   .object({
@@ -227,14 +228,45 @@ async function showOnceDirectoryListed(
     await setTimeout(2000);
   }
 }
+async function readInitialProjects(
+  plan: BaselinePlan,
+  installation: Installation,
+  receipt: Receipt,
+): Promise<string[]> {
+  const reads = [];
+  for (const file of plan.files) {
+    const { outcome, attempts, retried } = await showOnceDirectoryListed(
+      installation,
+      file.project,
+    );
+    await receipt.save(`project-${file.project}.json`, { attempts, retried, ...outcome });
+    if (outcome.kind !== "answered")
+      throw new Error(`ordinary old125 project open/read refused or unconfirmed: ${file.project}`);
+    z.object({
+      record: z.object({
+        state: z.object({
+          kind: z.literal("local"),
+          value: z.object({ projectId: z.literal(file.project) }),
+        }),
+      }),
+    }).parse(outcome.value);
+    reads.push(file.project);
+  }
+  return reads;
+}
 async function run(plan: BaselinePlan): Promise<void> {
   process.umask(0o077);
-  const { installation, receipt } = await prepare(plan);
+  const prepared = await prepare(plan);
+  let installation = prepared.installation;
+  const receipt = prepared.receipt;
+  const cancellation = new AbortController();
   const controls = createInterface({ input: process.stdin, crlfDelay: Infinity });
   let active = true,
     failure: unknown,
-    baselineReady = false;
+    baselineReady = false,
+    phase: "old" | "new" = "old";
   const close = (): void => {
+    cancellation.abort(new Error("staging controller stopped"));
     controls.close();
   };
   process.once("SIGTERM", close);
@@ -259,33 +291,14 @@ async function run(plan: BaselinePlan): Promise<void> {
           await exclusive(() => installation.check());
         } catch (error: unknown) {
           failure = error;
+          cancellation.abort(error);
           controls.close();
           return;
         }
         await setTimeout(500);
       }
     })();
-    const reads = [];
-    for (const file of plan.files) {
-      const { outcome, attempts, retried } = await showOnceDirectoryListed(
-        installation,
-        file.project,
-      );
-      await receipt.save(`project-${file.project}.json`, { attempts, retried, ...outcome });
-      if (outcome.kind !== "answered")
-        throw new Error(
-          `ordinary old125 project open/read refused or unconfirmed: ${file.project}`,
-        );
-      z.object({
-        record: z.object({
-          state: z.object({
-            kind: z.literal("local"),
-            value: z.object({ projectId: z.literal(file.project) }),
-          }),
-        }),
-      }).parse(outcome.value);
-      reads.push(file.project);
-    }
+    const reads = await readInitialProjects(plan, installation, receipt);
     await receipt.save("old125-read-summary.json", {
       openedAt,
       projects: reads,
@@ -299,11 +312,24 @@ async function run(plan: BaselinePlan): Promise<void> {
       `${encode({ kind: "old125CopiesReadable", files: reads.length, currentRenewalObserved: false, root: plan.machine.root })}\n`,
     );
     for await (const line of controls) {
-      const request = z
-        .object({ kind: z.literal("stop") })
-        .strict()
-        .parse(decode(line));
+      const request = continuationControl.parse(decode(line));
       if (request.kind === "stop") break;
+      if (phase !== "old")
+        throw new Error("one old-to-new upgrade per staging controller required");
+      const upgrade = ownedUpgradePlan.parse(
+        decodeAuthoredJson(await readPrivateText(request.planFile)),
+      );
+      installation = await exclusive(() =>
+        upgradeWithRelease({
+          installation,
+          receipt,
+          baseline,
+          plan: upgrade,
+          root: plan.machine.root,
+          signal: cancellation.signal,
+        }),
+      );
+      phase = "new";
     }
   } catch (error: unknown) {
     await receipt.save("baseline-failure.json", {
@@ -333,8 +359,78 @@ const ownedUpgradePlan = z
     productVersion: z.string(),
     sourceHead: z.string().regex(/^[a-f0-9]{40}$/),
     checkpoint: stoppedFleetCheckpointPlan,
+    releaseAfterCheckpoint: upgradeReleasePlan,
   })
   .strict();
+
+async function upgradeWithRelease(input: {
+  installation: Installation;
+  receipt: Receipt;
+  baseline: z.infer<typeof upgradeBaselineSchema>;
+  plan: z.infer<typeof ownedUpgradePlan>;
+  root: string;
+  signal: AbortSignal;
+}): Promise<Installation> {
+  if (input.plan.checkpoint.root !== input.root)
+    throw new Error("checkpoint plan belongs to another root");
+  const replacement = await input.installation.upgrade({
+    ...input.plan,
+    baseline: input.baseline,
+    observeStoppedOld: () =>
+      checkpointAndAwaitUpgradeRelease({
+        release: input.plan.releaseAfterCheckpoint,
+        signal: input.signal,
+        checkpoint: () => observeStoppedFleetCheckpoint(input.plan.checkpoint),
+        onWaiting: async () => {
+          const waiting = {
+            root: input.root,
+            checkpoint: input.plan.checkpoint,
+            releaseAfterCheckpoint: input.plan.releaseAfterCheckpoint,
+          };
+          await input.receipt.record("stoppedCheckpointWaitingForUpgradeRelease", waiting);
+          process.stdout.write(
+            `${encode({ kind: "stoppedCheckpointWaitingForUpgradeRelease", ...waiting })}\n`,
+          );
+        },
+        onReleased: async () => {
+          await input.receipt.record("stoppedUpgradeReleased", {
+            root: input.root,
+            ...input.plan.releaseAfterCheckpoint,
+          });
+          process.stdout.write(
+            `${encode({ kind: "stoppedUpgradeReleased", root: input.root, ...input.plan.releaseAfterCheckpoint })}\n`,
+          );
+        },
+      }),
+  });
+  try {
+    const status = await replacement.runRouterCommand([
+      "host",
+      "status",
+      "--router-root",
+      input.root,
+    ]);
+    await input.receipt.record("continuedUpgradeHostStatus", status);
+    if (status.exit !== 0) throw new Error("new owned Host status unavailable");
+    qualifyConnectedHost(status.stdout, {
+      peer: input.baseline.machineId,
+      origin: new URL(input.baseline.endpoint).origin,
+      endpoint: input.baseline.endpoint,
+    });
+    process.stdout.write(
+      `${encode({
+        kind: "ownedRootUpgraded",
+        root: input.root,
+        originalBaselineId: input.baseline.baselineId,
+        target: input.plan.productVersion,
+      })}\n`,
+    );
+    return replacement;
+  } catch (error) {
+    await replacement.close();
+    throw error;
+  }
+}
 
 async function continueStopped(raw: unknown): Promise<void> {
   process.umask(0o077);
@@ -360,6 +456,7 @@ async function runStoppedContinuation(
     decodeAuthoredJson(await readStoppedReference(declaration.original.baseline)),
   );
   const controls = createInterface({ input: process.stdin, crlfDelay: Infinity });
+  const cancellation = new AbortController();
   let active = true,
     phase: "old" | "new" = "old",
     failure: unknown;
@@ -370,6 +467,7 @@ async function runStoppedContinuation(
     return result;
   };
   const stop = (): void => {
+    cancellation.abort(new Error("staging controller stopped"));
     controls.close();
   };
   process.once("SIGTERM", stop);
@@ -393,6 +491,7 @@ async function runStoppedContinuation(
           await exclusive(() => installation.check());
         } catch (error: unknown) {
           failure = error;
+          cancellation.abort(error);
           controls.close();
           return;
         }
@@ -410,32 +509,17 @@ async function runStoppedContinuation(
       const plan = ownedUpgradePlan.parse(
         decodeAuthoredJson(await readPrivateText(request.planFile)),
       );
-      if (plan.checkpoint.root !== declaration.root)
-        throw new Error("checkpoint plan belongs to another root");
       installation = await exclusive(() =>
-        installation.upgrade({
-          ...plan,
+        upgradeWithRelease({
+          installation,
+          receipt,
+          plan,
           baseline: originalBaseline,
-          observeStoppedOld: (): Promise<void> => observeStoppedFleetCheckpoint(plan.checkpoint),
+          root: declaration.root,
+          signal: cancellation.signal,
         }),
       );
       phase = "new";
-      const status = await installation.runRouterCommand([
-        "host",
-        "status",
-        "--router-root",
-        declaration.root,
-      ]);
-      await receipt.record("continuedUpgradeHostStatus", status);
-      if (status.exit !== 0) throw new Error("new owned Host status unavailable");
-      qualifyConnectedHost(status.stdout, {
-        peer: originalBaseline.machineId,
-        origin: new URL(originalBaseline.endpoint).origin,
-        endpoint: originalBaseline.endpoint,
-      });
-      process.stdout.write(
-        `${encode({ kind: "ownedRootUpgraded", root: declaration.root, originalBaselineId: originalBaseline.baselineId, target: plan.productVersion })}\n`,
-      );
     }
   } finally {
     active = false;
