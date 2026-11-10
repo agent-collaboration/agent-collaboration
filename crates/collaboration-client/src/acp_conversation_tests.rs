@@ -306,17 +306,60 @@ fn only_write_restricted_access_creates_project_write_areas() {
     assert!(!workspace.join("docs").exists());
 }
 
-#[test]
-fn session_scratch_scopes_are_unique_and_owner_private() {
+#[tokio::test]
+async fn session_scratch_scopes_are_unique_owner_private_and_stamped_as_used() {
     let first = session_scratch_scope();
     let second = session_scratch_scope();
     assert_ne!(first, second);
-    let path = std::env::temp_dir()
-        .join("router-client-scratch")
-        .join(first);
-    assert!(create_private_scratch(&path).is_ok());
-    let metadata = std::fs::metadata(path).unwrap();
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("scratch").join(first);
+    assert!(prepare_session_scratch(&path).await.is_ok());
+    let metadata = std::fs::metadata(&path).unwrap();
     assert_eq!(metadata.permissions().mode() & 0o077, 0);
+    assert!(
+        path.join(codex_native_integration::SCRATCH_LAST_USED_FILE_NAME)
+            .is_file(),
+        "creating a scope records its use for the scratch sweep"
+    );
+    assert!(root.path().join("scratch/.locks").is_dir());
 }
 use crate::PublicPromptContent;
 use collaboration_protocol::{SessionId, UuidIdentity};
+
+/// A creator holds its scope's lock shared while it creates and stamps the
+/// folder, so the sweep's non-blocking exclusive lock fails meanwhile.
+#[tokio::test]
+async fn a_creator_holding_its_scope_lock_keeps_the_sweep_out() {
+    use codex_native_integration::scratch_scope_test_support::hold_next_scratch_creator;
+    let root = tempfile::tempdir().unwrap();
+    let scratch = root.path().join("scratch");
+    let folder = scratch.join("thread-root");
+    std::fs::create_dir_all(&folder).unwrap();
+    std::fs::write(folder.join("notes.md"), b"kept").unwrap();
+    let barrier = hold_next_scratch_creator(&folder);
+
+    let creator_folder = folder.clone();
+    let creator = tokio::spawn(async move { prepare_session_scratch(&creator_folder).await });
+    let barrier = tokio::task::spawn_blocking(move || barrier.wait_until_held().map(|()| barrier))
+        .await
+        .unwrap()
+        .unwrap();
+    let sweep =
+        codex_native_integration::try_lock_scratch_scope_exclusively(&scratch, "thread-root")
+            .unwrap();
+    let held_out = sweep.is_none();
+    drop(sweep);
+    barrier.release();
+    creator.await.unwrap().unwrap();
+
+    assert!(
+        held_out,
+        "the sweep must not lock a scope its creator holds"
+    );
+    assert_eq!(std::fs::read(folder.join("notes.md")).unwrap(), b"kept");
+    assert!(
+        folder
+            .join(codex_native_integration::SCRATCH_LAST_USED_FILE_NAME)
+            .is_file()
+    );
+}

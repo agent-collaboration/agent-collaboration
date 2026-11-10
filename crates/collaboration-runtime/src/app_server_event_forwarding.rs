@@ -22,7 +22,7 @@ use session_event_model::{
     ApprovalRequest, PendingInteraction, QuestionRequest, SessionEvent, SessionItem, StopReason,
     TurnLostReason, TurnOutcome,
 };
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, path::PathBuf, sync::Arc};
 
 fn render_turn_event(session: &SessionRef, event: &HubEvent) -> Option<Value> {
     let thread_id = thread_alias(session);
@@ -164,22 +164,30 @@ enum PendingAppServerInteraction {
 }
 
 pub(crate) struct AppServerEventForwarding {
+    pub(crate) user_receipts: crate::native_user_receipts::NativeUserReceipts,
     actor: Identity,
     broker: Option<Arc<ServiceInteractionBroker>>,
     turn_ids: HashMap<SessionRef, String>,
     items: HashMap<(SessionRef, String), Value>,
     pending: HashMap<String, PendingAppServerInteraction>,
+    working_directories: HashMap<SessionRef, PathBuf>,
 }
 
 impl AppServerEventForwarding {
     pub(crate) fn new(actor: Identity, broker: Option<Arc<ServiceInteractionBroker>>) -> Self {
         Self {
+            user_receipts: crate::native_user_receipts::NativeUserReceipts::default(),
             actor,
             broker,
             turn_ids: HashMap::new(),
             items: HashMap::new(),
             pending: HashMap::new(),
+            working_directories: HashMap::new(),
         }
+    }
+
+    pub(crate) fn register_working_directory(&mut self, session: SessionRef, cwd: PathBuf) {
+        self.working_directories.insert(session, cwd);
     }
 
     pub(crate) fn reset_session(&mut self, session: &SessionRef) -> Vec<Value> {
@@ -187,6 +195,7 @@ impl AppServerEventForwarding {
         self.items
             .retain(|(item_session, _), _| item_session != session);
         let thread_id = thread_alias(session);
+        self.user_receipts.complete_turn(&thread_id);
         let mut resolved = Vec::new();
         self.pending.retain(|request_id, interaction| {
             let belongs_to_session = match interaction {
@@ -210,22 +219,60 @@ impl AppServerEventForwarding {
     pub(crate) fn project(&mut self, session: &SessionRef, event: &HubEvent) -> Vec<Value> {
         let thread_id = thread_alias(session);
         match &event.event {
-            SessionEvent::TurnStarted { turn_id, .. } => {
+            SessionEvent::SettingsChanged { settings } => self
+                .working_directories
+                .get(session)
+                .map(|cwd| {
+                    crate::native_session_notifications::settings_notification(
+                        &thread_id,
+                        session.endpoint.endpoint_id.as_str(),
+                        settings,
+                        cwd,
+                    )
+                })
+                .into_iter()
+                .collect(),
+            SessionEvent::StateChanged { state } => {
+                crate::native_session_notifications::state_notifications(&thread_id, state)
+            }
+            SessionEvent::TurnStarted { turn_id, input_id } => {
+                self.user_receipts.accept(&thread_id, input_id);
                 self.turn_ids.insert(session.clone(), turn_id.clone());
                 render_turn_event(session, event).into_iter().collect()
             }
             SessionEvent::TurnEnded { .. } => {
+                self.user_receipts.complete_turn(&thread_id);
                 self.turn_ids.remove(session);
                 self.items
                     .retain(|(item_session, _), _| item_session != session);
                 render_turn_event(session, event).into_iter().collect()
             }
+            SessionEvent::ItemStarted { item } | SessionEvent::ItemUpdated { item }
+                if matches!(item.kind, session_event_model::SessionItemKind::Usage) =>
+            {
+                crate::app_server_token_usage::translate_usage_update(
+                    item,
+                    &thread_id,
+                    self.turn_ids.get(session).map(String::as_str),
+                )
+                .into_iter()
+                .collect()
+            }
             SessionEvent::ItemStarted { item } | SessionEvent::ItemUpdated { item } => {
                 let turn_id = self.turn_ids.get(session).map(String::as_str).unwrap_or("");
-                let Some(translated) = translate_session_item(item, &thread_id, turn_id) else {
+                let Some(mut translated) = translate_session_item(item, &thread_id, turn_id) else {
                     self.items.remove(&(session.clone(), item.item_id.clone()));
                     return Vec::new();
                 };
+                if matches!(item.kind, session_event_model::SessionItemKind::UserMessage) {
+                    self.user_receipts.stamp(
+                        &thread_id,
+                        &item.item_id,
+                        matches!(event.event, SessionEvent::ItemStarted { .. }),
+                        &mut translated.thread_item,
+                        self.items.get(&(session.clone(), item.item_id.clone())),
+                    );
+                }
                 let previous = self.items.insert(
                     (session.clone(), item.item_id.clone()),
                     translated.thread_item.clone(),
@@ -340,6 +387,10 @@ impl AppServerEventForwarding {
                     "threadId":thread_id,"turnId":turn_id,"item":item,
                     "completedAtMs":chrono::Utc::now().timestamp_millis()
                 }})]
+            }
+            SessionEvent::InputAccepted { input_id, .. } => {
+                self.user_receipts.accept(&thread_id, input_id);
+                Vec::new()
             }
             SessionEvent::InteractionRequested { interaction } => {
                 self.present_interaction(session, interaction, &thread_id)

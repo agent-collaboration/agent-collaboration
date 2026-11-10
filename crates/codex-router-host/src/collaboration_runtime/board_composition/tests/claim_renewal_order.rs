@@ -72,7 +72,7 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
         .subscribe();
     let registry = projects.registry()?;
     let admission = board.admission.clone();
-    let running = board.start().ok_or("session not started")?;
+    let running = board.start().session.ok_or("session not started")?;
     wait_welcome(welcomed).await?;
     let request = ProjectClaimRequest {
         request_id: message_board::RequestId::generate(),
@@ -251,7 +251,15 @@ async fn claim_drains_held_runner_renewal_then_persists_its_own_answer_before_pu
         if proof.is_ok() {
             grant_notice.release()?;
             let session_store =
-                board_fleet_sync::MachineSessionStore::open(&projects.directory).await?;
+                board_fleet_sync::MachineSessionStore::from_cache(std::sync::Arc::new(
+                    message_board_storage::FleetStore::open(
+                        &projects
+                            .directory
+                            .join(message_board_storage::FleetStore::FILE_NAME),
+                    )
+                    .await?
+                    .cache(),
+                ));
             timeout(BOUND, async {
                 loop {
                     if session_store

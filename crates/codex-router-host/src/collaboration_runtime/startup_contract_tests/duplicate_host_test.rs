@@ -11,16 +11,21 @@ async fn two_hosts_with_the_same_session_keep_the_latest_connected_without_flip_
         matches!(state, FleetLinkState::Connected { .. })
     })
     .await;
-    let cache =
-        message_board_storage::FleetCache::open(&first.directory.path().join("fleet-cache.sqlite"))
-            .await
-            .unwrap();
+    let cache_store = message_board_storage::FleetStore::open(
+        &first
+            .directory
+            .path()
+            .join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await
+    .unwrap();
+    let cache = cache_store.cache();
     let resume = cache
         .machine_session_state()
         .await
         .unwrap()
         .expect("first native resume state");
-    cache.close().await;
+    cache_store.close().await;
     let second_directory = tempfile::Builder::new()
         .prefix("same-session-host-")
         .tempdir_in("/tmp")
@@ -43,13 +48,16 @@ async fn two_hosts_with_the_same_session_keep_the_latest_connected_without_flip_
         )
         .unwrap();
     }
-    let cache = message_board_storage::FleetCache::open(
-        &second_directory.path().join("fleet-cache.sqlite"),
+    let cache_store = message_board_storage::FleetStore::open(
+        &second_directory
+            .path()
+            .join(message_board_storage::FleetStore::FILE_NAME),
     )
     .await
     .unwrap();
+    let cache = cache_store.cache();
     cache.save_machine_session_state(&resume).await.unwrap();
-    cache.close().await;
+    cache_store.close().await;
 
     // Act: the second real Host attaches the same peer AND session id.
     let second = StartupFixture {
@@ -95,11 +103,15 @@ async fn two_hosts_with_the_same_session_keep_the_latest_connected_without_flip_
         2,
         "one of the Hosts took the peer back"
     );
-    let cache = message_board_storage::FleetCache::open(
-        &second.directory.path().join("fleet-cache.sqlite"),
+    let cache_store = message_board_storage::FleetStore::open(
+        &second
+            .directory
+            .path()
+            .join(message_board_storage::FleetStore::FILE_NAME),
     )
     .await
     .unwrap();
+    let cache = cache_store.cache();
     assert_eq!(
         cache
             .machine_session_state()
@@ -109,7 +121,7 @@ async fn two_hosts_with_the_same_session_keep_the_latest_connected_without_flip_
             .session_id,
         resume.session_id
     );
-    cache.close().await;
+    cache_store.close().await;
     let old_identity = client(&first).await.installation_show().await.unwrap();
     let new_identity = client(&second).await.installation_show().await.unwrap();
     assert_eq!(old_identity.peer_id, new_identity.peer_id);

@@ -100,6 +100,44 @@ impl SessionEventSink for CaptureEventSink {
 /// running Turn links to that Turn without starting another one.
 #[tokio::test]
 async fn prompt_and_injected_steer_publish_distinct_inputs_on_one_turn() {
+    assert_injected_steer_receipt(
+        vec![session_event_model::PromptContent::text("Second".into()).expect("text")],
+        "Second",
+    )
+    .await;
+}
+
+#[tokio::test]
+async fn mixed_media_and_image_only_steers_publish_one_receipt() {
+    let image = serde_json::from_value(
+        serde_json::json!({"type":"image","mimeType":"image/png","data":"AA=="}),
+    )
+    .expect("image");
+    assert_injected_steer_receipt(
+        vec![
+            session_event_model::PromptContent::text("left".into()).expect("text"),
+            image,
+            session_event_model::PromptContent::text("right".into()).expect("text"),
+        ],
+        "leftright",
+    )
+    .await;
+    let image = serde_json::from_value(
+        serde_json::json!({"type":"image","mimeType":"image/png","data":"AA=="}),
+    )
+    .expect("image");
+    assert_injected_steer_receipt(vec![image], "").await;
+}
+
+#[expect(
+    clippy::expect_used,
+    clippy::panic,
+    reason = "Fixture setup and contract assertions must fail loudly when a receipt is missing."
+)]
+async fn assert_injected_steer_receipt(
+    content: Vec<session_event_model::PromptContent>,
+    expected_text: &str,
+) {
     let root = tempfile::tempdir().expect("fixture root");
     let (sender, mut events) = tokio::sync::mpsc::unbounded_channel();
     let client = AgentSessionClient::initialize(
@@ -157,9 +195,7 @@ async fn prompt_and_injected_steer_publish_distinct_inputs_on_one_turn() {
         .steer_contents_with_input(
             session_id.clone(),
             steer_input.clone(),
-            session_event_model::ProviderSubmission::plain(vec![
-                session_event_model::PromptContent::text("Second".to_owned()).expect("text steer"),
-            ]),
+            session_event_model::ProviderSubmission::plain(content),
         )
         .await
         .expect("steer accepted");
@@ -178,6 +214,7 @@ async fn prompt_and_injected_steer_publish_distinct_inputs_on_one_turn() {
             turn_id: turn_id.clone()
         }
     );
+    assert_submitted_user_item(&mut events, expected_text).await;
     prompt.await.expect("prompt ends");
     let ended = tokio::time::timeout(Duration::from_secs(2), events.recv())
         .await
@@ -249,6 +286,7 @@ async fn started_new_turn_uses_the_steer_input_id() {
             .get_version_num(),
         7
     );
+    assert_submitted_user_item(&mut events, "Begin").await;
     let ended = tokio::time::timeout(Duration::from_secs(2), events.recv())
         .await
         .expect("unobservable turn settles")

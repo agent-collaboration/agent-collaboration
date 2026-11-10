@@ -14,14 +14,15 @@ async fn observes_saved_checkpoint_from_fresh_cut_without_modifying_sealed_b() -
     let source = directory.join("fleet-cache.sqlite");
     let untouched = directory.join("B.sqlite");
     let scratch = directory.join("A.sqlite");
-    let cache = FleetCache::open(&source).await?;
-    cache
+    let store = FleetStore::open(&source).await?;
+    store
+        .cache()
         .replace_snapshot(&FleetRecordSnapshot {
             through: FleetPosition::try_from(17)?,
             records: Vec::new(),
         })
         .await?;
-    cache.close().await;
+    store.close().await;
     for (from, to) in [(&source, &untouched), (&untouched, &scratch)] {
         let input = if from == &untouched {
             let mut uri = url::Url::from_file_path(from).map_err(|()| "invalid fixture path")?;

@@ -44,7 +44,7 @@ fn quota_401_renews_once_and_retries_with_the_committed_generation() {
             "quota-401-recovered"
         });
         must_ok(fs::create_dir(test_root.path()));
-        let state_path = test_root.path().join("state.sqlite");
+        let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
         let secret_root = test_root.path().join("secrets");
         let state = must_ok(SqliteStateStore::open(&state_path));
         let account_id = account_id("quota-401-account");
@@ -184,7 +184,7 @@ impl QuotaRefreshProvider for ConcurrentGenerationQuotaProvider {
 fn quota_401_reuses_a_concurrently_committed_generation_without_oauth_refresh() {
     let test_root = TestRoot::new("quota-401-generation-race");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let state = must_ok(SqliteStateStore::open(&state_path));
     let account_id = account_id("quota-401-race-account");
@@ -258,7 +258,7 @@ fn quota_401_does_not_bypass_terminal_or_retry_cooldown_maintenance() {
     ] {
         let test_root = TestRoot::new(&format!("quota-401-{scenario}"));
         must_ok(fs::create_dir(test_root.path()));
-        let state_path = test_root.path().join("state.sqlite");
+        let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
         let secret_root = test_root.path().join("secrets");
         let state = must_ok(SqliteStateStore::open(&state_path));
         let account_id = account_id("quota-401-maintenance-account");
@@ -351,7 +351,9 @@ fn quota_refresh_rejects_non_provider_base_url_before_token_egress() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     let account_id = account_id("acct_refresh_reject");
     let account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
@@ -404,7 +406,9 @@ fn quota_refresh_resolver_refreshes_expired_access_token_before_provider_egress(
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     let account_id = account_id("acct_quota_refresh");
     let account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
@@ -494,8 +498,12 @@ fn quota_refresh_resolver_refreshes_expired_access_token_before_provider_egress(
             .build(),
     );
     runtime.block_on(async {
-        let async_state =
-            must_ok(AsyncSqliteStateStore::open(&router_root.join("state.sqlite")).await);
+        let async_state = must_ok(
+            AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+                &router_root,
+            ))
+            .await,
+        );
         let history = must_ok(
             async_state
                 .quota_history_observations_for_window(&account_id, "responses", 18_000, 0, 2_000)
@@ -576,7 +584,9 @@ fn quota_refresh_missing_refresh_token_fails_closed_before_provider_egress() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     let account_id = account_id("acct_quota_missing_refresh");
     let account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
@@ -637,7 +647,9 @@ fn quota_refresh_missing_refresh_token_fails_closed_before_provider_egress() {
     assert!(!rendered_stdout.contains("expired-quota-access-token-canary"));
 
     let async_state = must_ok(test_async_runtime().block_on(
-        AsyncSqliteStateStore::open_read_only(&router_root.join("state.sqlite")),
+        AsyncSqliteStateStore::open_read_only(&codex_router_state::provider_proxy_database_path(
+            &router_root,
+        )),
     ));
     let observation = must_ok(
         test_async_runtime().block_on(async_state.load_account_credit_observation(&account_id)),
@@ -686,7 +698,9 @@ fn quota_refresh_continues_after_one_account_provider_failure() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     let failing_account_id = account_id("acct_quota_provider_failing");
     let healthy_account_id = account_id("acct_quota_provider_healthy");
     let failing_account = AccountRecord::new(
@@ -788,7 +802,9 @@ fn quota_refresh_preserves_enabled_account_when_401_recovery_is_unavailable() {
         must_ok(fs::create_dir(test_root.path()));
         let router_root = test_root.path().join("router");
         must_ok(fs::create_dir_all(&router_root));
-        let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+        let state = must_ok(SqliteStateStore::open(
+            &codex_router_state::provider_proxy_database_path(&router_root),
+        ));
         let rejected_account_id = account_id("acct_quota_provider_rejected");
         let healthy_account_id = account_id("acct_quota_provider_healthy");
         for (account_id, account_label) in [

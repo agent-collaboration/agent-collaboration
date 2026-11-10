@@ -3,8 +3,7 @@
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use hmac::{Hmac, Mac};
 use message_board_storage::{
-    CursorSigningKey, CursorStore, RouterLocalStorageError, decode_board_cursor,
-    encode_board_cursor,
+    CursorSigningKey, RouterLocalStorageError, decode_board_cursor, encode_board_cursor,
 };
 use sha2::Sha256;
 use sqlx::Connection;
@@ -19,7 +18,7 @@ async fn cursor_connection(path: &Path) -> TestResult<TursoConnection> {
 
 async fn stored_key_identity(path: &Path) -> TestResult<String> {
     let mut connection = cursor_connection(path).await?;
-    let identity = sqlx::query_scalar("SELECT key_id FROM cursor_signing_key")
+    let identity = sqlx::query_scalar("SELECT key_id FROM fleet_cursor_signing_key")
         .fetch_one(&mut connection)
         .await?;
     connection.close().await?;
@@ -36,7 +35,8 @@ async fn signing_key_uses_a_uuid_v7_identity_that_survives_reopen() -> TestResul
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("cursors.sqlite");
     let key = CursorSigningKey::try_from(vec![9; 32])?;
-    let store = CursorStore::open(&path).await?;
+    let store_store = message_board_storage::FleetStore::open(&path).await?;
+    let store = store_store.cursors();
     assert_eq!(store.key().await?, None);
     assert_eq!(store.get_or_install_key(&key).await?, key);
     let identity = stored_key_identity(&path).await?;
@@ -44,14 +44,15 @@ async fn signing_key_uses_a_uuid_v7_identity_that_survives_reopen() -> TestResul
     assert_eq!(parsed.get_version_num(), 7);
     assert_eq!(parsed.get_variant(), uuid::Variant::RFC4122);
     assert_eq!(parsed.hyphenated().to_string(), identity);
-    store.close().await;
+    store_store.close().await;
 
     // Act through a fresh owning store with a different candidate.
-    let reopened = CursorStore::open(&path).await?;
+    let reopened_store = message_board_storage::FleetStore::open(&path).await?;
+    let reopened = reopened_store.cursors();
     let replacement = CursorSigningKey::try_from(vec![8; 32])?;
     let installed = reopened.get_or_install_key(&replacement).await?;
     let read = reopened.key().await?;
-    reopened.close().await;
+    reopened_store.close().await;
 
     // Assert both durable facts remain exactly the first installation's values.
     assert_eq!(installed, key);
@@ -68,22 +69,24 @@ async fn signing_key_uses_a_uuid_v7_identity_that_survives_reopen() -> TestResul
 async fn a_second_valid_signing_key_row_is_refused_without_replacement() -> TestResult {
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("cursors.sqlite");
-    let store = CursorStore::open(&path).await?;
+    let store_store = message_board_storage::FleetStore::open(&path).await?;
+    let store = store_store.cursors();
     let key = CursorSigningKey::try_from(vec![9; 32])?;
     store.get_or_install_key(&key).await?;
-    store.close().await;
+    store_store.close().await;
     let mut connection = cursor_connection(&path).await?;
-    sqlx::query("INSERT INTO cursor_signing_key(key_id,key_bytes) VALUES(?,?)")
+    sqlx::query("INSERT INTO fleet_cursor_signing_key(key_id,key_bytes) VALUES(?,?)")
         .bind(uuid::Uuid::now_v7().to_string())
         .bind(vec![8_u8; 32])
         .execute(&mut connection)
         .await?;
 
-    let reopened = CursorStore::open(&path).await?;
+    let reopened_store = message_board_storage::FleetStore::open(&path).await?;
+    let reopened = reopened_store.cursors();
     let read = reopened.key().await;
     let install = reopened.get_or_install_key(&key).await;
-    reopened.close().await;
-    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM cursor_signing_key")
+    reopened_store.close().await;
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM fleet_cursor_signing_key")
         .fetch_one(&mut connection)
         .await?;
     connection.close().await?;
@@ -113,29 +116,32 @@ async fn malformed_signing_key_identities_are_refused_without_replacement() -> T
     ] {
         let directory = tempfile::tempdir()?;
         let path = directory.path().join("cursors.sqlite");
-        let store = CursorStore::open(&path).await?;
+        let store_store = message_board_storage::FleetStore::open(&path).await?;
+        let store = store_store.cursors();
         let key = CursorSigningKey::try_from(vec![9; 32])?;
         store.get_or_install_key(&key).await?;
-        store.close().await;
+        store_store.close().await;
         let mut connection = cursor_connection(&path).await?;
-        sqlx::query("UPDATE cursor_signing_key SET key_id=?")
+        sqlx::query("UPDATE fleet_cursor_signing_key SET key_id=?")
             .bind(invalid)
             .execute(&mut connection)
             .await?;
 
-        let reopened = CursorStore::open(&path).await?;
+        let reopened_store = message_board_storage::FleetStore::open(&path).await?;
+        let reopened = reopened_store.cursors();
         let read = reopened.key().await;
         let install = reopened.get_or_install_key(&key).await;
-        reopened.close().await;
-        let stored: Option<String> = sqlx::query_scalar("SELECT key_id FROM cursor_signing_key")
-            .fetch_one(&mut connection)
-            .await?;
+        reopened_store.close().await;
+        let stored: Option<String> =
+            sqlx::query_scalar("SELECT key_id FROM fleet_cursor_signing_key")
+                .fetch_one(&mut connection)
+                .await?;
         connection.close().await?;
         assert!(
             matches!(
                 read,
                 Err(RouterLocalStorageError::InvalidRecordKey {
-                    field: "cursor_signing_key.key_id"
+                    field: "fleet_cursor_signing_key.key_id"
                 })
             ),
             "key() accepted invalid identity {invalid:?}"
@@ -144,7 +150,7 @@ async fn malformed_signing_key_identities_are_refused_without_replacement() -> T
             matches!(
                 install,
                 Err(RouterLocalStorageError::InvalidRecordKey {
-                    field: "cursor_signing_key.key_id"
+                    field: "fleet_cursor_signing_key.key_id"
                 })
             ),
             "get_or_install_key() accepted invalid identity {invalid:?}"
@@ -162,22 +168,24 @@ async fn malformed_signing_key_identities_are_refused_without_replacement() -> T
 async fn a_malformed_signing_key_is_refused_without_replacement() -> TestResult {
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("cursors.sqlite");
-    let store = CursorStore::open(&path).await?;
+    let store_store = message_board_storage::FleetStore::open(&path).await?;
+    let store = store_store.cursors();
     let key = CursorSigningKey::try_from(vec![9; 32])?;
     store.get_or_install_key(&key).await?;
-    store.close().await;
+    store_store.close().await;
     let mut connection = cursor_connection(&path).await?;
     let invalid = vec![6_u8; 31];
-    sqlx::query("UPDATE cursor_signing_key SET key_bytes=?")
+    sqlx::query("UPDATE fleet_cursor_signing_key SET key_bytes=?")
         .bind(&invalid)
         .execute(&mut connection)
         .await?;
 
-    let reopened = CursorStore::open(&path).await?;
+    let reopened_store = message_board_storage::FleetStore::open(&path).await?;
+    let reopened = reopened_store.cursors();
     let read = reopened.key().await;
     let install = reopened.get_or_install_key(&key).await;
-    reopened.close().await;
-    let stored: Vec<u8> = sqlx::query_scalar("SELECT key_bytes FROM cursor_signing_key")
+    reopened_store.close().await;
+    let stored: Vec<u8> = sqlx::query_scalar("SELECT key_bytes FROM fleet_cursor_signing_key")
         .fetch_one(&mut connection)
         .await?;
     connection.close().await?;
@@ -200,10 +208,12 @@ async fn key_reopen_accepts_current_tokens_and_refuses_validly_signed_old_format
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("cursors.sqlite");
     let key = CursorSigningKey::try_from(vec![9; 32])?;
-    let store = CursorStore::open(&path).await?;
+    let store_store = message_board_storage::FleetStore::open(&path).await?;
+    let store = store_store.cursors();
     assert_eq!(store.get_or_install_key(&key).await?, key);
-    store.close().await;
-    let reopened = CursorStore::open(&path).await?;
+    store_store.close().await;
+    let reopened_store = message_board_storage::FleetStore::open(&path).await?;
+    let reopened = reopened_store.cursors();
     assert_eq!(
         reopened
             .get_or_install_key(&CursorSigningKey::try_from(vec![8; 32])?)
@@ -238,6 +248,6 @@ async fn key_reopen_accepts_current_tokens_and_refuses_validly_signed_old_format
             Err(RouterLocalStorageError::InvalidCursor)
         ));
     }
-    reopened.close().await;
+    reopened_store.close().await;
     Ok(())
 }

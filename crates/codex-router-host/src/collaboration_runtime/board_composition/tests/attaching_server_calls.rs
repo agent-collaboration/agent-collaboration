@@ -142,7 +142,7 @@ async fn native_release_and_withdrawal_are_answered_before_welcome() -> TestResu
         .subscribe();
     let (fleet, request) = arrange_project(&board, &root).await?;
     let admission = board.admission.clone();
-    let running = board.start().ok_or("session not started")?;
+    let running = board.start().session.ok_or("session not started")?;
     timeout(BOUND, fleet_service.auth.entered.notified()).await?;
     assert_eq!(
         settle_fixture_directory(&fleet, &request).await?,
@@ -213,7 +213,7 @@ async fn native_release_and_withdrawal_are_answered_before_welcome() -> TestResu
         .welcomed
         .subscribe();
     let admission = board.admission.clone();
-    let running = board.start().ok_or("resumed session not started")?;
+    let running = board.start().session.ok_or("resumed session not started")?;
     timeout(BOUND + std::time::Duration::from_secs(5), reports.recv())
         .await?
         .ok_or("scripted peer report missing")??;

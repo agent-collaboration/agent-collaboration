@@ -364,7 +364,14 @@ pub async fn fleet_client(
     origin: &ActorOrigin,
 ) -> FixtureResult<(FleetClient, FleetTestRuntime)> {
     let (requests, runtime) = machine_session(directory, origin).await?;
-    let client = FleetClient::open(directory, registration, Some(requests)).await?;
+    let client = FleetClient::new(
+        &message_board_storage::FleetStore::open(
+            &(directory).join(message_board_storage::FleetStore::FILE_NAME),
+        )
+        .await?,
+        registration,
+        Some(requests),
+    );
     client.synchronize().await?;
     Ok((client, runtime))
 }

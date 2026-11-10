@@ -21,7 +21,15 @@ async fn offline_surfaces() -> TestResult<(tempfile::TempDir, Surfaces, SessionR
     let bound = Duration::from_secs(5);
     let client = SessionClient::<_, _, BoardConsumerProtocol>::load(
         ReqwestSessionTransport::new(AccessServiceToken::new("fixture", "fixture")?, bound, bound)?,
-        MachineSessionStore::open(root.path()).await?,
+        MachineSessionStore::from_cache(std::sync::Arc::new(
+            message_board_storage::FleetStore::open(
+                &root
+                    .path()
+                    .join(message_board_storage::FleetStore::FILE_NAME),
+            )
+            .await?
+            .cache(),
+        )),
         &UuidV7Ids,
         SchemaSupport { max_version: 1 },
         Backoff {

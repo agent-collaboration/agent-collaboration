@@ -4,7 +4,7 @@
 use crate::fleet_cache_source as source;
 use fleet_admission::{FleetOperation, FleetRequest};
 use message_board::*;
-use message_board_storage::{FleetCache, RouterLocalStorageError};
+use message_board_storage::RouterLocalStorageError;
 use source::NativeFleetSource;
 type TestResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
@@ -35,7 +35,8 @@ async fn fleet_cache_installs_a_real_snapshot_and_rejects_a_gapped_page_atomical
     let directory = tempfile::tempdir()?;
     let fleet = NativeFleetSource::open(&directory.path().join("central")).await?;
     let cache_path = directory.path().join("cache.sqlite");
-    let cache = FleetCache::open(&cache_path).await?;
+    let cache_store = message_board_storage::FleetStore::open(&cache_path).await?;
+    let cache = cache_store.cache();
     let original = request(WorkspaceId::generate())?;
     fleet.decide(&original).await?;
     let snapshot = fleet.snapshot().await?;
@@ -86,10 +87,11 @@ async fn fleet_cache_installs_a_real_snapshot_and_rejects_a_gapped_page_atomical
         .apply_feed(page.covered_through, &remainder.entries)
         .await?;
     assert_eq!(cache.snapshot().await?, fleet.snapshot().await?);
-    cache.close().await;
-    let reopened = FleetCache::open(&cache_path).await?;
+    cache_store.close().await;
+    let reopened_store = message_board_storage::FleetStore::open(&cache_path).await?;
+    let reopened = reopened_store.cache();
     assert_eq!(reopened.snapshot().await?, fleet.snapshot().await?);
-    reopened.close().await;
+    reopened_store.close().await;
     fleet.close().await?;
     Ok(())
 }
@@ -104,7 +106,8 @@ async fn repository_attachments_travel_in_workspace_feed_cache_and_reopen() -> T
     let fleet_path = directory.path().join("central");
     let cache_path = directory.path().join("cache.sqlite");
     let fleet = NativeFleetSource::open(&fleet_path).await?;
-    let cache = FleetCache::open(&cache_path).await?;
+    let cache_store = message_board_storage::FleetStore::open(&cache_path).await?;
+    let cache = cache_store.cache();
     let original = request(WorkspaceId::generate())?;
     fleet.decide(&original).await?;
     cache.replace_snapshot(&fleet.snapshot().await?).await?;
@@ -153,15 +156,16 @@ async fn repository_attachments_travel_in_workspace_feed_cache_and_reopen() -> T
         assert_eq!(fleet.decide(&mutation).await?, reply);
         assert_eq!(fleet.snapshot().await?, before_replay);
     }
-    cache.close().await;
+    cache_store.close().await;
     fleet.close().await?;
     let reopened_fleet = NativeFleetSource::open(&fleet_path).await?;
-    let reopened_cache = FleetCache::open(&cache_path).await?;
+    let reopened_cache_store = message_board_storage::FleetStore::open(&cache_path).await?;
+    let reopened_cache = reopened_cache_store.cache();
     assert_eq!(
         reopened_cache.snapshot().await?,
         reopened_fleet.snapshot().await?
     );
-    reopened_cache.close().await;
+    reopened_cache_store.close().await;
     reopened_fleet.close().await?;
     Ok(())
 }

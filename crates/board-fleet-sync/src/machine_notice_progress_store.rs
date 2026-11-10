@@ -3,27 +3,16 @@ use crate::machine_session_store::cache_error;
 use fleet_sync_protocol::NoticePosition;
 use fleet_sync_session::StoreError;
 use message_board_storage::FleetCache;
-use std::path::Path;
 
 pub struct MachineNoticeProgressStore {
     cache: FleetCache,
 }
 
 impl MachineNoticeProgressStore {
-    pub async fn open(router_directory: &Path) -> Result<Self, StoreError> {
-        tokio::fs::create_dir_all(router_directory)
-            .await
-            .map_err(|error| StoreError::Unavailable {
-                message: error.to_string(),
-            })?;
-        let cache = FleetCache::open(&router_directory.join("fleet-cache.sqlite"))
-            .await
-            .map_err(cache_error)?;
-        cache
-            .import_legacy_runtime(router_directory)
-            .await
-            .map_err(cache_error)?;
-        Ok(Self { cache })
+    /// A view over the Router's one Fleet database, which the Host owns and closes.
+    #[must_use]
+    pub const fn from_cache(cache: FleetCache) -> Self {
+        Self { cache }
     }
     pub async fn load(&self) -> Result<NoticePosition, StoreError> {
         self.cache

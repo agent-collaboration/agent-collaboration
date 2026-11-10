@@ -111,7 +111,13 @@ impl RecipientRuntime {
         );
         let client = SessionClient::<_, _, BoardConsumerProtocol>::load(
             transport.clone(),
-            MachineSessionStore::open(root).await?,
+            MachineSessionStore::from_cache(std::sync::Arc::new(
+                message_board_storage::FleetStore::open(
+                    &root.join(message_board_storage::FleetStore::FILE_NAME),
+                )
+                .await?
+                .cache(),
+            )),
             &UuidV7Ids,
             SchemaSupport { max_version: 1 },
             Backoff {
@@ -149,12 +155,17 @@ impl RecipientRuntime {
             root,
             Some(inputs.peer),
             Arc::new(SystemClock),
+            message_board_storage::CursorSigningKey::try_from(vec![0x5a_u8; 32])
+                .expect("32-byte fixture cursor key"),
         ));
         let projects = Arc::new(ProjectWriters::new(
             crate::collaboration_runtime::board_composition::project_writers::ProjectWriterInputs {
                 cache: Arc::new(
-                    message_board_storage::FleetCache::open(&root.join("fleet-cache.sqlite"))
-                        .await?,
+                    message_board_storage::FleetStore::open(
+                        &root.join(message_board_storage::FleetStore::FILE_NAME),
+                    )
+                    .await?
+                    .cache(),
                 ),
                 directory: root,
                 peer: inputs.peer,
@@ -171,7 +182,15 @@ impl RecipientRuntime {
         tasks.spawn(run_events(
             events,
             requests,
-            MachineNoticeReactions::open(root).await?,
+            MachineNoticeReactions::open(
+                message_board_storage::FleetStore::open(
+                    &root.join(message_board_storage::FleetStore::FILE_NAME),
+                )
+                .await
+                .map_err(std::io::Error::other)?
+                .cache(),
+            )
+            .await?,
             MachineSessionEventOwners {
                 link_failures: None,
                 projects: projects.clone(),

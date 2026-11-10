@@ -13,9 +13,10 @@ fn captured_target() -> AccountActionTarget {
 }
 
 async fn seed_account(root: &std::path::Path, label: &str, status: AccountStatus) {
-    let store = AsyncSqliteStateStore::open(&root.join("state.sqlite"))
-        .await
-        .unwrap();
+    let store =
+        AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(root))
+            .await
+            .unwrap();
     store
         .upsert_account(&AccountRecord::new(
             Provider::Openai,
@@ -47,9 +48,11 @@ async fn quota_account_port_retains_requires_disabled_from_the_real_removal_owne
             reason: QuotaAccountRefusal::RequiresDisabled
         }
     );
-    let state = AsyncSqliteStateStore::open_read_only(&root.path().join("state.sqlite"))
-        .await
-        .unwrap();
+    let state = AsyncSqliteStateStore::open_read_only(
+        &codex_router_state::provider_proxy_database_path(root.path()),
+    )
+    .await
+    .unwrap();
     assert_eq!(state.list_accounts().await.unwrap().len(), 1);
     state.close().await.unwrap();
     assert!(
@@ -76,9 +79,11 @@ async fn quota_account_port_retains_the_captured_record_refusal_without_deleting
             reason: QuotaAccountRefusal::TargetChanged
         }
     );
-    let state = AsyncSqliteStateStore::open_read_only(&root.path().join("state.sqlite"))
-        .await
-        .unwrap();
+    let state = AsyncSqliteStateStore::open_read_only(
+        &codex_router_state::provider_proxy_database_path(root.path()),
+    )
+    .await
+    .unwrap();
     assert_eq!(state.list_accounts().await.unwrap().len(), 1);
     state.close().await.unwrap();
     assert!(!root.path().join("secrets").exists());
@@ -88,9 +93,11 @@ async fn quota_account_port_retains_the_captured_record_refusal_without_deleting
 async fn quota_account_port_changes_status_by_id_when_the_label_is_rebound() {
     let root = tempfile::tempdir().unwrap();
     seed_account(root.path(), "renamed", AccountStatus::Enabled).await;
-    let state = AsyncSqliteStateStore::open(&root.path().join("state.sqlite"))
-        .await
-        .unwrap();
+    let state = AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+        root.path(),
+    ))
+    .await
+    .unwrap();
     let neighbor = AccountId::new("neighbor").unwrap();
     state
         .upsert_account(&AccountRecord::new(

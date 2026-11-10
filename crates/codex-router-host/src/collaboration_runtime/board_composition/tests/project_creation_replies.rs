@@ -38,7 +38,7 @@ async fn assert_creation_reply(ready_during_wait: bool) -> TestResult {
         Some(&json!("pendingUnreachable")),
         "{queued}"
     );
-    let running = board.start().ok_or("running session")?;
+    let running = board.start().session.ok_or("running session")?;
     timeout(BOUND, central.auth.entered.notified()).await?;
     settle_fixture_directory(&fleet, &creation).await?;
     assert_eq!(

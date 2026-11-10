@@ -245,7 +245,13 @@ async fn run_recovery(case: RecoveryCase) -> ConformanceResult<()> {
     let state_dir = root.path().join("machine");
     let session = SessionClient::<_, _, BoardConsumerProtocol>::load(
         transport,
-        MachineSessionStore::open(&state_dir).await?,
+        MachineSessionStore::from_cache(std::sync::Arc::new(
+            message_board_storage::FleetStore::open(
+                &state_dir.join(message_board_storage::FleetStore::FILE_NAME),
+            )
+            .await?
+            .cache(),
+        )),
         &UuidV7Ids,
         SchemaSupport { max_version: 7 },
         Backoff {
@@ -399,7 +405,13 @@ async fn run_recovery(case: RecoveryCase) -> ConformanceResult<()> {
     .await??;
     let mut session = SessionClient::<_, _, BoardConsumerProtocol>::load(
         transport::FixtureTransport::default(),
-        MachineSessionStore::open(&state_dir).await?,
+        MachineSessionStore::from_cache(std::sync::Arc::new(
+            message_board_storage::FleetStore::open(
+                &state_dir.join(message_board_storage::FleetStore::FILE_NAME),
+            )
+            .await?
+            .cache(),
+        )),
         &UuidV7Ids,
         SchemaSupport { max_version: 7 },
         Backoff {

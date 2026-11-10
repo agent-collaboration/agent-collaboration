@@ -119,7 +119,7 @@ fn explicit_mask_only_and_unsupported_requests_do_not_gain_delegation() {
         ));
     }
     for (field, value) in [
-        ("serviceTier", Value::Null),
+        ("serviceTier", json!("priority")),
         ("cwd", json!("/unsupported")),
         ("permissions", json!("workspace-write")),
         ("summary", json!("private")),

@@ -155,7 +155,7 @@ impl RefreshEffects {
                     });
                     watchers.lock().unwrap().push(watcher);
                     let resolver = crate::credential_runtime::AsyncCliCredentialResolver::open(
-                        &root.join("state.sqlite"),
+                        &codex_router_state::provider_proxy_database_path(&root),
                         &root.join("secrets"),
                     )
                     .await

@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "acp-client-runtime"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "agent-client-protocol",
  "futures-util",
@@ -23,7 +23,7 @@ dependencies = [
 
 [[package]]
 name = "acp-provider-adapters"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "acp-client-runtime",
  "serde",
@@ -124,7 +124,7 @@ dependencies = [
 
 [[package]]
 name = "agent-automation"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "chrono",
  "chrono-tz",
@@ -189,7 +189,7 @@ dependencies = [
 
 [[package]]
 name = "agent-collaboration"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "agent-automation",
  "agent-collaboration-tui",
@@ -260,7 +260,7 @@ dependencies = [
 
 [[package]]
 name = "agent-collaboration-tui"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "futures-util",
  "iocraft",
@@ -274,7 +274,7 @@ dependencies = [
 
 [[package]]
 name = "agent-router-quota-tui"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "agent-collaboration-tui",
  "chrono",
@@ -293,8 +293,60 @@ dependencies = [
 ]
 
 [[package]]
+name = "agent-router-update"
+version = "0.1.145"
+dependencies = [
+ "agent-session-inventory",
+ "automation-storage",
+ "board-fleet-sync",
+ "board-sync-protocol",
+ "chrono",
+ "clap",
+ "codex-router-core",
+ "codex-router-host",
+ "codex-router-secret-store",
+ "codex-router-state",
+ "collaboration-central-admin-protocol",
+ "collaboration-central-conformance",
+ "collaboration-central-core",
+ "collaboration-central-tokio",
+ "collaboration-client",
+ "collaboration-contracts",
+ "collaboration-protocol",
+ "collaboration-runtime",
+ "collaboration-service",
+ "durable-steps",
+ "fleet-admission",
+ "fleet-sync-lease",
+ "fleet-sync-protocol",
+ "fleet-sync-writer",
+ "futures-util",
+ "interaction-storage",
+ "legacy-upgrade-test-support",
+ "message-board",
+ "message-board-storage",
+ "nix",
+ "owned-process-test-support",
+ "reqwest 0.12.28",
+ "reqwest-websocket",
+ "runtime-primitives",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx",
+ "sqlx-turso",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
+]
+
+[[package]]
 name = "agent-session-inventory"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "axum",
  "chrono",
@@ -328,7 +380,7 @@ dependencies = [
 
 [[package]]
 name = "agent-session-tui"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "agent-collaboration-tui",
  "agent-session-inventory",
@@ -446,7 +498,7 @@ version = "1.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -457,7 +509,7 @@ checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
 dependencies = [
  "anstyle",
  "once_cell_polyfill",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -679,7 +731,7 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "automation-storage"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "agent-automation",
  "chrono",
@@ -898,7 +950,7 @@ dependencies = [
 
 [[package]]
 name = "board-central-test-support"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "axum",
  "board-fleet-sync",
@@ -918,6 +970,7 @@ dependencies = [
  "fleet-sync-tokio-runner",
  "futures-util",
  "message-board",
+ "message-board-storage",
  "reqwest 0.12.28",
  "reqwest-websocket",
  "runtime-primitives",
@@ -930,7 +983,7 @@ dependencies = [
 
 [[package]]
 name = "board-fleet-sync"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "axum",
  "board-sync-protocol",
@@ -962,57 +1015,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "board-legacy-upgrade"
-version = "0.1.140"
-dependencies = [
- "automation-storage",
- "board-fleet-sync",
- "board-sync-protocol",
- "chrono",
- "clap",
- "codex-router-host",
- "codex-router-secret-store",
- "collaboration-central-admin-protocol",
- "collaboration-central-conformance",
- "collaboration-central-core",
- "collaboration-central-tokio",
- "collaboration-client",
- "collaboration-contracts",
- "collaboration-protocol",
- "collaboration-runtime",
- "collaboration-service",
- "durable-steps",
- "fleet-admission",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-writer",
- "futures-util",
- "interaction-storage",
- "legacy-upgrade-test-support",
- "message-board",
- "message-board-storage",
- "nix",
- "owned-process-test-support",
- "reqwest 0.12.28",
- "reqwest-websocket",
- "runtime-primitives",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "sqlx",
- "sqlx-turso",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "uuid",
-]
-
-[[package]]
 name = "board-staging-cutover"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "axum",
  "board-central-test-support",
@@ -1065,7 +1069,7 @@ dependencies = [
 
 [[package]]
 name = "board-sync-protocol"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "chrono",
  "collaboration-mail-protocol",
@@ -1320,7 +1324,7 @@ checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "claude-code-peer-messaging"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "agent-automation",
  "collaboration-protocol",
@@ -1351,7 +1355,7 @@ checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 
 [[package]]
 name = "codex-acp-adapter"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -1373,7 +1377,7 @@ dependencies = [
 
 [[package]]
 name = "codex-native-integration"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "futures-util",
  "jsonschema",
@@ -1393,7 +1397,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-auth"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "base64 0.22.1",
  "codex-router-core",
@@ -1413,10 +1417,11 @@ dependencies = [
 
 [[package]]
 name = "codex-router-cli"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "agent-collaboration-tui",
  "agent-router-quota-tui",
+ "agent-router-update",
  "base64 0.22.1",
  "board-central-test-support",
  "chrono",
@@ -1447,6 +1452,7 @@ dependencies = [
  "indicatif",
  "iocraft",
  "message-board",
+ "message-board-storage",
  "nix",
  "opentelemetry",
  "opentelemetry-appender-tracing",
@@ -1476,7 +1482,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-core"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "hmac 0.12.1",
  "serde",
@@ -1488,17 +1494,17 @@ dependencies = [
 
 [[package]]
 name = "codex-router-host"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "acp-client-runtime",
  "acp-provider-adapters",
  "agent-automation",
  "agent-client-protocol",
+ "agent-router-update",
  "automation-storage",
  "axum",
  "board-central-test-support",
  "board-fleet-sync",
- "board-legacy-upgrade",
  "board-sync-protocol",
  "chrono",
  "claude-code-peer-messaging",
@@ -1507,6 +1513,7 @@ dependencies = [
  "codex-router-core",
  "codex-router-host",
  "codex-router-secret-store",
+ "codex-router-state",
  "codex-router-test-support",
  "collaboration-application-test-support",
  "collaboration-central-conformance",
@@ -1531,6 +1538,7 @@ dependencies = [
  "futures-util",
  "httparse",
  "interaction-storage",
+ "jsonc-parser",
  "lifecycle-observation",
  "message-board",
  "message-board-storage",
@@ -1561,7 +1569,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-proxy"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "async-compression",
  "bytes",
@@ -1596,7 +1604,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-quota"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "codex-router-core",
  "thiserror 2.0.18",
@@ -1604,7 +1612,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-quota-reset-test-harness"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "agent-collaboration",
  "axum",
@@ -1625,7 +1633,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-quota-service"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "chrono",
  "codex-router-auth",
@@ -1650,7 +1658,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-secret-store"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "aes-gcm 0.11.1",
  "apple-native-keyring-store",
@@ -1673,7 +1681,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-selection"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "base64 0.22.1",
  "codex-router-core",
@@ -1688,7 +1696,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-state"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "codex-router-core",
  "codex-router-selection",
@@ -1702,7 +1710,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-tailnet-verification-host"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "axum",
  "board-fleet-sync",
@@ -1732,7 +1740,7 @@ dependencies = [
 
 [[package]]
 name = "codex-router-test-support"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "codex-native-integration",
  "codex-router-cli",
@@ -1756,14 +1764,14 @@ dependencies = [
 
 [[package]]
 name = "codex-router-ux-prototype"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "iocraft",
 ]
 
 [[package]]
 name = "collaboration-application-test-support"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "automation-storage",
  "board-central-test-support",
@@ -1798,7 +1806,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-admin-protocol"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "board-sync-protocol",
  "chrono",
@@ -1811,7 +1819,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-cloudflare"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1845,7 +1853,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-conformance"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1872,7 +1880,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-core"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1911,7 +1919,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-tokio"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "aws-lc-rs",
  "axum",
@@ -1956,7 +1964,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-client"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "automation-storage",
  "board-central-test-support",
@@ -1995,7 +2003,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-contracts"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -2019,7 +2027,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-mail-protocol"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "chrono",
  "message-board",
@@ -2032,7 +2040,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-mcp"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "agent-collaboration",
  "automation-storage",
@@ -2078,7 +2086,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-protocol"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "agent-automation",
  "board-sync-protocol",
@@ -2100,7 +2108,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-runtime"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -2145,7 +2153,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-service"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -2816,7 +2824,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2926,7 +2934,7 @@ dependencies = [
 
 [[package]]
 name = "fleet-admission"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "chrono",
  "fleet-sync-protocol",
@@ -2939,7 +2947,7 @@ dependencies = [
 
 [[package]]
 name = "fleet-identity-protocol"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "chrono",
  "jsonschema",
@@ -3517,6 +3525,15 @@ dependencies = [
 
 [[package]]
 name = "hashlink"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7382cf6263419f2d8df38c55d7da83da5c18aef87fc7a7fc1fb1e344edfe14c1"
+dependencies = [
+ "hashbrown 0.15.5",
+]
+
+[[package]]
+name = "hashlink"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "824e001ac4f3012dd16a264bec811403a67ca9deb6c102fc5049b32c4574b35f"
@@ -3950,7 +3967,7 @@ dependencies = [
 
 [[package]]
 name = "interaction-storage"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "agent-automation",
  "automation-storage",
@@ -4207,7 +4224,7 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "legacy-upgrade-test-support"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "message-board",
  "owned-process-test-support",
@@ -4238,19 +4255,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
-name = "libredox"
-version = "0.1.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61ff90caf6077a803a240f62fdbe88645a890bbca49ef8174c3cb0404362171d"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "libsqlite3-sys"
-version = "0.39.1"
+version = "0.35.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "14a5f01b87b92705d07b433c06f96cbc764637d81a0bffb5734ce17cf0f9a2b3"
+checksum = "133c182a6a2c87864fe97778797e46c7e999672690dc9fa3ee8e241aa4a9c13f"
 dependencies = [
  "cc",
  "pkg-config",
@@ -4259,7 +4267,7 @@ dependencies = [
 
 [[package]]
 name = "lifecycle-observation"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -4404,7 +4412,7 @@ dependencies = [
 
 [[package]]
 name = "message-board"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "chrono",
  "petgraph",
@@ -4420,7 +4428,7 @@ dependencies = [
 
 [[package]]
 name = "message-board-storage"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "base64 0.22.1",
  "board-fleet-sync",
@@ -4526,7 +4534,7 @@ dependencies = [
 
 [[package]]
 name = "node-test-fixture"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "serde_json",
 ]
@@ -4547,7 +4555,7 @@ version = "0.50.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7957b9740744892f114936ab4a57b3f487491bbeafaf8083688b16841a4240e5"
 dependencies = [
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4632,24 +4640,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
-]
-
-[[package]]
-name = "objc2-core-foundation"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a180dd8642fa45cdb7dd721cd4c11b1cadd4929ce112ebd8b9f5803cc79d536"
-dependencies = [
- "bitflags 2.13.0",
-]
-
-[[package]]
-name = "objc2-system-configuration"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7216bd11cbda54ccabcab84d523dc93b858ec75ecfb3a7d89513fa22464da396"
-dependencies = [
- "objc2-core-foundation",
 ]
 
 [[package]]
@@ -4770,7 +4760,7 @@ checksum = "1a80800c0488c3a21695ea981a54918fbb37abf04f4d0720c453632255e2ff0e"
 
 [[package]]
 name = "owned-process-test-support"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "futures-util",
  "tokio",
@@ -5533,13 +5523,14 @@ dependencies = [
 
 [[package]]
 name = "rusqlite"
-version = "0.41.1"
+version = "0.37.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da9bba6f3506135e120a6586df05be18b48d18896600646a4bec8f993d91a594"
+checksum = "165ca6e57b20e1351573e3729b958bc62f0e48025386970b6e4d29e7a7e71f3f"
 dependencies = [
  "bitflags 2.13.0",
  "fallible-iterator",
  "fallible-streaming-iterator",
+ "hashlink 0.10.0",
  "libsqlite3-sys",
  "smallvec",
 ]
@@ -5598,7 +5589,7 @@ dependencies = [
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -5930,7 +5921,7 @@ dependencies = [
 
 [[package]]
 name = "session-event-model"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "base64 0.22.1",
  "message-board",
@@ -6136,7 +6127,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52d1cfed4120b4d927bf7c0f86d2087a4a7d6027c906d9f9d525a80573b9be51"
 dependencies = [
  "libc",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6156,7 +6147,7 @@ dependencies = [
 
 [[package]]
 name = "sqlite-storage-maintenance"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "fs2",
  "sqlx",
@@ -6169,7 +6160,8 @@ dependencies = [
 [[package]]
 name = "sqlx"
 version = "0.9.0"
-source = "git+https://github.com/launchbadge/sqlx?rev=10462fa4414c6c7f1ed1d39bb31678e3b726878c#10462fa4414c6c7f1ed1d39bb31678e3b726878c"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "378620ccc25c62c89d8be1c819e76a88d59bdcc3304733330788948e619bfd71"
 dependencies = [
  "sqlx-core",
  "sqlx-macros",
@@ -6181,7 +6173,8 @@ dependencies = [
 [[package]]
 name = "sqlx-core"
 version = "0.9.0"
-source = "git+https://github.com/launchbadge/sqlx?rev=10462fa4414c6c7f1ed1d39bb31678e3b726878c#10462fa4414c6c7f1ed1d39bb31678e3b726878c"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "05b44e85bf579a8eeb4ceaa77a3a523baf2bf0e9bac7e40f405d537b5d2d5ccb"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -6196,14 +6189,14 @@ dependencies = [
  "futures-io",
  "futures-util",
  "hashbrown 0.16.1",
- "hashlink",
+ "hashlink 0.11.1",
  "indexmap 2.14.0",
  "log",
  "memchr",
  "percent-encoding",
  "serde",
  "serde_json",
- "sha2 0.11.0",
+ "sha2 0.10.9",
  "smallvec",
  "thiserror 2.0.18",
  "tokio",
@@ -6241,7 +6234,8 @@ dependencies = [
 [[package]]
 name = "sqlx-macros"
 version = "0.9.0"
-source = "git+https://github.com/launchbadge/sqlx?rev=10462fa4414c6c7f1ed1d39bb31678e3b726878c#10462fa4414c6c7f1ed1d39bb31678e3b726878c"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd2b84f2bc39a5705ef27ec785a11c934a41bbd4a24941e257927cddc26b60bf"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -6253,7 +6247,8 @@ dependencies = [
 [[package]]
 name = "sqlx-macros-core"
 version = "0.9.0"
-source = "git+https://github.com/launchbadge/sqlx?rev=10462fa4414c6c7f1ed1d39bb31678e3b726878c#10462fa4414c6c7f1ed1d39bb31678e3b726878c"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb8d96de5fdc85a5c4ec813432b523ec637e80ba98f046555f75f7908ddac7c3"
 dependencies = [
  "cfg-if",
  "dotenvy",
@@ -6264,7 +6259,7 @@ dependencies = [
  "quote",
  "serde",
  "serde_json",
- "sha2 0.11.0",
+ "sha2 0.10.9",
  "sqlx-core",
  "sqlx-sqlite",
  "syn 2.0.118",
@@ -6276,7 +6271,8 @@ dependencies = [
 [[package]]
 name = "sqlx-mysql"
 version = "0.9.0"
-source = "git+https://github.com/launchbadge/sqlx?rev=10462fa4414c6c7f1ed1d39bb31678e3b726878c#10462fa4414c6c7f1ed1d39bb31678e3b726878c"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "90b8020fe17c5f2c245bfa2505d7ef59c5604839527c740266ad2214acebea27"
 dependencies = [
  "bitflags 2.13.0",
  "byteorder",
@@ -6301,7 +6297,8 @@ dependencies = [
 [[package]]
 name = "sqlx-postgres"
 version = "0.9.0"
-source = "git+https://github.com/launchbadge/sqlx?rev=10462fa4414c6c7f1ed1d39bb31678e3b726878c#10462fa4414c6c7f1ed1d39bb31678e3b726878c"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "87a2bdd6e83f6b3ea525ca9fee568030508b58355a43d0b2c1674d5f79dcd65e"
 dependencies = [
  "atoi",
  "base64 0.22.1",
@@ -6335,7 +6332,8 @@ dependencies = [
 [[package]]
 name = "sqlx-sqlite"
 version = "0.9.0"
-source = "git+https://github.com/launchbadge/sqlx?rev=10462fa4414c6c7f1ed1d39bb31678e3b726878c#10462fa4414c6c7f1ed1d39bb31678e3b726878c"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "488e99c397a62007e4229aec669a179816339afc6d2620ca6fa420dbee2e982c"
 dependencies = [
  "atoi",
  "flume",
@@ -6579,10 +6577,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32497e9a4c7b38532efcdebeef879707aa9f794296a4f0244f6f69e9bc8574bd"
 dependencies = [
  "fastrand",
- "getrandom 0.4.3",
+ "getrandom 0.3.4",
  "once_cell",
  "rustix 1.1.4",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -6592,7 +6590,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
 dependencies = [
  "rustix 1.1.4",
- "windows-sys 0.60.2",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -7323,7 +7321,7 @@ checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 
 [[package]]
 name = "ui-preference-store"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "sqlx",
  "tempfile",
@@ -7688,12 +7686,6 @@ name = "whoami"
 version = "2.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "626c4bac6755d76ffc12cb01b2eac751db1996b9e0041de9aa02c8c211ddc82c"
-dependencies = [
- "libc",
- "libredox",
- "objc2-system-configuration",
- "web-sys",
-]
 
 [[package]]
 name = "winapi"
@@ -8024,7 +8016,7 @@ dependencies = [
 
 [[package]]
 name = "workspace-architecture-check"
-version = "0.1.140"
+version = "0.1.145"
 dependencies = [
  "proc-macro2",
  "serde",

@@ -20,6 +20,7 @@ mod prompt_connection_task;
 mod prompt_content_translation;
 mod prompt_settlement;
 mod queued_frame_budget;
+mod scratch_scope_register;
 mod session_connection_registry;
 mod session_creation;
 mod stored_session_listing;
@@ -42,6 +43,7 @@ pub use prompt_connection_task::{
     PromptCommand, PromptTaskCompletion, PromptTaskInputs, run_prompt_task,
 };
 pub use queued_frame_budget::{AcpOutputSender, QueuedAcpFrame, bounded_acp_output};
+pub use scratch_scope_register::{ScratchScopeLease, ScratchScopeRegister};
 pub use session_connection_registry::{
     AcpSessionRegistry, HeldBindingCheckout, SessionRegistryError, UnmaterializedBindingStore,
 };

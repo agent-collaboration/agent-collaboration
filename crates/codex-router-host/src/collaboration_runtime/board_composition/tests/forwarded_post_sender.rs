@@ -54,7 +54,7 @@ impl SenderFixture {
             .welcomed
             .subscribe();
         let admission = board.admission.clone();
-        let running = board.start().ok_or("sender runtime")?;
+        let running = board.start().session.ok_or("sender runtime")?;
         wait_welcome(welcomed).await?;
         let application = (ApplicationFixture::new(
             origin.installation.as_str(),
@@ -531,7 +531,7 @@ async fn non_holder_sender_without_a_machine_session_refuses_without_queuing() -
     let directory = tempfile::tempdir()?;
     let board = open_board_admission(directory.path(), identity()?, None).await?;
     let admission = board.admission.clone();
-    assert!(board.start().is_none());
+    assert!(board.start().session.is_none());
     let application = (ApplicationFixture::new(
         origin()?.installation.as_str(),
         "00000000-0000-4000-8000-000000000002",

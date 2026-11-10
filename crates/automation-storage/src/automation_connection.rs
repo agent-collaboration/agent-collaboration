@@ -22,11 +22,11 @@ pub enum StorageError {
     #[error("automation database contains an unexpected schema; existing data was not replaced")]
     InvalidSchema,
     #[error(
-        "legacy message rows remain in {tables:?}; stop the Router and run codex-router-board-upgrade before starting it"
+        "legacy message rows remain in {tables:?}; stop the Router and run agent-router-update board-import before starting it"
     )]
     MessageUpgradeRequired { tables: Vec<&'static str> },
     #[error(
-        "mail_items contains {rows} rows of pre-release state; clear this development-only state by hand before running codex-router-board-upgrade or starting the Router"
+        "mail_items contains {rows} rows of pre-release state; clear this development-only state by hand before running agent-router-update board-import or starting the Router"
     )]
     PreReleaseMailPresent { rows: u64 },
     #[error("operation identity already belongs to a different request")]

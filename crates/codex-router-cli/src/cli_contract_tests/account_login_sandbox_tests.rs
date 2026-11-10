@@ -280,7 +280,7 @@ fn claude_login_and_refresh_use_only_router_owned_credentials() {
 
     let runtime = super::cli_test_support::test_async_runtime();
     let state = must_ok(runtime.block_on(AsyncSqliteStateStore::open(
-        &router_root.join("state.sqlite"),
+        &codex_router_state::provider_proxy_database_path(&router_root),
     )));
     let account_id = AccountId::new("acct_claude_r18").expect("account id should be valid");
     let account = must_ok(runtime.block_on(state.load_account(&account_id)))

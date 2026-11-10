@@ -66,7 +66,7 @@ fn responses_observation_transaction_failure_sends_no_floor_signal_or_windows() 
     for stage in ["history", "snapshot"] {
         let test_root = TestRoot::new(&format!("floor-refresh-{stage}-fault"));
         must_ok(fs::create_dir(test_root.path()));
-        let state_path = test_root.path().join("state.sqlite");
+        let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
         let secret_root = test_root.path().join("secrets");
         let state = must_ok(SqliteStateStore::open(&state_path));
         let account_id = account_id("floor-fault-account");
@@ -153,7 +153,9 @@ fn quota_refresh_writes_selector_windows_for_runtime_selection() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     let account_id = account_id("acct_quota_selector");
     let account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
@@ -201,7 +203,10 @@ fn quota_refresh_writes_selector_windows_for_runtime_selection() {
     let mut stdout = Vec::new();
     test_async_runtime().block_on(async {
         let mutation = must_ok(
-            AsyncWeeklyQuotaFloorMutationStore::open(&router_root.join("state.sqlite")).await,
+            AsyncWeeklyQuotaFloorMutationStore::open(
+                &codex_router_state::provider_proxy_database_path(&router_root),
+            )
+            .await,
         );
         must_ok(
             mutation
@@ -218,7 +223,7 @@ fn quota_refresh_writes_selector_windows_for_runtime_selection() {
 
     must_ok(refresh_quota_store_paths_with_floor_observer(
         &mut stdout,
-        &router_root.join("state.sqlite"),
+        &codex_router_state::provider_proxy_database_path(&router_root),
         &router_root.join("secrets"),
         "https://chatgpt.com/backend-api".to_owned(),
         &resolver,
@@ -286,7 +291,9 @@ fn quota_refresh_signals_floor_after_saved_history_before_next_account() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     let floor_account_id = account_id("acct_a_floor");
     let healthy_account_id = account_id("acct_b_healthy");
     let floor_account = AccountRecord::new(
@@ -339,7 +346,10 @@ fn quota_refresh_signals_floor_after_saved_history_before_next_account() {
         contract_credential_resolver(&state, &secrets, NoopCredentialRefreshClient, 1_000);
     test_async_runtime().block_on(async {
         let mutation = must_ok(
-            AsyncWeeklyQuotaFloorMutationStore::open(&router_root.join("state.sqlite")).await,
+            AsyncWeeklyQuotaFloorMutationStore::open(
+                &codex_router_state::provider_proxy_database_path(&router_root),
+            )
+            .await,
         );
         must_ok(
             mutation
@@ -356,13 +366,13 @@ fn quota_refresh_signals_floor_after_saved_history_before_next_account() {
         floor_account_id.clone(),
         healthy_account_id,
         Arc::clone(&floor_observer),
-        router_root.join("state.sqlite"),
+        codex_router_state::provider_proxy_database_path(&router_root),
     );
     let mut stdout = Vec::new();
 
     must_ok(refresh_quota_store_paths_with_floor_observer(
         &mut stdout,
-        &router_root.join("state.sqlite"),
+        &codex_router_state::provider_proxy_database_path(&router_root),
         &router_root.join("secrets"),
         "https://chatgpt.com/backend-api".to_owned(),
         &resolver,
@@ -391,7 +401,7 @@ fn quota_refresh_signals_floor_after_saved_history_before_next_account() {
 fn saved_quota_observations_switch_clear_and_floor_disable_intents() {
     let test_root = TestRoot::new("quota-switch-clear-intents");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let state = must_ok(SqliteStateStore::open(&state_path));
     let account_id = account_id("acct_switch_intent");
@@ -501,7 +511,9 @@ fn quota_refresh_weekly_only_response_is_known_with_five_hour_no_data() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     let account_id = account_id("acct_quota_partial");
     let account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,
@@ -615,7 +627,9 @@ fn quota_refresh_missing_reset_response_is_unknown_fallback() {
     must_ok(fs::create_dir(test_root.path()));
     let router_root = test_root.path().join("router");
     must_ok(fs::create_dir_all(&router_root));
-    let state = must_ok(SqliteStateStore::open(&router_root.join("state.sqlite")));
+    let state = must_ok(SqliteStateStore::open(
+        &codex_router_state::provider_proxy_database_path(&router_root),
+    ));
     let account_id = account_id("acct_quota_missing_reset");
     let account = AccountRecord::new(
         codex_router_core::provider::Provider::Openai,

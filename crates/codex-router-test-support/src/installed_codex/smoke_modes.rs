@@ -356,7 +356,7 @@ pub(super) fn run_installed_codex_mock_smoke_with_mode(
     let xdg_state_home = smoke_root.path().join("xdg-state");
     let xdg_cache_home = smoke_root.path().join("xdg-cache");
     let router_root = smoke_root.path().join("router");
-    let state_path = router_root.join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(&router_root);
     let secret_root = router_root.join("secrets");
     fs::create_dir_all(&codex_home).map_err(|error| {
         format!(

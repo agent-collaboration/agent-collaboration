@@ -73,8 +73,19 @@ async fn one_reaction_owner_defers_y_while_x_waits_on_notice_catch_up_and_reques
 -> Result<(), TestError> {
     let (_directory, mut harness) = welcomed_manual().await?;
     let owners = event_owners(&harness);
-    let mut reactions =
-        NoticeReactionQueue::new(MachineNoticeReactions::open(&harness.root).await?);
+    let mut reactions = NoticeReactionQueue::new(
+        MachineNoticeReactions::open(
+            message_board_storage::FleetStore::open(
+                &harness
+                    .root
+                    .join(message_board_storage::FleetStore::FILE_NAME),
+            )
+            .await
+            .map_err(std::io::Error::other)?
+            .cache(),
+        )
+        .await?,
+    );
     let mut receipts = NoticeReceipts::default();
     let mut handlers = JoinSet::new();
     // Hold the real notice-read reply needed to fill the first notice's gap.
@@ -158,10 +169,17 @@ async fn one_reaction_owner_defers_y_while_x_waits_on_notice_catch_up_and_reques
     assert_eq!(harness.ack().await?, NoticePosition::new(2));
 
     assert_eq!(
-        board_fleet_sync::MachineNoticeProgressStore::open(&harness.root)
+        board_fleet_sync::MachineNoticeProgressStore::from_cache(
+            message_board_storage::FleetStore::open(
+                &harness
+                    .root
+                    .join(message_board_storage::FleetStore::FILE_NAME)
+            )
             .await?
-            .load()
-            .await?,
+            .cache()
+        )
+        .load()
+        .await?,
         NoticePosition::new(3)
     );
     println!("NOTICE_DISPATCH_CASE one_owner_x_then_y_real_catch_up_hold_requests_continue");
@@ -179,8 +197,19 @@ async fn stale_generation_completion_returns_the_owner_without_acknowledging_new
 -> Result<(), TestError> {
     let (_directory, mut harness) = welcomed_manual().await?;
     let owners = event_owners(&harness);
-    let mut reactions =
-        NoticeReactionQueue::new(MachineNoticeReactions::open(&harness.root).await?);
+    let mut reactions = NoticeReactionQueue::new(
+        MachineNoticeReactions::open(
+            message_board_storage::FleetStore::open(
+                &harness
+                    .root
+                    .join(message_board_storage::FleetStore::FILE_NAME),
+            )
+            .await
+            .map_err(std::io::Error::other)?
+            .cache(),
+        )
+        .await?,
+    );
     let mut receipts = NoticeReceipts::default();
     let mut handlers = JoinSet::new();
     let (session_id, position, body) = actual_notice(&mut harness, 1).await?;

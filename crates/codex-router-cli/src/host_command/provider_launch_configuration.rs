@@ -2,7 +2,7 @@
 use super::HostCommandError;
 use codex_router_host::{
     ExternalProviderLaunchBinding, ExternalProviderStartup, ProviderConfigurationEntry,
-    ProviderConfigurationFile,
+    load_or_create_provider_settings, router_settings_path,
 };
 use collaboration_protocol::ProviderKind;
 use std::path::{Path, PathBuf};
@@ -11,7 +11,7 @@ pub(super) fn configured_provider_startups(
     router_root: &Path,
     explicit_launches: &[ExternalProviderLaunchBinding],
 ) -> Result<Vec<ExternalProviderStartup>, HostCommandError> {
-    let configuration = ProviderConfigurationFile::load_or_create(router_root);
+    let configuration = load_or_create_provider_settings(router_root);
     match configuration {
         Ok(configuration) => Ok(vec![
             configured_provider(
@@ -28,8 +28,8 @@ pub(super) fn configured_provider_startups(
         Err(error) => {
             let reason = error.to_string();
             let fix = format!(
-                "correct {} and restart the Host",
-                router_root.join("providers.json").display()
+                "correct the \"providers\" section of {} and restart the Host",
+                router_settings_path(router_root).display()
             );
             Ok(vec![
                 unavailable(ProviderKind::ClaudeCode, reason.clone(), fix.clone())?,
@@ -53,8 +53,8 @@ fn configured_provider(
     if !entry.enabled {
         return unavailable(
             provider,
-            "disabled in providers.json".to_owned(),
-            "enable this provider in providers.json at the router root and restart the Host"
+            "disabled in settings.jsonc".to_owned(),
+            "enable this provider in the \"providers\" section of settings.jsonc at the router root and restart the Host"
                 .to_owned(),
         );
     }
@@ -105,14 +105,17 @@ mod tests {
         };
         assert_eq!(cursor.launch.executable, PathBuf::from("agent"));
         assert_eq!(cursor.launch.arguments, vec!["acp"]);
-        assert!(root.path().join("providers.json").exists());
+        assert!(root.path().join("settings.jsonc").exists());
     }
 
     #[test]
     fn flag_overrides_disabled_entry_for_one_start_only() {
         let root = tempfile::tempdir().expect("router root");
-        let path = root.path().join("providers.json");
-        let bytes = br#"{"version":1,"providers":{"claude":{"enabled":false,"executable":null,"arguments":[]},"cursor":{"enabled":true,"executable":"/configured/agent","arguments":["acp"]}}}"#;
+        let path = root.path().join("settings.jsonc");
+        let bytes = br#"{
+  // owner-edited providers
+  "providers": {"version":1,"providers":{"claude":{"enabled":false,"executable":null,"arguments":[]},"cursor":{"enabled":true,"executable":"/configured/agent","arguments":["acp"]}}},
+}"#;
         std::fs::write(&path, bytes).expect("configuration");
         let explicit = ExternalProviderLaunchBinding::claude(
             PathBuf::from("/override/claude-agent-acp"),
@@ -140,7 +143,7 @@ mod tests {
     #[test]
     fn malformed_file_marks_both_unavailable_without_replacement() {
         let root = tempfile::tempdir().expect("router root");
-        let path = root.path().join("providers.json");
+        let path = root.path().join("settings.jsonc");
         let bytes = b"{not-json";
         std::fs::write(&path, bytes).expect("malformed file");
 
@@ -154,5 +157,62 @@ mod tests {
             assert!(String::from(fix).contains("correct"));
         }
         assert_eq!(std::fs::read(&path).expect("preserved file"), bytes);
+    }
+
+    #[test]
+    fn broken_providers_section_marks_both_unavailable_naming_the_section() {
+        let root = tempfile::tempdir().expect("router root");
+        let path = root.path().join("settings.jsonc");
+        let bytes = br#"{"providers": {"version": 9}, "ports": {"router": 28741}}"#;
+        std::fs::write(&path, bytes).expect("settings");
+
+        let startups = configured_provider_startups(root.path(), &[]).expect("isolated failure");
+
+        assert_eq!(startups.len(), 2);
+        for startup in startups {
+            let ExternalProviderStartup::Unavailable { reason, .. } = startup else {
+                panic!("a broken providers section cannot launch a provider")
+            };
+            let reason = String::from(reason);
+            assert!(reason.contains(&path.display().to_string()), "{reason}");
+            assert!(reason.contains("\"providers\""), "{reason}");
+        }
+        assert_eq!(std::fs::read(&path).expect("preserved file"), bytes);
+    }
+
+    #[test]
+    fn duplicate_member_inside_providers_marks_both_unavailable_naming_the_section() {
+        let root = tempfile::tempdir().expect("router root");
+        let path = root.path().join("settings.jsonc");
+        let bytes = br#"{"providers": {"version":1,"version":1,"providers":{"claude":{"enabled":true,"executable":null,"arguments":[]},"cursor":{"enabled":true,"executable":null,"arguments":["acp"]}}}, "ports": {"router": 28741}}"#;
+        std::fs::write(&path, bytes).expect("settings");
+
+        let startups = configured_provider_startups(root.path(), &[]).expect("isolated failure");
+
+        for startup in startups {
+            let ExternalProviderStartup::Unavailable { reason, .. } = startup else {
+                panic!("a repeated member in providers cannot launch a provider")
+            };
+            let reason = String::from(reason);
+            assert!(reason.contains("\"providers\" section"), "{reason}");
+            assert!(reason.contains("appears more than once"), "{reason}");
+        }
+    }
+
+    #[test]
+    fn broken_ports_section_keeps_configured_providers_launchable() {
+        let root = tempfile::tempdir().expect("router root");
+        let bytes = br#"{"ports": {"router": "not-a-port"}, "providers": {"version":1,"providers":{"claude":{"enabled":true,"executable":"/configured/claude-agent-acp","arguments":[]},"cursor":{"enabled":true,"executable":null,"arguments":["acp"]}}}}"#;
+        std::fs::write(root.path().join("settings.jsonc"), bytes).expect("settings");
+
+        let startups = configured_provider_startups(root.path(), &[]).expect("providers");
+
+        let ExternalProviderStartup::Launch(claude) = &startups[0] else {
+            panic!("Claude should launch from its own valid section")
+        };
+        assert_eq!(
+            claude.launch.executable,
+            PathBuf::from("/configured/claude-agent-acp")
+        );
     }
 }

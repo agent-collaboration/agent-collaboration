@@ -6,7 +6,7 @@ fn serve_at(root: &Path, flags: &[&str]) -> cli_argument_parsing::ServeCommand {
     let mut arguments = vec![
         OsString::from("serve"),
         OsString::from("--state-db"),
-        root.join("state.sqlite").into_os_string(),
+        codex_router_state::provider_proxy_database_path(root).into_os_string(),
         OsString::from("--secret-root"),
         root.join("secrets").into_os_string(),
     ];
@@ -32,7 +32,11 @@ fn standalone_serve_selects_the_file_port_unless_explicitly_overridden() {
         ),
     ] {
         if let Some(file) = file {
-            std::fs::write(root.path().join("ports.json"), file).expect("file");
+            std::fs::write(
+                root.path().join("settings.jsonc"),
+                format!("{{ \"ports\": {file} }}"),
+            )
+            .expect("settings");
         }
         let command = serve_at(root.path(), &flags);
         let actual = base_serve_runtime_config(&command).expect("runtime config");
@@ -49,13 +53,14 @@ fn standalone_serve_selects_the_file_port_unless_explicitly_overridden() {
 }
 
 #[test]
-fn standalone_serve_refuses_a_malformed_file_with_its_path() {
+fn standalone_serve_refuses_a_malformed_ports_section_with_its_path() {
     let root = tempfile::tempdir().expect("root");
-    let path = root.path().join("ports.json");
-    std::fs::write(&path, "{").expect("file");
+    let path = root.path().join("settings.jsonc");
+    std::fs::write(&path, r#"{ "ports": { "router": "28741" } }"#).expect("settings");
     let command = serve_at(root.path(), &[]);
     let message = base_serve_runtime_config(&command)
         .expect_err("a malformed port file must refuse Serve startup")
         .to_string();
     assert!(message.contains(path.to_str().expect("path")), "{message}");
+    assert!(message.contains("\"ports\""), "{message}");
 }

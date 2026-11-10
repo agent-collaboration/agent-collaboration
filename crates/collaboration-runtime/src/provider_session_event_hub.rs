@@ -23,6 +23,10 @@ use collaboration_contracts::SessionEventHub;
 
 use collaboration_contracts::SessionEventHubError;
 
+#[path = "provider_session_inventory_metadata.rs"]
+mod inventory_metadata;
+use inventory_metadata::SessionInventoryMetadata;
+
 pub struct ProviderSessionEventHub {
     store: Arc<Mutex<ProviderOperationStore>>,
     histories: Mutex<BTreeMap<SessionRef, Arc<Mutex<SessionHistory>>>>,
@@ -41,6 +45,7 @@ struct SessionHistory {
     settings: Option<SessionSettings>,
     pending: BTreeMap<String, PendingInteraction>,
     turn_running: bool,
+    inventory_metadata: SessionInventoryMetadata,
 }
 
 #[derive(Default)]
@@ -74,6 +79,7 @@ impl SessionHistory {
             settings: None,
             pending: BTreeMap::new(),
             turn_running: false,
+            inventory_metadata: SessionInventoryMetadata::default(),
         }
     }
 
@@ -88,6 +94,9 @@ impl SessionHistory {
     }
 
     fn project(&mut self, event: &SessionEvent) -> Result<(), HubProjectionDiagnostic> {
+        if let SessionEvent::ItemStarted { item } | SessionEvent::ItemUpdated { item } = event {
+            self.inventory_metadata.observe_item(item);
+        }
         match event {
             SessionEvent::TurnStarted { .. } => {
                 self.turn_running = true;
@@ -255,6 +264,9 @@ impl ProviderSessionEventHub {
             .or_insert_with(|| Arc::new(Mutex::new(SessionHistory::new(self.subscriber_capacity))))
             .clone();
         let mut history = history.lock().await;
+        history
+            .inventory_metadata
+            .observe_activity_at(chrono::Utc::now().timestamp());
         let sequence = history.next_sequence;
         let next_sequence = sequence
             .checked_add(1)
@@ -516,9 +528,16 @@ impl SessionEventHub for ProviderSessionEventHub {
                     working_directory: std::path::PathBuf::from(String::from(
                         entry.working_directory,
                     )),
-                    updated_at_seconds: entry.updated_at_ms.div_euclid(1_000),
-                    preview: String::new(),
-                    name: None,
+                    updated_at_seconds: history
+                        .as_ref()
+                        .and_then(|history| history.inventory_metadata.latest_activity_at_seconds())
+                        .unwrap_or_else(|| entry.updated_at_ms.div_euclid(1_000)),
+                    preview: history.as_ref().map_or_else(String::new, |history| {
+                        history.inventory_metadata.preview().to_owned()
+                    }),
+                    name: history
+                        .as_ref()
+                        .and_then(|history| history.inventory_metadata.name().map(str::to_owned)),
                     model: settings.and_then(|settings| settings.model.clone()),
                     mode: settings.and_then(|settings| settings.mode.clone()),
                     state,

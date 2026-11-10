@@ -1,6 +1,6 @@
 //! Lead01a1c147-e4b9: public Fleet-cache observation on fresh staging scratch copies only.
 use super::{ObservationError, check_sealed, seed_snapshot::check_scratch, source_hash};
-use message_board_storage::FleetCache;
+use message_board_storage::FleetStore;
 use std::{ffi::OsString, path::Path};
 
 fn failure(error: impl std::fmt::Display) -> ObservationError {
@@ -23,9 +23,10 @@ pub(super) async fn observe(
     }
     let untouched_before = source_hash(untouched)?;
     let scratch_before = source_hash(scratch)?;
-    let cache = FleetCache::open(scratch).await.map_err(failure)?;
-    let result = cache.checkpoint().await.map_err(failure);
-    cache.close().await;
+    // The old125 fleet-cache.sqlite is opened as an existing Fleet database on the A copy only.
+    let store = FleetStore::open_existing(scratch).await.map_err(failure)?;
+    let result = store.cache().checkpoint().await.map_err(failure);
+    store.close().await;
     let checkpoint = result?;
     let untouched_after = source_hash(untouched)?;
     if untouched_before != untouched_after {

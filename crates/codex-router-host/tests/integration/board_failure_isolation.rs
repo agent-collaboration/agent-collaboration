@@ -18,7 +18,7 @@ async fn board_open_failure_keeps_unrelated_control_methods_available()
             .as_nanos()
     ));
     std::fs::DirBuilder::new().mode(0o700).create(&root)?;
-    std::fs::create_dir(root.join("fleet-cache.sqlite"))?;
+    std::fs::create_dir(root.join(message_board_storage::FleetStore::FILE_NAME))?;
     let runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
         board_session: None,
         directory: root.clone(),
@@ -75,13 +75,17 @@ async fn corrupt_project_at_startup_keeps_runtime_and_endpoints_available()
     let directory = tempfile::tempdir()?;
     let root = directory.path();
     std::fs::set_permissions(root, std::os::unix::fs::PermissionsExt::from_mode(0o700))?;
-    let fleet = collaboration_runtime::FleetClient::open(
-        root,
-        std::sync::Arc::new(native_project_fixture::UnsettledRegistration),
-        None,
+    let fleet_store = message_board_storage::FleetStore::open(
+        &(root).join(message_board_storage::FleetStore::FILE_NAME),
     )
     .await?;
-    fleet.close().await;
+    let fleet = collaboration_runtime::FleetClient::new(
+        &fleet_store,
+        std::sync::Arc::new(native_project_fixture::UnsettledRegistration),
+        None,
+    );
+    drop(fleet);
+    fleet_store.close().await;
     std::fs::create_dir(root.join("projects"))?;
     let broken = message_board::ProjectId::generate();
     let project_directory = root.join("projects").join(broken.as_str());

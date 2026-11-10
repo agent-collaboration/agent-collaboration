@@ -55,7 +55,7 @@ pub(super) async fn run(inputs: ChildInputs, phase: &str, board: BoardCompositio
     let welcomed = projects.welcomed.clone();
     match phase {
         SnapshotRestartPhase::BeforeReady { producer } => {
-            let running = board.start().ok_or("snapshot runtime")?;
+            let running = board.start().session.ok_or("snapshot runtime")?;
             wait_welcome(welcomed).await?;
             // Parent holds the exact real grant notice while this existing
             // native probe is armed. Correlated answers remain live.
@@ -127,7 +127,15 @@ pub(super) async fn run(inputs: ChildInputs, phase: &str, board: BoardCompositio
             if let Some(claim) = &claimed {
                 assert!(!claim.is_finished(), "claim completed before Ready");
             }
-            let store = board_fleet_sync::MachineSessionStore::open(&inputs.root).await?;
+            let store = board_fleet_sync::MachineSessionStore::from_cache(std::sync::Arc::new(
+                message_board_storage::FleetStore::open(
+                    &inputs
+                        .root
+                        .join(message_board_storage::FleetStore::FILE_NAME),
+                )
+                .await?
+                .cache(),
+            ));
             timeout(BOUND, async {
                 loop {
                     if store
@@ -195,7 +203,7 @@ pub(super) async fn run(inputs: ChildInputs, phase: &str, board: BoardCompositio
                 .read_line(&mut instruction)
                 .await?;
             assert_eq!(instruction, "resume\n");
-            let running = board.start().ok_or("resume runtime")?;
+            let running = board.start().session.ok_or("resume runtime")?;
             wait_welcome(welcomed).await?;
             if matches!(producer, InstallProducer::Claim) {
                 let answer = timeout(BOUND, async {

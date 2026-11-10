@@ -11,6 +11,14 @@ pub use source_ssh_connection::{AbsoluteSourcePath, SourceClientProfile, SourceS
 pub enum RouterRegistryError {
     #[error("machine registry could not be read")]
     Unreadable,
+    #[error(
+        "machine registry routers.jsonc is the old name and is not read; run agent-router-update to rename it to agent-sessions.jsonc"
+    )]
+    LegacyMachineListOnly,
+    #[error(
+        "machine registry agent-sessions.jsonc and routers.jsonc both exist, so neither is used; keep one as agent-sessions.jsonc"
+    )]
+    BothMachineListsPresent,
     #[error("machine registry exceeds its read limit")]
     TooLarge,
     #[error("machine registry is not valid JSONC")]

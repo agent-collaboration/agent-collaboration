@@ -29,10 +29,6 @@ async fn large_snapshot(live: &mut Live) -> TestResult {
     Ok(())
 }
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Assertions must fail this test while fixture errors propagate through Result."
-)]
 #[tokio::test]
 async fn router_rebuild_keeps_the_old_view_until_older_then_newer_catchup_finishes() -> TestResult {
     // Wrong behavior: publishing snapshot or older replay pages before catch-up.
@@ -74,10 +70,7 @@ async fn router_rebuild_keeps_the_old_view_until_older_then_newer_catchup_finish
     catchup.release()?;
     tokio::time::timeout(BOUND, refresh).await???;
     assert_visible(&reader.fleet, &router_root, "catch-up state 129", 772).await?;
-    assert!(
-        !router_root.join("fleet.sqlite").exists(),
-        "Router recreated a local fleet authority"
-    );
+    fixture::assert_no_local_fleet_authority(&router_root).await?;
     reader.shutdown().await?;
     live.shutdown().await?;
     jwks.shutdown().await?;
@@ -179,7 +172,7 @@ async fn router_publication_failure_preserves_active_records_and_checkpoint_unti
     let jwks = JwksFixtureServer::start().await?;
     seed_old_view(&server_root, &router_root, &jwks.url).await?;
     let mut cache = sqlx_turso::TursoConnectOptions::new()
-        .filename(router_root.join("fleet-cache.sqlite"))
+        .filename(router_root.join(message_board_storage::FleetStore::FILE_NAME))
         .connect()
         .await?;
     cache.execute("CREATE TRIGGER reject_cache_publication BEFORE INSERT ON cached_fleet_records BEGIN SELECT RAISE(ABORT,'fixture publication failure'); END").await?;
@@ -191,7 +184,7 @@ async fn router_publication_failure_preserves_active_records_and_checkpoint_unti
     assert_visible(&reader.fleet, &router_root, "old visible workspace", 2).await?;
     reader.shutdown().await?;
     let mut cache = sqlx_turso::TursoConnectOptions::new()
-        .filename(router_root.join("fleet-cache.sqlite"))
+        .filename(router_root.join(message_board_storage::FleetStore::FILE_NAME))
         .connect()
         .await?;
     cache

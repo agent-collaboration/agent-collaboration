@@ -24,6 +24,59 @@ mod recorded_classification_tests;
 mod stored_policy_tests;
 
 #[tokio::test]
+async fn a_message_without_a_client_id_gets_a_uuidv7_correlation() {
+    let fixture = RecordedPolicyFixture::create().await.unwrap();
+    let server = policy_server(
+        &fixture,
+        PolicyServerCase {
+            cold: ReplyPolicy::Matching,
+            loaded: ReplyPolicy::Matching,
+            loaded_delivery: MessageDelivery::Auto,
+            turn_intent: None,
+            retire_loaded: None,
+            stored_run: None,
+        },
+    )
+    .unwrap();
+    let broker: Arc<dyn ApprovalBroker> = fixture.broker.clone();
+    let weak = Arc::downgrade(&broker);
+    let mut minted = Vec::new();
+    for _ in 0..2 {
+        let mut request = fixture.message_request(&weak);
+        request.params.client_user_message_id = None;
+        let outcome = tokio::time::timeout(Duration::from_secs(5), dispatch_message(request))
+            .await
+            .unwrap();
+        let NativeMessageOutcome::Accepted(receipt) = outcome else {
+            panic!("a matching policy accepts the message");
+        };
+        minted.push(String::from(receipt.client_user_message_id));
+    }
+    let exchanges = tokio::time::timeout(Duration::from_secs(5), server)
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+
+    for (correlation, requests) in minted.iter().zip(&exchanges) {
+        assert_eq!(
+            uuid::Uuid::parse_str(correlation)
+                .unwrap()
+                .get_version_num(),
+            7,
+            "minted correlation {correlation}"
+        );
+        assert!(
+            requests
+                .iter()
+                .any(|request| request["method"] == "turn/start"
+                    && request["params"]["clientUserMessageId"] == correlation.as_str()),
+            "the native input carries the minted correlation"
+        );
+    }
+}
+
+#[tokio::test]
 async fn cold_and_loaded_messages_both_report_narrowed_permissions() {
     let fixture = RecordedPolicyFixture::create().await.unwrap();
     let server = policy_server(

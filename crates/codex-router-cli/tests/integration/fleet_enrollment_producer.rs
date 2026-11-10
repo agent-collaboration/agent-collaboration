@@ -12,9 +12,9 @@ use std::{error::Error, io, time::Duration};
 #[path = "../support/fleet_enrollment_failures.rs"]
 mod failures;
 #[path = "../support/fleet_cli.rs"]
-mod fleet_cli;
+pub(crate) mod fleet_cli;
 #[path = "../support/fleet_fixture.rs"]
-mod fleet_fixture;
+pub(crate) mod fleet_fixture;
 #[path = "../support/fleet_host.rs"]
 mod fleet_host;
 #[path = "../support/fleet_enrollment_status.rs"]
@@ -110,7 +110,7 @@ fn future_expiry() -> String {
     (Utc::now() + ChronoDuration::hours(1)).to_rfc3339()
 }
 
-async fn create_and_read_project(client: &CollaborationClient) -> TestResult {
+pub(crate) async fn create_and_read_project(client: &CollaborationClient) -> TestResult {
     let (workspace, board, project) = project_requests()?;
     require_accepted(settled(|| client.workspace_create(workspace.clone())).await?)?;
     require_accepted(settled(|| client.board_create(board.clone())).await?)?;

@@ -56,7 +56,9 @@ async fn shed_commands_report_an_overload_to_retry() {
     .expect("real central fixture");
     let admission = Arc::new(
         ProjectAdmission::new(ProjectAdmissionProps {
-            registry: native_registry::new_registry(directory.path()).expect("native registry"),
+            registry: native_registry::new_registry(directory.path())
+                .await
+                .expect("native registry"),
             fleet: Arc::new(fleet),
             identity: MachineIdentity::new(
                 collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned())

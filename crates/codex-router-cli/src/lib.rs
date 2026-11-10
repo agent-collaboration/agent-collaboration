@@ -32,6 +32,7 @@ mod presentation;
 pub mod profile;
 pub mod quota;
 mod quota_reset;
+mod router_update_guard;
 mod secret_store_factory;
 mod telemetry;
 pub mod token;
@@ -378,7 +379,7 @@ mod session_pin_idle_ttl_tests {
         mut command: cli_argument_parsing::ServeCommand,
     ) -> (tempfile::TempDir, cli_argument_parsing::ServeCommand) {
         let root = tempfile::tempdir().expect("root");
-        command.state_db = root.path().join("state.sqlite");
+        command.state_db = codex_router_state::provider_proxy_database_path(root.path());
         command.secret_root = root.path().join("secrets");
         (root, command)
     }

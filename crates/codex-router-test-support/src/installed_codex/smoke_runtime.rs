@@ -215,7 +215,7 @@ pub(super) fn installed_codex_runtime_roots(
             let router_root = smoke_root.path().join("router");
             Ok(InstalledCodexRuntimeRoots {
                 mode,
-                state_path: router_root.join("state.sqlite"),
+                state_path: codex_router_state::provider_proxy_database_path(&router_root),
                 secret_root: router_root.join("secrets"),
                 router_root,
                 codex_home: None,
@@ -229,7 +229,7 @@ pub(super) fn installed_codex_runtime_roots(
             validate_copied_dev_state_roots(&router_root, &codex_home, &process_home)?;
             Ok(InstalledCodexRuntimeRoots {
                 mode,
-                state_path: router_root.join("state.sqlite"),
+                state_path: codex_router_state::provider_proxy_database_path(&router_root),
                 secret_root: router_root.join("secrets"),
                 router_root,
                 codex_home: Some(codex_home),
@@ -266,7 +266,10 @@ pub(super) fn validate_copied_dev_state_roots(
         ("router root", router_root),
         ("Codex home", codex_home),
         ("process HOME", process_home),
-        ("router state.sqlite", &router_root.join("state.sqlite")),
+        (
+            "router state.sqlite",
+            &codex_router_state::provider_proxy_database_path(router_root),
+        ),
         ("Codex state_5.sqlite", &codex_home.join("state_5.sqlite")),
         ("router secrets", &router_root.join("secrets")),
     ] {

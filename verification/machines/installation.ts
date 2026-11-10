@@ -83,6 +83,13 @@ export function validateUpgradeEnrollment(input: {
   )
     throw new Error("existing root identity or enrollment differs from the recorded baseline");
 }
+/** Releases before 0.1.142 read provider settings from providers.json, not settings.jsonc. */
+export function readsLegacyProvidersFile(productVersion: string): boolean {
+  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(productVersion);
+  if (match === null) throw new Error(`semantic product version required: ${productVersion}`);
+  const [major, minor, patch] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  return major === 0 && (minor < 1 || (minor === 1 && patch < 142));
+}
 export class Installation {
   readonly machine: Machine;
   readonly remote: Remote | undefined;
@@ -160,16 +167,22 @@ export class Installation {
         ),
       );
     }
-    const providers = encode({
-      version: 1,
-      providers: {
-        claude: { enabled: false, executable: null, arguments: [] },
-        cursor: { enabled: false, executable: null, arguments: [] },
-      },
-    });
+    // Provider isolation must reach the file the declared product reads: releases before
+    // 0.1.142 read providers.json; later ones read settings.jsonc (agent-router-update carries
+    // an old providers.json into it on upgrade).
+    const disabledProviders = {
+      claude: { enabled: false, executable: null, arguments: [] },
+      cursor: { enabled: false, executable: null, arguments: [] },
+    };
+    const [settingsFile, settingsContent] = readsLegacyProvidersFile(input.productVersion)
+      ? ["providers.json", encode({ version: 1, providers: disabledProviders })]
+      : ["settings.jsonc", encode({ providers: { version: 1, providers: disabledProviders } })];
     if (remote === undefined)
-      await writeFile(`${machine.root}/providers.json`, providers, { mode: 0o600, flag: "wx" });
-    else await remote.writePrivate("providers.json", providers);
+      await writeFile(`${machine.root}/${settingsFile}`, settingsContent, {
+        mode: 0o600,
+        flag: "wx",
+      });
+    else await remote.writePrivate(settingsFile, settingsContent);
     const releaseCommandRoot =
       remote === undefined ? await registerCommandRoot(machine.root) : (): void => {};
     return new Installation({ ...input, remote, guard, releaseCommandRoot });

@@ -14,7 +14,7 @@ pub async fn joint(fixture: &mut BoardFixture, second: &mut SecondHost) -> Fixtu
         .join("../..")
         .canonicalize()?;
     let template =
-        repository.join("crates/board-legacy-upgrade/tests/fixtures/legacy-complete.sqlite");
+        repository.join("crates/agent-router-update/tests/fixtures/legacy-complete.sqlite");
     let source = fixture.root.path().join("synthetic-legacy.sqlite");
     let before = Sha256::digest(std::fs::read(&template)?);
     std::fs::copy(&template, &source)?;
@@ -27,7 +27,7 @@ pub async fn joint(fixture: &mut BoardFixture, second: &mut SecondHost) -> Fixtu
     let assertion = collaboration_central_conformance::owner_assertion()?;
     fixture.stop_host().await?;
     let published = publish_legacy_fixture_to_central(PublishLegacyFixtureRequest {
-        cli_binary: &repository.join("target/debug/codex-router-board-upgrade"),
+        cli_binary: &repository.join("target/debug/agent-router-update"),
         signing_runner: &repository.join("scripts/cargo_debug_signing_runner.sh"),
         source_copy: &source,
         router_directory: fixture.root.path(),

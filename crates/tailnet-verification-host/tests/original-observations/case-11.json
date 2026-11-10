@@ -14,7 +14,7 @@
           "availability": {
             "state": "unavailable",
             "observedAt": "2026-10-16T00:00:00Z",
-            "reason": "disabled in providers.json",
+            "reason": "disabled in settings.jsonc",
             "fix": "enable provider"
           },
           "channels": []
@@ -28,7 +28,7 @@
           "availability": {
             "state": "unavailable",
             "observedAt": "2026-10-16T00:00:00Z",
-            "reason": "disabled in providers.json",
+            "reason": "disabled in settings.jsonc",
             "fix": "enable provider"
           },
           "channels": []

@@ -5,7 +5,7 @@ use codex_router_secret_store::encrypted_credential_store::EncryptedCredentialSt
 fn serve_provisions_local_token_and_keeps_codex_optional() {
     let test_root = TestRoot::new("serve-command");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let state = must_ok(SqliteStateStore::open(&state_path));
     let secrets = must_ok(
@@ -137,7 +137,7 @@ fn serve_starts_and_codex_route_fails_closed_for_unavailable_pooled_stores() {
     ] {
         let test_root = TestRoot::new(&format!("serve-{suffix}"));
         must_ok(fs::create_dir(test_root.path()));
-        let state_path = test_root.path().join("state.sqlite");
+        let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
         let secret_root = test_root.path().join("secrets");
         let state = must_ok(SqliteStateStore::open(&state_path));
         let account_id = account_id(&format!("acct_serve_{suffix}"));
@@ -281,7 +281,7 @@ fn serve_command_defaults_to_home_router_paths_and_provider_upstream() {
     };
 
     let router_root = default_router_root_for_test();
-    assert_eq!(command.state_db, router_root.join("state.sqlite"));
+    assert_eq!(command.state_db, router_root.join("provider-proxy.sqlite"));
     assert_eq!(command.secret_root, router_root.join("secrets"));
     assert_eq!(
         command.port, None,
@@ -312,7 +312,7 @@ fn serve_command_defaults_to_home_router_paths_and_provider_upstream() {
 fn serve_command_dispatches_websocket_upgrade_through_runtime() {
     let test_root = TestRoot::new("serve-command-websocket");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let state = must_ok(SqliteStateStore::open(&state_path));
     let secrets = must_ok(
@@ -515,7 +515,7 @@ fn serve_startup_maintains_idle_enabled_oauth_account_across_simulated_days() {
 
     let test_root = TestRoot::new("serve-idle-oauth-upkeep");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let state = must_ok(SqliteStateStore::open(&state_path));
     let secrets = must_ok(

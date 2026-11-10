@@ -6,7 +6,9 @@ edition.workspace = true
 license.workspace = true
 publish.workspace = true
 [features]
+# Test support only: what a Router's stores may hold. Never a default or production feature.
 test-support = []
+
 [lints]
 workspace = true
 [dependencies]

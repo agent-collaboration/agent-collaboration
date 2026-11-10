@@ -51,8 +51,8 @@ async fn connection(path: &Path) -> Result<TursoConnection, sqlx::Error> {
 
 async fn seed_link_store(storage: &Path) -> TestResult {
     tokio::fs::create_dir_all(storage).await?;
-    let path = storage.join("fleet-cache.sqlite");
-    message_board_storage::FleetCache::open(&path)
+    let path = storage.join(message_board_storage::FleetStore::FILE_NAME);
+    message_board_storage::FleetStore::open(&path)
         .await?
         .close()
         .await;
@@ -80,14 +80,15 @@ async fn seed_link_store(storage: &Path) -> TestResult {
 }
 
 async fn assert_link_store(storage: &Path) -> TestResult {
-    let path = storage.join("fleet-cache.sqlite");
+    let path = storage.join(message_board_storage::FleetStore::FILE_NAME);
     assert!(path.exists(), "reset deleted the shared Router link store");
-    let cache = message_board_storage::FleetCache::open(&path).await?;
+    let cache_store = message_board_storage::FleetStore::open(&path).await?;
+    let cache = cache_store.cache();
     assert_eq!(
         cache.checkpoint().await?,
         message_board::FleetPosition::ZERO
     );
-    cache.close().await;
+    cache_store.close().await;
     let mut reader = connection(&path).await?;
     for (table, statement) in [
         (
@@ -151,8 +152,11 @@ async fn reenrollment_preserves_unfinished_typed_and_legacy_attempts_and_clears_
         b"incompatible old state",
     )
     .await?;
-    let cache =
-        message_board_storage::FleetCache::open(&storage.join("fleet-cache.sqlite")).await?;
+    let cache_store = message_board_storage::FleetStore::open(
+        &storage.join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?;
+    let cache = cache_store.cache();
     let native = fleet_sync_session::ClientSessionState {
         session_id: fleet_sync_protocol::SessionId::new(uuid::Uuid::now_v7())?,
         notice_cursor: fleet_sync_protocol::NoticePosition::new(19),
@@ -179,7 +183,7 @@ async fn reenrollment_preserves_unfinished_typed_and_legacy_attempts_and_clears_
     let project = message_board::ProjectId::generate();
     let epoch = fleet_sync_protocol::Epoch::new(3)?;
     let typed = cache.snapshot_install_attempt(&project, epoch).await?;
-    cache.close().await;
+    cache_store.close().await;
     let legacy = message_board_storage::SnapshotInstallAttempt {
         project: message_board::ProjectId::generate(),
         epoch,
@@ -194,8 +198,11 @@ async fn reenrollment_preserves_unfinished_typed_and_legacy_attempts_and_clears_
 
     resume_enrollment_reset(&journal, &storage).await?;
 
-    let cache =
-        message_board_storage::FleetCache::open(&storage.join("fleet-cache.sqlite")).await?;
+    let cache_store = message_board_storage::FleetStore::open(
+        &storage.join(message_board_storage::FleetStore::FILE_NAME),
+    )
+    .await?;
+    let cache = cache_store.cache();
     assert_eq!(cache.machine_session_state().await?, None);
     assert_eq!(
         cache.machine_notice_progress().await?,
@@ -215,7 +222,7 @@ async fn reenrollment_preserves_unfinished_typed_and_legacy_attempts_and_clears_
     );
     assert!(!legacy_path.exists());
     assert!(!storage.join("machine-session/state.json").exists());
-    cache.close().await;
+    cache_store.close().await;
     Ok(())
 }
 
@@ -229,7 +236,13 @@ async fn legacy_cleared_phase_discards_old_mail_cursor_before_completing_reset()
     let storage = root.path().join("storage");
     let journal = root.path().join("enrollment");
     seed_link_store(&storage).await?;
-    clear_router_state(&storage).await?;
+    clear_router_state(
+        &storage,
+        ResetFleetStore::CreateWhenMissing(
+            &storage.join(message_board_storage::FleetStore::FILE_NAME),
+        ),
+    )
+    .await?;
     seed_status_cursor(&storage).await?;
     drop(record_pending_enrollment_reset(&journal)?);
     let reset = load_reset(&journal)?.ok_or("pending reset")?;

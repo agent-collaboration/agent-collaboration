@@ -30,7 +30,8 @@ fn request(
 async fn pending_fleet_requests_keep_their_ids_and_decisions_across_reopen() -> TestResult {
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("outbox.sqlite");
-    let outbox = FleetOutbox::open(&path).await?;
+    let outbox_store = crate::FleetStore::open(&path).await?;
+    let outbox = outbox_store.outbox();
     let original = request(WorkspaceId::generate())?;
     let first = outbox.enqueue(&original).await?;
     assert_eq!(
@@ -47,8 +48,9 @@ async fn pending_fleet_requests_keep_their_ids_and_decisions_across_reopen() -> 
         outbox.enqueue(&conflicting).await,
         Err(RouterLocalStorageError::ConflictingRequest)
     ));
-    outbox.close().await;
-    let reopened = FleetOutbox::open(&path).await?;
+    outbox_store.close().await;
+    let reopened_store = crate::FleetStore::open(&path).await?;
+    let reopened = reopened_store.outbox();
     assert_eq!(reopened.pending().await?, vec![first]);
     let rejected = RequestDecision::Rejected {
         reasons: vec![Refusal::Archived],
@@ -77,7 +79,7 @@ async fn pending_fleet_requests_keep_their_ids_and_decisions_across_reopen() -> 
     let kept = reopened.enqueue(&original).await?;
     assert_eq!(kept.request, original);
     assert_eq!(kept.state, FleetOutboxState::Decided { decision: rejected });
-    reopened.close().await;
+    reopened_store.close().await;
     Ok(())
 }
 
@@ -89,11 +91,13 @@ async fn pending_fleet_requests_keep_their_ids_and_decisions_across_reopen() -> 
 async fn cursor_key_is_stable_and_signed_payloads_refuse_tampering() -> TestResult {
     let directory = tempfile::tempdir()?;
     let path = directory.path().join("cursor.sqlite");
-    let store = CursorStore::open(&path).await?;
+    let store_store = crate::FleetStore::open(&path).await?;
+    let store = store_store.cursors();
     let key = CursorSigningKey::try_from(vec![9; 32])?;
     assert_eq!(store.get_or_install_key(&key).await?, key);
-    store.close().await;
-    let reopened = CursorStore::open(&path).await?;
+    store_store.close().await;
+    let reopened_store = crate::FleetStore::open(&path).await?;
+    let reopened = reopened_store.cursors();
     assert_eq!(
         reopened
             .get_or_install_key(&CursorSigningKey::try_from(vec![8; 32])?)
@@ -109,6 +113,6 @@ async fn cursor_key_is_stable_and_signed_payloads_refuse_tampering() -> TestResu
     let mut forged = cursor.into_bytes();
     forged[0] = if forged[0] == b'A' { b'B' } else { b'A' };
     assert!(decode_board_cursor::<serde_json::Value>(&key, &String::from_utf8(forged)?).is_err());
-    reopened.close().await;
+    reopened_store.close().await;
     Ok(())
 }

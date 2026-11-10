@@ -29,8 +29,9 @@ async fn project_admission(
     Arc<collaboration_runtime::FleetClient>,
     board_central_test_support::FleetTestRuntime,
 ) {
-    let registry =
-        crate::native_board_test_fixture::new_registry(directory).expect("native project registry");
+    let registry = crate::native_board_test_fixture::new_registry(directory)
+        .await
+        .expect("native project registry");
     let origin = message_board::ActorOrigin {
         installation: TEST_SERVICE_ID
             .to_owned()

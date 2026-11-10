@@ -57,7 +57,7 @@ fn run_retry_scenario(scenario: RetryScenario) -> Result<(), String> {
     let xdg_state_home = smoke_root.path().join("xdg-state");
     let xdg_cache_home = smoke_root.path().join("xdg-cache");
     let router_root = smoke_root.path().join("router");
-    let state_path = router_root.join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(&router_root);
     let secret_root = router_root.join("secrets");
     for path in [
         &codex_home,

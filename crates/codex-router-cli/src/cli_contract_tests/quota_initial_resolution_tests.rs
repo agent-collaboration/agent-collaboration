@@ -25,7 +25,7 @@ impl AsyncProviderCredentialResolver for GatedInitialFailureCredentialResolver {
 async fn assert_delayed_initial_failure_preserves_newer_authority(successful_generation: u64) {
     let test_root = TestRoot::new("quota-refresh-delayed-initial-resolution-failure");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let secret_root = test_root.path().join("secrets");
     let secrets = must_ok(
         codex_router_secret_store::test_support::open_encrypted_credential_store(&secret_root),
@@ -352,7 +352,7 @@ fn repository_selector(
 async fn newer_initial_resolver_failure_stales_quota_and_suppresses_credit() {
     let test_root = TestRoot::new("quota-refresh-newer-initial-failure");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let account_id = account_id("acct_newer_initial_failure");
     must_ok(
@@ -506,7 +506,7 @@ impl AsyncProviderCredentialResolver for GenerationReplacingInitialSuccessResolv
 async fn assert_initial_success_generation_handling(returned_generation: u64) {
     let test_root = TestRoot::new("quota-refresh-initial-success-generation");
     must_ok(fs::create_dir(test_root.path()));
-    let state_path = test_root.path().join("state.sqlite");
+    let state_path = codex_router_state::provider_proxy_database_path(test_root.path());
     let state = must_ok(AsyncSqliteStateStore::open(&state_path).await);
     let account_id = account_id("acct_initial_success_generation");
     must_ok(

@@ -1,0 +1,28 @@
+{
+  "db_name": "Turso",
+  "query": "SELECT key_id AS \"key_id?: String\", key_bytes AS \"key_bytes!: Vec<u8>\" FROM fleet_cursor_signing_key LIMIT 2",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "key_id?: String",
+        "type_info": {
+          "name": "TEXT"
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "key_bytes!: Vec<u8>",
+        "type_info": {
+          "name": "BLOB"
+        }
+      }
+    ],
+    "parameters": null,
+    "nullable": [
+      null,
+      null
+    ]
+  },
+  "hash": "d5afee4e5fe9f908660503d52be8a337a843f29ef1a9516049241a1c5942e963"
+}

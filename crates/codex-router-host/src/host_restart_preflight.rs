@@ -39,7 +39,7 @@ pub(crate) async fn preflight_restart_ports(
             message: "the Host coordination path has no Router root".to_owned(),
         })?
         .to_owned();
-    let path = root.join("ports.json");
+    let path = crate::router_settings_path(&root);
     let config = config.clone();
     // File reads and bind probes stay off the async runtime's worker threads.
     tokio::task::spawn_blocking(move || {
@@ -60,7 +60,7 @@ pub(crate) async fn preflight_router_restart(
             message: "the Host coordination path has no Router root".to_owned(),
         })?
         .to_owned();
-    let path = root.join("ports.json");
+    let path = crate::router_settings_path(&root);
     let isolated = config.isolated_debug_ports();
     let port = config.router_endpoint().port();
     tokio::task::spawn_blocking(move || crate::resolve_router_port(&root, isolated, Some(port)))
@@ -75,7 +75,7 @@ fn check_replacement_ports(
     held_router: Option<SocketAddr>,
     held_mcp: Option<SocketAddr>,
 ) -> Result<(), RestartPortPreflightError> {
-    let path = root.join("ports.json");
+    let path = crate::router_settings_path(root);
     let overrides = replacement_port_overrides(config, &path)?;
     let ports = crate::resolve_host_ports(root, config.isolated_debug_ports(), overrides)?;
     let mut router = config.router_endpoint();

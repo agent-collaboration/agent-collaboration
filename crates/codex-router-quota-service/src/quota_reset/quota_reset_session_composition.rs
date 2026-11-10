@@ -83,8 +83,10 @@ fn compose_http_reset_session(
     credential_store: codex_router_secret_store::runtime_credential_store::RuntimeCredentialStore,
     provider: HttpLiveQuotaResetProvider,
 ) -> Result<InteractiveResetSession, QuotaResetError> {
-    let authority_reader =
-        LiveResetAuthorityReader::new(router_root.join("state.sqlite"), credential_store);
+    let authority_reader = LiveResetAuthorityReader::new(
+        codex_router_state::provider_proxy_database_path(router_root),
+        credential_store,
+    );
     let service = ResetWorkflowService::new(authority_reader, provider);
     let (session, ports) = QuotaInteractiveSession::new(
         service,
