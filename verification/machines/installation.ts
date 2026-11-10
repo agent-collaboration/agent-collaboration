@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { setTimeout } from "node:timers/promises";
 import { z } from "zod";
 import { createServer } from "node:net";
-import type { Machine } from "../declaration.ts";
+import type { Artifact, Machine } from "../declaration.ts";
 import type { Receipt } from "../receipt.ts";
 import { decode, encode } from "../exact-json.ts";
 import { RouterMcp } from "../clients/router-mcp.ts";
@@ -29,6 +29,7 @@ import {
 } from "./command-ledger.ts";
 import { validateStagingUserHome, observeRuntimeHomeIsolation } from "./user-home-isolation.ts";
 import { observeInstallationStopWindow } from "./installation-stop-window.ts";
+import { qualifyRootUpdater, updateStoppedInstallationRoot } from "./installation-root-update.ts";
 
 type Child =
   | { readonly kind: "local"; readonly process: OwnedProcess }
@@ -458,6 +459,7 @@ export class Installation {
     cli: Machine["cli"];
     productVersion: string;
     sourceHead: string;
+    updater: Artifact;
     /** The observer owns its root registration and receipts; failure leaves old children stopped. */
     observeStoppedOld?: () => Promise<void>;
   }): Promise<Installation> {
@@ -489,6 +491,12 @@ export class Installation {
     await verifyEnrollment(this);
     await qualifyArtifact(input.router);
     await qualifyArtifact(input.cli);
+    await qualifyRootUpdater({
+      root: this.machine.root,
+      updater: input.updater,
+      targetVersion: input.productVersion,
+      receipt: this.input.receipt,
+    });
     await this.input.receipt.record("installationUpgradeRequested", {
       root: this.machine.root,
       sourceHead: input.sourceHead,
@@ -503,6 +511,21 @@ export class Installation {
       ...(input.observeStoppedOld === undefined
         ? {}
         : { observeStoppedOld: input.observeStoppedOld }),
+      updateStoppedRoot: (): Promise<void> => {
+        const environment: NodeJS.ProcessEnv = {
+          ...process.env,
+          CODEX_HOME: this.machine.codexHome,
+          ...(this.input.stagingHome === undefined ? {} : { HOME: this.input.stagingHome }),
+        };
+        delete environment.CODEX_ROUTER_HOST_INHERITED_LOCK;
+        delete environment.CODEX_ROUTER_USE_HOME_DEFAULT;
+        return updateStoppedInstallationRoot({
+          root: this.machine.root,
+          updater: input.updater,
+          receipt: this.input.receipt,
+          environment,
+        });
+      },
     });
     const releaseCommandRoot = await registerCommandRoot(this.machine.root);
     const replacement = new Installation({

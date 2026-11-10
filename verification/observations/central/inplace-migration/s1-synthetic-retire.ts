@@ -6,7 +6,10 @@ import { z } from "zod";
 import { decodeAuthoredJson, encode } from "../../../exact-json.ts";
 import { readPrivateText } from "./record.ts";
 import { SyntheticCli, syntheticReceipts, stagingRoot } from "./s1-synthetic-cli.ts";
-import { oldDirectoryEntry, oldDirectoryPage } from "./old-central-registry.ts";
+import {
+  directoryEntry as oldDirectoryEntry,
+  directoryPage as oldDirectoryPage,
+} from "./contracts.ts";
 import { healthReply } from "./contracts.ts";
 import { command } from "../../../machines/owned-process.ts";
 import { hashFile } from "./project-backups.ts";

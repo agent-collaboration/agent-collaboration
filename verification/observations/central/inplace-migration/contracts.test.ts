@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { oldDirectoryEntry } from "./old-central-registry.ts";
+import { directoryEntry as oldDirectoryEntry } from "./contracts.ts";
 
 test("old2636 Registry preserves the snake-case expiry, installation holder and full lease-version tuple", (): void => {
   const raw = {

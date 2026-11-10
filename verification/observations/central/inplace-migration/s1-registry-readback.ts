@@ -6,10 +6,7 @@ import { decode, decodeAuthoredJson, encode } from "../../../exact-json.ts";
 import { registerCommandRoot } from "../../../machines/command-ledger.ts";
 import { command, privateDirectory } from "../../../machines/owned-process.ts";
 import { healthReply, type Source } from "./contracts.ts";
-import {
-  oldDirectoryEntry as directoryEntry,
-  oldDirectoryPage as directoryPage,
-} from "./old-central-registry.ts";
+import { directoryEntry, directoryPage } from "./contracts.ts";
 import { readPrivateText, type CentralRead } from "./record.ts";
 import { stagingRoot, stagingOrigin, syntheticReceipts } from "./s1-synthetic-cli.ts";
 

@@ -2,7 +2,9 @@
 export async function observeInstallationStopWindow(input: {
   stopOwnedChildren: () => Promise<void>;
   observeStoppedOld?: () => Promise<void>;
+  updateStoppedRoot: () => Promise<void>;
 }): Promise<void> {
   await input.stopOwnedChildren();
   await input.observeStoppedOld?.();
+  await input.updateStoppedRoot();
 }

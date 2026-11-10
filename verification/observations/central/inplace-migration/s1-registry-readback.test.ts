@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { healthReply } from "./contracts.ts";
-import { oldDirectoryEntry as directoryEntry } from "./old-central-registry.ts";
+import { directoryEntry } from "./contracts.ts";
 import { collectSelectedRegistry, matchRegistryCopy } from "./s1-registry-readback.ts";
 
 const project = "01900000-0000-7000-8000-000000000001";

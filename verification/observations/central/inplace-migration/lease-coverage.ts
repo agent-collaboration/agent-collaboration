@@ -17,13 +17,23 @@ export function registryLeaseRows(observed: Snapshot) {
 
 export function checkLeaseCoverage(observed: Snapshot, gaps: string[]): void {
   const selected = new Set(observed.routerProjects);
-  const writers = new Map<string, { machine: string; holder: string; lease: bigint }>();
+  const holderRouters = new Map(observed.routers.map((router) => [router.installationId, router]));
+  if (
+    holderRouters.size !== observed.routers.length ||
+    new Set(observed.routers.map((router) => router.machineId)).size !== observed.routers.length
+  )
+    throw new Error("one observed installation/peer bridge per Router required");
+  const writers = new Map<
+    string,
+    { installation: string; machine: string; holder: string; lease: bigint }
+  >();
   for (const router of observed.routers)
     for (const writer of router.writers) {
       if (!selected.has(writer.database))
         throw new Error("current Router writer is outside the declared opened cohort");
       if (writers.has(writer.database)) throw new Error("multiple current writers for one project");
       writers.set(writer.database, {
+        installation: router.installationId,
         machine: router.machineId,
         holder: writer.holder,
         lease: writer.lease,
@@ -60,24 +70,27 @@ export function checkLeaseCoverage(observed: Snapshot, gaps: string[]): void {
       if (selected.has(entry.project) && (view === undefined || view.holderInstallation !== null))
         gaps.push(`${subject} R3 missing unheld public content view`);
     } else {
+      // Registry directory holder is ServiceId; Copy/native holder is the enrolled PeerId.
+      // Only this captured Router identity pair bridges them; equal UUID text is no evidence.
+      const holderRouter = holderRouters.get(lease.value.holder);
+      if (holderRouter === undefined) {
+        gaps.push(`${subject} R1 observed holder installation/peer bridge unavailable`);
+        continue;
+      }
       if (
         selected.has(entry.project) &&
         (writer === undefined ||
-          writer.holder !== lease.value.holder ||
-          writer.machine !== lease.value.holder ||
+          writer.installation !== lease.value.holder ||
+          writer.holder !== holderRouter.machineId ||
+          writer.machine !== holderRouter.machineId ||
           writer.lease !== lease.value.epoch)
       )
         gaps.push(`${subject} R1 missing matching current native writer`);
-      if (copy.holder !== lease.value.holder || copy.fence !== lease.value.epoch)
+      if (copy.holder !== holderRouter.machineId || copy.fence !== lease.value.epoch)
         gaps.push(`${subject} R1 Registry/Copy grant differs`);
-      const holderInstallation = observed.routers.find(
-        (router) => router.machineId === lease.value.holder,
-      )?.installationId;
       if (
         selected.has(entry.project) &&
-        (view === undefined ||
-          holderInstallation === undefined ||
-          view.holderInstallation !== holderInstallation)
+        (view === undefined || view.holderInstallation !== holderRouter.installationId)
       )
         gaps.push(`${subject} R3 missing non-holder content`);
     }

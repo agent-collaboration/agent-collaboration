@@ -25,16 +25,24 @@ const heldLease = z.discriminatedUnion("kind", [
           epoch: unsigned,
           holder: identifier,
           state: z.enum(["held", "expired"]),
-          expiresAt: z.string(),
+          expires_at: z.string(),
         })
         .strict(),
     })
     .strict(),
   z.object({ kind: z.literal("unheld") }).strict(),
   z
-    .object({ kind: z.literal("retired"), value: z.object({ retiredAt: z.string() }).strict() })
+    .object({ kind: z.literal("retired"), value: z.object({ retired_at: z.string() }).strict() })
     .strict(),
 ]);
+// message_board::LeaseVersion serializes its ordered epoch/incarnation/change tuple.
+export const leaseVersion = z
+  .object({
+    epoch: unsigned,
+    incarnation: unsigned.refine((value): boolean => value > 0n),
+    change: unsigned.refine((value): boolean => value > 0n),
+  })
+  .strict();
 export const directoryEntry = z
   .object({
     project: identifier,
@@ -47,7 +55,7 @@ export const directoryEntry = z
       z
         .object({
           kind: z.literal("known"),
-          value: z.object({ lease: heldLease, leaseVersion: unsigned, asOf: z.string() }).strict(),
+          value: z.object({ lease: heldLease, leaseVersion, asOf: z.string() }).strict(),
         })
         .strict(),
       z.object({ kind: z.literal("notYetReported") }).strict(),

@@ -98,15 +98,15 @@ function observation(phase: "before" | "after"): Snapshot {
       leaseSide: {
         kind: "known",
         value: {
-          leaseVersion: 1n,
+          leaseVersion: { epoch: 9007199254740993n, incarnation: 1n, change: 1n },
           asOf: "2026-11-09T00:00:00Z",
           lease: {
             kind: "held",
             value: {
               epoch: 9007199254740993n,
-              holder: id(19 + index),
+              holder: id(9 + index),
               state: "held",
-              expiresAt: "2026-11-10T00:00:00Z",
+              expires_at: "2026-11-10T00:00:00Z",
             },
           },
         },
@@ -154,6 +154,41 @@ test("same protected facts survive version change, key order and record-list ord
   assert.deepEqual(canonical({ z: 1n, a: { y: 2n, x: 3n } }), { a: { x: 3n, y: 2n }, z: 1n });
 });
 
+test("R1 requires an observed installation-to-peer bridge and rejects treating ServiceId as native PeerId", (): void => {
+  const before = observation("before"),
+    after = observation("after");
+  const [router] = before.routers;
+  assert.ok(router && router.installationId !== router.machineId);
+  assert.equal(compareSnapshots(before, after).status, "preserved");
+  for (const capture of [before, after]) {
+    const copy = capture.copies.find((row) => row.project === id(1));
+    assert.ok(
+      copy?.health.kind === "live" &&
+        copy.health.value.copy.kind === "known" &&
+        copy.health.value.copy.value,
+    );
+    copy.health.value.copy.value.holder = id(10);
+  }
+  const mismatched = compareSnapshots(before, after);
+  assert.equal(mismatched.status, "incomplete");
+  assert.ok(mismatched.coverageGaps.some((gap) => gap.includes("Registry/Copy grant differs")));
+});
+
+test("R1 cannot infer a missing identity bridge from equal holder text", (): void => {
+  const before = observation("before"),
+    after = observation("after");
+  for (const capture of [before, after]) {
+    const entry = capture.directory.find((row) => row.project === id(1));
+    assert.ok(entry?.leaseSide.kind === "known" && entry.leaseSide.value.lease.kind === "held");
+    entry.leaseSide.value.lease.value.holder = id(20);
+  }
+  const result = compareSnapshots(before, after);
+  assert.equal(result.status, "incomplete");
+  assert.ok(
+    result.coverageGaps.some((gap) => gap.includes("installation/peer bridge unavailable")),
+  );
+});
+
 test("declared source/version govern the new target and ADR changes cannot pass preservation", (): void => {
   const before = observation("before"),
     after = observation("after");
@@ -185,7 +220,7 @@ function nonHeld(observed: Snapshot, lifecycle: "unheld" | "retired"): void {
   entry.leaseSide.value.lease =
     lifecycle === "unheld"
       ? { kind: "unheld" }
-      : { kind: "retired", value: { retiredAt: "2026-11-08T00:00:00Z" } };
+      : { kind: "retired", value: { retired_at: "2026-11-08T00:00:00Z" } };
   if (lifecycle === "retired")
     copy.health = { kind: "retired", value: { retiredAt: "2026-11-08T00:00:00Z" } };
   else {
@@ -222,7 +257,7 @@ test("R1 catches a Registry-only lifecycle change even when Copy and native tupl
   assert.ok(entry?.leaseSide.kind === "known");
   entry.leaseSide.value.lease = {
     kind: "held",
-    value: { epoch: 1n, holder: id(20), state: "held", expiresAt: "2026-11-10T00:00:00Z" },
+    value: { epoch: 1n, holder: id(10), state: "held", expires_at: "2026-11-10T00:00:00Z" },
   };
   const result = compareSnapshots(before, after);
   assert.equal(result.status, "changed");
@@ -252,8 +287,8 @@ test("ordinary expiry and publication metadata do not change the preserved held 
   const [entry] = after.directory;
   assert.ok(entry?.leaseSide.kind === "known" && entry.leaseSide.value.lease.kind === "held");
   entry.leaseSide.value.lease.value.state = "expired";
-  entry.leaseSide.value.lease.value.expiresAt = "2026-11-11T00:00:00Z";
-  entry.leaseSide.value.leaseVersion = 2n;
+  entry.leaseSide.value.lease.value.expires_at = "2026-11-11T00:00:00Z";
+  entry.leaseSide.value.leaseVersion.change = 2n;
   assert.equal(compareSnapshots(before, after).status, "preserved");
 });
 for (const dimension of [

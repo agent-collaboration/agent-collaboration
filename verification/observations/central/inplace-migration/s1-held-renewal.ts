@@ -5,7 +5,7 @@ import { decode, decodeAuthoredJson, encode } from "../../../exact-json.ts";
 import { readCommandLedger, registerCommandRoot } from "../../../machines/command-ledger.ts";
 import { command, privateDirectory, qualifyArtifact } from "../../../machines/owned-process.ts";
 import { backupDatabase, hashFile } from "./project-backups.ts";
-import { oldDirectoryEntry as directoryEntry } from "./old-central-registry.ts";
+import { directoryEntry } from "./contracts.ts";
 import type { Artifact } from "../../../declaration.ts";
 import { readPrivateText } from "./record.ts";
 import { stagingRoot, syntheticReceipts } from "./s1-synthetic-cli.ts";
