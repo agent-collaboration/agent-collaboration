@@ -23,6 +23,32 @@ const planSchema = z
     evidenceDirectory: z.string().startsWith("/"),
   })
   .strict();
+/** Capture real command results from the caller's already-qualified CLI. */
+export function createRecordedRouterReads(input: {
+  cliPath: string;
+  serviceDirectory: string;
+  evidenceDirectory: string;
+}): { read: RouterRead; sources: Source[] } {
+  let count = 0;
+  const capturedSources: Source[] = [];
+  const read: RouterRead = async (arguments_) => {
+    const release = await registerCommandRoot(dirname(input.serviceDirectory));
+    const outcome = await command(
+      input.cliPath,
+      [...arguments_, "--service-directory", input.serviceDirectory, "--json"],
+      { timeoutSeconds: 190 },
+    ).finally(release);
+    if (outcome.exit !== 0)
+      throw new Error("public Router read failed; no automatic mutation/replay");
+    const artifact = join(input.evidenceDirectory, `router-page-${count++}.json`);
+    const body = decode(outcome.stdout);
+    await writeFile(artifact, outcome.stdout, { mode: 0o600, flag: "wx" });
+    const sha256 = createHash("sha256").update(outcome.stdout).digest("hex");
+    capturedSources.push({ artifact, sha256, method: "routerPublicRead" });
+    return { body, artifact, sha256 };
+  };
+  return { read, sources: capturedSources };
+}
 export async function recordRouterLists(rawPlan: unknown): Promise<string> {
   const plan = planSchema.parse(rawPlan);
   if (
@@ -38,24 +64,11 @@ export async function recordRouterLists(rawPlan: unknown): Promise<string> {
   await qualifyArtifact(plan.router);
   await mkdir(plan.evidenceDirectory, { mode: 0o700 });
   await privateDirectory(plan.evidenceDirectory);
-  let count = 0;
-  const capturedSources: Source[] = [];
-  const read: RouterRead = async (arguments_) => {
-    const release = await registerCommandRoot(dirname(plan.serviceDirectory));
-    const outcome = await command(
-      plan.cli.path,
-      [...arguments_, "--service-directory", plan.serviceDirectory, "--json"],
-      { timeoutSeconds: 190 },
-    ).finally(release);
-    if (outcome.exit !== 0)
-      throw new Error("public Router read failed; no automatic mutation/replay");
-    const artifact = join(plan.evidenceDirectory, `router-page-${count++}.json`);
-    const body = decode(outcome.stdout);
-    await writeFile(artifact, outcome.stdout, { mode: 0o600, flag: "wx" });
-    const sha256 = createHash("sha256").update(outcome.stdout).digest("hex");
-    capturedSources.push({ artifact, sha256, method: "routerPublicRead" });
-    return { body, artifact, sha256 };
-  };
+  const { read, sources: capturedSources } = createRecordedRouterReads({
+    cliPath: plan.cli.path,
+    serviceDirectory: plan.serviceDirectory,
+    evidenceDirectory: plan.evidenceDirectory,
+  });
   const lists = await collectRouterLists({
     read,
     expectedVersion: plan.expectedVersion,
