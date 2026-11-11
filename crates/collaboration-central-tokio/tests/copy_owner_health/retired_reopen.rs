@@ -67,7 +67,7 @@ async fn history_stamps(root: &Path) -> ConformanceResult<Vec<HistoryStamp>> {
         .await?;
     let result = async {
         let rows = query::<sqlx_turso::Turso>(
-            "SELECT corpus,version,checksum FROM central_schema_migrations ORDER BY corpus,version",
+            "SELECT 'fleet-sync-receiver' AS corpus,CAST(version AS INTEGER) AS version,checksum FROM _sqlx_migrations_fleet_sync_receiver ORDER BY version",
         )
         .fetch_all(&mut store)
         .await?;
@@ -86,25 +86,29 @@ async fn history_stamps(root: &Path) -> ConformanceResult<Vec<HistoryStamp>> {
     result
 }
 // Only central's own history is edited, after the owning server is stopped.
+// The newest receiver stamp becomes a version no library declares, so the
+// history keeps its order and only that one version changes.
 async fn make_history_unsupported(root: &Path) -> ConformanceResult<Vec<HistoryStamp>> {
+    let newest = i64::try_from(crate::copy_owner_health::copy_owner_scenarios::receiver_current())?;
     let mut expected = history_stamps(root).await?;
     let mut changed = 0_u64;
     for stamp in &mut expected {
-        if stamp.corpus == "fleet-sync-receiver" && stamp.version == 3 {
+        if stamp.corpus == "fleet-sync-receiver" && stamp.version == newest {
             stamp.version = 999;
             changed += 1;
         }
     }
     if changed != 1 {
-        return Err("retired fixture did not have exactly one receiver history3 stamp".into());
+        return Err("retired fixture did not have exactly one newest receiver stamp".into());
     }
     let mut store = sqlx_turso::TursoConnectOptions::new()
         .filename(root.join(format!("copy-{DATABASE}.db")))
         .connect()
         .await?;
     let changed = query::<sqlx_turso::Turso>(
-        "UPDATE central_schema_migrations SET version='999' WHERE corpus='fleet-sync-receiver' AND version='3'",
+        "UPDATE _sqlx_migrations_fleet_sync_receiver SET version=999 WHERE version=?",
     )
+    .bind(newest)
     .execute(&mut store)
     .await;
     store.close().await?;

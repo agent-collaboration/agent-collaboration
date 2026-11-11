@@ -12,6 +12,8 @@ pub mod board {
 }
 mod admission_overload;
 mod api_connection;
+#[cfg(test)]
+mod board_project_read_timeout_test;
 mod collaboration_access;
 mod collaboration_client;
 mod message_operation;

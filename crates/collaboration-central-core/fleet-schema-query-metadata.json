@@ -1,7 +1,6 @@
 {
   "producer": "owned sqlx-turso / Turso 0.8.1 describe",
   "sources": {
-    "core_migrations/0000_migration_history.sql": "badc108861ed9aff10b5da4383ecb7a62387c677f8ae28ab67a77d0d878bd68b",
     "core_migrations/0001_fleet_decisions.sql": "88b68c4557b378f3b6757c93243543de05dfc375d4d3c23d7cf5b6a1598343a5",
     "core_migrations/0002_fleet_decision_receipts.sql": "07da9a4fce8c160b30fec2133c1130171f901c1ecc9dfb2a15d35f32a0511fb3",
     "core_migrations/0003_fleet_records.sql": "708ac76292741e43deb96bec00cd32dcca4834ffc171289e330bc3e9e68a726c",
@@ -62,7 +61,7 @@
     "generator:sqlx-turso-core/src/value/primitive_codecs.rs": "8843e6dd8f05373f519b4fb03e001132debdca1f56fd137ca179c75793a8170f",
     "generator:sqlx-turso/Cargo.toml": "157f1fdfaaf89c5bdd0dc44c806a5155b723e350d545afec86004a77ec67c0e6",
     "generator:sqlx-turso/src/lib.rs": "32ec3ac4ca4d0d703a452496262928a3a00ddfdf71eac8cbbe4ce1a3da69d9b5",
-    "generator:workspace/Cargo.lock": "e6dd6bbdd6d3915326e1bb54c57870a5d55f515e4be70732d385a2c7fd5bebbe",
+    "generator:workspace/Cargo.lock": "9cddb21fd9fbfa173b3935edc9e647c9a9b7fcf2cb0ea9f33e389255f4e14d31",
     "generator:workspace/rust-toolchain.toml": "3baca9098f290c1bc291aa94f22c516487ba2c0865bd9795d1c863b72025ab9c",
     "sql/read_fleet_schema.sql": "f288317d8ab5c6f4ac95243756dcdfc3fd9b404585486585da8480bc28120477",
     "src/generated_fleet_schema.rs": "25a33683a9e1ea938ec7b8571e000101e8aeb32e675c252ff8d0eb729b2de0f1"

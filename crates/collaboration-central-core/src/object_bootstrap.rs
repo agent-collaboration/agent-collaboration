@@ -245,9 +245,6 @@ where
         scope: &'scope mut Store::Scope<'transaction>,
     ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
         Box::pin(async move {
-            generated_bootstrap::initialize_migration_history(scope)
-                .await
-                .map_err(bootstrap_sql_error)?;
             generated_bootstrap::initialize_migration_failures(scope)
                 .await
                 .map_err(bootstrap_sql_error)?;
@@ -476,17 +473,14 @@ where
         Type<Scope::Database> + Encode<'value, Scope::Database> + Decode<'value, Scope::Database>,
     for<'row> &'row str: ColumnIndex<<Scope::Database as Database>::Row>,
 {
+    let set = crate::migration_records::MigrationSet::named(corpus)?;
+    crate::migration_records::initialize(scope, set).await?;
     let mut applied = BTreeMap::new();
-    for row in generated_bootstrap::read_migration_history(scope, corpus.into())
+    for row in crate::migration_records::read(scope, set)
         .await
         .map_err(bootstrap_sql_error)?
     {
-        crate::migration_bookkeeping::validate_history_times(&row)?;
-        crate::fleet_record_codec::check_private_id(
-            &row.row_id
-                .ok_or_else(|| corrupt("missing physical row identity"))?,
-            "migration row identity",
-        )?;
+        crate::migration_records::validate(&row, set)?;
         let version = row.version.ok_or_else(|| corrupt("missing version"))?;
         let checksum = row.checksum.ok_or_else(|| corrupt("missing checksum"))?;
         if applied.insert(version, checksum).is_some() {
@@ -557,16 +551,16 @@ where
             })?;
         let installed_on = clock.now().unix_millis();
         let execution_time = installed_on.saturating_sub(started).max(0);
-        generated_bootstrap::insert_migration_history(
+        crate::migration_records::insert(
             scope,
-            durable_steps::Uuid::now_v7().to_string(),
-            corpus.into(),
-            migration.version,
-            migration.description.to_string(),
-            installed_on,
-            checksum(migration),
-            execution_time,
-            now.unix_millis(),
+            set,
+            crate::migration_records::AppliedMigration {
+                version: migration.version,
+                description: migration.description.to_string(),
+                installed_on: runtime_primitives::SyncTime::from_unix_millis(installed_on),
+                checksum: checksum(migration),
+                execution_time,
+            },
         )
         .await
         .map_err(|error| {
@@ -574,7 +568,7 @@ where
                 corpus,
                 migration.version,
                 now,
-                bootstrap_sql_error(error),
+                error,
             )
         })?;
         newly_applied.push(migration.version);

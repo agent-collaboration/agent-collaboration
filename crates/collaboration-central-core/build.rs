@@ -6,6 +6,7 @@ fn main() -> Result<(), fleet_sync_query_gen::GenerateError> {
     fleet_sync_query_gen::verify_manifest("fleet-reason-queries.json")?;
     fleet_sync_query_gen::verify_manifest("bootstrap-queries.json")?;
     fleet_sync_query_gen::verify_manifest("bootstrap-probe-queries.json")?;
+    fleet_sync_query_gen::verify_manifest("migration-record-queries.json")?;
     fleet_sync_query_gen::verify_manifest("enrollment-queries.json")?;
     fleet_sync_query_gen::verify_manifest("fleet-record-read-queries.json")?;
     fleet_sync_query_gen::verify_manifest("fleet-record-write-queries.json")?;

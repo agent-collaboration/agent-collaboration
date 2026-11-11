@@ -1,8 +1,7 @@
 {
   "producer": "owned sqlx-turso / Turso 0.8.1 describe",
   "sources": {
-    "bootstrap-queries.json": "9bb3440738877e0b7f9528c0f6c40d01632bb3d76f475f95e562bfad488990f7",
-    "core_migrations/0000_migration_history.sql": "badc108861ed9aff10b5da4383ecb7a62387c677f8ae28ab67a77d0d878bd68b",
+    "bootstrap-queries.json": "a0a5f67d8190d62aae3b5b03dfa936ba49e334649693360024d459152dc1d4fa",
     "core_migrations/0001_fleet_decisions.sql": "88b68c4557b378f3b6757c93243543de05dfc375d4d3c23d7cf5b6a1598343a5",
     "core_migrations/0002_fleet_decision_receipts.sql": "07da9a4fce8c160b30fec2133c1130171f901c1ecc9dfb2a15d35f32a0511fb3",
     "core_migrations/0003_fleet_records.sql": "708ac76292741e43deb96bec00cd32dcca4834ffc171289e330bc3e9e68a726c",
@@ -62,139 +61,16 @@
     "generator:sqlx-turso-core/src/value/primitive_codecs.rs": "8843e6dd8f05373f519b4fb03e001132debdca1f56fd137ca179c75793a8170f",
     "generator:sqlx-turso/Cargo.toml": "157f1fdfaaf89c5bdd0dc44c806a5155b723e350d545afec86004a77ec67c0e6",
     "generator:sqlx-turso/src/lib.rs": "32ec3ac4ca4d0d703a452496262928a3a00ddfdf71eac8cbbe4ce1a3da69d9b5",
-    "generator:workspace/Cargo.lock": "e6dd6bbdd6d3915326e1bb54c57870a5d55f515e4be70732d385a2c7fd5bebbe",
+    "generator:workspace/Cargo.lock": "9cddb21fd9fbfa173b3935edc9e647c9a9b7fcf2cb0ea9f33e389255f4e14d31",
     "generator:workspace/rust-toolchain.toml": "3baca9098f290c1bc291aa94f22c516487ba2c0865bd9795d1c863b72025ab9c",
     "sql/clear_migration_failure.sql": "7122119a9e1f1a81f7fbecd1d195d2e2f824d6b034126b06f666acd4dcd418a3",
-    "sql/insert_migration_history.sql": "5949cc74fa3072f9f9e204a670b85e9bfd3e237ffe15542932edca8cc516628d",
-    "sql/probe_migration_bookkeeping.sql": "d546d877cc56bea373c34d14978a92fffd5115a108ae052abeaa4670cc22c204",
+    "sql/probe_migration_bookkeeping.sql": "2b836c1803470402efe1aa074b0aa01676eef2c68f1fc3599e7e61775b320f10",
     "sql/read_migration_failures.sql": "d5b7bf36f8f71f81894ad1f651888e36ab35c46f19e769962faa90852ef8b05d",
-    "sql/read_migration_history.sql": "2297d93778fb76831c89f4764e9cba361447c5b318e19381a5bba692925a44d3",
     "sql/record_migration_failure.sql": "21e70218fc45f49d94c6bf255cbcaf1ad86ebcae79cf7205ca6799cdd6a189e7",
-    "src/generated_bootstrap.rs": "b118900f979b4520ac2723e9c95029cec3d575147c4f25d9a7be38a6e0c2a68d"
+    "src/generated_bootstrap.rs": "d513078c33b481d2b483b8494a1f94ba73569a35497d18d4aae9ccdcdf40cbb9"
   },
-  "queries_digest": "53553c77522e58e4948b29a0f89a5a9caee8869a01cfb570a9a411ea691fd59c",
+  "queries_digest": "d6e96cc609697156fe06e1e3afca7c31800ba1f8feda1f6257bf474c5db3adc1",
   "queries": [
-    {
-      "name": "initialize_migration_history",
-      "bind_slots": 0,
-      "columns": []
-    },
-    {
-      "name": "read_migration_history",
-      "bind_slots": 1,
-      "columns": [
-        {
-          "name": "row_id",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "version",
-          "sql_type": "INTEGER",
-          "rust_type": "Option<i64>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "description",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "success",
-          "sql_type": "INTEGER",
-          "rust_type": "Option<i64>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "checksum",
-          "sql_type": "BLOB",
-          "rust_type": "Option<Vec<u8>>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "execution_time",
-          "sql_type": "INTEGER",
-          "rust_type": "Option<i64>",
-          "nullable": null,
-          "type_source": "driver"
-        },
-        {
-          "name": "version_class",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "typeof"
-        },
-        {
-          "name": "success_class",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "typeof"
-        },
-        {
-          "name": "execution_class",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "typeof"
-        },
-        {
-          "name": "created_at",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "cast"
-        },
-        {
-          "name": "created_class",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "typeof"
-        },
-        {
-          "name": "updated_at",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "cast"
-        },
-        {
-          "name": "updated_class",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "typeof"
-        },
-        {
-          "name": "installed_on",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "cast"
-        },
-        {
-          "name": "installed_class",
-          "sql_type": "TEXT",
-          "rust_type": "Option<String>",
-          "nullable": null,
-          "type_source": "typeof"
-        }
-      ]
-    },
-    {
-      "name": "insert_migration_history",
-      "bind_slots": 8,
-      "columns": []
-    },
     {
       "name": "initialize_migration_failures",
       "bind_slots": 0,

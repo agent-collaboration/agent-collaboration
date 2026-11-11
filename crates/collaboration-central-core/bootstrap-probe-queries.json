@@ -1,6 +1,7 @@
 {
   "migrations": [
-    "core_migrations"
+    "core_migrations",
+    "migration_record_tables"
   ],
   "output": "src/generated_bootstrap_probes.rs",
   "metadata": "bootstrap-probe-query-metadata.json",
@@ -13,15 +14,8 @@
       "parameters": []
     },
     {
-      "name": "bootstrap_probe_history",
-      "sql": "sql/bootstrap_probe_history.sql",
-      "row": "BootstrapHistoryRow",
-      "result": "many",
-      "parameters": []
-    },
-    {
-      "name": "bootstrap_probe_checksum",
-      "sql": "sql/bootstrap_probe_checksum.sql",
+      "name": "bootstrap_probe_checksum_fleet_sync_lease",
+      "sql": "sql/migration_records/probe_checksum_fleet_sync_lease.sql",
       "row": null,
       "result": "execute",
       "parameters": [
@@ -29,17 +23,12 @@
           "name": "value",
           "kind": "blob",
           "nullable": false
-        },
-        {
-          "name": "corpus",
-          "kind": "text",
-          "nullable": false
         }
       ]
     },
     {
-      "name": "bootstrap_probe_version",
-      "sql": "sql/bootstrap_probe_version.sql",
+      "name": "bootstrap_probe_version_fleet_sync_lease",
+      "sql": "sql/migration_records/probe_version_fleet_sync_lease.sql",
       "row": null,
       "result": "execute",
       "parameters": [
@@ -47,10 +36,161 @@
           "name": "value",
           "kind": "integer",
           "nullable": false
-        },
+        }
+      ]
+    },
+    {
+      "name": "bootstrap_probe_checksum_fleet_sync_receiver",
+      "sql": "sql/migration_records/probe_checksum_fleet_sync_receiver.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
         {
-          "name": "corpus",
-          "kind": "text",
+          "name": "value",
+          "kind": "blob",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "bootstrap_probe_version_fleet_sync_receiver",
+      "sql": "sql/migration_records/probe_version_fleet_sync_receiver.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "value",
+          "kind": "integer",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "bootstrap_probe_checksum_fleet_sync_session",
+      "sql": "sql/migration_records/probe_checksum_fleet_sync_session.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "value",
+          "kind": "blob",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "bootstrap_probe_version_fleet_sync_session",
+      "sql": "sql/migration_records/probe_version_fleet_sync_session.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "value",
+          "kind": "integer",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "bootstrap_probe_checksum_fleet_sync_delivery",
+      "sql": "sql/migration_records/probe_checksum_fleet_sync_delivery.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "value",
+          "kind": "blob",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "bootstrap_probe_version_fleet_sync_delivery",
+      "sql": "sql/migration_records/probe_version_fleet_sync_delivery.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "value",
+          "kind": "integer",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "bootstrap_probe_checksum_central_fleet",
+      "sql": "sql/migration_records/probe_checksum_central_fleet.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "value",
+          "kind": "blob",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "bootstrap_probe_version_central_fleet",
+      "sql": "sql/migration_records/probe_version_central_fleet.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "value",
+          "kind": "integer",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "bootstrap_probe_checksum_central_registry",
+      "sql": "sql/migration_records/probe_checksum_central_registry.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "value",
+          "kind": "blob",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "bootstrap_probe_version_central_registry",
+      "sql": "sql/migration_records/probe_version_central_registry.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "value",
+          "kind": "integer",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "bootstrap_probe_checksum_central_session",
+      "sql": "sql/migration_records/probe_checksum_central_session.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "value",
+          "kind": "blob",
+          "nullable": false
+        }
+      ]
+    },
+    {
+      "name": "bootstrap_probe_version_central_session",
+      "sql": "sql/migration_records/probe_version_central_session.sql",
+      "row": null,
+      "result": "execute",
+      "parameters": [
+        {
+          "name": "value",
+          "kind": "integer",
           "nullable": false
         }
       ]

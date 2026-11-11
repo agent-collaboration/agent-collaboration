@@ -278,85 +278,85 @@ impl CollaborationClient {
         &self,
         request: ProjectRecordShowRequest,
     ) -> Result<Record, BoardClientError> {
-        self.board_call("workstream_show", request).await
+        self.project_read_call("workstream_show", request).await
     }
     pub async fn workstream_list(
         &self,
         request: ProjectRecordListRequest,
     ) -> Result<RecordListResult, BoardClientError> {
-        self.board_call("workstream_list", request).await
+        self.project_read_call("workstream_list", request).await
     }
     pub async fn task_show(
         &self,
         request: ProjectRecordShowRequest,
     ) -> Result<Record, BoardClientError> {
-        self.board_call("task_show", request).await
+        self.project_read_call("task_show", request).await
     }
     pub async fn task_list(
         &self,
         request: ProjectRecordListRequest,
     ) -> Result<RecordListResult, BoardClientError> {
-        self.board_call("task_list", request).await
+        self.project_read_call("task_list", request).await
     }
     pub async fn subtask_show(
         &self,
         request: ProjectRecordShowRequest,
     ) -> Result<Record, BoardClientError> {
-        self.board_call("subtask_show", request).await
+        self.project_read_call("subtask_show", request).await
     }
     pub async fn subtask_list(
         &self,
         request: SubtaskListRequest,
     ) -> Result<RecordListResult, BoardClientError> {
-        self.board_call("subtask_list", request).await
+        self.project_read_call("subtask_list", request).await
     }
     pub async fn role_show(
         &self,
         request: ProjectRecordShowRequest,
     ) -> Result<Record, BoardClientError> {
-        self.board_call("role_show", request).await
+        self.project_read_call("role_show", request).await
     }
     pub async fn role_list(
         &self,
         request: ProjectRecordListRequest,
     ) -> Result<RecordListResult, BoardClientError> {
-        self.board_call("role_list", request).await
+        self.project_read_call("role_list", request).await
     }
     pub async fn fact_show(
         &self,
         request: ProjectRecordShowRequest,
     ) -> Result<Record, BoardClientError> {
-        self.board_call("fact_show", request).await
+        self.project_read_call("fact_show", request).await
     }
     pub async fn fact_list(
         &self,
         request: ProjectRecordListRequest,
     ) -> Result<RecordListResult, BoardClientError> {
-        self.board_call("fact_list", request).await
+        self.project_read_call("fact_list", request).await
     }
     pub async fn intent_show(
         &self,
         request: ProjectRecordShowRequest,
     ) -> Result<Record, BoardClientError> {
-        self.board_call("intent_show", request).await
+        self.project_read_call("intent_show", request).await
     }
     pub async fn intent_list(
         &self,
         request: ProjectRecordListRequest,
     ) -> Result<RecordListResult, BoardClientError> {
-        self.board_call("intent_list", request).await
+        self.project_read_call("intent_list", request).await
     }
     pub async fn feed_read(
         &self,
         request: FeedReadRequest,
     ) -> Result<BoardReadReply<FeedRead>, BoardClientError> {
-        self.board_call("feed_read", request).await
+        self.project_read_call("feed_read", request).await
     }
     pub async fn work_trail_show(
         &self,
         request: WorkTrailShowRequest,
     ) -> Result<BoardReadReply<WorkTrailReadResult>, BoardClientError> {
-        self.board_call("work_trail_show", request).await
+        self.project_read_call("work_trail_show", request).await
     }
     pub async fn project_watch(
         &self,

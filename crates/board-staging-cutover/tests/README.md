@@ -156,3 +156,13 @@ without claiming lifecycle completion or post-canary source equality.
 
 Host lifecycle orchestration, the full process-crash matrix, frozen
 mail/cancel state, remote hardware and staging corpus remain unverified.
+
+## Example tests
+
+`examples/migration_decode_gate` (`test = true`) holds PD7's verification-only
+decode gate and its colocated `gate_test.rs`. The tests decode the committed
+`candidate_fixture.json` (the migration Worker's real inventory answer, kept
+current by tools/central-migration `test/candidate_fixture.test.ts`) with
+main's own decoders: the fixture passes, each value class the TypeScript
+preflight refuses is refused at its object and row, and a candidate that
+doesn't hash to its named digest is refused.

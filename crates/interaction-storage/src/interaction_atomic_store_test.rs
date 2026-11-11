@@ -134,6 +134,8 @@ type NativeSubmit = SubmitItem<
 mod central_mail_cursor;
 #[path = "composed_schema_upgrade_test.rs"]
 mod composed_schema_upgrade;
+#[path = "library_journal_upgrade_test.rs"]
+mod library_journal_upgrade;
 #[path = "local_cancel_delivery_storage_tests.rs"]
 mod local_cancels;
 #[path = "message_send_answer_custody_test.rs"]

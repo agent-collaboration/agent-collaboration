@@ -1,1 +1,0 @@
-SELECT corpus,version,description,installed_on,success,checksum,execution_time,typeof(version) AS version_class,typeof(checksum) AS checksum_class,typeof(installed_on) AS installed_class,typeof(execution_time) AS execution_class FROM central_schema_migrations ORDER BY corpus,version;

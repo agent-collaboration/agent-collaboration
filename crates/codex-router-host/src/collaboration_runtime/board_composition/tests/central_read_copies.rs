@@ -8,6 +8,8 @@ use runtime_primitives::{Clock, SystemClock};
 use std::{collections::BTreeSet, path::PathBuf};
 
 const WIDE_REVISION: u64 = 9_007_199_254_740_993;
+#[path = "central_read_copy_deadline.rs"]
+mod deadline;
 #[path = "central_read_copy_restart.rs"]
 mod restart;
 #[path = "central_read_copy_schema.rs"]

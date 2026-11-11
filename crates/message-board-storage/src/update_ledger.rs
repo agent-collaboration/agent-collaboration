@@ -12,7 +12,7 @@ use crate::{
     },
     router_local_database::RouterLocalDatabase,
 };
-use sqlx::{ConnectOptions, Connection, Row};
+use sqlx::{ConnectOptions, Connection, Row, sqlite::SqliteConnectOptions};
 use sqlx_turso::{Turso, TursoConnectOptions};
 use std::path::Path;
 
@@ -296,15 +296,31 @@ impl UpdateLedger {
         Ok(())
     }
 
-    /// Step 0010, before the rename: moves every page out of the write-ahead log into
-    /// the database file, then closes the one connection.
+    /// Step 0010 closes Turso before SQLite checkpoints its compatible WAL and closes
+    /// the SQLite WAL index that a stopped-root observer may have left behind.
     pub async fn checkpoint_and_close(self) -> Result<(), RouterLocalStorageError> {
-        let checkpointed = sqlx::query::<Turso>("PRAGMA wal_checkpoint(TRUNCATE)")
-            .execute(&self.database.pool)
-            .await;
+        let path = self
+            .database
+            .pool
+            .connect_options()
+            .get_filename()
+            .ok_or_else(|| sqlx::Error::Protocol("file-backed update ledger required".into()))?
+            .to_owned();
         self.database.close().await;
-        checkpointed?;
-        Ok(())
+        let mut connection = SqliteConnectOptions::new()
+            .filename(path)
+            .create_if_missing(false)
+            .connect()
+            .await?;
+        let checkpointed = sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)")
+            .fetch_one(&mut connection)
+            .await
+            .and_then(|row| row.try_get::<i64, _>("busy"));
+        let closed = connection.close().await;
+        if checkpointed? != 0 {
+            return Err(sqlx::Error::Protocol("Fleet database checkpoint is busy".into()).into());
+        }
+        Ok(closed?)
     }
 
     pub async fn close(self) {

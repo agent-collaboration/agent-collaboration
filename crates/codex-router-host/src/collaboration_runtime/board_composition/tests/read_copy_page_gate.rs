@@ -46,6 +46,7 @@ impl StagedPageGate {
         &self,
         receipt: InstallPageReceipt,
         target: PathBuf,
+        clock: &dyn router_clock::RuntimeClock,
     ) -> Result<(), CallFailure> {
         let pending = self.pending.lock().await.take();
         if let Some(pending) = pending {
@@ -53,7 +54,7 @@ impl StagedPageGate {
                 .staged
                 .send(StagedPageObservation { receipt, target })
                 .map_err(|_| CallFailure::AnswerLost)?;
-            tokio::time::timeout(Duration::from_secs(30), pending.proceed)
+            router_clock::timeout(clock, Duration::from_secs(240), pending.proceed)
                 .await
                 .map_err(|_| CallFailure::AnswerLost)?
                 .map_err(|_| CallFailure::AnswerLost)?;

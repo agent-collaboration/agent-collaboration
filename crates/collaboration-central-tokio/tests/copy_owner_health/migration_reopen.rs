@@ -1,7 +1,7 @@
 //! A missing central migration stamp keeps owner diagnostics available until recovery.
 use super::{ConformanceResult, JwksFixtureServer, PROJECT, TokioServer, measured_files, settings};
 use crate::copy_owner_health::{
-    copy_owner_scenarios::{OwnerClient, bookkeeping, no_failures},
+    copy_owner_scenarios::{OwnerClient, bookkeeping, no_failures, receiver_current},
     creation_scenarios as creation,
 };
 use board_sync_protocol::BoardAnnotation;
@@ -185,33 +185,65 @@ async fn create_project(base: &str) -> ConformanceResult<Value> {
 
 #[derive(Debug, PartialEq)]
 struct MigrationStamp {
-    row_id: String,
-    corpus: String,
     version: i64,
     checksum: Vec<u8>,
-    created_at: i64,
-    updated_at: i64,
-    installed_on: i64,
+    installed_on: String,
     description: String,
     success: i64,
     execution_time: i64,
 }
+const RECORD_COLUMNS: &str = "CAST(version AS INTEGER) AS version,checksum,CAST(installed_on AS TEXT) AS installed_on,description,CAST(success AS INTEGER) AS success,CAST(execution_time AS INTEGER) AS execution_time";
+fn stamp_of(row: &sqlx_turso::TursoRow) -> ConformanceResult<MigrationStamp> {
+    Ok(MigrationStamp {
+        version: row.try_get("version")?,
+        checksum: row.try_get("checksum")?,
+        installed_on: row.try_get("installed_on")?,
+        description: row.try_get("description")?,
+        success: row.try_get("success")?,
+        execution_time: row.try_get("execution_time")?,
+    })
+}
 
 // The caller has stopped the owning server. Only central's own stamp is changed.
-async fn remove_stamp(root: &Path) -> ConformanceResult<MigrationStamp> {
+// Receiver history is cut back to version 2: version 3 and every later stamp
+// go, so version 3 is the next to apply and its re-run hits the tables that
+// already exist, whatever later receiver migrations the pinned library adds.
+async fn remove_stamps(root: &Path) -> ConformanceResult<Vec<MigrationStamp>> {
     let mut store = sqlx_turso::TursoConnectOptions::new()
         .filename(root.join(format!("copy-{PROJECT}.db")))
         .connect()
         .await?;
     let result = async {
-        let rows = query::<sqlx_turso::Turso>("SELECT row_id,corpus,version,checksum,created_at,updated_at,installed_on,description,success,execution_time FROM central_schema_migrations WHERE corpus='fleet-sync-receiver' AND version='3'").fetch_all(&mut store).await?;
-        let [row] = rows.as_slice() else { return Err("fixture did not have exactly one receiver version3 stamp".into()); };
-        let stamp = MigrationStamp { row_id: row.try_get("row_id")?, corpus: row.try_get("corpus")?, version: row.try_get("version")?, checksum: row.try_get("checksum")?,created_at:row.try_get("created_at")?,updated_at:row.try_get("updated_at")?,installed_on:row.try_get("installed_on")?,description:row.try_get("description")?,success:row.try_get("success")?,execution_time:row.try_get("execution_time")? };
-        query::<sqlx_turso::Turso>("DELETE FROM central_schema_migrations WHERE corpus=? AND version=? AND checksum=?").bind(&stamp.corpus).bind(stamp.version).bind(&stamp.checksum).execute(&mut store).await?;
-        Ok(stamp)
-    }.await;
+        let rows = query::<sqlx_turso::Turso>(sqlx_core::sql_str::AssertSqlSafe(format!(
+            "SELECT {RECORD_COLUMNS} FROM _sqlx_migrations_fleet_sync_receiver WHERE version>=3 ORDER BY version"
+        )))
+        .fetch_all(&mut store)
+        .await?;
+        let stamps = rows.iter().map(stamp_of).collect::<ConformanceResult<Vec<_>>>()?;
+        if stamps.first().map(|stamp| stamp.version) != Some(3) {
+            return Err("fixture did not have a receiver version3 stamp".into());
+        }
+        for stamp in &stamps {
+            query::<sqlx_turso::Turso>(
+                "DELETE FROM _sqlx_migrations_fleet_sync_receiver WHERE version=? AND checksum=?",
+            )
+            .bind(stamp.version)
+            .bind(&stamp.checksum)
+            .execute(&mut store)
+            .await?;
+        }
+        Ok(stamps)
+    }
+    .await;
     store.close().await?;
     result
+}
+
+async fn restore_stamps(root: &Path, stamps: &[MigrationStamp]) -> ConformanceResult<()> {
+    for stamp in stamps {
+        restore_stamp(root, stamp).await?;
+    }
+    Ok(())
 }
 
 async fn restore_stamp(root: &Path, stamp: &MigrationStamp) -> ConformanceResult<()> {
@@ -220,9 +252,9 @@ async fn restore_stamp(root: &Path, stamp: &MigrationStamp) -> ConformanceResult
         .connect()
         .await?;
     let result = async {
-        query::<sqlx_turso::Turso>("INSERT INTO central_schema_migrations(row_id,corpus,version,checksum,created_at,updated_at,installed_on,description,success,execution_time) VALUES(?,?,?,?,?,?,?,?,?,?)").bind(&stamp.row_id).bind(&stamp.corpus).bind(stamp.version).bind(&stamp.checksum).bind(stamp.created_at).bind(stamp.updated_at).bind(stamp.installed_on).bind(&stamp.description).bind(stamp.success).bind(stamp.execution_time).execute(&mut store).await?;
-        let row = query::<sqlx_turso::Turso>("SELECT row_id,corpus,version,checksum,created_at,updated_at,installed_on,description,success,execution_time FROM central_schema_migrations WHERE corpus=? AND version=?").bind(&stamp.corpus).bind(stamp.version).fetch_one(&mut store).await?;
-        let restored = MigrationStamp { row_id: row.try_get("row_id")?, corpus: row.try_get("corpus")?, version: row.try_get("version")?, checksum: row.try_get("checksum")?,created_at:row.try_get("created_at")?,updated_at:row.try_get("updated_at")?,installed_on:row.try_get("installed_on")?,description:row.try_get("description")?,success:row.try_get("success")?,execution_time:row.try_get("execution_time")? };
+        query::<sqlx_turso::Turso>("INSERT INTO _sqlx_migrations_fleet_sync_receiver(version,checksum,installed_on,description,success,execution_time) VALUES(?,?,?,?,?,?)").bind(stamp.version).bind(&stamp.checksum).bind(&stamp.installed_on).bind(&stamp.description).bind(stamp.success).bind(stamp.execution_time).execute(&mut store).await?;
+        let row = query::<sqlx_turso::Turso>(sqlx_core::sql_str::AssertSqlSafe(format!("SELECT {RECORD_COLUMNS} FROM _sqlx_migrations_fleet_sync_receiver WHERE version=?"))).bind(stamp.version).fetch_one(&mut store).await?;
+        let restored = stamp_of(&row)?;
         if restored != *stamp { return Err("fixture did not restore the exact saved migration stamp".into()); }
         Ok(())
     }.await;
@@ -396,7 +428,7 @@ async fn pending_migration_keeps_health_readable_and_preview_recovers_with_origi
     let proof = async {
         // Arrange a real registered Copy, then interrupt central-owned bookkeeping at rest.
         let original = serve(root_path, &jwks.url, |base, _platform| async move { create_project(&base).await }).await?;
-        let stamp = remove_stamp(root_path).await?;
+        let stamps = remove_stamps(root_path).await?;
         // Act through the ordinary prelude and owner HTTP; Health remains tolerant.
         let failed = serve(root_path, &jwks.url, |base, platform| async move {
             pending_session_refusals(&base).await?;
@@ -432,7 +464,7 @@ async fn pending_migration_keeps_health_readable_and_preview_recovers_with_origi
         }
         println!("OWNER_MIGRATION_REOPEN_CASE pending_health_exact_diagnostic_bytes_and_preview_refusal passed");
         // Assert recovery after exact restoration, including the normal snapshot contents.
-        restore_stamp(root_path, &stamp).await?;
+        restore_stamps(root_path, &stamps).await?;
         serve(root_path, &jwks.url, |base, _platform| async move {
             let (status, recovered) = preview(&base).await?;
             if status != StatusCode::OK { return Err(format!("Preview did not recover after exact stamp restore: {status}: {recovered}").into()); }
@@ -442,7 +474,7 @@ async fn pending_migration_keeps_health_readable_and_preview_recovers_with_origi
             // The retained recovery oracle is the original holder, fence and prefix.
             if recovered_native.fence != original_native.fence || recovered_native.acked != original_native.acked || recovered_native.holder != original_native.holder || recovered.get("holderInstallation") != Some(&json!(SERVICE)) { return Err(format!("Preview did not recover its original native fence/prefix after exact stamp restore: {status}: {recovered}").into()); }
             let health = OwnerClient::new(&base)?.health(PROJECT).await?;
-            bookkeeping(&health, Some(3))?;
+            bookkeeping(&health, Some(receiver_current()))?;
             no_failures(&health)?;
             read_recovered_row(&base).await?;
             println!("OWNER_MIGRATION_REOPEN_CASE restored_preview_and_original_snapshot_row passed");

@@ -149,3 +149,67 @@ where
         })
     }
 }
+
+/// Decode every stored enrollment of one machine with the production decoder
+/// (`StoredMachine::decode`) in this scope; answers how many rows decoded.
+pub async fn decode_machine_enrollments_in_scope<S: TransactionScope>(
+    scope: &mut S,
+    machine: &str,
+) -> Result<usize, StoreError>
+where
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Option<String>:
+        Type<S::Database> + Encode<'value, S::Database> + Decode<'value, S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+{
+    let rows = crate::generated_enrollment::read_enrollments(
+        scope,
+        None,
+        None,
+        None,
+        Some(machine.to_owned()),
+    )
+    .await
+    .map_err(StoreError::backend)?;
+    let decoded = rows.len();
+    for row in rows {
+        crate::machine_enrollment_record::StoredMachine::decode(row)?;
+    }
+    Ok(decoded)
+}
+
+/// Decode one workspace's repository attachments with the production decoder
+/// (`fleet_repository_store::read`); answers how many decoded.
+pub async fn read_fleet_repository_attachments_in_scope<S: TransactionScope>(
+    scope: &mut S,
+    workspace: &str,
+) -> Result<usize, StoreError>
+where
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> String: Type<S::Database> + Encode<'value, S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+{
+    let workspace =
+        message_board::WorkspaceId::try_from(workspace.to_owned()).map_err(StoreError::backend)?;
+    crate::fleet_repository_store::read(scope, &workspace)
+        .await
+        .map(|attachments| attachments.len())
+}
+
+/// Decode the Fleet's lease incarnation with the production decoder; answers its counter.
+pub async fn read_fleet_lease_incarnation_in_scope<S: TransactionScope>(
+    scope: &mut S,
+) -> Result<Option<u64>, StoreError>
+where
+    <S::Database as Database>::Arguments: IntoArguments<S::Database>,
+    for<'value> Option<String>: Type<S::Database> + Decode<'value, S::Database>,
+    for<'row> &'row str: ColumnIndex<<S::Database as Database>::Row>,
+{
+    crate::generated_registry_lease::read_registry_incarnation(scope)
+        .await
+        .map_err(StoreError::backend)?
+        .map(crate::fleet_lease_projection_step::decode_incarnation)
+        .transpose()
+        .map(|decoded| decoded.map(|(_, counter)| counter))
+}

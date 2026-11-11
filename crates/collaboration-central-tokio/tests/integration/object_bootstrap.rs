@@ -104,7 +104,11 @@ async fn exported_engine_corpora_initialize_once_and_reopen_without_reapplying_t
 -> Result<(), TestError> {
     for (schema, expected) in [
         (EngineSchema::Registry, 8),
-        (EngineSchema::Copy, 3),
+        // Every receiver migration the pinned library declares.
+        (
+            EngineSchema::Copy,
+            fleet_sync_receiver::RECEIVER_MIGRATOR.iter().count(),
+        ),
         (EngineSchema::Session, 5),
         (EngineSchema::Delivery, 11),
         (EngineSchema::Fleet, 10),
@@ -147,22 +151,7 @@ async fn exported_engine_corpora_initialize_once_and_reopen_without_reapplying_t
                 ),
             }
         }
-        let count: String = fixture
-            .object
-            .transaction(|scope| {
-                Box::pin(async move {
-                    query::<sqlx_turso::Turso>(
-                        "SELECT CAST(COUNT(*) AS TEXT) AS count FROM central_schema_migrations",
-                    )
-                    .fetch_one(scope.executor())
-                    .await
-                    .map_err(StoreError::backend)?
-                    .try_get("count")
-                    .map_err(StoreError::backend)
-                })
-            })
-            .await?;
-        assert_eq!(count, expected.to_string());
+        assert_eq!(record_count(&fixture).await?, expected);
         fixture.objects.close().await?;
         drop(bootstrap);
         drop(fixture);
@@ -263,17 +252,49 @@ async fn a_real_late_sql_error_rolls_back_all_earlier_migrations_and_history()
     Ok(())
 }
 
+/// Every record in every set's sqlx table: one per applied migration.
+async fn record_count(fixture: &Fixture) -> Result<usize, TestError> {
+    Ok(fixture
+        .object
+        .transaction(|scope| {
+            Box::pin(async move {
+                let tables: Vec<String> = query::<sqlx_turso::Turso>(
+                    "SELECT name FROM sqlite_schema WHERE type='table' AND name GLOB '_sqlx_migrations_*' ORDER BY name",
+                )
+                .fetch_all(scope.executor())
+                .await
+                .map_err(StoreError::backend)?
+                .into_iter()
+                .map(|row| row.try_get("name").map_err(StoreError::backend))
+                .collect::<Result<_, _>>()?;
+                let mut total = 0;
+                for table in tables {
+                    total += query::<sqlx_turso::Turso>(sqlx_core::sql_str::AssertSqlSafe(format!(
+                        "SELECT version FROM {table}"
+                    )))
+                    .fetch_all(scope.executor())
+                    .await
+                    .map_err(StoreError::backend)?
+                    .len();
+                }
+                Ok(total)
+            })
+        })
+        .await?)
+}
+
 #[tokio::test]
 async fn a_changed_migration_checksum_is_refused_on_reopen() -> Result<(), TestError> {
-    corrupt_history("UPDATE central_schema_migrations SET checksum=x'000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000' WHERE version=1").await
+    corrupt_history("UPDATE _sqlx_migrations_fleet_sync_lease SET checksum=x'000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000' WHERE version=1").await
 }
 #[tokio::test]
 async fn an_invalid_stored_version_is_refused_on_reopen() -> Result<(), TestError> {
-    corrupt_history("UPDATE central_schema_migrations SET version=0 WHERE version=1").await
+    corrupt_history("UPDATE _sqlx_migrations_fleet_sync_lease SET version=0 WHERE version=1").await
 }
 #[tokio::test]
 async fn an_unknown_stored_version_is_refused_on_reopen() -> Result<(), TestError> {
-    corrupt_history("UPDATE central_schema_migrations SET version='999' WHERE version='1'").await
+    corrupt_history("UPDATE _sqlx_migrations_fleet_sync_lease SET version=999 WHERE version=1")
+        .await
 }
 async fn corrupt_history(sql: &'static str) -> Result<(), TestError> {
     let directory = tempfile::tempdir()?;
@@ -374,19 +395,14 @@ mod owner_migrate;
     reason = "Assertions must fail this test while fixture errors propagate through Result."
 )]
 #[tokio::test]
-async fn central_migration_metadata_has_physical_uuid_primary_keys() -> Result<(), TestError> {
+async fn migration_records_are_keyed_by_version_and_failures_by_uuid_and_survive_reopen()
+-> Result<(), TestError> {
     let root = tempfile::tempdir()?;
     let fixture = Fixture::open(root.path()).await?;
     ObjectBootstrap::new(fixture.host.clone(), Arc::new(ProbeIo))
         .initialize(EngineSchema::Copy)
         .await?;
     let identities = history_ids(&fixture).await?;
-    for identity in &identities {
-        assert_eq!(
-            durable_steps::Uuid::parse_str(identity)?.get_version_num(),
-            7
-        );
-    }
     assert!(!identities.is_empty());
     assert_eq!(
         ObjectBootstrap::new(fixture.host.clone(), Arc::new(ProbeIo))
@@ -396,15 +412,15 @@ async fn central_migration_metadata_has_physical_uuid_primary_keys() -> Result<(
     );
     assert_eq!(history_ids(&fixture).await?, identities);
     let keys=fixture.object.transaction(|scope|Box::pin(async move {
-        let history=sqlx_core::query::query::<sqlx_turso::Turso>("SELECT name FROM pragma_table_info('central_schema_migrations') WHERE pk>0 ORDER BY pk").fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
+        let history=sqlx_core::query::query::<sqlx_turso::Turso>("SELECT name FROM pragma_table_info('_sqlx_migrations_fleet_sync_receiver') WHERE pk>0 ORDER BY pk").fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
         let failures=sqlx_core::query::query::<sqlx_turso::Turso>("SELECT name FROM pragma_table_info('central_schema_migration_failures') WHERE pk>0 ORDER BY pk").fetch_all(scope.executor()).await.map_err(StoreError::backend)?;
         Ok((history.into_iter().map(|row|row.try_get::<String,_>("name")).collect::<Result<Vec<_>,_>>().map_err(StoreError::backend)?, failures.into_iter().map(|row|row.try_get::<String,_>("name")).collect::<Result<Vec<_>,_>>().map_err(StoreError::backend)?))
     })).await?;
     fixture.objects.close().await?;
     assert_eq!(
         keys,
-        (vec!["row_id".to_owned()], vec!["row_id".to_owned()]),
-        "natural metadata keys replaced physical UUID identities"
+        (vec!["version".to_owned()], vec!["row_id".to_owned()]),
+        "records are sqlx's (keyed by version); the failure table keeps its UUID key"
     );
     drop(fixture);
     let reopened = Fixture::open(root.path()).await?;
@@ -419,19 +435,20 @@ async fn central_migration_metadata_has_physical_uuid_primary_keys() -> Result<(
     Ok(())
 }
 
+/// The receiver records' versions and install times: stable across a no-op reopen.
 async fn history_ids(fixture: &Fixture) -> Result<Vec<String>, TestError> {
     Ok(fixture
         .object
         .transaction(|scope| {
             Box::pin(async move {
                 query::<sqlx_turso::Turso>(
-                    "SELECT row_id FROM central_schema_migrations ORDER BY corpus,version",
+                    "SELECT CAST(version AS TEXT)||'@'||CAST(installed_on AS TEXT) AS record FROM _sqlx_migrations_fleet_sync_receiver ORDER BY version",
                 )
                 .fetch_all(scope.executor())
                 .await
                 .map_err(StoreError::backend)?
                 .into_iter()
-                .map(|row| row.try_get("row_id").map_err(StoreError::backend))
+                .map(|row| row.try_get("record").map_err(StoreError::backend))
                 .collect()
             })
         })

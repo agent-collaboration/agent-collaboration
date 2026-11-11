@@ -12,6 +12,8 @@ use std::{
 
 #[path = "interaction_history_schema.rs"]
 mod interaction_history_schema;
+#[path = "library_journal_shape.rs"]
+mod library_journal_shape;
 use interaction_history_schema::{SchemaAdmission, inspect_schema};
 
 pub(super) static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
@@ -174,6 +176,8 @@ pub(crate) async fn initialize_history(
         durable_steps::turso_store::migrate_journal(&mut transaction)
             .await
             .map_err(|_| StorageError::InvalidSchema)?;
+        // The library adopted any released journal; only its own shape may commit.
+        library_journal_shape::require_standard(&mut transaction).await?;
         let mut delivery_migrator = sqlx::migrate::Migrator::with_migrations(
             fleet_sync_delivery::DELIVERY_MIGRATOR
                 .iter()

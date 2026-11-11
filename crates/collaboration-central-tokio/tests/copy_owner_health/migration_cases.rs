@@ -1,6 +1,8 @@
 //! Real native migration rollback, independent metadata reads and recovery.
 use super::{ConformanceResult, JwksFixtureServer, TokioServer, settings};
-use crate::copy_owner_health::copy_owner_scenarios::{OwnerClient, bookkeeping, no_failures};
+use crate::copy_owner_health::copy_owner_scenarios::{
+    OwnerClient, bookkeeping, no_failures, receiver_current,
+};
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 use sqlx_core::{
@@ -92,9 +94,9 @@ async fn receiver_failure_survives_rollback_best_effort_recording_and_clears_on_
         }).await?;
         // Both fixtures affect central-owned metadata. No receiver-private table is queried.
         sql(root.path(), database, &[
-            include_str!("../../../collaboration-central-core/core_migrations/0000_migration_history.sql"),
+            include_str!("../../../collaboration-central-core/migration_record_tables/0902_fleet_sync_receiver.sql"),
             include_str!("../../../collaboration-central-core/core_migrations/0009_migration_failures.sql"),
-            "CREATE TRIGGER receiver_history_fault BEFORE INSERT ON central_schema_migrations WHEN NEW.corpus='fleet-sync-receiver' AND NEW.version=3 BEGIN SELECT RAISE(ABORT,'receiver history fault'); END",
+            "CREATE TRIGGER receiver_history_fault BEFORE INSERT ON _sqlx_migrations_fleet_sync_receiver WHEN NEW.version=3 BEGIN SELECT RAISE(ABORT,'receiver history fault'); END",
             "CREATE TRIGGER diagnostic_write_fault BEFORE INSERT ON central_schema_migration_failures BEGIN SELECT RAISE(ABORT,'failure record fault'); END",
         ]).await?;
         serve(root.path(), &jwks.url, |base| async move {
@@ -136,7 +138,7 @@ async fn receiver_failure_survives_rollback_best_effort_recording_and_clears_on_
             let (status, body) = client.repair(database).await?;
             if status != StatusCode::OK {return Err(format!("recovered receiver Repair failed: {status}: {body}").into());}
             let health = client.health(database).await?;
-            bookkeeping(&health, Some(3))?;
+            bookkeeping(&health, Some(receiver_current()))?;
             no_failures(&health)
         }).await
     }.await;
@@ -180,7 +182,7 @@ async fn hook_failure_names_its_own_corpus_and_success_clears_it() -> Conformanc
                 return Err(format!("recovered hook Repair failed: {status}: {body}").into());
             }
             let health = client.health(database).await?;
-            bookkeeping(&health, Some(3))?;
+            bookkeeping(&health, Some(receiver_current()))?;
             no_failures(&health)
         })
         .await
@@ -218,7 +220,7 @@ async fn health_reads_history_independently_of_an_unreadable_failure_table() -> 
         serve(root.path(), &jwks.url, |base| async move {
             let client = OwnerClient::new(&base)?;
             let health = client.health(database).await?;
-            bookkeeping(&health, Some(3))?;
+            bookkeeping(&health, Some(receiver_current()))?;
             if health.pointer("/value/migrationFailures/kind") != Some(&json!("unreadable"))
                 || health
                     .pointer("/value/migrationFailures/value/detail")

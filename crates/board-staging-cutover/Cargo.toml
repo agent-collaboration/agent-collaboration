@@ -43,7 +43,7 @@ message-board = { path = "../message-board", version = "0.1.123" }
 message-board-storage = { path = "../message-board-storage", version = "0.1.123" }
 runtime-primitives.workspace = true
 sqlx.workspace = true
-sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "0b2742975ca8b20270929b89f4959c1987bdb090", default-features = false, features = ["macros", "runtime-tokio"] }
+sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "b75d072c116afa46cfa82facd34db6317f380687", default-features = false, features = ["macros", "runtime-tokio"] }
 tokio.workspace = true
 codex-router-host.workspace = true
 collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.121" }
@@ -59,9 +59,18 @@ codex-native-integration.workspace = true
 axum.workspace = true
 collaboration-central-conformance = { path = "../collaboration-central-conformance", version = "0.1.123" }
 board-central-test-support = { path = "../board-central-test-support", version = "0.1.123", features = ["conformance"] }
-fleet-sync-receiver.workspace = true
+fleet-sync-receiver = { workspace = true, features = ["inspect"] }
 fleet-sync-tokio-runner.workspace = true
 fleet-sync-session.workspace = true
+sqlx-core.workspace = true
+collaboration-central-core = { path = "../collaboration-central-core", version = "0.1.123", features = ["conformance"] }
+
+# PD7 decode gate (verification only): its tests decode the committed
+# candidate fixture with main's real decoders.
+[[example]]
+name = "migration_decode_gate"
+path = "examples/migration_decode_gate/main.rs"
+test = true
 
 [[test]]
 name = "integration"

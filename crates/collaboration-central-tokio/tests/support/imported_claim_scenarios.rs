@@ -170,7 +170,7 @@ pub(super) async fn run(base: &str) -> ConformanceResult<()> {
     let proof = async {
         // The owner uses the production retire route while the imported board is Open.
         // Its refusal must preserve the actual readable Copy, not merely report Live.
-        let before = seeded_page(&mut machine.socket, database).await?;
+        let before = seeded_pages(&mut machine.socket, database).await?;
         let route = format!("{base}/admin/v1/projects/{database}/retire");
         let request = json!({"requestId":Uuid::now_v7(),"expectFence":1,
             "expectAcked":{"epoch":1,"sequence":1}});
@@ -195,7 +195,7 @@ pub(super) async fn run(base: &str) -> ConformanceResult<()> {
             .json::<Value>()
             .await?;
         if health.get("kind") != Some(&json!("live"))
-            || seeded_page(&mut machine.socket, database).await? != before
+            || seeded_pages(&mut machine.socket, database).await? != before
         {
             return Err(
                 "refused Open-board retirement changed or wiped the actual seeded Copy".into(),
@@ -284,36 +284,52 @@ async fn owner_post(http: &reqwest::Client, route: &str, body: &Value) -> Confor
         .await?)
 }
 
-async fn seeded_page(socket: &mut WebSocket, database: DatabaseId) -> ConformanceResult<Value> {
-    match creation::operation_answer(
-        socket,
-        OperationRequest::Replication(ReplicationRequest::SnapshotPage {
-            database,
-            cursor: None,
-        }),
-    )
-    .await?
-    {
-        OperationAnswer::Replication(ReplicationAnswer::SnapshotPage(SnapshotRead::Page(page)))
-            if page.database == database
-                && page.position
-                    == ReplicationPosition::new(Epoch::new(1)?, CommitSequence::new(1))
-                && page.table == "owner_retirement_rows"
-                && page.next.is_none()
-                && page.rows
-                    == vec![vec![
-                        SqlValue::Text("019f0000-0000-7000-8000-000000005595".into()),
-                        SqlValue::Text("fixture imported row".into()),
-                    ]] =>
-        {
-            Ok(serde_json::to_value(page)?)
-        }
-        other => Err(format!(
-            "normal reader lost the exact imported seed: {}",
-            serde_json::to_string(&other)?
+async fn seeded_pages(
+    socket: &mut WebSocket,
+    database: DatabaseId,
+) -> ConformanceResult<Vec<Value>> {
+    let expected_rows = [
+        (
+            "owner_retirement_parents",
+            vec![
+                SqlValue::Text("019f0000-0000-7000-8000-000000005598".into()),
+                SqlValue::Text("fixture referenced parent".into()),
+            ],
+        ),
+        (
+            "owner_retirement_rows",
+            vec![
+                SqlValue::Text("019f0000-0000-7000-8000-000000005595".into()),
+                SqlValue::Text("fixture imported row".into()),
+                SqlValue::Text("019f0000-0000-7000-8000-000000005598".into()),
+            ],
+        ),
+    ];
+    let mut cursor = None;
+    let mut pages = Vec::new();
+    for (index, (table, row)) in expected_rows.into_iter().enumerate() {
+        let answer = creation::operation_answer(
+            socket,
+            OperationRequest::Replication(ReplicationRequest::SnapshotPage { database, cursor }),
         )
-        .into()),
+        .await?;
+        let OperationAnswer::Replication(ReplicationAnswer::SnapshotPage(SnapshotRead::Page(page))) =
+            answer
+        else {
+            return Err("normal reader did not receive the complete imported seed".into());
+        };
+        if page.database != database
+            || page.position != ReplicationPosition::new(Epoch::new(1)?, CommitSequence::new(1))
+            || page.table != table
+            || page.rows != vec![row]
+            || page.next.is_some() != (index == 0)
+        {
+            return Err(format!("normal reader lost an exact imported seed page: {page:?}").into());
+        }
+        cursor = page.next.clone();
+        pages.push(serde_json::to_value(page)?);
     }
+    Ok(pages)
 }
 
 pub(super) async fn claim(

@@ -15,4 +15,5 @@ mod native_snapshot_fixture;
 mod pending_intent_fixture;
 mod publication;
 mod publication_replay;
+mod seed_digest_fixture;
 mod source_archive;

@@ -3,7 +3,7 @@ use super::*;
 use crate::collaboration_runtime::board_composition::central_read_copy::CentralReadCopies;
 use std::os::unix::fs::PermissionsExt;
 
-async fn replicated_head(
+pub(super) async fn replicated_head(
     runtime: &Runtime,
 ) -> Result<(ProjectState, FeedCursor), Box<dyn std::error::Error + Send + Sync>> {
     let writer = runtime.projects.ensure(&runtime.project).await?;
@@ -30,7 +30,7 @@ async fn replicated_head(
     Ok((state, head))
 }
 
-fn reader_registry(
+pub(super) fn reader_registry(
     runtime: &Runtime,
     root: &Path,
     source: Arc<CentralReadCopies>,
@@ -96,6 +96,7 @@ async fn registry_close_removes_a_released_central_read_generation() -> TestResu
         runtime.requests.clone(),
         runtime.central.receiver,
         runtime.readiness.clone(),
+        Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let registry = reader_registry(&runtime, &root, Arc::new(source))?;
     let handle = registry
@@ -157,6 +158,7 @@ async fn startup_sweep_removes_stale_root_and_keeps_an_open_reader_generation() 
         runtime.requests.clone(),
         runtime.central.receiver,
         runtime.readiness.clone(),
+        Arc::new(router_clock::SystemRuntimeClock::new()),
     ));
     let registry = reader_registry(&runtime, &root, source.clone())?;
     let handle = registry
@@ -213,6 +215,7 @@ async fn assert_partial_pull(move_between_pages: bool) -> TestResult {
         runtime.requests.clone(),
         runtime.central.receiver,
         runtime.readiness.clone(),
+        Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let (source, pause) = source.pause_after_staged_page_for_test();
     let registry = reader_registry(&runtime, &root, Arc::new(source))?;
@@ -310,6 +313,7 @@ async fn assert_partial_pull(move_between_pages: bool) -> TestResult {
         runtime.requests.clone(),
         runtime.central.receiver,
         runtime.readiness.clone(),
+        Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let registry = reader_registry(&runtime, &root, Arc::new(source))?;
     let handle = timeout(BOUND, registry.read_project(&runtime.project))
@@ -402,6 +406,7 @@ async fn a_fresh_nonholder_without_any_local_project_reads_unknown_authority_fro
         runtime.requests.clone(),
         runtime.central.receiver,
         runtime.readiness.clone(),
+        Arc::new(router_clock::SystemRuntimeClock::new()),
     )))?;
     let admission = Arc::new(ProjectAdmission::new(ProjectAdmissionProps {
         clock: clock.clone(),

@@ -1,6 +1,7 @@
-//! Tolerant owner Health rejects physical identity corruption without repairing it.
+//! Tolerant owner Health rejects a receiver migration record outside sqlx's
+//! shape without repairing it (PD1).
 use super::{ConformanceResult, JwksFixtureServer, TokioServer, settings};
-use crate::copy_owner_health::copy_owner_scenarios::{OwnerClient, bookkeeping};
+use crate::copy_owner_health::copy_owner_scenarios::{OwnerClient, bookkeeping, receiver_current};
 use serde_json::Value;
 use sqlx_core::{
     connection::{ConnectOptions, Connection},
@@ -8,17 +9,23 @@ use sqlx_core::{
     row::Row,
 };
 
-type HistoryRows = Vec<(String, String, i64, Vec<u8>)>;
+type HistoryRows = Vec<(i64, String, i64, Vec<u8>)>;
 
 async fn history(connection: &mut sqlx_turso::TursoConnection) -> ConformanceResult<HistoryRows> {
     query::<sqlx_turso::Turso>(
-        "SELECT row_id,corpus,version,checksum FROM central_schema_migrations ORDER BY corpus,version",
+        "SELECT CAST(version AS INTEGER) AS version,CAST(installed_on AS TEXT) AS installed_on,CAST(success AS INTEGER) AS success,checksum FROM _sqlx_migrations_fleet_sync_receiver ORDER BY version",
     )
     .fetch_all(connection)
     .await?
     .into_iter()
-    .map(|row| Ok((row.try_get("row_id")?, row.try_get("corpus")?, row.try_get("version")?, row.try_get("checksum")?)))
+    .map(|row| Ok((row.try_get("version")?, row.try_get("installed_on")?, row.try_get("success")?, row.try_get("checksum")?)))
     .collect()
+}
+
+/// A corruption of the receiver's version-3 record, and the field Health must name.
+struct RecordCorruption {
+    update: &'static str,
+    field: &'static str,
 }
 
 fn stored_bytes(root: &std::path::Path, database: &str) -> ConformanceResult<Vec<Option<Vec<u8>>>> {
@@ -34,7 +41,7 @@ fn stored_bytes(root: &std::path::Path, database: &str) -> ConformanceResult<Vec
         .collect()
 }
 
-async fn read_health_with_identity(invalid_id: Option<&str>) -> ConformanceResult<()> {
+async fn read_health_with_record(corruption: Option<RecordCorruption>) -> ConformanceResult<()> {
     let root = tempfile::tempdir()?;
     let jwks = JwksFixtureServer::start().await?;
     let server = TokioServer::start(settings(root.path(), &jwks.url)?).await?;
@@ -47,20 +54,24 @@ async fn read_health_with_identity(invalid_id: Option<&str>) -> ConformanceResul
         }
         let mut reader = sqlx_turso::TursoConnectOptions::new()
             .filename(root.path().join(format!("copy-{database}.db")))
-            .connect().await?;
+            .connect()
+            .await?;
         let observed = async {
             let healthy = history(&mut reader).await?;
-            let original = healthy.iter().find(|row| row.1 == "fleet-sync-receiver" && row.2 == 3)
-                .ok_or("real receiver migration stamp missing")?;
-            let original_id = durable_steps::Uuid::parse_str(&original.0)?;
-            if original_id.get_version_num() != 7 {
-                return Err("healthy migration stamp is not UUIDv7".into());
+            let original = healthy
+                .iter()
+                .find(|row| row.0 == 3)
+                .ok_or("real receiver migration record missing")?;
+            if original.2 != 1 || original.3.len() != 48 {
+                return Err("healthy receiver record is not sqlx's shape".into());
             }
-            if let Some(id) = invalid_id {
-                let updated = query::<sqlx_turso::Turso>(
-                    "UPDATE central_schema_migrations SET row_id=? WHERE corpus='fleet-sync-receiver' AND version='3'",
-                ).bind(id).execute(&mut reader).await?;
-                if updated.rows_affected() != 1 { return Err("identity fixture did not replace one stamp".into()); }
+            if let Some(corruption) = &corruption {
+                let updated = query::<sqlx_turso::Turso>(corruption.update)
+                    .execute(&mut reader)
+                    .await?;
+                if updated.rows_affected() != 1 {
+                    return Err("corruption fixture did not change one record".into());
+                }
             }
             let before = history(&mut reader).await?;
             let files_before = stored_bytes(root.path(), database)?;
@@ -69,41 +80,62 @@ async fn read_health_with_identity(invalid_id: Option<&str>) -> ConformanceResul
             if before != unchanged || files_before != stored_bytes(root.path(), database)? {
                 return Err("Health committed a mutation while reading bookkeeping".into());
             }
-            if invalid_id.is_some() {
-                let section = health.pointer("/value/bookkeeping").ok_or("bookkeeping section missing")?;
+            if let Some(corruption) = &corruption {
+                let section = health
+                    .pointer("/value/bookkeeping")
+                    .ok_or("bookkeeping section missing")?;
                 if section.get("kind").and_then(Value::as_str) != Some("unreadable")
-                    || !section.pointer("/value/detail").and_then(Value::as_str).is_some_and(|detail| detail.contains("migration row identity")) {
-                    return Err(format!("Health accepted the invalid physical migration identity: {section}").into());
+                    || !section
+                        .pointer("/value/detail")
+                        .and_then(Value::as_str)
+                        .is_some_and(|detail| detail.contains(corruption.field))
+                {
+                    return Err(format!(
+                        "Health accepted a receiver record outside sqlx's shape: {section}"
+                    )
+                    .into());
                 }
                 if health.pointer("/value/copy/kind").and_then(Value::as_str) != Some("known") {
-                    return Err("invalid bookkeeping hid an independently readable Copy section".into());
+                    return Err(
+                        "invalid bookkeeping hid an independently readable Copy section".into(),
+                    );
                 }
             } else {
-                bookkeeping(&health, Some(3))?;
+                bookkeeping(&health, Some(receiver_current()))?;
             }
             Ok(())
-        }.await;
+        }
+        .await;
         reader.close().await?;
         observed
-    }.await;
+    }
+    .await;
     server.shutdown().await?;
     jwks.shutdown().await?;
     proof
 }
 
 #[tokio::test]
-async fn healthy_history_identity_keeps_health_known_without_writing() -> ConformanceResult<()> {
-    read_health_with_identity(None).await
+async fn a_healthy_receiver_record_keeps_health_known_without_writing() -> ConformanceResult<()> {
+    read_health_with_record(None).await
 }
 
 #[tokio::test]
-async fn malformed_history_identity_makes_health_unreadable_without_writing()
+async fn a_receiver_record_with_a_non_timestamp_install_time_makes_health_unreadable_without_writing()
 -> ConformanceResult<()> {
-    read_health_with_identity(Some("malformed-migration-row")).await
+    read_health_with_record(Some(RecordCorruption {
+        update: "UPDATE _sqlx_migrations_fleet_sync_receiver SET installed_on='yesterday' WHERE version=3",
+        field: "_sqlx_migrations_fleet_sync_receiver.installed_on",
+    }))
+    .await
 }
 
 #[tokio::test]
-async fn uuid_v4_history_identity_makes_health_unreadable_without_writing() -> ConformanceResult<()>
+async fn a_failed_receiver_record_makes_health_unreadable_without_writing() -> ConformanceResult<()>
 {
-    read_health_with_identity(Some("550e8400-e29b-41d4-a716-446655440000")).await
+    read_health_with_record(Some(RecordCorruption {
+        update: "UPDATE _sqlx_migrations_fleet_sync_receiver SET success=0 WHERE version=3",
+        field: "_sqlx_migrations_fleet_sync_receiver.success",
+    }))
+    .await
 }

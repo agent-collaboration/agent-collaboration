@@ -316,6 +316,7 @@ async fn prepare_board_admission(
                     &registry,
                     enrollment_directory,
                     link.ok_or_else(|| io::Error::other("configured link observation is missing"))?,
+                    clock.clone(),
                 ))
                 .await?,
             )

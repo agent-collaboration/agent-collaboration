@@ -58,7 +58,7 @@ pub(super) async fn run(base: &str) -> ConformanceResult<()> {
         let page=http.get(format!("{base}/admin/v1/copies?limit=1")).header("Cf-Access-Jwt-Assertion",owner_assertion()?).send().await?.error_for_status()?.json::<Value>().await?;
         if page.pointer("/projects/0/project")!=Some(&json!(database)) || page.get("nextAfter")!=Some(&json!(database)) {return Err(format!("normal registered project missing from owner Page: {page}").into());}
         let migrate=post(&http,&format!("{base}/admin/v1/copies/migrate?limit=1"),&Value::Null).await?;
-        if migrate != json!({"results":[{"project":database,"result":{"kind":"current","corpus":"fleet-sync-receiver","version":3}}],"nextAfter":database}) {return Err(format!("Migrate lost its normal registered Copy: {migrate}").into());}
+        if migrate != json!({"results":[{"project":database,"result":{"kind":"current","corpus":"fleet-sync-receiver","version":fleet_sync_receiver::RECEIVER_MIGRATOR.iter().last().map(|migration| migration.version)}}],"nextAfter":database}) {return Err(format!("Migrate lost its normal registered Copy: {migrate}").into());}
         println!("OWNER_REGISTRY_CASE normal_fleet_creation_page_and_migrate passed");
         let route=format!("{base}/admin/v1/projects/{database}");
         let moving=json!({"transferId":Uuid::now_v7(),"toInstallation":NEW_SERVICE,"reason":"normal owner move"});
@@ -204,10 +204,37 @@ pub(super) async fn retire_imported_fixture(base: &str) -> ConformanceResult<()>
     )
     .await?;
     let proof=async {
-        match creation::operation_answer(&mut reader.socket,OperationRequest::Replication(ReplicationRequest::SnapshotPage {database,cursor:None})).await? {
-            OperationAnswer::Replication(ReplicationAnswer::SnapshotPage(SnapshotRead::Page(page)))
-                if page.table=="owner_retirement_rows" && page.rows==vec![vec![SqlValue::Text("019f0000-0000-7000-8000-000000005595".into()),SqlValue::Text("fixture imported row".into())]]=>{},
-            _=>return Err("normal reader did not observe the fixture's actual seeded row before retirement".into()),
+        let mut cursor = None;
+        let mut observed_tables = Vec::new();
+        for _ in 0..2 {
+            let answer = creation::operation_answer(
+                &mut reader.socket,
+                OperationRequest::Replication(ReplicationRequest::SnapshotPage { database, cursor }),
+            )
+            .await?;
+            let OperationAnswer::Replication(ReplicationAnswer::SnapshotPage(SnapshotRead::Page(page))) = answer else {
+                return Err("normal reader did not observe both seeded tables before retirement".into());
+            };
+            let expected = match page.table.as_str() {
+                "owner_retirement_parents" => vec![
+                    SqlValue::Text("019f0000-0000-7000-8000-000000005598".into()),
+                    SqlValue::Text("fixture referenced parent".into()),
+                ],
+                "owner_retirement_rows" => vec![
+                    SqlValue::Text("019f0000-0000-7000-8000-000000005595".into()),
+                    SqlValue::Text("fixture imported row".into()),
+                    SqlValue::Text("019f0000-0000-7000-8000-000000005598".into()),
+                ],
+                _ => return Err("unexpected table in retirement fixture snapshot".into()),
+            };
+            if page.rows != vec![expected] {
+                return Err("normal reader lost the referenced parent/child graph".into());
+            }
+            observed_tables.push(page.table);
+            cursor = page.next;
+        }
+        if observed_tables != ["owner_retirement_parents", "owner_retirement_rows"] || cursor.is_some() {
+            return Err("retirement fixture snapshot was incomplete or duplicated".into());
         }
         let route=format!("{base}/admin/v1/projects/{database}/retire");
         let request=json!({"requestId":Uuid::now_v7(),"expectFence":1,"expectAcked":{"epoch":1,"sequence":1}});

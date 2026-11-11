@@ -7,7 +7,7 @@
 // Each test crate that includes this module uses only part of it.
 
 use serde_json::{Value, json};
-use std::{io, path::Path, time::Duration};
+use std::{io, path::Path, sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{UnixListener, UnixStream},
@@ -31,6 +31,7 @@ pub struct ScriptedApi {
 /// The calls the client made, in arrival order.
 pub struct ScriptedCalls {
     receiver: mpsc::UnboundedReceiver<ScriptedCall>,
+    clock: Arc<dyn router_clock::RuntimeClock>,
 }
 
 /// One `tools/call` the client made, waiting for the test's answer.
@@ -48,6 +49,11 @@ enum ScriptedAnswer {
 
 impl ScriptedApi {
     pub fn start() -> io::Result<(Self, ScriptedCalls)> {
+        Self::start_with_clock(Arc::new(router_clock::SystemRuntimeClock::new()))
+    }
+    pub fn start_with_clock(
+        clock: Arc<dyn router_clock::RuntimeClock>,
+    ) -> io::Result<(Self, ScriptedCalls)> {
         let directory = tempfile::tempdir()?;
         let listener = UnixListener::bind(directory.path().join("control.sock"))?;
         let manifest = json!({
@@ -69,7 +75,10 @@ impl ScriptedApi {
                 tokio::spawn(answer_connection(stream, sender.clone()));
             }
         });
-        Ok((Self { directory, accept }, ScriptedCalls { receiver }))
+        Ok((
+            Self { directory, accept },
+            ScriptedCalls { receiver, clock },
+        ))
     }
 
     #[must_use]
@@ -87,7 +96,7 @@ impl Drop for ScriptedApi {
 impl ScriptedCalls {
     /// The client's next call; fails when none arrives within a few seconds.
     pub async fn next(&mut self) -> io::Result<ScriptedCall> {
-        tokio::time::timeout(CALL_WAIT, self.receiver.recv())
+        router_clock::timeout(self.clock.as_ref(), CALL_WAIT, self.receiver.recv())
             .await
             .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "no call arrived"))?
             .ok_or_else(|| io::Error::other("scripted API stopped"))
@@ -95,7 +104,7 @@ impl ScriptedCalls {
 
     /// True when no call arrives within `window`.
     pub async fn none_within(&mut self, window: Duration) -> bool {
-        tokio::time::timeout(window, self.receiver.recv())
+        router_clock::timeout(self.clock.as_ref(), window, self.receiver.recv())
             .await
             .is_err()
     }
