@@ -130,12 +130,21 @@ impl FollowMembership {
 pub fn only_item(
     items: Vec<DeliveryEnvelope<BoardDeliveryTypes>>,
 ) -> FixtureResult<DeliveryItem<BoardDeliveryTypes>> {
+    let count = items.len();
+    let first_kind = match items.first() {
+        Some(DeliveryEnvelope::Item(_)) => "item",
+        Some(DeliveryEnvelope::Cancel(_)) => "cancel",
+        None => "absent",
+    };
     let mut items = items.into_iter();
     let Some(DeliveryEnvelope::Item(item)) = items.next() else {
-        return Err("expected exactly one actual frozen follow item".into());
+        return Err(format!(
+            "expected exactly one actual frozen follow item; count={count}, first_kind={first_kind}"
+        )
+        .into());
     };
     if items.next().is_some() {
-        return Err("follow range was allocated more than once".into());
+        return Err(format!("follow range was allocated more than once; count={count}").into());
     }
     Ok(item)
 }

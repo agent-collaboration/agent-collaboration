@@ -27,7 +27,8 @@ async fn exercise_input_validation(
         "scheduled-input-validation-{}",
         OperationId::generate().as_str()
     ));
-    std::fs::create_dir(&root)?;
+    std::fs::create_dir(&root)
+        .map_err(|error| format!("create validation fixture {}: {error}", root.display()))?;
     let store = Arc::new(Mutex::new(
         AutomationStore::open(&root.join("automation.sqlite")).await?,
     ));
@@ -237,12 +238,31 @@ async fn exercise_input_validation(
     ) {
         return Err("known local input failure blocked successor admission".into());
     }
+    let interactions = Arc::clone(&worker.interactions);
+    let automation = Arc::clone(&worker.store);
     drop(worker);
     drop(store);
+    Arc::try_unwrap(interactions)
+        .map_err(|_| "validation fixture interaction owner remained shared")?
+        .close()
+        .await?;
+    Arc::try_unwrap(automation)
+        .map_err(|_| "validation fixture automation owner remained shared")?
+        .into_inner()
+        .close()
+        .await?;
     drop(listener);
-    for entry in std::fs::read_dir(&root)? {
-        std::fs::remove_file(entry?.path())?;
+    for entry in std::fs::read_dir(&root)
+        .map_err(|error| format!("read validation fixture {}: {error}", root.display()))?
+    {
+        let path = entry
+            .map_err(|error| format!("read validation fixture entry {}: {error}", root.display()))?
+            .path();
+        std::fs::remove_file(&path).map_err(|error| {
+            format!("remove validation fixture file {}: {error}", path.display())
+        })?;
     }
-    std::fs::remove_dir(root)?;
+    std::fs::remove_dir(&root)
+        .map_err(|error| format!("remove validation fixture {}: {error}", root.display()))?;
     Ok(())
 }
