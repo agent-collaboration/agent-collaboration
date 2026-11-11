@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -147,9 +148,35 @@ interface BehaviorPeer {
   readonly frames: Record<string, unknown>[];
   readonly initialized: Record<string, unknown>;
   send(id: string | undefined, method: string, params: unknown): void;
-  until(predicate: (frame: Record<string, unknown>) => boolean): Promise<Record<string, unknown>>;
+  until(
+    predicate: (frame: Record<string, unknown>) => boolean,
+    phase?: string,
+  ): Promise<Record<string, unknown>>;
   request(id: string, method: string, params: unknown): Promise<Record<string, unknown>>;
   finish(): Promise<void>;
+}
+
+function frameMetadata(
+  frame: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, unknown>> {
+  const params = objectSchema.safeParse(frame.params);
+  const sessionId = params.success ? params.data.sessionId : undefined;
+  const update = objectSchema.safeParse(params.success ? params.data.update : undefined);
+  const error = objectSchema.safeParse(frame.error);
+  return {
+    id:
+      typeof frame.id === "string" && /^[a-z][a-z0-9-]{0,40}$/.test(frame.id)
+        ? frame.id
+        : typeof frame.id,
+    method: typeof frame.method === "string" ? frame.method.slice(0, 64) : undefined,
+    sessionId:
+      typeof sessionId === "string" && /^session-[0-9]+$/.test(sessionId) ? sessionId : undefined,
+    update: String((update.success ? update.data.sessionUpdate : undefined) ?? "absent").slice(
+      0,
+      64,
+    ),
+    errorCode: String((error.success ? error.data.code : undefined) ?? "absent").slice(0, 32),
+  };
 }
 
 async function openBehaviorPeer(props: {
@@ -171,11 +198,33 @@ async function openBehaviorPeer(props: {
   ]);
   const settled = once(child, "close");
   let stderr = "";
+  const frames: Record<string, unknown>[] = [];
+  let pendingPhase = "initial peer readiness";
+  let pendingRequest: Readonly<Record<string, unknown>> | undefined;
+  function reportPendingPhase(reason: string): void {
+    process.stderr.write(
+      `${JSON.stringify({
+        fixture: "behavior-peer",
+        reason,
+        pendingPhase,
+        pendingRequest,
+        frameCount: frames.length,
+        frames: frames.slice(-16).map(frameMetadata),
+        exitCode: child.exitCode,
+        signalCode: child.signalCode,
+        stderrBytes: Buffer.byteLength(stderr),
+        stderrSha256: createHash("sha256").update(stderr).digest("hex"),
+      })}\n`,
+    );
+  }
+  const reportAbort = (): void => reportPendingPhase("test context aborted");
+  props.context.signal.addEventListener("abort", reportAbort, { once: true });
   child.stderr.setEncoding("utf8").on("data", (chunk: string): void => {
     stderr += chunk;
   });
   const lines = createInterface({ input: child.stdout });
   props.context.after(async (): Promise<void> => {
+    props.context.signal.removeEventListener("abort", reportAbort);
     if (child.exitCode === null && child.signalCode === null) {
       child.kill("SIGTERM");
       await settled;
@@ -184,19 +233,24 @@ async function openBehaviorPeer(props: {
     rmSync(root, { recursive: true, force: true });
   });
   const iterator = lines[Symbol.asyncIterator]();
-  const frames: Record<string, unknown>[] = [];
   async function until(
     predicate: (frame: Record<string, unknown>) => boolean,
+    phase = "protocol frame",
   ): Promise<Record<string, unknown>> {
+    pendingPhase = phase;
     for (;;) {
       const next = await iterator.next();
-      if (next.done) throw new Error(`fixture exited before expected frame: ${stderr}`);
+      if (next.done) {
+        reportPendingPhase("EOF before expected frame");
+        throw new Error(`fixture exited before expected frame: ${stderr}`);
+      }
       const frame = objectSchema.parse(decode(next.value));
       frames.push(frame);
       if (predicate(frame)) return frame;
     }
   }
   function send(id: string | undefined, method: string, params: unknown): void {
+    pendingRequest = frameMetadata({ id, method, params });
     child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`);
   }
   async function request(
@@ -205,16 +259,19 @@ async function openBehaviorPeer(props: {
     params: unknown,
   ): Promise<Record<string, unknown>> {
     send(id, method, params);
-    return until((frame) => frame.id === id);
+    return until((frame) => frame.id === id, `${method} response`);
   }
   async function finish(): Promise<void> {
     child.stdin.end();
+    pendingPhase = "stdout EOF after stdin end";
     for (;;) {
       const next = await iterator.next();
       if (next.done) break;
       frames.push(objectSchema.parse(decode(next.value)));
     }
+    pendingPhase = "child close after stdout EOF";
     const [code] = await settled;
+    if (code !== 0) reportPendingPhase("child closed unsuccessfully");
     assert.equal(code, 0, stderr);
     assert.equal(stderr, "");
   }
@@ -460,7 +517,7 @@ test(
       sessionId: owner,
       prompt: [{ type: "text", text: "hold" }],
     });
-    await peer.until((frame) => isAgentChunk(frame, "HOLDING"));
+    await peer.until((frame) => isAgentChunk(frame, "HOLDING"), "first owner HOLDING");
     // Act: an invalid second hold must reply with refusal before any B output, not overwrite A.
     peer.send("second-held", "session/prompt", {
       sessionId: other,
@@ -470,13 +527,21 @@ test(
       (frame) =>
         frame.id === "second-held" ||
         (isAgentChunk(frame, "HOLDING") && field(frame, "params", "sessionId") === other),
+      "second held admission refusal",
     );
     assert.equal(second.id, "second-held");
     assertInvalidReply(second);
     assert.equal(peer.frames.filter((frame) => frame.id === "first-held").length, 0);
     writeFileSync(peer.sentinel, "release first owner");
     assert.equal(
-      field(await peer.until((frame) => frame.id === "first-held"), "result", "stopReason"),
+      field(
+        await peer.until(
+          (frame) => frame.id === "first-held",
+          "first owner terminal after sentinel release",
+        ),
+        "result",
+        "stopReason",
+      ),
       "end_turn",
     );
     await peer.finish();

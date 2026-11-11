@@ -39,6 +39,12 @@ pub async fn closed_peer_follow_is_refused_and_a_later_post_reaches_it(
             "posted while the terminal is closed",
         )
         .await?;
+    fixture
+        .host
+        .as_mut()
+        .ok_or("refusal publisher Host absent")?
+        .drain_project_publisher(&fixture.project)
+        .await?;
     let stopped = fixture
         .host
         .take()
