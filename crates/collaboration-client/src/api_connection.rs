@@ -36,14 +36,14 @@ pub(crate) enum ToolAnswer {
 #[derive(Clone)]
 pub(crate) struct ApiConnection {
     client: UnixSocketHttpClient,
-    uri: Arc<str>,
+    clock: Arc<dyn router_clock::RuntimeClock>,
 }
 
 impl ApiConnection {
-    pub(crate) fn new(socket: &str) -> Self {
+    pub(crate) fn new(socket: &str, clock: Arc<dyn router_clock::RuntimeClock>) -> Self {
         Self {
             client: UnixSocketHttpClient::new(socket, API_URI),
-            uri: Arc::from(API_URI),
+            clock,
         }
     }
 
@@ -82,9 +82,13 @@ impl ApiConnection {
         arguments: Value,
         timeout: Duration,
     ) -> Result<ToolAnswer, ClientError> {
-        tokio::time::timeout(timeout, self.exchange(tool, arguments, None))
-            .await
-            .map_err(|_| ClientError::Timeout)?
+        router_clock::timeout(
+            self.clock.as_ref(),
+            timeout,
+            self.exchange(tool, arguments, None),
+        )
+        .await
+        .map_err(|_| ClientError::Timeout)?
     }
 
     /// Calls a streaming tool: each notification the server sends before the answer goes to
@@ -96,9 +100,13 @@ impl ApiConnection {
         timeout: Duration,
         notified: &(dyn Fn(ServerNotification) + Send + Sync),
     ) -> Result<Value, ClientError> {
-        let answer = tokio::time::timeout(timeout, self.exchange(tool, arguments, Some(notified)))
-            .await
-            .map_err(|_| ClientError::Timeout)??;
+        let answer = router_clock::timeout(
+            self.clock.as_ref(),
+            timeout,
+            self.exchange(tool, arguments, Some(notified)),
+        )
+        .await
+        .map_err(|_| ClientError::Timeout)??;
         match answer {
             ToolAnswer::Success(value) => Ok(value),
             ToolAnswer::Failure(failure) => Err(rejection_from_tool_failure(failure)),
@@ -130,7 +138,7 @@ impl ApiConnection {
         );
         let response = self
             .client
-            .post_message(Arc::clone(&self.uri), request, None, None, headers)
+            .post_message(Arc::from(API_URI), request, None, None, headers)
             .await
             .map_err(|error| transport_failure(&error))?;
         let message = match response {

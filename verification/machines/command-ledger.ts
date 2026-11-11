@@ -1,15 +1,14 @@
 /** Per-root command evidence for explicitly registered owned verification roots. */
-import { appendFileSync, openSync, closeSync } from "node:fs";
-import { lstat, readFile, realpath } from "node:fs/promises";
+import { appendFileSync, openSync, closeSync, type Stats } from "node:fs";
+import { lstat, open, realpath } from "node:fs/promises";
 import { randomUUIDv7 } from "node:crypto";
 import { resolve } from "node:path";
 import { z } from "zod";
 import { decodeAuthoredJson, encode } from "../exact-json.ts";
 
 const roots = new Map<string, { path: string; users: number }>();
-// The retained Sunbook staging ledger reached190MB. Retain all history and its
-// original marker; this is a bounded full read, never rotation or truncation.
-const maximumLedgerBytes = 512 * 1024 * 1024;
+// Bound an individual retained row, rather than the lifetime of an append-only ledger.
+const maximumLedgerRowBytes = 512 * 1024 * 1024;
 const base = z.object({ at: z.iso.datetime(), commandId: z.uuidv7() });
 const started = base
   .extend({
@@ -39,7 +38,7 @@ const baseline = z
 const entry = z.discriminatedUnion("kind", [started, spawned, ended, baseline]);
 export type CommandLedgerEntry = z.infer<typeof entry>;
 
-async function checkLedger(path: string): Promise<void> {
+async function checkLedger(path: string): Promise<Stats> {
   const info = await lstat(path);
   if (
     !info.isFile() ||
@@ -48,7 +47,9 @@ async function checkLedger(path: string): Promise<void> {
     (info.mode & 0o777) !== 0o600
   )
     throw new Error("owner-only mode0600 command ledger required");
-  if (info.size > maximumLedgerBytes) throw new Error("bounded complete command ledger required");
+  if (!Number.isSafeInteger(info.size) || info.size < 0)
+    throw new Error("bounded complete command ledger required");
+  return info;
 }
 export async function registerCommandRoot(root: string): Promise<() => void> {
   if (resolve(root) !== root || /(^|\/)\.(codex|codex-router|claude)(\/|$)/.test(root))
@@ -68,8 +69,9 @@ export async function registerCommandRoot(root: string): Promise<() => void> {
   } catch (error: unknown) {
     if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) throw error;
   }
-  await checkLedger(path);
-  await readCommandLedger(root);
+  for await (const _row of readCommandLedgerEntries(root)) {
+    // Validate every historical row without retaining every command argument.
+  }
   const registration = roots.get(root) ?? { path, users: 0 };
   registration.users += 1;
   roots.set(root, registration);
@@ -131,33 +133,84 @@ export function beginCommandLedger(input: {
     },
   };
 }
-export async function readCommandLedger(root: string): Promise<CommandLedgerEntry[]> {
+/** Validate one complete captured prefix; later appends belong to the next scan. */
+export async function* readCommandLedgerEntries(
+  root: string,
+): AsyncGenerator<CommandLedgerEntry, void> {
   const path = `${root}/verification-commands.jsonl`;
-  await checkLedger(path);
-  const text = await readFile(path, "utf8");
-  if (Buffer.byteLength(text) > maximumLedgerBytes || (text !== "" && !text.endsWith("\n")))
-    throw new Error("bounded complete command ledger required");
-  return text
-    .split("\n")
-    .filter((line): boolean => line !== "")
-    .map((line): CommandLedgerEntry => {
-      // JSON protocol integers are exact, while process PIDs/exits are bounded JS integers.
-      // Keep decoded values, without retaining the parser's string storage.
-      return entry.parse(structuredClone(decodeAuthoredJson(line)));
-    });
+  const expected = await checkLedger(path);
+  const handle = await open(path, "r");
+  try {
+    const captured = await handle.stat();
+    if (captured.dev !== expected.dev || captured.ino !== expected.ino)
+      throw new Error("command ledger identity changed while opening");
+    const byteLength = captured.size;
+    if (!Number.isSafeInteger(byteLength) || byteLength < 0)
+      throw new Error("bounded complete command ledger required");
+    if (byteLength > 0) {
+      const lastByte = Buffer.alloc(1);
+      const last = await handle.read(lastByte, 0, 1, byteLength - 1);
+      if (last.bytesRead !== 1 || lastByte[0] !== 10)
+        throw new Error("bounded complete command ledger required");
+    }
+    const buffer = Buffer.alloc(64 * 1024);
+    let position = 0;
+    let fragments: Buffer[] = [];
+    let rowBytes = 0;
+    while (position < byteLength) {
+      const { bytesRead } = await handle.read(
+        buffer,
+        0,
+        Math.min(buffer.length, byteLength - position),
+        position,
+      );
+      if (bytesRead === 0) throw new Error("complete command ledger prefix is missing");
+      position += bytesRead;
+      let consumed = 0;
+      while (consumed < bytesRead) {
+        const newline = buffer.indexOf(10, consumed);
+        const terminal = newline >= consumed && newline < bytesRead;
+        const end = terminal ? newline : bytesRead;
+        const part = buffer.subarray(consumed, end);
+        rowBytes += part.length;
+        if (rowBytes > maximumLedgerRowBytes)
+          throw new Error("bounded complete command ledger row required");
+        if (!terminal) {
+          fragments.push(Buffer.from(part));
+          break;
+        }
+        const row = fragments.length === 0 ? part : Buffer.concat([...fragments, part], rowBytes);
+        if (rowBytes > 0)
+          yield entry.parse(structuredClone(decodeAuthoredJson(row.toString("utf8"))));
+        fragments = [];
+        rowBytes = 0;
+        consumed = newline + 1;
+      }
+    }
+    if (rowBytes !== 0) throw new Error("bounded complete command ledger required");
+    const current = await checkLedger(path);
+    if (current.dev !== captured.dev || current.ino !== captured.ino || current.size < byteLength)
+      throw new Error("complete command ledger prefix changed during read");
+  } finally {
+    await handle.close();
+  }
+}
+export async function readCommandLedger(root: string): Promise<CommandLedgerEntry[]> {
+  const rows: CommandLedgerEntry[] = [];
+  for await (const row of readCommandLedgerEntries(root)) rows.push(row);
+  return rows;
 }
 export async function markCommandBaseline(root: string): Promise<string> {
   const path = roots.get(root)?.path;
   if (path === undefined) throw new Error("baseline requires registered command root");
-  const rows = await readCommandLedger(root);
-  for (const row of rows)
-    if (
-      row.kind === "started" &&
-      row.mode === "command" &&
-      !rows.some(
-        (candidate): boolean => candidate.kind === "ended" && candidate.commandId === row.commandId,
-      )
-    )
+  const starts = new Set<string>();
+  const finished = new Set<string>();
+  for await (const row of readCommandLedgerEntries(root)) {
+    if (row.kind === "started" && row.mode === "command") starts.add(row.commandId);
+    else if (row.kind === "ended") finished.add(row.commandId);
+  }
+  for (const commandId of starts)
+    if (!finished.has(commandId))
       throw new Error("cannot mark baseline over an unfinished command");
   const baselineId = randomUUIDv7();
   appendFileSync(
@@ -168,32 +221,34 @@ export async function markCommandBaseline(root: string): Promise<string> {
   return baselineId;
 }
 export async function enrollInvocationsSince(root: string, baselineId: string): Promise<number> {
-  const rows = await readCommandLedger(root);
-  const indices = rows.flatMap((row, index): number[] =>
-    row.kind === "baseline" && row.baselineId === baselineId ? [index] : [],
-  );
-  const index = indices[0];
-  if (indices.length !== 1 || index === undefined)
-    throw new Error("one recorded enrollment baseline required");
-  const subsequent = rows.slice(index + 1);
-  const starts = new Map<string, z.infer<typeof started>>();
+  let baselineMatches = 0;
+  let enrollments = 0;
+  const starts = new Map<string, "command" | "daemon">();
   const finished = new Set<string>();
-  for (const row of subsequent) {
-    if (row.kind === "started") {
+  for await (const row of readCommandLedgerEntries(root)) {
+    if (row.kind === "baseline" && row.baselineId === baselineId) {
+      baselineMatches += 1;
+      if (baselineMatches > 1) throw new Error("one recorded enrollment baseline required");
+    } else if (baselineMatches === 0) {
+      continue;
+    } else if (row.kind === "started") {
       if (starts.has(row.commandId)) throw new Error("duplicate command start");
-      starts.set(row.commandId, row);
+      starts.set(row.commandId, row.mode);
+      if (
+        row.arguments.some(
+          (argument, offset): boolean =>
+            argument === "fleet" && row.arguments[offset + 1] === "enroll",
+        )
+      )
+        enrollments += 1;
     } else if (row.kind === "ended") {
       if (finished.has(row.commandId)) throw new Error("duplicate command ending");
       finished.add(row.commandId);
     }
   }
-  for (const start of starts.values())
-    if (start.mode === "command" && !finished.has(start.commandId))
+  if (baselineMatches !== 1) throw new Error("one recorded enrollment baseline required");
+  for (const [commandId, mode] of starts)
+    if (mode === "command" && !finished.has(commandId))
       throw new Error("bounded command outcome is missing");
-  return [...starts.values()].filter((start): boolean =>
-    start.arguments.some(
-      (argument, offset): boolean =>
-        argument === "fleet" && start.arguments[offset + 1] === "enroll",
-    ),
-  ).length;
+  return enrollments;
 }

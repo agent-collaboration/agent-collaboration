@@ -38,7 +38,7 @@ impl CollaborationClient {
         &self,
         request: ThreadShowRequest,
     ) -> Result<ThreadShowResult, BoardClientError> {
-        self.board_call("thread_show", request).await
+        self.project_read_call("thread_show", request).await
     }
     pub async fn thread_refile(
         &self,

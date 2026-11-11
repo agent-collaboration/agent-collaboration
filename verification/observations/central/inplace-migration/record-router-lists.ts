@@ -42,12 +42,11 @@ export async function recordRouterLists(rawPlan: unknown): Promise<string> {
   const capturedSources: Source[] = [];
   const read: RouterRead = async (arguments_) => {
     const release = await registerCommandRoot(dirname(plan.serviceDirectory));
-    const outcome = await command(plan.cli.path, [
-      ...arguments_,
-      "--service-directory",
-      plan.serviceDirectory,
-      "--json",
-    ]).finally(release);
+    const outcome = await command(
+      plan.cli.path,
+      [...arguments_, "--service-directory", plan.serviceDirectory, "--json"],
+      { timeoutSeconds: 190 },
+    ).finally(release);
     if (outcome.exit !== 0)
       throw new Error("public Router read failed; no automatic mutation/replay");
     const artifact = join(plan.evidenceDirectory, `router-page-${count++}.json`);

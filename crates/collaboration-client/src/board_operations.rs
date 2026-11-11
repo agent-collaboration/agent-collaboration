@@ -71,9 +71,36 @@ impl CollaborationClient {
         method: &str,
         request: TRequest,
     ) -> Result<TResult, BoardClientError> {
+        self.board_call_with_timeout(method, request, crate::api_connection::DEFAULT_CALL_TIMEOUT)
+            .await
+    }
+
+    async fn project_read_call<TRequest: serde::Serialize, TResult: serde::de::DeserializeOwned>(
+        &self,
+        method: &str,
+        request: TRequest,
+    ) -> Result<TResult, BoardClientError> {
+        // The server owns a three-minute verified snapshot pull; allow its answer to arrive.
+        self.board_call_with_timeout(method, request, std::time::Duration::from_secs(185))
+            .await
+    }
+
+    async fn board_call_with_timeout<
+        TRequest: serde::Serialize,
+        TResult: serde::de::DeserializeOwned,
+    >(
+        &self,
+        method: &str,
+        request: TRequest,
+        timeout: std::time::Duration,
+    ) -> Result<TResult, BoardClientError> {
         let params = serde_json::to_value(request)
             .map_err(|_| ClientError::Protocol("invalid board request"))?;
-        let result = match self.connection.call(method, params).await {
+        let result = match self
+            .connection
+            .call_with_timeout(method, params, timeout)
+            .await
+        {
             Ok(result) => result,
             Err(ClientError::Rejected {
                 code: -32050,

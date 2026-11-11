@@ -1,6 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, chmod, appendFile, truncate, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  readFile,
+  rm,
+  chmod,
+  appendFile,
+  truncate,
+  writeFile,
+  open,
+  stat,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { randomUUIDv7 } from "node:crypto";
@@ -9,6 +19,7 @@ import { Receipt } from "../receipt.ts";
 import {
   registerCommandRoot,
   readCommandLedger,
+  readCommandLedgerEntries,
   markCommandBaseline,
   enrollInvocationsSince,
 } from "./command-ledger.ts";
@@ -68,6 +79,91 @@ test("ledger refuses public permissions and truncated rows", async (): Promise<v
     await chmod(path, 0o600);
     await appendFile(path, "{");
     await assert.rejects(readCommandLedger(canonical), /complete/);
+  } finally {
+    release();
+    await rm(root, { recursive: true });
+  }
+});
+
+test("a ledger scan validates its frozen complete prefix and the next scan rejects a partial append", async (): Promise<void> => {
+  const temporary = await mkdtemp(join(tmpdir(), "2026-11-ledger-prefix-"));
+  const root = await import("node:fs/promises").then((fs) => fs.realpath(temporary));
+  const release = await registerCommandRoot(root);
+  try {
+    const marker = await markCommandBaseline(root);
+    const scan = readCommandLedgerEntries(root);
+    const first = await scan.next();
+    assert.ok(!first.done);
+    assert.equal(first.value.kind, "baseline");
+    await appendFile(`${root}/verification-commands.jsonl`, "{");
+    assert.equal((await scan.next()).done, true);
+    await assert.rejects(enrollInvocationsSince(root, marker), /complete/);
+  } finally {
+    release();
+    await rm(temporary, { recursive: true });
+  }
+});
+
+test("streaming enrollment checks still reject malformed history before the selected baseline", async (): Promise<void> => {
+  const temporary = await mkdtemp(join(tmpdir(), "2026-11-ledger-earlier-"));
+  const root = await import("node:fs/promises").then((fs) => fs.realpath(temporary));
+  const release = await registerCommandRoot(root);
+  try {
+    const marker = await markCommandBaseline(root);
+    const path = `${root}/verification-commands.jsonl`;
+    const original = await readFile(path, "utf8");
+    await writeFile(path, `{"kind":"not-a-ledger-row"}\n${original}`, { mode: 0o600 });
+    await assert.rejects(enrollInvocationsSince(root, marker));
+  } finally {
+    release();
+    await rm(temporary, { recursive: true });
+  }
+});
+
+test("registration and enrollment proof scan a complete ledger above512MiB within96MiB heap", async (): Promise<void> => {
+  const root = await import("node:fs/promises").then(async (fs) =>
+    fs.realpath(await mkdtemp(join(tmpdir(), "2026-11-streamed-ledger-"))),
+  );
+  const release = await registerCommandRoot(root);
+  try {
+    const marker = await markCommandBaseline(root);
+    const path = `${root}/verification-commands.jsonl`;
+    const at = "2026-11-11T00:00:00.000Z";
+    const padding = "x".repeat(128 * 1024);
+    const handle = await open(path, "a");
+    try {
+      for (let index = 0; index < 4102; index += 1) {
+        const commandId = randomUUIDv7();
+        const arguments_ = index === 0 || index === 4101 ? ["fleet", "enroll"] : [padding];
+        await handle.writeFile(
+          `${JSON.stringify({ kind: "started", at, commandId, mode: "command", executable: "/fixture", arguments: arguments_, cwd: root, environmentKeys: [] })}\n${JSON.stringify({ kind: "ended", at, commandId, pid: 1000 + index, exit: 0, signal: null, error: null })}\n`,
+        );
+      }
+    } finally {
+      await handle.close();
+    }
+    const before = await stat(path);
+    assert.ok(before.size > 512 * 1024 * 1024);
+    // The scanner, rather than its parent command, owns registration in the child.
+    release();
+    const module = new URL("./command-ledger.ts", import.meta.url).href;
+    const source = `import {registerCommandRoot,enrollInvocationsSince} from ${JSON.stringify(module)};
+const [root, marker] = process.argv.slice(1);
+if (root === undefined || marker === undefined) throw new Error("fixture inputs");
+const release = await registerCommandRoot(root);
+try { console.log(await enrollInvocationsSince(root, marker)); } finally { release(); }`;
+    const result = await command(
+      process.execPath,
+      ["--max-old-space-size=96", "--input-type=module", "-e", source, "--", root, marker],
+      { timeoutSeconds: 60 },
+    );
+    assert.equal(result.exit, 0, result.stderr);
+    assert.equal(result.stdout.trim(), "2", "both early and late enrollment rows must count");
+    const after = await stat(path);
+    assert.equal(after.size, before.size);
+    assert.equal(after.mtimeMs, before.mtimeMs);
+    await appendFile(path, "{");
+    await assert.rejects(registerCommandRoot(root), /complete/);
   } finally {
     release();
     await rm(root, { recursive: true });

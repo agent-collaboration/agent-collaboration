@@ -93,6 +93,7 @@ impl PreparedMachineSession {
         registry: &Arc<ProjectStoreRegistry>,
         enrollment_directory: &Path,
         link: &super::machine_link::PreparedMachineLink,
+        clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> io::Result<Self> {
         let cache = link.cache.clone();
         cache
@@ -140,6 +141,7 @@ impl PreparedMachineSession {
             requests.clone(),
             inputs.receiver,
             readiness.clone(),
+            clock,
         ));
         central_reads.sweep_stale_session_roots().await;
         registry

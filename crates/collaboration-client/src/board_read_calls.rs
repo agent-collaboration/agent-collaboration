@@ -26,20 +26,36 @@ impl CollaborationClient {
         &self,
         request: PostSearchRequest,
     ) -> Result<PostSearchResult, BoardClientError> {
-        self.board_call("post_search", request).await
+        if matches!(
+            &request.scope,
+            message_board::PostListScope::Project { .. }
+                | message_board::PostListScope::Thread { .. }
+        ) {
+            self.project_read_call("post_search", request).await
+        } else {
+            self.board_call("post_search", request).await
+        }
     }
 
     pub async fn post_show(
         &self,
         request: PostShowRequest,
     ) -> Result<PostShowResult, BoardClientError> {
-        self.board_call("post_show", request).await
+        self.project_read_call("post_show", request).await
     }
     pub async fn post_list(
         &self,
         request: PostListRequest,
     ) -> Result<PostListResult, BoardClientError> {
-        self.board_call("post_list", request).await
+        if matches!(
+            &request.scope,
+            message_board::PostListScope::Project { .. }
+                | message_board::PostListScope::Thread { .. }
+        ) {
+            self.project_read_call("post_list", request).await
+        } else {
+            self.board_call("post_list", request).await
+        }
     }
     pub async fn inbox_fetch(
         &self,

@@ -16,7 +16,7 @@ impl CollaborationClient {
         &self,
         request: ProjectShowRequest,
     ) -> Result<ProjectShowResult, BoardClientError> {
-        self.board_call("project_show", request).await
+        self.project_read_call("project_show", request).await
     }
     pub async fn adr_create(
         &self,

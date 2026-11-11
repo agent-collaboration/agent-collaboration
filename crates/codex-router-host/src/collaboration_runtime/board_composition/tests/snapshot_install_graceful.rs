@@ -314,6 +314,7 @@ async fn resume_and_post(
         projects.requests.clone(),
         inputs.receiver,
         projects.welcomed.clone(),
+        Arc::new(router_clock::SystemRuntimeClock::new()),
     );
     let pulled = timeout(BOUND, copies.pull(project)).await??;
     let mut read = pulled.copy.reader().snapshot().await?;

@@ -22,7 +22,15 @@ use fleet_sync_tokio_runner::{
     StagingStore, TokioHost, TokioObject,
 };
 use message_board::ProjectId;
-use runtime_primitives::SystemClock;
+use runtime_primitives::{Clock, SyncTime};
+
+#[derive(Clone)]
+struct ReadClock(Arc<dyn router_clock::RuntimeClock>);
+impl Clock for ReadClock {
+    fn now(&self) -> SyncTime {
+        self.0.now()
+    }
+}
 use serde::{Serialize, de::DeserializeOwned};
 use std::{
     path::PathBuf,
@@ -30,7 +38,7 @@ use std::{
 };
 use tokio::sync::watch;
 
-type ReadHost = TokioHost<ReadCopyCalls>;
+type ReadHost = TokioHost<ReadCopyCalls, ReadClock>;
 #[cfg(all(test, feature = "runtime-test-support"))]
 #[path = "tests/read_copy_page_gate.rs"]
 mod proof_gate;
@@ -44,6 +52,8 @@ struct ReadCopyCalls {
     database: DatabaseId,
     parts: OnceLock<std::sync::Weak<InstallParts>>,
     #[cfg(all(test, feature = "runtime-test-support"))]
+    clock: Arc<dyn router_clock::RuntimeClock>,
+    #[cfg(all(test, feature = "runtime-test-support"))]
     page_gate: Option<Arc<proof_gate::StagedPageGate>>,
 }
 
@@ -54,6 +64,7 @@ pub(super) struct CentralReadCopies {
     cache_root: PathBuf,
     session_root: PathBuf,
     session_id: durable_steps::Uuid,
+    clock: Arc<dyn router_clock::RuntimeClock>,
     #[cfg(all(test, feature = "runtime-test-support"))]
     page_gate: Option<Arc<proof_gate::StagedPageGate>>,
 }
@@ -63,6 +74,7 @@ impl CentralReadCopies {
         requests: SessionRequests<BoardConsumerProtocol>,
         receiver: ReceiverId,
         welcomed: watch::Receiver<bool>,
+        clock: Arc<dyn router_clock::RuntimeClock>,
     ) -> Self {
         let cache_root = root.join("board-read-cache");
         let session_id = durable_steps::Uuid::now_v7();
@@ -74,6 +86,7 @@ impl CentralReadCopies {
             cache_root,
             session_root,
             session_id,
+            clock,
             #[cfg(all(test, feature = "runtime-test-support"))]
             page_gate: None,
         }
@@ -192,9 +205,11 @@ impl CentralReadCopies {
             database,
             parts: OnceLock::new(),
             #[cfg(all(test, feature = "runtime-test-support"))]
+            clock: self.clock.clone(),
+            #[cfg(all(test, feature = "runtime-test-support"))]
             page_gate: self.page_gate.clone(),
         });
-        let host = Arc::new(TokioHost::new(calls.clone(), SystemClock));
+        let host = Arc::new(TokioHost::new(calls.clone(), ReadClock(self.clock.clone())));
         let objects = ObjectStore::open(root.join("objects"))
             .await
             .map_err(|_| CentralReadError::Unavailable)?;
@@ -273,23 +288,17 @@ impl CentralReadCopies {
                 .map_err(|_| CentralReadError::Unavailable)?;
             // A pull has a bounded lifetime; it never runs a second connection or
             // leaves a reader pointing at the target while the installer writes it.
-            let record = tokio::time::timeout(std::time::Duration::from_secs(30), async {
-                engine
-                    .drive_due()
-                    .await
-                    .map_err(|_| CentralReadError::Unavailable)?;
-                let record = handle
-                    .status()
-                    .await
-                    .map_err(|_| CentralReadError::Unavailable)?;
-                if matches!(record.status, InstallStatus::Running { .. }) {
-                    Err(CentralReadError::Unavailable)
-                } else {
-                    Ok(record)
-                }
-            })
-            .await
-            .map_err(|_| CentralReadError::Unavailable)??;
+            engine
+                .drive_due()
+                .await
+                .map_err(|_| CentralReadError::Unavailable)?;
+            let record = handle
+                .status()
+                .await
+                .map_err(|_| CentralReadError::Unavailable)?;
+            if matches!(record.status, InstallStatus::Running { .. }) {
+                return Err(CentralReadError::Unavailable);
+            }
             let snapshot = match record.status {
                 InstallStatus::Ready { snapshot } => snapshot,
                 InstallStatus::Failed {
@@ -332,8 +341,9 @@ impl CentralReadCopies {
 impl ProjectReadCopySource for CentralReadCopies {
     fn pull<'a>(&'a self, project: &'a ProjectId) -> ProjectReadCopyFuture<'a> {
         Box::pin(async move {
-            tokio::time::timeout(
-                std::time::Duration::from_secs(60),
+            router_clock::timeout(
+                self.clock.as_ref(),
+                std::time::Duration::from_secs(180),
                 self.pull_generation(project),
             )
             .await
@@ -456,8 +466,12 @@ impl CallRouter for ReadCopyCalls {
                                 Ok(InstallFileResult::Page(
                                     fleet_sync_tokio_runner::StagedPage::Receipt(receipt),
                                 )) => {
-                                    gate.after_page(receipt.clone(), parts.target.path().to_owned())
-                                        .await?
+                                    gate.after_page(
+                                        receipt.clone(),
+                                        parts.target.path().to_owned(),
+                                        self.clock.as_ref(),
+                                    )
+                                    .await?
                                 }
                                 Ok(InstallFileResult::Page(
                                     fleet_sync_tokio_runner::StagedPage::Moved { position },

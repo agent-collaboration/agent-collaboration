@@ -12,6 +12,7 @@ use serde_json::{Value, json};
 use std::{
     io::{self, Read},
     path::{Path, PathBuf},
+    sync::Arc,
     time::Duration,
 };
 use tokio::net::UnixStream;
@@ -105,6 +106,21 @@ pub struct CollaborationClient {
 impl CollaborationClient {
     /// Reads the manifest in `directory` and checks the API socket it names is reachable.
     pub async fn connect(directory: &Path, name: &str, version: &str) -> Result<Self, ClientError> {
+        Self::connect_with_clock(
+            directory,
+            name,
+            version,
+            Arc::new(router_clock::SystemRuntimeClock::new()),
+        )
+        .await
+    }
+
+    pub(crate) async fn connect_with_clock(
+        directory: &Path,
+        name: &str,
+        version: &str,
+        clock: Arc<dyn router_clock::RuntimeClock>,
+    ) -> Result<Self, ClientError> {
         if !directory.is_absolute() {
             return Err(ClientError::Protocol("service directory must be absolute"));
         }
@@ -131,13 +147,17 @@ impl CollaborationClient {
                 "API socket escapes service directory",
             ));
         }
-        let probe = tokio::time::timeout(DEFAULT_CALL_TIMEOUT, UnixStream::connect(&socket))
-            .await
-            .map_err(|_| ClientError::Timeout)?
-            .map_err(|source| ClientError::Discovery {
-                stage: "socket-connect",
-                source,
-            })?;
+        let probe = router_clock::timeout(
+            clock.as_ref(),
+            DEFAULT_CALL_TIMEOUT,
+            UnixStream::connect(&socket),
+        )
+        .await
+        .map_err(|_| ClientError::Timeout)?
+        .map_err(|source| ClientError::Discovery {
+            stage: "socket-connect",
+            source,
+        })?;
         drop(probe);
         let socket = socket
             .to_str()
@@ -146,7 +166,7 @@ impl CollaborationClient {
         crate::warn_on_router_version_mismatch(name, version, &service_version);
         crate::record_service_version(&service_version);
         Ok(Self {
-            connection: ApiConnection::new(socket),
+            connection: ApiConnection::new(socket, clock),
             identity: RouterIdentity {
                 service_id: manifest.service_id,
                 service_epoch: manifest.service_epoch,

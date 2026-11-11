@@ -9,13 +9,13 @@ impl CollaborationClient {
         &self,
         request: ProjectViewRequest,
     ) -> Result<WorkView, BoardClientError> {
-        self.board_call("view_work", request).await
+        self.project_read_call("view_work", request).await
     }
     pub async fn view_card(
         &self,
         request: ContinuationCardRequest,
     ) -> Result<ContinuationCard, BoardClientError> {
-        self.board_call("view_card", request).await
+        self.project_read_call("view_card", request).await
     }
     pub async fn view_owner(
         &self,
