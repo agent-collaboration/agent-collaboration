@@ -68,17 +68,28 @@ async fn a_second_request_waits_for_the_turn_and_reads_the_first_one_write() {
     held.until_held().await;
     assert_eq!(pauses.held(&workspace()), vec![PausePoint::AfterReads]);
 
+    // Arm the read point again for request 2: a build without the turn lets it read
+    // before request 1 writes, and the seam shows it held there instead of waiting.
+    let mut second_read = pauses.hold(&workspace(), PausePoint::AfterReads);
     let second = tokio::spawn(register_first_owner(
         platform.clone(),
         turns.clone(),
         pauses.clone(),
         "owner-2",
     ));
-    turns.until_waiting(&workspace(), 1).await;
-    assert!(!second.is_finished());
-
+    let watched = workspace();
+    let second_waits_for_the_turn = tokio::select! {
+        () = turns.until_waiting(&watched, 1) => true,
+        () = second_read.until_held() => false,
+    };
     held.release();
+    assert!(
+        second_waits_for_the_turn,
+        "request 2 read before request 1 released its turn"
+    );
     assert!(first.await.unwrap());
+    second_read.until_held().await;
+    second_read.release();
     assert!(!second.await.unwrap());
     assert_eq!(
         single_integer(&read_store(&platform, count_owners()).await),
