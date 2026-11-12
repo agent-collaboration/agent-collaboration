@@ -8,6 +8,9 @@ use sqlx_core::database::Database;
 use std::collections::BTreeMap;
 use std::{future::Future, sync::Arc};
 
+use crate::storage::{
+    BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
+};
 use crate::{
     AccessJwk, AdmissionOrigin, CentralObservation, SerializedObjectCall, SignatureValidity,
 };
@@ -64,6 +67,12 @@ pub trait CentralPlatform: Clone + Send + Sync + 'static {
         signature: &[u8],
     ) -> impl Future<Output = Result<SignatureValidity, VerifyFailure>> + Send;
     fn observe(&self, observation: CentralObservation);
+    /// Runs one call on a workspace store; a batch runs atomically.
+    fn call_store(
+        &self,
+        workspace: message_board::WorkspaceId,
+        call: StoreCall,
+    ) -> impl Future<Output = Result<StoreReply, StoreFailure>> + Send;
 }
 
 pub trait ObjectHost: Send + Sync + 'static {
@@ -93,6 +102,16 @@ pub trait ObjectHost: Send + Sync + 'static {
             reason: "drive-token observation is unavailable on this fixture host".into(),
         })
     }
+    /// Runs every statement in one transaction; a failed guard or constraint rolls it all
+    /// back. `AlarmUpdate::SetFromQuery` runs last in that transaction and sets the alarm.
+    fn run_batch(
+        &self,
+        batch: StatementBatch,
+    ) -> impl Future<Output = Result<BatchOutcome, StoreFailure>> + Send;
+    fn read(
+        &self,
+        statement: Statement,
+    ) -> impl Future<Output = Result<ReadOutcome, StoreFailure>> + Send;
     fn wake(&self) -> &Self::Wake;
     fn with_local_section<Output: Send + 'static>(
         &self,
