@@ -1016,59 +1016,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "board-staging-cutover"
-version = "0.1.148"
-dependencies = [
- "axum",
- "board-central-test-support",
- "board-fleet-sync",
- "board-sync-protocol",
- "chrono",
- "codex-native-integration",
- "codex-router-core",
- "codex-router-host",
- "codex-router-secret-store",
- "codex-router-test-support",
- "collaboration-central-admin-protocol",
- "collaboration-central-conformance",
- "collaboration-central-core",
- "collaboration-client",
- "collaboration-contracts",
- "collaboration-mail-protocol",
- "collaboration-protocol",
- "collaboration-runtime",
- "collaboration-service",
- "durable-steps",
- "fleet-admission",
- "fleet-sync-delivery",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-receiver",
- "fleet-sync-session",
- "fleet-sync-tokio-runner",
- "fleet-sync-writer",
- "fs2",
- "interaction-storage",
- "message-board",
- "message-board-storage",
- "nix",
- "reqwest 0.12.28",
- "runtime-primitives",
- "rustix 1.1.6",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "sqlx",
- "sqlx-core",
- "sqlx-turso",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "url",
- "uuid",
-]
-
-[[package]]
 name = "board-sync-protocol"
 version = "0.1.148"
 dependencies = [

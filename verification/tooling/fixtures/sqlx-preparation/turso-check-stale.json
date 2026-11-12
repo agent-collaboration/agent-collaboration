@@ -58,9 +58,6 @@
       },
       "crates/message-board-storage/.sqlx": {
         "query-original.json": "original"
-      },
-      "crates/board-staging-cutover/.sqlx": {
-        "query-original.json": "original"
       }
     },
     "stderr": "agent-router-update: Turso SQLx metadata is out of date; run node verification/tooling/prepare-sqlx-turso.ts\n  missing query-agent-router-update.json\n  stale query-original.json\n"

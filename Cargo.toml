@@ -6,7 +6,6 @@ members = [
     "crates/board-central-test-support",
     "crates/agent-router-update",
     "crates/legacy-upgrade-test-support",
-    "crates/board-staging-cutover",
     "crates/board-fleet-sync",
     "crates/board-sync-protocol",
     "crates/message-board",
