@@ -4,7 +4,9 @@
 use super::case_steps::{CaseBatch, CaseMigrator, CasePausePoint, CaseRead};
 use crate::statement_store::{self, AlarmPolicy};
 use crate::store_wire::OwnedStatement;
-use collaboration_central_core::storage::{AlarmUpdate, RowExpectation, SqlValue, StatementBatch};
+use collaboration_central_core::storage::{
+    AlarmUpdate, RowExpectation, SafeInteger, SqlValue, StatementBatch,
+};
 use collaboration_central_core::{
     ClockIds, HeldPause, PausePoint, PausePoints, WorkspaceTurns, storage_conformance,
 };
@@ -161,12 +163,13 @@ impl StorageCaseObject {
             &mint.owner_id,
             RowExpectation::Exactly(1),
         )];
+        let active = SqlValue::Integer(SafeInteger::new(1).map_err(case_error)?);
         statements.extend(minted.iter().enumerate().map(|(position, id)| {
             storage_conformance::insert_widget(
                 id,
                 &mint.owner_id,
                 SqlValue::Text(format!("widget {position}")),
-                SqlValue::Integer(1),
+                active.clone(),
                 None,
             )
         }));
@@ -216,7 +219,15 @@ impl StorageCaseObject {
             return Response::error(format!("the case object did not open: {error}"), 409);
         }
         match operation {
-            "batch" => self.run(request.json().await?).await,
+            "batch" => match serde_json::from_slice::<CaseBatch>(&request.bytes().await?) {
+                Ok(batch) => self.run(batch).await,
+                // The wire refuses a value it cannot carry, such as an integer
+                // outside ±(2^53−1), before anything reaches storage.
+                Err(refusal) => Ok(Response::from_json(
+                    &json!({ "refused": refusal.to_string() }),
+                )?
+                .with_status(422)),
+            },
             "read" => {
                 let read: CaseRead = request.json().await?;
                 Response::from_json(

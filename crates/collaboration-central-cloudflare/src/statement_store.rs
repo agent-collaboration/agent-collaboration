@@ -6,7 +6,7 @@
 
 use crate::store_wire::{OwnedAlarmUpdate, OwnedBatch, OwnedStatement};
 use collaboration_central_core::storage::{
-    BatchOutcome, ConstraintKind, CorruptReason, ReadOutcome, SqlValue, StoreFailure,
+    BatchOutcome, ConstraintKind, CorruptReason, ReadOutcome, SafeInteger, SqlValue, StoreFailure,
 };
 use sqlx_core::column::Column;
 use sqlx_core::error::ErrorKind;
@@ -65,8 +65,7 @@ fn bound(statement: &OwnedStatement) -> Query<'static, Do, DoArguments> {
         query(AssertSqlSafe(statement.sql.clone())),
         |query, argument| match argument {
             SqlValue::Null => query.bind(None::<i64>),
-            SqlValue::Integer(value) => query.bind(*value),
-            SqlValue::Real(value) => query.bind(*value),
+            SqlValue::Integer(value) => query.bind(value.get()),
             SqlValue::Text(value) => query.bind(value.clone()),
             SqlValue::Blob(value) => query.bind(value.clone()),
         },
@@ -76,8 +75,16 @@ fn bound(statement: &OwnedStatement) -> Query<'static, Do, DoArguments> {
 fn sql_value(value: &Value, column: &str) -> Result<SqlValue, StoreFailure> {
     match value {
         Value::Null => Ok(SqlValue::Null),
-        Value::Integer(value) => Ok(SqlValue::Integer(*value)),
-        Value::Real(value) => Ok(SqlValue::Real(*value)),
+        // The driver already refuses wider integers; a value outside ±(2^53−1) here
+        // is still refused rather than trusted.
+        Value::Integer(value) => SafeInteger::new(*value)
+            .map(SqlValue::Integer)
+            .map_err(|_| StoreFailure::Corrupt {
+                reason: CorruptReason::BadValue {
+                    column: column.to_owned(),
+                },
+            }),
+        // REAL is outside the storage contract (no schema stores one).
         Value::Text(value) => Ok(SqlValue::Text(value.clone())),
         Value::Blob(value) => Ok(SqlValue::Blob(value.clone())),
         _ => Err(StoreFailure::Corrupt {
@@ -128,7 +135,7 @@ fn alarm_time(outcome: &ReadOutcome) -> Result<Option<i64>, StoreFailure> {
     };
     match outcome.rows.as_slice() {
         [row] => match row.as_slice() {
-            [SqlValue::Integer(at)] => Ok(Some(*at)),
+            [SqlValue::Integer(at)] => Ok(Some(at.get())),
             [SqlValue::Null] => Ok(None),
             _ => Err(bad_value()),
         },

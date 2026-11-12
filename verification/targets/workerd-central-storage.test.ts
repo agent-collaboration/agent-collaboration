@@ -175,9 +175,60 @@ describe("statement batches on a Durable Object", () => {
   });
 });
 
+describe("integers within ±(2^53−1)", () => {
+  const MAX_SAFE = 9_007_199_254_740_991;
+  const rawRows = async (object: string): Promise<TaggedValue[][]> =>
+    ((await read(object, "listWidgets")) as { Ok: { rows: TaggedValue[][] } }).Ok.rows;
+
+  test("the safe extremes are stored and read back exactly", async () => {
+    assert.deepEqual(
+      await batch("integers", [
+        owner("o1"),
+        widget("max", "o1", text("max"), integer(1), MAX_SAFE),
+        widget("min", "o1", text("min"), integer(1), -MAX_SAFE),
+      ]),
+      applied([1, 1, 1]),
+    );
+    const byId = new Map((await rawRows("integers")).map((row) => [row[0]?.value, row]));
+    assert.deepEqual(byId.get("max")?.[5], { kind: "integer", value: MAX_SAFE });
+    assert.deepEqual(byId.get("min")?.[5], { kind: "integer", value: -MAX_SAFE });
+    // An INTEGER column holding a whole number reads back as an integer.
+    assert.deepEqual(byId.get("max")?.[3], { kind: "integer", value: 1 });
+  });
+
+  test("2^53 is refused on the wire and nothing is stored", async () => {
+    const response = await call("integers-refused", "batch", {
+      steps: [owner("o1"), widget("too-big", "o1", text("too-big"), integer(1), MAX_SAFE + 1)],
+      alarm: "unchanged",
+    });
+    assert.equal(response.status, 422);
+    assert.match(((await response.json()) as { refused: string }).refused, /2\^53/);
+    assert.deepEqual(await rows("integers-refused", "countOwners"), [[0]]);
+    const literal = await call("integers-refused", "batch", {
+      steps: [
+        owner("o2"),
+        {
+          insertWidget: {
+            widgetId: "w",
+            ownerId: "o2",
+            name: text("w"),
+            active: { kind: "integer", value: MAX_SAFE + 1 },
+            dueAtMs: null,
+          },
+        },
+      ],
+      alarm: "unchanged",
+    });
+    assert.equal(literal.status, 422);
+    assert.deepEqual(await rows("integers-refused", "countOwners"), [[0]]);
+  });
+});
+
 describe("migrations at object open", () => {
   test("a migration failing on its second statement leaves no partial schema and the history unchanged", async () => {
     assert.deepEqual(await json("migrations", "open", null), { opened: true });
+    const historyBefore = await read("migrations", "listAppliedMigrations");
+    assert.equal((historyBefore as { Ok: { rows: unknown[] } }).Ok.rows.length, 1);
     // Restart the object so the next request opens it again, with the failing source.
     assert.notEqual((await call("migrations", "crash", null)).status, 200);
     const reopened = (await json("migrations", "open", null, "failingSecondStatement")) as {
@@ -190,7 +241,12 @@ describe("migrations at object open", () => {
     const tables = (await rows("migrations", "listTables")).map((row) => row[0]);
     assert.ok(tables.includes("widgets"));
     assert.ok(!tables.includes("widget_labels"), "the failing migration's first table rolled back");
-    assert.deepEqual(await rows("migrations", "listAppliedMigrations"), [[1, 1]]);
+    // Every column of every receipt is as it was before the failing migration.
+    assert.deepEqual(await read("migrations", "listAppliedMigrations"), historyBefore);
+    assert.deepEqual(
+      (await rows("migrations", "listAppliedMigrations")).map((row) => [row[0], row[3]]),
+      [[1, 1]],
+    );
   });
 });
 

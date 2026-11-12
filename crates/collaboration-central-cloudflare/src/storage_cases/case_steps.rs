@@ -3,7 +3,7 @@
 
 use collaboration_central_core::PausePoint;
 use collaboration_central_core::storage::{
-    AlarmUpdate, RowExpectation, SqlValue, Statement, StatementBatch,
+    AlarmUpdate, RowExpectation, SafeInteger, SqlValue, Statement, StatementBatch,
 };
 use collaboration_central_core::storage_conformance as conformance;
 use serde::{Deserialize, Serialize};
@@ -37,7 +37,8 @@ pub(crate) enum CaseStep {
         owner_id: String,
         name: SqlValue,
         active: SqlValue,
-        due_at_ms: Option<i64>,
+        /// Refused at decoding when outside ±(2^53−1).
+        due_at_ms: Option<SafeInteger>,
     },
     #[serde(rename_all = "camelCase")]
     RetireLiveWidget { widget_id: String },

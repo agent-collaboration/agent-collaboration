@@ -1,6 +1,6 @@
 use super::{OwnedStoreCall, StoreAnswer};
 use collaboration_central_core::storage::{
-    AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, SqlValue, Statement,
+    AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, SafeInteger, SqlValue, Statement,
     StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
 
@@ -12,8 +12,8 @@ fn a_store_call_crosses_the_object_boundary_unchanged() {
                 sql: "INSERT INTO t (a, b, c, d, e) VALUES (?, ?, ?, ?, ?)",
                 args: vec![
                     SqlValue::Null,
-                    SqlValue::Integer(-7),
-                    SqlValue::Real(1.5),
+                    SqlValue::Integer(SafeInteger::MIN),
+                    SqlValue::Integer(SafeInteger::MAX),
                     SqlValue::Text("x".into()),
                     SqlValue::Blob(vec![0, 255]),
                 ],
@@ -44,4 +44,25 @@ fn a_store_answer_keeps_its_variant() {
             serde_json::from_slice(&serde_json::to_vec(&answer).unwrap()).unwrap();
         assert_eq!(decoded, answer);
     }
+}
+
+#[test]
+fn the_wire_refuses_an_unsafe_integer_and_a_real() {
+    let call =
+        |value: &str| format!(r#"{{"kind":"read","call":{{"sql":"SELECT ?","args":[{value}]}}}}"#);
+    assert!(
+        serde_json::from_str::<OwnedStoreCall>(&call(
+            r#"{"kind":"integer","value":9007199254740991}"#
+        ))
+        .is_ok()
+    );
+    assert!(
+        serde_json::from_str::<OwnedStoreCall>(&call(
+            r#"{"kind":"integer","value":9007199254740992}"#
+        ))
+        .is_err()
+    );
+    assert!(
+        serde_json::from_str::<OwnedStoreCall>(&call(r#"{"kind":"real","value":1.5}"#)).is_err()
+    );
 }

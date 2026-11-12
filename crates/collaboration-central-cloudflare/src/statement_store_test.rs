@@ -1,8 +1,12 @@
-use super::{alarm_time, constraint_kind};
+use super::{alarm_time, constraint_kind, sql_value};
 use collaboration_central_core::storage::{
-    ConstraintKind, CorruptReason, ReadOutcome, SqlValue, StoreFailure,
+    ConstraintKind, CorruptReason, ReadOutcome, SafeInteger, SqlValue, StoreFailure,
 };
-use sqlx_durable_object::DoDatabaseError;
+use sqlx_durable_object::{DoArgumentValue, DoDatabaseError};
+
+fn integer(value: i64) -> SqlValue {
+    SqlValue::Integer(SafeInteger::new(value).unwrap())
+}
 
 fn database_error(message: &str) -> sqlx_core::Error {
     sqlx_core::Error::Database(Box::new(DoDatabaseError::new(message.to_owned())))
@@ -42,10 +46,7 @@ fn answer(rows: Vec<Vec<SqlValue>>) -> ReadOutcome {
 
 #[test]
 fn the_alarm_query_answers_one_integer_or_null() {
-    assert_eq!(
-        alarm_time(&answer(vec![vec![SqlValue::Integer(42)]])),
-        Ok(Some(42))
-    );
+    assert_eq!(alarm_time(&answer(vec![vec![integer(42)]])), Ok(Some(42)));
     assert_eq!(alarm_time(&answer(vec![vec![SqlValue::Null]])), Ok(None));
     let bad = Err(StoreFailure::Corrupt {
         reason: CorruptReason::BadValue {
@@ -58,10 +59,28 @@ fn the_alarm_query_answers_one_integer_or_null() {
     );
     assert_eq!(alarm_time(&answer(Vec::new())), bad);
     assert_eq!(
-        alarm_time(&answer(vec![
-            vec![SqlValue::Integer(1)],
-            vec![SqlValue::Integer(2)]
-        ])),
+        alarm_time(&answer(vec![vec![integer(1)], vec![integer(2)]])),
         bad
+    );
+}
+
+#[test]
+fn a_read_value_keeps_the_integer_contract() {
+    assert_eq!(
+        sql_value(&DoArgumentValue::Integer(SafeInteger::MAX.get()), "n"),
+        Ok(SqlValue::Integer(SafeInteger::MAX))
+    );
+    assert_eq!(
+        sql_value(&DoArgumentValue::Integer(SafeInteger::MAX.get() + 1), "n"),
+        Err(StoreFailure::Corrupt {
+            reason: CorruptReason::BadValue { column: "n".into() }
+        })
+    );
+    // REAL is outside the storage contract.
+    assert_eq!(
+        sql_value(&DoArgumentValue::Real(1.5), "n"),
+        Err(StoreFailure::Corrupt {
+            reason: CorruptReason::UnknownKind { column: "n".into() }
+        })
     );
 }
