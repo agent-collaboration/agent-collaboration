@@ -3,31 +3,11 @@ use std::future::{self, Future};
 use std::str::FromStr;
 use std::time::Duration;
 
+use crate::database::{DoConnectOptions, DoConnection};
 use log::LevelFilter;
 use sqlx_core::Url;
-use sqlx_core::connection::{ConnectOptions, Connection};
+use sqlx_core::connection::ConnectOptions;
 use sqlx_core::error::Error;
-use sqlx_core::transaction::Transaction;
-
-use crate::Do;
-
-/// A connection to a Durable Object's SQL storage.
-///
-/// There is no socket behind it and nothing to pool: the database lives in
-/// the Durable Object itself. Build one from the object's storage with
-/// [`DoConnection::new`], in its constructor or per request.
-///
-/// Both `&mut DoConnection` and `&DoConnection` are sqlx executors, so a
-/// connection kept in the object's struct serves every request through
-/// `&self`.
-pub struct DoConnection {
-    /// For [`execute_batch`](Self::execute_batch) and
-    /// [`fetch_batch`](Self::fetch_batch), which run through
-    /// `Storage::transaction`.
-    pub(crate) storage: worker::send::SendWrapper<worker::Storage>,
-    /// `storage.sql()`, kept rather than fetched for every query.
-    pub(crate) sql: worker::SqlStorage,
-}
 
 impl DoConnection {
     /// Wraps a Durable Object's storage: `state.storage()`.
@@ -71,56 +51,6 @@ impl Debug for DoConnection {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("DoConnection").finish_non_exhaustive()
     }
-}
-
-impl Connection for DoConnection {
-    type Database = Do;
-
-    type Options = DoConnectOptions;
-
-    // Nothing to close: the storage belongs to the Durable Object, not to us.
-    fn close(self) -> impl Future<Output = Result<(), Error>> + Send + 'static {
-        future::ready(Ok(()))
-    }
-
-    fn close_hard(self) -> impl Future<Output = Result<(), Error>> + Send + 'static {
-        future::ready(Ok(()))
-    }
-
-    // The database is in-process: there is nothing to go stale.
-    fn ping(&mut self) -> impl Future<Output = Result<(), Error>> + Send + '_ {
-        future::ready(Ok(()))
-    }
-
-    /// Always fails -- see [`DoTransactionManager`](crate::DoTransactionManager).
-    fn begin(&mut self) -> impl Future<Output = Result<Transaction<'_, Do>, Error>> + Send + '_ {
-        Transaction::begin(self, None)
-    }
-
-    fn shrink_buffers(&mut self) {}
-
-    fn flush(&mut self) -> impl Future<Output = Result<(), Error>> + Send + '_ {
-        future::ready(Ok(()))
-    }
-
-    fn should_flush(&self) -> bool {
-        false
-    }
-}
-
-/// The options type sqlx requires of every connection.
-///
-/// It parses `do://` so the type is constructible, but
-/// [`connect`](ConnectOptions::connect) always fails: a connection comes from
-/// a Durable Object's storage, which only the object itself holds. Use
-/// [`DoConnection::new`].
-///
-/// Non-exhaustive, so parsing is the only way to get one -- as sqlx itself
-/// does -- and a field can be added without breaking anyone.
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[non_exhaustive]
-pub struct DoConnectOptions {
-    url: Url,
 }
 
 impl FromStr for DoConnectOptions {

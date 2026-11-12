@@ -3,7 +3,7 @@ use sqlx_core::type_info::TypeInfo;
 use sqlx_core::value::ValueRef;
 use sqlx_durable_object_core::Value;
 
-use super::DoRow;
+use crate::DoRow;
 use crate::DoTypeInfo;
 
 #[test]

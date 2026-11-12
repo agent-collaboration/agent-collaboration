@@ -1,19 +1,10 @@
 use std::fmt::{self, Debug, Formatter};
-use std::sync::Arc;
 
 use sqlx_core::column::ColumnIndex;
 use sqlx_core::error::Error;
-use sqlx_core::row::Row;
 use sqlx_durable_object_core::Value;
 
-use crate::{Do, DoColumn, DoValueRef};
-
-/// A row of a Durable Object storage result.
-pub struct DoRow {
-    /// Shared by every row of one result.
-    pub(crate) columns: Arc<[DoColumn]>,
-    pub(crate) values: Box<[Value]>,
-}
+use crate::database::{DoColumn, DoRow};
 
 impl DoRow {
     /// The rows of one result, from the cursor's `columnNames` and the rows
@@ -35,28 +26,6 @@ impl DoRow {
             },
             |columns, values| DoRow { columns, values },
         )
-    }
-}
-
-impl Row for DoRow {
-    type Database = Do;
-
-    fn columns(&self) -> &[DoColumn] {
-        &self.columns
-    }
-
-    fn try_get_raw<I>(&self, index: I) -> Result<DoValueRef<'_>, Error>
-    where
-        I: ColumnIndex<Self>,
-    {
-        let index = index.index(self)?;
-        self.values
-            .get(index)
-            .map(DoValueRef)
-            .ok_or(Error::ColumnIndexOutOfBounds {
-                index,
-                len: self.values.len(),
-            })
     }
 }
 

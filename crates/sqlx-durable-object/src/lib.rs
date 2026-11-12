@@ -70,7 +70,6 @@
 
 mod arguments;
 mod batch;
-mod column;
 mod connection;
 mod database;
 mod error;
@@ -78,19 +77,14 @@ mod executor;
 mod js;
 pub mod migrate;
 mod row;
-mod statement;
 mod transaction;
 pub mod types;
 mod value;
 
-pub use arguments::DoArguments;
-pub use column::DoColumn;
-pub use connection::{DoConnectOptions, DoConnection};
-pub use database::Do;
-pub use row::DoRow;
-pub use statement::DoStatement;
-pub use transaction::{DoTransaction, DoTransactionManager};
-pub use value::{DoValue, DoValueRef};
+pub use database::{
+    Do, DoArguments, DoColumn, DoConnectOptions, DoConnection, DoRow, DoStatement, DoTransaction,
+    DoTransactionManager, DoValue, DoValueRef,
+};
 
 // The types Durable Object storage shares with D1, under this crate's names:
 // both are SQLite behind a JavaScript API, so they are the same types

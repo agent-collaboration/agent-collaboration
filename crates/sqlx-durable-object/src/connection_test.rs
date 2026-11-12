@@ -1,6 +1,6 @@
 use sqlx_core::connection::ConnectOptions;
 
-use super::DoConnectOptions;
+use crate::DoConnectOptions;
 
 #[test]
 fn parses_a_do_url() {

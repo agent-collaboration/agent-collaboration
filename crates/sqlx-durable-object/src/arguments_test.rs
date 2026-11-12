@@ -1,6 +1,6 @@
 use sqlx_core::arguments::Arguments;
 
-use super::{DoArgumentValue, DoArguments};
+use crate::{DoArgumentValue, DoArguments};
 
 #[test]
 fn values_line_up_with_placeholders() {

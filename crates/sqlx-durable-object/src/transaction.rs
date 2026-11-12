@@ -1,18 +1,12 @@
 use std::cell::RefCell;
 use std::fmt::{self, Debug, Formatter};
-use std::future::{self, Future};
+use std::future::Future;
 use std::rc::Rc;
 
 use sqlx_core::error::Error;
-use sqlx_core::sql_str::SqlStr;
-use sqlx_core::transaction::TransactionManager;
 use worker::send::SendFuture;
 
-use crate::error::unsupported;
-use crate::{Do, DoConnection};
-
-const NO_TRANSACTIONS: &str = "Durable Object storage cannot begin a transaction here; \
-     run the statements inside `DoConnection::transaction`, which takes them as a callback";
+use crate::database::{DoConnection, DoTransaction};
 
 impl DoConnection {
     /// Runs `callback` in a transaction: it commits if the callback returns
@@ -118,60 +112,8 @@ impl DoConnection {
     }
 }
 
-/// An open transaction: the executor [`DoConnection::transaction`] hands its
-/// callback.
-///
-/// `&DoTransaction` and `&mut DoTransaction` are sqlx executors, like a
-/// connection's references, and every query run through one is part of the
-/// transaction.
-pub struct DoTransaction {
-    pub(crate) sql: worker::SqlStorage,
-}
-
 impl Debug for DoTransaction {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("DoTransaction").finish_non_exhaustive()
-    }
-}
-
-/// Refuses `begin()`.
-///
-/// `sql.exec` rejects `BEGIN` and `SAVEPOINT` outright: the only transactions
-/// Durable Object storage offers wrap a callback, and sqlx's `begin` and
-/// `commit` are two separate calls with the caller's code in between.
-/// Buffering writes until `commit` would look like a transaction and not be
-/// one -- reads inside it would see the database as it was before -- which is
-/// worse than an error. So `conn.begin()` compiles and fails at runtime, and
-/// transactions go through [`DoConnection::transaction`].
-#[derive(Debug)]
-pub struct DoTransactionManager;
-
-impl TransactionManager for DoTransactionManager {
-    type Database = Do;
-
-    fn begin(
-        _conn: &mut DoConnection,
-        _statement: Option<SqlStr>,
-    ) -> impl Future<Output = Result<(), Error>> + Send + '_ {
-        future::ready(Err(unsupported(NO_TRANSACTIONS)))
-    }
-
-    // Unreachable in practice: `begin` never succeeds, so there is never a
-    // transaction to end. They still answer rather than panic.
-    fn commit(_conn: &mut DoConnection) -> impl Future<Output = Result<(), Error>> + Send + '_ {
-        future::ready(Err(unsupported(NO_TRANSACTIONS)))
-    }
-
-    fn rollback(_conn: &mut DoConnection) -> impl Future<Output = Result<(), Error>> + Send + '_ {
-        future::ready(Err(unsupported(NO_TRANSACTIONS)))
-    }
-
-    // `Transaction` calls this from `Drop` when `begin` failed -- it cannot
-    // tell a failed begin from an abandoned transaction -- so it must be a
-    // quiet no-op, not an error.
-    fn start_rollback(_conn: &mut DoConnection) {}
-
-    fn get_transaction_depth(_conn: &DoConnection) -> usize {
-        0
     }
 }
