@@ -10,8 +10,14 @@ use std::sync::{Arc, LazyLock};
 
 static CENTRAL_OBJECT: LazyLock<Arc<Migrator>> =
     LazyLock::new(|| Arc::new(Migrator::with_migrations(Vec::new())));
+#[cfg(not(feature = "test-support"))]
 static WORKSPACE_STORE: LazyLock<Arc<Migrator>> =
     LazyLock::new(|| Arc::new(Migrator::with_migrations(Vec::new())));
+/// Test-support builds open workspace stores with core's widgets schema, so the
+/// workerd cases can drive `call_store` through real tables.
+#[cfg(feature = "test-support")]
+static WORKSPACE_STORE: LazyLock<Arc<Migrator>> =
+    LazyLock::new(|| Arc::new(collaboration_central_core::storage_conformance::widgets_migrator()));
 
 /// Central's own database, on the Fleet object.
 pub(crate) fn central_object() -> Arc<Migrator> {
