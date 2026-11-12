@@ -317,9 +317,9 @@ mod interaction_history_retention_tests;
 mod retention_test_harness;
 
 #[cfg(test)]
-#[path = "interaction_retention_worker/retention_schedule_test.rs"]
+#[path = "interaction_retention_schedule_test.rs"]
 mod retention_schedule_tests;
 
 #[cfg(test)]
-#[path = "interaction_retention_worker/retention_fault_test.rs"]
+#[path = "interaction_retention_fault_test.rs"]
 mod retention_fault_tests;
