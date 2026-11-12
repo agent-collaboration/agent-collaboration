@@ -273,11 +273,11 @@ mod revocation_clock;
 #[cfg(feature = "conformance")]
 mod revocation_writer_recovery;
 
-#[cfg(feature = "test-support")]
+#[cfg(all(test, feature = "test-support"))]
 mod central_object_batches;
-#[cfg(feature = "test-support")]
+#[cfg(all(test, feature = "test-support"))]
 mod request_pause_seam;
-#[cfg(feature = "test-support")]
+#[cfg(all(test, feature = "test-support"))]
 mod storage_support;
-#[cfg(feature = "test-support")]
+#[cfg(all(test, feature = "test-support"))]
 mod workspace_store_calls;
