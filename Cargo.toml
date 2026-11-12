@@ -165,7 +165,7 @@ zeroize = "1.9.0"
 
 # The SQLx Durable Object driver moved into this repository (crates/sqlx-durable-object*).
 # durable-steps still names the agent-fleet-sync copy; this resolves it to ours, so one
-# driver links into the Worker.
+# driver links into the Worker. Temporary: remove this patch when durable-steps leaves central.
 [patch."https://github.com/agent-collaboration/agent-fleet-sync.git"]
 sqlx-durable-object = { path = "crates/sqlx-durable-object" }
 sqlx-durable-object-core = { path = "crates/sqlx-durable-object-core" }

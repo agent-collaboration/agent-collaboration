@@ -692,6 +692,12 @@ jobs:
         run: |
           worker-build crates/collaboration-central-cloudflare --profile worker-release --no-opt -- --locked --no-default-features
           node verification/tooling/check-central-worker-bundle.ts production
+      # Verification O1 on the Cloudflare host: the storage cases run inside real
+      # SQLite-backed Durable Objects under the pinned Miniflare and workerd.
+      - name: Run the storage boundary cases in workerd
+        run: |
+          worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --locked --features test-support
+          pnpm --dir verification run test:workerd
       - name: Save pinned Worker build tool
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.worker_tools.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
