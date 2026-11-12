@@ -28,7 +28,7 @@ fleet-sync-lease = { version = "0.4.0", git = "https://github.com/agent-collabor
 fleet-sync-session = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "b75d072c116afa46cfa82facd34db6317f380687", default-features = false }
 durable-steps = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "b75d072c116afa46cfa82facd34db6317f380687", default-features = false, features = ["durable-object"] }
 runtime-primitives = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "b75d072c116afa46cfa82facd34db6317f380687", default-features = false, features = ["durable-object"] }
-sqlx-durable-object = { version = "0.3.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "b75d072c116afa46cfa82facd34db6317f380687" }
+sqlx-durable-object = { version = "0.3.0", path = "../sqlx-durable-object" }
 collaboration-central-core = { version = "0.1.96", path = "../collaboration-central-core" }
 collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance", default-features = false, optional = true }
 worker = { version = "0.8.7", git = "https://github.com/cloudflare/workers-rs", rev = "b171cb4bdd6fa943bb81f429df0a6b0df37e14b3", features = ["http", "axum"] }

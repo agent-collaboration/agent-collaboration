@@ -1,0 +1,19 @@
+[package]
+name = "sqlx-durable-object-core"
+description = "Shared internals of the SQLx Durable Object driver; use sqlx-durable-object"
+# Kept at the version durable-steps' git dependency names, so the workspace patch
+# below resolves that dependency to this copy too.
+version = "0.2.0"
+edition.workspace = true
+license = "MIT"
+publish = false
+readme = "README.md"
+autotests = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sqlx-core.workspace = true
+wasm-bindgen = "=0.2.129"
+js-sys = "=0.3.106"

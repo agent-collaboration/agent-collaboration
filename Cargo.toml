@@ -34,6 +34,9 @@ members = [
     "crates/collaboration-central-cloudflare",
     "crates/collaboration-central-tokio",
     "crates/collaboration-central-conformance",
+    "crates/sqlx-durable-object-core",
+    "crates/sqlx-durable-object",
+    "crates/sqlx-durable-object/tests/worker",
     "crates/collaboration-mail-protocol",
     "crates/claude-code-peer-messaging",
     "crates/agent-collaboration",
@@ -159,6 +162,13 @@ turso_parser = "=0.8.1"
 unicode-width = "0.2.2"
 url = "2.5.8"
 zeroize = "1.9.0"
+
+# The SQLx Durable Object driver moved into this repository (crates/sqlx-durable-object*).
+# durable-steps still names the agent-fleet-sync copy; this resolves it to ours, so one
+# driver links into the Worker.
+[patch."https://github.com/agent-collaboration/agent-fleet-sync.git"]
+sqlx-durable-object = { path = "crates/sqlx-durable-object" }
+sqlx-durable-object-core = { path = "crates/sqlx-durable-object-core" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
