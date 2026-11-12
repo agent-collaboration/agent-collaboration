@@ -18,14 +18,19 @@ mod cloudflare_transport;
 mod conformance_scope_faults;
 mod http_body;
 mod object_location;
+mod object_migrations;
 mod object_shell;
 mod platform;
 mod reply_deadline;
 mod shared_object_store;
 mod storage_measurement;
 pub use object_shell::{FleetObject, ProjectCopyObject};
+mod statement_store;
+mod store_wire;
+mod workspace_store_object;
 pub use shared_object_store::CloudflareStorageHost;
 use worker::{Context, Env, Request, Response, Result, event};
+pub use workspace_store_object::WorkspaceStoreObject;
 #[event(fetch)]
 pub async fn main(request: Request, env: Env, _context: Context) -> Result<Response> {
     let labels = access_verification::InvocationLabels::for_request(&request)?;

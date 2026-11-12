@@ -1,9 +1,10 @@
 //! Worker Access capabilities; verification and key-cache policy live in the core.
 
 use crate::access_verification::{InvocationLabels, VerificationLayer};
+use collaboration_central_core::storage::{StoreCall, StoreFailure, StoreReply};
 use collaboration_central_core::{
-    AccessJwk, CentralObservation, CentralPlatform, KeyFetchFailure, RawJwks, SignatureValidity,
-    VerifyFailure,
+    AccessJwk, CentralObservation, CentralPlatform, ClockIds, KeyFetchFailure, RawJwks,
+    SignatureValidity, VerifyFailure,
 };
 use runtime_primitives::{Clock, SyncTime};
 use std::future::Future;
@@ -17,20 +18,18 @@ pub(crate) struct CloudflareCentralPlatform {
     labels: InvocationLabels,
     layer: VerificationLayer,
     clock: CloudflareClock,
+    /// Ids for this invocation's platform, minted from its clock.
+    ids: Arc<ClockIds<CloudflareClock>>,
     env: Arc<SendWrapper<Env>>,
 }
 
+/// The Worker's one clock: the platform's time, read in one place.
 #[derive(Clone, Copy)]
 pub(crate) struct CloudflareClock;
 
 impl Clock for CloudflareClock {
     fn now(&self) -> SyncTime {
         SyncTime::from_unix_millis(chrono::Utc::now().timestamp_millis())
-    }
-}
-impl runtime_primitives::IdSource for CloudflareClock {
-    fn new_id(&self) -> durable_steps::Uuid {
-        durable_steps::Uuid::now_v7()
     }
 }
 
@@ -46,6 +45,7 @@ impl CloudflareCentralPlatform {
             labels,
             layer,
             clock: CloudflareClock,
+            ids: Arc::new(ClockIds::new(CloudflareClock)),
             env: Arc::new(SendWrapper::new(env)),
         }
     }
@@ -59,7 +59,7 @@ impl CentralPlatform for CloudflareCentralPlatform {
         &self.clock
     }
     fn ids(&self) -> &dyn runtime_primitives::IdSource {
-        &self.clock
+        self.ids.as_ref()
     }
     fn transport_object(
         &self,
@@ -182,5 +182,17 @@ impl CentralPlatform for CloudflareCentralPlatform {
 
     fn observe(&self, observation: CentralObservation) {
         self.labels.observe(self.layer, observation);
+    }
+
+    fn call_store(
+        &self,
+        workspace: message_board::WorkspaceId,
+        call: StoreCall,
+    ) -> impl Future<Output = Result<StoreReply, StoreFailure>> + Send {
+        SendFuture::new(crate::cloudflare_transport::call_store(
+            &self.env,
+            workspace,
+            call.into(),
+        ))
     }
 }

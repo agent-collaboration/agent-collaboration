@@ -24,10 +24,18 @@ export default {
         exportName: "ProjectCopyObject",
       },
       FLEET: { type: "durable-object", worker: "replace-worker-name", exportName: "FleetObject" },
+      // One store per workspace, named by its workspace id; it runs only the statements
+      // central sends it.
+      WORKSPACE_STORE: {
+        type: "durable-object",
+        worker: "replace-worker-name",
+        exportName: "WorkspaceStoreObject",
+      },
     },
     exports: {
       ProjectCopyObject: { type: "durable-object", storage: "sqlite" },
       FleetObject: { type: "durable-object", storage: "sqlite" },
+      WorkspaceStoreObject: { type: "durable-object", storage: "sqlite" },
     },
   },
 };

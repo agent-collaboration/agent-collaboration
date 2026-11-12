@@ -1,6 +1,8 @@
 //! Durable Object construction, physical addressing and hibernatable sockets.
 
+use crate::platform::CloudflareClock;
 use crate::{CloudflareStorageHost, binding_attachment::BindingAttachment, cloudflare_transport};
+use collaboration_central_core::ClockIds;
 use collaboration_central_core::{
     CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
 };
@@ -24,6 +26,7 @@ pub(crate) struct CloudflareObjectIo {
     wake: AlarmOwner,
     #[cfg(feature = "conformance")]
     faults: Arc<collaboration_central_conformance::RuntimeFaults>,
+    ids: Arc<ClockIds<CloudflareClock>>,
 }
 impl Clock for CloudflareObjectIo {
     fn now(&self) -> SyncTime {
@@ -31,12 +34,12 @@ impl Clock for CloudflareObjectIo {
         if let Some(now) = self.faults.clock() {
             return SyncTime::from_unix_millis(now.0.timestamp_millis());
         }
-        SyncTime::from_unix_millis(chrono::Utc::now().timestamp_millis())
+        CloudflareClock.now()
     }
 }
 impl IdSource for CloudflareObjectIo {
     fn new_id(&self) -> durable_steps::Uuid {
-        durable_steps::Uuid::now_v7()
+        self.ids.new_id()
     }
 }
 impl WakeScheduler for CloudflareObjectIo {
@@ -141,6 +144,7 @@ struct ShellActor {
     runtime: OnceCell<Arc<RuntimeFace>>,
     #[cfg(feature = "conformance")]
     faults: Arc<collaboration_central_conformance::RuntimeFaults>,
+    ids: Arc<ClockIds<CloudflareClock>>,
 }
 impl ShellActor {
     fn new(state: State, env: Env, kind: PhysicalKind) -> Self {
@@ -152,6 +156,7 @@ impl ShellActor {
             runtime: OnceCell::new(),
             #[cfg(feature = "conformance")]
             faults: Arc::default(),
+            ids: Arc::new(ClockIds::new(CloudflareClock)),
         }
     }
     fn config(&self) -> Result<RegistryConfig> {
@@ -169,10 +174,12 @@ impl ShellActor {
         let env = self.env.clone();
         #[cfg(feature = "conformance")]
         let faults = self.faults.clone();
+        let ids = self.ids.clone();
         let shared_host = move |wake| {
             Arc::new(CoreHost::for_store(
                 CloudflareObjectIo {
                     env,
+                    ids,
                     wake,
                     #[cfg(feature = "conformance")]
                     faults,
@@ -237,8 +244,10 @@ impl ShellActor {
             wake: host.wake().clone(),
             #[cfg(feature = "conformance")]
             faults: self.faults.clone(),
+            ids: self.ids.clone(),
         };
         let runtime = match address {
+            ObjectAddress::WorkspaceStore(_) => return Err(error("workspace store takes only store calls")),
             ObjectAddress::Copy(project) => RuntimeFace::Copy(ObjectRuntime::copy(
                 host.clone(),
                 io,
@@ -292,6 +301,11 @@ impl ShellActor {
         self.rearm_stale_alarm().await?;
         let (host, runtime) = self.runtime_handles(address)?;
         host.migrate_store().await.map_err(error)?;
+        // After the journal's own migrations: on a fresh object the journal refuses
+        // to adopt tables it did not create first.
+        host.migrate_statements(crate::object_migrations::central_object())
+            .await
+            .map_err(error)?;
         runtime.initialize().await?;
         Ok((host, runtime))
     }

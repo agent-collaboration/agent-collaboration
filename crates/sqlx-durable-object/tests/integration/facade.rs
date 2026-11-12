@@ -8,7 +8,10 @@
 //! `Executor::describe`. So this also proves a consumer can keep sqlx's
 //! defaults.
 
-#![expect(dead_code, reason = "these functions only have to compile against the facade")]
+#![expect(
+    dead_code,
+    reason = "these functions only have to compile against the facade"
+)]
 
 use sqlx_durable_object::{Do, DoConnection, DoQueryResult};
 
