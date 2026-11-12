@@ -15,3 +15,12 @@ walks every scenario under the pinned workerd:
 worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --features test-support
 pnpm --dir verification run test:workerd
 ```
+
+One upstream scenario was dropped in the move: `transaction_holds_off_other_requests`.
+It held a transaction open across a second request by awaiting 50 ms and 300 ms
+timers, which is a wall-clock test (AGENTS.md "Time"); it passed only at the
+upstream Worker's 2026-01-01 compatibility date, and the central Worker ships at a
+later one where workerd cancels a timer awaited inside `storage.transaction`; and
+central never relies on that serialization: its per-workspace write turn
+(`collaboration-central-core` `WorkspaceTurns`) orders requests, and no storage
+path awaits a timer inside a transaction.

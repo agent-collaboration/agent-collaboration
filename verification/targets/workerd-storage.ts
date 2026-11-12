@@ -41,11 +41,6 @@ export function centralTestBundle(): WorkerdBundle {
   };
 }
 
-/** The SQLx Durable Object driver's scenario Worker. */
-export function driverScenarioBundle(): WorkerdBundle {
-  return { ...centralTestBundle(), compatibilityDate: "2026-01-01" };
-}
-
 export class WorkerdStorage {
   readonly origin: string;
   private readonly runtime: Miniflare;

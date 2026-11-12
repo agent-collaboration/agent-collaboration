@@ -4,7 +4,7 @@
 // Program Design #storage-boundary; the Worker only executes the steps.
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
-import { WorkerdStorage, centralTestBundle, driverScenarioBundle } from "./workerd-storage.ts";
+import { WorkerdStorage, centralTestBundle } from "./workerd-storage.ts";
 
 type Migrator = "widgets" | "failingSecondStatement";
 type SqlValue =
@@ -280,21 +280,14 @@ describe("the pause seam inside a Durable Object", () => {
 describe("the SQLx Durable Object driver's scenarios", () => {
   // Moved with the driver from agent-fleet-sync; each runs inside a real
   // SQLite-backed Durable Object and answers whether its own assertions held.
-  let driver: WorkerdStorage;
-  before(async () => {
-    driver = await WorkerdStorage.start(driverScenarioBundle());
-  });
-  after(async () => {
-    await driver.close();
-  });
 
   test("every driver scenario passes", async () => {
-    const listed: unknown = await (await fetch(`${driver.origin}/test-support/driver/`)).json();
+    const listed: unknown = await (await fetch(`${central.origin}/test-support/driver/`)).json();
     assert.ok(Array.isArray(listed) && listed.length > 0, "the Worker lists no scenarios");
     const failures: string[] = [];
     // All of them, then one failure listing every scenario that failed.
     for (const name of listed as string[]) {
-      const body = await (await fetch(`${driver.origin}/test-support/driver/${name}`)).text();
+      const body = await (await fetch(`${central.origin}/test-support/driver/${name}`)).text();
       try {
         const outcome = JSON.parse(body) as { ok: boolean; error?: string };
         if (!outcome.ok) failures.push(`${name}: ${outcome.error ?? "no error given"}`);

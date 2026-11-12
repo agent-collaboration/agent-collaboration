@@ -68,9 +68,6 @@ const SCHEMA: &str = include_str!("driver_scenarios/schema.sql");
 
 // Every scenario in one object: they share its storage, as the D1 Worker's
 // share one database, and `reset` clears what each one depends on.
-// Scenarios the Worker runs itself rather than the object: they need more
-// than one request to the object at a time.
-const WORKER_SCENARIOS: &[&str] = &["transaction_holds_off_other_requests"];
 
 /// The binding of the scenario object class in the test-support bundle.
 pub(crate) const BINDING: &str = "DRIVER_SCENARIOS";
@@ -82,21 +79,7 @@ pub(crate) async fn route(scenario: &str, env: &Env) -> worker::Result<Response>
         .id_from_name("scenarios")?
         .get_stub()?;
 
-    match scenario {
-        "" => {
-            let mut names: Vec<String> = stub.fetch_with_str("https://do/").await?.json().await?;
-            names.extend(WORKER_SCENARIOS.iter().map(|name| (*name).to_owned()));
-            Response::from_json(&names)
-        }
-        "transaction_holds_off_other_requests" => {
-            let body = match transaction_holds_off_other_requests(env).await {
-                Ok(()) => serde_json::json!({ "ok": true }),
-                Err(error) => serde_json::json!({ "ok": false, "error": error }),
-            };
-            Response::from_json(&body)
-        }
-        _ => stub.fetch_with_str(&format!("https://do/{scenario}")).await,
-    }
+    stub.fetch_with_str(&format!("https://do/{scenario}")).await
 }
 
 #[durable_object]
@@ -115,14 +98,6 @@ impl DurableObject for DriverScenarioObject {
         if name.is_empty() {
             let names: Vec<_> = SCENARIOS.iter().map(|(name, _)| *name).collect();
             return Response::from_json(&names);
-        }
-
-        // The steps of the Worker-level scenarios, which are not scenarios
-        // themselves.
-        if let Some(op) = name.strip_prefix("op/") {
-            let conn = DoConnection::new(self.state.storage());
-            conn.sql().exec(SCHEMA, None)?;
-            return op_step(&conn, op).await;
         }
 
         let Some((_, scenario)) = SCENARIOS.iter().find(|(n, _)| *n == name) else {
@@ -177,8 +152,6 @@ async fn insert_user(conn: &DoConnection, email: &str) -> Result<i64, String> {
 
 #[path = "driver_scenarios/batch_scenarios.rs"]
 mod batch_scenarios;
-#[path = "driver_scenarios/concurrent_requests.rs"]
-mod concurrent_requests;
 #[path = "driver_scenarios/row_scenarios.rs"]
 mod row_scenarios;
 #[path = "driver_scenarios/transaction_scenarios.rs"]
@@ -188,7 +161,6 @@ use batch_scenarios::{
     fetch_batch_of_nothing_is_empty, fetch_batch_returns_rows_and_results,
     fetch_batch_serves_sqlc_batch_kinds,
 };
-use concurrent_requests::{op_step, transaction_holds_off_other_requests};
 use row_scenarios::{
     batch_is_atomic, batch_reports_each_statement, batch_with_unencodable_argument_runs_nothing,
     begin_fails, begin_statement_is_refused, bind_round_trip, blob_edge_cases, blob_round_trip,
