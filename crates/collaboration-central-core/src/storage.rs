@@ -9,21 +9,65 @@
 use serde::Serialize;
 
 /// One SQL statement and its positional arguments.
-#[derive(Clone, Debug, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Statement {
     pub sql: &'static str,
     pub args: Vec<SqlValue>,
 }
 
-/// SQLite's five storage classes; the only values a statement binds or a read returns.
-#[derive(Clone, Debug, PartialEq, Serialize, serde::Deserialize)]
+/// The values a statement binds or a read returns, the part both hosts keep alike.
+/// No REAL: a Durable Object reads a whole-number REAL back as an integer, and no
+/// schema stores one.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, serde::Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 pub enum SqlValue {
     Null,
-    Integer(i64),
-    Real(f64),
+    Integer(SafeInteger),
     Text(String),
     Blob(Vec<u8>),
+}
+
+/// An integer within ±(2^53−1): a Durable Object's SQLite reaches Rust through
+/// JavaScript numbers, so both hosts refuse anything wider at construction.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, serde::Deserialize)]
+#[serde(try_from = "i64", into = "i64")]
+pub struct SafeInteger(i64);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+#[error("{value} is outside ±(2^53−1)")]
+pub struct UnsafeInteger {
+    pub value: i64,
+}
+
+impl SafeInteger {
+    /// 2^53 − 1, the largest integer a JavaScript number holds exactly.
+    pub const MAX: Self = Self(9_007_199_254_740_991);
+    pub const MIN: Self = Self(-9_007_199_254_740_991);
+
+    pub const fn new(value: i64) -> Result<Self, UnsafeInteger> {
+        if value > Self::MAX.0 || value < Self::MIN.0 {
+            return Err(UnsafeInteger { value });
+        }
+        Ok(Self(value))
+    }
+
+    #[must_use]
+    pub const fn get(self) -> i64 {
+        self.0
+    }
+}
+
+impl TryFrom<i64> for SafeInteger {
+    type Error = UnsafeInteger;
+    fn try_from(value: i64) -> Result<Self, Self::Error> {
+        Self::new(value)
+    }
+}
+
+impl From<SafeInteger> for i64 {
+    fn from(value: SafeInteger) -> Self {
+        value.0
+    }
 }
 
 /// A guard on the rows a statement affects; a miss rolls the whole batch back.
@@ -94,7 +138,7 @@ pub enum ConstraintKind {
     CheckBoolean,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, serde::Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReadOutcome {
     pub columns: Vec<String>,

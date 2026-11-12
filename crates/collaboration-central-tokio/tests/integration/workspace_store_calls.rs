@@ -5,7 +5,8 @@ use crate::storage_support::{
 };
 use collaboration_central_core::CentralPlatform;
 use collaboration_central_core::storage::{
-    BatchOutcome, RowExpectation, SqlValue, StatementBatch, StoreCall, StoreFailure, StoreReply,
+    BatchOutcome, RowExpectation, SafeInteger, SqlValue, StatementBatch, StoreCall, StoreFailure,
+    StoreReply,
 };
 use collaboration_central_core::storage_conformance::{
     FAILING_MIGRATION_FIRST_TABLE, alarm_from_earliest_widget_due, count_owners,
@@ -31,7 +32,7 @@ async fn ids_minted_for_one_batch_keep_mint_order_while_the_clock_is_held() {
             id,
             "owner-1",
             SqlValue::Text(format!("widget {index}")),
-            SqlValue::Integer(1),
+            SqlValue::Integer(SafeInteger::new(1).unwrap()),
             None,
         )
     }));
@@ -108,13 +109,27 @@ async fn a_migration_failing_on_its_second_statement_leaves_no_partial_schema() 
             .any(|table| table == FAILING_MIGRATION_FIRST_TABLE),
         "{tables:?}"
     );
+    // The whole history row, not only its version: description, installed_on, success,
+    // checksum and execution_time must all be untouched by the failed migration.
+    assert_eq!(
+        applied_before.columns,
+        [
+            "version",
+            "description",
+            "installed_on",
+            "success",
+            "checksum",
+            "execution_time"
+        ]
+    );
+    assert_eq!(applied_before.rows.len(), 1);
+    assert_eq!(
+        applied_before.rows[0][0],
+        SqlValue::Integer(SafeInteger::new(1).unwrap())
+    );
     assert_eq!(
         read_store(&reopened, list_applied_migrations()).await,
         applied_before
-    );
-    assert_eq!(
-        applied_before.rows,
-        vec![vec![SqlValue::Integer(1), SqlValue::Integer(1)]]
     );
     assert_eq!(
         single_integer(&read_store(&reopened, count_owners()).await),

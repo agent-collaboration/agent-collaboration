@@ -83,7 +83,7 @@ pub async fn read_store(platform: &TokioCentralPlatform, statement: Statement) -
 pub fn single_integer(outcome: &ReadOutcome) -> i64 {
     match outcome.rows.as_slice() {
         [row] => match row.as_slice() {
-            [SqlValue::Integer(value)] => *value,
+            [SqlValue::Integer(value)] => value.get(),
             other => panic!("expected one integer, got {other:?}"),
         },
         other => panic!("expected one row, got {other:?}"),

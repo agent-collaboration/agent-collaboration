@@ -5,8 +5,8 @@
 //! or a constraint error rolls the whole batch back. The store knows no business table.
 
 use collaboration_central_core::storage::{
-    AlarmUpdate, BatchOutcome, ConstraintKind, CorruptReason, ReadOutcome, SqlValue, Statement,
-    StatementBatch, StoreFailure,
+    AlarmUpdate, BatchOutcome, ConstraintKind, CorruptReason, ReadOutcome, SafeInteger, SqlValue,
+    Statement, StatementBatch, StoreFailure,
 };
 use runtime_primitives::SyncTime;
 use sqlx::error::ErrorKind;
@@ -137,8 +137,7 @@ fn bind_arguments(args: Vec<SqlValue>) -> Result<SqliteArguments, StoreFailure> 
     for value in args {
         let bound = match value {
             SqlValue::Null => arguments.add(None::<i64>),
-            SqlValue::Integer(value) => arguments.add(value),
-            SqlValue::Real(value) => arguments.add(value),
+            SqlValue::Integer(value) => arguments.add(value.get()),
             SqlValue::Text(value) => arguments.add(value),
             SqlValue::Blob(value) => arguments.add(value),
         };
@@ -200,13 +199,28 @@ fn decode_value(row: &SqliteRow, index: usize, column: &str) -> Result<SqlValue,
     }
     let storage_class = raw.type_info().name().to_owned();
     match storage_class.as_str() {
-        "INTEGER" => row.try_get(index).map(SqlValue::Integer),
-        "REAL" => row.try_get(index).map(SqlValue::Real),
-        "TEXT" => row.try_get(index).map(SqlValue::Text),
-        "BLOB" => row.try_get(index).map(SqlValue::Blob),
-        _ => return Err(corrupt()),
+        "INTEGER" => {
+            let value: i64 = row.try_get(index).map_err(|_| corrupt())?;
+            // Both hosts keep ±(2^53−1); a wider stored integer is corrupt, never truncated.
+            SafeInteger::new(value)
+                .map(SqlValue::Integer)
+                .map_err(|_| corrupt())
+        }
+        "TEXT" => row
+            .try_get(index)
+            .map(SqlValue::Text)
+            .map_err(|_| corrupt()),
+        "BLOB" => row
+            .try_get(index)
+            .map(SqlValue::Blob)
+            .map_err(|_| corrupt()),
+        // REAL is outside the contract (no schema stores one); refuse it rather than guess.
+        _ => Err(StoreFailure::Corrupt {
+            reason: CorruptReason::UnknownKind {
+                column: column.to_owned(),
+            },
+        }),
     }
-    .map_err(|_| corrupt())
 }
 
 /// Runs the Timers query last in the batch's transaction; one INTEGER (ms) or NULL.
@@ -224,9 +238,9 @@ async fn alarm_from_query(
     match answer.rows.as_slice() {
         [row] => match row.as_slice() {
             [SqlValue::Null] => Ok(AlarmChange::Clear),
-            [SqlValue::Integer(milliseconds)] => {
-                Ok(AlarmChange::Set(SyncTime::from_unix_millis(*milliseconds)))
-            }
+            [SqlValue::Integer(milliseconds)] => Ok(AlarmChange::Set(SyncTime::from_unix_millis(
+                milliseconds.get(),
+            ))),
             _ => Err(bad_value()),
         },
         _ => Err(bad_value()),

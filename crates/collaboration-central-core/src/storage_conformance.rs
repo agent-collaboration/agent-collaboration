@@ -1,7 +1,9 @@
 //! Test-only schema and statements both hosts run to prove the storage boundary
 //! (Verification O1). Built only with the non-default `test-support` feature.
 
-use crate::storage::{AlarmUpdate, GuardedStatement, RowExpectation, SqlValue, Statement};
+use crate::storage::{
+    AlarmUpdate, GuardedStatement, RowExpectation, SafeInteger, SqlValue, Statement,
+};
 use sqlx_core::migrate::{Migration, MigrationType, Migrator};
 use sqlx_core::sql_str::SqlStr;
 use std::borrow::Cow;
@@ -56,8 +58,7 @@ const COUNT_OWNERS: &str = "SELECT COUNT(*) AS owners FROM widget_owners";
 const EARLIEST_WIDGET_DUE: &str =
     "SELECT MIN(due_at_ms) AS earliest_due_ms FROM widgets WHERE retired_at IS NULL";
 const LIST_TABLES: &str = "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name";
-const LIST_APPLIED_MIGRATIONS: &str =
-    "SELECT version, success FROM _sqlx_migrations ORDER BY version";
+const LIST_APPLIED_MIGRATIONS: &str = "SELECT version, description, installed_on, success, checksum, execution_time FROM _sqlx_migrations ORDER BY version";
 
 const STAMP: &str = "2026-11-12T00:00:00Z";
 
@@ -84,7 +85,7 @@ pub fn insert_widget(
     owner_id: &str,
     name: SqlValue,
     active: SqlValue,
-    due_at_ms: Option<i64>,
+    due_at_ms: Option<SafeInteger>,
 ) -> GuardedStatement {
     GuardedStatement {
         statement: Statement {
