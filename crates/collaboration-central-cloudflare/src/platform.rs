@@ -1,12 +1,13 @@
 //! Worker Access capabilities; verification and key-cache policy live in the core.
 
 use crate::access_verification::{InvocationLabels, VerificationLayer};
+use crate::worker_clock::CloudflareClock;
 use collaboration_central_core::storage::{StoreCall, StoreFailure, StoreReply};
 use collaboration_central_core::{
     AccessJwk, CentralObservation, CentralPlatform, ClockIds, KeyFetchFailure, RawJwks,
     SignatureValidity, VerifyFailure,
 };
-use runtime_primitives::{Clock, SyncTime};
+use runtime_primitives::Clock;
 use std::future::Future;
 use std::sync::Arc;
 use worker::{Env, send::SendWrapper};
@@ -21,16 +22,6 @@ pub(crate) struct CloudflareCentralPlatform {
     /// Ids for this invocation's platform, minted from its clock.
     ids: Arc<ClockIds<CloudflareClock>>,
     env: Arc<SendWrapper<Env>>,
-}
-
-/// The Worker's one clock: the platform's time, read in one place.
-#[derive(Clone, Copy)]
-pub(crate) struct CloudflareClock;
-
-impl Clock for CloudflareClock {
-    fn now(&self) -> SyncTime {
-        SyncTime::from_unix_millis(chrono::Utc::now().timestamp_millis())
-    }
 }
 
 impl CloudflareCentralPlatform {

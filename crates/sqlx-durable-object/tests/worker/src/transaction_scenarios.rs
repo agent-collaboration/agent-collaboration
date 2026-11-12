@@ -1,4 +1,6 @@
-use super::*;
+use super::{ensure, fail, insert_user, reset, Outcome};
+use sqlx::error::ErrorKind;
+use sqlx_durable_object::DoConnection;
 
 // ---- Interactive transactions: `DoConnection::transaction`.
 

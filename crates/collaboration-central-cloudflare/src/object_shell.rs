@@ -1,6 +1,6 @@
 //! Durable Object construction, physical addressing and hibernatable sockets.
 
-use crate::platform::CloudflareClock;
+use crate::worker_clock::CloudflareClock;
 use crate::{CloudflareStorageHost, binding_attachment::BindingAttachment, cloudflare_transport};
 use collaboration_central_core::ClockIds;
 use collaboration_central_core::{

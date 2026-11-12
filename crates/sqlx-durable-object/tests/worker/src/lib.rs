@@ -16,11 +16,7 @@
 use std::future::Future;
 use std::pin::Pin;
 
-use futures_util::future::try_join;
-use futures_util::{StreamExt, TryStreamExt};
-use sqlx::error::ErrorKind;
-use sqlx::{Connection, FromRow, Row};
-use sqlx_durable_object::{Do, DoConnection};
+use sqlx_durable_object::DoConnection;
 use worker::{durable_object, event, Context, DurableObject, Env, Request, Response, State};
 
 type Outcome = Result<(), String>;
