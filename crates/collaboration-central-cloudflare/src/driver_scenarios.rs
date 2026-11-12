@@ -1,19 +1,19 @@
-#![forbid(unsafe_code)]
-//! The scenarios the integration tests run, each inside a real SQLite-backed
-//! Durable Object under `wrangler dev --local`.
+//! The SQLx Durable Object driver's scenarios, each inside a real SQLite-backed
+//! Durable Object, behind the `test-support` feature. Moved with the driver from
+//! agent-fleet-sync, where they ran as a separate Worker crate.
 //!
-//! `GET /` lists the scenarios; `GET /<scenario>` runs one and answers
-//! `{"ok": true}` or `{"ok": false, "error": "..."}`. The Worker forwards
-//! every request to one Durable Object, which runs the scenario against its
-//! own storage. The assertions live here, in Rust next to the code they
-//! exercise, and `tests/driver.rs` on the host only has to walk the list -- so
+//! `GET /test-support/driver/` lists the scenarios; `GET /test-support/driver/<scenario>`
+//! runs one and answers `{"ok": true}` or `{"ok": false, "error": "..."}`. Every
+//! request goes to one Durable Object, which runs the scenario against its own
+//! storage. The assertions live here, in Rust next to the code they exercise, and
+//! `verification/targets/workerd-central-storage.test.ts` only walks the list -- so
 //! adding a scenario is one function and one line in `SCENARIOS`.
 
 use std::future::Future;
 use std::pin::Pin;
 
 use sqlx_durable_object::DoConnection;
-use worker::{durable_object, event, Context, DurableObject, Env, Request, Response, State};
+use worker::{DurableObject, Env, Request, Response, State, durable_object, wasm_bindgen};
 
 type Outcome = Result<(), String>;
 type Scenario = for<'c> fn(&'c mut DoConnection) -> Pin<Box<dyn Future<Output = Outcome> + 'c>>;
@@ -64,7 +64,7 @@ scenarios![
     begin_statement_is_refused,
 ];
 
-const SCHEMA: &str = include_str!("../schema.sql");
+const SCHEMA: &str = include_str!("driver_scenarios/schema.sql");
 
 // Every scenario in one object: they share its storage, as the D1 Worker's
 // share one database, and `reset` clears what each one depends on.
@@ -72,36 +72,39 @@ const SCHEMA: &str = include_str!("../schema.sql");
 // than one request to the object at a time.
 const WORKER_SCENARIOS: &[&str] = &["transaction_holds_off_other_requests"];
 
-#[event(fetch)]
-async fn fetch(req: Request, env: Env, _ctx: Context) -> worker::Result<Response> {
+/// The binding of the scenario object class in the test-support bundle.
+pub(crate) const BINDING: &str = "DRIVER_SCENARIOS";
+
+/// Answers `scenario`, the path after `/test-support/driver/`; empty lists them.
+pub(crate) async fn route(scenario: &str, env: &Env) -> worker::Result<Response> {
     let stub = env
-        .durable_object("TEST")?
+        .durable_object(BINDING)?
         .id_from_name("scenarios")?
         .get_stub()?;
 
-    match req.path().as_str() {
-        "/" => {
-            let mut names: Vec<String> = stub.fetch_with_request(req).await?.json().await?;
+    match scenario {
+        "" => {
+            let mut names: Vec<String> = stub.fetch_with_str("https://do/").await?.json().await?;
             names.extend(WORKER_SCENARIOS.iter().map(|name| (*name).to_owned()));
             Response::from_json(&names)
         }
-        "/transaction_holds_off_other_requests" => {
-            let body = match transaction_holds_off_other_requests(&env).await {
+        "transaction_holds_off_other_requests" => {
+            let body = match transaction_holds_off_other_requests(env).await {
                 Ok(()) => serde_json::json!({ "ok": true }),
                 Err(error) => serde_json::json!({ "ok": false, "error": error }),
             };
             Response::from_json(&body)
         }
-        _ => stub.fetch_with_request(req).await,
+        _ => stub.fetch_with_str(&format!("https://do/{scenario}")).await,
     }
 }
 
 #[durable_object]
-pub struct TestObject {
+pub struct DriverScenarioObject {
     state: State,
 }
 
-impl DurableObject for TestObject {
+impl DurableObject for DriverScenarioObject {
     fn new(state: State, _env: Env) -> Self {
         Self { state }
     }
@@ -172,9 +175,13 @@ async fn insert_user(conn: &DoConnection, email: &str) -> Result<i64, String> {
         .map_err(fail)
 }
 
+#[path = "driver_scenarios/batch_scenarios.rs"]
 mod batch_scenarios;
+#[path = "driver_scenarios/concurrent_requests.rs"]
 mod concurrent_requests;
+#[path = "driver_scenarios/row_scenarios.rs"]
 mod row_scenarios;
+#[path = "driver_scenarios/transaction_scenarios.rs"]
 mod transaction_scenarios;
 use batch_scenarios::{
     fetch_batch_is_atomic, fetch_batch_keeps_duplicate_column_names,

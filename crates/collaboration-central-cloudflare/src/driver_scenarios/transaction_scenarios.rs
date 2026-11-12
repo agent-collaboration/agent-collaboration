@@ -1,4 +1,4 @@
-use super::{ensure, fail, insert_user, reset, Outcome};
+use super::{Outcome, ensure, fail, insert_user, reset};
 use sqlx::error::ErrorKind;
 use sqlx_durable_object::DoConnection;
 

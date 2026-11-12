@@ -36,7 +36,6 @@ members = [
     "crates/collaboration-central-conformance",
     "crates/sqlx-durable-object-core",
     "crates/sqlx-durable-object",
-    "crates/sqlx-durable-object/tests/worker",
     "crates/collaboration-mail-protocol",
     "crates/claude-code-peer-messaging",
     "crates/agent-collaboration",

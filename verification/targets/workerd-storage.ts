@@ -35,6 +35,7 @@ export function centralTestBundle(): WorkerdBundle {
       FLEET: "FleetObject",
       WORKSPACE_STORE: "WorkspaceStoreObject",
       STORAGE_CASES: "StorageCaseObject",
+      DRIVER_SCENARIOS: "DriverScenarioObject",
     },
     textBindings: {},
   };
@@ -42,13 +43,7 @@ export function centralTestBundle(): WorkerdBundle {
 
 /** The SQLx Durable Object driver's scenario Worker. */
 export function driverScenarioBundle(): WorkerdBundle {
-  return {
-    bundleDirectory: join(repositoryRoot, "crates/sqlx-durable-object/tests/worker/build"),
-    buildCommand: "worker-build crates/sqlx-durable-object/tests/worker --dev --no-opt",
-    compatibilityDate: "2026-01-01",
-    durableObjects: { TEST: "TestObject" },
-    textBindings: {},
-  };
+  return { ...centralTestBundle(), compatibilityDate: "2026-01-01" };
 }
 
 export class WorkerdStorage {

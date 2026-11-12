@@ -1,4 +1,4 @@
-use super::{ensure, fail, insert_user, reset, Outcome, User};
+use super::{Outcome, User, ensure, fail, insert_user, reset};
 use futures_util::future::try_join;
 use sqlx::error::ErrorKind;
 use sqlx::{Connection, Row};
@@ -263,7 +263,7 @@ pub(super) async fn constraint_errors(conn: &mut DoConnection) -> Outcome {
                     "{sql}: kind {:?} for message {:?}",
                     error.kind(),
                     error.message()
-                ))
+                ));
             }
             other => return Err(format!("{sql}: {other:?}")),
         }
@@ -342,7 +342,7 @@ pub(super) async fn from_row(conn: &mut DoConnection) -> Outcome {
 
 // The reason `js` goes to `worker-sys` rather than `worker`: a statement Do
 // rejects must come back as an error, not abort the Worker. A panic here
-// would answer with an error page, which `tests/driver.rs` reports as such.
+// would answer with an error page, which the workerd case reports as such.
 pub(super) async fn invalid_sql_is_an_error(conn: &mut DoConnection) -> Outcome {
     let conn = &*conn;
 

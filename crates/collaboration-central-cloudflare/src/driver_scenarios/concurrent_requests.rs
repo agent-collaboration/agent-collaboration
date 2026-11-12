@@ -1,4 +1,4 @@
-use super::{ensure, reset, Outcome};
+use super::{Outcome, ensure, reset};
 use sqlx_durable_object::DoConnection;
 use worker::{Env, Response};
 
@@ -47,7 +47,7 @@ pub(super) async fn transaction_holds_off_other_requests(env: &Env) -> Outcome {
 // One step of a Worker-level scenario, on its own object so it cannot
 // disturb the object the other scenarios share.
 pub(super) async fn step_on(env: &Env, op: &str) -> worker::Result<serde_json::Value> {
-    let namespace = env.durable_object("TEST")?;
+    let namespace = env.durable_object(super::BINDING)?;
     let stub = namespace.id_from_name("concurrency")?.get_stub()?;
     let mut response = stub.fetch_with_str(&format!("https://do/op/{op}")).await?;
     response.json().await

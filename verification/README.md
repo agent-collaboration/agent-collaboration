@@ -51,18 +51,17 @@ entry does not establish every historical obligation.
 `targets/` runs worker-build bundles under the pinned Miniflare and workerd with real
 SQLite-backed Durable Objects (`workerd-storage.ts`). Its cases are permanent
 integration tests, run with `pnpm --dir verification run test:workerd` after building
-both bundles:
+the central Worker's test-support bundle:
 
 ```sh
 worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --features test-support
-worker-build crates/sqlx-durable-object/tests/worker --dev --no-opt
 ```
 
 `workerd-central-storage.test.ts` covers the storage boundary on the Cloudflare host
 (Verification O1): batch atomicity, constraint kinds with foreign keys enforced,
 `SetFromQuery` alarms, in-transaction migrations, clock-minted id order,
-`call_store` and the pause seam with a simulated crash.
-`sqlx-durable-object-scenarios.test.ts` runs the driver's scenario Worker.
+`call_store`, the pause seam with a simulated crash, and every scenario of the
+moved SQLx Durable Object driver (`/test-support/driver/`).
 
 
 Release formula generation is

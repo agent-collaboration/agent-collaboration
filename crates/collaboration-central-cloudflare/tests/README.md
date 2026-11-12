@@ -7,7 +7,9 @@ colocated with their implementation (`src/*_test.rs`).
   and binds `FLEET` and `WORKSPACE_STORE` to SQLite Durable Object classes. Run from
   the root with `node --test crates/collaboration-central-cloudflare/tests/public-template.test.mjs`.
 - The non-default `test-support` feature compiles the storage boundary's workerd
-  case routes (`/test-support/...`) and their `StorageCaseObject` class into a
+  case routes (`/test-support/...`), the moved SQLx driver's scenarios
+  (`/test-support/driver/`) and their `StorageCaseObject` and `DriverScenarioObject`
+  classes into a
   separate test bundle (`build-test-support/`). The cases themselves live in
   `verification/targets/workerd-central-storage.test.ts`; the production bundle check
   refuses a bundle that carries any of these routes.

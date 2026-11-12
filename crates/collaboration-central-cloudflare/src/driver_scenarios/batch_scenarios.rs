@@ -1,4 +1,4 @@
-use super::{ensure, fail, insert_user, reset, Outcome, User};
+use super::{Outcome, User, ensure, fail, insert_user, reset};
 use futures_util::{StreamExt, TryStreamExt};
 use sqlx::error::ErrorKind;
 use sqlx::{FromRow, Row};

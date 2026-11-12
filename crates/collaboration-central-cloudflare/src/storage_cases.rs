@@ -18,6 +18,7 @@ use worker::{Env, Headers, Method, Request, RequestInit, Response, Result, js_sy
 
 const STORAGE_PREFIX: &str = "/test-support/storage/";
 const CALL_STORE_PREFIX: &str = "/test-support/call-store/";
+const DRIVER_PREFIX: &str = "/test-support/driver/";
 
 /// Answers a test-support route, or returns the request for the central router.
 pub(crate) async fn route(
@@ -25,6 +26,9 @@ pub(crate) async fn route(
     env: &Env,
 ) -> Result<std::result::Result<Response, Request>> {
     let path = request.path();
+    if let Some(scenario) = path.strip_prefix(DRIVER_PREFIX) {
+        return Ok(Ok(crate::driver_scenarios::route(scenario, env).await?));
+    }
     if let Some(rest) = path.strip_prefix(STORAGE_PREFIX) {
         let Some((object, operation)) = rest.split_once('/') else {
             return Ok(Ok(Response::error("missing case operation", 404)?));

@@ -49,6 +49,8 @@
   "node-test-fixture": [],
   "session-event-model": [{"modules":["session_event_model::interaction_request","session_event_model::session_state"],"edges":[{"from":"session_event_model::interaction_request","to":"session_event_model::session_state"},{"from":"session_event_model::session_event","to":"session_event_model::interaction_request"},{"from":"session_event_model::session_event","to":"session_event_model::session_state"},{"from":"session_event_model::session_profile_codec","to":"session_event_model::interaction_request"},{"from":"session_event_model::session_profile_codec","to":"session_event_model::session_state"},{"from":"session_event_model::session_state","to":"session_event_model::interaction_request"}]}],
   "sqlite-storage-maintenance": [],
+  "sqlx-durable-object": [],
+  "sqlx-durable-object-core": [],
   "ui-preference-store": [],
   "workspace-architecture-check": []
 }
