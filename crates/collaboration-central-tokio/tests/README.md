@@ -36,3 +36,22 @@ that existing overlap and the timer case's process-runtime reservation.
 Test names map from binary `<root>` / test `<case>` to the appropriate aggregate
 binary / test `<root>::<case>`. Library test identities do not change. Integration
 and e2e cases run under nextest with one process per test.
+`integration/main.rs` (binary `integration`, requires the `test-support` feature)
+proves this host's side of the storage boundary on real SQLite files (Verification
+O1), with a test-only `widgets` schema from `collaboration-central-core`'s
+`test-support` feature and one injected clock that moves only when a case moves it:
+
+- `central_object_batches`: one object's file — a later guard failure rolls the
+  whole batch back; Unique, ForeignKey, NotNull and boolean CHECK errors map to
+  their `ConstraintKind` and roll back; `SetFromQuery` keeps the alarm from the
+  batch's own rows, a rolled-back batch leaves it, and NULL clears it.
+- `workspace_store_calls`: `CentralPlatform::call_store` — ids minted from the held
+  clock keep mint order in one batch; a migration failing on its second statement
+  leaves no partial schema and `_sqlx_migrations` unchanged.
+- `request_pause_seam`: the pause points and write turns — a second request waits
+  for the turn and reads the first one's write; a crash at a held point keeps
+  exactly what the store had applied.
+
+Run: `cargo nextest run -p collaboration-central-tokio --features test-support`.
+The kept enrollment, Access and session-upgrade behavior is proven by
+`collaboration-central-core`'s tests.
