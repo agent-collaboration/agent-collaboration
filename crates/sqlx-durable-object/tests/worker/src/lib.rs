@@ -1,8 +1,4 @@
 #![forbid(unsafe_code)]
-#![expect(
-    clippy::wildcard_imports,
-    reason = "the scenario modules share the Worker's imports and are listed by name"
-)]
 //! The scenarios the integration tests run, each inside a real SQLite-backed
 //! Durable Object under `wrangler dev --local`.
 //!
@@ -180,10 +176,25 @@ mod batch_scenarios;
 mod concurrent_requests;
 mod row_scenarios;
 mod transaction_scenarios;
-use batch_scenarios::*;
-use concurrent_requests::*;
-use row_scenarios::*;
-use transaction_scenarios::*;
+use batch_scenarios::{
+    fetch_batch_is_atomic, fetch_batch_keeps_duplicate_column_names,
+    fetch_batch_of_nothing_is_empty, fetch_batch_returns_rows_and_results,
+    fetch_batch_serves_sqlc_batch_kinds,
+};
+use concurrent_requests::{op_step, transaction_holds_off_other_requests};
+use row_scenarios::{
+    batch_is_atomic, batch_reports_each_statement, batch_with_unencodable_argument_runs_nothing,
+    begin_fails, begin_statement_is_refused, bind_round_trip, blob_edge_cases, blob_round_trip,
+    concurrent_queries_share_a_connection, constraint_errors, derived_types,
+    duplicate_column_names, empty_batch, empty_result, execute_reports_changes,
+    fetch_optional_takes_the_first_row, from_row, integer_bounds, invalid_sql_is_an_error,
+    null_values, query_builder_bulk_insert, select_literals, select_reports_no_changes,
+    text_edge_cases, whole_real_decodes_as_f64, wrong_argument_count_is_an_error,
+};
+use transaction_scenarios::{
+    transaction_commits_and_returns_its_value, transaction_keeps_the_statement_error,
+    transaction_reads_its_own_writes, transaction_rolls_back_when_the_callback_fails,
+};
 
 #[derive(Debug, sqlx::FromRow)]
 struct User {
