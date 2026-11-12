@@ -1,4 +1,4 @@
-//! Edge DTOs for the live enrollment and Fleet import owners.
+//! Edge DTOs for the live enrollment owner.
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -28,26 +28,4 @@ pub enum RegistryResult {
     Enrollment(crate::EnrollmentDecision),
     EnrollmentRevoked(crate::RevocationDecision),
     EnrollmentAuthenticated(Result<crate::AdmittedMachine, fleet_sync_protocol::AuthRefusal>),
-}
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(
-    tag = "kind",
-    content = "value",
-    rename_all = "camelCase",
-    deny_unknown_fields
-)]
-pub enum FleetCall {
-    Import {
-        bundle: Box<fleet_admission::FleetImportBundle>,
-    },
-}
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(
-    tag = "kind",
-    content = "value",
-    rename_all = "camelCase",
-    deny_unknown_fields
-)]
-pub enum FleetResult {
-    Imported(fleet_admission::FleetImportResult),
 }

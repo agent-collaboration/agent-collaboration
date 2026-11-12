@@ -10,17 +10,6 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-board-fleet-sync = { version = "0.1.126", path = "../board-fleet-sync" }
-codex-native-integration.workspace = true
-codex-router-host.workspace = true
-collaboration-central-core = { version = "0.1.126", path = "../collaboration-central-core", features = ["conformance"] }
-collaboration-central-conformance = { version = "0.1.126", path = "../collaboration-central-conformance", features = ["client"] }
-collaboration-central-tokio = { version = "0.1.126", path = "../collaboration-central-tokio", features = ["conformance"] }
-collaboration-runtime = { version = "0.1.126", path = "../collaboration-runtime" }
-fleet-sync-lease.workspace = true
-fleet-sync-protocol.workspace = true
-fleet-sync-session.workspace = true
-tokio = { workspace = true, features = ["io-std"] }
 chrono = { workspace = true, features = ["serde"] }
 fs2.workspace = true
 nix.workspace = true
@@ -31,7 +20,6 @@ serde_json.workspace = true
 sha2.workspace = true
 thiserror.workspace = true
 signal-hook = "=0.3.18"
-uuid.workspace = true
 
 [dev-dependencies]
 axum = { workspace = true, features = ["http1", "tokio", "json"] }

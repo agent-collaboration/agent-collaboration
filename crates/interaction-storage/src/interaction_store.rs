@@ -12,14 +12,6 @@ pub struct InteractionStore {
 }
 
 impl InteractionStore {
-    pub async fn stuck_sent_mail(
-        &self,
-        now: chrono::DateTime<chrono::Utc>,
-    ) -> Result<collaboration_protocol::StuckMailSummary, StorageError> {
-        let mut connection = self.writer.lock().await;
-        crate::stuck_sent_mail::read_stuck_sent_mail(&mut connection, now).await
-    }
-
     pub async fn open(path: impl AsRef<Path>) -> Result<Self, StorageError> {
         let (connection, _) =
             crate::interaction_history::store::interaction_history_database::initialize_history(
@@ -34,15 +26,6 @@ impl InteractionStore {
 
     pub async fn close(self) -> Result<(), StorageError> {
         self.writer.into_inner().close().await?;
-        Ok(())
-    }
-
-    /// Forgets the central status stream before a new enrollment attaches.
-    pub async fn clear_central_mail_status_cursor(&self) -> Result<(), StorageError> {
-        self.execute_as_transaction(sqlx::query::<sqlx_turso::Turso>(
-            "DELETE FROM _fleet_sync_outbox_status",
-        ))
-        .await?;
         Ok(())
     }
 

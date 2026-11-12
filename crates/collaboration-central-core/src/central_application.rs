@@ -102,51 +102,6 @@ impl<Platform: CentralPlatform> CentralApplication<Platform> {
         }
     }
 
-    pub(crate) async fn call_from_owner<To, Call>(
-        &self,
-        owner: crate::OwnerIdentity,
-        destination: To::Address,
-        target: Call,
-        request: Call::Request,
-    ) -> crate::CallOutcome<Call::Answer>
-    where
-        To: crate::ObjectKind,
-        Call: durable_steps::CallTarget,
-        crate::EdgeKind: crate::MayCall<To>,
-    {
-        let prepared = (|| {
-            let caller = crate::CallerContext::<crate::EdgeKind>::for_owner(owner);
-            let identity = durable_steps::CallId {
-                operation: durable_steps::OperationId::new(self.platform.ids().new_id())
-                    .map_err(crate::object_call_envelope::encode_refusal)?,
-                step: durable_steps::StepName::new("owner_operation")
-                    .map_err(crate::object_call_envelope::encode_refusal)?,
-            };
-            crate::object_call_envelope::encode_shared_call::<crate::EdgeKind, To, Call>(
-                &caller,
-                destination,
-                target,
-                request,
-                identity,
-            )
-        })();
-        let reply = match prepared {
-            Ok(call) => self
-                .platform
-                .transport_object(call)
-                .await
-                .and_then(|bytes| {
-                    serde_json::from_slice(&bytes)
-                        .map_err(|_| durable_steps::CallFailure::AnswerLost)
-                }),
-            Err(error) => Err(error),
-        };
-        match reply {
-            Ok(answer) => crate::CallOutcome::Answered(answer),
-            Err(failure) => crate::CallOutcome::Failed(failure),
-        }
-    }
-
     async fn verify_assertion(
         &self,
         header: Option<&str>,

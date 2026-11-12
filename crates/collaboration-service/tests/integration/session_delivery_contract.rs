@@ -1,9 +1,6 @@
 use collaboration_contracts::DeliveryPrecondition;
 use collaboration_contracts::RouteClaim;
 use collaboration_contracts::RouteUnavailableReason;
-use collaboration_contracts::RunSettlement;
-use collaboration_contracts::RunSubmission;
-use collaboration_contracts::RunSummarySource;
 use collaboration_protocol::{
     DeliveryNextAction, DeliveryPeerClaim, DeliveryRejection, DeliveryRejectionReason,
 };
@@ -70,74 +67,6 @@ fn route_claims_and_preconditions_keep_tagged_meaning() -> Result<(), Box<dyn st
     }
     if to_value(DeliveryPrecondition::Unpinned)? != json!({"kind":"unpinned"}) {
         return Err("unpinned guard changed shape".into());
-    }
-    Ok(())
-}
-
-#[test]
-fn settled_run_records_summary_source_only_when_available() -> Result<(), Box<dyn std::error::Error>>
-{
-    let native_turn = serde_json::from_value(json!({
-        "target": {
-            "endpoint": {
-                "serviceId": "00000000-0000-4000-8000-000000000001",
-                "endpointId": "codex-local"
-            },
-            "sessionId": "thread-one"
-        },
-        "turnId": "turn-one"
-    }))?;
-    for source in [
-        None,
-        Some(RunSummarySource::NativeTurn { turn: native_turn }),
-    ] {
-        let settlement = RunSettlement::Completed {
-            summary_source: source,
-        };
-        let encoded = to_value(&settlement)?;
-        let decoded: RunSettlement = serde_json::from_value(encoded.clone())?;
-        if to_value(decoded)? != encoded {
-            return Err("settled summary source changed during round trip".into());
-        }
-    }
-    Ok(())
-}
-
-#[test]
-fn scheduled_submission_and_settlement_keep_distinct_recovery_outcomes()
--> Result<(), Box<dyn std::error::Error>> {
-    for submission in [
-        RunSubmission::NotStartedBusy,
-        RunSubmission::Rejected(collaboration_protocol::DeliveryRejection {
-            reason: collaboration_protocol::DeliveryRejectionReason::Busy,
-            next_action: collaboration_protocol::DeliveryNextAction::RetryLater,
-            client_code: None,
-            detail: Some("worker still active".into()),
-            claims: None,
-            native_failure: None,
-        }),
-        RunSubmission::Unknown,
-    ] {
-        let encoded = to_value(&submission)?;
-        let decoded: RunSubmission = serde_json::from_value(encoded.clone())?;
-        if to_value(decoded)? != encoded {
-            return Err("scheduled submission changed during round trip".into());
-        }
-    }
-    for settlement in [
-        RunSettlement::Pending,
-        RunSettlement::NotObserved,
-        RunSettlement::Failed {
-            reason: "native turn failed".into(),
-        },
-        RunSettlement::Interrupted,
-        RunSettlement::WrittenWithoutCompletion,
-    ] {
-        let encoded = to_value(&settlement)?;
-        let decoded: RunSettlement = serde_json::from_value(encoded.clone())?;
-        if to_value(decoded)? != encoded {
-            return Err("run settlement changed during round trip".into());
-        }
     }
     Ok(())
 }

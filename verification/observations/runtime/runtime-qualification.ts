@@ -65,10 +65,7 @@ export function qualifyWorkerHost(input: {
   );
   const host = records.binaries.find((item) => item.target === "provider-only-debug-host");
   if (host === undefined) throw new Error("qualified provider-only proof Host missing");
-  const expected = join(
-    realpathSync(input.repository),
-    "target/debug/examples/provider-only-debug-host",
-  );
+  const expected = join(realpathSync(input.repository), "target/debug/provider-only-debug-host");
   if (realpathSync(host.path) !== expected || sha256(host.path) !== host.sha256)
     throw new Error("proof Host source/build path or hash mismatch");
   requireSigningIdentity(

@@ -1,21 +1,8 @@
 //! Shared collaboration vocabulary and capability ports; no runtime resource ownership.
-mod project_claim;
-pub use project_claim::{ProjectClaim, ProjectClaimError, ProjectClaimFuture};
-mod project_registration;
-pub use project_registration::{
-    ProjectRegistration, ProjectRegistrationError, ProjectRegistrationFuture,
-    ProjectRegistrationState,
-};
-mod project_replication_position;
-pub use project_replication_position::{
-    AcknowledgedMailChangesFuture, ProjectReplicationPosition, ReplicatedPositionFuture,
-    UnacknowledgedProjectReplication,
-};
 mod machine_identity;
 pub use machine_identity::MachineIdentity;
 mod native_delivery_result;
 mod provider_conversation_backend;
-mod scheduled_run_contract;
 mod session_command_port;
 mod session_event_hub;
 #[cfg(any(test, feature = "test-support"))]
@@ -29,14 +16,6 @@ pub use native_delivery_result::{
 pub use provider_conversation_backend::{
     ProviderConversationBackend, ProviderConversationFuture, ProviderSessionInspectFuture,
     ProviderSettingsFuture,
-};
-pub use scheduled_run_contract::{
-    FreshSessionRequest, NativeTurnRef, PreparationEvidenceSink, PreparedTarget, RunAcceptance,
-    RunEvidenceDisposition, RunEvidenceSink, RunObservationContext, RunReconciliation,
-    RunSettlement, RunSubmission, RunSummarySource, ScheduleCapability, ScheduleDestination,
-    SchedulePreparationFailure, SchedulePreparationOutcome, SchedulePreparationRequest,
-    ScheduleSupport, ScheduledRunExecution, ScheduledRunPayload, ScheduledRunRoute,
-    ScheduledRunSubmission, SettlementEvidence, StopRequestOutcome,
 };
 pub use session_command_port::{
     CommandContent, CommandFailure, CommandFuture, CreateSessionCommand, PromptSessionCommand,
@@ -55,13 +34,6 @@ pub use session_event_hub::{
     HubEvent, HubFuture, HubSessionSummary, SessionEventAttachment, SessionEventHub,
     SessionEventHubError, SkillViewAttachment,
 };
-mod router_delivery_types;
-pub use router_delivery_types::{
-    RouterConsumerProtocol, RouterDeliveryTypes, RouterLocalObservation,
-};
-#[cfg(test)]
-#[path = "mail_push_budget_test.rs"]
-mod mail_push_budget_tests;
 
 mod router_identity;
 pub use router_identity::{RouterIdentity, RouterIdentityError};

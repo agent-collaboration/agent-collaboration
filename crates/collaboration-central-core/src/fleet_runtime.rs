@@ -2,48 +2,19 @@
 
 use crate::{
     CallerKind, CoreHost, EngineSchema, FleetKind, ObjectAddress, ObjectBootstrap, ObjectHost,
-    ObjectRuntime, PlatformIo,
-    caller_context::CallAuthority,
-    fleet_effects_read::ReadFleetEffects,
-    holder_reply_hub::HolderReplyHub,
-    mail_push_dispatch::PushDispatcher,
-    object_call_envelope::{ObjectCallEnvelope, encode_refusal},
-    object_runtime::ObjectWork,
-    step_driver::{StepCallback, StepDriver, StepResult},
+    ObjectRuntime, PlatformIo, caller_context::CallAuthority,
+    object_call_envelope::ObjectCallEnvelope, object_runtime::ObjectWork,
 };
-use crate::{
-    mail_sender_calls::{AdmitSenderMail, SenderFleetMail, SenderMailRequest, SenderRoute},
-    mail_submit_admission::AdmitMailSubmit,
-    mail_submit_calls::{FleetMailSubmit, MailSubmitRequest},
-};
-use board_sync_protocol::BoardDeliveryTypes;
 use durable_steps::{
-    AtomicStore, BoxFuture, CallFailure, CallTarget, JournalScope, NotSentReason, StoreError,
+    AtomicStore, CallFailure, JournalScope, NotSentReason, StoreError,
     storage::{JournalStorage, TransactionScope},
 };
-use fleet_sync_delivery::{DeliveryLimits, Outbox};
-use fleet_sync_protocol::{DeliveryItemRef, ServerCall};
-use message_board::RequestEffectsRequest;
 use runtime_primitives::WakeScheduler;
-use serde::{Deserialize, Serialize};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
 };
-use std::{
-    convert::Infallible,
-    marker::PhantomData,
-    sync::{Arc, Weak},
-    time::Duration,
-};
-
-#[derive(Serialize, Deserialize)]
-pub(crate) struct FleetRequestEffects;
-impl CallTarget for FleetRequestEffects {
-    const KIND: &'static str = "central.fleet-request-effects";
-    type Request = RequestEffectsRequest;
-    type Answer = board_sync_protocol::BoardReadPage;
-}
+use std::{marker::PhantomData, sync::Arc};
 
 impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
@@ -72,55 +43,18 @@ where
         io: Io,
         config: fleet_sync_lease::RegistryConfig,
         delivery: crate::DeliveryConfig,
-        holder_answer_timeout: std::time::Duration,
     ) -> Result<Self, StoreError> {
         let io = Arc::new(io);
-        let replies = Arc::new(crate::holder_reply_hub::HolderReplyHub::default());
-        let mail_limits = crate::fleet_outbox_limits().map_err(StoreError::backend)?;
-        let publication = crate::mail_status_dispatch::bind(
-            Arc::downgrade(&host),
+        let shared_host = Arc::new(CoreHost::registry(
             io.clone(),
-            replies.clone(),
-            holder_answer_timeout,
-        );
-        let shared_host = Arc::new(
-            CoreHost::registry(
-                io.clone(),
-                config.authoritative_receiver,
-                crate::registry_peer_lookup::bind(Arc::downgrade(&host)),
-                Some(crate::registry_lease_store::bind(Arc::downgrade(&host))),
-            )
-            .with_publication(publication)
-            .with_push(bind_mail_push(
-                Arc::downgrade(&host),
-                io.clone(),
-                replies.clone(),
-                mail_limits,
-                holder_answer_timeout,
-            )),
-        );
-        let store = Arc::new(crate::session_store::CoreSessionStore::new(
-            host.clone(),
-            shared_host.clone(),
-            replies.clone(),
+            config.authoritative_receiver,
+            crate::registry_peer_lookup::bind(Arc::downgrade(&host)),
         ));
-        type NoticeTask<Host, Io> = crate::machine_notice_delivery::MachineNoticeTask<Host, Io>;
-        type LeaseHook<Host, Io> = crate::fleet_lease_projection_step::FleetLeaseChangeHook<
-            crate::session_store::CoreSessionStore<Host, Io>,
-            NoticeTask<Host, Io>,
-        >;
-        let hook = Arc::new(LeaseHook::<Host, Io>::new(io.clone()));
-        let mut engine = crate::shared_task_registry::registry_engine::<_, Host::Database, _, _>(
+        let store = Arc::new(crate::session_store::CoreSessionStore::new(host.clone()));
+        let mut engine = crate::shared_task_registry::registry_engine::<_, Host::Database, _>(
             store,
             shared_host.clone(),
-            config,
-            hook,
         )?;
-        engine.register(crate::machine_notice_outbox::FleetNoticeTask::<
-            crate::session_store::CoreSessionStore<Host, Io>,
-        >(PhantomData))?;
-        engine
-            .register(crate::machine_notice_delivery::MachineNoticeTask::<Host, Io>(PhantomData))?;
         engine.register(fleet_sync_session::PublishSchemaSupport::<
             crate::session_store::CoreSessionStore<Host, Io>,
             Host::Database,
@@ -128,37 +62,16 @@ where
         engine.register(crate::session_revocation::EndSessionsTask::<Host, Io>(
             PhantomData,
         ))?;
-        engine.register(crate::fleet_mail_tasks::FleetStatusTask::<
-            crate::session_store::CoreSessionStore<Host, Io>,
-            Host::Database,
-        >::new())?;
-        engine.register(crate::fleet_mail_tasks::FleetPushTask::<
-            crate::session_store::CoreSessionStore<Host, Io>,
-            Host::Database,
-        >::new(
-            mail_limits,
-            shared_host.clone(),
-            Arc::new(crate::fleet_sender_binding::FleetSenderBinding),
-        ))?;
-        engine.register(crate::fleet_mail_tasks::FleetMailRemoval::<
-            crate::session_store::CoreSessionStore<Host, Io>,
-            Host::Database,
-        >::new(fleet_sync_delivery::DeliveryHostRole::Relay))?;
-        let engine =
-            crate::fleet_task_engine::own_engine::<_, _, Host::Database, LeaseHook<Host, Io>>(
-                engine,
-            );
+        let engine = crate::fleet_task_engine::own_engine(engine);
         let weak_host = Arc::downgrade(&host);
         let weak_shared = Arc::downgrade(&shared_host);
         let weak_engine = Arc::downgrade(&engine);
         let local_io = io.clone();
-        let local_replies = replies.clone();
         shared_host.install_local_calls(Arc::new(move |bytes| {
             let host = weak_host.clone();
             let shared = weak_shared.clone();
             let engine = weak_engine.clone();
             let io = local_io.clone();
-            let replies = local_replies.clone();
             Box::pin(async move {
                 let runtime = ObjectRuntime::<FleetKind, Host, Io> {
                     work: ObjectWork::Fleet {
@@ -166,10 +79,7 @@ where
                         shared_host: shared.upgrade().ok_or(CallFailure::AnswerLost)?,
                         engine: engine.upgrade().ok_or(CallFailure::AnswerLost)?,
                         io,
-                        replies,
-                        config,
                         delivery,
-                        holder_answer_timeout,
                     },
                     face: PhantomData,
                 };
@@ -182,10 +92,7 @@ where
                 io,
                 engine,
                 shared_host,
-                replies,
-                config,
                 delivery,
-                holder_answer_timeout,
             },
             face: PhantomData,
         })
@@ -197,33 +104,7 @@ where
     }
 
     async fn drive_fleet_alarm(&self) -> Result<durable_steps::DriveReport, StoreError> {
-        let ObjectWork::Fleet {
-            engine,
-            host,
-            replies,
-            shared_host,
-            ..
-        } = &self.work
-        else {
-            return Err(wrong_face());
-        };
-        let mut maintenance_failure = self.prune_feed().await.err();
-        let now = runtime_primitives::Clock::now(shared_host.as_ref());
-        replies.expire(now);
-        if let Some(at) = replies.next_deadline() {
-            let wake = host.wake().wake_at(at).await.map_err(StoreError::backend);
-            maintenance_failure = maintenance_failure.or(wake.err());
-        }
-        let (store, shared) = self.session_store()?;
-        let now = runtime_primitives::Clock::now(shared.as_ref());
-        let forwards = store
-            .transaction(move |scope| Box::pin(async move { scope.expire_forwards(now).await }))
-            .await;
-        maintenance_failure = maintenance_failure.or(forwards.err());
-        let notices = crate::machine_notice_store::prune::<_, Host::Database>(store, now).await;
-        maintenance_failure = maintenance_failure.or(notices.err());
-        // Maintenance failure must not prevent the existing journal from
-        // deciding which unrelated operations can make progress.
+        let ObjectWork::Fleet { engine, host, .. } = &self.work;
         let driven = engine.drive_due().await;
         let rearmed = host
             .store()
@@ -242,17 +123,12 @@ where
         if let Err(failure) = &rearmed {
             eprintln!("Fleet journal rearm failed: {failure}");
         }
-        if let Some(failure) = maintenance_failure {
-            return Err(failure);
-        }
         let report = driven?;
         rearmed?;
         Ok(report)
     }
     pub async fn initialize(&self) -> Result<usize, StoreError> {
-        let ObjectWork::Fleet { host, io, .. } = &self.work else {
-            return Err(wrong_face());
-        };
+        let ObjectWork::Fleet { host, io, .. } = &self.work;
         let bootstrap = ObjectBootstrap::new(host.clone(), io.clone());
         let mut applied = 0;
         for schema in [
@@ -263,60 +139,18 @@ where
         ] {
             applied += bootstrap.initialize(schema).await?;
         }
-        self.prune_feed().await?;
         Ok(applied)
-    }
-    #[cfg(feature = "conformance")]
-    pub async fn conformance_schema(&self) -> Result<Vec<crate::FleetSchemaObject>, StoreError> {
-        let ObjectWork::Fleet { host, .. } = &self.work else {
-            return Err(wrong_face());
-        };
-        host.store()
-            .transaction(|scope| {
-                Box::pin(async move { crate::fleet_schema_observation::read_schema(scope).await })
-            })
-            .await
-    }
-    #[cfg(feature = "conformance")]
-    pub async fn conformance_mail_custody(
-        &self,
-        item: fleet_sync_protocol::ItemId,
-    ) -> Result<crate::FleetMailCustodyObservation, StoreError> {
-        let ObjectWork::Fleet { host, .. } = &self.work else {
-            return Err(wrong_face());
-        };
-        host.store()
-            .transaction(move |scope| {
-                Box::pin(
-                    async move { crate::fleet_mail_observation::read_custody(scope, item).await },
-                )
-            })
-            .await
-    }
-    async fn prune_feed(&self) -> Result<(), StoreError> {
-        let ObjectWork::Fleet { host, io, .. } = &self.work else {
-            return Err(wrong_face());
-        };
-        let now = chrono::DateTime::from_timestamp_millis(io.now().unix_millis())
-            .ok_or_else(|| StoreError::backend("invalid Fleet retention clock"))?;
-        StepDriver::new(host.clone())
-            .run(crate::fleet_feed_maintenance::PruneFeed { now })
-            .await?;
-        Ok(())
     }
     pub async fn on_call(&self, bytes: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
         let envelope: ObjectCallEnvelope = serde_json::from_slice(&bytes).map_err(|_| refused())?;
         let answer = match envelope.destination_face {
             CallerKind::Registry => self.on_registry_call(bytes).await,
-            CallerKind::Delivery => self.delivery().map_err(|_| refused())?.on_call(bytes).await,
-            _ => self.dispatch_call(bytes).await,
+            CallerKind::Delivery => self.on_delivery_call(&bytes).await,
+            _ => Err(refused()),
         };
-        let ObjectWork::Fleet { host, .. } = &self.work else {
-            return Err(refused());
-        };
-        // The mutation saved both notice debt and wake intent in its transaction.
-        // Only after it settles do we arm the platform timer. An inbound call
-        // never drives notice work; a replay can also rearm an earlier saved debt.
+        let ObjectWork::Fleet { host, .. } = &self.work;
+        // The mutation saved its wake intent in its transaction. Only after it
+        // settles do we arm the platform timer.
         let earliest = host
             .store()
             .transaction(|scope| Box::pin(async move { scope.earliest().await }))
@@ -331,301 +165,21 @@ where
         answer
     }
 
-    pub(crate) async fn mail_submit_call(
-        &self,
-        invocation: ObjectCallEnvelope,
-    ) -> Result<Vec<u8>, CallFailure> {
-        if invocation.source_face != CallerKind::Session
-            || !matches!(invocation.authority, CallAuthority::Machine { .. })
+    /// Only Fleet registry revocation reaches the Delivery face; it ends the peer sessions.
+    async fn on_delivery_call(&self, bytes: &[u8]) -> Result<Vec<u8>, CallFailure> {
+        let invocation =
+            ObjectCallEnvelope::decode(bytes, ObjectAddress::Fleet, CallerKind::Delivery)?;
+        if !matches!(invocation.authority, CallAuthority::Object)
+            || invocation.source != ObjectAddress::Fleet
+            || invocation.source_face != CallerKind::Registry
         {
             return Err(refused());
         }
-        let CallAuthority::Machine {
-            installation: source,
-        } = invocation.authority
-        else {
-            return Err(refused());
-        };
-        let _: FleetMailSubmit =
-            serde_json::from_value(invocation.target).map_err(|_| refused())?;
-        let request: MailSubmitRequest =
-            serde_json::from_value(invocation.request).map_err(|_| refused())?;
-        let ObjectWork::Fleet {
-            host, io, delivery, ..
-        } = &self.work
-        else {
-            return Err(refused());
-        };
-        let (answer, _) = StepDriver::new(host.clone())
-            .run(AdmitMailSubmit {
-                source,
-                request,
-                limits: crate::fleet_outbox_limits().map_err(|_| CallFailure::AnswerLost)?,
-                relay: delivery.relay_peer,
-                clock: io.clone(),
-            })
-            .await
-            .map_err(|_| CallFailure::AnswerLost)?;
-        serde_json::to_vec(&answer).map_err(|_| CallFailure::AnswerLost)
-    }
-
-    pub(crate) async fn sender_mail_call(
-        &self,
-        invocation: ObjectCallEnvelope,
-    ) -> Result<Vec<u8>, CallFailure> {
-        if invocation.source_face != CallerKind::Session
-            || !matches!(invocation.authority, CallAuthority::Machine { .. })
-        {
-            return Err(refused());
-        }
-        let CallAuthority::Machine {
-            installation: source,
-        } = invocation.authority
-        else {
-            return Err(refused());
-        };
-        let _: SenderFleetMail =
-            serde_json::from_value(invocation.target).map_err(encode_refusal)?;
-        let request: SenderMailRequest =
-            serde_json::from_value(invocation.request).map_err(encode_refusal)?;
-        if request.request.call() != &invocation.identity {
-            return Err(refused());
-        }
-        let ObjectWork::Fleet { host, io, .. } = &self.work else {
-            return Err(refused());
-        };
-        let (route, _) = StepDriver::new(host.clone())
-            .run(AdmitSenderMail {
-                source,
-                input: request,
-                limits: crate::fleet_outbox_limits().map_err(|_| CallFailure::AnswerLost)?,
-                now: io.now(),
-            })
-            .await
-            .map_err(|_| CallFailure::AnswerLost)?;
-        let answer = match route {
-            SenderRoute::Refused => return Err(refused()),
-            SenderRoute::Answered(answer) => answer,
-        };
-        serde_json::to_vec(&answer).map_err(|_| CallFailure::AnswerLost)
-    }
-
-    async fn dispatch_call(&self, bytes: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
-        let call = ObjectCallEnvelope::decode(&bytes, ObjectAddress::Fleet, CallerKind::Fleet)?;
-        if call.kind == crate::mail_submit_calls::FleetMailSubmit::KIND {
-            return self.mail_submit_call(call).await;
-        }
-        if call.kind == crate::mail_sender_calls::SenderFleetMail::KIND {
-            return self.sender_mail_call(call).await;
-        }
-        if matches!(
-            call.kind.as_str(),
-            crate::owner_operation_calls::FleetProjectOperations::KIND
-                | crate::admin_import_copy::FleetAdminCopySeed::KIND
-                | crate::copy_write_calls::FleetProjectSeed::KIND
-        ) {
-            return self.owner_project_call(call).await;
-        }
-        if call.kind == crate::owner_operation_calls::ReadCopyDirectoryPage::KIND {
-            return self.owner_directory_page(call).await;
-        }
-        if call.kind == crate::fleet_creation_calls::ReadProjectCreationDecision::KIND {
-            return self.creation_decision_call(call).await;
-        }
-        if call.kind == fleet_sync_lease::RetirementAdmission::KIND {
-            return self.retirement_gate_call(call).await;
-        }
-        if call.kind == crate::fleet_archive_calls::FleetArchiveReport::KIND {
-            return self.archive_report_call(call).await;
-        }
-        if call.kind == fleet_sync_lease::ClaimReservation::KIND
-            || call.kind == fleet_sync_lease::ClaimSettlement::KIND
-        {
-            return self.claim_gate_call(call).await;
-        }
-        if call.kind == crate::fleet_read_calls::FleetRead::KIND {
-            return self.fleet_read_call(call).await;
-        }
-        if call.kind == crate::copy_directory_summary::DirectorySummaryUpdate::KIND {
-            return self.directory_summary_call(call).await;
-        }
-        if call.kind == "central.object" {
-            return self.import_call(call).await;
-        }
-        if call.kind == crate::fleet_metadata_calls::FleetMetadata::KIND {
-            return self.metadata_call(call).await;
-        }
-        if call.kind == crate::fleet_lease_calls::ClaimGranted::KIND {
-            return self.claim_granted_call(call).await;
-        }
-        if call.kind == crate::admin_import_fleet::AdminImportWorkflow::KIND {
-            return self.admin_import_workflow(call).await;
-        }
-        #[cfg(feature = "conformance")]
-        if call.kind == crate::conformance_fleet::FleetReceiptProbe::KIND {
-            return self.receipt_probe(call).await;
-        }
-        if !matches!(call.authority, CallAuthority::Machine { .. })
-            || call.source_face != CallerKind::Session
-            || !matches!(call.source, ObjectAddress::Fleet)
-            || call.kind != FleetRequestEffects::KIND
-        {
-            return Err(refused());
-        }
-        let _: FleetRequestEffects = serde_json::from_value(call.target).map_err(|_| refused())?;
-        let request = serde_json::from_value(call.request).map_err(|_| refused())?;
-        let ObjectWork::Fleet { host, io, .. } = &self.work else {
-            return Err(refused());
-        };
-        let as_of = chrono::DateTime::from_timestamp_millis(io.now().unix_millis())
-            .ok_or(CallFailure::AnswerLost)?;
-        let (result, _) = StepDriver::new(host.clone())
-            .run(ReadFleetEffects(request))
-            .await
-            .map_err(|_| CallFailure::AnswerLost)?;
-        serde_json::to_vec(&board_sync_protocol::BoardReadPage::RequestEffects { result, as_of })
-            .map_err(|_| CallFailure::AnswerLost)
-    }
-}
-fn wrong_face() -> StoreError {
-    StoreError::Aborted {
-        reason: "Fleet request reached a different object face".into(),
+        self.delivery().end_peer_sessions(invocation).await
     }
 }
 fn refused() -> CallFailure {
     CallFailure::NotSent {
         reason: NotSentReason::Unreachable { last_seen: None },
-    }
-}
-
-fn bind_mail_push<Host, Io>(
-    host: Weak<Host>,
-    io: Arc<Io>,
-    replies: Arc<HolderReplyHub>,
-    limits: DeliveryLimits,
-    timeout: Duration,
-) -> PushDispatcher
-where
-    Host: ObjectHost,
-    Io: PlatformIo,
-    for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
-        TransactionScope<Database = Host::Database>,
-    <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
-    for<'scalar> i64: sqlx_core::types::Type<Host::Database>
-        + sqlx_core::encode::Encode<'scalar, Host::Database>
-        + sqlx_core::decode::Decode<'scalar, Host::Database>,
-    for<'blob> Vec<u8>: sqlx_core::types::Type<Host::Database>
-        + sqlx_core::encode::Encode<'blob, Host::Database>
-        + sqlx_core::decode::Decode<'blob, Host::Database>,
-    for<'blob> Option<Vec<u8>>:
-        sqlx_core::types::Type<Host::Database> + sqlx_core::decode::Decode<'blob, Host::Database>,
-    for<'scalar> Option<i64>:
-        sqlx_core::types::Type<Host::Database> + sqlx_core::decode::Decode<'scalar, Host::Database>,
-    for<'value> String:
-        Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
-    for<'value> Option<String>:
-        Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
-    for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
-{
-    Arc::new(move |target, reference, call| {
-        let host = host.clone();
-        let io = io.clone();
-        let replies = replies.clone();
-        Box::pin(async move {
-            let host = host.upgrade().ok_or(CallFailure::AnswerLost)?;
-            let (resolved, _) = StepDriver::new(host.clone())
-                .run(ResolvePush {
-                    reference,
-                    limits,
-                    clock: io.clone(),
-                })
-                .await
-                .map_err(crate::mail_push_dispatch::store_failure)?;
-            // No peer request has started. An absent, expired or gated item
-            // cannot truthfully turn this attempt into possible recipient reach.
-            let resolved = resolved.ok_or(CallFailure::NotSent {
-                reason: NotSentReason::Unreachable { last_seen: None },
-            })?;
-            let item = resolved.item;
-            if item.recipient().peer != target.recipient {
-                return Err(CallFailure::AnswerLost);
-            }
-            let deadline_io = io.clone();
-            let waiter = crate::peer_request::begin_peer_request(
-                host,
-                io.clone(),
-                replies,
-                target.recipient,
-                ServerCall::Push {
-                    call,
-                    submitter: resolved.submitter,
-                    item,
-                },
-                timeout,
-                move |remaining| async move { deadline_io.reply_deadline(remaining).await },
-            )
-            .await?;
-            let remaining = Duration::from_millis(
-                u64::try_from(
-                    waiter
-                        .deadline()
-                        .unix_millis()
-                        .saturating_sub(io.now().unix_millis()),
-                )
-                .unwrap_or(0),
-            );
-            crate::mail_push_dispatch::bounded_answer(waiter.answer(), io.reply_deadline(remaining))
-                .await
-        })
-    })
-}
-
-struct ResolvePush {
-    reference: DeliveryItemRef,
-    limits: DeliveryLimits,
-    clock: Arc<dyn runtime_primitives::Clock>,
-}
-impl<Store: AtomicStore, Driver: Database> StepCallback<Store, Driver> for ResolvePush
-where
-    for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
-    Driver::Arguments: IntoArguments<Driver>,
-    for<'blob> Vec<u8>: sqlx_core::types::Type<Driver>
-        + sqlx_core::encode::Encode<'blob, Driver>
-        + sqlx_core::decode::Decode<'blob, Driver>,
-    for<'blob> Option<Vec<u8>>:
-        sqlx_core::types::Type<Driver> + sqlx_core::decode::Decode<'blob, Driver>,
-    for<'value> String: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
-    for<'value> Option<String>: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
-    for<'row> &'row str: ColumnIndex<Driver::Row>,
-{
-    type Output = Option<fleet_sync_delivery::ResolvedPush<BoardDeliveryTypes>>;
-    type Effect = Infallible;
-    fn run<'scope, 'transaction>(
-        self,
-        scope: &'scope mut Store::Scope<'transaction>,
-    ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
-        Box::pin(async move {
-            let now = self.clock.now();
-            let item = Outbox::<_, BoardDeliveryTypes, _>::new(
-                scope,
-                self.limits,
-                &crate::fleet_sender_binding::FleetSenderBinding,
-            )
-            .resolve_push(&self.reference, now)
-            .await
-            .map_err(fleet_sync_delivery::delivery_rollback)?;
-            if let Some(item) = &item {
-                let recipient = item.item.recipient().peer;
-                if crate::machine_enrollment::admission::read_current_enrolled_machine(
-                    scope, recipient, now,
-                )
-                .await?
-                .is_none()
-                {
-                    return Ok((None, Vec::new()));
-                }
-            }
-            Ok((item, Vec::new()))
-        })
     }
 }

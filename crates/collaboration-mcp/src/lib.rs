@@ -23,8 +23,6 @@ pub mod test_support;
 #[cfg(test)]
 mod api_test_harness;
 #[cfg(test)]
-mod board_argument_rejection_tests;
-#[cfg(test)]
 mod carrier_response_loss_http_tests;
 #[cfg(test)]
 mod codex_conversation_cancel_http_tests;
@@ -32,10 +30,6 @@ mod codex_conversation_cancel_http_tests;
 mod collaboration_api_router_tests;
 #[cfg(test)]
 mod mcp_remediation_tests;
-#[cfg(test)]
-use collaboration_application_test_support::native_mail_owner;
-#[cfg(test)]
-use collaboration_application_test_support::native_registry as native_board_test_fixture;
 #[cfg(test)]
 mod observation_streaming_tests;
 #[cfg(test)]
@@ -49,8 +43,6 @@ mod provider_stdio_diagnostic_http_tests;
 mod proxy_authority;
 #[cfg(test)]
 mod proxy_authority_tests;
-#[cfg(test)]
-mod thread_subscription_entry_tests;
 #[cfg(test)]
 mod unix_origin_tests;
 pub use proxy_authority::ProxyAuthority;

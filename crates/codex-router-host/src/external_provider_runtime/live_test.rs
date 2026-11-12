@@ -2,7 +2,7 @@ use super::*;
 use collaboration_client::CollaborationClient;
 use collaboration_protocol::{
     ApprovalDecideParams, ApprovalDecision, EndpointDescription, EndpointId, EndpointRef,
-    GenerationNumber, OperationId, RouterOriginRef, SessionId, UuidIdentity,
+    GenerationNumber, OperationId, SessionId, UuidIdentity,
 };
 use collaboration_runtime::EndpointDirectory;
 use collaboration_runtime::NativeControlBackend;
@@ -223,7 +223,6 @@ async fn approval_broker_fixture(
     .await?;
     let route: Arc<dyn collaboration_contracts::SessionDeliveryRoute> =
         Arc::new(collaboration_runtime::CodexAppServerDeliveryRoute::new(
-            Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
             service_id.clone(),
             endpoints,
             native_backend,
@@ -233,8 +232,7 @@ async fn approval_broker_fixture(
         collaboration_runtime::SessionDeliveryRouter::new(vec![route]),
     ))?;
     let push_fixture =
-        approval_push_fixture::ApprovalPushFixture::compose(root.path(), service_id, &broker)
-            .await?;
+        approval_push_fixture::ApprovalPushFixture::compose(root.path(), service_id, &broker)?;
     let captured_approver = approver.clone();
     let captured_broker = Arc::clone(&broker);
     let approver_task = tokio::spawn(async move {
@@ -256,32 +254,16 @@ async fn approval_broker_fixture(
                     .pointer("/params/input/0/text")
                     .and_then(Value::as_str)
                     .ok_or("approval notice text missing")?;
-                let record = push_fixture
-                    .captured_approval(delivered_text, &captured_approver)
-                    .await?;
-                let RouterOriginRef::Interaction { interaction_id, .. } =
-                    RouterOriginRef::parse_canonical(
-                        record
-                            .origin_router_ref
-                            .as_deref()
-                            .ok_or("approval push omitted its interaction reference")?,
-                    )?
-                else {
-                    return Err("approval push reference does not identify an interaction".into());
-                };
-                let body = record.body.ok_or("stored approval push omitted its body")?;
+                push_fixture.captured_approval(delivered_text, &captured_approver)?;
+                // Notices are not stored: the preview line names the pending approval.
                 let pending = captured_broker
                     .list_typed_approvals(true)
                     .await
                     .into_iter()
-                    .find(|approval| approval.request_id == interaction_id.as_str())
-                    .ok_or("stored notice did not identify its pending approval")?;
-                if !body.contains(&format!("Approval request: {}\n", pending.title))
-                    || !body.contains(&format!("Request ID: {}\n", pending.request_id))
-                {
-                    return Err(
-                        "stored approval body omitted its reviewed title or request ID".into(),
-                    );
+                    .next()
+                    .ok_or("delivered notice had no pending approval")?;
+                if !delivered_text.contains(&format!("Approval request: {}", pending.title)) {
+                    return Err("approval notice preview omitted its reviewed title".into());
                 }
                 let option_id = pending
                     .options
@@ -290,16 +272,6 @@ async fn approval_broker_fixture(
                     .ok_or("pending approval omitted offered option ID")?
                     .option_id
                     .as_str();
-                let command = body
-                    .lines()
-                    .find_map(|line| line.strip_prefix("To choose: "))
-                    .ok_or("stored approval body omitted decision command")?;
-                if !command.contains("agent-collaboration approval decide")
-                    || !command.contains(&format!("--option-id '{option_id}'"))
-                    || !body.contains(&format!("Option {option_id} — "))
-                {
-                    return Err("typed approval notice did not explain how to decide".into());
-                }
                 offered_option_id = Some(option_id.to_owned());
             }
             if expected_method == "initialized" {
@@ -560,7 +532,6 @@ async fn live_composed_cursor_native_mcp_requires_typed_call_and_router_result()
     }
     let host_runtime = crate::CollaborationRuntime::start_with_external_providers(
         crate::CollaborationRuntimeInputs {
-            board_session: None,
             directory: host_directory.clone(),
             codex_home,
             backend_socket: root.path().join("backend.sock"),

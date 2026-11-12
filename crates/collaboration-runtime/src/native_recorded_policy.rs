@@ -68,12 +68,3 @@ pub async fn prepare_classified_native_policy(
         .await
         .map(Some)
 }
-
-pub(crate) async fn prepare_recorded_native_policy(
-    broker: Option<&Weak<dyn ApprovalBroker>>,
-    target: &SessionRef,
-    working_directory: Option<&str>,
-) -> Result<Option<RecordedSessionResume>, SessionSetupError> {
-    let classification = classify_recorded_native_route(broker, target).await;
-    prepare_classified_native_policy(&classification, target, working_directory).await
-}

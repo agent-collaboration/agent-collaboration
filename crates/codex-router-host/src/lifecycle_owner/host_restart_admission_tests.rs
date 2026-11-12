@@ -184,7 +184,6 @@ async fn assert_restart_admission(scenario: AdmissionCase) {
             reexecuting_ack,
         },
         OperatorRuntimeContext {
-            fleet_observation: Box::pin(async { crate::FleetHostObservation::NotObserved }),
             state: &mut state,
             app_server: &mut app_server,
             router_child: &mut router_child,

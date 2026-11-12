@@ -11,7 +11,6 @@ import {
   processIdentitySchema,
   type ProcessIdentity,
 } from "../shared/evidence-models.ts";
-import { readCarrierCorrelation } from "./native-correlation.ts";
 import { lookupProcessIdentity, sameIdentity } from "./process-ownership.ts";
 import {
   identityRecord,
@@ -20,7 +19,7 @@ import {
   processOperations,
   stopOwned,
 } from "./runtime-processes.ts";
-import { saveRecord, waitForProcess } from "./runtime-plan.ts";
+import { saveRecord } from "./runtime-plan.ts";
 import { settleInventory } from "./process-inventory.ts";
 import { LifecycleFixture, harmlessChild, releaseHarmlessChild } from "./lifecycle-fixture.ts";
 
@@ -209,52 +208,6 @@ test("a reaped initial child cannot authorize a new process identity capture", a
   );
   assert.equal(queried, false);
 });
-
-test(
-  "native metadata lookup failure still closes and reaps the owned stdin carrier",
-  { timeout: 10_000 },
-  async (): Promise<void> => {
-    const child = spawn(
-      process.execPath,
-      [new URL("../../fixtures/native-read-carrier.ts", import.meta.url).pathname],
-      { stdio: ["pipe", "pipe", "pipe"], detached: true },
-    );
-    await once(child, "spawn");
-    await assert.rejects(
-      readCarrierCorrelation(
-        child,
-        { thread_id: "fixture-thread", turn_id: "fixture-turn", push_id: "fixture-push" },
-        (): never => {
-          throw Object.assign(new Error("controlled metadata failure"), { code: "EPERM" });
-        },
-      ),
-      /controlled metadata failure/,
-    );
-    assert.equal(child.exitCode, 0);
-  },
-);
-
-test(
-  "an actual local native pipe drives only the original synthetic read protocol",
-  { timeout: 10_000 },
-  async (): Promise<void> => {
-    lookupProcessIdentity(process.pid);
-    const child = spawn(
-      process.execPath,
-      [new URL("../../fixtures/native-read-carrier.ts", import.meta.url).pathname],
-      { stdio: ["pipe", "pipe", "pipe"], detached: true },
-    );
-    await once(child, "spawn");
-    const result = await readCarrierCorrelation(child, {
-      thread_id: "fixture-thread",
-      turn_id: "fixture-turn",
-      push_id: "fixture-push",
-    });
-    assert.equal(result.supported, true);
-    assert.equal(child.exitCode, 0);
-    await waitForProcess(child, 5000);
-  },
-);
 
 // macOS installs /bin/ps setuid root, so a user-launched ps runs with effective UID 0 and the
 // launching account's real UID. Hosts without that split cannot exercise this case through ps.

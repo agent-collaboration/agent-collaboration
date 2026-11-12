@@ -58,7 +58,6 @@ async fn start_model_fixture(
 ) -> Result<CollaborationRuntime, Box<dyn std::error::Error>> {
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
-            board_session: None,
             owner_human_id: Some(message_board::HumanId::try_from("model-owner".to_owned())?),
             directory: root.into(),
             codex_home: root.into(),

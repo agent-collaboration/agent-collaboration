@@ -2,7 +2,6 @@
 use super::*;
 
 pub(super) struct RecordedPolicyFixture {
-    pub(super) clock: Arc<router_clock::ManualClock>,
     pub(super) directory: tempfile::TempDir,
     pub(super) backend: NativeControlBackend,
     pub(super) generation: CodexGeneration,
@@ -62,12 +61,6 @@ impl RecordedPolicyFixture {
         )
         .await?;
         Ok(Self {
-            clock: Arc::new(
-                router_clock::ManualClock::starting_at(
-                    runtime_primitives::SyncTime::from_unix_millis(1792432800000),
-                )
-                .unwrap(),
-            ),
             filesystem: expected_filesystem(&scratch)?,
             directory,
             backend,
@@ -103,42 +96,22 @@ impl RecordedPolicyFixture {
             attempt_deadline: None,
         }
     }
-
-    pub(super) fn scheduled_run(&self) -> collaboration_contracts::ScheduledRunSubmission {
-        collaboration_contracts::ScheduledRunSubmission {
-            run_id: RunId::generate(), target: target(), payload: collaboration_contracts::ScheduledRunPayload::Fresh { task_input: "validate scheduled policy".to_owned().try_into().unwrap() }, precondition: collaboration_contracts::DeliveryPrecondition::Unpinned,
-            inputs: serde_json::from_value::<CapturedRunInputs<_, _>>(json!({ "scheduleChangeId":agent_automation::ChangeId::generate(),"instructionRevisionId":agent_automation::RevisionId::generate(),"instructionText":"Validate policy","continuity":{"kind":"none"},"executionConfiguration":{"destination":{"kind":"ownedThread","target":target(),"cwd":self.directory.path()},"executionTimeoutSeconds":120,"model":"fixture-model","effort":"medium"} })).unwrap(),
-            recorded: serde_json::from_value(json!({"kind":"codexAppServer","target":target(),"generation":self.generation,"clientUserMessageId":"loaded-policy-input","nativeTurnId":null,"nativeSubmissionId":null,"allocation":"notRequested","resume":"notRequested","submission":"notDispatched","cessation":"notApplicable"})).unwrap(),
-        }
-    }
 }
 
 #[derive(Clone, Copy)]
 pub(super) enum ReplyPolicy {
     Matching,
     Narrowed,
-    MissingDirectory,
 }
 pub(super) struct PolicyServerCase {
     pub(super) cold: ReplyPolicy,
     pub(super) loaded: ReplyPolicy,
     pub(super) loaded_delivery: MessageDelivery,
-    pub(super) turn_intent: Option<Arc<AtomicBool>>,
-    pub(super) retire_loaded: Option<NativeGenerationGate>,
-    pub(super) stored_run: Option<(
-        Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>,
-        RunId,
-    )>,
 }
 
 /// Native replies and synthetic schema/endpoint metadata stand in for upstream; storage and sockets are real.
-/// CapturingRunSink below is a separate stand-in; stored-run cases use the real sink.
 type PolicyServerTask = tokio::task::JoinHandle<Result<Vec<Vec<Value>>, TestError>>;
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "The spawned fixture asserts the recorded admission order before replying."
-)]
 pub(super) fn policy_server(
     fixture: &RecordedPolicyFixture,
     scenario: PolicyServerCase,
@@ -172,29 +145,9 @@ pub(super) fn policy_server(
                         } else {
                             scenario.loaded
                         };
-                        let mut response = json!({"thread":{"id":THREAD,"cwd":cwd},"cwd":cwd,"activePermissionProfile":{"id":"router-workspace-write"},"sandbox":{"type":"workspaceWrite","networkAccess":true,"writableRoots":if matches!(policy, ReplyPolicy::Matching) {roots.clone()} else {vec![]}}});
-                        if matches!(policy, ReplyPolicy::MissingDirectory) {
-                            response.as_object_mut().unwrap().remove("cwd");
-                        }
-                        response
+                        json!({"thread":{"id":THREAD,"cwd":cwd},"cwd":cwd,"activePermissionProfile":{"id":"router-workspace-write"},"sandbox":{"type":"workspaceWrite","networkAccess":true,"writableRoots":if matches!(policy, ReplyPolicy::Matching) {roots.clone()} else {vec![]}}})
                     }
                     "turn/start" => {
-                        if let Some((store, run_id)) = &scenario.stored_run {
-                            let record=store.lock().await.read_run::<SessionRef,collaboration_protocol::EndpointRef,CodexGeneration,collaboration_runtime::stored_run_receipt::StoredRunReceipt>(run_id).await?;
-                            if record.evidence.timing.is_none()
-                                || !matches!(record.evidence.route,Some(RouteEffectEvidence::CodexAppServer(effects)) if effects.submission==agent_automation::SubmissionEffect::Dispatching && effects.resume==agent_automation::PreparationEffect::Accepted)
-                            {
-                                return Err(
-                                    "stored dispatch intent/timing missing before input".into()
-                                );
-                            }
-                        }
-                        if let Some(intent) = &scenario.turn_intent {
-                            assert!(
-                                intent.load(Ordering::SeqCst),
-                                "scheduled intent must be recorded before input"
-                            );
-                        }
                         json!({"turn":{"id":"accepted-native-turn"}})
                     }
                     "thread/turns/list" => {
@@ -204,12 +157,6 @@ pub(super) fn policy_server(
                     "thread/queue/add" => json!({"queuedSubmission":{"id":"queued-input"}}),
                     _ => return Err("unexpected native method".into()),
                 };
-                if method == "thread/resume"
-                    && request_index == 1
-                    && let Some(gate) = &scenario.retire_loaded
-                {
-                    gate.retire().unwrap();
-                }
                 requests.push(request.clone());
                 socket
                     .send(Message::Text(
@@ -223,37 +170,4 @@ pub(super) fn policy_server(
         }
         Ok(exchanges)
     }))
-}
-
-/// Deterministic sink stand-in: no storage admission, persistence or real timing.
-/// Stored-run tests use StoredRunEvidenceSink and AutomationStore instead.
-pub(super) struct CapturingRunSink {
-    pub(super) evidence: Mutex<Vec<RouteEffectEvidence<SessionRef, CodexGeneration>>>,
-    pub(super) turn_intent: Arc<AtomicBool>,
-}
-impl RunEvidenceSink for CapturingRunSink {
-    fn record(
-        &self,
-        evidence: RouteEffectEvidence<SessionRef, CodexGeneration>,
-    ) -> collaboration_contracts::DeliveryFuture<'_, RunEvidenceDisposition> {
-        if matches!(&evidence, RouteEffectEvidence::CodexAppServer(effects) if effects.submission == agent_automation::SubmissionEffect::Dispatching)
-        {
-            self.turn_intent.store(true, Ordering::SeqCst);
-        }
-        self.evidence.lock().unwrap().push(evidence);
-        Box::pin(async {
-            Ok(RunEvidenceDisposition::Recorded {
-                timing: Some(ExecutionTiming {
-                    dispatch_started_at_ms: 1_791_700_000_000,
-                    deadline_at_ms: 1_791_700_120_000,
-                    effective_timeout_seconds: 120,
-                }),
-            })
-        })
-    }
-    fn record_stop_intent(
-        &self,
-    ) -> collaboration_contracts::DeliveryFuture<'_, RunEvidenceDisposition> {
-        Box::pin(async { Ok(RunEvidenceDisposition::AdmissionRefused) })
-    }
 }

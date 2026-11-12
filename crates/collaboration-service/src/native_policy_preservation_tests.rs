@@ -15,9 +15,6 @@ async fn policy_loaded_generic_preserves_each_mode_without_resume() {
                 cold: ReplyPolicy::Matching,
                 loaded: ReplyPolicy::Matching,
                 loaded_delivery: mode,
-                turn_intent: None,
-                retire_loaded: None,
-                stored_run: None,
             },
         )
         .unwrap();
@@ -79,9 +76,6 @@ async fn policy_loaded_expired_broker_refuses_each_mode_before_resume_or_input()
                 cold: ReplyPolicy::Matching,
                 loaded: ReplyPolicy::Matching,
                 loaded_delivery: mode,
-                turn_intent: None,
-                retire_loaded: None,
-                stored_run: None,
             },
         )
         .unwrap();

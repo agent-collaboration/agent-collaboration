@@ -1,5 +1,5 @@
 use collaboration_protocol::{
-    AttemptId, DeliveryCorrelationId, DeliveryNextAction, DeliveryOutcome, DeliveryPeerClaim,
+    DeliveryCorrelationId, DeliveryNextAction, DeliveryOutcome, DeliveryPeerClaim,
     DeliveryRejection, DeliveryRejectionReason, SessionReachability,
 };
 use serde_json::{json, to_value};
@@ -155,11 +155,8 @@ fn native_failure_is_optional_for_old_receipts_and_rejects_invalid_facts() {
 
 #[test]
 fn delivery_correlation_accepts_caller_values_and_allocates_uuidv7_values() {
-    let attempt = AttemptId::generate();
     let correlation = DeliveryCorrelationId::generate();
-    assert_ne!(attempt.as_str(), correlation.as_str());
-    assert!(AttemptId::try_from(correlation.as_str().to_owned()).is_ok());
-    assert!(AttemptId::try_from("not-a-uuid".to_owned()).is_err());
+    assert!(uuid::Uuid::parse_str(correlation.as_str()).is_ok_and(|id| id.get_version_num() == 7));
     let caller = DeliveryCorrelationId::try_from("caller-correlation".to_owned())
         .expect("caller correlation remains valid");
     assert_eq!(caller.as_str(), "caller-correlation");

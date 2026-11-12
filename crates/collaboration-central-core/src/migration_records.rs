@@ -43,7 +43,7 @@ impl MigrationSet {
         })
     }
 
-    #[cfg(any(test, feature = "conformance"))]
+    #[cfg(test)]
     pub(crate) const ALL: [Self; 7] = [
         Self::FleetSyncLease,
         Self::FleetSyncReceiver,
@@ -54,7 +54,7 @@ impl MigrationSet {
         Self::CentralSession,
     ];
 
-    #[cfg(any(test, feature = "conformance"))]
+    #[cfg(test)]
     pub(crate) const fn name(self) -> &'static str {
         match self {
             Self::FleetSyncLease => "fleet-sync-lease",

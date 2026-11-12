@@ -21,9 +21,6 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 use std::marker::PhantomData;
-mod enrollment_gate;
-mod fleet_reads;
-mod forwards;
 mod operations;
 
 pub(crate) struct CoreSessionScope<'transaction, Host: ObjectHost, Io: PlatformIo>
@@ -99,12 +96,11 @@ where
     fn welcome_after_commit(
         &mut self,
         connection: ConnectionId,
-        peer: PeerId,
+        _peer: PeerId,
         session_id: SessionId,
     ) {
         self.effects.push(PendingWelcome {
             connection,
-            peer,
             session_id,
         });
     }
@@ -130,142 +126,26 @@ where
         Type<Host::Database> + Encode<'value, Host::Database> + Decode<'value, Host::Database>,
     for<'row> &'row str: ColumnIndex<<Host::Database as Database>::Row>,
 {
-    /// Own-stream reads remain local to the admitted frame's transaction.
-    pub(crate) async fn stage_frame_effects(
+    /// Every operation the removed board, replication and mail surfaces served is
+    /// refused with the existing designed operation refusal.
+    pub(crate) fn stage_frame_effects(
         &mut self,
         effects: Vec<fleet_sync_session::SessionEffect<board_sync_protocol::BoardConsumerProtocol>>,
         connection: ConnectionId,
-        installation: message_board::ServiceId,
-        now: SyncTime,
-        forward_frame: fleet_sync_protocol::FrameId,
     ) -> Result<(), StoreError> {
-        use board_sync_protocol::{BoardConsumerProtocol, BoardDeliveryTypes};
-        use fleet_sync_protocol::{
-            DeliveryAnswer, DeliveryRequest, OperationAnswer, OperationRequest, ServerFrame,
-        };
+        use fleet_sync_protocol::OperationAnswer;
         use fleet_sync_session::SessionEffect;
         for effect in effects {
-            if let SessionEffect::Route {
-                session,
-                frame,
-                operation,
-            } = &effect
-                && let Some(answer) = self
-                    .refuse_unenrolled_mutation(session.peer, operation, now)
-                    .await?
-            {
-                self.stage_operation_answer(connection, *frame, answer)?;
-                continue;
-            }
             match effect {
-                SessionEffect::Route {
-                    session,
+                SessionEffect::Route { frame, .. } => self.stage_operation_answer(
+                    connection,
                     frame,
-                    operation: OperationRequest::Delivery(DeliveryRequest::Report { report, .. }),
-                } => {
-                    let limits = crate::fleet_outbox_limits().map_err(StoreError::backend)?;
-                    let result = fleet_sync_delivery::Outbox::<_, BoardDeliveryTypes, _>::new(
-                        self,
-                        limits,
-                        &crate::fleet_sender_binding::FleetSenderBinding,
-                    )
-                    .recipient_report::<crate::fleet_mail_tasks::FleetStatusTask<
-                        crate::session_store::CoreSessionStore<Host, Io>,
-                        Host::Database,
-                    >>(session.peer, report, now)
-                    .await
-                    .map_err(fleet_sync_delivery::delivery_rollback)?;
-                    self.stage_operation_answer(
-                        connection,
-                        frame,
-                        OperationAnswer::Delivery(DeliveryAnswer::Report(result)),
-                    )?;
-                }
-                SessionEffect::Route {
-                    session,
-                    frame,
-                    operation:
-                        OperationRequest::Delivery(DeliveryRequest::StatusAck { through, .. }),
-                } => {
-                    let result = fleet_sync_delivery::StatusStream::<_, BoardDeliveryTypes>::new(
-                        self,
-                        fleet_sync_protocol::Submitter::Machine(session.peer),
-                        installation.clone(),
-                    )
-                    .acknowledge(through, now)
-                    .await
-                    .map_err(StoreError::backend)?;
-                    let bytes = serde_json::to_vec(&ServerFrame::<BoardConsumerProtocol>::Answer {
-                        frame,
-                        body: OperationAnswer::Delivery(DeliveryAnswer::StatusAck(result)),
-                    })
-                    .map_err(StoreError::backend)?;
-                    self.transport.push(SessionTransportEffect::Frame {
-                        connection,
-                        bytes: bytes.into(),
-                    });
-                }
-                SessionEffect::Route {
-                    session,
-                    frame,
-                    operation:
-                        OperationRequest::Delivery(DeliveryRequest::StatusFetch {
-                            after, limit, ..
-                        }),
-                } => {
-                    let answer =
-                        match fleet_sync_delivery::StatusStream::<_, BoardDeliveryTypes>::new(
-                            self,
-                            fleet_sync_protocol::Submitter::Machine(session.peer),
-                            installation.clone(),
-                        )
-                        .fetch(
-                            fleet_sync_protocol::Submitter::Machine(session.peer),
-                            after,
-                            limit,
-                        )
-                        .await
-                        {
-                            Ok(result) => {
-                                OperationAnswer::Delivery(DeliveryAnswer::StatusFetch(result))
-                            }
-                            Err(fleet_sync_delivery::DeliveryError::InvalidBatch) => {
-                                OperationAnswer::InvalidShape {
-                                    field: "after".into(),
-                                }
-                            }
-                            Err(error) => return Err(StoreError::backend(error)),
-                        };
-                    let bytes = serde_json::to_vec(&ServerFrame::<BoardConsumerProtocol>::Answer {
-                        frame,
-                        body: answer,
-                    })
-                    .map_err(StoreError::backend)?;
-                    self.transport.push(SessionTransportEffect::Frame {
-                        connection,
-                        bytes: bytes.into(),
-                    });
-                }
-                SessionEffect::Route {
-                    session,
-                    frame,
-                    operation,
-                } => {
-                    self.stage_operation(connection, session, frame, operation, now, forward_frame)
-                        .await?;
-                }
-                SessionEffect::RouteAnswer {
-                    session,
-                    frame,
-                    answer:
-                        fleet_sync_protocol::ClientAnswer::Consumer(
-                            board_sync_protocol::BoardClientAnswer::ForwardedPost(reply),
-                        ),
-                } => {
-                    self.stage_forward_answer(session, frame, reply, now)
-                        .await?;
-                }
-                other => self.stage_transport(vec![other], Some(connection))?,
+                    OperationAnswer::InvalidShape {
+                        field: "operation".into(),
+                    },
+                )?,
+                SessionEffect::RouteAnswer { .. } => {}
+                other => self.stage_transport(vec![other])?,
             }
         }
         Ok(())
@@ -366,22 +246,15 @@ where
     pub(crate) fn stage_transport(
         &mut self,
         effects: Vec<fleet_sync_session::SessionEffect<board_sync_protocol::BoardConsumerProtocol>>,
-        requesting_connection: Option<ConnectionId>,
     ) -> Result<(), StoreError> {
-        let request_connection = || {
-            requesting_connection.ok_or_else(|| StoreError::Aborted {
-                reason: "a delivery-only session step cannot originate a request or answer".into(),
-            })
-        };
         for effect in effects {
             match effect {
                 fleet_sync_session::SessionEffect::Welcome {
                     connection,
-                    peer,
                     session_id,
+                    ..
                 } => self.effects.push(PendingWelcome {
                     connection,
-                    peer,
                     session_id,
                 }),
                 fleet_sync_session::SessionEffect::Send { connection, frame } => {
@@ -400,24 +273,9 @@ where
                         reason: "a non-frame session step produced an operation".into(),
                     });
                 }
-                fleet_sync_session::SessionEffect::RouteAnswer {
-                    session,
-                    frame,
-                    answer,
-                } => {
-                    self.transport.push(SessionTransportEffect::PeerAnswer {
-                        connection: request_connection()?,
-                        session,
-                        frame,
-                        answer,
-                    });
-                }
+                fleet_sync_session::SessionEffect::RouteAnswer { .. } => {}
             }
         }
         Ok(())
     }
 }
-
-#[cfg(test)]
-#[path = "session_enrollment_gate_test.rs"]
-mod enrollment_gate_tests;

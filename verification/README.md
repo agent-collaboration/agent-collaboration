@@ -14,40 +14,25 @@ pnpm --dir verification test
 `tooling/` owns release formula generation, CI checks, SQLx preparation and proof
 receipt validation. `fixtures/` supplies synthetic executable stand-ins for Rust
 tests. `observations/` owns declared-runtime observation, process identity and
-cleanup, metadata, callbacks, and Tailnet peer/readback apparatus. Their original
+cleanup, metadata, callbacks and MCP control apparatus. Their original
 input/output comparisons are permanent tests; they supply apparatus evidence,
 not installed-provider, hosted, release or delivery acceptance.
 
 The isolated Tailnet Host driver is entirely Rust. Build and check
 `codex-router-tailnet-verification-host` as described in its
-[runbook](../crates/tailnet-verification-host/README.md). The TypeScript Tailnet
-peer and readback commands remain under `observations/tailnet/`.
+[runbook](../crates/tailnet-verification-host/README.md).
 
-Within `observations/`, choose the journey family: `central/` for D1 central and
-mail, `tailnet/` for cross-machine peer/readback, `runtime/` for process lifecycle
-and native correlation, `providers/acp/` and `providers/claude/` for provider
-observations, `callbacks/` for typed interactions, `configuration/` for config
-section comparisons, and `harness/` for evidence reports. `shared/` holds common
-observation contracts. Tests and their original baselines live with each family.
+Within `observations/`, choose the journey family: `runtime/` for process
+lifecycle, `providers/acp/` and `providers/claude/` for provider observations,
+`callbacks/` for typed interactions, `configuration/` for config section
+comparisons, `harness/` for evidence reports and `mcp-control/` for MCP Session
+control. `shared/` holds common observation contracts. Tests and their original
+baselines live with each family.
 
-The wrappers retired in 0.1.102 have these retained entries:
-
-| Surface                                              | Current source and entry                                                                                             |
-| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Local board records and reopen                       | `crates/agent-collaboration/tests/e2e/board_records_e2e.rs` and `tests/board_e2e/`                                   |
-| Local central replication, holders and forwarding    | `crates/agent-collaboration/tests/e2e/board_central_e2e.rs`                                                          |
-| Upgrade preparation, publication, replay and restart | `cargo nextest run --locked --profile ci -p agent-router-update --test e2e --test-threads 1`                         |
-| Native central conformance                           | `crates/collaboration-central-tokio/tests/`, with explicit targets and `conformance` where required                  |
-| Local Worker conformance                             | `composed_scope_workerd` and `session_scope_workerd` examples; use CI's pinned tools and scenario selections         |
-| Two-machine Tokio, workerd or staging                | `node verification/run.ts "$PRIVATE_DECLARATION"`; schema in `declaration.ts`, selected cases in `case-registry.ts`  |
-| Separately commissioned sealed-copy Mac import       | `node verification/import-run.ts "$PRIVATE_DECLARATION"`; schema in `import-declaration.ts`, local Tokio target only |
-
-The Rust local process suites require the CI local-end-to-end job's prebuilt
-entry points and owned runtime roots. The TypeScript runtime entries require
-private declarations, qualified artifacts and an explicit execution commission.
-Do not run them against production or infer authorization from this README.
-Mapped cases determine coverage. Missing mappings remain open; a replacement
-entry does not establish every historical obligation.
+The board, project, replication, board-upgrade, D1 central mail, cross-machine,
+staging and Tailnet board journeys retired with that code in the workspace
+storage clean-up; the central-workspace journey replaces them (Verification
+Design O2).
 
 Release formula generation is
 `node verification/tooling/update-homebrew-formula.ts --help`. The local tap

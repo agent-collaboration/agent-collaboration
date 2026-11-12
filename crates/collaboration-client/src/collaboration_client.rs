@@ -449,46 +449,6 @@ impl CollaborationClient {
         serde_json::from_value(value).map_err(|_| ClientError::Protocol("invalid journal status"))
     }
 
-    /// Reads a captured historical address page without loading any native thread.
-    pub async fn list_addresses(
-        &self,
-        endpoint: &collaboration_protocol::EndpointRef,
-        page_size: u32,
-        cursor: Option<&str>,
-    ) -> Result<collaboration_protocol::AddressPage, ClientError> {
-        if !(1..=100).contains(&page_size)
-            || cursor.is_some_and(|cursor| cursor.is_empty() || cursor.len() > 1024)
-        {
-            return Err(ClientError::InvalidRequest(
-                "invalid address snapshot arguments",
-            ));
-        }
-        let params = json!(collaboration_protocol::AddressListParams {
-            endpoint: endpoint.clone(),
-            page_size,
-            cursor: cursor.map(str::to_owned),
-        });
-        let value = self.connection.call("addresses_list", params).await?;
-        let page: collaboration_protocol::AddressPage = serde_json::from_value(value)
-            .map_err(|_| ClientError::Protocol("invalid address snapshot"))?;
-        if page.coverage.endpoint != *endpoint
-            || page.entries.len() > page_size as usize
-            || page.watermark.sequence > 9_007_199_254_740_991
-            || page.entries.iter().any(|entry| {
-                entry.address.endpoint != *endpoint
-                    || entry.last_observation.journal_id != page.watermark.journal_id
-                    || entry.last_observation.sequence > page.watermark.sequence
-            })
-            || page
-                .next_cursor
-                .as_ref()
-                .is_some_and(|cursor| cursor.is_empty() || cursor.len() > 1024)
-        {
-            return Err(ClientError::Protocol("inconsistent address snapshot"));
-        }
-        Ok(page)
-    }
-
     pub async fn read_journal(
         &self,
         endpoint: &collaboration_protocol::EndpointRef,
@@ -540,6 +500,46 @@ impl CollaborationClient {
         Ok(page)
     }
 
+    /// Reads a captured historical address page without loading any native thread.
+    pub async fn list_addresses(
+        &self,
+        endpoint: &collaboration_protocol::EndpointRef,
+        page_size: u32,
+        cursor: Option<&str>,
+    ) -> Result<collaboration_protocol::AddressPage, ClientError> {
+        if !(1..=100).contains(&page_size)
+            || cursor.is_some_and(|cursor| cursor.is_empty() || cursor.len() > 1024)
+        {
+            return Err(ClientError::InvalidRequest(
+                "invalid address snapshot arguments",
+            ));
+        }
+        let params = json!(collaboration_protocol::AddressListParams {
+            endpoint: endpoint.clone(),
+            page_size,
+            cursor: cursor.map(str::to_owned),
+        });
+        let value = self.connection.call("addresses_list", params).await?;
+        let page: collaboration_protocol::AddressPage = serde_json::from_value(value)
+            .map_err(|_| ClientError::Protocol("invalid address snapshot"))?;
+        if page.coverage.endpoint != *endpoint
+            || page.entries.len() > page_size as usize
+            || page.watermark.sequence > 9_007_199_254_740_991
+            || page.entries.iter().any(|entry| {
+                entry.address.endpoint != *endpoint
+                    || entry.last_observation.journal_id != page.watermark.journal_id
+                    || entry.last_observation.sequence > page.watermark.sequence
+            })
+            || page
+                .next_cursor
+                .as_ref()
+                .is_some_and(|cursor| cursor.is_empty() || cursor.len() > 1024)
+        {
+            return Err(ClientError::Protocol("inconsistent address snapshot"));
+        }
+        Ok(page)
+    }
+
     pub async fn list_endpoints(&self) -> Result<EndpointInventory, ClientError> {
         let value = self.connection.call("endpoints_list", json!({})).await?;
         let result: EndpointInventory = serde_json::from_value(value)
@@ -551,37 +551,6 @@ impl CollaborationClient {
             return Err(ClientError::Protocol("inconsistent endpoint inventory"));
         }
         Ok(result)
-    }
-
-    pub async fn installation_show(
-        &self,
-    ) -> Result<collaboration_protocol::InstallationIdentity, ClientError> {
-        let value = match self.connection.call("installation_show", json!({})).await {
-            // rmcp reports an absent tool as invalid_params with no data. This
-            // operation has no arguments, so our empty request cannot fail input validation.
-            Err(ClientError::Rejected {
-                code: -32602,
-                data: None,
-            }) => {
-                return Err(ClientError::UnsupportedCapability(
-                    "unknown tool installation_show on the running Router",
-                ));
-            }
-            result => result?,
-        };
-        let identity: collaboration_protocol::InstallationIdentity = serde_json::from_value(value)
-            .map_err(|_| ClientError::Protocol("invalid installation identity"))?;
-        if identity.service_id != self.identity.service_id {
-            return Err(ClientError::Protocol(
-                "installation identity belongs to another Router",
-            ));
-        }
-        if identity.central.record().is_some_and(|link| {
-            !link.is_valid() || link.peer.to_string() != identity.peer_id.as_str()
-        }) {
-            return Err(ClientError::Protocol("invalid central link record"));
-        }
-        Ok(identity)
     }
 }
 

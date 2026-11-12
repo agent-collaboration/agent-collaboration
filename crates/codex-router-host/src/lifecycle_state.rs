@@ -192,29 +192,8 @@ pub struct LifecycleOutcome {
     pub classification: LifecycleOutcomeClassification,
 }
 
-/// Orthogonal live status returned through the operator boundary.
-#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
-#[serde(
-    tag = "kind",
-    rename_all = "camelCase",
-    rename_all_fields = "camelCase"
-)]
-pub enum FleetHostObservation {
-    #[default]
-    NotObserved,
-    Available {
-        central: Option<Box<board_sync_protocol::FleetLinkRecord>>,
-        stuck_mail: collaboration_protocol::StuckMailSummary,
-    },
-    Unavailable {
-        message: String,
-    },
-}
-
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct HostSnapshot {
-    #[serde(default)]
-    fleet: Box<FleetHostObservation>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     port_selection: Option<crate::HostPortSelection>,
     phase: HostPhase,
@@ -258,7 +237,6 @@ impl HostSnapshot {
     #[must_use]
     pub fn new(dimensions: HostSnapshotDimensions) -> Self {
         Self {
-            fleet: Box::new(FleetHostObservation::NotObserved),
             port_selection: None,
             phase: dimensions.phase,
             router: dimensions.router,
@@ -271,15 +249,6 @@ impl HostSnapshot {
             last_lifecycle_outcome: dimensions.last_lifecycle_outcome,
             last_login_reload: None,
         }
-    }
-
-    pub fn fleet(&self) -> &FleetHostObservation {
-        &self.fleet
-    }
-
-    pub(crate) fn with_fleet(mut self, fleet: FleetHostObservation) -> Self {
-        self.fleet = Box::new(fleet);
-        self
     }
 
     /// Attaches the startup selections reported by the owning Host.

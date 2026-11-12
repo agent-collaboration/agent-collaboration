@@ -33,91 +33,9 @@ pub fn central_router<Platform: CentralPlatform>(
 ) -> Router {
     let application = Arc::new(application);
     let router = Router::new()
-        .route(
-            "/admin/v1/copies/{id}/health",
-            get(crate::owner_http_routes::health::<Platform>),
-        )
-        .route(
-            "/admin/v1/copies",
-            get(crate::owner_http_routes::copies::<Platform>),
-        )
-        .route(
-            "/admin/v1/copies/{id}/repair",
-            post(crate::owner_http_routes::repair::<Platform>),
-        )
-        .route(
-            "/admin/v1/copies/migrate",
-            post(crate::owner_http_routes::migrate::<Platform>),
-        )
-        .route(
-            "/admin/v1/import/fleet",
-            post(crate::admin_import_routes::fleet::<Platform>),
-        )
-        .route(
-            "/admin/v1/import/projects/{id}",
-            post(crate::admin_import_routes::project::<Platform>),
-        )
         .route("/admin/v1/machines/enroll", post(enroll::<Platform>))
-        .route(
-            "/admin/v1/projects/{id}/move",
-            post(crate::owner_registry_http::move_project::<Platform>),
-        )
-        .route(
-            "/admin/v1/projects/{id}/takeover/preview",
-            post(crate::owner_registry_http::preview::<Platform>),
-        )
-        .route(
-            "/admin/v1/projects/{id}/takeover",
-            post(crate::owner_registry_http::takeover::<Platform>),
-        )
         .route("/admin/v1/machines/revoke", post(revoke::<Platform>))
-        .route(
-            "/admin/v1/projects/{id}/retire",
-            post(crate::owner_registry_http::retire::<Platform>),
-        )
         .route("/v1/session", get(open_session::<Platform>));
-    #[cfg(feature = "conformance")]
-    let router = router
-        .route(
-            "/admin/v1/conformance/fleet-receipt",
-            post(crate::conformance_fleet::control::<Platform>),
-        )
-        .route(
-            "/admin/v1/conformance/revocation",
-            post(crate::machine_enrollment::conformance_revocation::control::<Platform>),
-        )
-        .route(
-            "/admin/v1/conformance/access",
-            post(crate::conformance_access::verify::<Platform>),
-        )
-        .route(
-            "/admin/v1/conformance/holder-call",
-            post(crate::conformance_holder::control::<Platform>),
-        )
-        .route(
-            "/admin/v1/conformance/holder-status",
-            post(crate::conformance_holder::status::<Platform>),
-        )
-        .route(
-            "/admin/v1/conformance/registry-dispatches",
-            get(crate::conformance_holder::dispatches::<Platform>),
-        )
-        .route(
-            "/admin/v1/conformance/copy-call",
-            post(crate::conformance_copy::control::<Platform>),
-        )
-        .route(
-            "/admin/v1/conformance/copy-status",
-            post(crate::conformance_copy::status::<Platform>),
-        )
-        .route(
-            "/admin/v1/conformance/copy-wait",
-            post(crate::conformance_copy::wait_control::<Platform>),
-        )
-        .route(
-            "/admin/v1/conformance/drive-tokens",
-            get(crate::conformance_copy::drive_tokens::<Platform>),
-        );
     router
         .fallback(|| async { (StatusCode::UNAUTHORIZED, Json(AccessRefusal::RouteRefused)) })
         .layer(middleware::from_fn_with_state(

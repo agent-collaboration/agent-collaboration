@@ -205,13 +205,6 @@ impl NativeDeliveryResult {
         self.route_evidence = Some(evidence);
         self
     }
-    pub fn into_local_observation(self) -> crate::RouterLocalObservation {
-        crate::RouterLocalObservation {
-            receipt: self.receipt,
-            scheduled_retry_at: None,
-            route_evidence: self.route_evidence,
-        }
-    }
 }
 
 /// Existing external-client stand-ins supply scripted receipts, not native

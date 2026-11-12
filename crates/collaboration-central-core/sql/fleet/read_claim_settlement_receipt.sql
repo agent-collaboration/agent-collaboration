@@ -1,1 +1,0 @@
-SELECT receipt_id,operation_id,step_name,attempt_id,project_id,result_kind,stored_epoch,stored_incarnation,stored_change,CAST(created_at AS TEXT) AS created_at,typeof(created_at) AS created_class,CAST(updated_at AS TEXT) AS updated_at,typeof(updated_at) AS updated_class FROM lease_claim_settlement_receipts WHERE operation_id=? AND step_name=?;

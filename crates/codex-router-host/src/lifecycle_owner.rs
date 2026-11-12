@@ -509,10 +509,6 @@ impl HostRuntime {
                         || retained_updater.is_some()
                         || active_status.is_some();
                     request_admission::handle_operator_work(work, request_admission::OperatorRuntimeContext {
-                        fleet_observation: match &collaboration {
-                            Some(owner) => owner.observe_fleet(),
-                            None => Box::pin(async { crate::FleetHostObservation::Unavailable { message: "collaboration runtime is not configured".to_owned() } }),
-                        },
                         state: &mut state,
                         app_server: &mut app_server,
                         router_child: &mut router_child,

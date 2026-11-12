@@ -15,9 +15,8 @@ permissions:
   contents: read
   actions: read
 
-# Static checks, Worker conformance, workspace tests and E2E each report
-# their result. Light static checks overlap serial Cargo work; feature-specific
-# E2E binaries keep their own runner instead of competing with workspace tests.
+# Static checks, the Worker build and workspace tests each report their
+# result. Light static checks overlap serial Cargo work.
 #
 # Every job installs all rust-toolchain.toml components up front: otherwise
 # parallel background cargo steps race rustup's on-demand component download.
@@ -78,7 +77,6 @@ jobs:
       - name: Check TypeScript verification harness
         run: |
           pnpm --dir verification install --frozen-lockfile
-          pnpm --dir tools/central-migration install --frozen-lockfile
           pnpm --dir verification run check
           pnpm --dir verification run lint
           pnpm --dir verification run format:check
@@ -127,7 +125,7 @@ jobs:
         background: true
         run: |
           set -euo pipefail
-          production_graph="$(cargo tree --locked --color never --target aarch64-apple-darwin -p codex-router-cli -p agent-collaboration -p agent-router-update -e normal,build,features)"
+          production_graph="$(cargo tree --locked --color never --target aarch64-apple-darwin -p codex-router-cli -p agent-collaboration -e normal,build,features)"
           if grep -Eq -- '-test-support v[0-9]|feature "test-support"' <<< "$production_graph"; then
             echo 'production dependency graph includes a test-support crate or feature' >&2
             exit 1
@@ -351,8 +349,6 @@ jobs:
       CARGO_INCREMENTAL: "0"
       # Re-run attempts upload their own archive instead of reusing a stale one.
       TEST_ARCHIVE_NAME: workspace-test-archive-${{ github.run_attempt }}
-      # Tests whose real Host, importer and forwarding-timer roots run in e2e.
-      WORKSPACE_TEST_FILTER: 'not((package(=agent-collaboration) & binary(=e2e)) | (package(=agent-router-update) & binary(=e2e)) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/)))'
     steps:
       # The steps below build the workspace under several package selections and
       # feature sets, which together outgrow the runner's free disk. Remove
@@ -451,7 +447,7 @@ jobs:
         run: |
           # Exercise private fixture setup under the ordinary Unix mask.
           umask 022
-          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness -E "$WORKSPACE_TEST_FILTER" --partition count:1/4
+          cargo nextest run --profile ci --status-level all --final-status-level all --workspace --features codex-router-cli/keychain-test-support --exclude codex-router-quota-reset-test-harness --partition count:1/4
       # Only shard 2 builds and runs the quota-reset harness and the default-port
       # cutover while shard 1 is still building. Each keeps its own package and
       # feature selection, and both finish before the archive lands in target/.
@@ -508,7 +504,7 @@ jobs:
         run: |
           # Exercise private fixture setup under the ordinary Unix mask.
           umask 022
-          cargo nextest run --profile ci --status-level all --final-status-level all --binaries-metadata target/nextest/binaries-metadata.json --cargo-metadata target/nextest/cargo-metadata.json -E "$WORKSPACE_TEST_FILTER" --partition count:${{ matrix.shard }}/4
+          cargo nextest run --profile ci --status-level all --final-status-level all --binaries-metadata target/nextest/binaries-metadata.json --cargo-metadata target/nextest/cargo-metadata.json --partition count:${{ matrix.shard }}/4
       - name: Save pinned Rust tools
         if: matrix.shard == 1 && github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.rust_tools.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
@@ -519,94 +515,8 @@ jobs:
             tmp/rust-tools/bin/cargo-audit
           key: ${{ steps.rust_tools.outputs.cache-primary-key }}
 
-  e2e:
-    name: Rust local end-to-end
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    env:
-      CARGO_TERM_COLOR: always
-      RUST_TOOLCHAIN: 1.98.1
-      CARGO_PROFILE_DEV_DEBUG: "0"
-      CARGO_PROFILE_TEST_DEBUG: "0"
-      CARGO_INCREMENTAL: "0"
-      CARGO_BUILD_JOBS: "4"
-      TMPDIR: /tmp
-      CODEX_ROUTER_E2E_HOST_BINARY: ${{ github.workspace }}/target/debug/examples/board-debug-runtime
-      CODEX_ROUTER_E2E_PARENT: /tmp/router-board-e2e-${{ github.run_id }}-${{ github.run_attempt }}
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v4
-        with:
-          node-version-file: verification/package.json
-      - uses: pnpm/action-setup@v4
-        with:
-          package_json_file: verification/package.json
-      - name: Install TypeScript fixture dependencies
-        run: pnpm --dir verification install --frozen-lockfile
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUST_TOOLCHAIN }}
-          components: clippy,rustfmt,rust-src
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: e2e
-          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-      # The baseline spent over nine minutes rebuilding these pinned tools.
-      # Reuse the same verified cache as static/test before bootstrapping.
-      - name: Restore pinned Rust tools
-        id: rust_tools
-        uses: actions/cache/restore@v4
-        with:
-          path: |
-            tmp/rust-tools/bin/cargo-nextest
-            tmp/rust-tools/bin/cargo-deny
-            tmp/rust-tools/bin/cargo-audit
-          key: ${{ runner.os }}-${{ runner.arch }}-rust-tools-${{ hashFiles('scripts/tooling/tool-versions.tsv', 'scripts/tooling/bootstrap-tools.sh', '.github/actions/install-ci-tools/action.yml', 'rust-toolchain.toml') }}
-      - name: Verify and install pinned Rust tools
-        uses: ./.github/actions/install-ci-tools
-        with:
-          cache-hit: ${{ steps.rust_tools.outputs.cache-hit }}
-      - name: Prepare owned runtime roots
-        run: mkdir -m 700 "$CODEX_ROUTER_E2E_PARENT"
-      - name: Build the real local entry points
-        run: |
-          cargo build --locked -p agent-collaboration --all-features --bins
-          cargo build --locked -p codex-router-host --features runtime-test-support --example board-debug-runtime
-          cargo build --locked -p agent-router-update --bin agent-router-update
-      - name: Build E2E test binaries
-        run: |
-          cargo nextest run --locked --profile ci --success-output final -p agent-collaboration --all-features --test e2e --test-threads 1 --color never --status-level all --final-status-level all --no-run
-          cargo nextest run --locked --profile ci -p agent-router-update --test e2e --test-threads 1 --color never --status-level all --final-status-level all --no-run
-          cargo nextest run --locked --profile ci -p collaboration-central-tokio --features conformance --test e2e --test-threads 1 --color never --status-level all --final-status-level all --no-run
-      - name: Run the deterministic local process journeys
-        run: |
-          set -o pipefail
-          cargo nextest run --locked --profile ci -p collaboration-central-tokio --features conformance --test e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee "$CODEX_ROUTER_E2E_PARENT/nextest.log"
-          cargo nextest run --locked --profile ci --success-output final -p agent-collaboration --all-features --test e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee -a "$CODEX_ROUTER_E2E_PARENT/nextest.log"
-          cargo nextest run --locked --profile ci -p agent-router-update --test e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee -a "$CODEX_ROUTER_E2E_PARENT/nextest.log"
-          if grep -Eq '^[[:space:]]*LEAK[[:space:]]' "$CODEX_ROUTER_E2E_PARENT/nextest.log"; then
-            echo "End-to-end child lifecycle leak detected" >&2
-            exit 1
-          fi
-      - name: Save pinned Rust tools
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.rust_tools.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            tmp/rust-tools/bin/cargo-nextest
-            tmp/rust-tools/bin/cargo-deny
-            tmp/rust-tools/bin/cargo-audit
-          key: ${{ steps.rust_tools.outputs.cache-primary-key }}
-      - name: Retain failed process evidence
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: rust-local-e2e-failures
-          path: ${{ env.CODEX_ROUTER_E2E_PARENT }}
-          if-no-files-found: ignore
-
   wasm:
-    name: Central Worker build and local workerd conformance
+    name: Central Worker build
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -650,45 +560,15 @@ jobs:
         run: |
           test "$("$RUNNER_TEMP/central-worker-tools/bin/worker-build" --version)" = '0.8.7'
           du -sb "$RUNNER_TEMP/central-worker-tools"
-          mkdir -p "$RUNNER_TEMP/central-node-tools"
-          pnpm --dir "$RUNNER_TEMP/central-node-tools" add --save-exact --allow-build workerd miniflare@5.20261012.0-beta
           echo "$RUNNER_TEMP/central-worker-tools/bin" >> "$GITHUB_PATH"
       - name: Check the workspace wasm shell and portable test contract
         run: |
           cargo fmt --manifest-path crates/collaboration-central-cloudflare/Cargo.toml -- --check
           cargo clippy --locked --manifest-path crates/collaboration-central-cloudflare/Cargo.toml --target wasm32-unknown-unknown --all-features -- -D warnings
-          cargo check --locked -p collaboration-central-conformance --no-default-features --target wasm32-unknown-unknown
       - name: Build the production profile and reject test controls
         run: |
           worker-build crates/collaboration-central-cloudflare --profile worker-release --no-opt -- --locked --no-default-features
           node verification/tooling/check-central-worker-bundle.ts production
-      # Legacy default/conformance and Fleet feed/notice/outbox launchers retire
-      # under decisions508/513. Their remaining functional obligations, including
-      # normal Worker session/holder equivalence and G18, stay in the removal map.
-      - name: Prove current composed controls, transactions and physical restart
-        run: |
-          worker-build crates/collaboration-central-cloudflare --dev --no-opt -- --locked --features conformance-faults
-          node verification/tooling/check-central-worker-bundle.ts faults
-          for scenario in runtime-controls composed-copy-suite composed-transactions composed-numeric composed-fleet-conflict; do
-            TIMEFORMAT=$'WORKERD_TEST\t%3R\tcomposed_scope_workerd/'"$scenario"
-            time cargo run --locked -p collaboration-central-tokio --features conformance --example composed_scope_workerd -- "$scenario" node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957
-          done
-          for example in step_scope_workerd bootstrap_scope_workerd; do
-            TIMEFORMAT=$'WORKERD_TEST\t%3R\t'"$example"
-            time cargo run --locked -p collaboration-central-tokio --features conformance --example "$example" -- node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$example" 8957
-          done
-      - name: Prove bounded normal Access and session cases
-        run: |
-          for scenario in access-sessions access-carryover session-carryover; do
-            TIMEFORMAT=$'WORKERD_TEST\t%3R\tsession_scope_workerd/'"$scenario"
-            time cargo run --locked -p collaboration-central-tokio --features conformance --example session_scope_workerd -- node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957 "$scenario"
-          done
-      - name: Prove forwarding and mailbox rules on workerd
-        run: |
-          for scenario in forward-boundary forward-overlap forward-state forward-terminal forward-real-timer mailbox-identity mailbox-capacity mailbox-cancel fleet-mail-expiry mailbox-held-retention mailbox-report-terminal; do
-            TIMEFORMAT=$'WORKERD_TEST\t%3R\tsession_scope_workerd/'"$scenario"
-            time cargo run --locked -p collaboration-central-tokio --features conformance --example session_scope_workerd -- node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957 "$scenario"
-          done
       - name: Build the deployment candidate without test features
         run: |
           worker-build crates/collaboration-central-cloudflare --profile worker-release --no-opt -- --locked --no-default-features
@@ -705,7 +585,7 @@ jobs:
     if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main'
     # needs waits for rust-cache post saves, including successful jobs when
     # another validation job failed. The workflow serializes main producers.
-    needs: [static, architecture, metadata, variants, wasm, test, e2e]
+    needs: [static, architecture, metadata, variants, wasm, test]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

@@ -2,10 +2,10 @@
 use super::{
     ApprovalDecideParams, ApprovalDecideResult, ApprovalListParams, ApprovalListResponse,
     CallToolResult, CollaborationMcpServer, ConversationCloseRequest,
-    ConversationOperationSubmission, ConversationResumeRequest, EmptyToolInput, McpToolOutput,
-    OperationEffect, Parameters, ProviderSettingsAcceptRequest, ProviderSettingsFailure,
-    ProviderSettingsResult, ProviderSettingsSetRequest, application_result, operation_error_result,
-    rejection_failure, success_result, tool, tool_router, typed_failure_result,
+    ConversationOperationSubmission, ConversationResumeRequest, McpToolOutput, OperationEffect,
+    Parameters, ProviderSettingsAcceptRequest, ProviderSettingsFailure, ProviderSettingsResult,
+    ProviderSettingsSetRequest, application_result, operation_error_result, rejection_failure,
+    success_result, tool, tool_router, typed_failure_result,
 };
 
 #[tool_router(router = interaction_tool_router, vis = "pub(super)")]
@@ -115,14 +115,6 @@ impl CollaborationMcpServer {
                 .await,
             OperationEffect::Unknown,
         )
-    }
-
-    #[tool(name = "automation_status", description = "Reads automation readiness and configured attempt budgets without mutating them.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<collaboration_protocol::AutomationStatus>>())]
-    pub(super) async fn automation_status(
-        &self,
-        Parameters(EmptyToolInput {}): Parameters<EmptyToolInput>,
-    ) -> CallToolResult {
-        success_result(&self.application.automation().automation_status().await)
     }
 }
 

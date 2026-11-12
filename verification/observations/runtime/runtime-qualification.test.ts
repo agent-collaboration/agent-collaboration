@@ -19,10 +19,10 @@ function executable(directory: string): string {
   return path;
 }
 
-test("the worker proof example is bound to its normal build path, exact signing identity and declared features", (): void => {
+test("the worker proof Host is bound to its normal build path, exact signing identity and declared features", (): void => {
   const root = createFixtureDirectory("worker-host-qualification");
   try {
-    const directory = join(root, "target/debug/examples");
+    const directory = join(root, "target/debug");
     mkdirSync(directory, { recursive: true });
     const path = join(directory, "provider-only-debug-host");
     writeFileSync(path, "owned proof Host bytes");

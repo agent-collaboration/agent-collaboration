@@ -2,14 +2,13 @@ use codex_router_host::{
     CollaborationRuntime, CollaborationRuntimeInputs, ExternalProviderLaunchBinding,
     ExternalProviderStartup,
 };
-use collaboration_client::{CollaborationClient, MessageSendRequest, PublicMessageContent};
+use collaboration_client::CollaborationClient;
 use collaboration_protocol::{
     ChannelDescription, CodexGeneration, ConversationCreateRequest,
     ConversationOperationSettlement, ConversationOperationWaitOutput,
-    ConversationOperationWaitRequest, ConversationPromptRequest, DeliveryOutcome,
-    EndpointAvailability, EndpointId, EndpointRef, MessageContent, MessageText, OperationId,
-    PositiveSeconds, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess, SessionId,
-    SessionRef,
+    ConversationOperationWaitRequest, ConversationPromptRequest, EndpointAvailability, EndpointId,
+    EndpointRef, MessageContent, MessageText, OperationId, PositiveSeconds,
+    ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess, SessionId, SessionRef,
 };
 use std::os::unix::fs::PermissionsExt as _;
 
@@ -37,7 +36,6 @@ async fn collaboration_api_reaches_host_owned_provider_and_reuses_target() {
 
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
-            board_session: None,
             directory: root.path().to_owned(),
             codex_home: root.path().to_owned(),
             backend_socket: root.path().join("backend.sock"),
@@ -165,26 +163,6 @@ async fn collaboration_api_reaches_host_owned_provider_and_reuses_target() {
         } if settled_target == target
     ));
 
-    let receipt = client
-        .send_message(MessageSendRequest {
-            item_id: None,
-            target,
-            message: PublicMessageContent::HumanUser {
-                text: MessageText::try_from("routed provider message".to_owned()).expect("message"),
-            },
-            delivery: collaboration_protocol::MessageDelivery::Auto,
-            generation_guard: None,
-        })
-        .await
-        .expect("message receipt");
-    let collaboration_protocol::MessageSendResult::Local(receipt) = receipt else {
-        panic!("local provider returned remote sender custody");
-    };
-    assert!(
-        matches!(receipt.receipt.outcome, DeliveryOutcome::Started),
-        "{receipt:?}"
-    );
-
     runtime.shutdown().await.expect("runtime shutdown");
 }
 
@@ -210,7 +188,6 @@ async fn provider_process_exit_retires_advertisement_and_rejects_new_admission()
         .expect("provider executable");
     let start = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
-            board_session: None,
             directory: root.path().to_owned(),
             codex_home: root.path().to_owned(),
             backend_socket: root.path().join("backend.sock"),

@@ -12,7 +12,7 @@ pub enum RouterRegistryError {
     #[error("machine registry could not be read")]
     Unreadable,
     #[error(
-        "machine registry routers.jsonc is the old name and is not read; run agent-router-update to rename it to agent-sessions.jsonc"
+        "machine registry routers.jsonc is the old name and is not read; rename it to agent-sessions.jsonc"
     )]
     LegacyMachineListOnly,
     #[error(

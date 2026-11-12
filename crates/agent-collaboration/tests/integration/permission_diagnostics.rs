@@ -67,58 +67,6 @@ fn endpoint_discovery_reports_typed_permission_recovery_in_json_and_human_output
 }
 
 #[test]
-fn wake_permission_diagnostic_preserves_operation_id_and_pre_dispatch_exit() {
-    let fixture =
-        DeniedServiceDirectory::create("wake").unwrap_or_else(|error| panic!("fixture: {error}"));
-    let operation_id = "019f0000-0000-7000-8000-000000000001";
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
-        .args([
-            "wake",
-            "pause",
-            "--wakeup-id",
-            "019f0000-0000-7000-8000-000000000002",
-            "--operation-id",
-            operation_id,
-            "--json",
-            "--service-directory",
-        ])
-        .arg(&fixture.root)
-        .output()
-        .unwrap_or_else(|error| panic!("wake command: {error}"));
-
-    assert_eq!(output.status.code(), Some(3));
-    let record: serde_json::Value = serde_json::from_slice(&output.stdout)
-        .unwrap_or_else(|error| panic!("wake output: {error}"));
-    assert_eq!(record["operationId"], operation_id);
-    assert_eq!(record["error"]["kind"], "permissionDenied");
-    assert_eq!(record["error"]["nextAction"], "requestApproval");
-}
-
-#[test]
-fn wake_read_permission_diagnostic_preserves_explicit_null_operation_id() {
-    let fixture = DeniedServiceDirectory::create("wake-show")
-        .unwrap_or_else(|error| panic!("fixture: {error}"));
-    let output = std::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
-        .args([
-            "wake",
-            "show",
-            "--wakeup-id",
-            "019f0000-0000-7000-8000-000000000002",
-            "--json",
-            "--service-directory",
-        ])
-        .arg(&fixture.root)
-        .output()
-        .unwrap_or_else(|error| panic!("wake command: {error}"));
-
-    assert_eq!(output.status.code(), Some(3));
-    let record: serde_json::Value = serde_json::from_slice(&output.stdout)
-        .unwrap_or_else(|error| panic!("wake output: {error}"));
-    assert_eq!(record.get("operationId"), Some(&serde_json::Value::Null));
-    assert_eq!(record["error"]["kind"], "permissionDenied");
-}
-
-#[test]
 fn stream_and_raw_carrier_entrypoints_report_initial_permission_denial() {
     let fixture = DeniedServiceDirectory::create("stream-carriers")
         .unwrap_or_else(|error| panic!("fixture: {error}"));
@@ -280,15 +228,6 @@ fn api_command_families_share_permission_diagnostic() {
     let fixture = DeniedServiceDirectory::create("control-families")
         .unwrap_or_else(|error| panic!("fixture: {error}"));
     let directory = fixture.root.to_string_lossy().into_owned();
-    let uuid = "019f0000-0000-7000-8000-000000000003";
-    let address = serde_json::json!({
-        "endpoint": {
-            "serviceId": "019f0000-0000-7000-8000-000000000004",
-            "endpointId": "codex-local"
-        },
-        "sessionId": "permission-fixture"
-    })
-    .to_string();
     let commands: Vec<Vec<&str>> = vec![
         vec![
             "addresses",
@@ -327,60 +266,6 @@ fn api_command_families_share_permission_diagnostic() {
             "codex-local",
             "--session",
             "permission-fixture",
-            "--json",
-            "--service-directory",
-            &directory,
-        ],
-        vec![
-            "instruction",
-            "show",
-            "--instruction-id",
-            uuid,
-            "--json",
-            "--service-directory",
-            &directory,
-        ],
-        vec![
-            "run",
-            "show",
-            "--run-id",
-            uuid,
-            "--json",
-            "--service-directory",
-            &directory,
-        ],
-        vec![
-            "schedule",
-            "show",
-            "--schedule-id",
-            uuid,
-            "--json",
-            "--service-directory",
-            &directory,
-        ],
-        vec![
-            "automation",
-            "status",
-            "--json",
-            "--service-directory",
-            &directory,
-        ],
-        vec![
-            "workspace",
-            "list",
-            "--json",
-            "--service-directory",
-            &directory,
-        ],
-        vec![
-            "message",
-            "send",
-            "--to",
-            &address,
-            "--from",
-            &address,
-            "--text",
-            "permission fixture",
             "--json",
             "--service-directory",
             &directory,

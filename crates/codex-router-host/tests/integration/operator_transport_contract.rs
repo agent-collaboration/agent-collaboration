@@ -161,52 +161,6 @@ fn terminal_frames_preserve_busy_classification_and_live_snapshot()
 }
 
 #[test]
-fn older_host_terminal_frames_without_fleet_remain_decodable()
--> Result<(), Box<dyn std::error::Error>> {
-    // Arrange: the unchanged v1 envelope and snapshot of an older running Host.
-    for request in [
-        OperatorRequest::Status,
-        OperatorRequest::StopHost,
-        OperatorRequest::RestartRouter,
-        OperatorRequest::RestartAppServer,
-        OperatorRequest::UpdateCodex,
-    ] {
-        let frame = OperatorFrame::busy(request.clone(), ready_snapshot(), "busy".to_owned());
-        let mut older: serde_json::Value = serde_json::from_slice(&encode_operator_frame(&frame)?)?;
-        let snapshot = older
-            .pointer_mut("/frame/payload/snapshot")
-            .and_then(serde_json::Value::as_object_mut)
-            .ok_or("terminal snapshot missing")?;
-        check(
-            snapshot.remove("fleet").is_some(),
-            "fixture did not remove fleet",
-        )?;
-
-        // Act: use the actual installed-CLI decoder, including protocol validation.
-        let decoded = decode_operator_frame(&serde_json::to_vec(&older)?)?;
-
-        // Assert: missing observation neither hides the result nor invents a link.
-        let OperatorFrame::Terminal(response) = decoded else {
-            return Err("older Host terminal became nonterminal".into());
-        };
-        check_equal(response.request(), &request, "older Host request preserved")?;
-        check_equal(
-            response.classification(),
-            TerminalClassification::Busy,
-            "older Host classification preserved",
-        )?;
-        check(
-            matches!(
-                response.snapshot().fleet(),
-                codex_router_host::FleetHostObservation::NotObserved
-            ),
-            "older Host invented a Fleet observation",
-        )?;
-    }
-    Ok(())
-}
-
-#[test]
 fn hosted_readiness_is_derived_from_orthogonal_dimensions() {
     let degraded = HostSnapshot::new(HostSnapshotDimensions {
         phase: HostPhase::Mutating {

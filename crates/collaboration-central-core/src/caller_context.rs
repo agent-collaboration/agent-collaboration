@@ -39,14 +39,6 @@ pub(crate) enum CallAuthority {
     AccessMachine(AccessClientId),
 }
 impl CallerContext<EdgeKind> {
-    pub(crate) fn for_owner(owner: OwnerIdentity) -> Self {
-        Self {
-            address: (),
-            face: PhantomData,
-            authority: CallAuthority::Owner(owner),
-        }
-    }
-
     pub(crate) fn for_verified_edge(caller: AccessCaller) -> Result<Self, crate::AccessRefusal> {
         let authority = match caller {
             AccessCaller::Machine { client_id } => CallAuthority::AccessMachine(client_id),

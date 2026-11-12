@@ -1,5 +1,5 @@
 //! Where the provider proxy's store lives under a Router root, and the checkpoint
-//! `agent-router-update` runs before step 0008 renames the store from its former name.
+//! taken before the store is renamed from its former name.
 //!
 //! Every program that opens the store by Router root goes through
 //! [`provider_proxy_database_path`]; an explicit `--state-db` path still wins where a

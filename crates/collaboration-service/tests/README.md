@@ -6,16 +6,13 @@ Run integration tests with Cargo nextest:
 cargo nextest run --profile ci -p collaboration-service --features test-support
 ```
 
-Cost proofs rely on one process per test, because `read_cost_counter` keeps
-process-global counters and installs a process-global tracing subscriber.
-Nextest preserves that isolation even though the cases share one executable.
-Plain multi-case `cargo test` execution is not supported for this aggregate;
-`cargo test --no-run` remains useful for measuring compilation.
+Nextest runs each case in its own process.
 
 - `integration/main.rs` is the single external test target. Each former Cargo
   test root retains its own module namespace. The cases exercise application
-  assembly, board and thread APIs, admission and bounded read/write costs,
-  native/provider delivery, subscriptions, schedules, wakes, and storage recovery.
+  assembly, native and provider session control, ACP listeners, session delivery
+  routes and presence, inventories, the lifecycle journal, approvals, questions
+  and provider operations.
 - Subdirectories under `integration/` keep case-specific expansions and their
   fixture data beside the owning case module.
 - `support/` contains shared fixtures. Reused helpers are declared once by

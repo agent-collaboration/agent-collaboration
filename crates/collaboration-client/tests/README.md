@@ -6,13 +6,16 @@ Run the package with nextest:
 cargo nextest run --locked --profile ci -p collaboration-client
 ```
 
-`integration/main.rs` gathers the 19 former external roots. Cases cover typed
-API requests, refusals and lost responses; ACP conversations and native adapter
-settlement; service and repository discovery; subscriptions, permissions and
-nonregular history files. Library unit tests remain colocated.
+`integration/main.rs` gathers the 14 former external roots. Cases cover typed
+API requests, refusals and lost responses; the admission overload; ACP
+conversations and native adapter settlement; service discovery; permissions,
+the stored repository scope and nonregular history files. Library unit tests
+remain colocated. The board, subscription, central-admin and installation-peer
+roots were removed with their client calls.
 
-`installation_identity_test` sends schema-valid link records over the real
-service socket and checks installation-peer agreement and endpoint presence.
+`admission_overload` holds the served API's only request slot with a caught-up
+journal read that waits for new records, then checks that other calls are shed
+as the retryable overload.
 
 The aggregate declares the shared scripted API fixture once. Two former roots
 register the same two ACP cases: their four existing case names call one copy

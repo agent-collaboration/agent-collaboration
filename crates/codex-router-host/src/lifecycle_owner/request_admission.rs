@@ -104,7 +104,6 @@ pub(super) struct ActiveStatusObservation {
 }
 
 pub(super) struct OperatorRuntimeContext<'a> {
-    pub(super) fleet_observation: crate::collaboration_runtime::FleetObservationFuture,
     pub(super) state: &'a mut RuntimeState,
     pub(super) app_server: &'a mut Option<AppServerChild>,
     pub(super) router_child: &'a mut Option<RouterChild>,
@@ -332,7 +331,6 @@ pub(super) async fn handle_operator_work(work: OperatorWork, context: OperatorRu
                         router_executable_observer: std::sync::Arc::clone(
                             &context.router_executable_observer,
                         ),
-                        fleet_observation: context.fleet_observation,
                     },
                 ),
                 responses: vec![(work.request, work.response)],

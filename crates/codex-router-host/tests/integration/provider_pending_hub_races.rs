@@ -38,7 +38,6 @@ async fn start_host(root: &Path) -> TestResult<CollaborationRuntime> {
     std::fs::set_permissions(&provider, std::fs::Permissions::from_mode(0o700))?;
     Ok(CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
-            board_session: None,
             owner_human_id: None,
             directory: root.to_owned(),
             codex_home: root.to_owned(),

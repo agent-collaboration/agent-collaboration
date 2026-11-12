@@ -7,7 +7,7 @@
       {
         "command": ["<root>/tmp/rust-tools/bin/sqlx", "database", "create"],
         "environment": {
-          "DATABASE_URL": "sqlite://<root>/tmp/<schema>/automation-schema.sqlite"
+          "DATABASE_URL": "sqlite://<root>/tmp/<schema>/account-schema.sqlite"
         }
       },
       {
@@ -16,21 +16,21 @@
           "migrate",
           "run",
           "--source",
-          "crates/automation-storage/migrations"
+          "crates/codex-router-state/migrations"
         ],
         "environment": {
-          "DATABASE_URL": "sqlite://<root>/tmp/<schema>/automation-schema.sqlite"
+          "DATABASE_URL": "sqlite://<root>/tmp/<schema>/account-schema.sqlite"
         }
       },
       {
-        "command": ["cargo", "clean", "--package", "path+file://<root>/crates/automation-storage"],
+        "command": ["cargo", "clean", "--package", "path+file://<root>/crates/codex-router-state"],
         "environment": {
           "SQLX_OFFLINE": "true",
           "RUSTC_WRAPPER": "<wrapper>",
-          "SQLX_PREPARE_PACKAGE": "automation-storage",
-          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/automation-storage",
-          "SQLX_PREPARE_DATABASE_URL": "sqlite://<root>/tmp/<schema>/automation-schema.sqlite",
-          "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/automation-storage-metadata"
+          "SQLX_PREPARE_PACKAGE": "codex-router-state",
+          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/codex-router-state",
+          "SQLX_PREPARE_DATABASE_URL": "sqlite://<root>/tmp/<schema>/account-schema.sqlite",
+          "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/codex-router-state-metadata"
         }
       },
       {
@@ -39,16 +39,16 @@
           "check",
           "--locked",
           "--package",
-          "path+file://<root>/crates/automation-storage",
+          "path+file://<root>/crates/codex-router-state",
           "--all-targets"
         ],
         "environment": {
           "SQLX_OFFLINE": "true",
           "RUSTC_WRAPPER": "<wrapper>",
-          "SQLX_PREPARE_PACKAGE": "automation-storage",
-          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/automation-storage",
-          "SQLX_PREPARE_DATABASE_URL": "sqlite://<root>/tmp/<schema>/automation-schema.sqlite",
-          "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/automation-storage-metadata"
+          "SQLX_PREPARE_PACKAGE": "codex-router-state",
+          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/codex-router-state",
+          "SQLX_PREPARE_DATABASE_URL": "sqlite://<root>/tmp/<schema>/account-schema.sqlite",
+          "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/codex-router-state-metadata"
         }
       }
     ],
@@ -57,6 +57,6 @@
         "query-original.json": "original"
       }
     },
-    "stderr": "SQLx metadata preparation failed: automation-storage: no checked queries were described\n"
+    "stderr": "SQLx metadata preparation failed: codex-router-state: no checked queries were described\n"
   }
 }

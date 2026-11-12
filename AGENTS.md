@@ -110,15 +110,15 @@ No wall-clock testing. Time comes from one injected clock, created in one place 
 - Local Apple Silicon `cargo run` and `cargo test`, in any profile, go
   through `scripts/cargo_debug_signing_runner.sh`, which signs every
   executable it runs with the same certificate, without a secure timestamp so
-  it works offline: `codex-router`, `agent-collaboration`, `agent-sessions`,
-  `agent-router-update` and `board-debug-runtime` under
+  it works offline: `codex-router`, `agent-collaboration`, `agent-sessions`
+  and `board-debug-runtime` under
   `dev.shravansunder.<executable>.debug`, and test, example and helper
   binaries under `dev.shravansunder.test.<name>`. Never execute a freshly
   built binary unsigned: macOS verifies each new ad-hoc-signed executable,
   and nextest launches every test binary. Debug and released builds are different code identities on
   purpose: the debug Router keeps its own Keychain item, and approvals given
   to one never apply to the other. A debug build another process starts
-  directly, such as the `--router-binary` a debug-host example launches,
+  directly, such as the `--router-binary` a debug-host binary launches,
   bypasses the runner; sign it first with
   `scripts/cargo_debug_signing_runner.sh --sign-only <executable>...` (any
   built executable). Before running anything, the runner also signs every

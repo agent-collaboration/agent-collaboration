@@ -2,7 +2,6 @@
 use collaboration_central_core::ObjectAddress;
 pub(crate) fn location(address: &ObjectAddress) -> (&'static str, String) {
     match address {
-        ObjectAddress::Copy(project) => ("PROJECT_COPIES", project.to_string()),
         ObjectAddress::Fleet => ("FLEET", "fleet".into()),
     }
 }

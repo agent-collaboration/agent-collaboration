@@ -44,10 +44,11 @@ const packedRows = new TextDecoder("utf-8", { fatal: true })
   );
 assert.deepEqual(
   packedRows.map((row) => row.name).sort(),
-  Array.from(
-    { length: 173 },
-    (_, index) => `embedded-acp-${String(index).padStart(2, "0")}.json`,
-  ).sort(),
+  Array.from({ length: 173 }, (_, index) => index)
+    // 156 retired with the provider load-error fixture, whose only Rust caller was removed.
+    .filter((index) => index !== 156)
+    .map((index) => `embedded-acp-${String(index).padStart(2, "0")}.json`)
+    .sort(),
 );
 for (const { name, source } of packedRows.toSorted((left, right) =>
   left.name.localeCompare(right.name),

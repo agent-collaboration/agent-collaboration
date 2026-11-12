@@ -13,20 +13,12 @@ export default {
       ACCESS_SESSION_AUD: { type: "text", value: "REPLACE_SESSION_APP_AUD" },
       ACCESS_ADMIN_AUD: { type: "text", value: "REPLACE_ADMIN_APP_AUD" },
       ACCESS_OWNER_IDENTITY: { type: "text", value: "REPLACE_OWNER_IDENTITY" },
-      CENTRAL_HOLDER_ANSWER_TIMEOUT: { type: "text", value: '{"secs":20,"nanos":0}' },
-      CENTRAL_COPY_ACK_WAIT: { type: "text", value: '{"secs":20,"nanos":0}' },
       CENTRAL_REGISTRY_CONFIG: { type: "text", value: "REPLACE_REGISTRY_CONFIG_JSON" },
       // JSON with the deployment's UUIDv7 relayPeer; required and validated by central.
       CENTRAL_DELIVERY_CONFIG: { type: "text", value: "REPLACE_DELIVERY_CONFIG_JSON" },
-      PROJECT_COPIES: {
-        type: "durable-object",
-        worker: "replace-worker-name",
-        exportName: "ProjectCopyObject",
-      },
       FLEET: { type: "durable-object", worker: "replace-worker-name", exportName: "FleetObject" },
     },
     exports: {
-      ProjectCopyObject: { type: "durable-object", storage: "sqlite" },
       FleetObject: { type: "durable-object", storage: "sqlite" },
     },
   },

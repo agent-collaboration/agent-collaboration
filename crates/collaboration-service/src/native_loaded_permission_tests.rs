@@ -1,14 +1,5 @@
 //! Known-route input reports permission differences while preserving attachment checks.
 use super::*;
-use agent_automation::{CapturedRunInputs, ExecutionTiming, RouteEffectEvidence, RunId};
-use collaboration_contracts::RunEvidenceDisposition;
-use collaboration_contracts::RunEvidenceSink;
-use collaboration_contracts::RunSubmission;
-use collaboration_contracts::SessionDeliveryRoute;
-use std::sync::{
-    Mutex,
-    atomic::{AtomicBool, Ordering},
-};
 
 #[path = "native_loaded_permission_fixture.rs"]
 mod policy_fixture;
@@ -16,12 +7,8 @@ use policy_fixture::*;
 
 #[path = "native_policy_preservation_tests.rs"]
 mod preservation_policy_tests;
-#[path = "native_policy_queue_tests.rs"]
-mod queue_policy_tests;
 #[path = "native_recorded_classification_tests.rs"]
 mod recorded_classification_tests;
-#[path = "native_policy_stored_run_tests.rs"]
-mod stored_policy_tests;
 
 #[tokio::test]
 async fn a_message_without_a_client_id_gets_a_uuidv7_correlation() {
@@ -32,9 +19,6 @@ async fn a_message_without_a_client_id_gets_a_uuidv7_correlation() {
             cold: ReplyPolicy::Matching,
             loaded: ReplyPolicy::Matching,
             loaded_delivery: MessageDelivery::Auto,
-            turn_intent: None,
-            retire_loaded: None,
-            stored_run: None,
         },
     )
     .unwrap();
@@ -85,9 +69,6 @@ async fn cold_and_loaded_messages_both_report_narrowed_permissions() {
             cold: ReplyPolicy::Narrowed,
             loaded: ReplyPolicy::Narrowed,
             loaded_delivery: MessageDelivery::Auto,
-            turn_intent: None,
-            retire_loaded: None,
-            stored_run: None,
         },
     )
     .unwrap();
@@ -142,117 +123,6 @@ async fn cold_and_loaded_messages_both_report_narrowed_permissions() {
 }
 
 #[tokio::test]
-async fn scheduled_route_reports_narrowing_but_refuses_missing_directory() {
-    for policy in [ReplyPolicy::Narrowed, ReplyPolicy::MissingDirectory] {
-        let fixture = RecordedPolicyFixture::create().await.unwrap();
-        let server = policy_server(
-            &fixture,
-            PolicyServerCase {
-                cold: ReplyPolicy::Matching,
-                loaded: policy,
-                loaded_delivery: MessageDelivery::Auto,
-                turn_intent: None,
-                retire_loaded: None,
-                stored_run: None,
-            },
-        )
-        .unwrap();
-        let directory = collaboration_runtime::EndpointDirectory::new(
-            fixture.backend.endpoint.service_id.clone(),
-        );
-        directory.publish(fixture.endpoint.clone()).unwrap();
-        let route = collaboration_runtime::CodexAppServerDeliveryRoute::new(
-            fixture.clock.clone(),
-            fixture.backend.endpoint.service_id.clone(),
-            directory,
-            fixture.backend.clone(),
-            Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
-        )
-        .with_approval_broker(&fixture.broker);
-        let scheduled = route.scheduled_runs().unwrap();
-        let sink = CapturingRunSink {
-            evidence: Mutex::new(Vec::new()),
-            turn_intent: Arc::new(AtomicBool::new(false)),
-        };
-        let first = tokio::time::timeout(
-            Duration::from_secs(5),
-            scheduled.submit_run(fixture.scheduled_run(), &sink),
-        )
-        .await
-        .unwrap()
-        .unwrap();
-        let second = tokio::time::timeout(
-            Duration::from_secs(5),
-            scheduled.submit_run(fixture.scheduled_run(), &sink),
-        )
-        .await
-        .unwrap()
-        .unwrap();
-        let exchanges = tokio::time::timeout(Duration::from_secs(5), server)
-            .await
-            .unwrap()
-            .unwrap()
-            .unwrap();
-        assert!(matches!(first, RunSubmission::NotStartedBusy));
-        let cold = exchanges[0]
-            .iter()
-            .find(|request| request["method"] == "thread/resume")
-            .unwrap();
-        assert_eq!(
-            cold.pointer("/params/permissions"),
-            Some(&json!("router-workspace-write")),
-            "scheduled cold resume must keep the recorded policy dependency"
-        );
-        assert_eq!(
-            cold.pointer("/params/config/permissions.router-workspace-write.filesystem"),
-            Some(&json!(fixture.filesystem))
-        );
-        match (policy, second) {
-            (ReplyPolicy::Narrowed, RunSubmission::Started(accepted)) => {
-                let collaboration_protocol::DeliveryClientReceipt::CodexAppServer(receipt) =
-                    accepted.receipt.client.unwrap()
-                else {
-                    panic!("native receipt expected");
-                };
-                assert_eq!(
-                    receipt.permission_differences,
-                    vec![collaboration_protocol::PermissionDifference::WritableRoots]
-                );
-                assert_eq!(
-                    exchanges[1]
-                        .iter()
-                        .filter(|request| request["method"] == "turn/start")
-                        .count(),
-                    1
-                );
-            }
-            (ReplyPolicy::MissingDirectory, RunSubmission::Unknown) => {
-                assert!(
-                    exchanges
-                        .iter()
-                        .flatten()
-                        .all(|request| request["method"] != "turn/start")
-                );
-            }
-            _ => panic!("scheduled permission report or cwd refusal lost"),
-        }
-        let evidence = sink.evidence.lock().unwrap();
-        let RouteEffectEvidence::CodexAppServer(last) = evidence.last().unwrap() else {
-            panic!("native evidence expected");
-        };
-        assert_eq!(last.resume, agent_automation::PreparationEffect::Accepted);
-        assert_eq!(
-            last.submission,
-            if matches!(policy, ReplyPolicy::Narrowed) {
-                agent_automation::SubmissionEffect::Accepted
-            } else {
-                agent_automation::SubmissionEffect::NotDispatched
-            }
-        );
-    }
-}
-
-#[tokio::test]
 async fn matching_loaded_policy_allows_each_message_mode_without_overrides() {
     for mode in [
         MessageDelivery::Auto,
@@ -266,9 +136,6 @@ async fn matching_loaded_policy_allows_each_message_mode_without_overrides() {
                 cold: ReplyPolicy::Matching,
                 loaded: ReplyPolicy::Matching,
                 loaded_delivery: mode,
-                turn_intent: None,
-                retire_loaded: None,
-                stored_run: None,
             },
         )
         .unwrap();
@@ -325,9 +192,6 @@ async fn narrowed_loaded_policy_reports_differences_for_queue_and_steer() {
                 cold: ReplyPolicy::Matching,
                 loaded: ReplyPolicy::Narrowed,
                 loaded_delivery: mode,
-                turn_intent: None,
-                retire_loaded: None,
-                stored_run: None,
             },
         )
         .unwrap();
@@ -372,137 +236,4 @@ async fn narrowed_loaded_policy_reports_differences_for_queue_and_steer() {
             1
         );
     }
-}
-
-#[tokio::test]
-async fn scheduled_matching_loaded_policy_preserves_idle_admission_and_intent_order() {
-    let fixture = RecordedPolicyFixture::create().await.unwrap();
-    let intent = Arc::new(AtomicBool::new(false));
-    let server = policy_server(
-        &fixture,
-        PolicyServerCase {
-            cold: ReplyPolicy::Matching,
-            loaded: ReplyPolicy::Matching,
-            loaded_delivery: MessageDelivery::Auto,
-            turn_intent: Some(intent.clone()),
-            retire_loaded: None,
-            stored_run: None,
-        },
-    )
-    .unwrap();
-    let directory =
-        collaboration_runtime::EndpointDirectory::new(fixture.backend.endpoint.service_id.clone());
-    directory.publish(fixture.endpoint.clone()).unwrap();
-    let route = collaboration_runtime::CodexAppServerDeliveryRoute::new(
-        fixture.clock.clone(),
-        fixture.backend.endpoint.service_id.clone(),
-        directory,
-        fixture.backend.clone(),
-        Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
-    )
-    .with_approval_broker(&fixture.broker);
-    let scheduled = route.scheduled_runs().unwrap();
-    let sink = CapturingRunSink {
-        evidence: Mutex::new(Vec::new()),
-        turn_intent: intent,
-    };
-    let first = tokio::time::timeout(
-        Duration::from_secs(5),
-        scheduled.submit_run(fixture.scheduled_run(), &sink),
-    )
-    .await
-    .unwrap()
-    .unwrap();
-    let second = tokio::time::timeout(
-        Duration::from_secs(5),
-        scheduled.submit_run(fixture.scheduled_run(), &sink),
-    )
-    .await
-    .unwrap()
-    .unwrap();
-    let exchanges = tokio::time::timeout(Duration::from_secs(5), server)
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap();
-    assert!(matches!(first, RunSubmission::NotStartedBusy));
-    assert!(matches!(second, RunSubmission::Started(_)));
-    assert!(
-        !exchanges[0]
-            .iter()
-            .any(|call| call["method"] == "turn/start")
-    );
-    assert_eq!(
-        exchanges[1]
-            .iter()
-            .find(|call| call["method"] == "thread/resume")
-            .unwrap()["params"],
-        json!({"threadId":THREAD,"excludeTurns":true})
-    );
-    let input = exchanges[1]
-        .iter()
-        .find(|call| call["method"] == "turn/start")
-        .unwrap();
-    assert_eq!(input.pointer("/params/effort"), Some(&json!("medium")));
-    assert!(input.pointer("/params/clientUserMessageId").is_some());
-}
-
-#[tokio::test]
-async fn scheduled_generation_retired_during_loaded_validation_never_submits_input() {
-    let fixture = RecordedPolicyFixture::create().await.unwrap();
-    let server = policy_server(
-        &fixture,
-        PolicyServerCase {
-            cold: ReplyPolicy::Matching,
-            loaded: ReplyPolicy::Matching,
-            loaded_delivery: MessageDelivery::Auto,
-            turn_intent: None,
-            retire_loaded: Some(fixture.backend.gate.clone()),
-            stored_run: None,
-        },
-    )
-    .unwrap();
-    let directory =
-        collaboration_runtime::EndpointDirectory::new(fixture.backend.endpoint.service_id.clone());
-    directory.publish(fixture.endpoint.clone()).unwrap();
-    let route = collaboration_runtime::CodexAppServerDeliveryRoute::new(
-        fixture.clock.clone(),
-        fixture.backend.endpoint.service_id.clone(),
-        directory,
-        fixture.backend.clone(),
-        Arc::new(collaboration_runtime::UnmaterializedThreadHolder::new()),
-    )
-    .with_approval_broker(&fixture.broker);
-    let scheduled = route.scheduled_runs().unwrap();
-    let sink = CapturingRunSink {
-        evidence: Mutex::new(Vec::new()),
-        turn_intent: Arc::new(AtomicBool::new(false)),
-    };
-    let first = tokio::time::timeout(
-        Duration::from_secs(5),
-        scheduled.submit_run(fixture.scheduled_run(), &sink),
-    )
-    .await
-    .unwrap()
-    .unwrap();
-    let second = tokio::time::timeout(
-        Duration::from_secs(5),
-        scheduled.submit_run(fixture.scheduled_run(), &sink),
-    )
-    .await
-    .unwrap()
-    .unwrap();
-    let exchanges = tokio::time::timeout(Duration::from_secs(5), server)
-        .await
-        .unwrap()
-        .unwrap()
-        .unwrap();
-    assert!(matches!(first, RunSubmission::NotStartedBusy));
-    assert!(matches!(second, RunSubmission::NotStartedBusy));
-    assert!(
-        !exchanges[1]
-            .iter()
-            .any(|call| call["method"] == "turn/start")
-    );
-    assert!(!sink.turn_intent.load(Ordering::SeqCst));
 }

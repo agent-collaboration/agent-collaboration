@@ -1,5 +1,4 @@
-//! Command groups no other test runs against a real collaboration API: questions, the
-//! message inbox, history and reply, journal status, session rename and turn interrupt
+//! Command groups no other test runs against a real collaboration API: questions, journal status, session rename and turn interrupt
 //! (refused by an application with no native route, as it refuses them today).
 //! Each runs the compiled CLI against the served API and checks its JSON against the
 //! published `FiniteCommandRecord` contract.
@@ -12,7 +11,6 @@ use std::{os::unix::fs::PermissionsExt, path::Path, sync::Arc};
 const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000301";
 const SERVICE_EPOCH: &str = "00000000-0000-4000-8000-000000000302";
 const CALLER_SESSION_ID: &str = "served-command-caller";
-const UNKNOWN_PUSH_ID: &str = "019f0000-0000-7000-8000-000000000999";
 
 struct ServedFixture {
     directory: tempfile::TempDir,
@@ -25,7 +23,7 @@ impl ServedFixture {
         clippy::expect_used,
         reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
     )]
-    /// An application with an automation store, an interaction broker and a lifecycle
+    /// An application with an interaction broker and a lifecycle
     /// journal, publishing a Codex endpoint whose native backend is absent.
     async fn start() -> Self {
         let directory = tempfile::tempdir_in("/tmp").expect("service directory");
@@ -53,11 +51,6 @@ impl ServedFixture {
         )
         .await
         .expect("interaction broker");
-        let automation = Arc::new(tokio::sync::Mutex::new(
-            automation_storage::AutomationStore::open(&directory.path().join("automation.sqlite"))
-                .await
-                .expect("automation store"),
-        ));
         let journal = lifecycle_observation::ObservationJournal::open(
             &directory.path().join("session-registry.sqlite"),
             "00000000-0000-4000-8000-000000000303"
@@ -79,7 +72,6 @@ impl ServedFixture {
             .expect("service identity")
             .with_endpoints(vec![description])
             .expect("endpoint inventory")
-            .with_automation_store(automation)
             .with_approval_broker(broker)
             .with_journal(Arc::clone(&journal));
         let served = ServedCollaborationApi::start(directory.path(), (identity).build())
@@ -109,10 +101,6 @@ impl ServedFixture {
 
 fn codex_endpoint() -> Value {
     json!({"serviceId":SERVICE_ID,"endpointId":"codex-local"})
-}
-
-fn session(session_id: &str) -> Value {
-    json!({"endpoint":codex_endpoint(),"sessionId":session_id})
 }
 
 #[expect(
@@ -173,7 +161,7 @@ async fn run_json(directory: &Path, arguments: &[&str]) -> (Option<i32>, Value) 
 }
 
 #[tokio::test]
-async fn questions_messages_and_journal_read_through_the_served_api() {
+async fn questions_and_journal_read_through_the_served_api() {
     let fixture = ServedFixture::start().await;
 
     let (status, questions) = run_finite(fixture.path(), &["question", "list", "--pending"]).await;
@@ -196,27 +184,6 @@ async fn questions_messages_and_journal_read_through_the_served_api() {
     .await;
     assert_eq!(answer["kind"], "error", "{answer}");
     assert_eq!(status, Some(4), "{answer}");
-
-    let (status, inbox) = run_finite(fixture.path(), &["message", "inbox"]).await;
-    assert_eq!(status, Some(0), "{inbox}");
-    assert_eq!(inbox["kind"], "result", "{inbox}");
-
-    let with = session("served-command-peer").to_string();
-    let (status, history) =
-        run_finite(fixture.path(), &["message", "history", "--with", &with]).await;
-    assert_eq!(status, Some(0), "{history}");
-    assert_eq!(history["kind"], "result", "{history}");
-
-    // A reply's error record also names its caller, which the finite-record contract does
-    // not describe, so only its fields are checked.
-    let (status, reply) = run_json(
-        fixture.path(),
-        &["message", "reply", UNKNOWN_PUSH_ID, "answer"],
-    )
-    .await;
-    assert_eq!(reply["kind"], "error", "{reply}");
-    assert_eq!(reply["error"]["serviceKind"], "notFound", "{reply}");
-    assert_eq!(status, Some(4), "{reply}");
 
     let (status, journal) = run_finite(fixture.path(), &["journal", "status"]).await;
     assert_eq!(status, Some(0), "{journal}");

@@ -158,8 +158,7 @@ pub fn operation_failure_from_client_error(
         // An overloaded request was not run.
         ClientError::Overloaded { .. } => OperationEffect::None,
         ClientError::Rejected { data, .. }
-            if native_control_rejection_has_no_effect(data.as_ref())
-                || decided_mail_or_wake_refusal_has_no_effect(data.as_ref()) =>
+            if native_control_rejection_has_no_effect(data.as_ref()) =>
         {
             OperationEffect::None
         }
@@ -189,32 +188,6 @@ pub fn operation_failure_from_client_error(
         code,
         data,
     }
-}
-
-fn decided_mail_or_wake_refusal_has_no_effect(data: Option<&Value>) -> bool {
-    let Some(data) = data else {
-        return false;
-    };
-    // These are pre-custody decisions. Do not generalize this to unavailable:
-    // a post-admission failure may have followed a committed external effect.
-    if data.get("stage").and_then(Value::as_str) == Some("discovery")
-        && matches!(
-            data.get("kind").and_then(Value::as_str),
-            Some("itemConflict" | "invalidShape" | "mailboxFull" | "tooOld")
-        )
-    {
-        return true;
-    }
-    matches!(
-        serde_json::from_value::<collaboration_protocol::WakeFailure>(data.clone()),
-        Ok(collaboration_protocol::WakeFailure {
-            reason: collaboration_protocol::WakeFailureReason::Refused(_),
-            effects: collaboration_protocol::LocalMutationEvidence::Local {
-                mutation: collaboration_protocol::LocalMutationState::None
-            },
-            ..
-        })
-    )
 }
 
 fn native_control_rejection_has_no_effect(data: Option<&Value>) -> bool {

@@ -2,7 +2,7 @@
 
 use crate::{CloudflareStorageHost, binding_attachment::BindingAttachment, cloudflare_transport};
 use collaboration_central_core::{
-    CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CoreHost, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
 };
 use durable_steps::{CallFailure, NotSentReason};
 use fleet_sync_lease::RegistryConfig;
@@ -15,22 +15,12 @@ use worker::{
     wasm_bindgen,
 };
 
-#[cfg(feature = "conformance")]
-#[path = "object_shell/conformance_routes.rs"]
-mod conformance_routes;
-
 pub(crate) struct CloudflareObjectIo {
     env: Arc<SendWrapper<Env>>,
     wake: AlarmOwner,
-    #[cfg(feature = "conformance")]
-    faults: Arc<collaboration_central_conformance::RuntimeFaults>,
 }
 impl Clock for CloudflareObjectIo {
     fn now(&self) -> SyncTime {
-        #[cfg(feature = "conformance")]
-        if let Some(now) = self.faults.clock() {
-            return SyncTime::from_unix_millis(now.0.timestamp_millis());
-        }
         SyncTime::from_unix_millis(chrono::Utc::now().timestamp_millis())
     }
 }
@@ -55,103 +45,32 @@ impl PlatformIo for CloudflareObjectIo {
         worker::send::SendFuture::new(crate::reply_deadline::ReplyDeadline::new(remaining))
     }
 
-    #[cfg(feature = "conformance")]
-    async fn before_local_call(&self, request: &[u8]) -> std::result::Result<(), CallFailure> {
-        self.faults
-            .before_dispatch(&ObjectAddress::Fleet, request)
-            .await
-            .map_err(|_| CallFailure::AnswerLost)
-    }
-    #[cfg(feature = "conformance")]
-    fn drop_local_reply(&self, request: &[u8]) -> std::result::Result<bool, CallFailure> {
-        self.faults
-            .drop_successful_object_reply(&ObjectAddress::Fleet, request)
-            .map_err(|_| CallFailure::AnswerLost)
-    }
     fn object_call(
         &self,
         address: ObjectAddress,
         body: Vec<u8>,
     ) -> impl Future<Output = std::result::Result<Vec<u8>, CallFailure>> + Send {
         SendFuture::new(async move {
-            #[cfg(feature = "conformance")]
-            self.faults
-                .before_dispatch(&address, &body)
-                .await
-                .map_err(|_| CallFailure::AnswerLost)?;
-            #[cfg(feature = "conformance")]
-            let original_destination = address.clone();
-            #[cfg(feature = "conformance")]
-            let original_request = body.clone();
             let answer = cloudflare_transport::call(&self.env, address, body).await?;
-            #[cfg(feature = "conformance")]
-            if self
-                .faults
-                .drop_successful_object_reply(&original_destination, &original_request)
-                .map_err(|_| CallFailure::AnswerLost)?
-            {
-                return Err(CallFailure::AnswerLost);
-            }
             Ok(answer)
         })
     }
 }
 type StoreHost = CloudflareStorageHost<CoreHost<CloudflareObjectIo>>;
-enum RuntimeFace {
-    Fleet(ObjectRuntime<FleetKind, StoreHost, CloudflareObjectIo>),
-    Copy(ObjectRuntime<CopyKind, StoreHost, CloudflareObjectIo>),
-}
-impl RuntimeFace {
-    async fn initialize(&self) -> Result<()> {
-        match self {
-            Self::Fleet(runtime) => runtime.initialize().await.map_err(error)?,
-            // Copy's core classifies Health before its call/alarm prelude.
-            Self::Copy(_) => 0,
-        };
-        Ok(())
-    }
-    async fn on_alarm(&self) -> Result<()> {
-        match self {
-            Self::Fleet(runtime) => {
-                runtime.on_alarm().await.map_err(error)?;
-            }
-            Self::Copy(runtime) => runtime.on_alarm().await.map_err(error)?,
-        };
-        Ok(())
-    }
-}
-#[derive(Clone, Copy)]
-enum PhysicalKind {
-    Copy,
-    Fleet,
-}
-impl PhysicalKind {
-    fn matches(self, address: &ObjectAddress) -> bool {
-        matches!(
-            (self, address),
-            (Self::Copy, ObjectAddress::Copy(_)) | (Self::Fleet, ObjectAddress::Fleet)
-        )
-    }
-}
+type FleetRuntime = ObjectRuntime<FleetKind, StoreHost, CloudflareObjectIo>;
 struct ShellActor {
     state: Arc<SendWrapper<State>>,
     env: Arc<SendWrapper<Env>>,
-    kind: PhysicalKind,
     host: OnceCell<Arc<StoreHost>>,
-    runtime: OnceCell<Arc<RuntimeFace>>,
-    #[cfg(feature = "conformance")]
-    faults: Arc<collaboration_central_conformance::RuntimeFaults>,
+    runtime: OnceCell<Arc<FleetRuntime>>,
 }
 impl ShellActor {
-    fn new(state: State, env: Env, kind: PhysicalKind) -> Self {
+    fn new(state: State, env: Env) -> Self {
         Self {
             state: Arc::new(SendWrapper::new(state)),
             env: Arc::new(SendWrapper::new(env)),
-            kind,
             host: OnceCell::new(),
             runtime: OnceCell::new(),
-            #[cfg(feature = "conformance")]
-            faults: Arc::default(),
         }
     }
     fn config(&self) -> Result<RegistryConfig> {
@@ -167,26 +86,12 @@ impl ShellActor {
             return Ok(host.clone());
         }
         let env = self.env.clone();
-        #[cfg(feature = "conformance")]
-        let faults = self.faults.clone();
         let shared_host = move |wake| {
             Arc::new(CoreHost::for_store(
-                CloudflareObjectIo {
-                    env,
-                    wake,
-                    #[cfg(feature = "conformance")]
-                    faults,
-                },
+                CloudflareObjectIo { env, wake },
                 config.authoritative_receiver,
             ))
         };
-        #[cfg(feature = "conformance")]
-        let host = Arc::new(CloudflareStorageHost::with_faults(
-            self.state.clone(),
-            shared_host,
-            self.faults.clone(),
-        ));
-        #[cfg(not(feature = "conformance"))]
         let host = Arc::new(CloudflareStorageHost::new(self.state.clone(), shared_host));
         // Publish the one wake owner before any initializer can yield.
         self.host
@@ -205,9 +110,6 @@ impl ShellActor {
             (None, Some(expected)) => expected.clone(),
             (None, None) => return Err(error("object address missing")),
         };
-        if !self.kind.matches(&address) {
-            return Err(error("wrong physical object kind"));
-        }
         let (binding, name) = cloudflare_transport::location(&address);
         if self
             .env
@@ -223,10 +125,7 @@ impl ShellActor {
         }
         Ok(address)
     }
-    fn runtime_handles(
-        &self,
-        address: ObjectAddress,
-    ) -> Result<(Arc<StoreHost>, Arc<RuntimeFace>)> {
+    fn runtime_handles(&self) -> Result<(Arc<StoreHost>, Arc<FleetRuntime>)> {
         let config = self.config()?;
         let host = self.host(config)?;
         if let Some(runtime) = self.runtime.get() {
@@ -235,31 +134,11 @@ impl ShellActor {
         let io = CloudflareObjectIo {
             env: self.env.clone(),
             wake: host.wake().clone(),
-            #[cfg(feature = "conformance")]
-            faults: self.faults.clone(),
         };
-        let runtime = match address {
-            ObjectAddress::Copy(project) => RuntimeFace::Copy(ObjectRuntime::copy(
-                host.clone(),
-                io,
-                config.authoritative_receiver,
-                project,
-                serde_json::from_str(&self.env.var("CENTRAL_COPY_ACK_WAIT")?.to_string())?,
-            )),
-            ObjectAddress::Fleet => RuntimeFace::Fleet(
-                ObjectRuntime::fleet(
-                    host.clone(),
-                    io,
-                    config,
-                    self.delivery_config()?,
-                    serde_json::from_str(
-                        &self.env.var("CENTRAL_HOLDER_ANSWER_TIMEOUT")?.to_string(),
-                    )?,
-                )
+        let runtime = Arc::new(
+            ObjectRuntime::fleet(host.clone(), io, config, self.delivery_config()?)
                 .map_err(error)?,
-            ),
-        };
-        let runtime = Arc::new(runtime);
+        );
         // Publish before an initializer can yield, so independent socket events
         // and RPCs share one transient reply hub and one wake owner.
         self.runtime
@@ -267,37 +146,14 @@ impl ShellActor {
             .map_err(|_| error("object runtime already constructed"))?;
         Ok((host, runtime))
     }
-    #[cfg(feature = "conformance")]
-    async fn restore_conformance_state(&self) -> Result<()> {
-        let now = self
-            .state
-            .storage()
-            .get::<collaboration_central_core::RegistryTime>(crate::composed_control::CLOCK_KEY)
-            .await?;
-        self.faults.restore_clock(now).map_err(error)?;
-        let unavailable = self
-            .state
-            .storage()
-            .get::<bool>(crate::composed_control::PROJECT_FAULT_KEY)
-            .await?
-            .unwrap_or(false);
-        self.faults
-            .restore_project_fault(unavailable)
-            .map_err(error)?;
-        Ok(())
-    }
-    async fn runtime(&self, address: ObjectAddress) -> Result<(Arc<StoreHost>, Arc<RuntimeFace>)> {
-        #[cfg(feature = "conformance")]
-        self.restore_conformance_state().await?;
+    async fn runtime(&self) -> Result<(Arc<StoreHost>, Arc<FleetRuntime>)> {
         self.rearm_stale_alarm().await?;
-        let (host, runtime) = self.runtime_handles(address)?;
+        let (host, runtime) = self.runtime_handles()?;
         host.migrate_store().await.map_err(error)?;
-        runtime.initialize().await?;
+        runtime.initialize().await.map_err(error)?;
         Ok((host, runtime))
     }
     async fn rearm_stale_alarm(&self) -> Result<()> {
-        #[cfg(feature = "conformance")]
-        let faults = self.faults.clone();
         let storage = self.state.storage();
         // Repair at event entry, before any store or runtime can ask the shared
         // library owner for a wake. The platform gate excludes competing events
@@ -305,8 +161,6 @@ impl ShellActor {
         let repair = async move {
             let existing = storage.get_alarm().await?;
             let now = chrono::Utc::now();
-            #[cfg(feature = "conformance")]
-            let now = faults.clock().map_or(now, |now| now.0);
             if existing.is_some_and(|at| at < now.timestamp_millis()) {
                 storage.set_alarm(worker::ScheduledTime::from(now)).await?;
             }
@@ -324,90 +178,17 @@ impl ShellActor {
             .get("x-central-object-address")?
             .ok_or_else(|| error("object address missing"))?;
         let requested: ObjectAddress = serde_json::from_str(&requested)?;
-        #[cfg(feature = "conformance")]
-        let read_only = request.path() == "/test/fleet-mail-custody";
-        #[cfg(feature = "conformance")]
-        let address = if read_only {
-            let stored = self.address(None).await?;
-            if stored != requested {
-                return Err(error("object address mismatch"));
-            }
-            stored
-        } else {
-            self.address(Some(requested)).await?
-        };
-        #[cfg(not(feature = "conformance"))]
         let address = self.address(Some(requested)).await?;
-        #[cfg(feature = "conformance")]
-        if request.path() == crate::composed_control::OBJECT_PATH
-            || request.path() == "/test/fleet-schema"
-            || request.path() == "/test/fleet-mail-custody"
-        {
-            self.restore_conformance_state().await?;
-            let (host, runtime) = self.runtime_handles(address.clone())?;
-            if let Some(response) = self
-                .conformance_fetch(&mut request, host.as_ref(), runtime.as_ref())
-                .await?
-            {
-                return Ok(response);
-            }
-        }
-        #[cfg(feature = "conformance")]
-        if request.path() == "/call" && matches!(address, ObjectAddress::Copy(_)) {
-            let unavailable = self
-                .state
-                .storage()
-                .get::<bool>(crate::composed_control::PROJECT_FAULT_KEY)
-                .await?
-                .unwrap_or(false);
-            if unavailable {
-                return Ok(Response::from_json(
-                    &cloudflare_transport::WireCallFailure::Unreachable { last_seen: None },
+        let (host, runtime) = self.runtime().await?;
+        match request.path().as_str() {
+            "/call" => match runtime.on_call(request.bytes().await?).await {
+                Ok(bytes) => Response::from_bytes(bytes),
+                Err(failure) => Ok(Response::from_json(
+                    &cloudflare_transport::WireCallFailure::from(failure),
                 )?
-                .with_status(409));
-            }
-        }
-        let (host, runtime) = self.runtime(address.clone()).await?;
-        #[cfg(feature = "conformance")]
-        if let Some(response) = self
-            .conformance_fetch(&mut request, host.as_ref(), runtime.as_ref())
-            .await?
-        {
-            return Ok(response);
-        }
-        match (request.path().as_str(), runtime.as_ref()) {
-            ("/call", RuntimeFace::Fleet(runtime)) => {
-                match runtime.on_call(request.bytes().await?).await {
-                    Ok(bytes) => Response::from_bytes(bytes),
-                    Err(failure) => Ok(Response::from_json(
-                        &cloudflare_transport::WireCallFailure::from(failure),
-                    )?
-                    .with_status(409)),
-                }
-            }
-            ("/call", RuntimeFace::Copy(runtime)) => {
-                let bytes = request.bytes().await?;
-                let result = match runtime.copy_call_class(&bytes) {
-                    Ok(collaboration_central_core::CopyCallClass::Health) => {
-                        match crate::storage_measurement::storage_bytes(&self.state.storage()) {
-                            Ok(storage_bytes) => runtime.on_health(bytes, storage_bytes).await,
-                            Err(_) => Err(CallFailure::AnswerLost),
-                        }
-                    }
-                    Ok(collaboration_central_core::CopyCallClass::Ordinary) => {
-                        runtime.on_call(bytes).await
-                    }
-                    Err(failure) => Err(failure),
-                };
-                match result {
-                    Ok(bytes) => Response::from_bytes(bytes),
-                    Err(failure) => Ok(Response::from_json(
-                        &cloudflare_transport::WireCallFailure::from(failure),
-                    )?
-                    .with_status(409)),
-                }
-            }
-            ("/session", RuntimeFace::Fleet(runtime)) => {
+                .with_status(409)),
+            },
+            "/session" => {
                 use base64::Engine;
                 let encoded = request
                     .headers()
@@ -445,11 +226,8 @@ impl ShellActor {
         socket: WebSocket,
         message: WebSocketIncomingMessage,
     ) -> Result<()> {
-        let address = self.address(None).await?;
-        let (host, runtime) = self.runtime(address).await?;
-        let RuntimeFace::Fleet(runtime) = runtime.as_ref() else {
-            return Err(error("socket on non-session object"));
-        };
+        self.address(None).await?;
+        let (host, runtime) = self.runtime().await?;
         let binding = host.binding(&socket).map_err(error)?;
         let bytes = match message {
             WebSocketIncomingMessage::Binary(bytes) => bytes,
@@ -458,20 +236,17 @@ impl ShellActor {
         runtime.on_frame(binding, bytes).await.map_err(error)
     }
     async fn disconnected(&self, socket: WebSocket) -> Result<()> {
-        let address = self.address(None).await?;
-        let (host, runtime) = self.runtime(address).await?;
-        let RuntimeFace::Fleet(runtime) = runtime.as_ref() else {
-            return Err(error("socket on non-session object"));
-        };
+        self.address(None).await?;
+        let (host, runtime) = self.runtime().await?;
         runtime
             .on_socket_closed(host.binding(&socket).map_err(error)?)
             .await
             .map_err(error)
     }
     async fn alarm(&self) -> Result<Response> {
-        let address = self.address(None).await?;
-        let (_, runtime) = self.runtime(address).await?;
-        runtime.on_alarm().await?;
+        self.address(None).await?;
+        let (_, runtime) = self.runtime().await?;
+        runtime.on_alarm().await.map_err(error)?;
         Response::ok("alarm applied")
     }
 }
@@ -479,7 +254,7 @@ fn error(error: impl std::fmt::Display) -> Error {
     Error::RustError(error.to_string())
 }
 macro_rules! shell {
-    ($name:ident, $kind:ident) => {
+    ($name:ident) => {
         #[durable_object]
         pub struct $name {
             actor: ShellActor,
@@ -487,7 +262,7 @@ macro_rules! shell {
         impl DurableObject for $name {
             fn new(state: State, env: Env) -> Self {
                 Self {
-                    actor: ShellActor::new(state, env, PhysicalKind::$kind),
+                    actor: ShellActor::new(state, env),
                 }
             }
             async fn fetch(&self, request: Request) -> Result<Response> {
@@ -518,5 +293,4 @@ macro_rules! shell {
         }
     };
 }
-shell!(ProjectCopyObject, Copy);
-shell!(FleetObject, Fleet);
+shell!(FleetObject);

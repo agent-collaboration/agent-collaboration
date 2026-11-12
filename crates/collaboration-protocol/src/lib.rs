@@ -1,28 +1,9 @@
 //! Public communication contracts without process, storage or transport ownership.
-mod wake_authority;
-pub use wake_authority::{WakeCreator, WakeRefusal};
-mod mail_boundary_conversions;
-pub use mail_boundary_conversions::MailBoundaryConversionError;
-mod thread_subscription_contract;
-mod thread_subscription_wait;
-pub use thread_subscription_contract::{
-    ThreadSubscribeRequest, ThreadSubscriptionPresence, ThreadSubscriptionState,
-    ThreadSubscriptionView, ThreadSubscriptionsRequest, ThreadSubscriptionsResult,
-    ThreadUnsubscribeRequest,
-};
-pub use thread_subscription_wait::{
-    InvalidSubscriptionWait, MAX_SUBSCRIPTION_WAIT_SECONDS, SubscriptionRenewalEntry,
-    SubscriptionRenewalOutcome, SubscriptionWaitBatch, ThreadSubscriptionWaitFilter,
-    ThreadSubscriptionWaitOutcome, ThreadSubscriptionWaitRequest, ThreadSubscriptionWaitResult,
-};
 mod cli_output_contract;
-mod fleet_host_status;
-pub use board_sync_protocol::{FleetLinkRecord, FleetLinkState};
 pub use cli_output_contract::{
     ConversationRecord, ConversationTerminalReason, EffortChange, FiniteCommandRecord,
     NativeObservationRecord, ObservationCloseReason,
 };
-pub use fleet_host_status::{KnownStuckMail, StuckMailSummary};
 mod operation_failure_contract;
 pub use operation_failure_contract::{
     AdapterOperationFailure, OperationEffect, OperationFailureKind,
@@ -118,26 +99,16 @@ mod push_line;
 #[cfg(test)]
 #[path = "push_line_tests.rs"]
 mod push_line_tests;
-mod push_record;
-mod router_origin_ref;
 mod session_delivery_outcome;
 pub use delivery_rejection::{
     DeliveryNextAction, DeliveryPeerClaim, DeliveryRejection, DeliveryRejectionReason,
 };
 mod session_delivery_receipt;
-mod session_message_send;
 pub use delivery_route_evidence::{DeliveryRouteEvidence, ProviderAcpRouteEvidence};
 pub use session_delivery_outcome::{
     DeliveryCorrelationId, DeliveryIdentityError, DeliveryOutcome, SessionReachability,
 };
 pub use session_delivery_receipt::{DeliveryClientReceipt, DeliveryReceipt};
-pub use session_message_send::SessionMessageSendParams;
-mod session_message_reply;
-pub use session_message_reply::{SessionMessageReplyParams, SessionMessageReplyResult};
-mod message_mail_operations;
-mod message_send_result;
-pub use message_mail_operations::*;
-pub use message_send_result::{MessageReplyResult, MessageSendResult, QueuedMessageSend};
 mod native_schema_references;
 mod native_session_catalog;
 pub use message_content::{
@@ -159,21 +130,9 @@ pub use push_line::{
     PushLineError, PushLineInput, PushOrigin, RouterLink, escape_push_line_field, parse_push_line,
     parse_push_line_header, render_push_line,
 };
-pub use push_record::{
-    CancelledAfterDelivery, MAX_DIRECT_MESSAGE_BODY_BYTES, MAX_PUSH_ACTIVITY_RANGES,
-    PushActivityRange, PushActivityRangeRead, PushActivitySnapshot, PushDeliveryState,
-    PushMessageSendResult, PushRecord, PushRecordDraft, PushRecordHistoryParams,
-    PushRecordListParams, PushRecordListResult, PushRecordNotice, PushRecordShowParams,
-    PushRecordShowResult, PushRecordValidationError,
-};
-pub use router_origin_ref::{InteractionId, InteractionPresentationId, RouterOriginRef};
 mod endpoint_inventory;
 pub use endpoint_inventory::EndpointInventory;
 mod identity_schemas;
-mod installation_peer_identity;
-pub use installation_peer_identity::{
-    CentralLinkObservation, InstallationIdentity, InstallationPeerId, InstallationPeerIdentityError,
-};
 mod protocol_type_schemas;
 pub use protocol_type_schemas::protocol_type_schemas;
 mod native_control_contract;
@@ -228,111 +187,11 @@ pub use acp_schema_catalog::{
     ACP_SCHEMA_BYTES, ACP_SCHEMA_DIGEST, AcpSchemaCatalog, AcpSchemaError,
 };
 
-mod instruction_contract;
-pub use agent_automation::{AttemptId, DeliveryId, EventId, PeerWriteEffect};
-pub use agent_automation::{InstructionId, InstructionText, OperationId, RevisionId, WakeupId};
-pub use instruction_contract::{
-    InstructionCreateParams, InstructionShowParams, InstructionSnapshot, InstructionUpdateParams,
+// Provider operations keep the automation crate's operation identity.
+pub use agent_automation::OperationId;
+mod native_effect_evidence;
+pub use native_effect_evidence::{
+    CessationEvidence, NativeEffectEvidence, PreparationEffect, SubmissionEffect,
 };
-pub use instruction_contract::{
-    InstructionFailure, InstructionFailureKind, InstructionNextAction, InstructionStage,
-    LocalMutationEvidence, LocalMutationState,
-};
-mod automation_timing_contract;
-pub use automation_timing_contract::{
-    ExpiryRequest, InvalidSeconds, PositiveSeconds, TimingRequest,
-};
-mod wakeup_contract;
-pub use wakeup_contract::{
-    FireKind, FireReceipt, SavedMessage, WakeDefinition, WakeMutationRequest, WakeSendRequest,
-    WakeShowRequest, WakeSnapshot, WakeState,
-};
-mod wakeup_failure;
-pub use wakeup_failure::{WakeFailure, WakeFailureReason, WakeFailureStage, WakeNextAction};
-mod delivery_inspection_contract;
-pub use delivery_inspection_contract::{
-    CessationEvidence, DeliveryDisposition, DeliveryEvidence, DeliveryInspection,
-    DeliveryShowRequest, DeliverySource, NativeEffectEvidence, PreparationEffect, SubmissionEffect,
-    WakeMutationResult,
-};
-
-mod wakeup_subscription_contract;
-pub use wakeup_subscription_contract::{
-    NoMutation, UnknownFire, WaitNextAction, WaitStage, WaitUnavailable, WaitUnavailableEffects,
-    WaitUnavailableKind, WakeChange, WakeChanged, WakeSubscription, WakeWaitOutcome,
-    WakeWaitRequest, WakeWaitResult,
-};
-
-pub use wakeup_subscription_contract::{
-    UnknownFirstFire, VerifyWakeupAddress, WakeNotFound, WakeNotFoundKind,
-};
-mod automation_page_contract;
-pub use automation_page_contract::{
-    AutomationPage, AutomationPageRequest, InvalidPageLimit, PageLimit,
-};
-
-mod attempt_history_contract;
-mod automation_inspection_contract;
-pub use attempt_history_contract::{
-    AttemptHistoryCoverage, AttemptHistoryPage, AttemptInspection, DeliveryAttemptsRequest,
-    EarlierAttempts, RunSummariesRequest, SummaryInspection, SummaryInspectionState,
-};
-mod automation_event_contract;
-mod operation_outcome_contract;
-pub use operation_outcome_contract::{
-    AutomationOperationMethod, ConfigurationOperation, InstructionOperation, OperationSuccess,
-    RunRecoveryOperation, ScheduleOperation, WakeCreationOperation, WakeMutationOperation,
-};
-mod operation_inspection_contract;
-pub use automation_event_contract::{
-    AutomationEvent, AutomationEventDetails, AutomationEventSubject, AutomationEventSubjectKind,
-    AutomationEventsPage, AutomationEventsRequest,
-};
-pub use operation_inspection_contract::{
-    OperationEffects, OperationFailure, OperationLocalMutation, OperationShowRequest,
-    OperationSnapshot, OperationState,
-};
-mod schedule_contract;
-mod schedule_package_contract;
-pub use automation_inspection_contract::{
-    AutomationInspectionFailure, AutomationInspectionFailureKind, AutomationInspectionNextAction,
-    AutomationInspectionStage, DeliveryListRequest, RevisionListRequest, RevisionRecord,
-    RunListRequest,
-};
-pub use schedule_contract::{
-    ExecutionDestination, ImportedContinuity, ScheduleCreateRequest, ScheduleDefinition,
-    ScheduleEnableRequest, ScheduleShowRequest, ScheduleSnapshot, ScheduleUpdateRequest,
-};
-pub use schedule_failure::ScheduleFailureDetails;
-pub use schedule_package_contract::{ScheduleExportResult, ScheduleImportRequest};
-mod schedule_failure;
-pub use agent_automation::{ChangeId, RunId, ScheduleId};
-pub use schedule_failure::{
-    ScheduleFailure, ScheduleFailureKind, ScheduleFailureStage, ScheduleNextAction,
-};
-
-mod schedule_preparation_contract;
-pub use schedule_failure::ScheduleEffects;
-pub use schedule_preparation_contract::{DestinationPreparation, SchedulePrepareRequest};
-
-mod run_evidence_validation;
-mod run_execution_contract;
-mod run_execution_reference;
-pub use agent_automation::SummarySourceReference;
-pub use run_execution_contract::{
-    CapturedRunInputs, ContinuityInput, ExecutionTiming, FrozenExecutionConfiguration,
-    RetainedSummary, RunExecutionEvidence, RunRecoveryRequest, RunShowRequest, RunSnapshot,
-    RunState, WorkerOutcome,
-};
-pub use run_execution_reference::{NativeExecution, RunExecution};
-mod run_failure_contract;
-pub use run_failure_contract::{RunFailure, RunFailureKind, RunFailureStage, RunNextAction};
-
-mod automation_configuration_contract;
-pub use automation_configuration_contract::{
-    AutomationConfiguration, AutomationConfigureRequest, AutomationStatus, ConfigurationFailure,
-    ConfigurationFailureKind, ConfigurationFileState, ConfigurationNextAction,
-};
-
-// The facade preserves mail identity through every local message boundary.
-pub use collaboration_mail_protocol::{MailDigest, MailItemId};
+mod positive_seconds;
+pub use positive_seconds::{InvalidSeconds, PositiveSeconds};

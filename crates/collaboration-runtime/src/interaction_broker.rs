@@ -176,7 +176,6 @@ pub struct ServiceInteractionBroker {
 
 #[derive(Clone)]
 pub(crate) struct InteractionPushContext {
-    pub store: Arc<interaction_storage::InteractionStore>,
     pub machine_identity: collaboration_contracts::MachineIdentity,
 }
 
@@ -283,10 +282,6 @@ impl ServiceInteractionBroker {
         backend: NativeControlBackend,
         interaction_store: Arc<interaction_storage::InteractionStore>,
     ) -> Result<Arc<Self>, ApprovalBrokerError> {
-        interaction_store
-            .recover_interrupted_interaction_notices(chrono::Utc::now())
-            .await
-            .map_err(|_| ApprovalBrokerError::Unavailable)?;
         let interaction_history =
             InteractionHistoryStore::from_owner(Arc::clone(&interaction_store))
                 .await
@@ -388,19 +383,14 @@ impl ServiceInteractionBroker {
         let _already_installed = self.display_names.set(display_names);
     }
 
-    pub fn install_push_context(
-        &self,
-        store: Arc<interaction_storage::InteractionStore>,
-        machine_identity: collaboration_contracts::MachineIdentity,
-    ) {
+    pub fn install_push_context(&self, machine_identity: collaboration_contracts::MachineIdentity) {
         if machine_identity.service_id() != &self.service_id {
             tracing::error!("approval push identity belongs to another service");
             return;
         }
-        let _already_installed = self.push_context.set(InteractionPushContext {
-            store,
-            machine_identity,
-        });
+        let _already_installed = self
+            .push_context
+            .set(InteractionPushContext { machine_identity });
     }
 
     pub async fn list(&self, pending_only: bool) -> ApprovalListResult {

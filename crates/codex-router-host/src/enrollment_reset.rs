@@ -112,16 +112,6 @@ pub fn completed_enrollment_reset_journal(router_root: &Path) -> io::Result<Opti
         .map(|_| directory.join(JOURNAL_FILE)))
 }
 
-/// Which Fleet database a reset clears, and whether it may be created.
-#[derive(Clone, Copy)]
-enum ResetFleetStore<'path> {
-    /// The Host's own Fleet database; a Router that never opened it gets an empty one.
-    CreateWhenMissing(&'path Path),
-    /// The Fleet database under the name the Router that recorded the reset used. It
-    /// must exist: the reset clears that store and never makes a new one.
-    Existing(&'path Path),
-}
-
 async fn persist_phase(
     directory: &Path,
     reset: &EnrollmentReset,
@@ -145,41 +135,23 @@ pub(crate) async fn resume_enrollment_reset(
     let barrier = reset_barrier();
     #[cfg(not(all(debug_assertions, feature = "runtime-test-support")))]
     let barrier = std::future::ready(Ok(()));
-    let fleet_store = storage_directory.join(message_board_storage::FleetStore::FILE_NAME);
-    resume_with_barrier(
-        journal_directory,
-        storage_directory,
-        ResetFleetStore::CreateWhenMissing(&fleet_store),
-        barrier,
-    )
-    .await
+    resume_with_barrier(journal_directory, storage_directory, barrier).await
 }
 
 /// Update step 0002: finishes a reset an older Router left unfinished, with the Host's
-/// own clearing rules, against `fleet_store`: the Fleet database under the name that
-/// Router used, which those rules clear. A root without an unfinished reset is left as
-/// it is, with no lock file added; an unreadable journal is an error.
-pub async fn finish_enrollment_reset_for_update(
-    router_root: &Path,
-    fleet_store: &Path,
-) -> io::Result<()> {
+/// own clearing rules. A root without an unfinished reset is left as it is, with no lock
+/// file added; an unreadable journal is an error.
+pub async fn finish_enrollment_reset_for_update(router_root: &Path) -> io::Result<()> {
     let directory = crate::router_collaboration_directory(router_root);
     if !reset_pending_in_directory(&directory)? {
         return Ok(());
     }
-    resume_with_barrier(
-        &directory,
-        &directory,
-        ResetFleetStore::Existing(fleet_store),
-        std::future::ready(Ok(())),
-    )
-    .await
+    resume_with_barrier(&directory, &directory, std::future::ready(Ok(()))).await
 }
 
 async fn resume_with_barrier(
     journal_directory: &Path,
     storage_directory: &Path,
-    fleet_store: ResetFleetStore<'_>,
     barrier: impl Future<Output = io::Result<()>>,
 ) -> io::Result<()> {
     let owned = journal_directory.to_owned();
@@ -196,11 +168,8 @@ async fn resume_with_barrier(
         return Ok(());
     }
     if matches!(reset.phase, ResetPhase::Pending) {
-        clear_router_state(storage_directory, fleet_store).await?;
+        clear_router_state(storage_directory).await?;
     }
-    // Older reset journals may already have cleared Router state without this
-    // central observation. Neither unfinished phase may carry it into attach.
-    clear_mail_status_cursor(storage_directory).await?;
     if matches!(reset.phase, ResetPhase::Pending) {
         persist_phase(journal_directory, &reset, ResetPhase::RouterStateCleared).await?;
     }
@@ -209,7 +178,7 @@ async fn resume_with_barrier(
     persist_phase(journal_directory, &reset, ResetPhase::Completed).await
 }
 
-async fn clear_router_state(directory: &Path, fleet_store: ResetFleetStore<'_>) -> io::Result<()> {
+async fn clear_router_state(directory: &Path) -> io::Result<()> {
     tokio::fs::create_dir_all(directory).await?;
     for file in [
         "machine-session/state.json",
@@ -221,26 +190,6 @@ async fn clear_router_state(directory: &Path, fleet_store: ResetFleetStore<'_>) 
             Err(error) => return Err(error),
         }
     }
-    let store = match fleet_store {
-        ResetFleetStore::CreateWhenMissing(path) => {
-            message_board_storage::FleetStore::open(path).await
-        }
-        ResetFleetStore::Existing(path) => {
-            message_board_storage::FleetStore::open_existing(path).await
-        }
-    }
-    .map_err(io::Error::other)?;
-    let cache = store.cache();
-    let cleared = async {
-        // Resume/progress files were deliberately discarded above. Commit any
-        // unfinished legacy attempts before removing their old directory.
-        cache.import_legacy_runtime(directory).await?;
-        cache.clear_central_derived_cache().await?;
-        cache.clear_machine_runtime().await
-    }
-    .await;
-    store.close().await;
-    cleared.map_err(io::Error::other)?;
     for child in [
         "board-read-cache",
         "claim-installs",
@@ -253,27 +202,6 @@ async fn clear_router_state(directory: &Path, fleet_store: ResetFleetStore<'_>) 
         }
     }
     tokio::fs::File::open(directory).await?.sync_all().await
-}
-
-async fn clear_mail_status_cursor(directory: &Path) -> io::Result<()> {
-    let interaction_path = directory.join("interaction.sqlite");
-    if !tokio::fs::try_exists(&interaction_path).await? {
-        return Ok(());
-    }
-    let interactions = interaction_storage::InteractionStore::open(&interaction_path)
-        .await
-        .map_err(io::Error::other)?;
-    let cleared = interactions.clear_central_mail_status_cursor().await;
-    interactions.close().await.map_err(io::Error::other)?;
-    cleared.map_err(io::Error::other)?;
-    // A crash after the cursor commit must replay the Pending phase safely.
-    #[cfg(all(test, debug_assertions, feature = "runtime-test-support"))]
-    crate::debug_runtime_barrier::wait_at_socket(
-        "CODEX_ROUTER_TEST_MAIL_CURSOR_RESET_BARRIER_SOCKET",
-        b"mail-status-cursor-cleared\n",
-    )
-    .await?;
-    Ok(())
 }
 
 #[cfg(all(debug_assertions, feature = "runtime-test-support"))]
@@ -289,7 +217,3 @@ async fn reset_barrier() -> io::Result<()> {
 #[cfg(test)]
 #[path = "enrollment_reset_test.rs"]
 mod tests;
-
-#[cfg(test)]
-#[path = "enrollment_reset_cache_test.rs"]
-mod cache_tests;

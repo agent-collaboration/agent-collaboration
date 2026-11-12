@@ -6,18 +6,15 @@ Run with the feature set used by the main workspace CI job:
 cargo nextest run --locked --profile ci -p codex-router-cli --features keychain-test-support
 ```
 
-`integration/main.rs` gathers 12 roots covering account and recovery commands,
-debug isolation and logging, compiled Host lifecycle, enrollment, proxy
-overload, and the update guard that refuses `host` and account commands on a
-root still needing `agent-router-update` (on a copy of the update tool's
-`populated-root` fixture). `e2e/main.rs` retains the one ignored default-port
+`integration/main.rs` gathers 10 roots covering account and recovery commands,
+debug isolation and logging, compiled Host lifecycle, the local enrollment
+command vocabulary and proxy overload. `e2e/main.rs` retains the one ignored default-port
 cutover case selected by its separate CI job. Ordinary package runs keep that
 case ignored. Library and binary unit tests remain colocated.
 
-Case expansions and fixture data retain their existing directories. The three
-child selectors derive from `module_path!()`: the captured enrollment Host must
-report one passed test, and managed native children retain real readiness, PID,
-replacement and teardown checks that reject zero matches.
+Case expansions and fixture data retain their existing directories. Child
+selectors derive from `module_path!()`: managed native children retain real
+readiness, PID, replacement and teardown checks that reject zero matches.
 
 Compiled Host installation fixtures sign and verify copied Router binaries before
 launch. Their directory owner kills only processes rooted in that fixture (and

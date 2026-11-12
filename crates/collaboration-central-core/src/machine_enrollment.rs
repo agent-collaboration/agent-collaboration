@@ -24,13 +24,10 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 use std::convert::Infallible;
-pub(crate) mod admission;
 mod readmission;
 mod revocation;
 pub(crate) use readmission::ReadmissionTask;
 pub(crate) use revocation::{EndPeerSessions, RevokeMachineTask};
-#[cfg(feature = "conformance")]
-pub(crate) mod conformance_revocation;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -133,10 +130,7 @@ where
             engine,
             delivery,
             ..
-        } = &self.work
-        else {
-            return Err(wrong_face());
-        };
+        } = &self.work;
         let now = DateTime::from_timestamp_millis(shared_host.now().unix_millis())
             .ok_or_else(|| corrupt("clock"))?;
         let (admission, _) = StepDriver::new(host.clone())
@@ -182,10 +176,7 @@ where
     ) -> Result<Result<AdmittedMachine, AuthRefusal>, StoreError> {
         let ObjectWork::Fleet {
             host, shared_host, ..
-        } = &self.work
-        else {
-            return Err(wrong_face());
-        };
+        } = &self.work;
         let now = shared_host.now();
         let (decision, _) = StepDriver::new(host.clone())
             .run(AuthenticateStep {
@@ -489,9 +480,4 @@ async fn operation_pending<Scope: JournalStorage>(
         record.execution,
         OperationExecution::Completed { .. }
     ))
-}
-fn wrong_face() -> StoreError {
-    StoreError::Aborted {
-        reason: "registry runtime has a different face".into(),
-    }
 }

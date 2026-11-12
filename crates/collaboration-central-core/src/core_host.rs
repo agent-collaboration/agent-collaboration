@@ -2,39 +2,20 @@
 
 use crate::registry_peer_lookup::PeerDirectory;
 use crate::{
-    CallerContext, CopyKind, DeliveryKind, FleetKind, ObjectAddress, RegistryKind,
-    SerializedObjectCall, SessionKind,
+    CallerContext, DeliveryKind, ObjectAddress, RegistryKind, SerializedObjectCall, SessionKind,
     object_call_envelope::{encode_refusal, encode_shared_call},
 };
 use durable_steps::{CallFailure, CallId, CallTarget, Host, NotSentReason};
-use fleet_sync_lease::{
-    ClaimReservation, ClaimSettlement, CopyAcknowledged, CopyCreate, CopyFence, CopyRead,
-    CopyRetire, HolderRelease, HolderWithdrawal, RegistrationAdmission, RetirementAdmission,
-};
-use fleet_sync_protocol::{DatabaseId, PeerId, ReceiverId};
+use fleet_sync_protocol::{PeerId, ReceiverId};
 use message_board::ServiceId;
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use serde::de::DeserializeOwned;
 use std::future::Future;
 
-mod copy_followup;
-mod lease_settlement;
-mod registration_gate;
 mod session_routes;
 
 pub trait PlatformIo: Clock + IdSource + WakeScheduler + Send + Sync + 'static {
     fn reply_deadline(&self, remaining: std::time::Duration) -> impl Future<Output = ()> + Send;
-    #[cfg(feature = "conformance")]
-    fn before_local_call(
-        &self,
-        _request: &[u8],
-    ) -> impl Future<Output = Result<(), CallFailure>> + Send {
-        std::future::ready(Ok(()))
-    }
-    #[cfg(feature = "conformance")]
-    fn drop_local_reply(&self, _request: &[u8]) -> Result<bool, CallFailure> {
-        Ok(false)
-    }
     fn object_call(
         &self,
         destination: ObjectAddress,
@@ -52,27 +33,13 @@ pub struct CoreHost<Io: PlatformIo> {
     local_calls: std::sync::Arc<std::sync::OnceLock<LocalFleetCalls>>,
     io: std::sync::Arc<Io>,
     caller: SharedTaskCaller,
-    publication: Option<crate::mail_status_dispatch::PublicationDispatcher>,
-    push: Option<crate::mail_push_dispatch::PushDispatcher>,
     authoritative_receiver: ReceiverId,
-    #[cfg(feature = "conformance")]
-    dispatches: std::sync::Arc<std::sync::Mutex<Vec<ObjectAddress>>>,
-    #[cfg(feature = "conformance")]
-    pub(crate) forward_route_probe: std::sync::Arc<crate::forward_observer::ForwardRouteProbe>,
-    #[cfg(feature = "conformance")]
-    pub(crate) revocation_probe:
-        std::sync::Arc<crate::machine_enrollment::conformance_revocation::RevocationProbe>,
 }
 
 enum SharedTaskCaller {
     Registry {
         caller: CallerContext<RegistryKind>,
         peer_directory: PeerDirectory,
-        lease_publication: Option<lease_settlement::RegistryLeasePublication>,
-    },
-    Copy {
-        caller: CallerContext<CopyKind>,
-        database: DatabaseId,
     },
     StoreOnly,
     Session(CallerContext<SessionKind>),
@@ -80,60 +47,28 @@ enum SharedTaskCaller {
 }
 
 impl<Io: PlatformIo> CoreHost<Io> {
-    #[cfg(feature = "conformance")]
-    pub fn conformance_registry(io: Io, authoritative_receiver: ReceiverId) -> Self {
-        Self::registry(
-            std::sync::Arc::new(io),
-            authoritative_receiver,
-            std::sync::Arc::new(|_peer| Box::pin(std::future::ready(Err(no_route())))),
-            None,
-        )
-    }
-
     pub(crate) fn registry(
         io: std::sync::Arc<Io>,
         authoritative_receiver: ReceiverId,
         peer_directory: PeerDirectory,
-        lease_store: Option<std::sync::Arc<dyn crate::registry_lease_store::RegistryLeaseStore>>,
     ) -> Self {
         Self {
             io,
+            authoritative_receiver,
             caller: SharedTaskCaller::Registry {
                 caller: CallerContext::for_object(()),
                 peer_directory,
-                lease_publication: lease_store.map(lease_settlement::RegistryLeasePublication::new),
             },
-            authoritative_receiver,
-            publication: None,
-            push: None,
             local_calls: Default::default(),
-            #[cfg(feature = "conformance")]
-            dispatches: Default::default(),
-            #[cfg(feature = "conformance")]
-            forward_route_probe: Default::default(),
-            #[cfg(feature = "conformance")]
-            revocation_probe: Default::default(),
         }
-    }
-
-    pub(crate) fn authoritative_receiver(&self) -> ReceiverId {
-        self.authoritative_receiver
     }
 
     pub fn for_store(io: Io, authoritative_receiver: ReceiverId) -> Self {
         Self {
             io: std::sync::Arc::new(io),
-            caller: SharedTaskCaller::StoreOnly,
             authoritative_receiver,
-            publication: None,
-            push: None,
+            caller: SharedTaskCaller::StoreOnly,
             local_calls: Default::default(),
-            #[cfg(feature = "conformance")]
-            dispatches: Default::default(),
-            #[cfg(feature = "conformance")]
-            forward_route_probe: Default::default(),
-            #[cfg(feature = "conformance")]
-            revocation_probe: Default::default(),
         }
     }
 
@@ -142,15 +77,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
             io: self.io.clone(),
             caller: SharedTaskCaller::Delivery,
             authoritative_receiver: self.authoritative_receiver,
-            publication: self.publication.clone(),
-            push: self.push.clone(),
             local_calls: self.local_calls.clone(),
-            #[cfg(feature = "conformance")]
-            dispatches: self.dispatches.clone(),
-            #[cfg(feature = "conformance")]
-            forward_route_probe: self.forward_route_probe.clone(),
-            #[cfg(feature = "conformance")]
-            revocation_probe: self.revocation_probe.clone(),
         }
     }
 
@@ -159,28 +86,13 @@ impl<Io: PlatformIo> CoreHost<Io> {
             io: self.io.clone(),
             caller: SharedTaskCaller::Session(CallerContext::for_machine(installation)),
             authoritative_receiver: self.authoritative_receiver,
-            publication: self.publication.clone(),
-            push: self.push.clone(),
             local_calls: self.local_calls.clone(),
-            #[cfg(feature = "conformance")]
-            dispatches: self.dispatches.clone(),
-            #[cfg(feature = "conformance")]
-            forward_route_probe: self.forward_route_probe.clone(),
-            #[cfg(feature = "conformance")]
-            revocation_probe: self.revocation_probe.clone(),
         }
     }
-    pub(crate) fn with_publication(
-        mut self,
-        publication: crate::mail_status_dispatch::PublicationDispatcher,
-    ) -> Self {
-        self.publication = Some(publication);
-        self
+    pub(crate) fn authoritative_receiver(&self) -> ReceiverId {
+        self.authoritative_receiver
     }
-    pub(crate) fn with_push(mut self, push: crate::mail_push_dispatch::PushDispatcher) -> Self {
-        self.push = Some(push);
-        self
-    }
+
     pub(crate) fn install_local_calls(
         &self,
         calls: LocalFleetCalls,
@@ -188,89 +100,6 @@ impl<Io: PlatformIo> CoreHost<Io> {
         self.local_calls.set(calls).map_err(|_| {
             durable_steps::StoreError::backend("Fleet local dispatcher already installed")
         })
-    }
-    pub(crate) async fn gather_welcome(
-        &self,
-        peer: PeerId,
-    ) -> Result<Vec<fleet_sync_protocol::DatabaseStatus>, CallFailure> {
-        use fleet_sync_protocol::{CopyStatusAnswer, CopyUnavailableReason, DatabaseStatus};
-        let leases = self
-            .dispatch(
-                crate::session_calls::WelcomeLeases,
-                peer,
-                self.call_identity("welcome_read")?,
-            )
-            .await?;
-        let mut databases = Vec::new();
-        for lease in leases {
-            let database = lease.database;
-            let status = self
-                .dispatch(
-                    CopyRead {
-                        copy: self.authoritative_receiver,
-                        database,
-                    },
-                    (),
-                    self.call_identity("welcome_read")?,
-                )
-                .await;
-            databases.push(match status {
-                Ok(CopyStatusAnswer::Status(copy)) => DatabaseStatus::Ready {
-                    database,
-                    acked: copy.acked,
-                    lease,
-                },
-                Ok(CopyStatusAnswer::Retired) => continue,
-                Ok(CopyStatusAnswer::NotInitialized) => DatabaseStatus::Unavailable {
-                    database,
-                    lease: Some(lease),
-                    reason: CopyUnavailableReason::Uninitialized,
-                },
-                Err(failure) => DatabaseStatus::Unavailable {
-                    database,
-                    lease: Some(lease),
-                    reason: crate::copy_call_failure::unavailable(&failure).unwrap_or_else(|| {
-                        CopyUnavailableReason::Damaged {
-                            detail: "copy status unavailable".into(),
-                        }
-                    }),
-                },
-            });
-        }
-        Ok(databases)
-    }
-
-    #[cfg(feature = "conformance")]
-    pub(crate) fn dispatched_destinations(
-        &self,
-    ) -> Result<Vec<ObjectAddress>, durable_steps::StoreError> {
-        Ok(self
-            .dispatches
-            .lock()
-            .map_err(durable_steps::StoreError::backend)?
-            .clone())
-    }
-
-    pub(crate) fn call_identity(&self, step: &str) -> Result<CallId, CallFailure> {
-        Ok(CallId {
-            operation: durable_steps::OperationId::new(self.new_id()).map_err(encode_refusal)?,
-            step: durable_steps::StepName::new(step).map_err(encode_refusal)?,
-        })
-    }
-
-    #[cfg(feature = "conformance")]
-    pub(crate) async fn replay_lifecycle_call(&self, identity: &CallId) -> Result<(), CallFailure> {
-        let call = self
-            .revocation_probe
-            .recorded(identity)
-            .map_err(|_| no_route())?;
-        let answer = self
-            .transmit(SerializedObjectCall {
-                destination: call.destination,
-                bytes: call.bytes,
-            })
-            .await?;
-        serde_json::from_slice(&answer).map_err(|_| CallFailure::AnswerLost)
     }
 
     async fn classify<Call: CallTarget>(
@@ -282,139 +111,36 @@ impl<Io: PlatformIo> CoreHost<Io> {
         let target = serde_json::to_value(target).map_err(encode_refusal)?;
         let request = serde_json::to_value(request).map_err(encode_refusal)?;
         match &self.caller {
-            SharedTaskCaller::Session(caller) => session_routes::classify_session(
-                Call::KIND,
-                caller,
-                self.authoritative_receiver,
-                target,
-                request,
-                identity,
-            ),
-            SharedTaskCaller::StoreOnly
-            | SharedTaskCaller::Delivery
-            | SharedTaskCaller::Copy { .. } => Err(no_route()),
+            SharedTaskCaller::Session(caller) => {
+                session_routes::classify_session(Call::KIND, caller, target, request, identity)
+            }
+            SharedTaskCaller::StoreOnly | SharedTaskCaller::Delivery => Err(no_route()),
             SharedTaskCaller::Registry {
                 caller,
                 peer_directory,
-                ..
             } => {
-                macro_rules! to_copy {
-                    ($target:ty, $database:expr) => {{
-                        let target: $target = decode(target)?;
-                        if target.copy != self.authoritative_receiver {
-                            return Err(no_route());
-                        }
-                        let request: <$target as CallTarget>::Request = decode(request)?;
-                        let database: DatabaseId = ($database)(&target, &request);
-                        encode_shared_call::<RegistryKind, CopyKind, $target>(
-                            caller, database, target, request, identity,
-                        )
-                    }};
-                }
-                macro_rules! to_fleet {
-                    ($target:ty) => {
-                        encode_shared_call::<RegistryKind, FleetKind, $target>(
-                            caller,
-                            (),
-                            decode(target)?,
-                            decode(request)?,
-                            identity,
-                        )
-                    };
-                }
-                if Call::KIND == fleet_sync_session::SchemaSupportRegistry::KIND
-                    || Call::KIND == crate::session_calls::WelcomeLeases::KIND
-                {
-                    let peer = if Call::KIND == fleet_sync_session::SchemaSupportRegistry::KIND {
-                        decode::<fleet_sync_protocol::ReportSchemaSupport>(request.clone())?.peer
-                    } else {
-                        decode::<PeerId>(request.clone())?
-                    };
+                if Call::KIND == fleet_sync_session::SchemaSupportRegistry::KIND {
+                    let peer: PeerId =
+                        decode::<fleet_sync_protocol::ReportSchemaSupport>(request.clone())?.peer;
                     let source =
                         CallerContext::<SessionKind>::for_machine(peer_directory(peer).await?);
                     return session_routes::classify_session(
                         Call::KIND,
                         &source,
-                        self.authoritative_receiver,
                         target,
                         request,
                         identity,
                     );
                 }
                 match Call::KIND {
-                    crate::machine_notice_delivery::DeliverMachineNotice::KIND => {
-                        let target: crate::machine_notice_delivery::DeliverMachineNotice = decode(target)?;
-                        encode_shared_call::<RegistryKind, DeliveryKind, crate::machine_notice_delivery::DeliverMachineNotice>(
-                            caller, (), target, decode(request)?, identity,
-                        )
-                    }
-                    #[cfg(feature = "conformance")]
-                    crate::conformance_copy_wait::CopyWaitTarget::KIND => to_copy!(
-                        crate::conformance_copy_wait::CopyWaitTarget,
-                        |target: &crate::conformance_copy_wait::CopyWaitTarget, _: &crate::conformance_copy_wait::CopyWaitControl| target.database
-                    ),
-                    CopyRead::KIND => {
-                        to_copy!(CopyRead, |target: &CopyRead, _: &()| target.database)
-                    }
-                    CopyAcknowledged::KIND => to_copy!(
-                        CopyAcknowledged,
-                        |target: &CopyAcknowledged, _: &fleet_sync_protocol::AwaitAcked| target
-                            .database
-                    ),
-                    CopyFence::KIND => to_copy!(
-                        CopyFence,
-                        |_: &CopyFence, request: &fleet_sync_protocol::FenceRequest| request
-                            .database
-                    ),
-                    CopyCreate::KIND => to_copy!(
-                        CopyCreate,
-                        |_: &CopyCreate, request: &fleet_sync_protocol::CreateCopy| request
-                            .database
-                    ),
-                    CopyRetire::KIND => to_copy!(
-                        CopyRetire,
-                        |_: &CopyRetire, request: &fleet_sync_protocol::RetireCopy| request
-                            .database
-                    ),
                     crate::machine_enrollment::EndPeerSessions::KIND => {
                         let target: crate::machine_enrollment::EndPeerSessions = decode(target)?;
-                        encode_shared_call::<RegistryKind, DeliveryKind, crate::machine_enrollment::EndPeerSessions>(
-                            caller,
-                            (),
-                            target,
-                            decode(request)?,
-                            identity,
-                        )
+                        encode_shared_call::<
+                            RegistryKind,
+                            DeliveryKind,
+                            crate::machine_enrollment::EndPeerSessions,
+                        >(caller, (), target, decode(request)?, identity)
                     }
-                    HolderRelease::KIND => {
-                        let target: HolderRelease = decode(target)?;
-                        let request: fleet_sync_protocol::ReleaseRequest = decode(request)?;
-                        if target.database != request.database {
-                            return Err(no_route());
-                        }
-                        encode_shared_call::<RegistryKind, DeliveryKind, HolderRelease>(
-                            caller,
-                            (),
-                            target,
-                            request,
-                            identity,
-                        )
-                    }
-                    HolderWithdrawal::KIND => {
-                        let target: HolderWithdrawal = decode(target)?;
-                        encode_shared_call::<RegistryKind, DeliveryKind, HolderWithdrawal>(
-                            caller,
-                            (),
-                            target,
-                            decode(request)?,
-                            identity,
-                        )
-                    }
-                    crate::fleet_creation_calls::ReadProjectCreationDecision::KIND => to_fleet!(crate::fleet_creation_calls::ReadProjectCreationDecision),
-                    RetirementAdmission::KIND => to_fleet!(RetirementAdmission),
-                    ClaimReservation::KIND => to_fleet!(ClaimReservation),
-                    ClaimSettlement::KIND => to_fleet!(ClaimSettlement),
-                    crate::fleet_lease_calls::ClaimGranted::KIND => to_fleet!(crate::fleet_lease_calls::ClaimGranted),
                     _ => Err(no_route()),
                 }
             }
@@ -424,23 +150,7 @@ impl<Io: PlatformIo> CoreHost<Io> {
         if call.destination == ObjectAddress::Fleet
             && let Some(local) = self.local_calls.get()
         {
-            #[cfg(feature = "conformance")]
-            {
-                self.io.before_local_call(&call.bytes).await?;
-                let request = call.bytes.clone();
-                let answer = local(call.bytes).await?;
-                if self.io.drop_local_reply(&request)? {
-                    return Err(CallFailure::AnswerLost);
-                }
-                return Ok(answer);
-            }
-            #[cfg(not(feature = "conformance"))]
             return local(call.bytes).await;
-        }
-        // Observe actual platform calls; in-Fleet calls use the local fault controls above.
-        #[cfg(feature = "conformance")]
-        if let Ok(mut dispatches) = self.dispatches.lock() {
-            dispatches.push(call.destination.clone());
         }
         self.io.object_call(call.destination, call.bytes).await
     }
@@ -468,65 +178,7 @@ impl<Io: PlatformIo> Host for CoreHost<Io> {
         request: Call::Request,
         identity: CallId,
     ) -> Result<Call::Answer, CallFailure> {
-        if Call::KIND
-            == fleet_sync_delivery::PushCall::<board_sync_protocol::BoardDeliveryTypes>::KIND
-            && let Some(push) = &self.push
-        {
-            let target = decode(serde_json::to_value(target).map_err(encode_refusal)?)?;
-            let request = decode(serde_json::to_value(request).map_err(encode_refusal)?)?;
-            let answer = push(target, request, identity).await?;
-            return decode(serde_json::to_value(answer).map_err(encode_refusal)?);
-        }
-        if Call::KIND == RegistrationAdmission::KIND {
-            let _: RegistrationAdmission =
-                decode(serde_json::to_value(&target).map_err(encode_refusal)?)?;
-            let admission: fleet_sync_protocol::RegistrationAdmission =
-                decode(serde_json::to_value(&request).map_err(encode_refusal)?)?;
-            let answer = self.admit_registration(admission, identity).await?;
-            return decode(serde_json::to_value(answer).map_err(encode_refusal)?);
-        }
-        if Call::KIND == ClaimSettlement::KIND {
-            let _: ClaimSettlement =
-                decode(serde_json::to_value(&target).map_err(encode_refusal)?)?;
-            let settlement: fleet_sync_protocol::ClaimSettlement =
-                decode(serde_json::to_value(&request).map_err(encode_refusal)?)?;
-            if matches!(
-                settlement.outcome,
-                fleet_sync_protocol::SettleOutcome::Granted { .. }
-            ) {
-                return decode(self.settle_granted_claim(settlement, identity).await?);
-            }
-        }
-        if Call::KIND == fleet_sync_receiver::FollowUpCall::<crate::CopyDirectorySummary>::KIND {
-            let target = serde_json::to_value(target).map_err(encode_refusal)?;
-            let request = serde_json::to_value(request).map_err(encode_refusal)?;
-            return decode(self.copy_follow_up(target, request, identity).await?);
-        }
-        if Call::KIND
-            == fleet_sync_delivery::PublishCall::<board_sync_protocol::BoardDeliveryTypes>::KIND
-            && let Some(publication) = &self.publication
-        {
-            let target = decode(serde_json::to_value(target).map_err(encode_refusal)?)?;
-            let request = decode(serde_json::to_value(request).map_err(encode_refusal)?)?;
-            let answer = publication(target, request, identity).await?;
-            return decode(serde_json::to_value(answer).map_err(encode_refusal)?);
-        }
-        #[cfg(feature = "conformance")]
-        let recorded_identity = identity.clone();
         let call = self.classify(target, request, identity).await?;
-        #[cfg(feature = "conformance")]
-        if Call::KIND == crate::machine_enrollment::EndPeerSessions::KIND {
-            self.revocation_probe
-                .before_dispatch(
-                    crate::machine_enrollment::conformance_revocation::RecordedLifecycleCall {
-                        identity: recorded_identity,
-                        destination: call.destination.clone(),
-                        bytes: call.bytes.clone(),
-                    },
-                )
-                .await
-                .map_err(|_| CallFailure::AnswerLost)?;
-        }
         let answer = self.transmit(call).await?;
         serde_json::from_slice(&answer).map_err(|_| CallFailure::AnswerLost)
     }
@@ -541,11 +193,3 @@ fn no_route() -> CallFailure {
         reason: NotSentReason::Unreachable { last_seen: None },
     }
 }
-
-#[cfg(feature = "conformance")]
-mod imported_unheld_fixture;
-#[cfg(feature = "conformance")]
-pub use imported_unheld_fixture::ConformanceBoardState;
-
-#[cfg(feature = "conformance")]
-mod imported_board_snapshot;

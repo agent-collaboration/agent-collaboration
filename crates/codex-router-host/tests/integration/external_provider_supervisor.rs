@@ -288,7 +288,6 @@ async fn approval_broker_fixture(
     .await?;
     let route: Arc<dyn collaboration_contracts::SessionDeliveryRoute> =
         Arc::new(collaboration_runtime::CodexAppServerDeliveryRoute::new(
-            Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
             service_id.clone(),
             endpoints,
             native_backend,
@@ -299,7 +298,6 @@ async fn approval_broker_fixture(
     ))?;
     let push_fixture =
         approval_push_fixture::ApprovalPushFixture::compose(root.path(), service_id, &broker)
-            .await
             .map_err(|error| format!("approval push fixture composition: {error}"))?;
     let captured_approver = approver.clone();
     let backend = tokio::spawn(async move {
@@ -337,9 +335,7 @@ async fn approval_broker_fixture(
                     .pointer("/params/input/0/text")
                     .and_then(Value::as_str)
                     .ok_or("native approver input omitted its push line")?;
-                let _record = push_fixture
-                    .captured_approval(delivered_line, &captured_approver)
-                    .await?;
+                push_fixture.captured_approval(delivered_line, &captured_approver)?;
             }
             requests.push(request.clone());
             if expected_method == "initialized" {

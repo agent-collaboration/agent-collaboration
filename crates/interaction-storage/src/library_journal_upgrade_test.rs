@@ -2,7 +2,7 @@
 //! released durable-steps journal is adopted in the owner transaction, admitted
 //! in exactly the converted shape, and keeps every row. A tampered or
 //! half-converted journal is refused without rewriting the file.
-use super::*;
+use crate::InteractionStore;
 use crate::schema_prefix_fixture::{PrecedingJournal, create_native_prefix_with_journal};
 use sqlx::Connection;
 

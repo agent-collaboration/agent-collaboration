@@ -85,7 +85,7 @@ make_executable() {
   chmod +x "$1"
 }
 make_executable "$profile/codex-router"
-make_executable "$profile/codex-router-board-staging-cutover"
+make_executable "$profile/codex-router-tailnet-verification-host"
 make_executable "$profile/deps/integration-0123456789abcdef"
 printf 'not executable\n' > "$profile/codex-router.d"
 
@@ -103,7 +103,7 @@ no_sweep_leftovers() {
 output="$("$runner" "$profile/deps/integration-0123456789abcdef")"
 [[ "$output" == "ran integration-0123456789abcdef" ]]
 grep -qx 'dev.shravansunder.codex-router.debug' "$FAKE_SIGN_LOG"
-grep -qx 'dev.shravansunder.test.codex-router-board-staging-cutover' "$FAKE_SIGN_LOG"
+grep -qx 'dev.shravansunder.test.codex-router-tailnet-verification-host' "$FAKE_SIGN_LOG"
 grep -qx 'dev.shravansunder.test.integration' "$FAKE_SIGN_LOG"
 [[ "$(wc -l < "$FAKE_SIGN_LOG" | tr -d ' ')" == 3 ]]
 [[ -s "$profile/.debug-signing-verified" ]]

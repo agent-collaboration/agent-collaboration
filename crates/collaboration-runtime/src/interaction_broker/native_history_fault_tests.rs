@@ -1,4 +1,4 @@
-//! History faults use the actual owner while channel receipts keep an independent observer.
+//! History faults use a second native connection while channel receipts keep an independent observer.
 use super::super::native_history_fault_fixture::{
     IndependentNativeHistoryRead, NativeHistoryFaults,
 };
@@ -6,7 +6,7 @@ use super::*;
 
 #[tokio::test]
 async fn question_answer_delivery_reports_later_history_write_failure() {
-    let (broker, _, _) = super::super::tests::fixture_broker().await;
+    let (broker, _, directory) = super::super::tests::fixture_broker().await;
     let (requester, approver) = typed_participants(&broker);
     let receiver = broker
         .request_question(
@@ -37,12 +37,14 @@ async fn question_answer_delivery_reports_later_history_write_failure() {
         .await
         .expect("bounded validation wait")
         .expect("validation reached pause");
-    let fault = NativeHistoryFaults::new(&broker);
+    let fault = NativeHistoryFaults::open(&directory.join("interaction.sqlite"))
+        .await
+        .expect("native fault connection");
     let before_revision = fault
         .integer("SELECT revision FROM interaction_history_revision")
         .await
         .expect("native revision before fault");
-    // Both changes commit in one borrowed native transaction, after validation.
+    // Both changes commit in one native transaction, after validation.
     fault.execute_all(&[
         "UPDATE typed_interaction_history SET record_json='{}' WHERE request_id='write-failure-question'",
         "UPDATE interaction_history_revision SET revision=revision+1",
@@ -103,7 +105,9 @@ async fn approval_decision_native_write_failure_keeps_channel_unsent_then_commit
     let mut independent = IndependentNativeHistoryRead::open(&directory.join("interaction.sqlite"))
         .await
         .expect("independent native observer");
-    let fault = NativeHistoryFaults::new(&broker);
+    let fault = NativeHistoryFaults::open(&directory.join("interaction.sqlite"))
+        .await
+        .expect("native fault connection");
     fault.execute_all(&["CREATE TRIGGER reject_history_update BEFORE UPDATE ON typed_interaction_history BEGIN SELECT RAISE(ABORT, 'fixture failed decision'); END"])
         .await.expect("native write rejection installed");
     assert_eq!(fault.integer("SELECT COUNT(*) FROM sqlite_master WHERE type='trigger' AND name='reject_history_update'")

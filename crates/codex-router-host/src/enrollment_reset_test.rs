@@ -35,12 +35,6 @@ async fn interrupted_reset_resumes_before_activation_and_preserves_router_owned_
         b"old central copy",
     )
     .await?;
-    message_board_storage::FleetStore::open(
-        &storage.join(message_board_storage::FleetStore::FILE_NAME),
-    )
-    .await?
-    .close()
-    .await;
     let owned_files = [
         "fleet-outbox.sqlite",
         "installation-peer.json",
@@ -49,29 +43,18 @@ async fn interrupted_reset_resumes_before_activation_and_preserves_router_owned_
     for name in owned_files {
         tokio::fs::write(storage.join(name), name.as_bytes()).await?;
     }
-    // Reset now clears central stream progress through this real file owner.
-    interaction_storage::InteractionStore::open(storage.join("interaction.sqlite"))
-        .await?
-        .close()
-        .await?;
     drop(record_pending_enrollment_reset(&journal)?);
     let (entered, observed) = oneshot::channel();
     let (_release, released) = oneshot::channel::<()>();
     let resetting_journal = journal.clone();
     let resetting_storage = storage.clone();
     let resetting = tokio::spawn(async move {
-        let fleet_store = resetting_storage.join(message_board_storage::FleetStore::FILE_NAME);
-        resume_with_barrier(
-            &resetting_journal,
-            &resetting_storage,
-            ResetFleetStore::CreateWhenMissing(&fleet_store),
-            async {
-                entered
-                    .send(())
-                    .map_err(|_| io::Error::other("reset observer closed"))?;
-                released.await.map_err(io::Error::other)
-            },
-        )
+        resume_with_barrier(&resetting_journal, &resetting_storage, async {
+            entered
+                .send(())
+                .map_err(|_| io::Error::other("reset observer closed"))?;
+            released.await.map_err(io::Error::other)
+        })
         .await
     });
 
@@ -104,48 +87,13 @@ async fn interrupted_reset_resumes_before_activation_and_preserves_router_owned_
         assert_eq!(tokio::fs::read(storage.join(name)).await?, name.as_bytes());
     }
     // Replaying completion cannot clear state learned after the reset.
-    let cache_store = message_board_storage::FleetStore::open(
-        &storage.join(message_board_storage::FleetStore::FILE_NAME),
-    )
-    .await?;
-    let cache = cache_store.cache();
-    cache
-        .replace_snapshot(&message_board_storage::FleetRecordSnapshot {
-            through: message_board::FleetPosition::try_from(7)?,
-            records: Vec::new(),
-        })
-        .await?;
-    cache_store.close().await;
+    tokio::fs::write(storage.join("machine-session/state.json"), b"learned").await?;
     resume_enrollment_reset(&journal, &storage).await?;
-    let cache_store = message_board_storage::FleetStore::open(
-        &storage.join(message_board_storage::FleetStore::FILE_NAME),
-    )
-    .await?;
-    let cache = cache_store.cache();
     assert_eq!(
-        cache.checkpoint().await?,
-        message_board::FleetPosition::try_from(7)?
+        tokio::fs::read(storage.join("machine-session/state.json")).await?,
+        b"learned"
     );
-    cache_store.close().await;
     Ok(())
-}
-
-/// A collaboration directory laid out as an older Router left it: the Fleet database
-/// under its former name, holding a learned checkpoint the reset must clear.
-async fn older_root_with_learned_checkpoint()
--> Result<(tempfile::TempDir, std::path::PathBuf), Box<dyn std::error::Error + Send + Sync>> {
-    let root = tempfile::tempdir()?;
-    let former = crate::router_collaboration_directory(root.path()).join("fleet-cache.sqlite");
-    let store = message_board_storage::FleetStore::open(&former).await?;
-    store
-        .cache()
-        .replace_snapshot(&message_board_storage::FleetRecordSnapshot {
-            through: message_board::FleetPosition::try_from(7)?,
-            records: Vec::new(),
-        })
-        .await?;
-    store.close().await;
-    Ok((root, former))
 }
 
 #[tokio::test]
@@ -153,27 +101,19 @@ async fn older_root_with_learned_checkpoint()
     clippy::panic_in_result_fn,
     reason = "Contract asserts; fixture errors propagate."
 )]
-async fn the_update_finishes_a_pending_reset_against_the_store_under_its_former_name() -> TestResult
-{
-    // Arrange
-    let (root, former) = older_root_with_learned_checkpoint().await?;
+async fn the_update_finishes_a_pending_reset() -> TestResult {
+    // Arrange: a pending reset beside central-derived session state.
+    let root = tempfile::tempdir()?;
     let directory = crate::router_collaboration_directory(root.path());
+    tokio::fs::create_dir_all(directory.join("machine-session")).await?;
+    tokio::fs::write(directory.join("machine-session/state.json"), b"old").await?;
     drop(record_pending_enrollment_reset(&directory)?);
 
     // Act
-    finish_enrollment_reset_for_update(root.path(), &former).await?;
+    finish_enrollment_reset_for_update(root.path()).await?;
 
-    // Assert: the store the older Router used is the one cleared; no store is created
-    // under the current name; the reset is finished.
-    let store = message_board_storage::FleetStore::open_existing(&former).await?;
-    let checkpoint = store.cache().checkpoint().await;
-    store.close().await;
-    assert_eq!(checkpoint?, message_board::FleetPosition::try_from(0)?);
-    assert!(
-        !directory
-            .join(message_board_storage::FleetStore::FILE_NAME)
-            .exists()
-    );
+    // Assert: the central-derived state is cleared and the reset is finished.
+    assert!(!directory.join("machine-session/state.json").exists());
     assert_eq!(
         completed_enrollment_reset_journal(root.path())?,
         Some(directory.join(JOURNAL_FILE))
@@ -186,37 +126,12 @@ async fn the_update_finishes_a_pending_reset_against_the_store_under_its_former_
     clippy::panic_in_result_fn,
     reason = "Contract asserts; fixture errors propagate."
 )]
-async fn the_update_never_creates_the_store_a_pending_reset_would_clear() -> TestResult {
-    // Arrange: a pending reset and no Fleet database under either name.
+async fn the_update_leaves_a_root_without_an_unfinished_reset_as_it_is() -> TestResult {
+    // Arrange: a root whose collaboration directory holds only its session state.
     let root = tempfile::tempdir()?;
     let directory = crate::router_collaboration_directory(root.path());
-    drop(record_pending_enrollment_reset(&directory)?);
-    let former = directory.join("fleet-cache.sqlite");
-
-    // Act
-    let finished = finish_enrollment_reset_for_update(root.path(), &former).await;
-
-    // Assert
-    assert!(finished.is_err(), "a missing store must stop the update");
-    assert!(!former.exists());
-    assert!(
-        !directory
-            .join(message_board_storage::FleetStore::FILE_NAME)
-            .exists()
-    );
-    assert!(reset_pending_in_directory(&directory)?);
-    Ok(())
-}
-
-#[tokio::test]
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract asserts; fixture errors propagate."
-)]
-async fn the_update_leaves_a_root_without_an_unfinished_reset_as_it_is() -> TestResult {
-    // Arrange: a root whose collaboration directory holds only its Fleet database.
-    let (root, former) = older_root_with_learned_checkpoint().await?;
-    let directory = crate::router_collaboration_directory(root.path());
+    tokio::fs::create_dir_all(directory.join("machine-session")).await?;
+    tokio::fs::write(directory.join("machine-session/state.json"), b"learned").await?;
     let listing = || -> io::Result<Vec<std::ffi::OsString>> {
         let mut names = std::fs::read_dir(&directory)?
             .map(|entry| entry.map(|entry| entry.file_name()))
@@ -227,13 +142,13 @@ async fn the_update_leaves_a_root_without_an_unfinished_reset_as_it_is() -> Test
     let before = listing()?;
 
     // Act
-    finish_enrollment_reset_for_update(root.path(), &former).await?;
+    finish_enrollment_reset_for_update(root.path()).await?;
 
-    // Assert: no journal, no lock file, and the learned checkpoint is kept.
+    // Assert: no journal, no lock file, and the learned state is kept.
     assert_eq!(listing()?, before);
-    let store = message_board_storage::FleetStore::open_existing(&former).await?;
-    let checkpoint = store.cache().checkpoint().await;
-    store.close().await;
-    assert_eq!(checkpoint?, message_board::FleetPosition::try_from(7)?);
+    assert_eq!(
+        tokio::fs::read(directory.join("machine-session/state.json")).await?,
+        b"learned"
+    );
     Ok(())
 }

@@ -7,53 +7,6 @@
       {
         "command": ["<root>/tmp/rust-tools/bin/sqlx", "database", "create"],
         "environment": {
-          "DATABASE_URL": "sqlite://<root>/tmp/<schema>/automation-schema.sqlite"
-        }
-      },
-      {
-        "command": [
-          "<root>/tmp/rust-tools/bin/sqlx",
-          "migrate",
-          "run",
-          "--source",
-          "crates/automation-storage/migrations"
-        ],
-        "environment": {
-          "DATABASE_URL": "sqlite://<root>/tmp/<schema>/automation-schema.sqlite"
-        }
-      },
-      {
-        "command": ["cargo", "clean", "--package", "path+file://<root>/crates/automation-storage"],
-        "environment": {
-          "SQLX_OFFLINE": "true",
-          "RUSTC_WRAPPER": "<wrapper>",
-          "SQLX_PREPARE_PACKAGE": "automation-storage",
-          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/automation-storage",
-          "SQLX_PREPARE_DATABASE_URL": "sqlite://<root>/tmp/<schema>/automation-schema.sqlite",
-          "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/automation-storage-metadata"
-        }
-      },
-      {
-        "command": [
-          "cargo",
-          "check",
-          "--locked",
-          "--package",
-          "path+file://<root>/crates/automation-storage",
-          "--all-targets"
-        ],
-        "environment": {
-          "SQLX_OFFLINE": "true",
-          "RUSTC_WRAPPER": "<wrapper>",
-          "SQLX_PREPARE_PACKAGE": "automation-storage",
-          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/automation-storage",
-          "SQLX_PREPARE_DATABASE_URL": "sqlite://<root>/tmp/<schema>/automation-schema.sqlite",
-          "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/automation-storage-metadata"
-        }
-      },
-      {
-        "command": ["<root>/tmp/rust-tools/bin/sqlx", "database", "create"],
-        "environment": {
           "DATABASE_URL": "sqlite://<root>/tmp/<schema>/account-schema.sqlite"
         }
       },
@@ -97,6 +50,58 @@
           "SQLX_PREPARE_DATABASE_URL": "sqlite://<root>/tmp/<schema>/account-schema.sqlite",
           "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/codex-router-state-metadata"
         }
+      },
+      {
+        "command": ["<root>/tmp/rust-tools/bin/sqlx", "database", "create"],
+        "environment": {
+          "DATABASE_URL": "sqlite://<root>/tmp/<schema>/provider-operation-schema.sqlite"
+        }
+      },
+      {
+        "command": [
+          "<root>/tmp/rust-tools/bin/sqlx",
+          "migrate",
+          "run",
+          "--source",
+          "crates/collaboration-runtime/migrations"
+        ],
+        "environment": {
+          "DATABASE_URL": "sqlite://<root>/tmp/<schema>/provider-operation-schema.sqlite"
+        }
+      },
+      {
+        "command": [
+          "cargo",
+          "clean",
+          "--package",
+          "path+file://<root>/crates/collaboration-runtime"
+        ],
+        "environment": {
+          "SQLX_OFFLINE": "true",
+          "RUSTC_WRAPPER": "<wrapper>",
+          "SQLX_PREPARE_PACKAGE": "collaboration-runtime",
+          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/collaboration-runtime",
+          "SQLX_PREPARE_DATABASE_URL": "sqlite://<root>/tmp/<schema>/provider-operation-schema.sqlite",
+          "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/collaboration-runtime-metadata"
+        }
+      },
+      {
+        "command": [
+          "cargo",
+          "check",
+          "--locked",
+          "--package",
+          "path+file://<root>/crates/collaboration-runtime",
+          "--all-targets"
+        ],
+        "environment": {
+          "SQLX_OFFLINE": "true",
+          "RUSTC_WRAPPER": "<wrapper>",
+          "SQLX_PREPARE_PACKAGE": "collaboration-runtime",
+          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/collaboration-runtime",
+          "SQLX_PREPARE_DATABASE_URL": "sqlite://<root>/tmp/<schema>/provider-operation-schema.sqlite",
+          "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/collaboration-runtime-metadata"
+        }
       }
     ],
     "metadata": {
@@ -104,6 +109,6 @@
         "query-original.json": "original"
       }
     },
-    "stderr": "SQLx metadata preparation failed: codex-router-state produced conflicting SQLx metadata for query-shared.json\n"
+    "stderr": "SQLx metadata preparation failed: collaboration-runtime produced conflicting SQLx metadata for query-shared.json\n"
   }
 }

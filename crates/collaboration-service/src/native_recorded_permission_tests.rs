@@ -153,7 +153,6 @@ enum NativeReply {
     Narrowed,
     WrongDirectory,
     WrongThread,
-    MalformedThreadRead,
 }
 struct ProbeCase {
     authority: RecordedAuthority,
@@ -247,12 +246,6 @@ async fn cold_message_probe(case: ProbeCase) -> Result<ProbeObservation, TestErr
         if case.directory_present {
             thread["cwd"] = json!(cwd);
         }
-        if matches!(case.reply, NativeReply::MalformedThreadRead) {
-            thread
-                .as_object_mut()
-                .ok_or("fixture thread object")?
-                .remove("status");
-        }
         socket
             .send(Message::Text(
                 json!({"id":read["id"],"result":{"thread":thread}})
@@ -333,26 +326,6 @@ async fn cold_message_probe(case: ProbeCase) -> Result<ProbeObservation, TestErr
         turn_started: observation.1,
         expected_filesystem: filesystem,
     })
-}
-
-/// The existing native endpoint sends a real malformed read response before any mutating RPC.
-pub(crate) async fn malformed_thread_read_probe() -> (SessionRef, NativeMessageOutcome) {
-    let observation = cold_message_probe(ProbeCase {
-        authority: RecordedAuthority::Valid,
-        reply: NativeReply::MalformedThreadRead,
-        directory_present: true,
-    })
-    .await
-    .expect("malformed native endpoint probe");
-    assert!(
-        observation.resume.is_none(),
-        "malformed read must stop before resume"
-    );
-    assert!(
-        !observation.turn_started,
-        "malformed read must stop before native input"
-    );
-    (target(), observation.outcome)
 }
 
 fn assert_projected_policy(observation: &ProbeObservation) {
@@ -536,7 +509,6 @@ async fn native_delivery_does_not_retain_its_broker_owner() {
     let weak_port = Arc::downgrade(&broker_port);
     let native_route: Arc<dyn collaboration_contracts::SessionDeliveryRoute> = Arc::new(
         collaboration_runtime::CodexAppServerDeliveryRoute::new(
-            std::sync::Arc::new(router_clock::ManualClock::new(chrono::DateTime::UNIX_EPOCH)),
             service_id.clone(),
             collaboration_runtime::EndpointDirectory::new(service_id),
             backend,

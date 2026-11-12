@@ -67,11 +67,11 @@ fn record_table(schema: EngineSchema) -> TestResult<&'static str> {
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Both fresh bootstrap roles must create sqlx's exact record table for their set, store the injected install time, and leave the failure table's shape alone."
+    reason = "Fresh Fleet bootstrap must create sqlx's exact record table for its set, store the injected install time, and leave the failure table's shape alone."
 )]
-async fn fleet_and_copy_bootstrap_create_one_sqlx_record_table_per_set_with_injected_install_times()
+async fn fleet_bootstrap_creates_one_sqlx_record_table_per_set_with_injected_install_times()
 -> TestResult {
-    for schema in [EngineSchema::Fleet, EngineSchema::Copy] {
+    for schema in [EngineSchema::Fleet] {
         let fixture = FleetStorageFixture::open().await?;
         assert!(bootstrap(&fixture, schema, NOW).await? > 0);
         let table = record_table(schema)?;
@@ -168,7 +168,7 @@ async fn read_history(
     reason = "Fresh owning bootstrap must persist the exact 48 SQLx SHA-384 bytes as a SQLite blob."
 )]
 async fn fresh_bootstrap_matches_sqlx_migration_column_types_and_checksum_bytes() -> TestResult {
-    for schema in [EngineSchema::Fleet, EngineSchema::Copy] {
+    for schema in [EngineSchema::Fleet] {
         let fixture = FleetStorageFixture::open().await?;
         bootstrap(&fixture, schema, NOW).await?;
 
@@ -334,10 +334,9 @@ async fn sql(fixture: &FleetStorageFixture, statement: &'static str) -> TestResu
 #[tokio::test]
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Actual bootstrap must refuse a record outside sqlx's shape, and tolerant Copy health must reject stored REAL/TEXT failure times rather than coerce them."
+    reason = "Actual bootstrap must refuse a record outside sqlx's shape."
 )]
-async fn corrupt_migration_records_refuse_bootstrap_and_corrupt_failure_times_make_health_unreadable()
--> TestResult {
+async fn corrupt_migration_records_refuse_bootstrap() -> TestResult {
     for (statement, field) in [
         (
             "UPDATE _sqlx_migrations_central_fleet SET installed_on=1.5",
@@ -366,48 +365,6 @@ async fn corrupt_migration_records_refuse_bootstrap_and_corrupt_failure_times_ma
         assert!(
             matches!(failure.downcast_ref::<StoreError>(),Some(StoreError::Corrupt {field:actual,..}) if actual==field),
             "{failure:?}"
-        );
-        fixture.close().await?;
-    }
-    for (statement, field) in [
-        (
-            "UPDATE central_schema_migration_failures SET created_at=x'31'",
-            "central_schema_migration_failures.created_at",
-        ),
-        (
-            "UPDATE central_schema_migration_failures SET updated_at='bad'",
-            "central_schema_migration_failures.updated_at",
-        ),
-        (
-            "UPDATE central_schema_migration_failures SET failed_at=1.5",
-            "central_schema_migration_failures.failed_at",
-        ),
-    ] {
-        let fixture = FleetStorageFixture::open().await?;
-        bootstrap(&fixture, EngineSchema::Copy, NOW).await?;
-        record_failure(&fixture, 1, NOW).await?;
-        sql(&fixture, statement).await?;
-        let health = fixture
-            .object
-            .transaction(|scope| {
-                Box::pin(async move {
-                    let (health, _) = <crate::copy_health::ReadCopyHealth as StepCallback<
-                        Store,
-                        sqlx_turso::Turso,
-                    >>::run(
-                        crate::copy_health::ReadCopyHealth { storage_bytes: 0 },
-                        scope,
-                    )
-                    .await?;
-                    Ok(health)
-                })
-            })
-            .await?;
-        let collaboration_central_admin_protocol::CopyHealth::Live(health) = health else {
-            return Err("fresh Copy health was not live".into());
-        };
-        assert!(
-            matches!(health.migration_failures,collaboration_central_admin_protocol::CopyHealthRead::Unreadable {detail} if detail.contains(field))
         );
         fixture.close().await?;
     }

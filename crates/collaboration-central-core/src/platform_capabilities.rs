@@ -72,27 +72,6 @@ pub trait ObjectHost: Send + Sync + 'static {
     type Wake: WakeScheduler;
 
     fn store(&self) -> &Arc<Self::Store>;
-    #[cfg(feature = "conformance")]
-    fn session_finalize_fault(
-        &self,
-    ) -> Result<Option<crate::SessionFinalizeFault>, durable_steps::StoreError> {
-        Ok(None)
-    }
-    #[cfg(feature = "conformance")]
-    fn observe_session_finalize_failure(
-        &self,
-        _failure: crate::SessionFinalizeFailure,
-    ) -> Result<(), durable_steps::StoreError> {
-        Ok(())
-    }
-    #[cfg(feature = "conformance")]
-    fn stale_drive_rejections(
-        &self,
-    ) -> Result<Vec<durable_steps::OperationId>, durable_steps::StoreError> {
-        Err(durable_steps::StoreError::Aborted {
-            reason: "drive-token observation is unavailable on this fixture host".into(),
-        })
-    }
     fn wake(&self) -> &Self::Wake;
     fn with_local_section<Output: Send + 'static>(
         &self,

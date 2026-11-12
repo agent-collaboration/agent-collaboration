@@ -1,1 +1,0 @@
-INSERT INTO fleet_decision_reason_evidence (row_id,reason_id,ordinal,entry_kind,task_id,assignment_kind,assignment_project_id,assignment_workstream_id,created_at,updated_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?9);

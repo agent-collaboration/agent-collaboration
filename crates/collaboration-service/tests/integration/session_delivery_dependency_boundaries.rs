@@ -2,48 +2,10 @@
 
 #[test]
 fn message_features_do_not_import_client_routes() {
-    let features = [
-        (
-            "message send",
-            include_str!("../../src/collaboration_application/message_operations.rs"),
-        ),
-        (
-            "timed wake",
-            include_str!("../../../collaboration-runtime/src/wakeup_delivery_sender.rs"),
-        ),
-        (
-            "subscription push",
-            include_str!("../../src/subscription_delivery/subscription_push.rs"),
-        ),
-        (
-            "interaction notice",
-            include_str!("../../../collaboration-runtime/src/interaction_broker.rs"),
-        ),
-        (
-            "subscription admission",
-            include_str!("../../src/collaboration_application/board_operations.rs"),
-        ),
-        (
-            "direct message push",
-            include_str!("../../src/subscription_delivery/direct_message_push.rs"),
-        ),
-        (
-            "scheduled run worker",
-            include_str!("../../../collaboration-runtime/src/scheduled_run_worker.rs"),
-        ),
-        (
-            "run reconciliation",
-            include_str!("../../../collaboration-runtime/src/run_reconciliation.rs"),
-        ),
-        (
-            "schedule activation",
-            include_str!("../../src/schedule_activation.rs"),
-        ),
-        (
-            "schedule preparation",
-            include_str!("../../src/schedule_preparation.rs"),
-        ),
-    ];
+    let features = [(
+        "interaction notice",
+        include_str!("../../../collaboration-runtime/src/interaction_broker.rs"),
+    )];
     for (feature, source) in features {
         for forbidden in [
             "native_message_dispatch",

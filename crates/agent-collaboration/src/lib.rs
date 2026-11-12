@@ -24,24 +24,12 @@ pub fn run_sessions_picker_test_harness() -> std::io::Result<()> {
 #[must_use]
 pub fn command_help() -> String {
     let help = format!(
-        "{}\nCollaboration:\n  central --central URL copies|copy|migrate|project --help\n  workspace|board|project|workstream|task|subtask|work-trail|thread|post|role|move|fact|feed|adr|process --help\n  operation show --operation-id UUID --json\n  delivery attempts --delivery-id UUID [--cursor CURSOR] --json\n  run summaries --run-id UUID [--cursor CURSOR] --json\n  automation events [--after CURSOR] [--limit 50] --json\n  instruction list --json\n  schedule list --json\n  run list --schedule-id UUID --json\n  revision list --instruction-id UUID --json\n  delivery list [--wakeup-id UUID] --json\n  delivery show --delivery-id UUID --json\n  schedule export --schedule-id UUID > schedule.jsonl\n  schedule import --package-file PATH [--overwrite] --json\n  automation status --json\n  automation configure --execution-timeout-seconds 3600 --summary-timeout-seconds 900 --json\n  run show --run-id UUID --json\n  run summary-retry|summary-skip --run-id UUID [--operation-id UUID] --json\n  schedule create --definition-file PATH [--operation-id UUID] --json\n  schedule show --schedule-id UUID --json\n  schedule prepare --schedule-id UUID --fresh --cwd PATH --json\n  schedule update --schedule-id UUID --expected-change-id UUID --definition-file PATH --json\n  schedule enable|disable --schedule-id UUID --json\n  wake send --to ADDRESS --from ADDRESS --text TEXT --every 10m --for 2h [--wait-until-first-fire] --json\n  wake show --wakeup-id UUID --json\n  wake list [--limit 50] [--cursor CURSOR] --json\n  wake pause|resume|cancel --wakeup-id UUID [--operation-id UUID] --json\n  instruction create --text TEXT [--operation-id UUID] --json\n  instruction show --instruction-id UUID --json\n  instruction update --instruction-id UUID --expected-revision-id UUID --text TEXT --json\n  conversation create --endpoint ID --cwd PATH --access write-restricted|workspace-write [--operation-id UUID] [--mode ID] [--model ID] [--effort LEVEL] [--fork SESSION] [--generation JSON] [--timeout-seconds 300] --json\n  conversation settings set --target ADDRESS --actor ADDRESS --setting mode|model|effort --value ID --json\n  conversation settings accept --target ADDRESS --actor ADDRESS --json\n  conversation prompt --endpoint ID --new|--session ID|--fork ID|--to ADDRESS [--cwd PATH] [--operation-id UUID] [--prompt-operation-id UUID] [--generation JSON] --text-file PATH --json\n  conversation load --target ADDRESS --cwd PATH --access write-restricted|workspace-write [--operation-id UUID] [--generation JSON] --json\n  conversation resume --target ADDRESS --cwd PATH --access write-restricted|workspace-write [--operation-id UUID] [--generation JSON] --json\n  conversation close --target ADDRESS [--operation-id UUID] [--generation JSON] --json\n  conversation cancel --target ADDRESS --target-operation-id UUID [--operation-id UUID] [--generation JSON] --json\n  conversation operation show|wait|reconcile --operation-id UUID --json\n  sessions list --endpoint ID --view stored|loaded|active --cwd PATH|--checkout PATH|--repo PATH|--any [--source interactive|subagents|all] --json\n  events listen --endpoint ID --session ID --attach [--timeout-seconds 60]\n  message send --to ADDRESS --from ADDRESS [--delivery auto|queue|steer] --text TEXT --json\n  message send --human-user --to ADDRESS --text-file PATH --json\n  whoami [--json] (this agent's SessionRef from CODEX_THREAD_ID, CLAUDE_CODE_SESSION_ID or CURSOR_CONVERSATION_ID)\n  endpoints list --json [--service-directory PATH]\n  addresses list --endpoint ID --json [--cursor CURSOR]\n  session inspect --endpoint ID --session ID --json\n  session rename --endpoint ID --session ID --name TEXT --json\n  turn interrupt --endpoint ID --session ID --turn ID --json\n  native --endpoint ID\n  acp --endpoint ID\n  journal status --json\n  journal read --endpoint ID --journal-id UUID --after SEQUENCE --json\n",
+        "{}\nSessions and providers:\n  conversation create --endpoint ID --cwd PATH --access write-restricted|workspace-write [--operation-id UUID] [--mode ID] [--model ID] [--effort LEVEL] [--fork SESSION] [--generation JSON] [--timeout-seconds 300] --json\n  conversation settings set --target ADDRESS --actor ADDRESS --setting mode|model|effort --value ID --json\n  conversation settings accept --target ADDRESS --actor ADDRESS --json\n  conversation prompt --endpoint ID --new|--session ID|--fork ID|--to ADDRESS [--cwd PATH] [--operation-id UUID] [--prompt-operation-id UUID] [--generation JSON] --text-file PATH --json\n  conversation load --target ADDRESS --cwd PATH --access write-restricted|workspace-write [--operation-id UUID] [--generation JSON] --json\n  conversation resume --target ADDRESS --cwd PATH --access write-restricted|workspace-write [--operation-id UUID] [--generation JSON] --json\n  conversation close --target ADDRESS [--operation-id UUID] [--generation JSON] --json\n  conversation cancel --target ADDRESS --target-operation-id UUID [--operation-id UUID] [--generation JSON] --json\n  conversation operation show|wait|reconcile --operation-id UUID --json\n  sessions list --endpoint ID --view stored|loaded|active --cwd PATH|--checkout PATH|--repo PATH|--any [--source interactive|subagents|all] --json\n  events listen --endpoint ID --session ID --attach [--timeout-seconds 60]\n  whoami [--json] (this agent's SessionRef from CODEX_THREAD_ID, CLAUDE_CODE_SESSION_ID or CURSOR_CONVERSATION_ID)\n  endpoints list --json [--service-directory PATH]\n  addresses list --endpoint ID --json [--cursor CURSOR]\n  session inspect --endpoint ID --session ID --json\n  session rename --endpoint ID --session ID --name TEXT --json\n  turn interrupt --endpoint ID --session ID --turn ID --json\n  native --endpoint ID\n  acp --endpoint ID\n  journal status --json\n  journal read --endpoint ID --journal-id UUID --after SEQUENCE --json\n",
         agent_session_inventory::sessions::command_help("agent-collaboration")
     );
     help.replace(
         "  events listen --endpoint ID --session ID --attach [--timeout-seconds 60]\n",
         "  events listen --endpoint ID --session ID --attach [--timeout-seconds 60]\n  events observe --endpoint ID --session ID --attach [--timeout-seconds 60] [--max-events 256] [--max-bytes 262144] [--after-sequence N --epoch N]\n  approval list|decide --help\n  question list|answer --help\n",
-    )
-    .replace(
-        "  wake send --to ADDRESS --from ADDRESS",
-        "  wake send --to ADDRESS",
-    )
-    .replace(
-        "  message send --to ADDRESS --from ADDRESS",
-        "  message send --to ADDRESS",
-    )
-    .replace(
-        "  whoami [--json]",
-        "  show <PUSH_ID_OR_LINK> [--service-directory PATH] [--json]\n  message inbox [--limit 50] [--service-directory PATH] [--json]\n  message history --with SESSIONREF_JSON [--limit 50] [--service-directory PATH] [--json]\n  message reply <PUSH_ID_OR_LINK> [TEXT] [--text-file PATH] [--json]\n  whoami [--json]",
     )
 }
 
@@ -71,10 +59,6 @@ pub use native_stdio_bridge::run_native_command;
 mod native_session_commands;
 pub use native_session_commands::run_native_session_command;
 
-mod failure_line;
-mod message_commands;
-pub use message_commands::{run_message_command, run_push_record_show_command};
-
 mod event_commands;
 pub use event_commands::run_event_command;
 
@@ -95,31 +79,3 @@ pub use acp_stdio_bridge::run_acp_command;
 mod session_contract_tests;
 
 mod automation_argument_feedback;
-mod automation_collection_commands;
-mod automation_history_commands;
-mod instruction_commands;
-pub use automation_history_commands::{
-    run_delivery_command, run_operation_command, run_revision_command,
-};
-pub use instruction_commands::run_instruction_command;
-
-mod message_input_arguments;
-mod wakeup_commands;
-mod wakeup_timing_arguments;
-pub use wakeup_commands::run_wakeup_command;
-
-mod schedule_commands;
-mod wakeup_wait_output;
-pub use schedule_commands::run_schedule_command;
-
-mod run_commands;
-mod schedule_preparation_arguments;
-pub use run_commands::run_workflow_command;
-mod automation_configuration_commands;
-pub use automation_configuration_commands::run_automation_command;
-
-mod board_commands;
-pub use board_commands::run_board_command;
-
-mod central_commands;
-pub use central_commands::run_central_command;

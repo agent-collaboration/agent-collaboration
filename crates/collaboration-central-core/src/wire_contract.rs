@@ -1,5 +1,5 @@
 //! Serialized edge requests; every receiver executes the shared asynchronous core.
-use crate::{FleetCall, FleetResult, RegistryCall, RegistryResult};
+use crate::{RegistryCall, RegistryResult};
 use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(
@@ -10,7 +10,6 @@ use serde::{Deserialize, Serialize};
 )]
 pub enum WireCall {
     Registry(RegistryCall),
-    Fleet(FleetCall),
 }
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(
@@ -21,5 +20,4 @@ pub enum WireCall {
 )]
 pub enum WireResult {
     Registry(RegistryResult),
-    Fleet(FleetResult),
 }

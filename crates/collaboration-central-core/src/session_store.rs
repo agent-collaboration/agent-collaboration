@@ -11,13 +11,13 @@
 )]
 
 use crate::{
-    CoreHost, ObjectHost, PlatformIo, RegistrationEdits, RegistrationSnapshot,
+    ObjectHost, PlatformIo, RegistrationEdits, RegistrationSnapshot,
     effect_driver::EffectDriver,
     session_scope::CoreSessionScope,
     step_driver::{StepCallback, StepDriver},
 };
 use durable_steps::{AtomicStore, BoxFuture, ReborrowScope, StoreError, storage::TransactionScope};
-use fleet_sync_protocol::{ConnectionId, PeerId, SessionId};
+use fleet_sync_protocol::{ConnectionId, SessionId};
 use runtime_primitives::SyncTime;
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
@@ -27,94 +27,10 @@ use std::{marker::PhantomData, sync::Arc};
 
 pub(crate) struct PendingWelcome {
     pub connection: ConnectionId,
-    pub peer: PeerId,
     pub session_id: SessionId,
 }
 
 pub(crate) enum SessionTransportEffect {
-    InstallationRead {
-        connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        frame: fleet_sync_protocol::FrameId,
-        request: crate::installation_peer_reads::InstallationReadRequest,
-    },
-    ForwardRoute {
-        pending: crate::project_request_store::ProjectRequest,
-        post: board_sync_protocol::ForwardedPost,
-    },
-    ForwardDelivery {
-        installation: message_board::ServiceId,
-        request: crate::forward_calls::ForwardDeliveryRequest,
-        last_seen: Option<SyncTime>,
-    },
-    ForwardFrame {
-        connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        bytes: fleet_sync_session::Bytes,
-    },
-    FleetRead {
-        connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        frame: fleet_sync_protocol::FrameId,
-        request: crate::fleet_read_calls::FleetReadRequest,
-    },
-    SenderMailRequest {
-        connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        frame: fleet_sync_protocol::FrameId,
-        request: Box<fleet_sync_protocol::DeliveryRequest<board_sync_protocol::BoardDeliveryTypes>>,
-    },
-    FleetRequest {
-        connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        frame: fleet_sync_protocol::FrameId,
-        request: board_sync_protocol::FleetRequestEnvelope,
-    },
-    ArchiveReport {
-        connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        frame: fleet_sync_protocol::FrameId,
-        report: board_sync_protocol::ArchiveSeen,
-    },
-    MailSubmit {
-        connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        frame: fleet_sync_protocol::FrameId,
-        item: Box<fleet_sync_protocol::DeliveryEnvelope<board_sync_protocol::BoardDeliveryTypes>>,
-        origin_epoch: Option<fleet_sync_protocol::Epoch>,
-    },
-    FleetEffects {
-        connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        frame: fleet_sync_protocol::FrameId,
-        request: message_board::RequestEffectsRequest,
-    },
-    CopyWrite {
-        connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        frame: fleet_sync_protocol::FrameId,
-        database: fleet_sync_protocol::DatabaseId,
-        request: Box<crate::copy_write_calls::WriterCopyRequest>,
-    },
-    CopyRead {
-        connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        frame: fleet_sync_protocol::FrameId,
-        database: fleet_sync_protocol::DatabaseId,
-        request: crate::copy_read_calls::CopyReadRequest,
-    },
-    PeerAnswer {
-        connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        frame: fleet_sync_protocol::FrameId,
-        answer: fleet_sync_protocol::ClientAnswer<board_sync_protocol::BoardConsumerProtocol>,
-    },
-    LeaseRequest {
-        connection: ConnectionId,
-        session: fleet_sync_session::SessionKey,
-        frame: fleet_sync_protocol::FrameId,
-        request: fleet_sync_protocol::LeaseRequest,
-    },
     Frame {
         connection: ConnectionId,
         bytes: fleet_sync_session::Bytes,
@@ -137,13 +53,9 @@ pub(crate) struct CoreSessionStore<Host: ObjectHost, Io: PlatformIo> {
     effects: EffectDriver<Host, Io>,
 }
 impl<Host: ObjectHost, Io: PlatformIo> CoreSessionStore<Host, Io> {
-    pub(crate) fn new(
-        host: Arc<Host>,
-        shared_host: Arc<CoreHost<Io>>,
-        replies: Arc<crate::holder_reply_hub::HolderReplyHub>,
-    ) -> Self {
+    pub(crate) fn new(host: Arc<Host>) -> Self {
         Self {
-            effects: EffectDriver::new(host.clone(), shared_host, replies),
+            effects: EffectDriver::new(host.clone()),
             host,
         }
     }
@@ -162,8 +74,6 @@ where
 {
     registrations: RegistrationSnapshot,
     callback: Box<SessionTransactionCallback<Host, Io, Output>>,
-    #[cfg(feature = "conformance")]
-    finalize_fault: Option<crate::SessionFinalizeFault>,
     marker: PhantomData<fn() -> (Host, Io)>,
 }
 impl<Host: ObjectHost, Io: PlatformIo, Output> StepCallback<Host::Store, Host::Database>
@@ -199,25 +109,7 @@ where
                 wake_at: None,
                 marker: PhantomData,
             };
-            #[cfg(feature = "conformance")]
-            let before = if self.finalize_fault.is_some() {
-                Some(crate::session_finalize_fault::changes(&mut scope).await?)
-            } else {
-                None
-            };
             let output = (self.callback)(&mut scope).await?;
-            #[cfg(feature = "conformance")]
-            if let (Some(fault), Some(before)) = (self.finalize_fault, before)
-                && (!scope.effects.is_empty()
-                    || scope.edits.values().any(|registration| {
-                        matches!(
-                            registration,
-                            fleet_sync_session::ConnectionRegistration::Attached { .. }
-                        )
-                    }))
-            {
-                crate::session_finalize_fault::fail_after_writes(&mut scope, fault, before).await?;
-            }
             Ok((
                 output,
                 vec![SessionCommit {
@@ -263,28 +155,13 @@ where
             .host
             .with_local_section(async move {
                 let registrations = host.registrations().await.map_err(StoreError::backend)?;
-                #[cfg(feature = "conformance")]
-                let finalize_fault = host.session_finalize_fault()?;
-                #[cfg(feature = "conformance")]
-                let observation_host = host.clone();
                 let result = StepDriver::new(host)
                     .run(SessionTransaction::<Host, Io, Output> {
                         registrations,
                         callback: Box::new(run),
-                        #[cfg(feature = "conformance")]
-                        finalize_fault,
                         marker: PhantomData,
                     })
                     .await;
-                #[cfg(feature = "conformance")]
-                if let Err(error) = &result
-                    && let Some(failure) =
-                        crate::session_finalize_fault::SessionFinalizeFailure::from_store_error(
-                            error,
-                        )
-                {
-                    let _ = observation_host.observe_session_finalize_failure(failure);
-                }
                 let (output, committed) = result?;
                 let published = effects.publish_registrations(committed).await;
                 Ok::<_, StoreError>((output, published))

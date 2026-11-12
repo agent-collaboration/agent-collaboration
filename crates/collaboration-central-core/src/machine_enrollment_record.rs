@@ -5,16 +5,12 @@ use durable_steps::{OperationId, StoreError};
 use fleet_sync_protocol::PeerId;
 use message_board::{MachineLabel, ServiceId};
 use runtime_primitives::SyncTime;
-#[cfg(feature = "conformance")]
-use serde::Serialize;
 
 #[derive(Eq, PartialEq)]
-#[cfg_attr(feature = "conformance", derive(Serialize))]
 pub(crate) enum EnrollmentState {
     Enrolled,
     Revoked,
 }
-#[cfg_attr(feature = "conformance", derive(Serialize))]
 pub(crate) struct StoredMachine {
     pub(crate) peer: PeerId,
     pub(crate) origin: AdmissionOrigin,
@@ -22,7 +18,6 @@ pub(crate) struct StoredMachine {
     pub(crate) credential_hash: String,
     pub(crate) state: EnrollmentState,
     pub(crate) expires_at: DateTime<Utc>,
-    pub(crate) last_seen: Option<SyncTime>,
     pub(crate) last_revocation_operation: Option<durable_steps::OperationId>,
     pub(crate) last_enrollment_operation: Option<OperationId>,
 }
@@ -59,7 +54,7 @@ impl StoredMachine {
         let expires_at = required(row.expires_at, "expires_at")?
             .parse()
             .map_err(|_| corrupt("expires_at"))?;
-        let last_seen = stored_presence(row.last_seen)?;
+        stored_presence(row.last_seen)?;
         let last_revocation_operation = row
             .last_revocation_operation
             .map(durable_steps::OperationId::try_from)
@@ -80,7 +75,6 @@ impl StoredMachine {
             credential_hash,
             state,
             expires_at,
-            last_seen,
             last_revocation_operation,
             last_enrollment_operation,
         })
@@ -124,23 +118,4 @@ pub(crate) fn service_for_stored_peer(
         return Err(corrupt("peer_id"));
     }
     Ok(machine.origin.installation)
-}
-
-/// Identity and Registry presence stay readable after revocation; authentication
-/// and submit-time revocation decisions remain with their existing owners.
-pub(crate) struct EnrollmentIdentity {
-    pub peer: PeerId,
-    pub origin: AdmissionOrigin,
-    pub last_seen: Option<SyncTime>,
-}
-
-pub(crate) fn identity_from_stored_enrollment(
-    row: queries::StoredEnrollment,
-) -> Result<EnrollmentIdentity, StoreError> {
-    let machine = StoredMachine::decode(row)?;
-    Ok(EnrollmentIdentity {
-        peer: machine.peer,
-        origin: machine.origin,
-        last_seen: machine.last_seen,
-    })
 }

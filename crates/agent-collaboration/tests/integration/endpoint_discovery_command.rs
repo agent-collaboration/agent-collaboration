@@ -202,3 +202,40 @@ async fn executable_discovers_an_isolated_published_service() {
         .unwrap_or_else(|error| panic!("journal cleanup: {error}"));
     std::fs::remove_dir(root).unwrap_or_else(|e| panic!("cleanup: {e}"));
 }
+
+#[test]
+fn finite_control_groups_keep_json_for_missing_required_arguments() {
+    let cases: &[&[&str]] = &[
+        &["endpoints", "invalid-action", "--json"],
+        &["addresses", "list", "--json"],
+        &["journal", "read", "--json"],
+        &["sessions", "list", "--json"],
+        &["session", "inspect", "--json"],
+        &["conversation", "prompt", "--json"],
+    ];
+
+    for arguments in cases {
+        let output = std::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
+            .args(*arguments)
+            .output()
+            .unwrap_or_else(|error| panic!("command {arguments:?}: {error}"));
+        assert_eq!(output.status.code(), Some(2), "command {arguments:?}");
+        let record: serde_json::Value = serde_json::from_slice(&output.stdout)
+            .unwrap_or_else(|error| panic!("JSON for {arguments:?}: {error}"));
+        assert_eq!(record["error"]["kind"], "invalidField");
+        assert_eq!(record["error"]["stage"], "validation");
+        assert_eq!(record["error"]["nextAction"], "correctRequest");
+    }
+}
+
+#[test]
+fn address_help_describes_lifecycle_coverage_not_message_targets() {
+    let addresses = std::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
+        .args(["addresses", "list", "--help"])
+        .output()
+        .unwrap_or_else(|error| panic!("addresses help: {error}"));
+    let address_help = String::from_utf8(addresses.stdout)
+        .unwrap_or_else(|error| panic!("addresses help text: {error}"));
+    assert!(address_help.contains("lifecycle coverage"));
+    assert!(address_help.contains("not message target discovery"));
+}

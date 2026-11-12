@@ -1,0 +1,34 @@
+//! A bounded positive duration in whole seconds.
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "u32", into = "u32")]
+pub struct PositiveSeconds(u32);
+impl JsonSchema for PositiveSeconds {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "PositiveSeconds".into()
+    }
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({"type":"integer","minimum":1,"maximum":31536000})
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+#[error("duration must be an integer between 1 and 31536000 seconds")]
+pub struct InvalidSeconds;
+impl TryFrom<u32> for PositiveSeconds {
+    type Error = InvalidSeconds;
+    fn try_from(value: u32) -> Result<Self, Self::Error> {
+        if (1..=31_536_000).contains(&value) {
+            Ok(Self(value))
+        } else {
+            Err(InvalidSeconds)
+        }
+    }
+}
+impl From<PositiveSeconds> for u32 {
+    fn from(value: PositiveSeconds) -> Self {
+        value.0
+    }
+}

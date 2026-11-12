@@ -6,16 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use syn::{Expr, Lit, Meta, Token, parse::Parser, punctuated::Punctuated};
 
-const EXCEPTIONS: [(&str, &str); 2] = [
-    (
-        "crates/collaboration-central-tokio/tests/integration/binding_attachment.rs",
-        "crates/collaboration-central-cloudflare/src/binding_attachment.rs",
-    ),
-    (
-        "crates/collaboration-central-tokio/tests/integration/object_identity.rs",
-        "crates/collaboration-central-cloudflare/src/object_location.rs",
-    ),
-];
+const EXCEPTIONS: [(&str, &str); 0] = [];
 
 pub(super) fn check_source_paths(root: &Path, packages: &[&CargoPackage]) -> PolicyResult {
     let mut observed_exceptions = BTreeSet::new();

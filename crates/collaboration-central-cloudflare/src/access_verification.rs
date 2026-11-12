@@ -69,19 +69,6 @@ impl InvocationLabels {
     }
 }
 
-#[cfg(feature = "conformance")]
-pub(crate) async fn verify(
-    env: &Env,
-    header: Option<&str>,
-    path: &str,
-    labels: &InvocationLabels,
-    layer: VerificationLayer,
-) -> Result<collaboration_central_core::AccessCaller, AccessRefusal> {
-    application(env, labels.clone(), layer)?
-        .verify_access(header, path)
-        .await
-}
-
 pub(crate) fn application(
     env: &Env,
     labels: InvocationLabels,

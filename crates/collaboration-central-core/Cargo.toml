@@ -15,11 +15,9 @@ conformance = []
 [dependencies]
 fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.118" }
 schemars.workspace = true
-collaboration-central-admin-protocol = { version = "0.1.96", path = "../collaboration-central-admin-protocol" }
 axum = { workspace = true, features = ["json", "query"] }
 http.workspace = true
 board-sync-protocol = { version = "0.1.96", path = "../board-sync-protocol" }
-collaboration-mail-protocol = { version = "0.1.93", path = "../collaboration-mail-protocol" }
 durable-steps.workspace = true
 runtime-primitives.workspace = true
 fleet-sync-protocol.workspace = true
@@ -27,10 +25,7 @@ fleet-sync-lease.workspace = true
 fleet-sync-receiver.workspace = true
 fleet-sync-delivery.workspace = true
 fleet-sync-session.workspace = true
-futures-channel = "0.3.34"
-futures-util.workspace = true
 sqlx-core.workspace = true
-fleet-admission = { version = "0.1.93", path = "../fleet-admission" }
 message-board = { version = "0.1.93", path = "../message-board" }
 chrono = { version = "0.4.45", default-features = false, features = ["serde", "alloc"] }
 serde.workspace = true

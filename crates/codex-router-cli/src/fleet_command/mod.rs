@@ -170,7 +170,7 @@ fn inspect(root: PathBuf) -> FileStatus {
         Ok(_) => {
             let checked = (|| {
                 let document = codex_router_host::read_fleet_enrollment_document(&path, &root)?;
-                document.session_inputs(&codex_router_host::open_fleet_enrollment_store(&root)?)?;
+                document.verify_secrets(&codex_router_host::open_fleet_enrollment_store(&root)?)?;
                 Ok::<_, io::Error>(document.metadata())
             })();
             match checked {

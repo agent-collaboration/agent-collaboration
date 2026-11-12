@@ -17,67 +17,10 @@ use std::{collections::BTreeMap, convert::Infallible, sync::Arc};
 #[path = "migration_bookkeeping_test.rs"]
 mod tests;
 
-#[cfg(test)]
-#[path = "fleet_workspace_columns_test.rs"]
-pub(crate) mod workspace_columns_tests;
-
-#[cfg(test)]
-#[path = "fleet_board_columns_test.rs"]
-mod board_columns_tests;
-
-#[cfg(test)]
-#[path = "fleet_adr_columns_test.rs"]
-pub(crate) mod adr_columns_tests;
-
-#[cfg(test)]
-#[path = "fleet_repository_columns_test.rs"]
-mod repository_columns_tests;
-
-#[cfg(test)]
-#[path = "fleet_directory_columns_test.rs"]
-mod directory_columns_tests;
-
-#[cfg(test)]
-#[path = "fleet_feed_columns_test.rs"]
-mod feed_columns_tests;
-
-#[cfg(test)]
-#[path = "fleet_feed_retention_test.rs"]
-mod feed_retention_tests;
-
-#[cfg(test)]
-#[path = "fleet_ledger_columns_test.rs"]
-pub(crate) mod ledger_columns_tests;
-
-#[cfg(test)]
-#[path = "fleet_ledger_integrity_test.rs"]
-mod ledger_integrity_tests;
-
-#[cfg(test)]
-#[path = "fleet_receipt_columns_test.rs"]
-mod receipt_columns_tests;
-
-#[cfg(test)]
-#[path = "admin_import_columns_test.rs"]
-mod admin_import_columns_tests;
-
-#[cfg(test)]
-#[path = "admin_import_corruption_test.rs"]
-mod admin_import_corruption_tests;
-
-#[cfg(feature = "conformance")]
-mod conformance;
-#[cfg(feature = "conformance")]
-pub use conformance::{
-    BootstrapCommand, BootstrapHistory, BootstrapProbe, BootstrapProbeReply, BootstrapReply,
-    HistoryCorruption,
-};
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum EngineSchema {
     Registry,
-    Copy,
     Session,
     Delivery,
     Fleet,
@@ -86,7 +29,6 @@ impl EngineSchema {
     fn corpus(self) -> &'static str {
         match self {
             Self::Registry => "fleet-sync-lease",
-            Self::Copy => "fleet-sync-receiver",
             Self::Session => "fleet-sync-session",
             Self::Delivery => "fleet-sync-delivery",
             Self::Fleet => "central-fleet",
@@ -95,7 +37,6 @@ impl EngineSchema {
     fn migrations(self) -> Vec<&'static sqlx_core::migrate::Migration> {
         match self {
             Self::Registry => fleet_sync_lease::LEASE_MIGRATOR.sql_migrations().collect(),
-            Self::Copy => fleet_sync_receiver::RECEIVER_MIGRATOR.iter().collect(),
             Self::Session => fleet_sync_session::SESSION_MIGRATOR
                 .sql_migrations()
                 .collect(),
@@ -150,67 +91,14 @@ where
             .await?;
         Ok(applied.count)
     }
-
-    pub(crate) async fn migrate_copy(&self) -> crate::owner_operation_calls::CopyMigrationResult {
-        use crate::owner_operation_calls::CopyMigrationResult;
-        match self
-            .driver
-            .run(MigrateCopyStep {
-                now: self.now,
-                clock: self.clock.clone(),
-            })
-            .await
-        {
-            Ok((result, _effects)) => result,
-            Err(error) => match crate::migration_failure::MigrationFailure::from_rollback(&error) {
-                Some(failure) => {
-                    // Before the first receiver migration there is no trusted
-                    // version. In particular, an existing-object collision is
-                    // a refusal, never shape-based adoption (decision 580).
-                    let first = EngineSchema::Copy
-                        .migrations()
-                        .into_iter()
-                        .filter(|migration| migration.migration_type.is_up_migration())
-                        .map(|migration| migration.version)
-                        .min();
-                    let version = if failure.corpus == EngineSchema::Copy.corpus()
-                        && first.and_then(|version| u64::try_from(version).ok())
-                            == Some(failure.version)
-                    {
-                        None
-                    } else {
-                        Some(failure.version)
-                    };
-                    CopyMigrationResult::Failed {
-                        corpus: failure.corpus,
-                        version,
-                        reason: failure.reason,
-                    }
-                }
-                None => CopyMigrationResult::Failed {
-                    corpus: EngineSchema::Copy.corpus().into(),
-                    version: None,
-                    reason: match fleet_sync_receiver::classify_copy_store_error(error.clone()) {
-                        fleet_sync_receiver::CopyTransactionFailure::Unavailable(
-                            fleet_sync_protocol::CopyUnavailableReason::Damaged { detail },
-                        ) => detail,
-                        _ => error.to_string(),
-                    },
-                },
-            },
-        }
-    }
 }
 
 struct CorpusProgress {
     count: usize,
-    from: Option<u64>,
-    to: u64,
 }
 
 struct BootstrapApplied {
     count: usize,
-    primary: CorpusProgress,
 }
 
 struct BootstrapStep {
@@ -262,35 +150,6 @@ where
                     .map_err(fleet_sync_delivery::delivery_rollback)?;
             }
             let mut count = primary.count;
-            if self.schema == EngineSchema::Copy {
-                let rules = crate::CopyReceiverRules::new(
-                    runtime_primitives::SyncTime::from_unix_millis(0),
-                    None,
-                )?;
-                fleet_sync_receiver::initialize_hook(scope, &rules)
-                    .await
-                    .map_err(|error| {
-                        crate::migration_failure::MigrationFailure::rollback(
-                            crate::copy_receiver_rules::COPY_SUMMARY_CORPUS,
-                            crate::copy_receiver_rules::COPY_SUMMARY_VERSION,
-                            self.now,
-                            fleet_sync_receiver::receiver_rollback(error),
-                        )
-                    })?;
-                generated_bootstrap::clear_migration_failure(
-                    scope,
-                    crate::copy_receiver_rules::COPY_SUMMARY_CORPUS.into(),
-                )
-                .await
-                .map_err(|error| {
-                    crate::migration_failure::MigrationFailure::rollback(
-                        crate::copy_receiver_rules::COPY_SUMMARY_CORPUS,
-                        crate::copy_receiver_rules::COPY_SUMMARY_VERSION,
-                        self.now,
-                        bootstrap_sql_error(error),
-                    )
-                })?;
-            }
             if self.schema == EngineSchema::Registry {
                 count += apply_corpus(
                     scope,
@@ -314,7 +173,7 @@ where
                 .count;
             }
 
-            Ok((BootstrapApplied { count, primary }, Vec::new()))
+            Ok((BootstrapApplied { count }, Vec::new()))
         })
     }
 }
@@ -586,11 +445,6 @@ where
         })?;
     Ok(CorpusProgress {
         count: newly_applied.len(),
-        from: highest
-            .map(u64::try_from)
-            .transpose()
-            .map_err(StoreError::backend)?,
-        to: u64::try_from(version).map_err(StoreError::backend)?,
     })
 }
 
@@ -611,81 +465,9 @@ fn bootstrap_sql_error(error: sqlx_core::Error) -> StoreError {
     ))
 }
 
-struct MigrateCopyStep {
-    clock: Arc<dyn Clock>,
-    now: runtime_primitives::SyncTime,
-}
-impl<Store, Driver> StepCallback<Store, Driver> for MigrateCopyStep
-where
-    Store: AtomicStore,
-    Driver: Database,
-    for<'transaction> Store::Scope<'transaction>: TransactionScope<Database = Driver>,
-    Driver::Arguments: IntoArguments<Driver>,
-    for<'blob> Vec<u8>: sqlx_core::types::Type<Driver>
-        + sqlx_core::encode::Encode<'blob, Driver>
-        + sqlx_core::decode::Decode<'blob, Driver>,
-    for<'scalar> i64: sqlx_core::types::Type<Driver>
-        + sqlx_core::encode::Encode<'scalar, Driver>
-        + sqlx_core::decode::Decode<'scalar, Driver>,
-    for<'blob> Option<Vec<u8>>:
-        sqlx_core::types::Type<Driver> + sqlx_core::decode::Decode<'blob, Driver>,
-    for<'scalar> Option<i64>:
-        sqlx_core::types::Type<Driver> + sqlx_core::decode::Decode<'scalar, Driver>,
-    for<'value> String: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
-    for<'value> Option<String>: Type<Driver> + Encode<'value, Driver> + Decode<'value, Driver>,
-    for<'row> &'row str: ColumnIndex<Driver::Row>,
-{
-    type Output = crate::owner_operation_calls::CopyMigrationResult;
-    type Effect = Infallible;
-    fn run<'scope, 'transaction>(
-        self,
-        scope: &'scope mut Store::Scope<'transaction>,
-    ) -> BoxFuture<'scope, StepResult<Self::Output, Self::Effect>> {
-        Box::pin(async move {
-            use crate::owner_operation_calls::CopyMigrationResult;
-            // Retired is observed inside the same transaction, before even
-            // migration-history DDL; the minimal receipt is left unchanged.
-            if matches!(
-                fleet_sync_receiver::inspect_copy(scope).await,
-                fleet_sync_receiver::CopyInspection::Retired { .. }
-            ) {
-                return Ok((CopyMigrationResult::Retired, Vec::new()));
-            }
-            let (applied, effects) = <BootstrapStep as StepCallback<Store, Driver>>::run(
-                BootstrapStep {
-                    schema: EngineSchema::Copy,
-                    now: self.now,
-                    clock: self.clock,
-                },
-                scope,
-            )
-            .await?;
-            let progress = applied.primary;
-            let corpus = EngineSchema::Copy.corpus().to_owned();
-            let result = if progress.count == 0 {
-                CopyMigrationResult::Current {
-                    corpus,
-                    version: progress.to,
-                }
-            } else {
-                CopyMigrationResult::Migrated {
-                    corpus,
-                    from: progress.from,
-                    to: progress.to,
-                }
-            };
-            Ok((result, effects))
-        })
-    }
-}
-
 #[cfg(test)]
-#[path = "fleet_directory_projection_test.rs"]
-mod directory_projection_tests;
-
-#[cfg(any(test, feature = "conformance"))]
 pub(crate) struct FixedBootstrapClock(pub runtime_primitives::SyncTime);
-#[cfg(any(test, feature = "conformance"))]
+#[cfg(test)]
 impl Clock for FixedBootstrapClock {
     fn now(&self) -> runtime_primitives::SyncTime {
         self.0

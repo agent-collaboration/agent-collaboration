@@ -1,4 +1,5 @@
-//! Store typed approval and question notices before delivering their push line.
+//! Deliver typed approval and question notices as one push line through the session route.
+//! Notices are not stored: a crash before the receipt leaves the approval pending.
 
 use super::{InteractionHistoryError, InteractionPushContext, SessionMessageDelivery};
 use agent_automation::AttemptId;
@@ -7,16 +8,16 @@ use collaboration_contracts::LoadPolicy;
 use collaboration_contracts::UnstoredAttemptEvidenceSink;
 use collaboration_protocol::{
     ApprovalOptionScope, ApprovalRequestRecord, DeliveryCorrelationId, DeliveryOutcome,
-    DeliveryReceipt, EndpointId, EndpointRef, InteractionId, InteractionPresentationId, MachineId,
-    MessageDelivery, MessageText, PushHeaderFacts, PushId, PushKind, PushLineInput, PushOrigin,
-    PushRecord, PushRecordDraft, RouterLink, RouterOriginRef, SessionDisplayNameLookup, SessionId,
-    SessionRef as ProtocolSessionRef, UuidIdentity, render_push_line,
+    DeliveryReceipt, EndpointId, EndpointRef, MachineId, MessageDelivery, MessageText,
+    PushHeaderFacts, PushId, PushKind, PushLineInput, PushOrigin, RouterLink,
+    SessionDisplayNameLookup, SessionId, SessionRef as ProtocolSessionRef, UuidIdentity,
+    render_push_line,
 };
 use message_board::{Identity, SessionRef};
 use session_event_model::{
     ApprovalEffect, ApprovalRequest, ApprovalScope, ApprovalSubject, QuestionField, QuestionRequest,
 };
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 pub(super) async fn deliver_approval_notice(
     delivery: Option<&Arc<dyn SessionMessageDelivery>>,
@@ -82,21 +83,13 @@ async fn deliver_notice(
     let target = protocol_session_ref(approver)?;
     let kind = notice.push_kind();
     let body = notice.body(approver)?;
-    let origin_router_ref = interaction_origin_ref(notice.request_id())?
-        .canonical_string()
-        .map_err(|_| InteractionHistoryError::Unavailable)?;
     let requester_display_name = display_names.display_name_for(&requester).ok().flatten();
     let push_id = PushId::try_from(uuid::Uuid::now_v7().hyphenated().to_string())
         .map_err(|_| InteractionHistoryError::Unavailable)?;
-    let draft = PushRecordDraft {
-        mode: None,
-        guard: None,
+    let notice_push = NoticePush {
         push_id,
         kind,
-        origin: PushOrigin::Router(kind),
-        origin_router_ref: Some(origin_router_ref),
         target: target.clone(),
-        reply_to_push_id: None,
         header_facts: match kind {
             PushKind::Approval => PushHeaderFacts::Approval {
                 requester,
@@ -108,12 +101,10 @@ async fn deliver_notice(
             },
             _ => return Err(InteractionHistoryError::Unavailable),
         },
-        body: Some(body),
-        activity: None,
-        created_at: chrono::Utc::now(),
+        body,
     };
 
-    let outcome = deliver_interaction_push_record(delivery.as_ref(), push_context, draft).await?;
+    let outcome = deliver_interaction_push(delivery.as_ref(), push_context, notice_push).await?;
     match outcome {
         DeliveryOutcome::Started
         | DeliveryOutcome::Steered
@@ -138,53 +129,41 @@ pub(super) async fn deliver_legacy_approval_record_notice(
         .display_name_for(&request.requester)
         .ok()
         .flatten();
-    let origin_router_ref = interaction_origin_ref(&request.request_id)?
-        .canonical_string()
-        .map_err(|_| InteractionHistoryError::Unavailable)?;
     let push_id = PushId::try_from(uuid::Uuid::now_v7().hyphenated().to_string())
         .map_err(|_| InteractionHistoryError::Unavailable)?;
-    let draft = PushRecordDraft {
-        mode: None,
-        guard: None,
+    let notice_push = NoticePush {
         push_id,
         kind: PushKind::Approval,
-        origin: PushOrigin::Router(PushKind::Approval),
-        origin_router_ref: Some(origin_router_ref),
         target: request.approver.clone(),
-        reply_to_push_id: None,
         header_facts: PushHeaderFacts::Approval {
             requester: request.requester.clone(),
             requester_display_name,
         },
-        body: Some(body),
-        activity: None,
-        created_at: chrono::Utc::now(),
+        body,
     };
-    deliver_interaction_push_record(delivery, push_context, draft).await
+    deliver_interaction_push(delivery, push_context, notice_push).await
 }
 
-async fn deliver_interaction_push_record(
+/// The rendered parts of one notice line; nothing about it is stored.
+struct NoticePush {
+    push_id: PushId,
+    kind: PushKind,
+    target: ProtocolSessionRef,
+    header_facts: PushHeaderFacts,
+    body: String,
+}
+
+async fn deliver_interaction_push(
     delivery: &dyn SessionMessageDelivery,
     push_context: &InteractionPushContext,
-    draft: PushRecordDraft,
+    notice_push: NoticePush,
 ) -> Result<DeliveryOutcome, InteractionHistoryError> {
-    let record = push_context
-        .store
-        .insert_push_record(draft)
-        .await
-        .map_err(|_| InteractionHistoryError::Unavailable)?;
-    let prepared = prepared_interaction_push(push_context, &record)?;
-    push_context
-        .store
-        .mark_interaction_notice_attempted(&prepared.push_id)
-        .await
-        .map_err(|_| InteractionHistoryError::Unavailable)?;
-
+    let prepared = prepared_interaction_push(push_context, &notice_push)?;
     let correlation = DeliveryCorrelationId::try_from(prepared.push_id.as_str().to_owned())
         .map_err(|_| InteractionHistoryError::Unavailable)?;
     let request = collaboration_contracts::layer_zero::DeliveryRequest {
         payload: prepared,
-        target: record.target.clone(),
+        target: notice_push.target,
         mode: MessageDelivery::Auto,
         precondition: DeliveryPrecondition::Unpinned,
         correlation,
@@ -200,54 +179,30 @@ async fn deliver_interaction_push_record(
         Ok(Ok(receipt)) => receipt.into_receipt(),
         Ok(Err(_)) | Err(_) => unknown_receipt(),
     };
-    settle_interaction_push(push_context, &record.push_id, &receipt).await;
     Ok(receipt.outcome)
 }
 
 fn prepared_interaction_push(
     push_context: &InteractionPushContext,
-    record: &PushRecord,
+    notice_push: &NoticePush,
 ) -> Result<collaboration_contracts::layer_zero::PreparedPush, InteractionHistoryError> {
     let line = render_push_line(&PushLineInput {
         link: RouterLink::new(
             MachineId::from(push_context.machine_identity.service_id().clone()),
-            record.push_id.clone(),
+            notice_push.push_id.clone(),
         ),
         machine_label: push_context.machine_identity.machine_label().clone(),
-        origin: record.origin.clone(),
-        header_facts: record.header_facts.clone(),
-        body: record.body.clone(),
+        origin: PushOrigin::Router(notice_push.kind),
+        header_facts: notice_push.header_facts.clone(),
+        body: Some(notice_push.body.clone()),
     })
     .map_err(|_| InteractionHistoryError::Unavailable)?;
     let line = MessageText::try_from(line).map_err(|_| InteractionHistoryError::Unavailable)?;
     Ok(collaboration_contracts::layer_zero::PreparedPush {
-        push_id: record.push_id.clone(),
+        push_id: notice_push.push_id.clone(),
         line,
         load_policy: LoadPolicy::MayLoad,
     })
-}
-
-async fn settle_interaction_push(
-    push_context: &InteractionPushContext,
-    push_id: &PushId,
-    receipt: &DeliveryReceipt,
-) {
-    let mut delay = Duration::from_secs(1);
-    loop {
-        let result = push_context
-            .store
-            .settle_interaction_notice(push_id, receipt.clone(), chrono::Utc::now())
-            .await;
-        if result.is_ok() {
-            return;
-        }
-        tracing::warn!(
-            push_id = push_id.as_str(),
-            "retrying interaction push settlement without redelivery"
-        );
-        tokio::time::sleep(delay).await;
-        delay = delay.saturating_mul(2).min(Duration::from_secs(30));
-    }
 }
 
 fn unknown_receipt() -> DeliveryReceipt {
@@ -256,15 +211,6 @@ fn unknown_receipt() -> DeliveryReceipt {
         reachability: None,
         client: None,
     }
-}
-
-fn interaction_origin_ref(request_id: &str) -> Result<RouterOriginRef, InteractionHistoryError> {
-    let interaction_id = InteractionId::try_from(request_id.to_owned())
-        .map_err(|_| InteractionHistoryError::Unavailable)?;
-    Ok(RouterOriginRef::Interaction {
-        interaction_id,
-        presentation_id: InteractionPresentationId::generate(),
-    })
 }
 
 fn protocol_session_ref(
@@ -292,13 +238,6 @@ impl TypedInteractionNotice<'_> {
         match self {
             Self::Approval(_) => PushKind::Approval,
             Self::Question(_) => PushKind::Question,
-        }
-    }
-
-    fn request_id(&self) -> &str {
-        match self {
-            Self::Approval(request) => &request.request_id,
-            Self::Question(request) => &request.request_id,
         }
     }
 
@@ -579,36 +518,4 @@ fn append_question_field(body: &mut String, field: &QuestionField) {
 
 fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\"'\"'"))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn each_interaction_presentation_gets_a_new_v7_identity() {
-        let first = interaction_origin_ref("approval-1").expect("first origin");
-        let second = interaction_origin_ref("approval-1").expect("second origin");
-        let (
-            RouterOriginRef::Interaction {
-                interaction_id: first_interaction,
-                presentation_id: first_presentation,
-            },
-            RouterOriginRef::Interaction {
-                interaction_id: second_interaction,
-                presentation_id: second_presentation,
-            },
-        ) = (first, second)
-        else {
-            panic!("typed interaction origin expected");
-        };
-
-        assert_eq!(first_interaction, second_interaction);
-        assert_ne!(first_presentation, second_presentation);
-        for presentation_id in [first_presentation, second_presentation] {
-            let parsed =
-                uuid::Uuid::parse_str(presentation_id.as_str()).expect("valid presentation UUID");
-            assert_eq!(parsed.get_version_num(), 7);
-        }
-    }
 }

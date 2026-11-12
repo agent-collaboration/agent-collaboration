@@ -230,13 +230,10 @@ pub(crate) fn run_close(args: CloseArguments) -> i32 {
             .await;
         match result {
             Ok(_) => {
-                report_wait(
-                    &mut client,
-                    operation_id,
-                    PositiveSeconds::DEFAULT_SUMMARY_TIMEOUT,
-                    args.json,
-                )
-                .await
+                let Ok(timeout) = PositiveSeconds::try_from(CLOSE_SETTLEMENT_WAIT_SECONDS) else {
+                    return 3;
+                };
+                report_wait(&mut client, operation_id, timeout, args.json).await
             }
             Err(error) => report_create_client_error(
                 ConversationClientError::Client(error),
@@ -246,6 +243,9 @@ pub(crate) fn run_close(args: CloseArguments) -> i32 {
         }
     })
 }
+
+/// How long `conversation close` waits for the close to settle, including the closing summary.
+const CLOSE_SETTLEMENT_WAIT_SECONDS: u32 = 900;
 
 async fn report_wait(
     client: &mut CollaborationClient,

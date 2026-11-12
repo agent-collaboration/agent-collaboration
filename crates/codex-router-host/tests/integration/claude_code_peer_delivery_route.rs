@@ -1,5 +1,6 @@
 //! Real registry/socket fixtures at the peer route boundary.
 
+use agent_automation::AttemptId;
 use agent_automation::{
     ClaudeCodePeerEffectEvidence, PeerProcessId, PeerSessionReference, PeerWriteEffect,
     RouteEffectEvidence,
@@ -17,7 +18,7 @@ use collaboration_contracts::SessionMessageDelivery;
 use collaboration_contracts::layer_zero::DeliveryRequest as PreparedDeliveryRequest;
 use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
-    AttemptId, CodexGeneration, DeliveryClientReceipt, DeliveryCorrelationId, DeliveryOutcome,
+    CodexGeneration, DeliveryClientReceipt, DeliveryCorrelationId, DeliveryOutcome,
     DeliveryRejectionReason, EndpointId, EndpointRef, MessageDelivery, MessageText, PushId,
     SessionId, SessionReachability, SessionRef, UuidIdentity,
 };

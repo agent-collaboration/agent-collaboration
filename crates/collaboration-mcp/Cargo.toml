@@ -16,7 +16,6 @@ test-support = ["collaboration-service/test-support"]
 [dependencies]
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
-board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
 axum = { workspace = true, features = ["http1", "tokio"] }
 collaboration-client = { path = "../collaboration-client", version = "0.1.30" }
 collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.30" }
@@ -24,7 +23,6 @@ collaboration-service = { path = "../collaboration-service", version = "0.1.30" 
 codex-native-integration.workspace = true
 futures-util.workspace = true
 http.workspace = true
-message-board = { path = "../message-board", version = "0.1.20" }
 rmcp.workspace = true
 schemars.workspace = true
 serde.workspace = true
@@ -34,27 +32,19 @@ tokio-util.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+lifecycle-observation = { path = "../lifecycle-observation", version = "0.1.14" }
+message-board = { path = "../message-board", version = "0.1.20" }
 router-clock = { workspace = true, features = ["test-support"] }
-collaboration-application-test-support = { path = "../collaboration-application-test-support", version = "0.1.126" }
 node-test-fixture = { version = "0.1.105", path = "../node-test-fixture" }
 collaboration-service = { path = "../collaboration-service", version = "0.1.30", features = ["test-support"] }
-durable-steps.workspace = true
 interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
-fleet-admission = { path = "../fleet-admission", version = "0.1.96" }
-fleet-sync-writer.workspace = true
-board-fleet-sync = { path = "../board-fleet-sync", version = "0.1.96" }
-board-central-test-support = { version = "0.1.96", path = "../board-central-test-support" }
-fleet-sync-protocol.workspace = true
-runtime-primitives.workspace = true
 uuid.workspace = true
 agent-collaboration = { path = "../agent-collaboration", version = "0.1.30" }
-automation-storage = { path = "../automation-storage", version = "0.1.16" }
 codex-acp-adapter = { path = "../codex-acp-adapter", version = "0.1.30" }
 codex-router-host = { path = "../codex-router-host", version = "0.1.31" }
 codex-native-integration.workspace = true
 futures-util.workspace = true
 jsonschema.workspace = true
-message-board-storage = { path = "../message-board-storage", version = "0.1.20" }
 reqwest = { workspace = true, features = ["json"] }
 rmcp = { workspace = true, features = ["client", "transport-streamable-http-client-reqwest", "transport-streamable-http-client-unix-socket"] }
 tempfile = "3.27.0"

@@ -1,20 +1,6 @@
 //! Resource-backed collaboration execution, provider adapters, durable owners and workers.
-mod project_store_paths;
-mod project_store_registry;
-pub use project_store_registry::{
-    NativeProjectStore, ProjectRegistryError, ProjectStoreRegistry, install_board_cursor_key,
-};
-mod central_project_reads;
-mod project_read_handle;
-pub use central_project_reads::{
-    CentralReadError, ProjectReadCopyFuture, ProjectReadCopySource, PulledProjectReadCopy,
-};
-pub use project_read_handle::{ProjectReadHandle, ProjectReadSnapshot};
-mod fleet_client;
-pub use fleet_client::{FleetClient, FleetClientError, FleetReply};
-mod automation_retention_worker;
-mod project_claim_store;
-pub use automation_retention_worker::AutomationRetentionWorker;
+mod interaction_retention_worker;
+pub use interaction_retention_worker::InteractionRetentionWorker;
 mod endpoint_directory;
 pub use endpoint_directory::{EndpointDirectory, EndpointInventoryReader, EndpointSnapshot};
 mod native_channel_relay;
@@ -40,8 +26,6 @@ pub use provider_operation_store::{
     ProviderOperationAdmissionResult, ProviderOperationRecord, ProviderOperationStore,
     ProviderOperationStoreError, provider_operation_retention_cutoff_ms,
 };
-mod delivery_acceptance_effect;
-pub mod delivery_route_projection;
 pub use provider_session_event_hub::{HubReceiveError, ProviderSessionEventHub, receive_hub_event};
 pub use provider_session_record::ProviderSessionRecord;
 mod app_server_event_forwarding;
@@ -70,9 +54,6 @@ mod provider_acp_event_projection;
 mod provider_acp_interaction;
 mod provider_acp_session_route;
 mod router_session_app_server;
-pub mod schedule_preparation_evidence_sink;
-mod scheduled_run_evidence_sink;
-mod scheduled_run_router;
 pub use app_server_model_catalog::{
     InvalidProviderModelEntry, ProviderModelEntry, ProviderModelReasoning, ProviderReasoningChoice,
     SessionModelCatalog, SessionModelCatalogError, render_model_list,
@@ -82,8 +63,6 @@ pub use router_session_app_server::{
     serve_router_session_app_server_connection,
 };
 mod session_delivery_router;
-pub mod stored_delivery_receipt;
-pub mod stored_run_receipt;
 pub use provider_acp_session_route::ProviderAcpSessionRoute;
 pub use session_delivery_router::SessionDeliveryRouter;
 mod service_identity_storage;
@@ -98,7 +77,6 @@ mod session_display_name_cache;
 pub use native_control_backend::NativeControlBackend;
 pub use session_display_name_cache::SessionDisplayNameCache;
 mod codex_app_server_delivery_route;
-mod codex_app_server_scheduled_runs;
 mod codex_queue_reconciliation;
 mod interaction_broker;
 mod message_effect_state;
@@ -106,7 +84,6 @@ pub use message_effect_state::classify_native_rejection;
 mod native_message_dispatch;
 mod native_recorded_policy;
 pub use codex_app_server_delivery_route::CodexAppServerDeliveryRoute;
-pub use codex_app_server_scheduled_runs::CodexAppServerScheduledRuns;
 pub use interaction_broker::{
     ApprovalDecisionError, InteractionHistoryError, InteractionHistoryRecord,
     InteractionHistoryState, QuestionHistoryState, QuestionResponse, RefusedApprovalOption,
@@ -120,70 +97,21 @@ mod open_scratch_scopes;
 pub use open_scratch_scopes::OpenScratchScopes;
 mod unmaterialized_thread_holder;
 pub use unmaterialized_thread_holder::UnmaterializedThreadHolder;
-mod interaction_storage_failure;
-pub mod stored_inventory_observation;
-mod wakeup_timing_worker;
-pub(crate) use interaction_storage_failure::map_interaction_storage_error;
 #[cfg(test)]
 mod captured_warnings_test_support;
-mod commit_or_timer_wait;
-mod keyed_worker_tasks;
-mod push_handoff_worker;
-#[cfg(test)]
-mod worker_test_support;
-pub use commit_or_timer_wait::{CommitWaitEnd, wait_for_commit_or_timer};
+pub mod stored_inventory_observation;
 /// The failed-pass retry lives with SQLite store maintenance; the layers above this crate
 /// reach it here.
 pub use sqlite_storage_maintenance::{FAILED_PASS_BACKOFF, FailedPassBackoff, FailureRetry};
 mod wake_driven_worker_loop;
 mod wake_driven_worker_observation;
-pub use push_handoff_worker::{PushHandoffError, PushHandoffWorker};
 pub use wake_driven_worker_loop::{BatchOutcome, WakeDrivenWorkerLoop, WakeSource, WorkerPass};
 pub use wake_driven_worker_observation::WorkerObservation;
 #[cfg(any(test, feature = "test-support"))]
 pub use wake_driven_worker_observation::{LoopSnapshot, SleepGate};
-pub mod received_mail_push;
-pub use received_mail_push::received_mail_push;
-mod outgoing_mail_message;
-pub use outgoing_mail_message::outgoing_mail_message;
-pub mod mail_push_preparation;
-pub use mail_push_preparation::{MailPushPreparation, prepare_mail_push};
-mod mail_delivery_session;
-pub use mail_delivery_session::MailDeliverySession;
-mod mail_delivery_projection;
-pub use mail_delivery_projection::{
-    project_cancelled_after_delivery, project_mail_cancel_outcome, project_mail_outcome,
-    project_received_mail,
-};
-pub use wakeup_timing_worker::WakeTimingWorker;
-mod native_thread_preparation;
-mod schedule_timing_worker;
-mod scheduled_native_dispatch;
-mod scheduled_native_observation;
-mod scheduled_run_worker;
-mod wakeup_delivery_sender;
-pub use schedule_timing_worker::ScheduleTimingWorker;
-mod automation_configuration;
-mod summary_native_worker;
-pub use automation_configuration::{
-    AutomationConfigurationBackend, AutomationConfigurationHandle, ConfigurationAdmissionLease,
-};
-pub mod delivery_reconciliation;
-pub mod run_reconciliation;
 
-mod project_replication_cursor;
-pub use project_replication_cursor::project_replication_cursor;
 pub mod observation_timestamp;
 
-#[cfg(all(test, not(feature = "test-support")))]
-#[path = "test_support/native_worker_faults.rs"]
-mod native_worker_faults;
-#[cfg(all(test, feature = "test-support"))]
-use test_support::native_worker_faults;
-
-/// Test-only schedule execution fixtures shared with application inspection tests.
-#[cfg(any(test, feature = "test-support"))]
-pub mod scheduled_route_fixture;
-/// Test-only hooks for causal runtime steps observed through the application.
+/// Test-only native boundary inputs used by the application's permission tests.
 #[cfg(feature = "test-support")]
 pub mod test_support;

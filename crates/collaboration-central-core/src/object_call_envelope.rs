@@ -65,22 +65,3 @@ pub(crate) fn encode_envelope(
     let bytes = serde_json::to_vec(&envelope).map_err(encode_refusal)?;
     Ok(SerializedObjectCall { destination, bytes })
 }
-
-/// Only the project journal's committed summary can use the return delivery path.
-pub(crate) fn encode_summary_delivery(
-    caller: &CallerContext<crate::CopyKind>,
-    summary: crate::CopyDirectorySummary,
-    identity: CallId,
-) -> Result<SerializedObjectCall, CallFailure> {
-    encode_envelope(ObjectCallEnvelope {
-        source: caller.address(),
-        source_face: CallerKind::Copy,
-        authority: caller.authority.clone(),
-        destination: ObjectAddress::Fleet,
-        destination_face: CallerKind::Fleet,
-        identity,
-        kind: crate::copy_directory_summary::DirectorySummaryUpdate::KIND.into(),
-        target: serde_json::Value::Null,
-        request: serde_json::to_value(summary).map_err(encode_refusal)?,
-    })
-}

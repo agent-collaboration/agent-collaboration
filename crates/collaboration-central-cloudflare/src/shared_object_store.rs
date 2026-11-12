@@ -29,19 +29,8 @@ use worker::{
     send::{SendFuture, SendWrapper},
 };
 
-#[cfg(feature = "conformance")]
-#[path = "shared_object_store/session_capabilities.rs"]
-mod session_capabilities;
-
-#[cfg(feature = "conformance")]
-type SharedStore<SharedHost> = crate::conformance_scope_faults::ScopeFaultStore<SharedHost>;
-#[cfg(not(feature = "conformance"))]
 type SharedStore<SharedHost> = DurableObjectStore<SharedHost>;
 
-#[cfg(feature = "conformance")]
-type RuntimeStore<SharedHost> =
-    collaboration_central_core::DriveTokenObserver<SharedStore<SharedHost>>;
-#[cfg(not(feature = "conformance"))]
 type RuntimeStore<SharedHost> = SharedStore<SharedHost>;
 
 pub struct CloudflareStorageHost<SharedHost: Host> {
@@ -49,8 +38,6 @@ pub struct CloudflareStorageHost<SharedHost: Host> {
     wake: AlarmOwner,
     state: Arc<SendWrapper<State>>,
     quarantine: Mutex<BTreeSet<ConnectionId>>,
-    #[cfg(feature = "conformance")]
-    faults: Arc<collaboration_central_conformance::RuntimeFaults>,
 }
 
 impl<SharedHost: Host> CloudflareStorageHost<SharedHost> {
@@ -67,59 +54,17 @@ impl<SharedHost: Host> CloudflareStorageHost<SharedHost> {
             shared_host,
             wake.clone(),
         );
-        #[cfg(feature = "conformance")]
-        let faults = Arc::new(collaboration_central_conformance::RuntimeFaults::default());
-        #[cfg(feature = "conformance")]
-        let store =
-            crate::conformance_scope_faults::ScopeFaultStore::with_faults(store, faults.clone());
         let store = Arc::new(store);
-        #[cfg(feature = "conformance")]
-        let store = Arc::new(collaboration_central_core::DriveTokenObserver::new(store));
         Self {
             store,
             wake,
             state,
             quarantine: Mutex::default(),
-            #[cfg(feature = "conformance")]
-            faults,
-        }
-    }
-
-    #[cfg(feature = "conformance")]
-    pub(crate) fn with_faults(
-        state: Arc<SendWrapper<State>>,
-        shared_host: impl FnOnce(AlarmOwner) -> Arc<SharedHost>,
-        faults: Arc<collaboration_central_conformance::RuntimeFaults>,
-    ) -> Self {
-        let wake = AlarmOwner::new(state.storage());
-        let shared_host = shared_host(wake.clone());
-        let store = DurableObjectStore::new(
-            sqlx_durable_object::DoConnection::new(state.storage()),
-            shared_host,
-            wake.clone(),
-        );
-        let store = Arc::new(
-            crate::conformance_scope_faults::ScopeFaultStore::with_faults(store, faults.clone()),
-        );
-        let store = Arc::new(collaboration_central_core::DriveTokenObserver::new(store));
-        Self {
-            store,
-            wake,
-            state,
-            quarantine: Mutex::default(),
-            faults,
         }
     }
 
     pub async fn migrate_store(&self) -> Result<(), durable_steps::StoreError> {
-        #[cfg(feature = "conformance")]
-        {
-            self.store.inner().migrate().await
-        }
-        #[cfg(not(feature = "conformance"))]
-        {
-            self.store.migrate().await
-        }
+        self.store.migrate().await
     }
 
     pub fn accept_socket(
@@ -181,15 +126,6 @@ impl<SharedHost: Host> CloudflareStorageHost<SharedHost> {
                 if !Self::is_open(&socket) || self.is_quarantined(connection) {
                     return Err(SocketFailure::Closed);
                 }
-                #[cfg(feature = "conformance")]
-                if matches!(registration, ConnectionRegistration::Attached { .. })
-                    && self
-                        .faults
-                        .fail_registration_publication(connection)
-                        .map_err(|_| SocketFailure::Closed)?
-                {
-                    return Err(SocketFailure::Closed);
-                }
                 let mut attachment = Self::attachment(&socket)?;
                 attachment.registration = registration;
                 socket
@@ -211,30 +147,6 @@ impl<SharedHost: Host> ObjectHost for CloudflareStorageHost<SharedHost> {
 
     fn store(&self) -> &Arc<Self::Store> {
         &self.store
-    }
-    #[cfg(feature = "conformance")]
-    fn session_finalize_fault(
-        &self,
-    ) -> Result<Option<collaboration_central_core::SessionFinalizeFault>, durable_steps::StoreError>
-    {
-        self.faults
-            .session_finalize_fault()
-            .map_err(durable_steps::StoreError::backend)
-    }
-    #[cfg(feature = "conformance")]
-    fn observe_session_finalize_failure(
-        &self,
-        failure: collaboration_central_core::SessionFinalizeFailure,
-    ) -> Result<(), durable_steps::StoreError> {
-        self.faults
-            .observe_session_finalize_failure(failure)
-            .map_err(durable_steps::StoreError::backend)
-    }
-    #[cfg(feature = "conformance")]
-    fn stale_drive_rejections(
-        &self,
-    ) -> Result<Vec<durable_steps::OperationId>, durable_steps::StoreError> {
-        self.store.rejected_operations()
     }
     fn wake(&self) -> &Self::Wake {
         &self.wake
@@ -269,18 +181,6 @@ impl<SharedHost: Host> ObjectHost for CloudflareStorageHost<SharedHost> {
         frame: Bytes,
     ) -> impl Future<Output = Result<(), SocketFailure>> + Send {
         ready((|| {
-            #[cfg(feature = "conformance")]
-            if let Ok(identity) = serde_json::from_slice::<
-                collaboration_central_conformance::OutboundFrameIdentity,
-            >(&frame)
-                && let Some(frame) = identity.answer_frame()
-                && self
-                    .faults
-                    .drop_answer(to, frame)
-                    .map_err(|_| SocketFailure::Closed)?
-            {
-                return Ok(());
-            }
             let socket = self.socket(to)?;
             if !Self::is_open(&socket) || self.is_quarantined(to) {
                 return Err(SocketFailure::Closed);

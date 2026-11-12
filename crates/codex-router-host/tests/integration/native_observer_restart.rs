@@ -240,7 +240,6 @@ async fn an_observer_that_never_restores_coverage_backs_off_with_one_warning_unt
     let clock_listener =
         host_clock_control::prepare(&root).unwrap_or_else(|error| panic!("clock input: {error}"));
     let mut runtime = CollaborationRuntime::start(CollaborationRuntimeInputs {
-        board_session: None,
         directory: root.clone(),
         codex_home: root.clone(),
         backend_socket: root.join("backend.sock"),

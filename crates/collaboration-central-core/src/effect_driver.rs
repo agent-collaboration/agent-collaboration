@@ -12,36 +12,24 @@
 
 use crate::session_store::SessionTransportEffect;
 use crate::{
-    CoreHost, ObjectHost, PlatformIo,
+    ObjectHost, PlatformIo,
     session_store::{PendingWelcome, SessionCommit},
     step_driver::CommittedEffects,
 };
 use board_sync_protocol::BoardConsumerProtocol;
-use durable_steps::Host as _;
 use fleet_sync_protocol::{CloseReason, ConnectionId, ServerFrame};
-use runtime_primitives::{Clock, WakeScheduler};
+use runtime_primitives::WakeScheduler;
 use std::{collections::BTreeSet, sync::Arc};
-mod archive_reports;
-mod copy_reads;
-mod copy_writes;
-mod fleet_reads;
-mod fleet_requests;
-mod forwards;
-mod installation_reads;
-mod mail_submit;
-mod sender_mail;
 
 pub(crate) struct EffectDriver<Host: ObjectHost, Io: PlatformIo> {
     host: Arc<Host>,
-    shared_host: Arc<CoreHost<Io>>,
-    replies: Arc<crate::holder_reply_hub::HolderReplyHub>,
+    marker: std::marker::PhantomData<fn() -> Io>,
 }
 impl<Host: ObjectHost, Io: PlatformIo> Clone for EffectDriver<Host, Io> {
     fn clone(&self) -> Self {
         Self {
             host: self.host.clone(),
-            shared_host: self.shared_host.clone(),
-            replies: self.replies.clone(),
+            marker: std::marker::PhantomData,
         }
     }
 }
@@ -55,15 +43,10 @@ pub(crate) struct PublishedSessionEffects {
 }
 
 impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
-    pub(crate) fn new(
-        host: Arc<Host>,
-        shared_host: Arc<CoreHost<Io>>,
-        replies: Arc<crate::holder_reply_hub::HolderReplyHub>,
-    ) -> Self {
+    pub(crate) fn new(host: Arc<Host>) -> Self {
         Self {
             host,
-            shared_host,
-            replies,
+            marker: std::marker::PhantomData,
         }
     }
 
@@ -119,7 +102,6 @@ impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
             let _ = self.host.wake().wake_at(at).await;
         }
         for connection in &published.close {
-            self.replies.fail_connection(*connection);
             let _ = self
                 .host
                 .close_connection(*connection, CloseReason::ClientClosed)
@@ -127,198 +109,6 @@ impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
         }
         for effect in published.transport {
             match effect {
-                SessionTransportEffect::ForwardRoute { pending, post } => {
-                    if !published.close.contains(&pending.connection) {
-                        self.route_forward(pending, post).await;
-                    }
-                }
-                SessionTransportEffect::ForwardDelivery {
-                    installation,
-                    request,
-                    last_seen,
-                } => self.deliver_forward(installation, request, last_seen).await,
-                SessionTransportEffect::ForwardFrame {
-                    connection,
-                    session,
-                    bytes,
-                } => {
-                    if published.close.contains(&connection)
-                        || !self.is_attached(connection, session.session_id).await
-                    {
-                        continue;
-                    }
-                    let live = matches!(self.host.admission_binding(connection).await,Ok(binding) if binding.connection==connection && binding.peer==session.peer && binding.expires_at>self.shared_host.now());
-                    if live && self.host.send_frame(connection, bytes).await.is_err() {
-                        self.fail_connection(connection).await;
-                    }
-                }
-                SessionTransportEffect::FleetRead {
-                    connection,
-                    session,
-                    frame,
-                    request,
-                } => {
-                    if !published.close.contains(&connection) {
-                        self.answer_fleet_read(connection, session, frame, request)
-                            .await;
-                    }
-                }
-                SessionTransportEffect::InstallationRead {
-                    connection,
-                    session,
-                    frame,
-                    request,
-                } => {
-                    if !published.close.contains(&connection) {
-                        self.answer_installation_read(connection, session, frame, request)
-                            .await;
-                    }
-                }
-                SessionTransportEffect::SenderMailRequest {
-                    connection,
-                    session,
-                    frame,
-                    request,
-                } => {
-                    if !published.close.contains(&connection) {
-                        self.answer_sender_mail(connection, session, frame, request)
-                            .await;
-                    }
-                }
-                SessionTransportEffect::FleetRequest {
-                    connection,
-                    session,
-                    frame,
-                    request,
-                } => {
-                    if !published.close.contains(&connection) {
-                        self.answer_fleet_request(connection, session, frame, request)
-                            .await;
-                    }
-                }
-                SessionTransportEffect::ArchiveReport {
-                    connection,
-                    session,
-                    frame,
-                    report,
-                } => {
-                    if !published.close.contains(&connection) {
-                        self.answer_archive_report(connection, session, frame, report)
-                            .await;
-                    }
-                }
-                SessionTransportEffect::MailSubmit {
-                    connection,
-                    session,
-                    frame,
-                    item,
-                    origin_epoch,
-                } => {
-                    if !published.close.contains(&connection) {
-                        self.answer_mail_submit(connection, session, frame, item, origin_epoch)
-                            .await;
-                    }
-                }
-                SessionTransportEffect::FleetEffects {
-                    connection,
-                    session,
-                    frame,
-                    request,
-                } => {
-                    if !published.close.contains(&connection) {
-                        self.answer_fleet_effects(connection, session, frame, request)
-                            .await;
-                    }
-                }
-                SessionTransportEffect::CopyWrite {
-                    connection,
-                    session,
-                    frame,
-                    database,
-                    request,
-                } => {
-                    if !published.close.contains(&connection) {
-                        self.answer_copy_write(connection, session, frame, database, *request)
-                            .await;
-                    }
-                }
-                SessionTransportEffect::CopyRead {
-                    connection,
-                    session,
-                    frame,
-                    database,
-                    request,
-                } => {
-                    if !published.close.contains(&connection) {
-                        self.answer_copy_read(connection, session, frame, database, request)
-                            .await;
-                    }
-                }
-                SessionTransportEffect::PeerAnswer {
-                    connection,
-                    session,
-                    frame,
-                    answer,
-                } => {
-                    if !published.close.contains(&connection) {
-                        self.replies.resolve(
-                            session,
-                            connection,
-                            frame,
-                            answer,
-                            self.shared_host.now(),
-                        );
-                    }
-                }
-                SessionTransportEffect::LeaseRequest {
-                    connection,
-                    session,
-                    frame,
-                    request,
-                } => {
-                    if published.close.contains(&connection)
-                        || !self.is_attached(connection, session.session_id).await
-                    {
-                        continue;
-                    }
-                    let identity = self.shared_host.call_identity("session_lease");
-                    let Ok(identity) = identity else {
-                        self.fail_connection(connection).await;
-                        continue;
-                    };
-                    let answer = self
-                        .shared_host
-                        .dispatch(
-                            crate::session_calls::SessionLeaseRegistry,
-                            crate::session_calls::SessionLeaseRequest { session, request },
-                            identity,
-                        )
-                        .await;
-                    let Ok(answer) = answer else {
-                        self.fail_connection(connection).await;
-                        continue;
-                    };
-                    if !self.is_attached(connection, session.session_id).await {
-                        continue;
-                    }
-                    let reply = ServerFrame::<BoardConsumerProtocol>::Answer {
-                        frame,
-                        body: fleet_sync_protocol::OperationAnswer::Lease(answer),
-                    };
-                    match serde_json::to_vec(&reply) {
-                        Ok(bytes) => {
-                            if self
-                                .host
-                                .send_frame(connection, bytes.into())
-                                .await
-                                .is_err()
-                            {
-                                self.fail_connection(connection).await;
-                            }
-                        }
-                        Err(_) => self.fail_connection(connection).await,
-                    }
-                }
                 SessionTransportEffect::Frame { connection, bytes } => {
                     if !published.close.contains(&connection)
                         && self.host.send_frame(connection, bytes).await.is_err()
@@ -327,25 +117,23 @@ impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
                     }
                 }
                 SessionTransportEffect::Close { connection, reason } => {
-                    self.replies.fail_connection(connection);
                     let _ = self.host.close_connection(connection, reason).await;
                 }
             }
         }
         for PendingWelcome {
             connection,
-            peer,
             session_id,
         } in published.welcomes
         {
             if published.close.contains(&connection) {
                 continue;
             }
-            let sent = match self.shared_host.gather_welcome(peer).await {
-                Ok(databases) => {
+            let sent = {
+                {
                     match serde_json::to_vec(&ServerFrame::<BoardConsumerProtocol>::Welcome {
                         session_id,
-                        databases,
+                        databases: Vec::new(),
                     }) {
                         Ok(bytes) => {
                             // Gathering may yield to a replacement connection. Recheck
@@ -368,25 +156,13 @@ impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
                         Err(_) => false,
                     }
                 }
-                Err(_) => false,
             };
             if !sent {
                 self.fail_connection(connection).await;
             }
         }
     }
-    async fn is_attached(
-        &self,
-        connection: ConnectionId,
-        session: fleet_sync_protocol::SessionId,
-    ) -> bool {
-        let host = self.host.clone();
-        matches!(self.host.with_local_section(async move {
-            host.registrations().await.ok().and_then(|registrations| registrations.get(&connection).copied())
-        }).await, Ok(Some(fleet_sync_session::ConnectionRegistration::Attached { session_id, .. })) if session_id == session)
-    }
     async fn fail_connection(&self, connection: ConnectionId) {
-        self.replies.fail_connection(connection);
         let host = self.host.clone();
         let _ = self
             .host
@@ -397,10 +173,4 @@ impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
             .close_connection(connection, CloseReason::ClientClosed)
             .await;
     }
-}
-
-/// A test-only sink for observing the minimal real rule's released effects.
-#[cfg(feature = "conformance")]
-pub(crate) fn conformance_effects<Effect>(committed: CommittedEffects<Effect>) -> Vec<Effect> {
-    committed.into_effects()
 }

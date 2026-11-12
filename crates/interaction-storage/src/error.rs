@@ -11,16 +11,4 @@ pub enum StorageError {
     InvalidStoredRecord,
     #[error("interaction record is invalid or inconsistent")]
     InvalidRecord,
-    #[error("push record id already exists")]
-    PushAlreadyExists,
-    #[error("push identity already belongs to different content")]
-    PushContentConflict,
-    #[error("push record was not found in this interaction database")]
-    PushNotFound,
-    #[error("push record delivery state does not permit this transition")]
-    PushStateConflict,
-    #[error("push record is not permitted for this caller")]
-    PushNotPermitted,
-    #[error("installation identities conflict with the immutable local directory")]
-    InstallationPeerConflict,
 }

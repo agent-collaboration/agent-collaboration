@@ -292,10 +292,9 @@ fn the_existing_valid_1024_bit_fixture_is_refused_by_core_key_selection() {
     struct WeakKeyFixture {
         key: AccessJwk,
     }
-    let fixture: WeakKeyFixture = serde_json::from_str(include_str!(
-        "../../../collaboration-central-conformance/fixtures/access-weak-1024.json"
-    ))
-    .expect("retained weak RSA fixture");
+    let fixture: WeakKeyFixture =
+        serde_json::from_str(include_str!("../fixtures/access-weak-1024.json"))
+            .expect("retained weak RSA fixture");
     let kid = fixture.key.kid.clone();
     let keys = AccessJwks {
         keys: vec![fixture.key],

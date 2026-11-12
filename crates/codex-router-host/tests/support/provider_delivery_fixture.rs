@@ -1,6 +1,7 @@
 //! Provider route decisions before any client effect.
 
 use super::provider_fixture_launch;
+use agent_automation::AttemptId;
 use agent_automation::RouteEffectEvidence;
 use codex_router_host::{
     ExternalProviderLaunch, LiveSessionOwnership, LiveSessionOwnershipCheck,
@@ -12,7 +13,7 @@ use collaboration_contracts::{
     layer_zero::{DeliveryRequest as PreparedDeliveryRequest, PreparedPush},
 };
 use collaboration_protocol::{
-    AttemptId, ChannelDescription, CodexGeneration, DeliveryCorrelationId, EndpointAvailability,
+    ChannelDescription, CodexGeneration, DeliveryCorrelationId, EndpointAvailability,
     EndpointDescription, EndpointId, EndpointRef, GenerationNumber, MessageDelivery, MessageText,
     NonEmptyText, ObservationTimestamp, ProviderBindingId, ProviderBindingIdentity,
     ProviderCapabilities, ProviderCapability, ProviderCapabilityEvidence, ProviderCapabilityName,

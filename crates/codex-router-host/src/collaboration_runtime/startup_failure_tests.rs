@@ -44,7 +44,6 @@ async fn assert_exposure_failure_cleanup(provider_launches: Vec<crate::ExternalP
     let result = Box::pin(
         CollaborationRuntime::start_with_optional_router_proxy_endpoint(
             CollaborationRuntimeInputs {
-                board_session: None,
                 directory: root.path().to_owned(),
                 codex_home: root.path().to_owned(),
                 backend_socket: root.path().join("missing-backend.sock"),
@@ -62,7 +61,6 @@ async fn assert_exposure_failure_cleanup(provider_launches: Vec<crate::ExternalP
             )),
             None,
             prepared,
-            None,
         ),
     )
     .await;

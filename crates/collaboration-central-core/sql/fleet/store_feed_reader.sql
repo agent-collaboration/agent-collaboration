@@ -1,1 +1,0 @@
-INSERT INTO fleet_feed_readers(reader_id, installation, last_read_position, created_at, updated_at) VALUES(?1, ?2, CAST(?3 AS INTEGER), CAST(?4 AS INTEGER), CAST(?4 AS INTEGER)) ON CONFLICT(installation) DO UPDATE SET last_read_position = MAX(fleet_feed_readers.last_read_position, excluded.last_read_position), updated_at = excluded.updated_at;

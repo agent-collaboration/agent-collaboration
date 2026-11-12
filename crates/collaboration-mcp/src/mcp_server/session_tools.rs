@@ -1,28 +1,17 @@
 //! Endpoint, session, lifecycle-journal and address-book tools.
 use super::{
     API_RESULT_BUDGET, AddressListParams, AddressPage, CallToolResult, ClientError,
-    CollaborationMcpServer, EmptyToolInput, EndpointInventory, InstallationIdentity, JournalPage,
-    JournalReadParams, JournalStatus, McpToolOutput, NativeInspectParams, NativeInspectResult,
-    NativeInterruptParams, NativeInterruptResult, NativeRenameParams, NativeRenameResult,
-    NativeSessionListParams, NativeSessionListResult, OperationEffect, Parameters,
-    ProviderInspectFailure, ProviderSessionInspectRequest, ProviderSessionInspectResult,
-    ProviderSessionListParams, ProviderSessionListResult, application_result, caller_cancelled,
-    failure, success_result, tool, tool_router, typed_failure_result,
+    CollaborationMcpServer, EmptyToolInput, EndpointInventory, JournalPage, JournalReadParams,
+    JournalStatus, McpToolOutput, NativeInspectParams, NativeInspectResult, NativeInterruptParams,
+    NativeInterruptResult, NativeRenameParams, NativeRenameResult, NativeSessionListParams,
+    NativeSessionListResult, OperationEffect, Parameters, ProviderInspectFailure,
+    ProviderSessionInspectRequest, ProviderSessionInspectResult, ProviderSessionListParams,
+    ProviderSessionListResult, application_result, caller_cancelled, failure, success_result, tool,
+    tool_router, typed_failure_result,
 };
 
 #[tool_router(router = session_tool_router, vis = "pub(super)")]
 impl CollaborationMcpServer {
-    #[tool(name = "installation_show", description = "Shows this Router's stable installation peer and current central link observation. Read-only; does not enroll or change the installation.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<InstallationIdentity>>())]
-    pub(super) async fn installation_show(
-        &self,
-        Parameters(EmptyToolInput {}): Parameters<EmptyToolInput>,
-    ) -> CallToolResult {
-        application_result(
-            self.application.sessions().installation_show().await,
-            OperationEffect::None,
-        )
-    }
-
     #[tool(name = "endpoints_list", description = "Lists collaboration endpoints. Read-only; successful discovery is not evidence that an agent assignment completed.", output_schema = rmcp::handler::server::tool::schema_for_type::<McpToolOutput<EndpointInventory>>())]
     pub(super) async fn endpoints_list(
         &self,

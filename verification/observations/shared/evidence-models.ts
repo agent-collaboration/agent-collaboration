@@ -261,25 +261,6 @@ export const nativeThreadSchema = z.looseObject({
   id: z.string(),
   turns: z.array(nativeTurnSchema).default([]),
 });
-export const nativeExpectationSchema = z.object({
-  thread_id: z.string(),
-  turn_id: z.string(),
-  push_id: z.string(),
-});
-export type NativeExpectation = z.infer<typeof nativeExpectationSchema>;
-export const nativeMatchSchema = z.object({
-  nativeId: z.string(),
-  clientId: z.string(),
-  turnId: z.string(),
-  textSHA256: z.string(),
-});
-export const nativeCorrelationSchema = z.object({
-  threadId: z.string(),
-  matchingCount: z.number().int(),
-  matches: z.array(nativeMatchSchema),
-  supported: z.boolean(),
-});
-export type NativeCorrelation = z.infer<typeof nativeCorrelationSchema>;
 export const signalFailureSchema = z.object({ pid: z.number().int(), error: z.string() });
 export const signalResultSchema = z.object({
   sent: z.array(z.number().int()).default([]),

@@ -6,7 +6,7 @@ use super::{
     IdSource, Infallible, IntoArguments, ObjectHost, ObjectRuntime, ObjectWork, OwnerIdentity,
     PeerId, PlatformIo, RevocationDecision, ServiceId, StepCallback, StepDriver, StepResult,
     StoreError, StoredMachine, SyncTime, TransactionScope, Type, corrupt, operation_pending,
-    queries, readmission, wrong_face,
+    queries, readmission,
 };
 use durable_steps::{
     CallTarget, JournalScope, OperationContext, OperationFailure, OperationId, RequestKey, Task,
@@ -97,10 +97,7 @@ where
             shared_host,
             engine,
             ..
-        } = &self.work
-        else {
-            return Err(wrong_face());
-        };
+        } = &self.work;
         let (admission, _) = StepDriver::new(host.clone())
             .run(RevokeStep {
                 installation,

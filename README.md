@@ -7,16 +7,14 @@ The product boundary is intentionally narrow:
 - Codex remains the CLI, protocol client, session owner, installer, config owner, hook runner, MCP owner, and log/session/history owner.
 - `codex-router serve` owns local router authentication, upstream OAuth accounts, quota snapshots, account selection, and byte-preserving forwarding of Codex model-provider traffic.
 - The optional foreground `codex-router host` command owns one local router and one native Codex app-server child, serves the collaboration API as MCP tools, and composes the native Codex relay and ACP channels. Codex still owns native threads, queues, permissions, and agent execution.
-- The separate `agent-collaboration` CLI and reusable `collaboration-client` Rust SDK provide session discovery, explicit messaging, observation, and exact interruption. Lifecycle metadata lives separately from provider state and Codex history.
+- The separate `agent-collaboration` CLI and reusable `collaboration-client` Rust SDK provide session discovery, conversations, observation, and exact interruption. Lifecycle metadata lives separately from provider state and Codex history.
 - Prodex is source-mining reference material only. This repo is not a Prodex fork.
 
 The collaboration CLI is an interface to the Rust SDK. Reusable connection and
 session operations belong to `collaboration-client`; `collaboration-protocol`
 defines the shared request and result types. `collaboration-service` handles
-requests inside the Router Host, and `collaboration-mcp` serves them as MCP tools. Message-board types and rules live in `message-board`, with SQLx
-persistence in `message-board-storage`.
-Request and result types are available through `collaboration_client::protocol`;
-board request/result types through `collaboration_client::board`. SDK consumers
+requests inside the Router Host, and `collaboration-mcp` serves them as MCP tools.
+Request and result types are available through `collaboration_client::protocol`. SDK consumers
 do not need to invoke the CLI or depend on its argument types.
 
 Current design source of truth:
@@ -191,20 +189,16 @@ new restart request. Subsequent compatible upgrades use `host restart`.
 See [Host restart validation](docs/testing/host-restart.md) for isolation and
 replacement proof.
 
-For discovery, agent-declared messages, queue/steer, timed wake-ups and scheduled
-work, see the [agent CLI guide](docs/agent-guidance/agent-collaboration.md).
+For discovery and observation, see the [agent CLI guide](docs/agent-guidance/agent-collaboration.md).
 `agent-collaboration conversation create|prompt|load|cancel` uses the target
 endpoint's client, including Codex, Claude, and Cursor. Use `conversation
-operation show|wait|reconcile` for inspectable operations. `message send` can
-also reach a live Claude Code session through its peer socket; its
-`peerMessageWritten` receipt confirms the write, not the session's response.
+operation show|wait|reconcile` for inspectable operations.
 That guide also documents registering the running Router Host's manifest-advertised
 Streamable HTTP MCP endpoint with Codex. Use the selected current `service.json`;
 do not guess a port or expose the unauthenticated endpoint beyond loopback.
-Automation uses a separate `automation.sqlite` database and the same Rust SDK
-and CLI. [Debug testing instructions](docs/testing/automation-debug-testing.md)
-cover the opt-in Luna acceptance runner and its isolated Host. Shared message boards use the same client and service; see the
-[agent collaboration skill](agent-skills/agent-collaboration/SKILL.md). Other language
+[Debug testing instructions](docs/testing/automation-debug-testing.md)
+cover the isolated debug Host. See the
+[agent collaboration skill](agent-skills/agent-collaboration/SKILL.md) for the CLI and MCP. Other language
 SDK implementations and remote transport follow separately.
 
 ## Install and upgrade

@@ -22,7 +22,7 @@
         }
       },
       {
-        "command": ["cargo", "clean", "--package", "path+file://<root>/crates/agent-router-update"],
+        "command": ["cargo", "clean", "--package", "path+file://<root>/crates/interaction-storage"],
         "environment": {
           "SQLX_OFFLINE": "true"
         }
@@ -35,31 +35,22 @@
           "--jobs",
           "1",
           "--package",
-          "path+file://<root>/crates/agent-router-update",
+          "path+file://<root>/crates/interaction-storage",
           "--all-targets",
           "--all-features"
         ],
         "environment": {
           "SQLX_OFFLINE": "true",
           "RUSTC_WRAPPER": "<wrapper>",
-          "SQLX_PREPARE_PACKAGE": "agent-router-update",
-          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/agent-router-update",
+          "SQLX_PREPARE_PACKAGE": "interaction-storage",
+          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/interaction-storage",
           "SQLX_PREPARE_DATABASE_URL": "turso:<root>/tmp/<schema>/schema.db",
           "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/metadata"
         }
       }
     ],
     "metadata": {
-      "crates/agent-router-update/.sqlx": {
-        "query-original.json": "original"
-      },
       "crates/interaction-storage/.sqlx": {
-        "query-original.json": "original"
-      },
-      "crates/message-board-storage/.sqlx": {
-        "query-original.json": "original"
-      },
-      "crates/board-staging-cutover/.sqlx": {
         "query-original.json": "original"
       }
     },

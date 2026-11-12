@@ -1,22 +1,17 @@
-//! A request the API sheds at its request limit was not run. The CLI reports it as an
-//! `overloaded` failure to retry later: a board command in the board's typed refusal, and an
-//! untyped command as the retryable overload, never as a connection failure or protocol
-//! violation.
+//! A request the API sheds at its request limit was not run. The CLI reports it as the
+//! retryable `overloaded` failure, never as a connection failure or protocol violation.
 
-use crate::board_fixture::native_registry;
-use automation_storage::AutomationStore;
-use collaboration_contracts::MachineIdentity;
 use collaboration_mcp::test_support::{ServedCollaborationApi, TestServeOptions};
-use collaboration_protocol::OperationId;
 use collaboration_service::ApplicationFixture;
-
-use collaboration_service::ProjectAdmission;
-use collaboration_service::ProjectAdmissionProps;
 use serde_json::{Value, json};
 use std::{os::unix::fs::PermissionsExt, path::Path, sync::Arc, time::Duration};
-use tokio::sync::Mutex;
 
 const SERVICE_ID: &str = "00000000-0000-4000-8000-000000000001";
+const SERVICE_EPOCH: &str = "00000000-0000-4000-8000-000000000002";
+
+fn codex_endpoint() -> Value {
+    json!({"serviceId": SERVICE_ID, "endpointId": "codex-local"})
+}
 
 async fn run_cli(
     directory: &Path,
@@ -36,55 +31,37 @@ async fn run_cli(
 
 #[tokio::test]
 async fn shed_commands_report_an_overload_to_retry() {
-    let clock = std::sync::Arc::new(router_clock::ManualClock::new(
-        chrono::DateTime::from_timestamp_millis(1792432800000).expect("fixed fixture time"),
-    ));
-
-    // Arrange: one request slot, held by a first-fire wait.
+    // Arrange: one request slot, held by a caught-up journal read waiting for new records.
     let directory = tempfile::Builder::new()
         .permissions(std::fs::Permissions::from_mode(0o700))
         .tempdir_in("/tmp")
         .expect("private directory");
-    let origin = message_board::ActorOrigin {
-        installation: message_board::ServiceId::try_from(SERVICE_ID.to_owned())
-            .expect("fixture service"),
-        machine: message_board::MachineLabel::try_from("overload proof".to_owned())
-            .expect("fixture machine"),
-    };
-    let (fleet, fleet_runtime) = board_central_test_support::fleet_client(
-        directory.path(),
-        Arc::new(native_registry::PendingRegistration),
-        &origin,
+    let journal = lifecycle_observation::ObservationJournal::open(
+        &directory.path().join("session-registry.sqlite"),
+        "00000000-0000-4000-8000-000000000003"
+            .to_owned()
+            .try_into()
+            .expect("journal identity"),
     )
     .await
-    .expect("real central fixture");
-    let admission = Arc::new(
-        ProjectAdmission::new(ProjectAdmissionProps {
-            clock: clock.clone(),
-            registry: native_registry::new_registry_with_clock(directory.path(), clock.clone())
-                .await
-                .expect("native registry"),
-            fleet: Arc::new(fleet),
-            identity: MachineIdentity::new(
-                collaboration_protocol::UuidIdentity::try_from(SERVICE_ID.to_owned())
-                    .expect("service fixture"),
-                Some("overload proof"),
-            )
-            .expect("identity fixture"),
-        })
-        .expect("admission fixture"),
-    );
-    let automation = AutomationStore::open(&directory.path().join("automation.sqlite"))
-        .await
-        .expect("automation store");
-    let identity = ApplicationFixture::new(SERVICE_ID, "00000000-0000-4000-8000-000000000002")
+    .expect("journal");
+    let journal = Arc::new(lifecycle_observation::LifecycleStore::new(journal));
+    let description = serde_json::from_value(json!({
+        "endpoint":codex_endpoint(),"label":"Codex fixture",
+        "availability":{"state":"available","observedAt":"2026-10-08T00:00:00Z"},
+        "channels":[{"kind":"nativeCodex","transport":"unixWebSocket","path":"codex-native.sock",
+            "schemaDigest":null,"generation":{"serviceEpoch":SERVICE_EPOCH,"generation":1}}]
+    }))
+    .expect("Codex endpoint");
+    let identity = ApplicationFixture::new(SERVICE_ID, SERVICE_EPOCH)
         .expect("service identity")
-        .with_project_admission(admission)
-        .with_automation_store(Arc::new(Mutex::new(automation)));
+        .with_endpoints(vec![description])
+        .expect("endpoint inventory")
+        .with_journal(Arc::clone(&journal));
     let served = Arc::new(
         ServedCollaborationApi::start_with(
             directory.path(),
-            (identity).build(),
+            identity.build(),
             TestServeOptions {
                 concurrent_requests: Some(1),
                 ..TestServeOptions::default()
@@ -92,45 +69,31 @@ async fn shed_commands_report_an_overload_to_retry() {
         )
         .expect("served API"),
     );
-    let wake = served
-        .call(
-            "wake_send",
-            json!({
-                "operationId": OperationId::generate(),
-                "message": {
-                    "target": {
-                        "endpoint": {"serviceId": SERVICE_ID, "endpointId": "codex-local"},
-                        "sessionId": "overload-target"
-                    },
-                    "content": {"kind": "humanUser", "text": "overload proof"},
-                    "delivery": "auto",
-                    "generationGuard": null
-                },
-                "timing": {"kind": "after", "seconds": 600},
-                "requestedBy":{"kind":"owner"},"replace":false,"expiry": {"kind": "none"}
-            }),
-        )
+    let status = served
+        .call("journal_status", json!({}))
         .await
-        .expect("wake send");
-    let wakeup_id = wake["result"]["definition"]["wakeupId"].clone();
+        .expect("journal status");
+    let journal_id = status["result"]["bounds"]["journalId"].clone();
+    let last_sequence = status["result"]["bounds"]["lastSequence"].clone();
+    assert!(journal_id.is_string(), "{status}");
     let held = tokio::time::timeout(Duration::from_secs(10), async {
         loop {
             let holder = Arc::clone(&served);
-            let held_wakeup = wakeup_id.clone();
+            let read = json!({
+                "endpoint": codex_endpoint(),
+                "after": {"journalId": journal_id, "sequence": last_sequence},
+                "pageSize": 1,
+                "waitMilliseconds": 30000
+            });
             let held = tokio::spawn(async move {
-                let _answer = holder
-                    .call(
-                        "wake_wait_until_first_fire",
-                        json!({"wakeupId": held_wakeup, "timeoutSeconds": 60}),
-                    )
-                    .await;
+                let _answer = holder.call("journal_read", read).await;
             });
             tokio::time::sleep(Duration::from_millis(100)).await;
             if held.is_finished() {
                 continue;
             }
             let probe = served
-                .call("automation_status", json!({}))
+                .call("journal_status", json!({}))
                 .await
                 .expect("probe");
             if probe["error"]["data"]["kind"] == "overloaded" {
@@ -142,20 +105,9 @@ async fn shed_commands_report_an_overload_to_retry() {
     .await
     .ok()
     .flatten()
-    .expect("the wake wait holds the only request slot");
+    .expect("the journal read holds the only request slot");
 
     // Act
-    let (board_exit, board) = run_cli(
-        directory.path(),
-        &[
-            "project",
-            "list",
-            "--board-id",
-            message_board::BoardId::generate().as_str(),
-        ],
-    )
-    .await
-    .expect("board command output");
     let (endpoints_exit, endpoints) = run_cli(directory.path(), &["endpoints", "list"])
         .await
         .expect("endpoints command output");
@@ -167,16 +119,7 @@ async fn shed_commands_report_an_overload_to_retry() {
         .await
         .expect("native bridge output");
 
-    // Assert: the board refusal is its typed overload; the untyped command reports the
-    // retryable overload with no effect.
-    assert_eq!(board_exit, Some(4), "{board}");
-    assert_eq!(board["error"]["kind"], "overloaded", "{board}");
-    assert!(
-        board["error"]["message"]
-            .as_str()
-            .is_some_and(|message| message.contains("not run")),
-        "{board}"
-    );
+    // Assert: the untyped command reports the retryable overload with no effect.
     assert_eq!(endpoints_exit, Some(3), "{endpoints}");
     assert_eq!(endpoints["error"]["kind"], "overloaded", "{endpoints}");
     assert_eq!(endpoints["error"]["effect"], "none", "{endpoints}");
@@ -196,8 +139,7 @@ async fn shed_commands_report_an_overload_to_retry() {
     if let Ok(served) = Arc::try_unwrap(served) {
         served.stop().await.expect("API stops");
     }
-    fleet_runtime
-        .shutdown()
-        .await
-        .expect("stop real central fixture");
+    if let Ok(journal) = Arc::try_unwrap(journal) {
+        journal.close().await;
+    }
 }

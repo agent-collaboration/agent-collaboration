@@ -1,6 +1,7 @@
 //! A running Claude prompt identifies the operation receiving a steered message.
 use crate::provider_fixture_launch;
 
+use agent_automation::AttemptId;
 use agent_automation::{RouteEffectEvidence, SubmissionEffect};
 use codex_router_host::{
     ExternalProviderBinding, ExternalProviderLaunch, ExternalProviderRuntime,
@@ -17,14 +18,14 @@ use collaboration_contracts::SessionDeliveryRoute;
 use collaboration_contracts::layer_zero::DeliveryRequest;
 use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
-    AttemptId, ChannelDescription, CodexGeneration, ConversationPromptRequest,
-    DeliveryClientReceipt, DeliveryCorrelationId, DeliveryOutcome, EndpointAvailability,
-    EndpointDescription, EndpointId, EndpointRef, GenerationNumber, MessageContent,
-    MessageDelivery, MessageText, NonEmptyText, ObservationTimestamp, OperationId,
-    ProviderBindingId, ProviderBindingIdentity, ProviderCapabilities, ProviderCapability,
-    ProviderCapabilityEvidence, ProviderCapabilityName, ProviderCapabilityStatus, ProviderKind,
-    ProviderRequestedPolicy, ProviderRuntimeIdentity, ProviderTransport, ProviderWorkingDirectory,
-    PushId, RouterAccess, SessionId, SessionRef, UuidIdentity,
+    ChannelDescription, CodexGeneration, ConversationPromptRequest, DeliveryClientReceipt,
+    DeliveryCorrelationId, DeliveryOutcome, EndpointAvailability, EndpointDescription, EndpointId,
+    EndpointRef, GenerationNumber, MessageContent, MessageDelivery, MessageText, NonEmptyText,
+    ObservationTimestamp, OperationId, ProviderBindingId, ProviderBindingIdentity,
+    ProviderCapabilities, ProviderCapability, ProviderCapabilityEvidence, ProviderCapabilityName,
+    ProviderCapabilityStatus, ProviderKind, ProviderRequestedPolicy, ProviderRuntimeIdentity,
+    ProviderTransport, ProviderWorkingDirectory, PushId, RouterAccess, SessionId, SessionRef,
+    UuidIdentity,
 };
 use collaboration_runtime::EndpointDirectory;
 use collaboration_runtime::ProviderOperationStore;

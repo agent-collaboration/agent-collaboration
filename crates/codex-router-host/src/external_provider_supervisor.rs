@@ -143,14 +143,6 @@ impl ExternalProviderSupervisor {
             .map(|entry| Arc::clone(&entry.runtime))
     }
 
-    /// Announces a completion as a live operation publishing its result does.
-    #[cfg(test)]
-    pub(crate) fn announce_completion(&self) {
-        self.inner
-            .completions
-            .send_modify(|revision| *revision = revision.wrapping_add(1));
-    }
-
     /// Holds `operation_id` live, as admitting it to a provider does.
     #[cfg(test)]
     pub(crate) fn hold_live_operation(&self, operation_id: OperationId) {

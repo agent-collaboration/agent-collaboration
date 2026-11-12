@@ -50,7 +50,6 @@ use std::{
 use tokio::sync::Mutex;
 
 pub struct ProviderAcpDeliveryRoute {
-    service_id: UuidIdentity,
     claim: ProviderAcpRouteClaim,
     supervisor: Arc<ExternalProviderSupervisor>,
     store: Arc<Mutex<ProviderOperationStore>>,
@@ -85,7 +84,7 @@ impl ProviderAcpDeliveryRoute {
         ownership: Arc<dyn LiveSessionOwnershipCheck>,
     ) -> Self {
         let claim = ProviderAcpRouteClaim::new(
-            service_id.clone(),
+            service_id,
             provider_endpoints,
             directory,
             Arc::clone(&supervisor),
@@ -97,7 +96,6 @@ impl ProviderAcpDeliveryRoute {
             Arc::clone(&ownership),
         );
         Self {
-            service_id,
             claim,
             supervisor,
             store,

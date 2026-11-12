@@ -1,104 +1,26 @@
-//! Collaboration application operations and publication policy, independent of the Host executable.
+//! Collaboration application operations, independent of the Host executable.
 pub mod collaboration_application;
 pub mod collaboration_rejection;
 pub use collaboration_application::{CollaborationApplication, ResultByteBudget};
-mod board_views;
-mod notification_publisher;
-mod project_admission;
-pub use notification_publisher::NotificationPublisher;
-mod project_commit_publication;
-#[cfg(feature = "runtime-test-support")]
-pub use project_admission::ProjectAdmissionTestContext;
-pub use project_admission::{
-    IntentHandoffInput, IntentRecipientEnrollment, IntentReply, ProjectAdmission,
-    ProjectAdmissionError, ProjectAdmissionProps, ProjectArchiveObservation,
-};
-pub use project_commit_publication::after_project_commit_publish_and_reconcile;
 #[cfg(any(test, feature = "test-support"))]
 mod application_fixture;
 #[cfg(any(test, feature = "test-support"))]
 pub use application_fixture::ApplicationFixture;
-mod subscription_delivery;
-pub use subscription_delivery::{
-    BoardAvailability, HeldMailSignals, SubscriptionDeliveryService,
-    SubscriptionDeliveryServiceProps, SubscriptionStartupRestoration, SubscriptionWaitFilter,
-    SubscriptionWaitResult, SubscriptionWindowStore,
-};
 mod conversation_operation_projection;
-pub use codex_acp_adapter::ConversationOperationRecorder;
-pub use conversation_operation_projection::conversation_operation_snapshot;
-#[cfg(test)]
-#[path = "wake_creation_crash_test.rs"]
-mod wake_creation_crash_tests;
-pub use collaboration_protocol::{DeliveryClientReceipt, DeliveryReceipt};
-mod push_record_delivery;
-mod push_record_resolver;
 pub use codex_acp_adapter::BrokeredApprovalOutcome;
+pub use codex_acp_adapter::ConversationOperationRecorder;
 pub use codex_acp_adapter::{ACP_SCHEMA_DIGEST, NativeStoredSessions};
+pub use collaboration_protocol::{DeliveryClientReceipt, DeliveryReceipt};
+pub use conversation_operation_projection::conversation_operation_snapshot;
 mod codex_session_inventory;
 mod inventory_failures;
 mod response_budget;
 pub use codex_session_inventory::CodexSessionInventory;
-mod instruction_projection;
-mod mail_push_delivery;
-mod mail_push_outcome;
 mod native_claude_catalogue;
 mod provider_session_inventory;
 pub use provider_session_inventory::ProviderSessionInventory;
-mod wakeup_projection;
-pub use mail_push_delivery::{MailPushDelivery, MailPushDeliveryProps};
-mod mail_delivery_runtime;
-#[cfg(any(test, feature = "test-support"))]
-pub use mail_delivery_runtime::NativeMailOwner;
-pub use mail_delivery_runtime::{LocalCancelReference, MachineSenderBinding, MailDeliveryRuntime};
-mod attempt_history_projection;
-mod automation_collection_cursor;
-mod automation_collection_projection;
-mod automation_event_cursor;
-mod automation_event_projection;
-mod automation_inspection_failure;
-mod delivery_projection;
-#[cfg(test)]
-mod frozen_mail_query_fixture;
-#[cfg(test)]
-use collaboration_runtime::test_support::native_worker_faults;
-mod operation_receipt_projection;
-mod run_projection;
-mod schedule_activation;
-mod schedule_preparation;
-mod schedule_projection;
-#[cfg(test)]
-mod test_project_runtime;
-#[cfg(test)]
-mod test_subject_workstream;
-mod wakeup_subscription;
 
-#[cfg(test)]
-mod delivery_route_projection_tests;
 #[cfg(test)]
 mod native_control_failure_tests;
-
-#[cfg(test)]
-mod mail_delivery_projection_tests;
-
-#[cfg(test)]
-mod scheduled_run_route_tests;
-#[cfg(test)]
-mod wakeup_delivery_sender {
-    use agent_automation::DeliveryId;
-    use automation_storage::AutomationStore;
-    use collaboration_protocol::{CodexGeneration, SessionRef};
-    use collaboration_runtime::test_support::WakeDeliverySender;
-    use collaboration_runtime::test_support::build_wake_push_draft;
-    use std::sync::Arc;
-    use tokio::sync::Mutex;
-    #[path = "aged_wake_retention_tests.rs"]
-    mod aged_wake_retention_tests;
-    #[path = "../native_delivery_crash_tests.rs"]
-    mod crash_tests;
-}
-
 #[cfg(test)]
 mod native_recorded_permission_tests;
-#[cfg(test)]
-mod native_result_tests;

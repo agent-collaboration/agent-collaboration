@@ -1,9 +1,9 @@
 //! Real owning-store fixture for Fleet's private query and domain-codec tests.
-use crate::{CoreHost, ObjectAddress, PlatformIo, generated_enrollment};
+use crate::{CoreHost, ObjectAddress, PlatformIo};
 use durable_steps::{
     AtomicStore, CallFailure, NotSentReason, StoreError, storage::TransactionScope,
 };
-use fleet_sync_protocol::{PeerId, ReceiverId};
+use fleet_sync_protocol::ReceiverId;
 use fleet_sync_tokio_runner::{ObjectKey, ObjectStore, TokioObject};
 use runtime_primitives::{Clock, IdSource, SyncTime, WakeFailure, WakeScheduler};
 use sqlx_core::executor::Executor;
@@ -92,29 +92,6 @@ impl FleetStorageFixture {
             objects,
             root,
         })
-    }
-    pub async fn enroll(&self, peer: PeerId, service: &str) -> Result<(), TestError> {
-        let service = service.to_owned();
-        self.object
-            .transaction(move |scope| {
-                Box::pin(async move {
-                    generated_enrollment::insert_enrollment(
-                        scope,
-                        peer.to_string(),
-                        service.clone(),
-                        "storage fixture".into(),
-                        format!("fixture-client-{peer}"),
-                        format!("fixture-hash-{peer}"),
-                        "2033-05-18T03:33:20+00:00".into(),
-                        "2026-10-18T00:00:00+00:00".into(),
-                        "2026-10-18T00:00:00+00:00".into(),
-                    )
-                    .await
-                    .map_err(StoreError::backend)
-                })
-            })
-            .await?;
-        Ok(())
     }
     pub async fn close(self) -> Result<(), TestError> {
         self.objects.close().await?;

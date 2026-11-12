@@ -1,15 +1,15 @@
 //! The connection's existing journal makes old revocation calls harmless on replay.
 
 use crate::{
-    DeliveryKind, ObjectHost, ObjectRuntime, PlatformIo,
+    DeliveryKind, FleetKind, ObjectHost, ObjectRuntime, PlatformIo,
     machine_enrollment::EndPeerSessions,
     object_call_envelope::{ObjectCallEnvelope, encode_refusal},
     object_runtime::ObjectWork,
     session_store::CoreSessionStore,
 };
 use durable_steps::{
-    AtomicStore, CallFailure, JournalScope, OperationContext, OperationFailure, ReborrowScope,
-    RequestKey, StoreError, Task,
+    AtomicStore, CallFailure, CallTarget, JournalScope, NotSentReason, OperationContext,
+    OperationFailure, ReborrowScope, RequestKey, StoreError, Task,
     storage::{JournalStorage, OperationExecution, TransactionScope},
 };
 use fleet_sync_protocol::PeerId;
@@ -76,7 +76,7 @@ where
                         )
                         .await
                         .map_err(StoreError::backend)?;
-                        scope.stage_transport(effects, None)?;
+                        scope.stage_transport(effects)?;
                         Ok(())
                     })
                 },
@@ -105,18 +105,17 @@ where
         &self,
         invocation: ObjectCallEnvelope,
     ) -> Result<Vec<u8>, CallFailure> {
+        if invocation.kind != EndPeerSessions::KIND {
+            return Err(CallFailure::NotSent {
+                reason: NotSentReason::Unreachable { last_seen: None },
+            });
+        }
         let target: EndPeerSessions =
             serde_json::from_value(invocation.target).map_err(encode_refusal)?;
         let (): () = serde_json::from_value(invocation.request).map_err(encode_refusal)?;
         let ObjectWork::Fleet {
-            host,
-            shared_host,
-            replies,
-            ..
-        } = &self.work
-        else {
-            return Err(CallFailure::AnswerLost);
-        };
+            host, shared_host, ..
+        } = &self.work;
         let key = RequestKey::new(format!(
             "central-end-sessions:{}:{}",
             String::from(invocation.identity.operation),
@@ -124,11 +123,7 @@ where
         ))
         .map_err(encode_refusal)?;
         let now = shared_host.now();
-        let store = Arc::new(CoreSessionStore::new(
-            host.clone(),
-            shared_host.clone(),
-            replies.clone(),
-        ));
+        let store = Arc::new(CoreSessionStore::<Host, Io>::new(host.clone()));
         let completed = store
             .transaction(move |scope| {
                 Box::pin(async move {
@@ -167,6 +162,28 @@ where
             // Admission may already have ended the session before this answer
             // arrives. Only the saved completion can acknowledge the call.
             Err(CallFailure::AnswerLost)
+        }
+    }
+}
+
+impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io> {
+    pub fn delivery(&self) -> ObjectRuntime<DeliveryKind, Host, Io> {
+        let ObjectWork::Fleet {
+            host,
+            io,
+            engine,
+            shared_host,
+            delivery,
+        } = &self.work;
+        ObjectRuntime {
+            work: ObjectWork::Fleet {
+                host: host.clone(),
+                io: io.clone(),
+                engine: engine.clone(),
+                shared_host: Arc::new(shared_host.delivery()),
+                delivery: *delivery,
+            },
+            face: PhantomData,
         }
     }
 }

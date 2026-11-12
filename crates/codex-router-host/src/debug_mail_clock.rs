@@ -1,6 +1,5 @@
-//! One frozen mail clock and a private, causally acknowledged debug control stream.
+//! The Host's one frozen debug clock and a private, causally acknowledged control stream.
 use chrono::{DateTime, Utc};
-use collaboration_service::MailDeliveryRuntime;
 use router_clock::{ManualClock, RuntimeClock};
 use std::{io, path::Path, sync::Arc};
 use tokio::{
@@ -82,13 +81,9 @@ impl PreparedMailClock {
         self.clock.clone()
     }
 
-    pub(crate) async fn run(
-        mut self,
-        mail: Arc<MailDeliveryRuntime>,
-        shutdown: CancellationToken,
-    ) -> io::Result<()> {
+    pub(crate) async fn run(mut self, shutdown: CancellationToken) -> io::Result<()> {
         tokio::select! {
-            result = self.serve(mail) => result,
+            result = self.serve() => result,
             () = shutdown.cancelled() => Ok(()),
         }
     }
@@ -99,7 +94,7 @@ impl PreparedMailClock {
         self.control.get_mut().write_all(&frame).await
     }
 
-    async fn serve(&mut self, mail: Arc<MailDeliveryRuntime>) -> io::Result<()> {
+    async fn serve(&mut self) -> io::Result<()> {
         self.reply(ClockReply::Ready {
             now: self.clock.utc_now(),
         })
@@ -122,9 +117,6 @@ impl PreparedMailClock {
             }
             let step: ClockStep = serde_json::from_slice(&frame).map_err(io::Error::other)?;
             advance_clock_to(&self.clock, step.now)?;
-            mail.runtime_test_run_due_record_removals()
-                .await
-                .map_err(io::Error::other)?;
             self.reply(ClockReply::Stepped {
                 now: self.clock.utc_now(),
             })

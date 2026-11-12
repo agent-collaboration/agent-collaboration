@@ -95,7 +95,7 @@ for (const [index, entry] of baselines.installCases.entries()) {
   });
 }
 
-test("the formula installs agent-router-update exactly once, whichever importer line it had", (): void => {
+test("the formula installs no retired importer, whichever importer lines it had", (): void => {
   // Arrange
   const current = readFileSync(new URL("./fixtures/current-formula.rb", import.meta.url), "utf8");
   const formerLine = '    bin.install "codex-router-board-upgrade"\n';
@@ -105,7 +105,7 @@ test("the formula installs agent-router-update exactly once, whichever importer 
     "former importer only": current,
     "no importer line": current.replace(formerLine, ""),
     "both importer lines": current.replace(formerLine, `${formerLine}${updateLine}`),
-    "current importer only": current.replace(formerLine, updateLine),
+    "later importer only": current.replace(formerLine, updateLine),
   };
 
   for (const [name, formula] of Object.entries(formulas)) {
@@ -120,7 +120,6 @@ test("the formula installs agent-router-update exactly once, whichever importer 
         '    bin.install "codex-router"',
         '    bin.install "agent-collaboration"',
         '    bin.install "agent-sessions"',
-        '    bin.install "agent-router-update"',
       ],
       name,
     );
@@ -177,8 +176,8 @@ test("release signatures require both the fixed release identifier and team", ()
     assert.notEqual(releaseSignatureProblem(details, "agent-sessions"), undefined);
 });
 
-test("installation validation checks the importer version as well as the other three executables", (): void => {
-  for (const importerVersion of ["0.1.102", "0.1.101"]) {
+test("installation validation checks agent-sessions' version as well as codex-router's", (): void => {
+  for (const sessionsVersion of ["0.1.102", "0.1.101"]) {
     const runner: CommandRunner = (command): CommandResult => {
       let stdout = "";
       let stderr = "";
@@ -189,11 +188,11 @@ test("installation validation checks the importer version as well as the other t
         stderr = `Identifier=dev.shravansunder.${executable}\nTeamIdentifier=974QD84WVC\n`;
       else if (command.at(-1) === "--version") {
         const name = command[0]?.split("/").at(-1);
-        stdout = `${name} ${name === "agent-router-update" ? importerVersion : "0.1.102"}`;
+        stdout = `${name} ${name === "agent-sessions" ? sessionsVersion : "0.1.102"}`;
       }
       return { status: 0, stdout, stderr };
     };
-    if (importerVersion === "0.1.102") validateInstallation("0.1.102", runner);
-    else assert.throws(() => validateInstallation("0.1.102", runner), /agent-router-update/);
+    if (sessionsVersion === "0.1.102") validateInstallation("0.1.102", runner);
+    else assert.throws(() => validateInstallation("0.1.102", runner), /agent-sessions/);
   }
 });

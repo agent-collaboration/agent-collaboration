@@ -189,24 +189,6 @@ fn fixture_refuses_public_files_external_paths_and_noncanonical_identity()
     clippy::panic_in_result_fn,
     reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
 )]
-fn absent_router_enrollment_is_the_only_normal_fallback() -> Result<(), Box<dyn Error>> {
-    let root = tempfile::tempdir()?;
-    assert!(load_router_fleet_enrollment(root.path())?.is_none());
-    std::fs::create_dir(root.path().join("fleet"))?;
-    assert!(load_router_fleet_enrollment(root.path())?.is_none());
-    std::os::unix::fs::symlink(
-        root.path().join("absent.json"),
-        root.path().join("fleet/enrollment.json"),
-    )?;
-    assert!(load_router_fleet_enrollment(root.path()).is_err());
-    Ok(())
-}
-
-#[test]
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Contract assertions panic on a wrong result; Result propagates fixture failures."
-)]
 fn enrollment_refuses_a_symlink_even_when_its_target_is_private() -> Result<(), Box<dyn Error>> {
     let root = tempfile::tempdir()?;
     let file = write_fixture(root.path())?;

@@ -15,8 +15,6 @@ pub struct TokioSettings {
     pub jwks_url: String,
     pub registry: RegistryConfig,
     pub delivery: crate::DeliveryConfig,
-    pub holder_answer_timeout: std::time::Duration,
-    pub copy_ack_wait: std::time::Duration,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -56,8 +54,6 @@ impl TokioServer {
             &settings.root,
             settings.registry,
             settings.delivery,
-            settings.holder_answer_timeout,
-            settings.copy_ack_wait,
         )
         .await?;
         Self::serve_platform(settings, listen, platform, None).await
@@ -76,37 +72,9 @@ impl TokioServer {
             &settings.root,
             settings.registry,
             settings.delivery,
-            settings.holder_answer_timeout,
-            settings.copy_ack_wait,
         )
         .await?;
         Self::serve_platform(settings, listen, platform, Some(keys)).await
-    }
-
-    #[cfg(feature = "conformance")]
-    pub async fn start_with_controls(
-        settings: TokioSettings,
-        controls: Vec<collaboration_central_conformance::RuntimeControlRequest>,
-    ) -> Result<Self, TokioServerError> {
-        let platform = TokioCentralPlatform::new_with_controls(
-            &settings.jwks_url,
-            Arc::new(SystemClock),
-            crate::native_logging::observe,
-            &settings.root,
-            settings.registry,
-            settings.delivery,
-            settings.holder_answer_timeout,
-            settings.copy_ack_wait,
-            controls,
-        )
-        .await?;
-        Self::serve_platform(
-            settings,
-            SocketAddr::from(([127, 0, 0, 1], 0)),
-            platform,
-            None,
-        )
-        .await
     }
 
     async fn serve_platform(
@@ -126,8 +94,6 @@ impl TokioServer {
                 return Err(error.into());
             }
         };
-        #[cfg(feature = "conformance")]
-        let conformance_policy = settings.access_policy;
         let listener = match tokio::net::TcpListener::bind(listen).await {
             Ok(listener) => listener,
             Err(error) => {
@@ -144,9 +110,6 @@ impl TokioServer {
         } else {
             router
         };
-        #[cfg(feature = "conformance")]
-        let router =
-            crate::conformance_control::mount(router, platform.clone(), conformance_policy)?;
         let task = tokio::spawn(async move {
             axum::serve(listener, router)
                 .with_graceful_shutdown(stopped.cancelled_owned())
@@ -162,11 +125,6 @@ impl TokioServer {
 
     pub fn base_url(&self) -> &str {
         &self.base_url
-    }
-
-    #[cfg(feature = "conformance")]
-    pub fn conformance_platform(&self) -> &TokioCentralPlatform {
-        &self.platform
     }
 
     pub async fn shutdown(mut self) -> Result<(), TokioServerError> {

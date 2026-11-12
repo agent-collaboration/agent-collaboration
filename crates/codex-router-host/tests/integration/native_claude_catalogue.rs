@@ -72,7 +72,6 @@ async fn isolated_host_native_catalogue_probe() {
     std::fs::write(&observed, serde_json::to_vec(&job("blocked")).unwrap()).unwrap();
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
-            board_session: None,
             directory: api_root.clone(),
             codex_home: root.join("codex-home"),
             backend_socket: root.join("unused-native.sock"),

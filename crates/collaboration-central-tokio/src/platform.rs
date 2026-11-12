@@ -36,32 +36,6 @@ pub struct TokioCentralPlatform {
 }
 
 impl TokioCentralPlatform {
-    /// Conformance-only real import/seed; no production or HTTP route.
-    #[cfg(feature = "conformance")]
-    pub async fn conformance_import_board_snapshot(
-        &self,
-        owner: collaboration_central_core::OwnerIdentity,
-        state: collaboration_central_core::ConformanceBoardState,
-        pages: Vec<fleet_sync_protocol::SnapshotPage>,
-        manifest: fleet_sync_protocol::SnapshotManifest,
-    ) -> Result<fleet_sync_protocol::ReplicationPosition, durable_steps::StoreError> {
-        self.objects
-            .import_board_snapshot(owner, state, pages, manifest)
-            .await
-    }
-
-    #[cfg(feature = "conformance")]
-    pub(crate) async fn runtime_control(
-        &self,
-        request: collaboration_central_conformance::RuntimeControlRequest,
-    ) -> Result<collaboration_central_conformance::RuntimeFaultObservation, durable_steps::StoreError>
-    {
-        self.objects.runtime_control(request).await
-    }
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "Native composition takes runtime capabilities and independent deployment policies explicitly."
-    )]
     pub async fn new(
         key_source: &str,
         clock: Arc<dyn Clock>,
@@ -69,70 +43,6 @@ impl TokioCentralPlatform {
         root: &std::path::Path,
         registry: fleet_sync_lease::RegistryConfig,
         delivery: crate::DeliveryConfig,
-        holder_answer_timeout: Duration,
-        copy_ack_wait: Duration,
-    ) -> Result<Self, TokioPlatformError> {
-        Self::new_configured(
-            key_source,
-            clock,
-            observe,
-            root,
-            registry,
-            delivery,
-            holder_answer_timeout,
-            copy_ack_wait,
-            #[cfg(feature = "conformance")]
-            Vec::new(),
-        )
-        .await
-    }
-
-    #[cfg(feature = "conformance")]
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "Conformance adds only initial per-object arming controls to native composition."
-    )]
-    pub(crate) async fn new_with_controls(
-        key_source: &str,
-        clock: Arc<dyn Clock>,
-        observe: impl Fn(CentralObservation) + Send + Sync + 'static,
-        root: &std::path::Path,
-        registry: fleet_sync_lease::RegistryConfig,
-        delivery: crate::DeliveryConfig,
-        holder_answer_timeout: Duration,
-        copy_ack_wait: Duration,
-        controls: Vec<collaboration_central_conformance::RuntimeControlRequest>,
-    ) -> Result<Self, TokioPlatformError> {
-        Self::new_configured(
-            key_source,
-            clock,
-            observe,
-            root,
-            registry,
-            delivery,
-            holder_answer_timeout,
-            copy_ack_wait,
-            controls,
-        )
-        .await
-    }
-
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "Keep deployment capabilities and test-only arming controls explicit at composition."
-    )]
-    async fn new_configured(
-        key_source: &str,
-        clock: Arc<dyn Clock>,
-        observe: impl Fn(CentralObservation) + Send + Sync + 'static,
-        root: &std::path::Path,
-        registry: fleet_sync_lease::RegistryConfig,
-        delivery: crate::DeliveryConfig,
-        holder_answer_timeout: Duration,
-        copy_ack_wait: Duration,
-        #[cfg(feature = "conformance")] controls: Vec<
-            collaboration_central_conformance::RuntimeControlRequest,
-        >,
     ) -> Result<Self, TokioPlatformError> {
         let key_source =
             reqwest::Url::parse(key_source).map_err(|_| TokioPlatformError::InvalidKeySource)?;
@@ -145,27 +55,9 @@ impl TokioCentralPlatform {
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .map_err(TokioPlatformError::HttpClient)?;
-        #[cfg(not(feature = "conformance"))]
-        let objects = crate::native_objects::NativeObjects::open(
-            root,
-            clock.clone(),
-            registry,
-            delivery,
-            holder_answer_timeout,
-            copy_ack_wait,
-        )
-        .await?;
-        #[cfg(feature = "conformance")]
-        let objects = crate::native_objects::NativeObjects::open_with_controls(
-            root,
-            clock.clone(),
-            registry,
-            delivery,
-            holder_answer_timeout,
-            copy_ack_wait,
-            controls,
-        )
-        .await?;
+        let objects =
+            crate::native_objects::NativeObjects::open(root, clock.clone(), registry, delivery)
+                .await?;
         Ok(Self {
             client,
             key_source,
@@ -182,87 +74,6 @@ impl TokioCentralPlatform {
 
     pub(crate) fn begin_shutdown(&self) {
         self.objects.stop.cancel();
-    }
-
-    /// Actual per-file metadata results from the most recent Health call.
-    #[cfg(feature = "conformance")]
-    pub async fn conformance_health_sample(
-        &self,
-        database: fleet_sync_protocol::DatabaseId,
-    ) -> Option<Vec<crate::HealthFileSample>> {
-        self.objects.health_sample(database).await
-    }
-
-    /// Raw owning forwarding rows; no domain decoding discards unexpected content.
-    #[cfg(feature = "conformance")]
-    pub async fn conformance_forward_state(
-        &self,
-        service: &message_board::ServiceId,
-    ) -> Result<collaboration_central_core::ForwardStateObservation, durable_steps::StoreError>
-    {
-        self.objects.forward_state(service).await
-    }
-
-    /// Read-only observation of one committed mail row in the Fleet owner.
-    #[cfg(feature = "conformance")]
-    pub async fn conformance_mail_custody(
-        &self,
-        item: fleet_sync_protocol::ItemId,
-    ) -> Result<collaboration_central_core::FleetMailCustodyObservation, durable_steps::StoreError>
-    {
-        self.objects.mail_custody(item).await
-    }
-
-    /// Read-only observation of live holder request correlations.
-    #[cfg(feature = "conformance")]
-    pub async fn conformance_holder_frames(
-        &self,
-        service: &message_board::ServiceId,
-    ) -> Result<Vec<fleet_sync_protocol::FrameId>, durable_steps::StoreError> {
-        self.objects.holder_frames(service).await
-    }
-
-    /// Read-only observation of attachments created by the real HTTP upgrade.
-    #[cfg(feature = "conformance")]
-    pub(crate) async fn conformance_session_connections(
-        &self,
-        service: Option<&message_board::ServiceId>,
-    ) -> Result<
-        Vec<crate::native_objects::SessionConnectionSnapshot>,
-        collaboration_central_core::SocketFailure,
-    > {
-        self.objects.session_connections(service).await
-    }
-
-    #[cfg(feature = "conformance")]
-    pub async fn conformance_socket_inventory(
-        &self,
-    ) -> Result<Vec<crate::SocketOwnerSnapshot>, collaboration_central_core::SocketFailure> {
-        self.objects.socket_inventory().await
-    }
-
-    #[cfg(feature = "conformance")]
-    pub async fn conformance_socket_origins(
-        &self,
-        service: &message_board::ServiceId,
-    ) -> Result<Vec<AdmissionOrigin>, collaboration_central_core::SocketFailure> {
-        self.objects.socket_origins(service).await
-    }
-
-    #[cfg(feature = "conformance")]
-    pub async fn conformance_schema_report(
-        &self,
-        peer: fleet_sync_protocol::PeerId,
-    ) -> Result<Option<fleet_sync_protocol::ReportSchemaSupport>, durable_steps::StoreError> {
-        self.objects.schema_report(peer).await
-    }
-
-    /// Explicit fixture pruning; no HTTP or production path exposes it.
-    #[cfg(feature = "conformance")]
-    pub async fn conformance_prune_fleet_feed(
-        &self,
-    ) -> Result<(u64, i64), durable_steps::StoreError> {
-        self.objects.prune_fleet_feed().await
     }
 }
 

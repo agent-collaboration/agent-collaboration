@@ -5,7 +5,7 @@ use collaboration_protocol::{
     SessionReachability, SessionRef,
 };
 use serde::{Deserialize, Serialize};
-use std::{future::Future, pin::Pin, sync::Arc};
+use std::{future::Future, pin::Pin};
 
 pub type DeliveryFuture<'a, TValue> =
     Pin<Box<dyn Future<Output = Result<TValue, DeliveryContractError>> + Send + 'a>>;
@@ -191,7 +191,4 @@ pub trait SessionDeliveryRoute: Send + Sync {
         &self,
         context: AttemptReconciliationContext,
     ) -> DeliveryFuture<'_, AttemptReconciliation>;
-    fn scheduled_runs(&self) -> Option<Arc<dyn crate::ScheduledRunRoute>> {
-        None
-    }
 }

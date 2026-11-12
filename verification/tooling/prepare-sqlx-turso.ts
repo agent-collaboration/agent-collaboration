@@ -17,27 +17,8 @@ export interface TursoPreparationTarget {
 
 export const tursoPreparationTargets: readonly TursoPreparationTarget[] = [
   {
-    packageName: "agent-router-update",
-    migrationSources: ["crates/interaction-storage/migrations"],
-  },
-  {
     packageName: "interaction-storage",
     migrationSources: ["crates/interaction-storage/migrations"],
-  },
-  {
-    packageName: "message-board-storage",
-    migrationSources: [
-      "project_migrations",
-      "project_bookkeeping_migrations",
-      "fleet_cache_migrations",
-    ].map((name) => `crates/message-board-storage/${name}`),
-  },
-  {
-    packageName: "board-staging-cutover",
-    migrationSources: [
-      "crates/message-board-storage/project_migrations",
-      "crates/message-board-storage/project_bookkeeping_migrations",
-    ],
   },
 ];
 

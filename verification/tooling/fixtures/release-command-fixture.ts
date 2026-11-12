@@ -10,7 +10,7 @@ const fixtureSchema = z.object({
   version: z.string(),
   commit: z.string(),
   asset: z.string(),
-  importerVersion: z.string().optional(),
+  sessionsVersion: z.string().optional(),
 });
 
 function main(): number {
@@ -48,11 +48,9 @@ function main(): number {
     console.error(
       `Identifier=dev.shravansunder.${basename(z.string().parse(args.at(-1)))}\nTeamIdentifier=974QD84WVC`,
     );
-  else if (
-    ["codex-router", "agent-collaboration", "agent-sessions", "agent-router-update"].includes(tool)
-  )
+  else if (["codex-router", "agent-collaboration", "agent-sessions"].includes(tool))
     console.log(
-      `${tool} ${tool === "agent-router-update" ? (fixture.importerVersion ?? fixture.version) : fixture.version}`,
+      `${tool} ${tool === "agent-sessions" ? (fixture.sessionsVersion ?? fixture.version) : fixture.version}`,
     );
   else if (tool !== "ruby" && tool !== "codesign")
     throw new Error(`unexpected release fixture command ${tool}`);

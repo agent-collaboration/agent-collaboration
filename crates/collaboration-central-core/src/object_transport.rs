@@ -7,9 +7,7 @@ use crate::{
     ObjectRuntime, PlatformIo, RegistryCall, RegistryResult, WireCall, WireKind,
     caller_context::CallAuthority,
 };
-use durable_steps::{
-    AtomicStore, CallFailure, CallTarget, NotSentReason, storage::TransactionScope,
-};
+use durable_steps::{AtomicStore, CallFailure, NotSentReason, storage::TransactionScope};
 use sqlx_core::{
     arguments::IntoArguments, column::ColumnIndex, database::Database, decode::Decode,
     encode::Encode, types::Type,
@@ -72,11 +70,7 @@ impl ObjectCallEnvelope {
         let call: Self = serde_json::from_slice(bytes).map_err(|_| refused())?;
         if call.destination != destination
             || call.destination_face != face
-            || !(call.source_face.may_call(face)
-                || (call.source_face == CallerKind::Copy
-                    && face == CallerKind::Fleet
-                    && call.kind == crate::copy_directory_summary::DirectorySummaryUpdate::KIND
-                    && matches!(call.authority, CallAuthority::Object)))
+            || !call.source_face.may_call(face)
             || !source_matches(&call)
         {
             return Err(refused());
@@ -97,7 +91,6 @@ fn source_matches(call: &ObjectCallEnvelope) -> bool {
             (&call.source, call.source_face),
             (ObjectAddress::Fleet, CallerKind::Registry)
                 | (ObjectAddress::Fleet, CallerKind::Fleet)
-                | (ObjectAddress::Copy(_), CallerKind::Copy)
                 | (ObjectAddress::Fleet, CallerKind::Delivery)
         ),
         CallAuthority::Machine { .. } => {
@@ -132,57 +125,6 @@ where
     pub(crate) async fn on_registry_call(&self, bytes: Vec<u8>) -> Result<Vec<u8>, CallFailure> {
         let invocation =
             ObjectCallEnvelope::decode(&bytes, ObjectAddress::Fleet, CallerKind::Registry)?;
-        if invocation.kind == crate::owner_registry_calls::OwnerRegistryOperations::KIND {
-            return self.owner_registry_call(invocation).await;
-        }
-        if invocation.kind == crate::admin_import_registry::AdminImportReservation::KIND {
-            return self.admin_import_reservation(invocation).await;
-        }
-        #[cfg(feature = "conformance")]
-        if invocation.kind
-            == crate::machine_enrollment::conformance_revocation::ControlRevocation::KIND
-        {
-            return self.control_revocation(invocation).await;
-        }
-        #[cfg(feature = "conformance")]
-        if invocation.kind == crate::conformance_holder::HolderProbe::KIND {
-            return self.holder_probe(invocation).await;
-        }
-        #[cfg(feature = "conformance")]
-        if invocation.kind == crate::conformance_holder::HolderProbeStatus::KIND {
-            return self.holder_probe_status(invocation).await;
-        }
-        #[cfg(feature = "conformance")]
-        if invocation.kind == crate::conformance_holder::ObserveRegistryDispatches::KIND {
-            return self.registry_dispatches(invocation);
-        }
-        #[cfg(feature = "conformance")]
-        if invocation.kind == crate::conformance_copy::CopyProbe::KIND {
-            return self.copy_probe(invocation).await;
-        }
-        #[cfg(feature = "conformance")]
-        if invocation.kind == crate::conformance_copy::CopyProbeStatus::KIND {
-            return self.copy_probe_status(invocation).await;
-        }
-        #[cfg(feature = "conformance")]
-        if invocation.kind == crate::conformance_copy_wait::ControlCopyWait::KIND {
-            return self.control_copy_wait(invocation).await;
-        }
-        #[cfg(feature = "conformance")]
-        if invocation.kind == crate::conformance_copy::ObserveDriveTokens::KIND {
-            return self.observe_drive_tokens(invocation);
-        }
-        if invocation.kind == crate::session_calls::SessionLeaseRegistry::KIND {
-            return self.lease_call(invocation).await;
-        }
-        if matches!(
-            invocation.kind.as_str(),
-            crate::forward_calls::ForwardRoute::KIND
-                | crate::forward_calls::InstallationPeerRegistry::KIND
-                | crate::installation_peer_reads::InstallationPeerDirectory::KIND
-        ) {
-            return self.registry_machine_read(invocation).await;
-        }
         if invocation.kind != "central.object" {
             return self.session_call(invocation).await;
         }
@@ -190,9 +132,7 @@ where
             return Err(refused());
         }
         let call: WireCall = serde_json::from_value(invocation.request).map_err(|_| refused())?;
-        let WireCall::Registry(call) = call else {
-            return Err(refused());
-        };
+        let WireCall::Registry(call) = call;
         let result = match (invocation.authority, call) {
             (CallAuthority::Owner(owner), RegistryCall::RevokeEnrollment { installation }) => {
                 RegistryResult::EnrollmentRevoked(

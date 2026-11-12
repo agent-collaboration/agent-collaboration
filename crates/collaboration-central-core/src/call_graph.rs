@@ -1,6 +1,5 @@
 //! The only synchronous object edges. Rank checks and wire checks share this table.
-use crate::{FleetCall, FleetResult, ObjectAddress, RegistryCall, RegistryResult};
-use fleet_sync_protocol::DatabaseId;
+use crate::{ObjectAddress, RegistryCall, RegistryResult};
 use message_board::ServiceId;
 use serde::{Deserialize, Serialize};
 
@@ -10,7 +9,6 @@ pub enum CallerKind {
     Edge,
     Session,
     Registry,
-    Copy,
     Fleet,
     Delivery,
 }
@@ -110,17 +108,14 @@ object_kind!(
     |_: &()| ObjectAddress::Fleet
 );
 object_kind!(
-    CopyKind,
-    6,
-    Copy,
-    DatabaseId,
+    FleetKind,
+    4,
+    Fleet,
+    (),
     SharedCallOnly,
     SharedAnswerOnly,
-    |v: &DatabaseId| ObjectAddress::Copy(*v)
+    |_: &()| ObjectAddress::Fleet
 );
-object_kind!(FleetKind, 4, Fleet, (), FleetCall, FleetResult, |_: &()| {
-    ObjectAddress::Fleet
-});
 object_kind!(
     DeliveryKind,
     5,
@@ -146,7 +141,7 @@ macro_rules! allowed_edges {
 }
 allowed_edges!(
     EdgeKind=>SessionKind, EdgeKind=>RegistryKind, EdgeKind=>FleetKind,
-    SessionKind=>RegistryKind, SessionKind=>CopyKind, SessionKind=>FleetKind, SessionKind=>DeliveryKind,
-    RegistryKind=>CopyKind, RegistryKind=>FleetKind, RegistryKind=>DeliveryKind,
-    FleetKind=>CopyKind, FleetKind=>DeliveryKind,
+    SessionKind=>RegistryKind, SessionKind=>FleetKind, SessionKind=>DeliveryKind,
+    RegistryKind=>FleetKind, RegistryKind=>DeliveryKind,
+    FleetKind=>DeliveryKind,
 );

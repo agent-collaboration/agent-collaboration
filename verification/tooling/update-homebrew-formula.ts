@@ -74,8 +74,6 @@ export function updateCodexRouterFormula(formulaText: string, release: FormulaRe
   const legacy = '    bin.install "agent-session"';
   const collaboration = '    bin.install "agent-collaboration"';
   const sessions = '    bin.install "agent-sessions"';
-  const formerUpdate = '    bin.install "codex-router-board-upgrade"';
-  const update = '    bin.install "agent-router-update"';
   if (updated.includes(legacy))
     updated = updated.replace(legacy, updated.includes(sessions) ? "" : sessions);
   if (!updated.includes(collaboration))
@@ -85,13 +83,9 @@ export function updateCodexRouterFormula(formulaText: string, release: FormulaRe
     );
   if (!updated.includes(sessions))
     updated = updated.replace(collaboration, `${collaboration}\n${sessions}`);
-  // agent-router-update replaced codex-router-board-upgrade, which releases no longer carry.
-  if (updated.includes(formerUpdate))
-    updated = updated.replace(
-      updated.includes(update) ? `${formerUpdate}\n` : formerUpdate,
-      updated.includes(update) ? "" : update,
-    );
-  if (!updated.includes(update)) updated = updated.replace(sessions, `${sessions}\n${update}`);
+  // Releases no longer carry an importer; a formula installing a missing file fails.
+  for (const retired of ["codex-router-board-upgrade", "agent-router-update"])
+    updated = updated.replaceAll(`    bin.install "${retired}"\n`, "");
   return updated;
 }
 

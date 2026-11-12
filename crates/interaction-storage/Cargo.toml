@@ -7,6 +7,7 @@ license.workspace = true
 publish.workspace = true
 
 [features]
+# Empty: its mail fault hooks are gone; remove once no crate enables it.
 runtime-test-support = []
 # Lets another crate's tests hold an interaction commit at a CommitPoint.
 test-support = ["sqlite-storage-maintenance/test-support"]
@@ -16,11 +17,9 @@ workspace = true
 
 [dependencies]
 chrono.workspace = true
-collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.96" }
 collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.96" }
 durable-steps = { workspace = true, features = ["turso"] }
 fleet-sync-delivery.workspace = true
-fleet-sync-protocol.workspace = true
 message-board = { path = "../message-board", version = "0.1.96" }
 serde.workspace = true
 serde_json.workspace = true
@@ -31,15 +30,11 @@ thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 sqlite-storage-maintenance = { path = "../sqlite-storage-maintenance", version = "0.1.118" }
-uuid.workspace = true
 
 [dev-dependencies]
 sqlite-storage-maintenance = { path = "../sqlite-storage-maintenance", version = "0.1.118", features = ["test-support"] }
-automation-storage = { path = "../automation-storage", version = "0.1.96" }
-agent-automation = { path = "../agent-automation", version = "0.1.96" }
-board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
-runtime-primitives.workspace = true
 tempfile = "3.27.0"
+uuid.workspace = true
 sqlx = { workspace = true, features = ["sqlite"] }
 
 [[test]]

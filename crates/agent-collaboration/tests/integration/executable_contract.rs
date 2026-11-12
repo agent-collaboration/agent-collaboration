@@ -141,37 +141,6 @@ fn debug_dry_run_preserves_isolated_socket_and_never_executes_codex() {
 }
 
 #[test]
-fn message_discovery_error_reports_category_without_leaking_content_or_path() {
-    // Arrange: nonexistent service directory; no native process or send can occur.
-    let id = "00000000-0000-4000-8000-000000000001";
-    let target = serde_json::json!({"endpoint":{"serviceId":id,"endpointId":"codex-local"},"sessionId":"test"}).to_string();
-    let absent = format!("/tmp/absent-message-service-{}", std::process::id());
-    // Act.
-    let output = Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
-        .args([
-            "message",
-            "send",
-            "--human-user",
-            "--to",
-            &target,
-            "--text",
-            "private message text",
-            "--service-directory",
-            &absent,
-            "--json",
-        ])
-        .output()
-        .unwrap();
-    // Assert: useful non-secret failure category, no arbitrary IO message text.
-    assert_eq!(output.status.code(), Some(3));
-    let text = String::from_utf8(output.stdout).unwrap();
-    assert!(text.contains("NotFound"));
-    assert!(text.contains("manifest-read"));
-    assert!(!text.contains(&absent));
-    assert!(!text.contains("private message text"));
-}
-
-#[test]
 fn event_listening_requires_explicit_attachment_and_reports_missing_service() {
     // Arrange: no service exists; listing events must never imply a passive native read.
     let binary = env!("CARGO_BIN_EXE_agent-collaboration");

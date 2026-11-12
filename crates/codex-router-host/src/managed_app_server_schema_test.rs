@@ -307,7 +307,6 @@ async fn host_starts_keep_the_bundle_in_use_and_bundles_used_within_thirty_days(
         // Act: the Host prepares the export, then its runtime publishes it.
         let plan = prepare(executable, &directory).await?;
         let mut inputs = crate::CollaborationRuntimeInputs {
-            board_session: None,
             directory: directory.clone(),
             codex_home: directory.clone(),
             backend_socket: directory.join("backend.sock"),

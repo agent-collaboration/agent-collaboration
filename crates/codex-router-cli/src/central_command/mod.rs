@@ -78,8 +78,6 @@ pub(crate) async fn run_central_command(
                     delivery: collaboration_central_tokio::DeliveryConfig {
                         relay_peer: config.relay,
                     },
-                    holder_answer_timeout: Duration::from_secs(30),
-                    copy_ack_wait: Duration::from_secs(30),
                 },
                 listen,
                 issuer.jwks(),

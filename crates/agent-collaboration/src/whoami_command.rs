@@ -23,7 +23,6 @@ struct ResolvedCurrentSession {
     session: SessionRef,
     endpoint_registered: bool,
     machine_id: String,
-    peer_id: String,
     machine_label: String,
 }
 
@@ -109,10 +108,6 @@ async fn resolve_current_session(
         .list_endpoints()
         .await
         .map_err(ResolveFailure::Client)?;
-    let installation = client
-        .installation_show()
-        .await
-        .map_err(ResolveFailure::Client)?;
     let session = harness
         .session_ref(&service_id)
         .map_err(ResolveFailure::Invalid)?;
@@ -124,7 +119,6 @@ async fn resolve_current_session(
         session,
         endpoint_registered,
         machine_id: String::from(service_id),
-        peer_id: installation.peer_id.as_str().to_owned(),
         machine_label,
     })
 }
@@ -144,7 +138,6 @@ fn print_current_session(
                 "source": harness.harness.environment_variable,
                 "endpointRegistered": resolved.endpoint_registered,
                 "machineId": resolved.machine_id,
-                "peerId": resolved.peer_id,
                 "machineLabel": resolved.machine_label,
             }))
         )
@@ -164,8 +157,8 @@ fn print_current_session(
             collaboration_client::protocol::escape_push_line_field(&resolved.machine_label);
         writeln!(
             out,
-            "machine: {} · {machine_label}\npeer: {}\n{session}\nsource: {}{registration}",
-            resolved.machine_id, resolved.peer_id, harness.harness.environment_variable
+            "machine: {} · {machine_label}\n{session}\nsource: {}{registration}",
+            resolved.machine_id, harness.harness.environment_variable
         )
     };
     if printed.is_err() { 3 } else { 0 }

@@ -37,7 +37,7 @@ test("local publisher CLI completes the release contract through isolated comman
   }
 });
 
-test("local publisher restores the formula when installed importer validation fails", (): void => {
+test("local publisher restores the formula when installed version validation fails", (): void => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "release-commands-failure-")));
   try {
     const fixture = releaseCommandFixture(root, "0.1.101");
@@ -52,7 +52,7 @@ test("local publisher restores the formula when installed importer validation fa
       { env: fixture.environment, encoding: "utf8" },
     );
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /publish failed: Homebrew installed 'agent-router-update 0.1.101'/);
+    assert.match(result.stderr, /publish failed: Homebrew installed 'agent-sessions 0.1.101'/);
     assert.ok(
       readFileSync(fixture.log, "utf8").includes(
         '"args":["checkout","HEAD","--","Formula/codex-router.rb"]',

@@ -352,7 +352,6 @@ async fn live_cursor_create_wait_prompt_wait_through_compiled_cli() {
 
     let runtime = Box::pin(CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
-            board_session: None,
             directory: service_directory.clone(),
             codex_home: std::env::var_os("CODEX_HOME")
                 .map(std::path::PathBuf::from)
@@ -523,10 +522,8 @@ async fn run_wait(root: &std::path::Path, operation_id: &str) -> std::process::O
     reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
 )]
 fn fixture_directory(label: &str) -> std::path::PathBuf {
-    let root = std::path::PathBuf::from("/tmp").join(format!(
-        "pc-{label}-{}",
-        collaboration_client::board::ProjectId::generate().as_str()
-    ));
+    let root = std::path::PathBuf::from("/tmp")
+        .join(format!("pc-{label}-{}", uuid::Uuid::now_v7().simple()));
     std::fs::DirBuilder::new()
         .mode(0o700)
         .create(&root)

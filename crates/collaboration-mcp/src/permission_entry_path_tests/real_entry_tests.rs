@@ -470,16 +470,5 @@ async fn stateless_http_create_reports_discovery_failure_without_creation_uncert
         "{response}"
     );
 
-    let wake_response = mcp_call(
-        &client,
-        &listener.url(),
-        5,
-        "wake_wait_until_first_fire",
-        json!({"wakeupId":"01985b1e-8d90-7fff-8000-000000000099"}),
-    )
-    .await;
-    let wake_failure = &wake_response["result"]["structuredContent"];
-    assert_eq!(wake_failure["kind"], "waitUnavailable", "{wake_response}");
-    assert_eq!(wake_failure["effect"], "none");
     listener.stop().await;
 }

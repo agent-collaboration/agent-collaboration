@@ -1,6 +1,7 @@
 //! Explicit queue mode is shared by both ACP providers.
 use crate::provider_fixture_launch;
 
+use agent_automation::AttemptId;
 use agent_automation::{RouteEffectEvidence, SubmissionEffect};
 use codex_router_host::{
     ExternalProviderBinding, ExternalProviderLaunch, ExternalProviderRuntime,
@@ -14,7 +15,7 @@ use collaboration_contracts::SessionDeliveryRoute;
 use collaboration_contracts::layer_zero::DeliveryRequest;
 use collaboration_contracts::layer_zero::PreparedPush;
 use collaboration_protocol::{
-    AttemptId, ChannelDescription, CodexGeneration, DeliveryClientReceipt, DeliveryCorrelationId,
+    ChannelDescription, CodexGeneration, DeliveryClientReceipt, DeliveryCorrelationId,
     DeliveryOutcome, EndpointAvailability, EndpointDescription, EndpointId, EndpointRef,
     GenerationNumber, MessageDelivery, MessageText, NonEmptyText, ObservationTimestamp,
     ProviderBindingId, ProviderBindingIdentity, ProviderCapabilities, ProviderCapability,

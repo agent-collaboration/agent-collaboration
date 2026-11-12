@@ -6,25 +6,20 @@ Run the package with nextest:
 cargo nextest run --locked --profile ci -p agent-collaboration --features quota-reset-test-harness
 ```
 
-- `integration/main.rs` gathers the 61 former CLI, protocol, fixture and opt-in
-  live-debug roots. Each root retains its module namespace and ignore policy.
-- `e2e/main.rs` gathers the eight real local Host/central/CLI/MCP journey roots:
-  board records, central, takeover, installation directory, messaging rules,
-  local mail, reconciliation and retirement. CI prepares the CLI and
-  `board-debug-runtime` artifacts, then sets `CODEX_ROUTER_E2E_HOST_BINARY` and
-  `CODEX_ROUTER_E2E_PARENT` before running this target serially. These cases
-  remain excluded from the main workspace test job.
+- `integration/main.rs` gathers the 23 former CLI, protocol and fixture roots
+  for the kept surfaces: sessions and conversations, approvals and questions,
+  provider operations, endpoints, whoami, the journal and the native and ACP
+  stdio bridges. Each root retains its module namespace and ignore policy.
 - Other directories hold case expansions and reusable fixtures. An aggregate
   declares each shared helper implementation once. Colocated `*_test.rs`
-  files retain helper unit cases; test-only namespace modules preserve every
-  former root's unit-case identity while sharing the helper implementation.
-  The ACP recipient helper cases run the real Node journal fixture and prove
-  that a pending prompt read wakes on its write notice, including a write
-  already present before the read starts. Their Rust runtime enables I/O
-  without a timer driver, so polling with a native timer fails immediately.
+  files retain helper unit cases.
 
-A former binary `<root>` and test `<case>` becomes binary `integration` or
-`e2e` and test `<root>::<case>`. Library and binary unit tests keep their names.
+The board, message, mail, wake, schedule, automation and central-admin
+commands were removed, and their integration and e2e roots went with them.
+No e2e category remains, so no e2e target is declared.
+
+A former binary `<root>` and test `<case>` becomes binary `integration` and
+test `<root>::<case>`. Library and binary unit tests keep their names.
 Nextest launches each case in its own process. Use `cargo test --no-run` for
 compilation measurements; do not replace that process isolation with plain
 multi-case `cargo test` execution.

@@ -24,16 +24,6 @@ pub(super) struct CollaborationLifecycle {
     schema_digest: Option<[u8; 32]>,
 }
 impl CollaborationLifecycle {
-    pub(super) fn observe_fleet(&self) -> crate::collaboration_runtime::FleetObservationFuture {
-        match &self.runtime {
-            Some(runtime) => runtime.observe_fleet(),
-            None => Box::pin(async {
-                crate::FleetHostObservation::Unavailable {
-                    message: "collaboration runtime is unavailable".to_owned(),
-                }
-            }),
-        }
-    }
     pub(super) async fn start(
         config: &HostConfig,
         instance: &HostInstance,
@@ -135,11 +125,6 @@ impl CollaborationLifecycle {
                 &self.directory,
             )
             .await?;
-            let board_session = tokio::task::spawn_blocking(move || {
-                crate::fleet_enrollment_file::load_router_fleet_enrollment(&router_root)
-            })
-            .await
-            .map_err(io::Error::other)??;
             use std::os::unix::fs::DirBuilderExt;
             match std::fs::DirBuilder::new()
                 .mode(0o700)
@@ -160,11 +145,7 @@ impl CollaborationLifecycle {
             );
             let mut runtime = CollaborationRuntime::start_for_host_with_router_proxy_endpoint(
                 crate::HostCollaborationInputs {
-                    enrollment_reset_directory: crate::router_collaboration_directory(
-                        &self.router_root,
-                    ),
                     collaboration_runtime: CollaborationRuntimeInputs {
-                        board_session,
                         directory: self.directory.clone(),
                         codex_home: self.codex_home.clone(),
                         backend_socket: self.backend_socket.clone(),

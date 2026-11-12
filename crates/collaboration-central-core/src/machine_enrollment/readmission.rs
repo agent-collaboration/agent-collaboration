@@ -6,8 +6,6 @@ use super::{
 };
 use durable_steps::{OperationContext, OperationFailure, Task};
 use std::marker::PhantomData;
-#[cfg(feature = "conformance")]
-use std::sync::Arc;
 
 pub(super) const READMISSION_TASK_KIND: &str = "central.readmit-machine";
 
@@ -18,8 +16,6 @@ pub(crate) struct ReadmissionInput {
 }
 pub(crate) struct ReadmissionTask<Store, Driver> {
     pub marker: PhantomData<fn() -> (Store, Driver)>,
-    #[cfg(feature = "conformance")]
-    pub probe: Arc<super::conformance_revocation::RevocationProbe>,
 }
 impl<Store: AtomicStore, Driver: Database> Task for ReadmissionTask<Store, Driver>
 where
@@ -40,17 +36,6 @@ where
         context: &mut Context,
         input: &ReadmissionInput,
     ) -> Result<(), OperationFailure> {
-        #[cfg(feature = "conformance")]
-        if self
-            .probe
-            .before_activation_pause
-            .defer_completion()
-            .map_err(|error| OperationFailure::Storage { error })?
-        {
-            // No activation step has run. Yield the alarm so normal credential
-            // requests can observe the reserved, inactive enrollment.
-            return Err(OperationFailure::Retry { after_ms: 100 });
-        }
         let peer = input.peer;
         let updated_at = chrono::DateTime::from_timestamp_millis(context.now().unix_millis())
             .ok_or_else(|| invalid_step("readmission clock is outside the timestamp range"))?
@@ -68,18 +53,6 @@ where
                 },
             )
             .await?;
-        #[cfg(feature = "conformance")]
-        if self
-            .probe
-            .activation_pause
-            .defer_completion()
-            .map_err(|error| OperationFailure::Storage { error })?
-        {
-            // A live held alarm would stop unrelated due operations in the
-            // native host. Retry preserves this real local receipt and yields
-            // the drive so the test's later revoke can finish first.
-            return Err(OperationFailure::Retry { after_ms: 100 });
-        }
         Ok(())
     }
 }

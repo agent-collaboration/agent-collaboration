@@ -9,9 +9,7 @@ publish.workspace = true
 workspace = true
 [dependencies]
 router-clock.workspace = true
-board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.96" }
 reqwest = { workspace = true, features = ["json"] }
-collaboration-central-admin-protocol = { version = "0.1.96", path = "../collaboration-central-admin-protocol" }
 futures-util.workspace = true
 http.workspace = true
 rmcp = { workspace = true, features = ["client", "transport-streamable-http-client-unix-socket"] }
@@ -30,20 +28,11 @@ uuid.workspace = true
 [dev-dependencies]
 router-clock = { workspace = true, features = ["test-support"] }
 codex-native-integration = { workspace = true, features = ["test-support"] }
-collaboration-application-test-support = { path = "../collaboration-application-test-support", version = "0.1.126" }
 collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
-collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts" }
-fleet-admission = { path = "../fleet-admission", version = "0.1.96" }
-fleet-sync-writer.workspace = true
-board-fleet-sync = { path = "../board-fleet-sync", version = "0.1.96" }
-board-central-test-support = { version = "0.1.96", path = "../board-central-test-support" }
-fleet-sync-protocol.workspace = true
-runtime-primitives.workspace = true
-automation-storage = { path = "../automation-storage", version = "0.1.16" }
-message-board-storage = { path = "../message-board-storage", version = "0.1.20" }
 collaboration-mcp = { path = "../collaboration-mcp", version = "0.1.30", features = ["test-support"] }
 codex-acp-adapter = { path = "../codex-acp-adapter", version = "0.1.30" }
 collaboration-service = { path = "../collaboration-service", version = "0.1.14", features = ["test-support"] }
+lifecycle-observation = { path = "../lifecycle-observation", version = "0.1.14" }
 tokio = { workspace = true, features = ["test-util"] }
 tempfile = "3.27.0"
 

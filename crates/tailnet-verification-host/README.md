@@ -9,7 +9,7 @@ cargo build -p codex-router-tailnet-verification-host
 target/debug/codex-router-tailnet-verification-host host "$HOST_PLAN"
 ```
 
-The TypeScript tailnet peer/readback driver has its own entry point. Its checks do not require this executable.
+Its one action is `host`: Host readiness, normal shutdown and the exposure-loss negative. The earlier D1 central and native actions and the TypeScript board peer retired with the board and mail they drove.
 
 The Host keeps `O_NOFOLLOW`, nonblocking `flock`, owner/mode checks, inode/device checks, byte guards, and exact profile restoration in Rust. It signals only processes whose retained identity still matches a fresh observation. An unavailable cleanup inventory remains unknown and cannot count as empty.
 

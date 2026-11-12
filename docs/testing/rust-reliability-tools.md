@@ -76,10 +76,8 @@ node verification/tooling/prepare-sqlx-turso.ts --check
 The wrappers supply their own database URLs and remove their temporary schema
 databases when finished. They never read Router or Codex home. Stock metadata
 lives in the root `.sqlx`; Turso metadata lives in each querying package's `.sqlx`.
-`message-board-storage` has only native Turso queries. When stock preparation
-passes a SQLite URL through its dependency graph, that package's build script
-uses its existing native cache. The separate Turso preparation still describes
-every native query online against a fresh native schema and checks the cache.
+The separate Turso preparation describes every native query online against a
+fresh native schema and checks the cache.
 Both full `--check` commands are required. Run metadata generation before dependent
 workspace builds, since stock generation replaces the shared root cache as it runs.
 Commit metadata changes with query/schema changes. Metadata checks do not replace

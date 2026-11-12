@@ -67,15 +67,6 @@ impl ApiConnection {
     }
 
     /// Calls `tool` and answers its result or tool error as the tool returned it.
-    pub(crate) async fn answer(
-        &self,
-        tool: &str,
-        arguments: Value,
-    ) -> Result<ToolAnswer, ClientError> {
-        self.answer_with_timeout(tool, arguments, DEFAULT_CALL_TIMEOUT)
-            .await
-    }
-
     pub(crate) async fn answer_with_timeout(
         &self,
         tool: &str,

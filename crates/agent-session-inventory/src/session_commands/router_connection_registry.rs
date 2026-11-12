@@ -12,7 +12,7 @@ pub use connection_profile::{
 const MAX_REGISTRY_BYTES: u64 = 65536;
 /// The session picker's machine list at the Router root.
 pub const MACHINE_LIST_FILE_NAME: &str = "agent-sessions.jsonc";
-/// The machine list's earlier name; `agent-router-update` renames it.
+/// The machine list's earlier name; it is not read and the owner renames it.
 const LEGACY_MACHINE_LIST_FILE_NAME: &str = "routers.jsonc";
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]

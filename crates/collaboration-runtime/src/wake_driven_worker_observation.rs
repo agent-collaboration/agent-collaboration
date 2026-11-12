@@ -31,17 +31,6 @@ impl WorkerObservation {
         self.observed.update(|snapshot| snapshot.asleep = false);
     }
 
-    /// Reports how many of the worker's tasks are still running, until each reports.
-    #[cfg(any(test, feature = "test-support"))]
-    pub(crate) fn track_running_tasks(
-        &self,
-        running: std::sync::Arc<std::sync::atomic::AtomicUsize>,
-    ) {
-        if let Ok(mut counters) = self.observed.running.lock() {
-            counters.push(running);
-        }
-    }
-
     /// The loop stopped waiting on a source that can never change again.
     pub(crate) fn source_closed(&self) {
         #[cfg(any(test, feature = "test-support"))]
@@ -105,8 +94,6 @@ mod observed {
         pub armed_deadline: Option<SyncTime>,
         /// The loop or waiter is waiting now, not running a pass or a read.
         pub asleep: bool,
-        /// The worker's tasks that have not reported yet.
-        pub tasks_running: usize,
         /// When a waiter's timer fires, as it reported before its latest sleep.
         pub waiter_wakes_at: Option<router_clock::ClockInstant>,
     }
@@ -120,8 +107,6 @@ mod observed {
         snapshot: Mutex<LoopSnapshot>,
         sleeps: watch::Sender<u64>,
         held: Mutex<Option<HeldSleep>>,
-        /// One counter per task set the worker runs.
-        pub(super) running: Mutex<Vec<std::sync::Arc<std::sync::atomic::AtomicUsize>>>,
     }
 
     impl Default for ObservedLoop {
@@ -130,7 +115,6 @@ mod observed {
                 snapshot: Mutex::default(),
                 sleeps: watch::channel(0).0,
                 held: Mutex::default(),
-                running: Mutex::default(),
             }
         }
     }
@@ -155,15 +139,6 @@ mod observed {
                 snapshot.passes += 1;
                 snapshot.asleep = false;
             });
-        }
-
-        fn tasks_running(&self) -> usize {
-            self.running.lock().map_or(0, |counters| {
-                counters
-                    .iter()
-                    .map(|running| running.load(std::sync::atomic::Ordering::SeqCst))
-                    .sum()
-            })
         }
 
         pub(super) async fn armed(&self, deadline: Option<SyncTime>) {
@@ -212,14 +187,11 @@ mod observed {
     impl WorkerObservation {
         #[must_use]
         pub fn snapshot(&self) -> LoopSnapshot {
-            let mut snapshot = self
-                .observed
+            self.observed
                 .snapshot
                 .lock()
                 .map(|snapshot| snapshot.clone())
-                .unwrap_or_default();
-            snapshot.tasks_running = self.observed.tasks_running();
-            snapshot
+                .unwrap_or_default()
         }
 
         /// Resolves once the loop has gone to sleep at least `count` times; a loop that

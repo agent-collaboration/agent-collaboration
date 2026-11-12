@@ -1,1 +1,0 @@
-SELECT report_id,board_id,project_id,epoch,commit_sequence,installation,reported_at,CAST(created_at AS TEXT) AS created_at,typeof(created_at) AS created_class,CAST(updated_at AS TEXT) AS updated_at,typeof(updated_at) AS updated_class FROM fleet_archive_reports WHERE board_id=? ORDER BY project_id;

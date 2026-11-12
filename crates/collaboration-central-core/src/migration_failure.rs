@@ -63,16 +63,6 @@ impl MigrationFailure {
         }
         Some(failure)
     }
-    pub(crate) fn unavailable(&self) -> fleet_sync_protocol::CopyUnavailableReason {
-        match fleet_sync_receiver::classify_copy_store_error(self.cause.clone()) {
-            fleet_sync_receiver::CopyTransactionFailure::Unavailable(
-                fleet_sync_protocol::CopyUnavailableReason::StorageFull,
-            ) => fleet_sync_protocol::CopyUnavailableReason::StorageFull,
-            _ => fleet_sync_protocol::CopyUnavailableReason::MigrationPending {
-                version: self.version,
-            },
-        }
-    }
 }
 pub(crate) async fn record<Scope: TransactionScope>(
     scope: &mut Scope,

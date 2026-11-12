@@ -110,7 +110,7 @@ impl WakeDrivenWorkerLoop {
     }
 
     /// Runs passes until `shutdown`. Startup is the first pass: it drains whatever an
-    /// earlier process or `agent-router-update` committed.
+    /// earlier process committed.
     pub async fn run<TPass: WorkerPass>(mut self, pass: &mut TPass, shutdown: CancellationToken) {
         let mut failures = FailedPassBackoff::default();
         loop {

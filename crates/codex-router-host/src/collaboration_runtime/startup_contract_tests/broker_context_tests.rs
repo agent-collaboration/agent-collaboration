@@ -1,13 +1,13 @@
 use super::{BOUND, start_host, target};
-use collaboration_protocol::{PushHeaderFacts, PushKind, RouterLink};
+use collaboration_protocol::{PushKind, RouterLink};
 use serde_json::{Value, json};
 use sha2::{Digest as _, Sha256};
 use std::os::unix::fs::PermissionsExt as _;
 use tokio::io::{AsyncBufReadExt as _, BufReader};
 
 #[tokio::test]
-async fn host_broker_notices_use_the_shared_display_names_and_physical_push_store() {
-    let fixture = start_host(false).await;
+async fn host_broker_notices_use_the_shared_display_names() {
+    let fixture = start_host().await;
     let requester = target(&fixture.runtime, "named-requester");
     let approver = target(&fixture.runtime, "approver");
     fixture
@@ -37,7 +37,6 @@ async fn host_broker_notices_use_the_shared_display_names_and_physical_push_stor
         .startup_test_broker
         .upgrade()
         .expect("actual Host broker");
-    let physical = broker.interaction_store();
     let requester = serde_json::from_value(serde_json::to_value(&requester).expect("requester"))
         .expect("board requester");
     let approver: message_board::SessionRef =
@@ -78,24 +77,15 @@ async fn host_broker_notices_use_the_shared_display_names_and_physical_push_stor
     let link = content
         .split_whitespace()
         .find(|word| word.starts_with("router://"))
-        .expect("stored push link");
-    let link = RouterLink::parse(link).expect("canonical link");
-    let record = physical
-        .get_push_record(link.push_id())
-        .await
-        .expect("physical store read")
-        .expect("notice was committed to the Host broker's physical store before delivery");
-    assert_eq!(record.kind, PushKind::Question);
+        .expect("notice link");
+    RouterLink::parse(link).expect("canonical link");
+    let header = collaboration_protocol::parse_push_line_header(content).expect("notice header");
+    assert_eq!(header.kind, PushKind::Question);
     assert!(
-        matches!(record.header_facts,PushHeaderFacts::Question { requester_display_name:Some(ref name),.. } if name.as_str()=="Host requester"),
-        "broker must use the same display-name cache populated by Host operations"
-    );
-    assert!(
-        record.origin_router_ref.is_some(),
-        "typed notice retains its originating interaction"
+        content.contains("Host requester"),
+        "broker must use the same display-name cache populated by Host operations: {content}"
     );
     drop(response);
-    drop(physical);
     drop(broker);
     fixture.runtime.shutdown().await.expect("Host shutdown");
 }

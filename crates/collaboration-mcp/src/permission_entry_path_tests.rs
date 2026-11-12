@@ -5,8 +5,8 @@ use codex_acp_adapter::{
 };
 use collaboration_contracts::MachineIdentity;
 use collaboration_protocol::{
-    ApprovalDecision, CodexGeneration, EndpointDescription, EndpointRef, MachineId, PushLineInput,
-    RouterAccess, RouterLink, RouterOriginRef, SessionRef, render_push_line,
+    ApprovalDecision, CodexGeneration, EndpointDescription, EndpointRef, MachineId, RouterAccess,
+    RouterLink, SessionRef,
 };
 use collaboration_runtime::EndpointDirectory;
 use collaboration_service::ApplicationFixture;
@@ -39,7 +39,6 @@ struct ApprovalFixture {
     directory: tempfile::TempDir,
     application: collaboration_service::CollaborationApplication,
     broker: Arc<ServiceInteractionBroker>,
-    _automation_store: Arc<tokio::sync::Mutex<automation_storage::AutomationStore>>,
     generation: CodexGeneration,
     requester: SessionRef,
     approver: SessionRef,
@@ -107,12 +106,6 @@ impl ApprovalFixture {
             std::fs::set_permissions(directory.path(), std::fs::Permissions::from_mode(0o700))
                 .expect("private permissions");
         }
-        let automation_path = directory.path().join("automation.sqlite");
-        let automation_store = Arc::new(tokio::sync::Mutex::new(
-            automation_storage::AutomationStore::open(&automation_path)
-                .await
-                .expect("automation store"),
-        ));
         let service_id: collaboration_protocol::UuidIdentity =
             SERVICE_ID.to_owned().try_into().expect("service id");
         let machine_identity = MachineIdentity::new(service_id.clone(), Some("Permission fixture"))
@@ -180,7 +173,6 @@ impl ApprovalFixture {
         .expect("approval broker");
         let route: Arc<dyn collaboration_contracts::SessionDeliveryRoute> =
             Arc::new(collaboration_runtime::CodexAppServerDeliveryRoute::new(
-                clock.clone(),
                 service_id.clone(),
                 endpoints,
                 native_backend.clone(),
@@ -227,7 +219,6 @@ impl ApprovalFixture {
             .expect("machine identity")
             .with_native_backend(native_backend)
             .expect("native backend")
-            .with_automation_store(Arc::clone(&automation_store))
             .with_approval_broker(Arc::clone(&broker));
         // The CLI reaches the API on the service socket the manifest names; the response-loss
         // case puts a proxy there that forwards to the real socket and drops the decision's
@@ -257,7 +248,6 @@ impl ApprovalFixture {
             directory,
             application,
             broker,
-            _automation_store: automation_store,
             generation,
             requester,
             approver,
@@ -439,102 +429,42 @@ async fn serve_approval_deliveries(
                     assert!(!text.contains("Self-declared sender:"));
                     assert!(!text.contains("Intended recipient:"));
 
-                    let push = capture
-                        .broker
-                        .interaction_store()
-                        .get_push_record(link.push_id())
-                        .await
-                        .expect("read delivered push")
-                        .expect("stored delivered push");
-                    assert_eq!(&push.push_id, link.push_id());
-                    assert_eq!(push.target, capture.approver);
-                    let expected_line = render_push_line(&PushLineInput {
-                        link,
-                        machine_label: capture.machine_identity.machine_label().clone(),
-                        origin: push.origin.clone(),
-                        header_facts: push.header_facts.clone(),
-                        body: push.body.clone(),
-                    })
-                    .expect("render stored push line");
-                    assert_eq!(text, expected_line);
+                    // Notices are not stored: the line itself carries the preview.
                     assert_eq!(text.lines().count(), 1);
-                    let origin = RouterOriginRef::parse_canonical(
-                        push.origin_router_ref
-                            .as_deref()
-                            .expect("interaction origin reference"),
-                    )
-                    .expect("canonical interaction origin");
-                    let RouterOriginRef::Interaction { interaction_id, .. } = origin else {
-                        panic!("interaction origin expected");
-                    };
-                    let body = push.body.as_deref().expect("stored push body");
-                    assert!(body.contains(interaction_id.as_str()));
-                    match push.kind {
+                    let header = collaboration_protocol::parse_push_line_header(text)
+                        .expect("notice header");
+                    match header.kind {
                         collaboration_protocol::PushKind::Approval => {
                             assert!(text.starts_with("❓ Router approval @Permission fixture"));
-                            assert_eq!(
-                                push.origin,
-                                collaboration_protocol::PushOrigin::Router(
-                                    collaboration_protocol::PushKind::Approval,
-                                )
-                            );
-                            assert!(matches!(
-                                &push.header_facts,
-                                collaboration_protocol::PushHeaderFacts::Approval {
-                                    requester: push_requester,
-                                    ..
-                                } if push_requester == &capture.requester
-                            ));
-                            assert!(body.contains("Allow this operation once (allow once)"));
-                            assert!(body.contains("agent-collaboration approval decide"));
-                            let approval = capture
-                                .broker
-                                .list(false)
-                                .await
-                                .approvals
-                                .into_iter()
-                                .find(|record| record.request_id == interaction_id.as_str())
-                                .expect("approval associated with delivered push");
-                            assert_eq!(approval.requester, capture.requester);
-                            assert_eq!(approval.approver, capture.approver);
-                            assert_eq!(
-                                serde_json::to_value(&approval.generation)
-                                    .expect("generation JSON")["generation"],
-                                if delivery_count == 2 && index == 1 {
-                                    6
-                                } else {
-                                    7
-                                }
-                            );
+                            let generation = if delivery_count == 2 && index == 1 {
+                                6
+                            } else {
+                                7
+                            };
+                            let approvals = capture.broker.list(false).await.approvals;
                             assert!(
-                                approval.operation["params"]["toolCall"]["content"][0]
-                                    ["content"]["text"]
-                                    .as_str()
-                                    .is_some_and(|text| text
-                                        .contains("Requested permissions:")
-                                        && text.contains("\"enabled\": true"))
+                                approvals.iter().any(|approval| {
+                                    approval.requester == capture.requester
+                                        && approval.approver == capture.approver
+                                        && serde_json::to_value(&approval.generation)
+                                            .expect("generation JSON")["generation"]
+                                            == generation
+                                        && approval.operation["params"]["toolCall"]["content"]
+                                            [0]["content"]["text"]
+                                            .as_str()
+                                            .is_some_and(|text| {
+                                                text.contains("Requested permissions:")
+                                                    && text.contains("\"enabled\": true")
+                                            })
+                                }),
+                                "approval associated with the delivered notice: {approvals:?}"
                             );
                         }
                         collaboration_protocol::PushKind::Question => {
                             assert!(text.starts_with("❓ Router question @Permission fixture"));
-                            assert_eq!(
-                                push.origin,
-                                collaboration_protocol::PushOrigin::Router(
-                                    collaboration_protocol::PushKind::Question,
-                                )
-                            );
-                            assert!(matches!(
-                                &push.header_facts,
-                                collaboration_protocol::PushHeaderFacts::Question {
-                                    requester: push_requester,
-                                    ..
-                                } if push_requester == &capture.requester
-                            ));
-                            assert!(body.contains("Question: Choose settings"));
-                            assert!(body.contains("mcp-question"));
-                            assert!(body.contains("agent-collaboration question answer"));
+                            assert!(text.contains("Choose settings"), "{text}");
                         }
-                        _ => panic!("approval or question push expected"),
+                        _ => panic!("approval or question notice expected"),
                     }
                     json!({"turn":{"id":format!("approval-delivery-{index}")}})
                 }

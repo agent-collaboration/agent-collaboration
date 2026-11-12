@@ -10,7 +10,6 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
-board-sync-protocol = { path = "../board-sync-protocol", version = "0.1.132" }
 fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.118" }
 collaboration-mail-protocol = { path = "../collaboration-mail-protocol", version = "0.1.93" }
 message-board = { path = "../message-board", version = "0.1.20" }
@@ -18,7 +17,6 @@ session-event-model = { path = "../session-event-model", version = "0.1.39" }
 agent-automation = { path = "../agent-automation", version = "0.1.16" }
 jsonschema.workspace = true
 schemars.workspace = true
-serde_json_canonicalizer.workspace = true
 sha2.workspace = true
 chrono.workspace = true
 serde.workspace = true

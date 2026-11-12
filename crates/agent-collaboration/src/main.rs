@@ -16,86 +16,6 @@ fn main() {
         print!("{}", agent_collaboration::command_help());
         return;
     }
-    if let Some(argument) = arguments.first().and_then(|argument| argument.to_str())
-        && argument.starts_with("board ")
-    {
-        let message = "The board command was passed as one argument. Pass each word as a separate argument, for example: agent-collaboration workspace list --json";
-        if argument
-            .split_ascii_whitespace()
-            .any(|word| word == "--json")
-            || arguments
-                .iter()
-                .skip(1)
-                .any(|argument| argument == "--json")
-        {
-            println!(
-                "{}",
-                serde_json::json!({"kind":"error","error":{"kind":"invalidUsage","stage":"validation","message":message,"nextAction":"correctRequest","details":{"kind":"none"}}})
-            );
-        } else {
-            eprintln!("{message}");
-        }
-        std::process::exit(2);
-    }
-    if arguments
-        .first()
-        .and_then(|arg| arg.to_str())
-        .is_some_and(|arg| {
-            matches!(
-                arg,
-                "board"
-                    | "request-effects"
-                    | "workspace"
-                    | "project"
-                    | "repository"
-                    | "post"
-                    | "thread"
-                    | "inbox"
-                    | "search"
-                    | "workstream"
-                    | "task"
-                    | "subtask"
-                    | "work-trail"
-                    | "adr"
-                    | "process"
-                    | "move"
-                    | "fact"
-                    | "feed"
-                    | "role"
-                    | "view"
-                    | "hook"
-            )
-        })
-    {
-        std::process::exit(agent_collaboration::run_board_command(arguments));
-    }
-    if arguments.first().is_some_and(|arg| arg == "central") {
-        std::process::exit(agent_collaboration::run_central_command(arguments));
-    }
-    if arguments.first().is_some_and(|arg| arg == "automation") {
-        std::process::exit(agent_collaboration::run_automation_command(arguments));
-    }
-    if arguments.first().is_some_and(|arg| arg == "delivery") {
-        std::process::exit(agent_collaboration::run_delivery_command(arguments));
-    }
-    if arguments.first().is_some_and(|arg| arg == "revision") {
-        std::process::exit(agent_collaboration::run_revision_command(arguments));
-    }
-    if arguments.first().is_some_and(|arg| arg == "operation") {
-        std::process::exit(agent_collaboration::run_operation_command(arguments));
-    }
-    if arguments.first().is_some_and(|arg| arg == "run") {
-        std::process::exit(agent_collaboration::run_workflow_command(arguments));
-    }
-    if arguments.first().is_some_and(|arg| arg == "schedule") {
-        std::process::exit(agent_collaboration::run_schedule_command(arguments));
-    }
-    if arguments.first().is_some_and(|arg| arg == "wake") {
-        std::process::exit(agent_collaboration::run_wakeup_command(arguments));
-    }
-    if arguments.first().is_some_and(|arg| arg == "instruction") {
-        std::process::exit(agent_collaboration::run_instruction_command(arguments));
-    }
     if arguments.first().is_some_and(|arg| arg == "conversation") {
         std::process::exit(agent_collaboration::run_conversation_command(arguments));
     }
@@ -112,12 +32,6 @@ fn main() {
     }
     if arguments.first().is_some_and(|arg| arg == "events") {
         std::process::exit(agent_collaboration::run_event_command(arguments));
-    }
-    if arguments.first().is_some_and(|arg| arg == "show") {
-        std::process::exit(agent_collaboration::run_push_record_show_command(arguments));
-    }
-    if arguments.first().is_some_and(|arg| arg == "message") {
-        std::process::exit(agent_collaboration::run_message_command(arguments));
     }
     if arguments.first().is_some_and(|arg| arg == "native") {
         std::process::exit(agent_collaboration::run_native_command(arguments));

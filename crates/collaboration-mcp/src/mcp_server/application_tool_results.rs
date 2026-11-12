@@ -59,37 +59,6 @@ where
     }
 }
 
-/// A domain family's typed result or typed failure. A rejection the family does not type is
-/// an operation failure whose effect is unknown for a mutation.
-pub(super) fn domain_result<TValue, TFailure>(
-    result: Result<TValue, TFailure>,
-    mutation: bool,
-) -> CallToolResult
-where
-    TValue: serde::Serialize,
-    TFailure: CollaborationRejection,
-{
-    match result {
-        Ok(value) => success_result(&value),
-        Err(rejection) => {
-            let published = rejection.published_rejection();
-            match published.data {
-                Some(data) if published.code == PublishedRejection::OPERATION_FAILED => {
-                    structured_tool_error(data)
-                }
-                _ => operation_failure_result(&published_failure(
-                    published,
-                    if mutation {
-                        OperationEffect::Unknown
-                    } else {
-                        OperationEffect::None
-                    },
-                )),
-            }
-        }
-    }
-}
-
 /// A typed result, the rejection as `TTypedFailure` when it is one, or else an operation
 /// failure.
 pub(super) fn typed_failure_result<TTypedFailure, TValue, TFailure>(

@@ -1,23 +1,21 @@
-# Private Tailnet MCP and board verification
+# Private Tailnet exposure lifecycle
 
 **Draft: real-target journeys remain unobserved.** Use only after the caller declares the current normal signed artifacts and a live-run allocation. Loading this recipe grants no Host, SSH, Serve, profile, native/model or fault action. A frozen source tree, fixture tests, ping or a compiler lease is not that declaration.
 
-The outcome comes from [Tailnet Specification R1–R7](../../../../docs/specs/2026-10-16-tailnet-collaboration/specification.md), its [Requirements](../../../../docs/specs/2026-10-16-tailnet-collaboration/requirements.md) and [HTTP Program Design](../../../../docs/specs/2026-10-16-tailnet-collaboration/program-design.md). Each permitted peer must reach the other Host’s own board store through private HTTPS. The Host remains unprivileged; existing Origin checks remain enforced. Each Host owns its foreground Serve child and session, while production and unrelated configuration remain protected.
+The outcome comes from [Tailnet Specification R1–R7](../../../../docs/specs/2026-10-16-tailnet-collaboration/specification.md), its [Requirements](../../../../docs/specs/2026-10-16-tailnet-collaboration/requirements.md) and [HTTP Program Design](../../../../docs/specs/2026-10-16-tailnet-collaboration/program-design.md). The board journey that reached a peer Host’s board store retired with the board in the workspace storage clean-up; this recipe keeps the Host exposure lifecycle. The Host remains unprivileged; existing Origin checks remain enforced. Each Host owns its foreground Serve child and session, while production and unrelated configuration remain protected.
 
 ## Entry and required inputs
 
-Run from the repository root. The [Rust Host driver](../../../../crates/tailnet-verification-host/README.md) owns the Host lifetime, profile guard and process cleanup. The TypeScript [peer/readback CLI](../../../../verification/observations/tailnet/tailnet-mcp.ts), [BoardPlan](../../../../verification/observations/tailnet/tailnet-plans.ts) and [transport](../../../../verification/observations/tailnet/tailnet-transport.ts) own peer operations. One agent owns each instance for its whole run. The caller sequences the two machines and any separately authorized transport.
+Run from the repository root. The [Rust Host driver](../../../../crates/tailnet-verification-host/README.md) owns the Host lifetime, profile guard and process cleanup. One agent owns each instance for its whole run. The caller sequences the two machines and any separately authorized transport.
 
-Install the pinned Node dependencies with `pnpm --dir verification install --frozen-lockfile` and build the Host with `cargo build -p codex-router-tailnet-verification-host`. Bind source and executable hashes on both machines; the Host records them in `driver-binding.json`.
+Build the Host with `cargo build -p codex-router-tailnet-verification-host`. Bind source and executable hashes on both machines; the Host records them in `driver-binding.json`.
 
-Peer HTTPS observations use the ordinary system `/usr/bin/curl`, version8.4 or newer; record its actual `--version` on each machine. This minimum makes the 4MiB transfer limit apply to unknown-length bodies too. The driver keeps normal system certificate/hostname validation, disables curl config, proxies, redirects and retries, sends the same JSON POST and explicit Host/Origin headers, and permits 65 seconds for connection and 75 seconds total, with a 76-second subprocess guard. This peer-only budget allows the certificate window; it proves no acquisition or peer success by itself. The curl child omits custom CA/backend and TLS-key-log environment overrides. No CA file, certificate bypass, redirect target, DNS mapping or plaintext fallback is added. HTTP error status/body remain available to negative probes; nonzero curl exit, malformed status or oversized body fails. Unix and loopback HTTP observations retain five-second bounds. Earlier failed observations stay failed.
 
-Have the caller supply actual values for these plans before any live command:
+Have the caller supply actual values for this plan before any live command:
 
 - **HostPlan on each machine:** source repository/head, immutable normal three-binary qualification and its SHA256, expected version, a nonexistent direct `/private/tmp` root, a freshly checked free proxy port, private node HTTPS `/mcp` URL and HTTPS port, the installed Tailscale executable, original debug-profile SHA256, protected process identities and an aware future deadline. The qualification shape is `sourceHead` plus `artifacts` containing `name`, absolute `path`, `sha256`, `features` and `version`; the driver rechecks bytes, normal features, actual versions and strict debug signing. The caller binds the actual source/diff to those artifacts; matching HEAD alone does not establish a binary’s source.
-- **BoardPlan per direction:** destination root, destination service ID **and epoch**, HTTPS endpoint, actual Session actor attribution, local canonical 0700 evidence directory, and allocation deadline. Its marker requires `topic_id`, `root_message_id`, fresh `message_id` and text. All three IDs must already be canonical lowercase RFC UUIDv7 strings. The caller seeds the owned private test-board/topic and an unresolved Thread under its grant, using `board_thread_create` with the same actual Session actor, an explicit permitted role and `watch: false`. Record its real root-message ID; the driver never creates or joins a thread or invents an actor. Topic-only plans fail validation. Derive service ID/epoch from actual readiness. Both Hosts must have distinct service IDs.
 
-`HOST_PLAN` and `BOARD_PLAN` below denote caller-supplied absolute JSON plan paths, not example payloads. The two Host roots and local evidence paths belong to the declared allocation. Preserve real owner HOME and normal Codex home. The driver checks those homes, disables unrelated external providers only in its fresh root and permits only a hash-bound temporary port projection in the normal debug profile. It does not copy credentials or account data. Stop at a permission, ownership, existing-root, profile-hash or selected-port conflict; do not change identity, use sudo, alter Tailscale policy or substitute a different backend to get past it.
+`HOST_PLAN` below denotes a caller-supplied absolute JSON plan path, not an example payload. The two Host roots and local evidence paths belong to the declared allocation. Preserve real owner HOME and normal Codex home. The driver checks those homes, disables unrelated external providers only in its fresh root and permits only a hash-bound temporary port projection in the normal debug profile. It does not copy credentials or account data. Stop at a permission, ownership, existing-root, profile-hash or selected-port conflict; do not change identity, use sudo, alter Tailscale policy or substitute a different backend to get past it.
 
 ## Start and establish readiness
 
@@ -44,30 +42,6 @@ These inventory/probe requests are the read-only health route. After any failed 
 
 The adopted path is CLI Host configuration → `HostCollaborationInputs` → prepared Tailscale preflight → bound loopback API with the exact proxy authority → foreground Serve → local service/epoch health. Decisive owners are [CLI launch](../../../../crates/codex-router-cli/src/host_command/foreground_launch.rs), [runtime composition](../../../../crates/codex-router-host/src/collaboration_runtime.rs), [exposure](../../../../crates/codex-router-host/src/tailscale_exposure.rs), [API listeners](../../../../crates/codex-router-host/src/collaboration_runtime/collaboration_api_serving.rs) and [Host normalization at port 443](../../../../crates/collaboration-mcp/src/proxy_authority.rs). Local health/configured Serve does not establish an allowed peer's ACL, route, trust or certificate-validated access; actual peer HTTPS remains a separate real-target gate.
 
-## Reciprocal board journey — R2, R5, R6
-
-On the allowed peer, run exactly one operation for that direction:
-
-```sh
-node verification/observations/tailnet/tailnet-mcp.ts peer "$BOARD_PLAN"
-```
-
-The driver checks service ID/epoch, actual `tools/list`, Origin-free success, and 403 for the destination’s actual HTTPS Origin plus a foreign Origin. It reads the seeded root and requires the exact root ID/topic/Session actor and Topic placement that identifies the root. It saves exclusive `peer-intent.json`, including exact post arguments, before one `board_message_post` with `placement: {kind: thread, rootMessageId: <the seeded root>}`. Session actors cannot post directly at Topic placement; [the storage owner](../../../../crates/message-board-storage/src/message_write_operations.rs) rejects that before insertion and requires an open participant for Thread replies.
-
-Before interpreting the post result, the driver saves `peer-post-response.json` with exact arguments, HTTP status and the unparsed MCP body encoded losslessly as base64. Transport failure instead retains `peer-post-transport-error.json` with an unknown outcome; the prior intent still forbids replay. HTTP/MCP/parse errors stay failed and their raw evidence remains. A successful post and subsequent peer HTTPS readback must match the exact ID/text/topic/Session actor **and Thread placement/root ID**. Keep the intent, raw response and `peer-result.json`. If the outcome is unknown, the caller may inspect that exact message through separately authorized supported reads; do not replay the post. Reusing its evidence directory refuses a second write, including after an MCP error.
-
-The caller allocation is checked at peer entry and rechecked immediately before the sole post, after preflight reads and durable intent. Expiry at that boundary prevents the request and leaves intent retained; it does not authorize a new attempt. Long read-only TLS preflight cannot carry stale write authority past the deadline.
-
-On the **destination machine**, use the destination-local BoardPlan/evidence path:
-
-```sh
-node verification/observations/tailnet/tailnet-mcp.ts readback "$BOARD_PLAN"
-```
-
-This independently checks the destination manifest/service/epoch, reads the exact message through its owner-only Unix MCP socket, then opens that root’s existing `agent-communication/project-board.sqlite` read-only and verifies the persisted message joined to its actual actor, including `board_messages.root_id` matching the seeded Thread. Wrong or null root fails even when ID/topic/text/actor match. Keep `destination-readback.json`. Two reads through the proxy alone cannot establish this destination-store binding; no database copy or source-machine substitute is an input. This proves the scoped persisted marker, not persistence across a Host restart.
-
-Repeat the reciprocal direction with the other service ID/epoch and another unique marker. Keep directions and their physical machines explicit. Actor fields remain application attribution; the existing Tailscale policy is the network authorization boundary. This model-free journey supplies no provider callback, native mutation or paid-turn authority.
-
 ## Normal shutdown and restoration — R3, R4
 
 After all callers settle, request stop only through that owned Host’s `evidence/stop.json` within the caller’s allocation. Preserve the evidence directory. The lifecycle records stable acquired identities and `host-before-fallback.json` before driver cleanup signals, requests the exact Host to stop, then uses the canonical identity-guarded fallback cleanup if necessary.
@@ -93,16 +67,11 @@ To attribute cleanup to the Host, bind the pre-fault inventory to `host-before-f
 The permanent local suite is:
 
 ```sh
-pnpm --dir verification run check
-pnpm --dir verification run lint
-pnpm --dir verification run format:check
-pnpm --dir verification test
 cargo test -p codex-router-tailnet-verification-host
 cargo clippy -p codex-router-tailnet-verification-host --all-targets -- -D warnings
 ```
 
 These tests use literal protocol fixtures and harmless retained processes. They qualify the apparatus only. Preserve failed/unknown IDs and raw results; do not weaken an expected outcome to manufacture a pass.
 
-The curl fixtures exercise real local HTTP POST/Origin/error/redirect/known-and-unknown-size behavior and ordinary TLS rejection of an untrusted local certificate. The HTTP fixtures change only their own test URL/protocol allowance; the TLS rejection fixture maps its own test name to its local socket. Neither route exists in the live driver, neither changes machine trust or networking, and neither proves successful private HTTPS, remote identity or board persistence. Those positive observations still require the declared Hosts and real certificate validation.
 
-**Open coverage:** final normal target and live-run lease; actual two-machine HTTPS/Origin/board readback, normal retirement and the separately declared R4 negative. Default-mode no-IO/no-alias, parser/replacement and full Host-supervisor product tests remain separate required gates. Fixtures, source inspection and this draft cannot close them. Return each real journey as supported, unsupported or unknown with machine/build/root/client, exact evidence paths and cleanup outcome. Acceptance remains with the caller.
+**Open coverage:** final normal target and live-run lease; actual peer HTTPS/Origin access, normal retirement and the separately declared R4 negative. Default-mode no-IO/no-alias, parser/replacement and full Host-supervisor product tests remain separate required gates. Fixtures, source inspection and this draft cannot close them. Return each real journey as supported, unsupported or unknown with machine/build/root/client, exact evidence paths and cleanup outcome. Acceptance remains with the caller.

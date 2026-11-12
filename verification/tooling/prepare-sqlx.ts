@@ -18,21 +18,13 @@ export interface SqlitePreparationTarget {
 
 export const sqlitePreparationTargets: readonly SqlitePreparationTarget[] = [
   {
-    packageName: "automation-storage",
-    migrationSources: ["crates/automation-storage/migrations"],
-    databaseFilename: "automation-schema.sqlite",
-  },
-  {
     packageName: "codex-router-state",
     migrationSources: ["crates/codex-router-state/migrations"],
     databaseFilename: "account-schema.sqlite",
   },
   {
     packageName: "collaboration-runtime",
-    migrationSources: [
-      "crates/collaboration-runtime/migrations",
-      "crates/automation-storage/migrations",
-    ],
+    migrationSources: ["crates/collaboration-runtime/migrations"],
     databaseFilename: "provider-operation-schema.sqlite",
   },
   {

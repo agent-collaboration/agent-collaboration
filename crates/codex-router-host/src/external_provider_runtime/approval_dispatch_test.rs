@@ -42,7 +42,6 @@ impl SessionMessageDelivery for AcceptedApprovalNoticeDelivery {
         Box::pin(async move {
             self.push_fixture
                 .captured_approval(request.payload.line.as_str(), &request.target)
-                .await
                 .map_err(|_| collaboration_contracts::DeliveryContractError::InvalidEvidence)?;
             self.notice_delivered.notify_one();
             Ok({
@@ -250,8 +249,7 @@ async fn approval_broker_fixture(
     )
     .await?;
     let push_fixture =
-        approval_push_fixture::ApprovalPushFixture::compose(root.path(), service_id, &broker)
-            .await?;
+        approval_push_fixture::ApprovalPushFixture::compose(root.path(), service_id, &broker)?;
     let approval_notice = Arc::new(Notify::new());
     broker.install_session_delivery(Arc::new(AcceptedApprovalNoticeDelivery {
         notice_delivered: Arc::clone(&approval_notice),

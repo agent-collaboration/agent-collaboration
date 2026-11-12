@@ -1,5 +1,4 @@
 //! One private enrollment-file boundary for production Host startup and debug overrides.
-use board_fleet_sync::{AccessServiceToken, BoardSessionInputs};
 use codex_router_secret_store::{
     SecretStore,
     fleet_secret_key::{FleetSecretKey, FleetSecretKind},
@@ -106,37 +105,33 @@ impl FleetEnrollmentDocument {
         }
         Ok((access, credential))
     }
-    pub fn session_inputs(&self, store: &dyn SecretStore) -> io::Result<BoardSessionInputs> {
+    /// Confirms both referenced secrets are readable and the endpoint and machine credential
+    /// parse, before the metadata naming them is published.
+    pub fn verify_secrets(&self, store: &dyn SecretStore) -> io::Result<()> {
         let (access_key, credential_key) = self.secret_keys()?;
         let access = store.read_secret(&access_key).map_err(io::Error::other)?;
         let credential = store
             .read_secret(&credential_key)
             .map_err(io::Error::other)?;
-        Ok(BoardSessionInputs {
-            endpoint: Endpoint::new(&self.endpoint).map_err(io::Error::other)?,
-            access: match &self.access {
-                FleetAccess::Cloudflare(reference) => {
-                    AccessServiceToken::new(&reference.client_id, access.expose_secret())
-                }
-                FleetAccess::SelfHosted(_) => {
-                    AccessServiceToken::self_hosted(access.expose_secret())
-                }
+        Endpoint::new(&self.endpoint).map_err(io::Error::other)?;
+        match &self.access {
+            FleetAccess::Cloudflare(reference) => {
+                access_header(&reference.client_id)?;
+                access_header(access.expose_secret())?;
             }
-            .map_err(io::Error::other)?,
-            credential: PeerCredential::new(credential.expose_secret().to_owned())
-                .map_err(io::Error::other)?,
-            peer: self.peer,
-            receiver: self.receiver,
-            relay: self.relay,
-        })
+            FleetAccess::SelfHosted(_) => access_header(access.expose_secret())?,
+        }
+        PeerCredential::new(credential.expose_secret().to_owned()).map_err(io::Error::other)?;
+        Ok(())
     }
 }
 
-/// Reads an explicit enrollment file inside its owning Router root.
-pub fn load_fleet_enrollment(path: &Path, root: &Path) -> io::Result<BoardSessionInputs> {
-    let document = read_fleet_enrollment_document(path, root)?;
-    let store = open_fleet_enrollment_store(root)?;
-    document.session_inputs(&store)
+/// An Access value must be a nonempty, valid HTTP header value, as the edge receives it.
+fn access_header(value: &str) -> io::Result<()> {
+    if value.is_empty() || reqwest::header::HeaderValue::from_str(value).is_err() {
+        return Err(io::Error::other("invalid fleet Access credential"));
+    }
+    Ok(())
 }
 
 /// Reads and validates the metadata and typed secret references, without opening a secret store.
@@ -222,7 +217,7 @@ fn persist_fleet_enrollment_with_rename(
         os::unix::fs::{DirBuilderExt, OpenOptionsExt},
     };
     document
-        .session_inputs(store)
+        .verify_secrets(store)
         .map_err(FleetEnrollmentPublishError::BeforeRename)?;
     let path = crate::router_fleet_enrollment_file(root);
     let parent = path.parent().ok_or_else(|| {
@@ -277,13 +272,34 @@ fn persist_fleet_enrollment_with_rename(
         .map_err(FleetEnrollmentPublishError::Renamed)
 }
 
-pub(crate) fn load_router_fleet_enrollment(root: &Path) -> io::Result<Option<BoardSessionInputs>> {
-    let path = crate::router_fleet_enrollment_file(root);
-    match std::fs::symlink_metadata(&path) {
-        Ok(_) => load_fleet_enrollment(&path, root).map(Some),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(error) => Err(error),
-    }
+/// What a test reads back through the same file and secret owners the Host uses.
+#[cfg(test)]
+struct LoadedEnrollment {
+    endpoint: String,
+    peer: PeerId,
+    receiver: ReceiverId,
+    relay: PeerId,
+    credential: PeerCredential,
+}
+
+/// Reads an enrollment file inside its owning Router root and resolves its machine credential.
+#[cfg(test)]
+fn load_fleet_enrollment(path: &Path, root: &Path) -> io::Result<LoadedEnrollment> {
+    let document = read_fleet_enrollment_document(path, root)?;
+    let store = open_fleet_enrollment_store(root)?;
+    document.verify_secrets(&store)?;
+    let (_, credential_key) = document.secret_keys()?;
+    let credential = store
+        .read_secret(&credential_key)
+        .map_err(io::Error::other)?;
+    Ok(LoadedEnrollment {
+        endpoint: document.endpoint,
+        peer: document.peer,
+        receiver: document.receiver,
+        relay: document.relay,
+        credential: PeerCredential::new(credential.expose_secret().to_owned())
+            .map_err(io::Error::other)?,
+    })
 }
 
 #[cfg(test)]

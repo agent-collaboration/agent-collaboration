@@ -288,13 +288,10 @@ async fn native_allow_and_deny_decisions_survive_broker_restart() {
 
         let notices = Arc::new(Mutex::new(Vec::new()));
         let delivered = Arc::new(tokio::sync::Notify::new());
-        let prepared_pushes_at_delivery = Arc::new(Mutex::new(Vec::new()));
         broker
             .install_session_delivery(Arc::new(CapturingInteractionDelivery {
                 notices,
                 delivered: Arc::clone(&delivered),
-                push_store: Some(broker.interaction_store()),
-                prepared_pushes_at_delivery,
             }))
             .expect("delivery route");
 
@@ -512,7 +509,7 @@ async fn valid_legacy_routes_are_removed_after_loading() {
 async fn typed_interaction_rejects_self_approver_and_corrupt_stored_rows() {
     use message_board::Identity;
 
-    let (broker, _generation, _directory) = fixture_broker().await;
+    let (broker, _generation, directory) = fixture_broker().await;
     let requester: message_board::SessionRef = serde_json::from_value(
         serde_json::to_value(session(&broker.service_id, "provider-session"))
             .expect("requester JSON"),
@@ -531,8 +528,11 @@ async fn typed_interaction_rejects_self_approver_and_corrupt_stored_rows() {
             .await,
         Err(crate::interaction_broker::InteractionHistoryError::SelfApprover)
     ));
-    let fault =
-        crate::interaction_broker::native_history_fault_fixture::NativeHistoryFaults::new(&broker);
+    let fault = crate::interaction_broker::native_history_fault_fixture::NativeHistoryFaults::open(
+        &directory.join("interaction.sqlite"),
+    )
+    .await
+    .expect("native fault connection");
     fault.execute_all(&["INSERT INTO typed_interaction_history VALUES ('bad', '{\"requestId\":\"other\"}', '2026-10-01T00:00:00.000000000Z')"])
         .await.expect("corrupt actual native record");
     assert_eq!(

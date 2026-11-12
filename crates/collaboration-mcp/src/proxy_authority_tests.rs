@@ -48,7 +48,7 @@ async fn tools_status(api: &ServedApi, host: &str, origin: Option<&str>) -> Stat
                 .as_array()
                 .expect("tools")
                 .iter()
-                .any(|tool| tool["name"] == "workspace_list")
+                .any(|tool| tool["name"] == "endpoints_list")
         );
     }
     status
