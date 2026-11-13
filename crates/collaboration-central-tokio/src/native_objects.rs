@@ -25,7 +25,8 @@ use crate::{SocketCommand, TokioStorageHost};
 use axum::extract::ws::{CloseFrame, Message, WebSocket};
 use collaboration_central_core::storage::{StoreCall, StoreFailure, StoreReply};
 use collaboration_central_core::{
-    AdmissionOrigin, ClockIds, CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectRuntime, PlatformIo,
+    AdmissionOrigin, ClockIds, CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectRuntime,
+    PlatformIo,
 };
 use durable_steps::{BoxFuture, CallFailure, NotSentReason, StoreError};
 use fleet_sync_lease::RegistryConfig;
@@ -240,6 +241,10 @@ impl NativeObjects {
     }
 
     #[cfg(feature = "conformance")]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Native composition keeps migrations, deployment policies and initial fault controls explicit."
+    )]
     pub(crate) async fn open_with_controls(
         root: &Path,
         clock: Arc<dyn Clock>,
@@ -264,6 +269,13 @@ impl NativeObjects {
         .await
     }
 
+    #[cfg_attr(
+        feature = "conformance",
+        expect(
+            clippy::too_many_arguments,
+            reason = "Native composition keeps migrations, deployment policies and initial fault controls explicit."
+        )
+    )]
     async fn open_prepared(
         root: &Path,
         clock: Arc<dyn Clock>,
@@ -284,7 +296,6 @@ impl NativeObjects {
             clock: SharedClock(clock),
             config,
             delivery,
-            migrations,
             holder_answer_timeout,
             copy_ack_wait,
             stop: CancellationToken::new(),
@@ -370,7 +381,7 @@ impl NativeObjects {
                 #[cfg(feature = "conformance")]
                 let host = TokioStorageHost::with_faults(object, storage, slot.io.faults.clone());
                 #[cfg(not(feature = "conformance"))]
-                let host = TokioStorageHost::new(object, storage);
+                let host = TokioStorageHost::with_storage(object, storage);
                 Ok::<_, StoreError>(Arc::new(host))
             })
             .await?
@@ -379,7 +390,11 @@ impl NativeObjects {
             .runtime
             .get_or_try_init(|| async {
                 let runtime = match &address {
-                    ObjectAddress::WorkspaceStore(_) => return Err(StoreError::Aborted { reason: "workspace store takes only store calls".into() }),
+                    ObjectAddress::WorkspaceStore(_) => {
+                        return Err(StoreError::Aborted {
+                            reason: "workspace store takes only store calls".into(),
+                        });
+                    }
                     ObjectAddress::Copy(project) => RuntimeFace::Copy(ObjectRuntime::copy(
                         host,
                         slot.io.clone(),

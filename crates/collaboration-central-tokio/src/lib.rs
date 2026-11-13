@@ -52,7 +52,15 @@ pub struct TokioStorageHost<SharedHost: Host> {
 }
 
 impl<SharedHost: Host> TokioStorageHost<SharedHost> {
-    pub(crate) fn new(
+    pub fn new(object: Arc<TokioObject<SharedHost>>) -> Self {
+        let storage = Arc::new(object_storage::ObjectStorage::new(
+            object.path().with_extension("sqlite"),
+            StoreMigrations::production().central,
+        ));
+        Self::with_storage(object, storage)
+    }
+
+    pub(crate) fn with_storage(
         object: Arc<TokioObject<SharedHost>>,
         storage: Arc<object_storage::ObjectStorage>,
     ) -> Self {

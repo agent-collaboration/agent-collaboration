@@ -40,7 +40,7 @@ pub async fn open_platform(
         workspace: Arc::new(workspace_migrator),
         ..StoreMigrations::production()
     };
-    TokioCentralPlatform::new(
+    TokioCentralPlatform::new_with_migrations(
         "http://127.0.0.1:9/cdn-cgi/access/certs",
         clock,
         |_| {},

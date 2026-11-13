@@ -24,7 +24,7 @@ commands do not deploy it. The existing deployment flow uploads that prebuilt
 artifact: `wrangler.config.ts` retains `noBundle`, and the public cf-format
 `cloudflare.config.ts` disables workers.dev and preview URLs. Account, routing
 and real Access values belong to the private ops configuration. The public
-template contains placeholders and three SQLite Durable Object bindings: `PROJECT_COPY`, the kept project copy, `FLEET`,
+template contains placeholders and three SQLite Durable Object bindings: `PROJECT_COPIES`, the kept project copy, `FLEET`,
 central's object, and `WORKSPACE_STORE`, one store per workspace named by its
 workspace id. A workspace store holds tables and runs the statement batches central
 sends it; it has no rules of its own. Deploying the new `WORKSPACE_STORE` class

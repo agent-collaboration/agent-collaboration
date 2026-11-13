@@ -204,6 +204,24 @@ impl ObjectHost for TestHost {
     fn store(&self) -> &Arc<Self::Store> {
         &self.store
     }
+    async fn run_batch(
+        &self,
+        batch: collaboration_central_core::storage::StatementBatch,
+    ) -> Result<
+        collaboration_central_core::storage::BatchOutcome,
+        collaboration_central_core::storage::StoreFailure,
+    > {
+        self.native.run_batch(batch).await
+    }
+    async fn read(
+        &self,
+        statement: collaboration_central_core::storage::Statement,
+    ) -> Result<
+        collaboration_central_core::storage::ReadOutcome,
+        collaboration_central_core::storage::StoreFailure,
+    > {
+        self.native.read(statement).await
+    }
     fn wake(&self) -> &Self::Wake {
         self.native.wake()
     }

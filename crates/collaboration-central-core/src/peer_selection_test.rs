@@ -31,6 +31,18 @@ impl ObjectHost for SelectionHost {
     fn store(&self) -> &Arc<Store> {
         &self.store
     }
+    async fn run_batch(
+        &self,
+        _: crate::storage::StatementBatch,
+    ) -> Result<crate::storage::BatchOutcome, crate::storage::StoreFailure> {
+        Err(crate::storage::StoreFailure::Unavailable)
+    }
+    async fn read(
+        &self,
+        _: crate::storage::Statement,
+    ) -> Result<crate::storage::ReadOutcome, crate::storage::StoreFailure> {
+        Err(crate::storage::StoreFailure::Unavailable)
+    }
     fn wake(&self) -> &FixtureIo {
         &self.io
     }

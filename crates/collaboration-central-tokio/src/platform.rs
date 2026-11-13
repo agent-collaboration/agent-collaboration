@@ -113,6 +113,7 @@ impl TokioCentralPlatform {
             root,
             registry,
             delivery,
+            crate::StoreMigrations::production(),
             holder_answer_timeout,
             copy_ack_wait,
             controls,
@@ -155,6 +156,7 @@ impl TokioCentralPlatform {
             clock.clone(),
             registry,
             delivery,
+            migrations,
             holder_answer_timeout,
             copy_ack_wait,
         )
@@ -165,12 +167,15 @@ impl TokioCentralPlatform {
             clock.clone(),
             registry,
             delivery,
+            migrations,
             holder_answer_timeout,
             copy_ack_wait,
             controls,
         )
         .await?;
-        let ids = Arc::new(ClockIds::new(crate::native_objects::SharedClock::new(clock.clone())));
+        let ids = Arc::new(ClockIds::new(crate::native_objects::SharedClock::new(
+            clock.clone(),
+        )));
         Ok(Self {
             ids,
             client,
@@ -191,8 +196,19 @@ impl TokioCentralPlatform {
         delivery: crate::DeliveryConfig,
         migrations: crate::StoreMigrations,
     ) -> Result<Self, TokioPlatformError> {
-        Self::new_configured(key_source, clock, observe, root, registry, delivery, migrations,
-            Duration::from_secs(30), Duration::from_secs(30), Vec::new()).await
+        Self::new_configured(
+            key_source,
+            clock,
+            observe,
+            root,
+            registry,
+            delivery,
+            migrations,
+            Duration::from_secs(30),
+            Duration::from_secs(30),
+            Vec::new(),
+        )
+        .await
     }
 
     pub async fn shutdown(&self) -> Result<(), durable_steps::StoreError> {

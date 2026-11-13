@@ -247,7 +247,9 @@ impl ShellActor {
             ids: self.ids.clone(),
         };
         let runtime = match address {
-            ObjectAddress::WorkspaceStore(_) => return Err(error("workspace store takes only store calls")),
+            ObjectAddress::WorkspaceStore(_) => {
+                return Err(error("workspace store takes only store calls"));
+            }
             ObjectAddress::Copy(project) => RuntimeFace::Copy(ObjectRuntime::copy(
                 host.clone(),
                 io,

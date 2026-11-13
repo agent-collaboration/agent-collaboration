@@ -28,6 +28,7 @@ async fn open_with_clock(root: &Path, clock: Arc<dyn Clock>) -> TestResult<Arc<N
                 .to_owned()
                 .try_into()?,
         },
+        crate::StoreMigrations::production(),
         Duration::from_secs(2),
         Duration::from_millis(500),
         vec![],

@@ -169,7 +169,7 @@ impl PlatformIo for Io {
             ObjectAddress::Copy(database) if database.to_string() == PROJECT => {
                 project(bytes).await
             }
-            ObjectAddress::Copy(_) => Err(no_route()),
+            ObjectAddress::Copy(_) | ObjectAddress::WorkspaceStore(_) => Err(no_route()),
         }
     }
 }

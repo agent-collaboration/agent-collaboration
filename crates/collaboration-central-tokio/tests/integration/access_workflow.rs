@@ -89,6 +89,16 @@ impl CentralPlatform for FixturePlatform {
     }
     // These policy fixtures exercise no object transport or socket upgrade.
     // The native HTTP suite covers those real capabilities separately.
+    async fn call_store(
+        &self,
+        _: message_board::WorkspaceId,
+        _: collaboration_central_core::storage::StoreCall,
+    ) -> Result<
+        collaboration_central_core::storage::StoreReply,
+        collaboration_central_core::storage::StoreFailure,
+    > {
+        Err(collaboration_central_core::storage::StoreFailure::Unavailable)
+    }
     async fn transport_object(
         &self,
         _: collaboration_central_core::SerializedObjectCall,
