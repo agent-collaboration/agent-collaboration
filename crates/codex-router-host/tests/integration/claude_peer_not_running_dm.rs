@@ -292,7 +292,7 @@ async fn closed_peer_rejects_queue_steer_and_guarded_dms() {
         (
             MessageDelivery::Queue,
             None,
-            DeliveryRejectionReason::QueueUnsupported,
+            DeliveryRejectionReason::EndpointUnavailable,
         ),
         (
             MessageDelivery::Steer,
@@ -321,12 +321,6 @@ async fn closed_peer_rejects_queue_steer_and_guarded_dms() {
             panic!("mode {mode:?} must be rejected");
         };
         assert_eq!(rejection.reason, expected_reason, "mode={mode:?}");
-        if mode == MessageDelivery::Queue {
-            assert_eq!(
-                rejection.detail.as_deref(),
-                Some("Queue delivery isn't supported for Claude Code terminals")
-            );
-        }
     }
     assert!(
         automation

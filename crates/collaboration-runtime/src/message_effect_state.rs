@@ -11,7 +11,6 @@ use serde_json::{Value, json};
 pub enum NativeFailureKind {
     WrongService,
     EndpointNotFound,
-    UnsupportedCapability,
     Unavailable,
     StaleGeneration,
     OutcomeUnknown,
@@ -26,7 +25,6 @@ impl NativeFailureKind {
         match self {
             Self::WrongService => "wrongService",
             Self::EndpointNotFound => "endpointNotFound",
-            Self::UnsupportedCapability => "unsupportedCapability",
             Self::Unavailable => "unavailable",
             Self::StaleGeneration => "staleGeneration",
             Self::OutcomeUnknown => "outcomeUnknown",
@@ -44,9 +42,6 @@ impl NativeFailureKind {
             Self::WrongService => UnsentCause::InvalidInput,
             Self::EndpointNotFound | Self::ThreadMissingOrUnmaterialized => {
                 UnsentCause::RecipientUnknown
-            }
-            Self::UnsupportedCapability => {
-                UnsentCause::Refused(Code::Rejection(Reason::UnsupportedCapability))
             }
             Self::Unavailable => UnsentCause::Holdable {
                 otherwise: Code::NativeUnavailable,
@@ -163,21 +158,6 @@ impl MessageEffects {
         {
             data.insert("operation".to_owned(), json!(operation));
             data.insert("cause".to_owned(), json!(cause));
-        }
-        response
-    }
-    pub fn unsupported_method(&self, operation: &str, stage: &str) -> NativeMessageFailure {
-        let mut response = self.failure(NativeFailureKind::UnsupportedCapability, stage);
-        if let Some(data) = response
-            .response
-            .pointer_mut("/error/data")
-            .and_then(Value::as_object_mut)
-        {
-            data.insert("operation".to_owned(), json!(operation));
-            data.insert(
-                "cause".to_owned(),
-                json!(NativeDeliveryFailureCause::NativeMethodUnavailable),
-            );
         }
         response
     }

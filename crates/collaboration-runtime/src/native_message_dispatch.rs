@@ -164,7 +164,7 @@ pub async fn dispatch_message(mut request: NativeMessageRequest<'_>) -> NativeMe
         .unwrap_or_else(|| tokio::time::Instant::now() + std::time::Duration::from_secs(30));
     let mut effects = MessageEffects::new(request.id);
     let load_policy = request.load_policy;
-    let params = request.params;
+    let mut params = request.params;
     if &params.target.endpoint.service_id != request.service_id {
         return NativeMessageOutcome::Failed(
             effects.failure(NativeFailureKind::WrongService, "inspect"),
@@ -224,9 +224,7 @@ pub async fn dispatch_message(mut request: NativeMessageRequest<'_>) -> NativeMe
     if params.delivery == MessageDelivery::Queue
         && !schemas.supports_operation(NativeOperation::QueueAdd)
     {
-        return NativeMessageOutcome::Failed(
-            effects.unsupported_method("thread/queue/add", "queue"),
-        );
+        params.delivery = MessageDelivery::Steer;
     }
     let rendered = render_native_message(&params.body);
     let correlation = match &params.client_user_message_id {

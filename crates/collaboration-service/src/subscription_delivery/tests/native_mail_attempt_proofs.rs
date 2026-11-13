@@ -306,11 +306,12 @@ async fn no_route_normalization_keeps_queue_auto_and_steer_semantics() {
                 .into_receipt()
         });
         let call = runtime.next_call().await;
+        assert_eq!(call.request.mode, mode);
         call.reply.send(no_route()).unwrap();
         let receipt = attempt.await.unwrap();
         match mode {
             MessageDelivery::Queue => assert!(
-                matches!(receipt.outcome,DeliveryOutcome::Rejected(rejection) if rejection.reason==DeliveryRejectionReason::QueueUnsupported)
+                matches!(receipt.outcome,DeliveryOutcome::Rejected(rejection) if rejection.reason==DeliveryRejectionReason::NoRoute)
             ),
             MessageDelivery::Auto => assert!(matches!(
                 receipt.outcome,

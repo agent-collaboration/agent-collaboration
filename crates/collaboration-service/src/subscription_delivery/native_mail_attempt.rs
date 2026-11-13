@@ -11,8 +11,8 @@ use collaboration_contracts::NativeRefusalCode;
 use collaboration_contracts::UnsentCause;
 use collaboration_contracts::layer_zero::DeliveryRequest;
 use collaboration_protocol::{
-    CodexGeneration, DeliveryNextAction, DeliveryOutcome, DeliveryRejection,
-    DeliveryRejectionReason, MessageDelivery, PushKind, SessionReachability, SessionRef,
+    CodexGeneration, DeliveryOutcome, DeliveryRejectionReason, MessageDelivery, PushKind,
+    SessionReachability, SessionRef,
 };
 use message_board::BoardError;
 use tokio::sync::Mutex;
@@ -33,6 +33,8 @@ impl SubscriptionPushStore {
         let mode = request.mode;
         let prepared = request.payload.clone();
         let allow_hold = mode != MessageDelivery::Steer
+            && !(mode == MessageDelivery::Queue
+                && !self.delivery.supports_delivery_mode(&target, mode))
             && matches!(
                 request.precondition,
                 collaboration_contracts::DeliveryPrecondition::Unpinned
@@ -51,27 +53,7 @@ impl SubscriptionPushStore {
         }
         if matches!(kind, PushKind::DirectMessage | PushKind::BoardNotification) {
             let no_route = matches!(&delivery.receipt().outcome,DeliveryOutcome::Rejected(rejection) if rejection.reason==DeliveryRejectionReason::NoRoute);
-            // A Claude Code terminal that isn't running is refused as unavailable; Queue to
-            // one is still named as unsupported, which stays true once it runs.
-            let unreachable = no_route
-                || matches!(&delivery.receipt().outcome,DeliveryOutcome::Rejected(rejection) if rejection.reason==DeliveryRejectionReason::EndpointUnavailable);
-            if unreachable && !self.delivery.supports_delivery_mode(&target, mode) {
-                delivery = NativeDeliveryResult::rejected(
-                    DeliveryRejection {
-                        native_failure: None,
-                        reason: DeliveryRejectionReason::QueueUnsupported,
-                        next_action: DeliveryNextAction::CorrectRequest,
-                        client_code: None,
-                        detail: Some(
-                            "Queue delivery isn't supported for Claude Code terminals".to_owned(),
-                        ),
-                        claims: None,
-                    },
-                    UnsentCause::Refused(NativeRefusalCode::Rejection(
-                        DeliveryRejectionReason::QueueUnsupported,
-                    )),
-                );
-            } else if no_route && allow_hold {
+            if no_route && allow_hold {
                 delivery = NativeDeliveryResult::not_submitted(
                     "no route currently claims the session; direct message held",
                     true,

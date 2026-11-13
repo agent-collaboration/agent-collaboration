@@ -220,7 +220,9 @@ mod tests {
                 unknown_recipient,
             ),
             (
-                NativeFailureKind::UnsupportedCapability,
+                NativeFailureKind::LocalRejection(UnsentCause::for_rejection(
+                    DeliveryRejectionReason::UnsupportedCapability,
+                )),
                 true,
                 refused("unsupportedCapability"),
             ),

@@ -19,6 +19,10 @@ Request and result types are available through `collaboration_client::protocol`;
 board request/result types through `collaboration_client::board`. SDK consumers
 do not need to invoke the CLI or depend on its argument types.
 
+Queue delivery falls back to steer when the selected target does not support
+queueing. This applies to messages and timed wakes for every target. The receipt
+reports the actual delivery outcome; an uncertain submission is never replayed.
+
 Current design source of truth:
 
 - [Router database retention and space recovery](docs/architecture/data-retention.md)

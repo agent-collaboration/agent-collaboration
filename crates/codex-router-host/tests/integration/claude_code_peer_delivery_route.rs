@@ -135,73 +135,81 @@ fn delivery(mode: MessageDelivery) -> PreparedDeliveryRequest {
 
 #[tokio::test]
 async fn prepared_push_reaches_peer_route_as_the_exact_router_line() {
-    let root = tempfile::tempdir().expect("registry root");
-    let socket_path = publish_peer(root.path(), Some("busy"));
-    let listener = tokio::net::UnixListener::bind(&socket_path).expect("peer listener");
-    let receiver = tokio::spawn(async move {
-        let (stream, _) = listener.accept().await.expect("accepted peer");
-        let mut lines = BufReader::new(stream).lines();
-        let _auth: Value =
-            serde_json::from_str(&lines.next_line().await.expect("auth line").expect("auth"))
-                .expect("auth JSON");
-        serde_json::from_str::<Value>(&lines.next_line().await.expect("user line").expect("user"))
+    for mode in [
+        MessageDelivery::Auto,
+        MessageDelivery::Queue,
+        MessageDelivery::Steer,
+    ] {
+        let root = tempfile::tempdir().expect("registry root");
+        let socket_path = publish_peer(root.path(), Some("busy"));
+        let listener = tokio::net::UnixListener::bind(&socket_path).expect("peer listener");
+        let receiver = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.expect("accepted peer");
+            let mut lines = BufReader::new(stream).lines();
+            let _auth: Value =
+                serde_json::from_str(&lines.next_line().await.expect("auth line").expect("auth"))
+                    .expect("auth JSON");
+            serde_json::from_str::<Value>(
+                &lines.next_line().await.expect("user line").expect("user"),
+            )
             .expect("user JSON")
-    });
-    let route = Arc::new(ClaudeCodePeerDeliveryRoute::new(
-        target().endpoint,
-        Arc::new(ClaudeCodeSessionRegistry::new(root.path().to_owned())),
-        Arc::new(ClaudeCodePeerSocket::new(root.path().to_owned())),
-    ));
-    let router = SessionDeliveryRouter::new(vec![route]);
-    let evidence = RecordedPeerEvidence(tokio::sync::Mutex::new(Vec::new()));
-    let push_id = PushId::try_from("018f47d2-24d5-7a68-b9ec-6f759c39458f".to_owned())
-        .expect("UUIDv7 push id");
-    let line = MessageText::try_from(format!(
-        "✉️ Main · \"S1 is green\" · router://00000000-0000-4000-8000-000000000001/push/{}",
-        push_id.as_str()
-    ))
-    .expect("push line");
-    let correlation =
-        DeliveryCorrelationId::try_from(push_id.as_str().to_owned()).expect("push id correlation");
-    assert_eq!(correlation.as_str(), push_id.as_str());
-    let request = PreparedDeliveryRequest {
-        payload: PreparedPush {
-            push_id,
-            line: line.clone(),
-            load_policy: collaboration_contracts::LoadPolicy::LoadedOnly,
-        },
-        target: target(),
-        mode: MessageDelivery::Auto,
-        precondition: DeliveryPrecondition::Unpinned,
-        correlation,
-        attempt: AttemptId::generate(),
-    };
+        });
+        let route = Arc::new(ClaudeCodePeerDeliveryRoute::new(
+            target().endpoint,
+            Arc::new(ClaudeCodeSessionRegistry::new(root.path().to_owned())),
+            Arc::new(ClaudeCodePeerSocket::new(root.path().to_owned())),
+        ));
+        let router = SessionDeliveryRouter::new(vec![route]);
+        let evidence = RecordedPeerEvidence(tokio::sync::Mutex::new(Vec::new()));
+        let push_id = PushId::try_from("018f47d2-24d5-7a68-b9ec-6f759c39458f".to_owned())
+            .expect("UUIDv7 push id");
+        let line = MessageText::try_from(format!(
+            "✉️ Main · \"S1 is green\" · router://00000000-0000-4000-8000-000000000001/push/{}",
+            push_id.as_str()
+        ))
+        .expect("push line");
+        let correlation = DeliveryCorrelationId::try_from(push_id.as_str().to_owned())
+            .expect("push id correlation");
+        assert_eq!(correlation.as_str(), push_id.as_str());
+        let request = PreparedDeliveryRequest {
+            payload: PreparedPush {
+                push_id,
+                line: line.clone(),
+                load_policy: collaboration_contracts::LoadPolicy::LoadedOnly,
+            },
+            target: target(),
+            mode,
+            precondition: DeliveryPrecondition::Unpinned,
+            correlation,
+            attempt: AttemptId::generate(),
+        };
 
-    let receipt = router
-        .deliver(request, &evidence)
-        .await
-        .expect("prepared push delivery");
+        let receipt = router
+            .deliver(request, &evidence)
+            .await
+            .expect("prepared push delivery");
 
-    assert_eq!(
-        receipt.receipt().outcome.clone(),
-        DeliveryOutcome::PeerMessageWritten
-    );
-    assert_eq!(
-        receipt.receipt().reachability,
-        Some(SessionReachability::ClaudeCodePeer)
-    );
-    assert!(matches!(
-        receipt.receipt().client,
-        Some(DeliveryClientReceipt::ClaudeCodePeer)
-    ));
-    let user = receiver.await.expect("receiver");
-    assert_eq!(user["message"]["content"], line.as_str());
-    assert!(
-        !user["message"]["content"]
-            .as_str()
-            .expect("peer message content")
-            .contains("For follow-up messages")
-    );
+        assert_eq!(
+            receipt.receipt().outcome.clone(),
+            DeliveryOutcome::PeerMessageWritten
+        );
+        assert_eq!(
+            receipt.receipt().reachability,
+            Some(SessionReachability::ClaudeCodePeer)
+        );
+        assert!(matches!(
+            receipt.receipt().client,
+            Some(DeliveryClientReceipt::ClaudeCodePeer)
+        ));
+        let user = receiver.await.expect("receiver");
+        assert_eq!(user["message"]["content"], line.as_str());
+        assert!(
+            !user["message"]["content"]
+                .as_str()
+                .expect("peer message content")
+                .contains("For follow-up messages")
+        );
+    }
 }
 
 #[tokio::test]
