@@ -4,7 +4,7 @@ For central-storage-reset D1, use [D1 central mail](d1-central-mail.md). O5 rese
 
 ## Current entry
 
-The wrapper retired in 0.1.102. Current cross-machine/staging orchestration is `node verification/run.ts "$PRIVATE_DECLARATION"`, using `verification/declaration.ts`, `verification/case-registry.ts` and `verification/targets/staging-central.ts`. The declaration binds the HTTPS staging target, qualified artifacts, both machines, selected governing rows and a deadline. Staging attachment owns no deployed process; guarded deployment remains a separately declared, authorized external operation. The runner records unmapped rows as open and cannot return confirmation credit for them. Do not infer that every historical group below has a mapped replacement.
+The two-Mac cross-machine/staging harness is unavailable until deliverable C. Ordinary `node verification/run.ts` invocation refuses with exit 2 before reading a declaration or launching setup. C will connect the retained non-import behavior cases to the new path. Independent D1 routes keep their declared scope. Staging attachment grants no deployment, login or enrollment authority.
 
 ## Retained obligations and historical evidence
 

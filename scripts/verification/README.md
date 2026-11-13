@@ -1,6 +1,6 @@
 # Real board journey
 
-The former wrapper retired in 0.1.102. Current local process journeys live in `crates/agent-collaboration/tests/e2e/board_records_e2e.rs` and `crates/agent-collaboration/tests/e2e/board_central_e2e.rs`, with owned fixtures in `board_e2e/`. Follow the CI local-end-to-end job’s artifact preparation and run the retained Rust e2e aggregates. Upgrade/import publication has its own `agent-router-update` `e2e` target and `upgrade_binary_e2e` module. Current two-machine and Worker orchestration is `node verification/run.ts "$PRIVATE_DECLARATION"`; its registered cases and declaration determine actual coverage. See [current tooling](../../verification/README.md).
+The former wrapper retired in 0.1.102. Current local process journeys live in `crates/agent-collaboration/tests/e2e/board_records_e2e.rs` and `crates/agent-collaboration/tests/e2e/board_central_e2e.rs`, with owned fixtures in `board_e2e/`. Follow the CI local-end-to-end job’s artifact preparation and run the retained Rust e2e aggregates. The two-Mac verification harness is unavailable until deliverable C. Ordinary `node verification/run.ts` invocation refuses with exit 2 before reading a declaration or launching setup. C will connect the retained non-import behavior cases to the new path. See [current tooling](../../verification/README.md).
 
 The requirements and earlier qualification notes below remain governing obligations. Historical wrapper descriptions do not establish current availability or runtime proof; an obligation without a retained route remains unavailable.
 
