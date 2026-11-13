@@ -346,7 +346,10 @@ fn isolated_router_child_uses_selected_root_and_debug_isolation() {
             "--port",
             "28787",
             "--state-db",
-            "/tmp/sqlite-proof-account/state.sqlite",
+            &format!(
+                "/tmp/sqlite-proof-account/{}",
+                codex_router_state::PROVIDER_PROXY_DATABASE_FILE_NAME
+            ),
             "--secret-root",
             "/tmp/sqlite-proof-account/secrets",
             "--audit-file",
@@ -382,7 +385,10 @@ fn host_and_router_share_declared_root_without_copying_tokens() {
             "--port",
             "28787",
             "--state-db",
-            "/tmp/sqlite-proof-account/state.sqlite",
+            &format!(
+                "/tmp/sqlite-proof-account/{}",
+                codex_router_state::PROVIDER_PROXY_DATABASE_FILE_NAME
+            ),
             "--secret-root",
             "/tmp/sqlite-proof-account/secrets",
             "--audit-file",
