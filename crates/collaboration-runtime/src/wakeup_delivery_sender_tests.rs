@@ -179,7 +179,7 @@ struct QueueUnsupportedRoute;
 
 impl collaboration_contracts::SessionDeliveryRoute for QueueUnsupportedRoute {
     fn reachability(&self) -> SessionReachability {
-        SessionReachability::ProviderAcp
+        SessionReachability::CodexAppServer
     }
     fn supports_delivery_mode(
         &self,
@@ -203,15 +203,42 @@ impl collaboration_contracts::SessionDeliveryRoute for QueueUnsupportedRoute {
     fn deliver<'a>(
         &'a self,
         request: collaboration_contracts::layer_zero::DeliveryRequest,
-        _: &'a dyn AttemptEvidenceSink,
+        sink: &'a dyn AttemptEvidenceSink,
     ) -> DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult> {
         assert_eq!(request.mode, collaboration_protocol::MessageDelivery::Steer);
         assert!(request.payload.line.as_str().contains("wake fixture"));
-        Box::pin(async {
+        Box::pin(async move {
+            let mut effects = agent_automation::NativeEffectEvidence {
+                permission_differences: Vec::new(),
+                target: Some(request.target),
+                generation: Some(
+                    serde_json::from_value(json!({
+                        "serviceEpoch":"00000000-0000-4000-8000-000000000001", "generation":1
+                    }))
+                    .expect("fixture generation"),
+                ),
+                client_user_message_id: Some(request.correlation.as_str().to_owned()),
+                native_turn_id: None,
+                native_submission_id: None,
+                allocation: agent_automation::PreparationEffect::NotRequested,
+                resume: agent_automation::PreparationEffect::NotRequested,
+                submission: agent_automation::SubmissionEffect::Dispatching,
+                cessation: agent_automation::CessationEvidence::NotApplicable,
+            };
+            sink.record(agent_automation::RouteEffectEvidence::CodexAppServer(
+                effects.clone(),
+            ))
+            .await?;
+            effects.submission = agent_automation::SubmissionEffect::Accepted;
+            effects.native_turn_id = Some("wake-active-turn".to_owned());
+            sink.record(agent_automation::RouteEffectEvidence::CodexAppServer(
+                effects,
+            ))
+            .await?;
             Ok(collaboration_contracts::scripted_delivery_result(
                 DeliveryReceipt {
                     outcome: DeliveryOutcome::Steered,
-                    reachability: Some(SessionReachability::ProviderAcp),
+                    reachability: Some(SessionReachability::CodexAppServer),
                     client: None,
                 },
             ))
