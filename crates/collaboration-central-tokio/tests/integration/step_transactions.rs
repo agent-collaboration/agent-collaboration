@@ -390,6 +390,24 @@ impl ObjectHost for HeldHost {
     type Database = sqlx_turso::Turso;
     type Store = HeldStore;
     type Wake = FixtureHost;
+    async fn run_batch(
+        &self,
+        batch: collaboration_central_core::storage::StatementBatch,
+    ) -> Result<
+        collaboration_central_core::storage::BatchOutcome,
+        collaboration_central_core::storage::StoreFailure,
+    > {
+        self.native.run_batch(batch).await
+    }
+    async fn read(
+        &self,
+        statement: collaboration_central_core::storage::Statement,
+    ) -> Result<
+        collaboration_central_core::storage::ReadOutcome,
+        collaboration_central_core::storage::StoreFailure,
+    > {
+        self.native.read(statement).await
+    }
     fn wake(&self) -> &Self::Wake {
         self.native.wake()
     }

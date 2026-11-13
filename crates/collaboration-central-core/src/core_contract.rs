@@ -36,13 +36,17 @@ pub struct RegistryTime(pub DateTime<Utc>);
 pub enum ObjectAddress {
     Copy(DatabaseId),
     Fleet,
+    /// One workspace's store: it holds the tables and runs the statements it is given.
+    WorkspaceStore(message_board::WorkspaceId),
 }
 impl ObjectAddress {
+    /// The caller face an object call arrives under; a workspace store takes no object calls.
     #[must_use]
-    pub const fn primary_face(&self) -> crate::CallerKind {
+    pub const fn primary_face(&self) -> Option<crate::CallerKind> {
         match self {
-            Self::Copy(_) => crate::CallerKind::Copy,
-            Self::Fleet => crate::CallerKind::Fleet,
+            Self::Copy(_) => Some(crate::CallerKind::Copy),
+            Self::Fleet => Some(crate::CallerKind::Fleet),
+            Self::WorkspaceStore(_) => None,
         }
     }
 }

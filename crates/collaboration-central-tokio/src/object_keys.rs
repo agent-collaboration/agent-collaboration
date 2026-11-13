@@ -5,6 +5,10 @@ pub(crate) fn address_key(address: &ObjectAddress) -> Result<String, StoreError>
     match address {
         ObjectAddress::Copy(project) => Ok(format!("copy-{project}")),
         ObjectAddress::Fleet => Ok("fleet".into()),
+        // Workspace stores are not runtime objects: they live under their own directory.
+        ObjectAddress::WorkspaceStore(_) => Err(StoreError::Aborted {
+            reason: "a workspace store is not a native runtime object".into(),
+        }),
     }
 }
 pub(crate) fn address_from_key(key: &str) -> Result<ObjectAddress, StoreError> {

@@ -1790,8 +1790,10 @@ dependencies = [
  "serde-wasm-bindgen",
  "serde_json",
  "sha2 0.10.9",
+ "sqlx",
  "sqlx-core",
  "sqlx-durable-object",
+ "sqlx-durable-object-core",
  "thiserror 2.0.18",
  "tower-service",
  "uuid",
@@ -1901,6 +1903,7 @@ dependencies = [
  "runtime-primitives",
  "serde",
  "serde_json",
+ "sqlx",
  "sqlx-core",
  "sqlx-turso",
  "tempfile",
@@ -1910,6 +1913,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "turso_parser",
+ "uuid",
 ]
 
 [[package]]
@@ -6181,14 +6185,15 @@ dependencies = [
 [[package]]
 name = "sqlx-durable-object"
 version = "0.3.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687#b75d072c116afa46cfa82facd34db6317f380687"
 dependencies = [
  "futures-core",
  "futures-util",
  "js-sys",
  "log",
+ "sqlx",
  "sqlx-core",
  "sqlx-durable-object-core",
+ "thiserror 2.0.18",
  "wasm-bindgen",
  "worker",
 ]
@@ -6196,7 +6201,6 @@ dependencies = [
 [[package]]
 name = "sqlx-durable-object-core"
 version = "0.2.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687#b75d072c116afa46cfa82facd34db6317f380687"
 dependencies = [
  "js-sys",
  "sqlx-core",

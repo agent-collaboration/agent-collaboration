@@ -11,6 +11,8 @@ workspace = true
 
 [features]
 conformance = []
+# Test seams (pause points, the storage conformance schema); never in a production build.
+test-support = ["sqlx-core/migrate"]
 
 [dependencies]
 fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.118" }
@@ -39,6 +41,9 @@ thiserror.workspace = true
 sha2.workspace = true
 base64 = "0.22.1"
 url.workspace = true
+uuid.workspace = true
+# Executor-independent sync primitives only, so the Worker build stays portable.
+tokio = { version = "1.53.3", default-features = false, features = ["sync"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 uuid = { version = "=1.26.0", features = ["v7", "js"] }

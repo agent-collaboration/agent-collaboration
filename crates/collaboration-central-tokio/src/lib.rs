@@ -11,7 +11,13 @@ mod conformance_store;
 mod native_logging;
 mod native_objects;
 mod native_server;
+mod object_clock;
 mod object_keys;
+mod object_storage;
+mod sqlite_object_store;
+#[cfg(feature = "test-support")]
+pub use object_storage::ObjectStorage;
+pub use object_storage::StoreMigrations;
 mod platform;
 mod self_hosted_issuer;
 pub use self_hosted_issuer::{IssuerError, SelfHostedIssuer};
@@ -42,11 +48,23 @@ pub struct TokioStorageHost<SharedHost: Host> {
     #[cfg(feature = "conformance")]
     faults: Arc<collaboration_central_conformance::RuntimeFaults>,
     wake: Arc<SharedHost>,
+    storage: Arc<object_storage::ObjectStorage>,
     sockets: socket_host::TokioSockets,
 }
 
 impl<SharedHost: Host> TokioStorageHost<SharedHost> {
     pub fn new(object: Arc<TokioObject<SharedHost>>) -> Self {
+        let storage = Arc::new(object_storage::ObjectStorage::new(
+            object.path().with_extension("sqlite"),
+            StoreMigrations::production().central,
+        ));
+        Self::with_storage(object, storage)
+    }
+
+    pub(crate) fn with_storage(
+        object: Arc<TokioObject<SharedHost>>,
+        storage: Arc<object_storage::ObjectStorage>,
+    ) -> Self {
         let wake = object.host();
         #[cfg(feature = "conformance")]
         let faults = Arc::new(collaboration_central_conformance::RuntimeFaults::default());
@@ -64,6 +82,7 @@ impl<SharedHost: Host> TokioStorageHost<SharedHost> {
             #[cfg(feature = "conformance")]
             faults,
             wake,
+            storage,
             sockets: Default::default(),
         }
     }
@@ -71,6 +90,7 @@ impl<SharedHost: Host> TokioStorageHost<SharedHost> {
     #[cfg(feature = "conformance")]
     pub(crate) fn with_faults(
         object: Arc<TokioObject<SharedHost>>,
+        storage: Arc<object_storage::ObjectStorage>,
         faults: Arc<collaboration_central_conformance::RuntimeFaults>,
     ) -> Self {
         let wake = object.host();
@@ -85,8 +105,13 @@ impl<SharedHost: Host> TokioStorageHost<SharedHost> {
             observed,
             faults,
             wake,
+            storage,
             sockets: Default::default(),
         }
+    }
+
+    pub(crate) async fn close_storage(&self) {
+        self.storage.close().await;
     }
 
     pub async fn attach_socket(
@@ -130,6 +155,24 @@ impl<SharedHost: Host> ObjectHost for TokioStorageHost<SharedHost> {
     }
     fn wake(&self) -> &Self::Wake {
         self.wake.as_ref()
+    }
+    async fn run_batch(
+        &self,
+        batch: collaboration_central_core::storage::StatementBatch,
+    ) -> Result<
+        collaboration_central_core::storage::BatchOutcome,
+        collaboration_central_core::storage::StoreFailure,
+    > {
+        self.storage.run_batch(batch).await
+    }
+    async fn read(
+        &self,
+        statement: collaboration_central_core::storage::Statement,
+    ) -> Result<
+        collaboration_central_core::storage::ReadOutcome,
+        collaboration_central_core::storage::StoreFailure,
+    > {
+        self.storage.read(statement).await
     }
     async fn with_local_section<Output: Send + 'static>(
         &self,

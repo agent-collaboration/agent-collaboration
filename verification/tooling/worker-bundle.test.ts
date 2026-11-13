@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { z } from "zod";
 import { checkDeployTemplate, checkWorkerBundle } from "./check-central-worker-bundle.ts";
+import { testSupportMarkers } from "./worker-test-support-markers.ts";
 
 const schema = z.object({
   cargo: z.string(),
@@ -69,4 +70,26 @@ test("deploy templates refuse public routes, private values, and rebundling", ()
     checkDeployTemplate(baseline.config, "noBundle: false"),
     "Worker deploy tooling must upload the guarded bundle without rebundling",
   );
+});
+
+test("a production bundle carrying any storage test-support marker is refused", (): void => {
+  for (const marker of testSupportMarkers) {
+    const root = mkdtempSync(join(tmpdir(), "worker-bundle-guard-"));
+    try {
+      const worker = join(root, "crates/collaboration-central-cloudflare");
+      mkdirSync(join(worker, "build"), { recursive: true });
+      writeFileSync(join(root, "Cargo.toml"), baseline.cargo);
+      writeFileSync(join(worker, "README.md"), baseline.readme);
+      writeFileSync(join(worker, "cloudflare.config.ts"), baseline.config);
+      writeFileSync(join(worker, "wrangler.config.ts"), baseline.tooling);
+      writeFileSync(join(worker, "build/index.js"), `route(${JSON.stringify(marker)})`);
+      writeFileSync(join(worker, "build/index_bg.wasm"), "");
+      assert.deepEqual(checkWorkerBundle("production", root), {
+        status: 1,
+        message: "Worker production bundle contains the storage test-support routes",
+      });
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
 });

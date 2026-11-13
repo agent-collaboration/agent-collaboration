@@ -4,9 +4,11 @@ use axum::{
     extract::{FromRequestParts, ws::WebSocketUpgrade},
     response::IntoResponse,
 };
+use collaboration_central_core::storage::{StoreCall, StoreFailure, StoreReply};
 use collaboration_central_core::{
-    AccessJwk, AdmissionOrigin, CentralObservation, CentralPlatform, CoreHost, KeyFetchFailure,
-    RawJwks, SerializedObjectCall, SignatureValidity, UpgradeFailure, VerifyFailure,
+    AccessJwk, AdmissionOrigin, CentralObservation, CentralPlatform, ClockIds, CoreHost,
+    KeyFetchFailure, RawJwks, SerializedObjectCall, SignatureValidity, UpgradeFailure,
+    VerifyFailure,
 };
 use runtime_primitives::Clock;
 use std::{
@@ -32,7 +34,7 @@ pub struct TokioCentralPlatform {
     clock: Arc<dyn Clock>,
     observe: Arc<dyn Fn(CentralObservation) + Send + Sync>,
     objects: Arc<crate::native_objects::NativeObjects>,
-    ids: runtime_primitives::UuidV7Ids,
+    ids: Arc<ClockIds<crate::object_clock::SharedClock>>,
 }
 
 impl TokioCentralPlatform {
@@ -79,6 +81,7 @@ impl TokioCentralPlatform {
             root,
             registry,
             delivery,
+            crate::StoreMigrations::production(),
             holder_answer_timeout,
             copy_ack_wait,
             #[cfg(feature = "conformance")]
@@ -110,6 +113,7 @@ impl TokioCentralPlatform {
             root,
             registry,
             delivery,
+            crate::StoreMigrations::production(),
             holder_answer_timeout,
             copy_ack_wait,
             controls,
@@ -128,6 +132,7 @@ impl TokioCentralPlatform {
         root: &std::path::Path,
         registry: fleet_sync_lease::RegistryConfig,
         delivery: crate::DeliveryConfig,
+        migrations: crate::StoreMigrations,
         holder_answer_timeout: Duration,
         copy_ack_wait: Duration,
         #[cfg(feature = "conformance")] controls: Vec<
@@ -151,6 +156,7 @@ impl TokioCentralPlatform {
             clock.clone(),
             registry,
             delivery,
+            migrations,
             holder_answer_timeout,
             copy_ack_wait,
         )
@@ -161,19 +167,48 @@ impl TokioCentralPlatform {
             clock.clone(),
             registry,
             delivery,
+            migrations,
             holder_answer_timeout,
             copy_ack_wait,
             controls,
         )
         .await?;
+        let ids = Arc::new(ClockIds::new(crate::object_clock::SharedClock::new(
+            clock.clone(),
+        )));
         Ok(Self {
+            ids,
             client,
             key_source,
             clock,
             observe: Arc::new(observe),
             objects,
-            ids: runtime_primitives::UuidV7Ids,
         })
+    }
+
+    #[cfg(feature = "test-support")]
+    pub async fn new_with_migrations(
+        key_source: &str,
+        clock: Arc<dyn Clock>,
+        observe: impl Fn(CentralObservation) + Send + Sync + 'static,
+        root: &std::path::Path,
+        registry: fleet_sync_lease::RegistryConfig,
+        delivery: crate::DeliveryConfig,
+        migrations: crate::StoreMigrations,
+    ) -> Result<Self, TokioPlatformError> {
+        Self::new_configured(
+            key_source,
+            clock,
+            observe,
+            root,
+            registry,
+            delivery,
+            migrations,
+            Duration::from_secs(30),
+            Duration::from_secs(30),
+            Vec::new(),
+        )
+        .await
     }
 
     pub async fn shutdown(&self) -> Result<(), durable_steps::StoreError> {
@@ -272,7 +307,15 @@ impl CentralPlatform for TokioCentralPlatform {
         self.clock.as_ref()
     }
     fn ids(&self) -> &dyn runtime_primitives::IdSource {
-        &self.ids
+        self.ids.as_ref()
+    }
+
+    async fn call_store(
+        &self,
+        workspace: message_board::WorkspaceId,
+        call: StoreCall,
+    ) -> Result<StoreReply, StoreFailure> {
+        self.objects.call_store(&workspace, call).await
     }
 
     async fn transport_object(

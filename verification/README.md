@@ -48,6 +48,20 @@ private declarations, qualified artifacts and an explicit execution commission.
 Do not run them against production or infer authorization from this README.
 Mapped cases determine coverage. Missing mappings remain open; a replacement
 entry does not establish every historical obligation.
+`targets/` runs worker-build bundles under the pinned Miniflare and workerd with real
+SQLite-backed Durable Objects (`workerd-storage.ts`). Its cases are permanent
+integration tests, run with `pnpm --dir verification run test:workerd` after building
+the central Worker's test-support bundle:
+
+```sh
+worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --features test-support,conformance
+```
+
+`workerd-central-storage.test.ts` covers the storage boundary on the Cloudflare host
+(Verification O1): batch atomicity, constraint kinds with foreign keys enforced,
+`SetFromQuery` alarms, in-transaction migrations, clock-minted id order,
+`call_store`, the pause seam with a simulated crash, and every scenario of the
+moved SQLx Durable Object driver (`/test-support/driver/`).
 
 Release formula generation is
 `node verification/tooling/update-homebrew-formula.ts --help`. The local tap

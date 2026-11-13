@@ -18,21 +18,26 @@ pub(crate) struct SessionConnectionSnapshot {
     registration: fleet_sync_session::ConnectionRegistration,
 }
 
+use crate::object_clock::SharedClock;
 use crate::object_keys::{address_from_key, address_key};
 
+use crate::object_storage::{ObjectStorage, StoreMigrations};
 use crate::{SocketCommand, TokioStorageHost};
 use axum::extract::ws::{CloseFrame, Message, WebSocket};
+use collaboration_central_core::storage::{StoreCall, StoreFailure, StoreReply};
 use collaboration_central_core::{
-    AdmissionOrigin, CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectRuntime, PlatformIo,
+    AdmissionOrigin, ClockIds, CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectRuntime,
+    PlatformIo,
 };
 use durable_steps::{BoxFuture, CallFailure, NotSentReason, StoreError};
 use fleet_sync_lease::RegistryConfig;
 use fleet_sync_session::ConnectionBinding;
 use fleet_sync_tokio_runner::{ObjectKey, ObjectOptions, ObjectStore};
+use message_board::WorkspaceId;
 use runtime_primitives::{Clock, IdSource, SyncTime, TokioWakeTimer, WakeFailure, WakeScheduler};
 use std::{
     collections::BTreeMap,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Arc, OnceLock, Weak},
 };
 use tokio::sync::{Mutex, OnceCell};
@@ -43,33 +48,22 @@ type CopyRuntime = ObjectRuntime<CopyKind, NativeHost, TokioObjectIo>;
 type FleetRuntime = ObjectRuntime<FleetKind, NativeHost, TokioObjectIo>;
 
 #[derive(Clone)]
-struct SharedClock(Arc<dyn Clock>);
-impl Clock for SharedClock {
-    fn now(&self) -> SyncTime {
-        self.0.now()
-    }
-}
-
-#[derive(Clone)]
 pub struct TokioObjectIo {
     objects: Weak<NativeObjects>,
     clock: SharedClock,
+    ids: Arc<ClockIds<SharedClock>>,
     wake: Arc<TokioWakeTimer<SharedClock>>,
     #[cfg(feature = "conformance")]
     faults: Arc<collaboration_central_conformance::RuntimeFaults>,
 }
 impl Clock for TokioObjectIo {
     fn now(&self) -> SyncTime {
-        #[cfg(feature = "conformance")]
-        if let Some(now) = self.faults.clock() {
-            return SyncTime::from_unix_millis(now.0.timestamp_millis());
-        }
         self.clock.now()
     }
 }
 impl IdSource for TokioObjectIo {
     fn new_id(&self) -> durable_steps::Uuid {
-        durable_steps::Uuid::now_v7()
+        self.ids.new_id()
     }
 }
 impl WakeScheduler for TokioObjectIo {
@@ -163,7 +157,10 @@ struct ObjectSlot {
 
 pub(crate) struct NativeObjects {
     store: ObjectStore<CoreHost<TokioObjectIo>>,
+    root: PathBuf,
+    migrations: StoreMigrations,
     slots: Mutex<BTreeMap<String, Arc<ObjectSlot>>>,
+    workspace_stores: Mutex<BTreeMap<WorkspaceId, Arc<ObjectStorage>>>,
     clock: SharedClock,
     config: RegistryConfig,
     delivery: crate::DeliveryConfig,
@@ -209,6 +206,7 @@ impl NativeObjects {
         clock: Arc<dyn Clock>,
         config: RegistryConfig,
         delivery: crate::DeliveryConfig,
+        migrations: StoreMigrations,
         holder_answer_timeout: std::time::Duration,
         copy_ack_wait: std::time::Duration,
     ) -> Result<Arc<Self>, StoreError> {
@@ -217,6 +215,7 @@ impl NativeObjects {
             clock,
             config,
             delivery,
+            migrations,
             holder_answer_timeout,
             copy_ack_wait,
             #[cfg(feature = "conformance")]
@@ -226,11 +225,16 @@ impl NativeObjects {
     }
 
     #[cfg(feature = "conformance")]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Native composition keeps migrations, deployment policies and initial fault controls explicit."
+    )]
     pub(crate) async fn open_with_controls(
         root: &Path,
         clock: Arc<dyn Clock>,
         config: RegistryConfig,
         delivery: crate::DeliveryConfig,
+        migrations: StoreMigrations,
         holder_answer_timeout: std::time::Duration,
         copy_ack_wait: std::time::Duration,
         controls: Vec<collaboration_central_conformance::RuntimeControlRequest>,
@@ -241,6 +245,7 @@ impl NativeObjects {
             clock,
             config,
             delivery,
+            migrations,
             holder_answer_timeout,
             copy_ack_wait,
             prepared,
@@ -248,11 +253,19 @@ impl NativeObjects {
         .await
     }
 
+    #[cfg_attr(
+        feature = "conformance",
+        expect(
+            clippy::too_many_arguments,
+            reason = "Native composition keeps migrations, deployment policies and initial fault controls explicit."
+        )
+    )]
     async fn open_prepared(
         root: &Path,
         clock: Arc<dyn Clock>,
         config: RegistryConfig,
         delivery: crate::DeliveryConfig,
+        migrations: StoreMigrations,
         holder_answer_timeout: std::time::Duration,
         copy_ack_wait: std::time::Duration,
         #[cfg(feature = "conformance")]
@@ -260,8 +273,11 @@ impl NativeObjects {
     ) -> Result<Arc<Self>, StoreError> {
         let objects = Arc::new(Self {
             store: ObjectStore::open(root).await?,
+            root: root.to_path_buf(),
+            migrations,
             slots: Mutex::default(),
-            clock: SharedClock(clock),
+            workspace_stores: Mutex::default(),
+            clock: SharedClock::new(clock),
             config,
             delivery,
             holder_answer_timeout,
@@ -306,13 +322,19 @@ impl NativeObjects {
             slots
                 .entry(key.clone())
                 .or_insert_with(|| {
+                    let clock = self.clock.clone();
+                    #[cfg(feature = "conformance")]
+                    let faults = self.startup_controls.faults_for(&key);
+                    #[cfg(feature = "conformance")]
+                    let clock = clock.with_controls(faults.clone());
                     Arc::new(ObjectSlot {
                         io: TokioObjectIo {
                             objects: Arc::downgrade(self),
-                            clock: self.clock.clone(),
+                            clock: clock.clone(),
+                            ids: Arc::new(ClockIds::new(clock)),
                             wake: Arc::new(TokioWakeTimer::new(self.clock.clone())),
                             #[cfg(feature = "conformance")]
-                            faults: self.startup_controls.faults_for(&key),
+                            faults,
                         },
                         host: OnceCell::new(),
                         runtime: OnceCell::new(),
@@ -341,10 +363,14 @@ impl NativeObjects {
                         )),
                     )
                     .await?;
+                let storage = Arc::new(ObjectStorage::new(
+                    self.root.join(format!("{key}.sqlite")),
+                    self.migrations.central.clone(),
+                ));
                 #[cfg(feature = "conformance")]
-                let host = TokioStorageHost::with_faults(object, slot.io.faults.clone());
+                let host = TokioStorageHost::with_faults(object, storage, slot.io.faults.clone());
                 #[cfg(not(feature = "conformance"))]
-                let host = TokioStorageHost::new(object);
+                let host = TokioStorageHost::with_storage(object, storage);
                 Ok::<_, StoreError>(Arc::new(host))
             })
             .await?
@@ -353,6 +379,11 @@ impl NativeObjects {
             .runtime
             .get_or_try_init(|| async {
                 let runtime = match &address {
+                    ObjectAddress::WorkspaceStore(_) => {
+                        return Err(StoreError::Aborted {
+                            reason: "workspace store takes only store calls".into(),
+                        });
+                    }
                     ObjectAddress::Copy(project) => RuntimeFace::Copy(ObjectRuntime::copy(
                         host,
                         slot.io.clone(),
@@ -495,10 +526,56 @@ impl NativeObjects {
         host.detach_socket(binding.connection).await;
     }
 
+    /// The workspace's store, opened (and migrated) on its first call.
+    async fn workspace_store(&self, workspace: &WorkspaceId) -> Arc<ObjectStorage> {
+        let mut stores = self.workspace_stores.lock().await;
+        stores
+            .entry(workspace.clone())
+            .or_insert_with(|| {
+                Arc::new(ObjectStorage::new(
+                    self.root
+                        .join(WORKSPACE_STORE_DIRECTORY)
+                        .join(format!("{}.sqlite", workspace.as_str())),
+                    self.migrations.workspace.clone(),
+                ))
+            })
+            .clone()
+    }
+
+    pub(crate) async fn call_store(
+        &self,
+        workspace: &WorkspaceId,
+        call: StoreCall,
+    ) -> Result<StoreReply, StoreFailure> {
+        if self.stop.is_cancelled() {
+            return Err(StoreFailure::Unavailable);
+        }
+        tokio::fs::create_dir_all(self.root.join(WORKSPACE_STORE_DIRECTORY))
+            .await
+            .map_err(|_| StoreFailure::Unavailable)?;
+        let store = self.workspace_store(workspace).await;
+        match call {
+            // A workspace store has no alarm: central owns every timer.
+            StoreCall::Batch(mut batch) => {
+                batch.alarm = collaboration_central_core::storage::AlarmUpdate::Unchanged;
+                store.run_batch(batch).await.map(StoreReply::Batch)
+            }
+            StoreCall::Read(statement) => store.read(statement).await.map(StoreReply::Read),
+        }
+    }
+
     pub(crate) async fn shutdown(&self) -> Result<(), StoreError> {
         self.stop.cancel();
         self.tasks.close();
         self.tasks.wait().await;
+        for store in self.workspace_stores.lock().await.values() {
+            store.close().await;
+        }
+        for slot in self.slots.lock().await.values() {
+            if let Some(host) = slot.host.get() {
+                host.close_storage().await;
+            }
+        }
         self.store.close().await
     }
 
@@ -668,6 +745,13 @@ impl Drop for NativeObjects {
         self.stop.cancel();
     }
 }
+
+const WORKSPACE_STORE_DIRECTORY: &str = "workspace-stores";
+
+#[cfg(test)]
+#[cfg(feature = "conformance")]
+#[path = "native_objects_test.rs"]
+mod tests;
 
 fn no_route() -> CallFailure {
     CallFailure::NotSent {

@@ -11,6 +11,10 @@
 )]
 
 use crate::binding_attachment::BindingAttachment;
+use crate::statement_store::{self, AlarmPolicy, MigrationFailure};
+use collaboration_central_core::storage::{
+    BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreFailure,
+};
 use collaboration_central_core::{
     AdmissionOrigin, LocalSectionFailure, ObjectHost, RegistrationEdits, RegistrationSnapshot,
     SocketFailure,
@@ -19,10 +23,12 @@ use durable_steps::{Host, durable_object_store::DurableObjectStore};
 use fleet_sync_protocol::{CloseReason, ConnectionId};
 use fleet_sync_session::{Bytes, ConnectionBinding, ConnectionRegistration};
 use runtime_primitives::AlarmOwner;
+use sqlx_core::migrate::Migrator;
+use sqlx_durable_object::DoConnection;
 use std::{
     collections::BTreeSet,
     future::{Future, ready},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
 };
 use worker::{
     State, WebSocket,
@@ -51,6 +57,9 @@ pub struct CloudflareStorageHost<SharedHost: Host> {
     quarantine: Mutex<BTreeSet<ConnectionId>>,
     #[cfg(feature = "conformance")]
     faults: Arc<collaboration_central_conformance::RuntimeFaults>,
+    /// The statement-batch store on the same storage, beside the journal store.
+    statements: DoConnection,
+    statements_open: OnceLock<()>,
 }
 
 impl<SharedHost: Host> CloudflareStorageHost<SharedHost> {
@@ -75,9 +84,12 @@ impl<SharedHost: Host> CloudflareStorageHost<SharedHost> {
         let store = Arc::new(store);
         #[cfg(feature = "conformance")]
         let store = Arc::new(collaboration_central_core::DriveTokenObserver::new(store));
+        let statements = DoConnection::new(state.storage());
         Self {
             store,
             wake,
+            statements,
+            statements_open: OnceLock::new(),
             state,
             quarantine: Mutex::default(),
             #[cfg(feature = "conformance")]
@@ -105,10 +117,25 @@ impl<SharedHost: Host> CloudflareStorageHost<SharedHost> {
         Self {
             store,
             wake,
+            statements: DoConnection::new(state.storage()),
+            statements_open: OnceLock::new(),
             state,
             quarantine: Mutex::default(),
             faults,
         }
+    }
+
+    /// Runs the object's SQLx migrations in one storage transaction, once per instance.
+    pub(crate) async fn migrate_statements(
+        &self,
+        migrator: Arc<Migrator>,
+    ) -> Result<(), MigrationFailure> {
+        if self.statements_open.get().is_some() {
+            return Ok(());
+        }
+        statement_store::migrate(&self.statements, migrator).await?;
+        let _ = self.statements_open.set(());
+        Ok(())
     }
 
     pub async fn migrate_store(&self) -> Result<(), durable_steps::StoreError> {
@@ -235,6 +262,25 @@ impl<SharedHost: Host> ObjectHost for CloudflareStorageHost<SharedHost> {
         &self,
     ) -> Result<Vec<durable_steps::OperationId>, durable_steps::StoreError> {
         self.store.rejected_operations()
+    }
+    fn run_batch(
+        &self,
+        batch: StatementBatch,
+    ) -> impl Future<Output = Result<BatchOutcome, StoreFailure>> + Send {
+        SendFuture::new(async move {
+            statement_store::run_batch(
+                &self.statements,
+                batch.into(),
+                AlarmPolicy::Apply(self.state.storage()),
+            )
+            .await
+        })
+    }
+    fn read(
+        &self,
+        statement: Statement,
+    ) -> impl Future<Output = Result<ReadOutcome, StoreFailure>> + Send {
+        SendFuture::new(statement_store::read(&self.statements, statement.into()))
     }
     fn wake(&self) -> &Self::Wake {
         &self.wake

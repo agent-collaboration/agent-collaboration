@@ -1,6 +1,8 @@
 //! Durable Object construction, physical addressing and hibernatable sockets.
 
+use crate::worker_clock::ObjectClock;
 use crate::{CloudflareStorageHost, binding_attachment::BindingAttachment, cloudflare_transport};
+use collaboration_central_core::ClockIds;
 use collaboration_central_core::{
     CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
 };
@@ -24,19 +26,17 @@ pub(crate) struct CloudflareObjectIo {
     wake: AlarmOwner,
     #[cfg(feature = "conformance")]
     faults: Arc<collaboration_central_conformance::RuntimeFaults>,
+    ids: Arc<ClockIds<ObjectClock>>,
+    clock: ObjectClock,
 }
 impl Clock for CloudflareObjectIo {
     fn now(&self) -> SyncTime {
-        #[cfg(feature = "conformance")]
-        if let Some(now) = self.faults.clock() {
-            return SyncTime::from_unix_millis(now.0.timestamp_millis());
-        }
-        SyncTime::from_unix_millis(chrono::Utc::now().timestamp_millis())
+        self.clock.now()
     }
 }
 impl IdSource for CloudflareObjectIo {
     fn new_id(&self) -> durable_steps::Uuid {
-        durable_steps::Uuid::now_v7()
+        self.ids.new_id()
     }
 }
 impl WakeScheduler for CloudflareObjectIo {
@@ -133,6 +133,14 @@ impl PhysicalKind {
         )
     }
 }
+#[cfg(all(feature = "test-support", feature = "conformance"))]
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ObjectClockObservation {
+    now_ms: i64,
+    ids: [durable_steps::Uuid; 2],
+}
+
 struct ShellActor {
     state: Arc<SendWrapper<State>>,
     env: Arc<SendWrapper<Env>>,
@@ -141,9 +149,17 @@ struct ShellActor {
     runtime: OnceCell<Arc<RuntimeFace>>,
     #[cfg(feature = "conformance")]
     faults: Arc<collaboration_central_conformance::RuntimeFaults>,
+    ids: Arc<ClockIds<ObjectClock>>,
+    clock: ObjectClock,
 }
 impl ShellActor {
     fn new(state: State, env: Env, kind: PhysicalKind) -> Self {
+        #[cfg(feature = "conformance")]
+        let faults: Arc<collaboration_central_conformance::RuntimeFaults> = Arc::default();
+        let clock = ObjectClock::new(
+            #[cfg(feature = "conformance")]
+            faults.clone(),
+        );
         Self {
             state: Arc::new(SendWrapper::new(state)),
             env: Arc::new(SendWrapper::new(env)),
@@ -151,7 +167,19 @@ impl ShellActor {
             host: OnceCell::new(),
             runtime: OnceCell::new(),
             #[cfg(feature = "conformance")]
-            faults: Arc::default(),
+            faults,
+            ids: Arc::new(ClockIds::new(clock.clone())),
+            clock,
+        }
+    }
+    fn object_io(&self, wake: AlarmOwner) -> CloudflareObjectIo {
+        CloudflareObjectIo {
+            env: self.env.clone(),
+            wake,
+            #[cfg(feature = "conformance")]
+            faults: self.faults.clone(),
+            ids: self.ids.clone(),
+            clock: self.clock.clone(),
         }
     }
     fn config(&self) -> Result<RegistryConfig> {
@@ -166,17 +194,9 @@ impl ShellActor {
         if let Some(host) = self.host.get() {
             return Ok(host.clone());
         }
-        let env = self.env.clone();
-        #[cfg(feature = "conformance")]
-        let faults = self.faults.clone();
-        let shared_host = move |wake| {
+        let shared_host = |wake| {
             Arc::new(CoreHost::for_store(
-                CloudflareObjectIo {
-                    env,
-                    wake,
-                    #[cfg(feature = "conformance")]
-                    faults,
-                },
+                self.object_io(wake),
                 config.authoritative_receiver,
             ))
         };
@@ -232,13 +252,11 @@ impl ShellActor {
         if let Some(runtime) = self.runtime.get() {
             return Ok((host, runtime.clone()));
         }
-        let io = CloudflareObjectIo {
-            env: self.env.clone(),
-            wake: host.wake().clone(),
-            #[cfg(feature = "conformance")]
-            faults: self.faults.clone(),
-        };
+        let io = self.object_io(host.wake().clone());
         let runtime = match address {
+            ObjectAddress::WorkspaceStore(_) => {
+                return Err(error("workspace store takes only store calls"));
+            }
             ObjectAddress::Copy(project) => RuntimeFace::Copy(ObjectRuntime::copy(
                 host.clone(),
                 io,
@@ -292,6 +310,11 @@ impl ShellActor {
         self.rearm_stale_alarm().await?;
         let (host, runtime) = self.runtime_handles(address)?;
         host.migrate_store().await.map_err(error)?;
+        // After the journal's own migrations: on a fresh object the journal refuses
+        // to adopt tables it did not create first.
+        host.migrate_statements(crate::object_migrations::central_object())
+            .await
+            .map_err(error)?;
         runtime.initialize().await?;
         Ok((host, runtime))
     }
@@ -338,6 +361,20 @@ impl ShellActor {
         };
         #[cfg(not(feature = "conformance"))]
         let address = self.address(Some(requested)).await?;
+        #[cfg(all(feature = "test-support", feature = "conformance"))]
+        if request.path() == "/test/object-clock-ids" {
+            let now: collaboration_central_core::RegistryTime = request.json().await?;
+            self.faults
+                .control(collaboration_central_conformance::RuntimeControl::SetTime { now })
+                .await
+                .map_err(error)?;
+            let host = self.host(self.config()?)?;
+            let io = self.object_io(host.wake().clone());
+            return Response::from_json(&ObjectClockObservation {
+                now_ms: io.now().unix_millis(),
+                ids: [io.new_id(), io.new_id()],
+            });
+        }
         #[cfg(feature = "conformance")]
         if request.path() == crate::composed_control::OBJECT_PATH
             || request.path() == "/test/fleet-schema"

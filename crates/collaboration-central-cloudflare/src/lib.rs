@@ -16,18 +16,37 @@ pub use conformance_bootstrap::BootstrapObject;
 mod cloudflare_transport;
 #[cfg(feature = "conformance")]
 mod conformance_scope_faults;
+#[cfg(feature = "test-support")]
+mod driver_scenarios;
 mod http_body;
 mod object_location;
+mod object_migrations;
 mod object_shell;
 mod platform;
 mod reply_deadline;
 mod shared_object_store;
 mod storage_measurement;
 pub use object_shell::{FleetObject, ProjectCopyObject};
+mod statement_store;
+#[cfg(feature = "test-support")]
+mod storage_cases;
+mod store_wire;
+mod worker_clock;
+mod workspace_store_object;
+#[cfg(feature = "test-support")]
+pub use driver_scenarios::DriverScenarioObject;
 pub use shared_object_store::CloudflareStorageHost;
+#[cfg(feature = "test-support")]
+pub use storage_cases::StorageCaseObject;
 use worker::{Context, Env, Request, Response, Result, event};
+pub use workspace_store_object::WorkspaceStoreObject;
 #[event(fetch)]
 pub async fn main(request: Request, env: Env, _context: Context) -> Result<Response> {
+    #[cfg(feature = "test-support")]
+    let request = match storage_cases::route(request, &env).await? {
+        Ok(response) => return Ok(response),
+        Err(request) => request,
+    };
     let labels = access_verification::InvocationLabels::for_request(&request)?;
     let request: worker::HttpRequest = request.try_into()?;
     let (parts, body) = request.into_parts();

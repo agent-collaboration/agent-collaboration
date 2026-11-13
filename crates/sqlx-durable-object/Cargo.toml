@@ -1,0 +1,40 @@
+[package]
+name = "sqlx-durable-object"
+description = "A Cloudflare Durable Objects driver for SQLx: an sqlx::Database over a Durable Object's SQL storage"
+# Kept at the version durable-steps' git dependency names, so the workspace patch
+# resolves that dependency to this copy too.
+version = "0.3.0"
+edition.workspace = true
+license = "MIT"
+publish = false
+readme = "README.md"
+autotests = false
+
+[lints]
+workspace = true
+
+[dependencies]
+sqlx-durable-object-core = { path = "../sqlx-durable-object-core", version = "0.2.0" }
+# Executor::describe is part of this driver; SQLx gates the trait method on offline.
+# `migrate` carries the in-transaction migration runner.
+sqlx-core = { workspace = true, features = ["offline", "migrate"] }
+worker = { version = "0.8.7", git = "https://github.com/cloudflare/workers-rs", rev = "b171cb4bdd6fa943bb81f429df0a6b0df37e14b3" }
+wasm-bindgen = "=0.2.129"
+js-sys = "=0.3.106"
+futures-core = "0.3.34"
+futures-util = { workspace = true, features = ["alloc"] }
+# Only for `log::LevelFilter`, which `ConnectOptions` names in its signatures.
+log = "0.4.33"
+thiserror.workspace = true
+
+[dev-dependencies]
+# The facade, only to prove that a consumer naming `sqlx::Database` and using
+# `#[derive(sqlx::FromRow)]` sees this crate's `Do`; see tests/integration/facade.rs.
+sqlx = { workspace = true, features = ["derive", "macros"] }
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"
+
+[package.metadata.docs.rs]
+targets = ["wasm32-unknown-unknown"]

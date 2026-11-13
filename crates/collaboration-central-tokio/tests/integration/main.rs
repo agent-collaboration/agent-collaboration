@@ -272,3 +272,19 @@ mod fleet_ledger_rows;
 mod revocation_clock;
 #[cfg(feature = "conformance")]
 mod revocation_writer_recovery;
+
+#[cfg(test)]
+#[cfg(feature = "test-support")]
+mod alarm_publication_order;
+#[cfg(test)]
+#[cfg(feature = "test-support")]
+mod central_object_batches;
+#[cfg(test)]
+#[cfg(feature = "test-support")]
+mod request_pause_seam;
+#[cfg(test)]
+#[cfg(feature = "test-support")]
+mod storage_support;
+#[cfg(test)]
+#[cfg(feature = "test-support")]
+mod workspace_store_calls;

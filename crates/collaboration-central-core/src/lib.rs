@@ -1,7 +1,18 @@
 //! One asynchronous application core shared by every runtime.
 #![forbid(unsafe_code)]
 
+mod clock_ids;
 pub mod identity_contract;
+pub mod storage;
+#[cfg(feature = "test-support")]
+pub mod storage_conformance;
+pub use clock_ids::ClockIds;
+mod workspace_turns;
+pub use workspace_turns::{WorkspaceTurn, WorkspaceTurns};
+#[cfg(feature = "test-support")]
+mod pause_points;
+#[cfg(feature = "test-support")]
+pub use pause_points::{HeldPause, PausePoint, PausePoints};
 
 mod admin_import_columns;
 mod admin_import_contract;
