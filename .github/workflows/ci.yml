@@ -78,7 +78,6 @@ jobs:
       - name: Check TypeScript verification harness
         run: |
           pnpm --dir verification install --frozen-lockfile
-          pnpm --dir tools/central-migration install --frozen-lockfile
           pnpm --dir verification run check
           pnpm --dir verification run lint
           pnpm --dir verification run format:check

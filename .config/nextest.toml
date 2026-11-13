@@ -184,18 +184,6 @@ filter = "package(=agent-router-update) & binary(=integration) & test(=upload_pu
 priority = 50
 
 [[profile.ci.overrides]]
-filter = "package(=board-staging-cutover) & binary(=e2e) & test(=installed_claim::compiled_canary_appends_after_recovery_and_replays_the_sealed_request)"
-priority = 50
-
-[[profile.ci.overrides]]
-filter = "package(=board-staging-cutover) & binary(=e2e) & test(=installed_claim::ordinary_host_cutover_canary_reaches_a_distinct_enrolled_host)"
-priority = 50
-
-[[profile.ci.overrides]]
-filter = "package(=board-staging-cutover) & binary(=e2e) & test(=rich_project_cutover::rich_real_l2_history_survives_cutover_without_resetting_line_two_or_replaying_writes)"
-priority = 50
-
-[[profile.ci.overrides]]
 filter = "package(=codex-router-cli) & test(=host_command::stop_tests::stop_times_out_without_claiming_success_or_signalling_an_unresponsive_peer)"
 priority = 50
 

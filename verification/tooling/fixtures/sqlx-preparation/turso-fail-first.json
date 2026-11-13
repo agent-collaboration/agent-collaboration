@@ -58,9 +58,6 @@
       },
       "crates/message-board-storage/.sqlx": {
         "query-original.json": "original"
-      },
-      "crates/board-staging-cutover/.sqlx": {
-        "query-original.json": "original"
       }
     },
     "stderr": ""
