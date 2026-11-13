@@ -8,15 +8,15 @@ Run from the repository root:
 
 ```sh
 cargo build -p codex-router-cli --bin codex-router
-cargo build -p codex-router-host --bin automation-debug-host
+cargo build -p codex-router-debug-hosts --bin automation-debug-host
 cargo test -p agent-collaboration --test debug_luna_acceptance --no-run
 ```
 
 The last command also builds the CLI used by the agent. The live test is ignored by default and requires an explicit invocation.
 
-Use the normal binary target for a real acceptance Host. The example target shares
-its implementation but includes development dependencies and their test credential
-features; it is suitable for regression tests, not real credential observation.
+Build without features for a real acceptance Host. The debug-hosts crate's
+`runtime-test-support` feature adds test credential features; such a build suits
+regression tests, not real credential observation.
 Before runtime admission, inspect Cargo's actual helper, Host, and secret-store
 artifact features and reject any test credential features.
 
@@ -314,4 +314,4 @@ python3 -m unittest scripts.tests.test_update_homebrew_formula -v
 
 CI also builds the router with all features, checks an isolated Cargo installation, and runs the quota-reset PTY harness. Preserve those gates when preparing the PR.
 
-Source: [debug Host launcher](../../crates/codex-router-host/examples/automation-debug-host.rs), [Claude launch target](../../crates/agent-collaboration/src/session_commands/claude_launch_target.rs), [Claude launch target tests](../../crates/agent-collaboration/src/session_commands/claude_launch_target_tests.rs), [Host Claude launch environment](../../crates/codex-router-host/src/claude_provider_launch_environment.rs), [Host token startup](../../crates/codex-router-host/src/lifecycle_owner/startup_convergence.rs), [live acceptance test](../../crates/agent-collaboration/tests/debug_luna_acceptance.rs), [scheduled workflow requirements](../specs/2026-09-07-scheduled-agent-workflows/2026-09-07-scheduled-agent-workflows-requirements.md).
+Source: [debug Host launcher](../../crates/codex-router-debug-hosts/src/bin/automation-debug-host.rs), [Claude launch target](../../crates/agent-collaboration/src/session_commands/claude_launch_target.rs), [Claude launch target tests](../../crates/agent-collaboration/src/session_commands/claude_launch_target_tests.rs), [Host Claude launch environment](../../crates/codex-router-host/src/claude_provider_launch_environment.rs), [Host token startup](../../crates/codex-router-host/src/lifecycle_owner/startup_convergence.rs), [live acceptance test](../../crates/agent-collaboration/tests/debug_luna_acceptance.rs), [scheduled workflow requirements](../specs/2026-09-07-scheduled-agent-workflows/2026-09-07-scheduled-agent-workflows-requirements.md).

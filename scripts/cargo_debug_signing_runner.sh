@@ -17,8 +17,8 @@
 #
 # Usage: as the cargo runner, `<executable> [arguments...]`; or
 # `--sign-only <executable>...` to sign builds another process starts directly,
-# such as the debug Router a debug-host example launches, or the
-# board-debug-runtime Host that end-to-end tests start.
+# such as the debug Router a debug-host binary launches, or a debug Host
+# (board-debug-runtime and the other codex-router-debug-hosts binaries) another process starts.
 #
 # Tests also launch bin targets directly (env!("CARGO_BIN_EXE_<name>"), often
 # from a copy), bypassing the runner. So before running any executable the

@@ -54,7 +54,7 @@ export function qualifyNormalBinaries(
   return verified;
 }
 
-/** The declared proof example carries its real Cargo feature list, unlike a product binary. */
+/** The declared proof Host carries its real Cargo feature list, unlike a product binary. */
 export function qualifyWorkerHost(input: {
   readonly qualification: string;
   readonly repository: string;
@@ -65,10 +65,7 @@ export function qualifyWorkerHost(input: {
   );
   const host = records.binaries.find((item) => item.target === "provider-only-debug-host");
   if (host === undefined) throw new Error("qualified provider-only proof Host missing");
-  const expected = join(
-    realpathSync(input.repository),
-    "target/debug/examples/provider-only-debug-host",
-  );
+  const expected = join(realpathSync(input.repository), "target/debug/provider-only-debug-host");
   if (realpathSync(host.path) !== expected || sha256(host.path) !== host.sha256)
     throw new Error("proof Host source/build path or hash mismatch");
   requireSigningIdentity(

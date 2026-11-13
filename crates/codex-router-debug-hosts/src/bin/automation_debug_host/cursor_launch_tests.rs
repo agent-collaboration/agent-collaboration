@@ -274,7 +274,7 @@ fn cursor_private_context_round_trip_rejects_changed_resume_input() {
         .expect("Cursor command")
         .executable = "/another/node".into();
     assert!(validate_resume_binding(&context, &changed_executable).is_err());
-    let mut changed_arguments = options.clone();
+    let mut changed_arguments = options;
     changed_arguments
         .cursor_provider
         .as_mut()

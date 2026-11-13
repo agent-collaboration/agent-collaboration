@@ -1441,6 +1441,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "codex-router-debug-hosts"
+version = "0.1.148"
+dependencies = [
+ "acp-client-runtime",
+ "codex-native-integration",
+ "codex-router-host",
+ "codex-router-secret-store",
+ "codex-router-state",
+ "collaboration-client",
+ "collaboration-protocol",
+ "collaboration-runtime",
+ "fleet-sync-protocol",
+ "futures-util",
+ "interaction-storage",
+ "message-board",
+ "node-test-fixture",
+ "rustix 1.1.6",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tokio-tungstenite",
+ "toml 1.1.2+spec-1.1.0",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "codex-router-host"
 version = "0.1.148"
 dependencies = [
@@ -1510,7 +1538,6 @@ dependencies = [
  "tokio",
  "tokio-tungstenite",
  "tokio-util",
- "toml 1.1.2+spec-1.1.0",
  "tracing",
  "tracing-subscriber",
  "uuid",

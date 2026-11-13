@@ -1,4 +1,9 @@
 //! Opt-in acceptance Host: normal Codex home, existing debug provider, fresh runtime and Luna only.
+#[cfg(test)]
+#[macro_use]
+#[path = "automation_debug_host/fallible_assertions_test.rs"]
+mod fallible_assertions;
+
 #[path = "automation_debug_host/host_replacement.rs"]
 mod host_replacement;
 #[path = "automation_debug_host/launch_options.rs"]

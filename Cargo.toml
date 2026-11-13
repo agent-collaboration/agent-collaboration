@@ -50,6 +50,7 @@ members = [
     "crates/codex-router-core",
     "crates/agent-collaboration-tui",
     "crates/codex-router-host",
+    "crates/codex-router-debug-hosts",
     "crates/codex-router-quota-reset-test-harness",
     "crates/codex-router-proxy",
     "crates/codex-router-quota",

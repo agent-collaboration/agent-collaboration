@@ -530,7 +530,7 @@ jobs:
       CARGO_INCREMENTAL: "0"
       CARGO_BUILD_JOBS: "4"
       TMPDIR: /tmp
-      CODEX_ROUTER_E2E_HOST_BINARY: ${{ github.workspace }}/target/debug/examples/board-debug-runtime
+      CODEX_ROUTER_E2E_HOST_BINARY: ${{ github.workspace }}/target/debug/board-debug-runtime
       CODEX_ROUTER_E2E_PARENT: /tmp/router-board-e2e-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v5
@@ -570,7 +570,7 @@ jobs:
       - name: Build the real local entry points
         run: |
           cargo build --locked -p agent-collaboration --all-features --bins
-          cargo build --locked -p codex-router-host --features runtime-test-support --example board-debug-runtime
+          cargo build --locked -p codex-router-debug-hosts --features runtime-test-support --bin board-debug-runtime
           cargo build --locked -p agent-router-update --bin agent-router-update
       - name: Build E2E test binaries
         run: |

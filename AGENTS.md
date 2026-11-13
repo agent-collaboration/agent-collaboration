@@ -118,7 +118,7 @@ No wall-clock testing. Time comes from one injected clock, created in one place 
   and nextest launches every test binary. Debug and released builds are different code identities on
   purpose: the debug Router keeps its own Keychain item, and approvals given
   to one never apply to the other. A debug build another process starts
-  directly, such as the `--router-binary` a debug-host example launches,
+  directly, such as the `--router-binary` a debug-host binary launches,
   bypasses the runner; sign it first with
   `scripts/cargo_debug_signing_runner.sh --sign-only <executable>...` (any
   built executable). Before running anything, the runner also signs every

@@ -112,46 +112,46 @@ mod tests {
         run_directory: &Path,
         arguments: &[OsString],
     ) -> Result<(), Box<dyn std::error::Error>> {
-        assert_eq!(arguments.len(), 4);
-        assert_eq!(arguments[0], "-c");
-        assert_eq!(arguments[2], "-c");
-        assert!(
+        ensure_test_eq!(arguments.len(), 4);
+        ensure_test_eq!(arguments[0], "-c");
+        ensure_test_eq!(arguments[2], "-c");
+        ensure_test!(
             arguments[1]
                 .to_str()
                 .is_some_and(|argument| argument.starts_with("permissions.automation-proof="))
         );
-        assert!(
+        ensure_test!(
             arguments[3]
                 .to_str()
                 .is_some_and(|argument| argument.starts_with("features.network_proxy="))
         );
 
         let profile = parse_override(&arguments[1])?;
-        assert_eq!(profile["extends"].as_str(), Some(":workspace"));
-        assert_eq!(profile["network"]["enabled"].as_bool(), Some(true));
-        assert_eq!(profile["network"].as_table().map(toml::Table::len), Some(1));
-        assert_eq!(profile.as_table().map(toml::Table::len), Some(2));
+        ensure_test_eq!(profile["extends"].as_str(), Some(":workspace"));
+        ensure_test_eq!(profile["network"]["enabled"].as_bool(), Some(true));
+        ensure_test_eq!(profile["network"].as_table().map(toml::Table::len), Some(1));
+        ensure_test_eq!(profile.as_table().map(toml::Table::len), Some(2));
 
         let proxy = parse_override(&arguments[3])?;
-        assert_eq!(proxy.as_table().map(toml::Table::len), Some(9));
-        assert_eq!(proxy["enabled"].as_bool(), Some(true));
-        assert_eq!(proxy["enable_socks5"].as_bool(), Some(false));
-        assert_eq!(proxy["allow_upstream_proxy"].as_bool(), Some(false));
-        assert_eq!(proxy["allow_local_binding"].as_bool(), Some(false));
-        assert_eq!(proxy["credential_broker"].as_bool(), Some(false));
-        assert_eq!(
+        ensure_test_eq!(proxy.as_table().map(toml::Table::len), Some(9));
+        ensure_test_eq!(proxy["enabled"].as_bool(), Some(true));
+        ensure_test_eq!(proxy["enable_socks5"].as_bool(), Some(false));
+        ensure_test_eq!(proxy["allow_upstream_proxy"].as_bool(), Some(false));
+        ensure_test_eq!(proxy["allow_local_binding"].as_bool(), Some(false));
+        ensure_test_eq!(proxy["credential_broker"].as_bool(), Some(false));
+        ensure_test_eq!(
             proxy["dangerously_allow_all_unix_sockets"].as_bool(),
             Some(false)
         );
-        assert_eq!(proxy["domains"].as_table().map(toml::Table::len), Some(0));
+        ensure_test_eq!(proxy["domains"].as_table().map(toml::Table::len), Some(0));
         let unix_sockets = proxy["unix_sockets"]
             .as_table()
             .ok_or("unix_sockets is not a table")?;
-        assert_eq!(unix_sockets.len(), 1);
+        ensure_test_eq!(unix_sockets.len(), 1);
         let socket = run_directory
             .canonicalize()?
             .join("agent-communication/control.sock");
-        assert_eq!(
+        ensure_test_eq!(
             unix_sockets.get(socket.to_str().ok_or("socket path is not UTF-8")?),
             Some(&toml::Value::String("allow".to_owned()))
         );
@@ -162,7 +162,7 @@ mod tests {
             .strip_prefix("http://127.0.0.1:")
             .ok_or("proxy_url is not loopback HTTP")?
             .parse::<u16>()?;
-        assert_ne!(proxy_port, 0);
+        ensure_test_ne!(proxy_port, 0);
         Ok(())
     }
 
