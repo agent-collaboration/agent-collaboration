@@ -1,4 +1,5 @@
 [package]
+autobins = false
 name = "board-upgrade-native-observer"
 version = "0.0.0"
 edition = "2024"
@@ -15,7 +16,6 @@ name = "board-request-shapes"
 path = "src/request_shapes.rs"
 
 [dependencies]
-agent-router-update = { path = "../../../crates/agent-router-update" }
 collaboration-protocol = { path = "../../../crates/collaboration-protocol" }
 message-board = { path = "../../../crates/message-board" }
 message-board-storage = { path = "../../../crates/message-board-storage" }

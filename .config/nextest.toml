@@ -111,7 +111,7 @@ threads-required = "num-test-threads"
 
 # Real local Host/central journeys run in the required slower CI job.
 [[profile.ci.overrides]]
-filter = "(package(=agent-collaboration) & binary(=e2e)) | (package(=agent-router-update) & binary(=e2e)) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/))"
+filter = "(package(=agent-collaboration) & binary(=e2e)) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/))"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
@@ -160,7 +160,7 @@ filter = "package(=codex-router-host) & test(collaboration_runtime::board_compos
 priority = 100
 
 [[profile.ci.overrides]]
-filter = "(package(=agent-collaboration) & binary(=e2e)) | (package(=agent-router-update) & binary(=e2e)) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/))"
+filter = "(package(=agent-collaboration) & binary(=e2e)) | (package(=collaboration-central-tokio) & binary(=e2e) & test(/^forwarding_real_timer::/))"
 priority = 100
 
 [[profile.ci.overrides]]
@@ -177,10 +177,6 @@ priority = 50
 
 [[profile.ci.overrides]]
 filter = "package(=agent-collaboration) & binary(=integration) & test(=local_mail_failures_cli_mcp::full_inbox_refuses_cli_and_mcp_sends_and_replies_without_effect_or_target)"
-priority = 50
-
-[[profile.ci.overrides]]
-filter = "package(=agent-router-update) & binary(=integration) & test(=upload_publication::real_store_failures_resume_before_and_after_publication_across_server_reopen)"
 priority = 50
 
 [[profile.ci.overrides]]

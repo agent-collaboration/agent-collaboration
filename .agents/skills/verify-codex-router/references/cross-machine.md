@@ -4,7 +4,7 @@ For central-storage-reset D1, use [D1 central mail](d1-central-mail.md). The exi
 
 ## Current entry
 
-The wrapper retired in 0.1.102. Current execution is `node verification/run.ts "$PRIVATE_DECLARATION"`, with the strict owner-private declaration in `verification/declaration.ts` and retained cases in `verification/case-registry.ts`. The declaration selects two machines, exact signed artifacts, an explicit Tokio/workerd/staging target, governing rows and a deadline. Real state and evidence require the declared canonical cache task roots; current synthetic-only and real-copy boundaries are enforced by the selected entry. Missing mappings remain open and cannot receive confirmation credit. A separate real-copy Mac import uses `verification/import-run.ts` and its own declaration.
+The two-Mac verification harness is unavailable until deliverable C. Ordinary `node verification/run.ts` invocation refuses with exit 2 before reading a declaration or launching anything: legacy import setup was removed, and C must connect the retained behavior cases to the new path. The cases and non-import support remain source for C; they provide no current runnable cross-machine proof. Independent D1 routes remain available under their own declared scope.
 
 ## Retained obligations and historical evidence
 

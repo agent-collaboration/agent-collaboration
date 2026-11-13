@@ -322,15 +322,6 @@ where
     scenario_in_directory("host-a", case).await
 }
 
-/// BC05's importer reads the same preexisting Host identity through its Router root.
-// The shared fixture also compiles in targets that use only host-a.
-pub async fn router_root_scenario<F>(case: F) -> FixtureResult
-where
-    F: for<'a> AsyncFnOnce(&'a mut BoardFixture) -> FixtureResult,
-{
-    scenario_in_directory("agent-communication", case).await
-}
-
 async fn scenario_in_directory<F>(directory_name: &str, case: F) -> FixtureResult
 where
     F: for<'a> AsyncFnOnce(&'a mut BoardFixture) -> FixtureResult,

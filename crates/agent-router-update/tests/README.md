@@ -1,4 +1,4 @@
-# Router update and board import tests
+# Router update tests
 
 Run the package with nextest:
 
@@ -6,10 +6,8 @@ Run the package with nextest:
 cargo nextest run --locked --profile ci -p agent-router-update
 ```
 
-`integration/main.rs` gathers 26 former external roots covering the `board-import`
-subcommand: legacy transforms, identities, attribution and refusals, source and
-seed integrity, message cutover, native inbox fidelity, publication and fleet
-owner routes. Its `update_ledger_journey` root drives the real update binary
+`integration/main.rs` retains the binary version contract and normal Fleet conflict
+corpus. Its `update_ledger_journey` root drives the real update binary
 (J0) on a copy of `fixtures/populated-root`: refusal while the Host holds the
 root, a dry run that changes no byte, kills at each step-0001 barrier followed
 by a rerun, a never-connected root, an unexplained `fleet.sqlite` and a Host
@@ -38,23 +36,5 @@ each step's values through their owners and an exact listing of the root. These
 cases sign the binary with
 the debug runner before launching it, and read values raw from the stores, so
 their oracle is independent of the tool's code.
-`e2e/main.rs` retains the former `upgrade_binary_e2e` root, which drives the real
-importer CLI through preparation, publication, replay and restart journeys.
-Library and binary unit tests remain colocated.
-
-Run only the serial CLI journeys after preparing the artifacts as CI does:
-
-```sh
-cargo nextest run --locked --profile ci -p agent-router-update --test e2e --test-threads 1
-```
-
-Each aggregate declares shared helper implementations once. The actual CLI
-publication fixture lives in legacy-upgrade-test-support; package tests and
-external consumers use that library through dev-dependencies. Case expansions
-and fixture data stay in their existing directories.
-
-A former binary `<root>` and test `<case>` becomes binary `integration` or
-`e2e` and test `<root>::<case>`. Unit-test identities do not change. CI retains
-the same main/e2e split, scheduling and deadlines; nextest uses one process per
-case. The message-copy child selector derives from `module_path!()`. Its
-intentional exit 93, durable copy and replay/drop checks reject zero matches.
+The retired board-import e2e target and its fixtures were removed.
+Colocated unit tests and the integration aggregate retain their original namespaces.

@@ -22,50 +22,6 @@
         }
       },
       {
-        "command": ["cargo", "clean", "--package", "path+file://<root>/crates/agent-router-update"],
-        "environment": {
-          "SQLX_OFFLINE": "true"
-        }
-      },
-      {
-        "command": [
-          "cargo",
-          "check",
-          "--locked",
-          "--jobs",
-          "1",
-          "--package",
-          "path+file://<root>/crates/agent-router-update",
-          "--all-targets",
-          "--all-features"
-        ],
-        "environment": {
-          "SQLX_OFFLINE": "true",
-          "RUSTC_WRAPPER": "<wrapper>",
-          "SQLX_PREPARE_PACKAGE": "agent-router-update",
-          "SQLX_PREPARE_MANIFEST_DIR": "<root>/crates/agent-router-update",
-          "SQLX_PREPARE_DATABASE_URL": "turso:<root>/tmp/<schema>/schema.db",
-          "SQLX_PREPARE_METADATA_DIR": "<root>/tmp/<schema>/metadata"
-        }
-      },
-      {
-        "command": [
-          "cargo",
-          "run",
-          "--locked",
-          "--package",
-          "path+file://<root>/crates/interaction-storage",
-          "--example",
-          "seed_native_schema",
-          "--",
-          "<root>/tmp/<schema>/schema.db",
-          "crates/interaction-storage/migrations"
-        ],
-        "environment": {
-          "SQLX_OFFLINE": "true"
-        }
-      },
-      {
         "command": ["cargo", "clean", "--package", "path+file://<root>/crates/interaction-storage"],
         "environment": {
           "SQLX_OFFLINE": "true"
@@ -145,9 +101,6 @@
       }
     ],
     "metadata": {
-      "crates/agent-router-update/.sqlx": {
-        "query-shared.json": "agent-router-update"
-      },
       "crates/interaction-storage/.sqlx": {
         "query-shared.json": "interaction-storage"
       },

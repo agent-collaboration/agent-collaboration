@@ -167,13 +167,10 @@ async function publicRefusals(input: {
   const projectId = holder.heldProject;
   const gate = context.gates.get(holder.installation.machine.name);
   if (gate === undefined) throw new ObservationOpen("holder Session gate is unavailable");
-  const unheld = context.imported.report.projects[0];
-  if (unheld === undefined)
-    throw new ObservationOpen("no imported synthetic unheld project is available");
   const root = {
     ...writeHeader(requester.actor),
     postId: boardIdentity(),
-    projectId: unheld.project,
+    projectId,
     about: { kind: "project", subject: { line: "Unheld forwarding refusal" } },
     text: "Disposable forwarding refusal",
     references: [],
@@ -181,11 +178,6 @@ async function publicRefusals(input: {
     role: null,
     watch: false,
   };
-  await receipt.equal(
-    "an imported synthetic unheld project refuses forwarding",
-    field(await requester.installation.mcp.call("thread_create", root), "result", "kind"),
-    "notHeld",
-  );
   const nonPost = await requester.installation.mcp.call("workstream_create", {
     ...writeHeader(requester.actor),
     projectId,

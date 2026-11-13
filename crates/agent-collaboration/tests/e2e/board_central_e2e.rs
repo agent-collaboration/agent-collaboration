@@ -1,4 +1,4 @@
-//! BC01–BC06: approved local central journeys through compiled CLI and real Hosts.
+//! BC01–BC04 and BC06: approved local central journeys through compiled CLI and real Hosts.
 
 #![deny(clippy::too_many_lines)]
 #[path = "../board_e2e/central_archive.rs"]
@@ -7,10 +7,6 @@ mod central_archive;
 mod central_forwarding;
 #[path = "../board_e2e/central_holders.rs"]
 mod central_holders;
-#[path = "../board_e2e/central_import.rs"]
-mod central_import;
-#[path = "../board_e2e/central_joint.rs"]
-mod central_joint;
 use crate::central_pair;
 #[path = "../board_e2e/central_replication.rs"]
 mod central_replication;
@@ -18,7 +14,6 @@ use crate::fixture;
 use crate::owned_host;
 use crate::records_reopen;
 use codex_router_test_support::FixtureResult;
-use legacy_upgrade_test_support::actual_cli as legacy_publisher;
 
 #[tokio::test]
 async fn bc01_replicated_prefix_mapping_replay_and_owning_reopen() -> FixtureResult {
@@ -38,11 +33,6 @@ async fn bc03_archive_notices_settle_and_copied_content_stays_readable() -> Fixt
 #[tokio::test]
 async fn bc04_forwarding_uses_verified_origin_and_replays_one_effect() -> FixtureResult {
     central_pair::scenario(central_forwarding::verified_origin).await
-}
-
-#[tokio::test]
-async fn bc05_actual_import_claim_move_takeover_and_forwarding() -> FixtureResult {
-    central_pair::router_root_scenario(central_import::joint).await
 }
 
 #[tokio::test]

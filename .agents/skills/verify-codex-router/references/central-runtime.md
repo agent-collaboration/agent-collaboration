@@ -27,7 +27,7 @@ publication to the submitter. Query/Settle bind sender authority and digest;
 retired Fetch/Received/Retire return InvalidShape without changing custody.
 These Native fixtures do not establish a Router/model turn or Worker/hosted parity.
 
-Current local workerd entries are the crate’s `composed_scope_workerd` and `session_scope_workerd` examples, using the pinned tools and scenario selections in the CI Worker job. `verification/run.ts` also selects explicit Tokio/workerd targets from `verification/declaration.ts`. Select actual retained targets and cases; a historical target name below is not an executable current selection.
+Current local workerd entries are the crate’s `composed_scope_workerd` and `session_scope_workerd` examples, using the pinned tools and scenario selections in the CI Worker job. The two-Mac `verification/run.ts` harness is unavailable until deliverable C; ordinary invocation refuses with exit 2 before declaration access or setup. C will connect its retained non-import cases to the new path. Select actual retained targets and cases; a historical target name below is not an executable current selection.
 
 ## Retained obligations and historical evidence
 

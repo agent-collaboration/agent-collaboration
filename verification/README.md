@@ -32,15 +32,13 @@ observation contracts. Tests and their original baselines live with each family.
 
 The wrappers retired in 0.1.102 have these retained entries:
 
-| Surface                                              | Current source and entry                                                                                             |
-| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Local board records and reopen                       | `crates/agent-collaboration/tests/e2e/board_records_e2e.rs` and `tests/board_e2e/`                                   |
-| Local central replication, holders and forwarding    | `crates/agent-collaboration/tests/e2e/board_central_e2e.rs`                                                          |
-| Upgrade preparation, publication, replay and restart | `cargo nextest run --locked --profile ci -p agent-router-update --test e2e --test-threads 1`                         |
-| Native central conformance                           | `crates/collaboration-central-tokio/tests/`, with explicit targets and `conformance` where required                  |
-| Local Worker conformance                             | `composed_scope_workerd` and `session_scope_workerd` examples; use CI's pinned tools and scenario selections         |
-| Two-machine Tokio, workerd or staging                | `node verification/run.ts "$PRIVATE_DECLARATION"`; schema in `declaration.ts`, selected cases in `case-registry.ts`  |
-| Separately commissioned sealed-copy Mac import       | `node verification/import-run.ts "$PRIVATE_DECLARATION"`; schema in `import-declaration.ts`, local Tokio target only |
+| Surface                                           | Current source and entry                                                                                             |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Local board records and reopen                    | `crates/agent-collaboration/tests/e2e/board_records_e2e.rs` and `tests/board_e2e/`                                   |
+| Local central replication, holders and forwarding | `crates/agent-collaboration/tests/e2e/board_central_e2e.rs`                                                          |
+| Native central conformance                        | `crates/collaboration-central-tokio/tests/`, with explicit targets and `conformance` where required                  |
+| Local Worker conformance                          | `composed_scope_workerd` and `session_scope_workerd` examples; use CI's pinned tools and scenario selections         |
+| Two-machine Tokio, workerd or staging             | Unavailable until deliverable C; `node verification/run.ts` refuses with exit 2. Retained cases remain source for C. |
 
 The Rust local process suites require the CI local-end-to-end job's prebuilt
 entry points and owned runtime roots. The TypeScript runtime entries require

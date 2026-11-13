@@ -10,7 +10,7 @@ The wrapper retired in 0.1.102. Current local model-free process journeys are th
 cargo nextest run --locked --profile ci -p agent-collaboration --all-features --test e2e -E 'test(/^(board_records_e2e|board_central_e2e)::/)' --test-threads 1
 ```
 
-These cover retained record/reopen and BC01–BC06 replication, holders, archive, forwarding, import and lease cases. They grant no hosted or separate-machine credit.
+These cover retained record/reopen and BC01–BC04 and BC06 replication, holders, archive, forwarding and lease cases. They grant no hosted or separate-machine credit.
 
 ## Retained obligations and historical evidence
 
@@ -41,8 +41,7 @@ Coordinate its build with the shared build owner; this driver never builds.
 The caller's `artifacts` JSON array contains `path`, `sha256`, `identifier`, `team`
 and `strictSignatureVerified` for each artifact. Retain actual build/signing
 receipts. The driver checks bytes before and after use, and never infers source
-provenance from a filename. The `joint` scenario also consumes the qualified
-`target/debug/agent-router-update` (its `agent-router-update board-import` command); other scenarios exclude that artifact.
+provenance from a filename.
 A changed consumed hash stops the run. Build every consumed artifact at the
 declared pin and finish Cargo before signing and hashing: later Cargo commands
 may replace a signed executable with a linker-signed cached artifact.
@@ -69,7 +68,7 @@ The plan JSON has these caller-supplied bindings:
 
 `expected_head` must be exactly 40 hexadecimal characters. Required `scenario`:
 `fresh-create`, `records`, `replication`, `holder-change`, `archive`,
-`verified-origin`, `joint`, or `i1`.
+`verified-origin` or `i1`.
 `record_cases` optionally selects `recorded-work`, `pending-views`, `role-authority`
 and `thread-subjects`; the default runs all four. `known_unrelated_changes` is
 empty unless the caller explicitly grants source/build equivalence for exact
@@ -101,7 +100,6 @@ identity, bounded to 30 seconds, and never counts pending as a board mutation.
 | `holder-change` | Actual owner Move and takeover preview/confirm, native successor at the next epoch, preserved acknowledged lanes and refused superseded writes. Empty-board archive and notice progress are separate checks in the run. |
 | `archive` | Independently drives empty-board archive and verifies visibility on B plus advancement of B's durable machine-notice cursor. Full nonempty-board final reporting remains separate. |
 | `verified-origin` | A nonholder sends a project-qualified post through its public Host. Require acceptance at the holder and the sending installation in the stored origin. Copy-origin equality alone cannot satisfy forwarding. |
-| `joint` | Real CLI import of a private synthetic legacy copy creates two unheld projects. Public Claim A installs epoch 2, owner Move to B installs epoch 3 and owner Takeover back to A installs epoch 4. A fresh write must replicate at every epoch, acknowledged old lanes remain readable and a stale holder's task is refused. B's public MCP creates a root and reply, checks exact enrolled origin/declared actor/text and same-ID replay without another post. An unheld project returns `notHeld`; after closing A, B's CLI exits zero with `holderUnreachable` and the independently observed lastSeen. A owning reopen must still publish epoch 4. |
 | `i1` | Pin only Fleet's conformance clock to grant expiry minus 1 ms and expiry. Directory shows Held then Expired at the same leaseVersion/asOf; B's readCopy view stays readable and identical. WorkView.currentWriter retains the committed Held epoch; Expired is Directory display state. |
 
 Calls, deciding assertions and failures are retained in `journey.json`,
@@ -130,20 +128,6 @@ reservation races, fencing crashes, local/remote notification delivery or the
 production lease timer. Permanent native cases below provide separate
 source-qualified routes. Worker, hosted and two-machine coverage stay separate.
 A missing producer or entry is named rather than synthesized.
-
-For `joint`, the adopted forwarding oracle is spec 2 WA-13, spec 3 FL-14/15,
-spec 1's typed outcome table and VD U56/OB4. Non-post writes are not forwarded;
-the accepted lookup limit permits `scopeUnavailable/projectNotFound` on a Router
-that never held that project, while a superseded old holder can return
-`notWriter`. Forwarded `WriteReply` is a normal CLI result with exit 0, including
-typed refusals. Post uniqueness uses the typed `{kind: post, id}` reference:
-the root's Thread record intentionally shares its ID with its Post record.
-The fixture Access edge has no selective answer-hold seam. The public
-`unanswered` deadline remains a named gap; the permanent native
-`forwarded_post_unknown` case holds the actual write gate across the production
-deadline and checks same-ID retry with one post. That component case is not
-two-Host public deadline evidence. No overload or missing-session coverage is
-implied by the selected joint cases.
 
 The I1 whole-struct wrong-build control requires an explicitly coordinated
 fault build and receipt naming the deliberate mutation. It must fail the expired
