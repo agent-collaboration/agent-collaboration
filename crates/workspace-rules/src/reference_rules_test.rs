@@ -1,5 +1,6 @@
-use super::{LocatedItem, ReferenceReads, change_reference, references_to};
+use super::{LocatedItem, ReferenceReads, change_reference};
 use crate::fixtures::{context, id};
+use crate::{PositionedItem, references_to};
 use central_storage::SqlValue;
 
 #[test]
@@ -21,7 +22,7 @@ fn r22_a_c_missing_foreign_and_complete_reverse_lookup() {
     let reference = Reference {
         reference_id: id(10),
         source: ReferenceSource::Thread(id(8)),
-        target: ItemRef::Project(id(5)),
+        target: ItemRef::Project(id(5)).try_into().unwrap(),
         details: None,
     };
     let source = LocatedItem {
@@ -78,18 +79,35 @@ fn r22_a_c_missing_foreign_and_complete_reverse_lookup() {
     };
     let unrelated = Reference {
         reference_id: id(13),
-        target: ItemRef::Project(id(99)),
+        target: ItemRef::Project(id(99)).try_into().unwrap(),
         ..reference.clone()
     };
-    let rows = [reference, other, unrelated];
-    assert_eq!(references_to(&ItemRef::Project(id(5)), &rows).len(), 2);
+    let rows = [reference, other, unrelated]
+        .into_iter()
+        .enumerate()
+        .map(|(index, item)| PositionedItem {
+            position: workspace_model::ChangePosition::try_from(u64::try_from(index).unwrap() + 1)
+                .unwrap(),
+            item,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        references_to(
+            &ItemRef::Project(id(5)),
+            &rows,
+            workspace_model::ChangePosition::ZERO,
+            100
+        )
+        .len(),
+        2
+    );
 }
 #[test]
 fn r2_reference_removal_never_moves_a_project() {
     let reference = Reference {
         reference_id: id(10),
         source: ReferenceSource::Initiative(id(20)),
-        target: ItemRef::Project(id(5)),
+        target: ItemRef::Project(id(5)).try_into().unwrap(),
         details: None,
     };
     let plan = change_reference(
@@ -166,7 +184,7 @@ fn r33_c_closed_initiative_cannot_gain_an_open_project() {
     let reference = Reference {
         reference_id: id(10),
         source: ReferenceSource::Initiative(id(20)),
-        target: ItemRef::Project(id(5)),
+        target: ItemRef::Project(id(5)).try_into().unwrap(),
         details: None,
     };
     let source = LocatedItem {

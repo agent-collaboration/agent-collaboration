@@ -114,6 +114,11 @@ pub enum ItemView {
     Post(Post),
     WorkLogEntry(WorkLogEntry),
     BacklogItem(BacklogItem),
+    Reference(crate::Reference),
+    Link(crate::ExternalLink),
+    Removed {
+        item: ItemRef,
+    },
 }
 impl ItemView {
     #[must_use]
@@ -130,6 +135,9 @@ impl ItemView {
             Self::Post(row) => ItemRef::Post(row.post_id.clone()),
             Self::WorkLogEntry(row) => ItemRef::WorkLogEntry(row.entry_id.clone()),
             Self::BacklogItem(row) => ItemRef::BacklogItem(row.item_id.clone()),
+            Self::Reference(row) => ItemRef::Reference(row.reference_id.clone()),
+            Self::Link(row) => ItemRef::Link(row.link_id.clone()),
+            Self::Removed { item } => item.clone(),
         }
     }
 }

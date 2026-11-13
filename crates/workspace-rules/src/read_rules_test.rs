@@ -24,6 +24,156 @@ fn r30_b_read_marks_never_go_back() {
     assert!(matches!(plan.answer,RuleAnswer::Marked {through,..} if through.get() == 3));
     assert!(plan.batch.statements.is_empty());
 }
+
+#[test]
+fn relation_pages_use_own_created_positions_not_source_or_id_order() {
+    use workspace_model::{ExternalLink, Reference, ReferenceSource};
+    let reference = |value| Reference {
+        reference_id: id(value),
+        source: ReferenceSource::Thread(id(8)),
+        target: ItemRef::Project(id(5)).try_into().unwrap(),
+        details: None,
+    };
+    let rows = [
+        PositionedItem {
+            position: ChangePosition::try_from(20).unwrap(),
+            item: reference(100),
+        },
+        PositionedItem {
+            position: ChangePosition::try_from(10).unwrap(),
+            item: reference(200),
+        },
+    ];
+    let first = super::references_to(&ItemRef::Project(id(5)), &rows, ChangePosition::ZERO, 1);
+    assert_eq!(first.first().unwrap().item.reference_id, id(200));
+    assert_eq!(first.first().unwrap().position.get(), 10);
+    let second = super::references_to(
+        &ItemRef::Project(id(5)),
+        &rows,
+        ChangePosition::try_from(10).unwrap(),
+        1,
+    );
+    assert_eq!(second.first().unwrap().item.reference_id, id(100));
+    assert_eq!(second.first().unwrap().position.get(), 20);
+    assert!(
+        super::references_to(
+            &ItemRef::Project(id(5)),
+            &rows,
+            ChangePosition::try_from(20).unwrap(),
+            1
+        )
+        .is_empty()
+    );
+    assert_eq!(
+        super::references_from(&ItemRef::Thread(id(8)), &rows, ChangePosition::ZERO, 10)
+            .iter()
+            .map(|row| row.item.reference_id.clone())
+            .collect::<Vec<_>>(),
+        vec![id(200), id(100)]
+    );
+    let link = |value| ExternalLink {
+        link_id: id(value),
+        source: ReferenceSource::Thread(id(8)),
+        url: "raw".to_owned(),
+        title: "Link".to_owned(),
+        details: None,
+    };
+    let rows = [
+        PositionedItem {
+            position: ChangePosition::try_from(20).unwrap(),
+            item: link(100),
+        },
+        PositionedItem {
+            position: ChangePosition::try_from(10).unwrap(),
+            item: link(200),
+        },
+    ];
+    let first = super::links_from(&ItemRef::Thread(id(8)), &rows, ChangePosition::ZERO, 1);
+    assert_eq!(first.first().unwrap().item.link_id, id(200));
+    let second = super::links_from(
+        &ItemRef::Thread(id(8)),
+        &rows,
+        ChangePosition::try_from(10).unwrap(),
+        1,
+    );
+    assert_eq!(second.first().unwrap().item.link_id, id(100));
+    assert!(
+        super::links_from(
+            &ItemRef::Thread(id(8)),
+            &rows,
+            ChangePosition::try_from(20).unwrap(),
+            1
+        )
+        .is_empty()
+    );
+}
+
+#[test]
+fn removed_link_on_a_followed_post_stays_in_the_inbox_without_a_snapshot() {
+    let writer = context();
+    let post = workspace_model::Post {
+        post_id: id(30),
+        thread_id: id(8),
+        author: id(2),
+        body: workspace_model::PostText::try_from("Post".to_owned()).unwrap(),
+        addressees: vec![],
+    };
+    let link = workspace_model::ExternalLink {
+        link_id: id(71),
+        source: workspace_model::ReferenceSource::Post(id(30)),
+        url: "raw".to_owned(),
+        title: "Link".to_owned(),
+        details: None,
+    };
+    let plan = crate::change_reference(
+        &writer,
+        &workspace_model::ReferenceCommand::RemoveLink { link_id: id(71) },
+        crate::ReferenceReads {
+            link: Some(&link),
+            source_post: Some(&post),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let change = &plan.batch.statements.last().unwrap().statement;
+    let Some(central_storage::SqlValue::Text(parent)) = change.args.get(4) else {
+        panic!("removal must retain thread metadata");
+    };
+    let mut reader = context();
+    reader.actor = id(99);
+    let membership = member(id(99), MemberRole::Observer);
+    let changes = [ThreadChange {
+        thread_id: parent.parse().unwrap(),
+        change: Change {
+            change_id: id(3),
+            position: ChangePosition::try_from(1).unwrap(),
+            item: ItemRef::Link(id(71)),
+            actor: id(2),
+            event: ChangeEvent::Removed,
+        },
+    }];
+    let inbox = inbox_page(
+        &reader,
+        InboxReads {
+            threads: &[thread()],
+            memberships: &[membership],
+            changes: &changes,
+            current_items: &[],
+        },
+        ChangePosition::ZERO,
+        10,
+    );
+    assert_eq!(inbox.len(), 1);
+    let entry = inbox.first().unwrap();
+    assert_eq!(entry.change.actor, id(2));
+    assert_eq!(entry.change.event, ChangeEvent::Removed);
+    assert_eq!(
+        entry.item,
+        ItemView::Removed {
+            item: ItemRef::Link(id(71))
+        }
+    );
+}
 #[test]
 fn r8_order_comes_from_positions_not_input_or_ids() {
     let rows = [

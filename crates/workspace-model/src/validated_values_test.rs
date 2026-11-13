@@ -90,6 +90,16 @@ fn closed_states_and_sources_reject_unknown_or_invalid_shapes() {
 }
 
 #[test]
+fn stored_reference_targets_reject_relation_kinds() {
+    for kind in ["reference", "link"] {
+        let row = format!(
+            r#"{{"referenceId":"01890f2e-7b4c-7cc0-98c4-000000000046","source":{{"kind":"thread","id":"01890f2e-7b4c-7cc0-98c4-000000000008"}},"target":{{"kind":"{kind}","id":"01890f2e-7b4c-7cc0-98c4-000000000047"}},"details":null}}"#
+        );
+        assert!(serde_json::from_str::<crate::Reference>(&row).is_err());
+    }
+}
+
+#[test]
 fn r3_f_r20_b_roles_are_closed_and_wrong_scope_text_names_allowed_roles() {
     use crate::{DeliverableRole, ProjectRole, RoleName};
     let project_error = serde_json::from_str::<ProjectRole>("\"implementer\"")

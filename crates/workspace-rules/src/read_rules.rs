@@ -58,6 +58,57 @@ pub struct PositionedItem<T> {
     pub item: T,
 }
 #[must_use]
+pub fn references_to(
+    target: &ItemRef,
+    rows: &[PositionedItem<workspace_model::Reference>],
+    after: ChangePosition,
+    limit: u16,
+) -> Vec<PositionedItem<workspace_model::Reference>> {
+    let selected: Vec<_> = rows
+        .iter()
+        .filter(|row| row.item.target.as_item_ref() == target)
+        .map(|row| PositionedItem {
+            position: row.position,
+            item: row.item.clone(),
+        })
+        .collect();
+    ordered_page(&selected, after, limit)
+}
+#[must_use]
+pub fn references_from(
+    source: &ItemRef,
+    rows: &[PositionedItem<workspace_model::Reference>],
+    after: ChangePosition,
+    limit: u16,
+) -> Vec<PositionedItem<workspace_model::Reference>> {
+    let selected: Vec<_> = rows
+        .iter()
+        .filter(|row| ItemRef::from(row.item.source.clone()) == *source)
+        .map(|row| PositionedItem {
+            position: row.position,
+            item: row.item.clone(),
+        })
+        .collect();
+    ordered_page(&selected, after, limit)
+}
+#[must_use]
+pub fn links_from(
+    source: &ItemRef,
+    rows: &[PositionedItem<workspace_model::ExternalLink>],
+    after: ChangePosition,
+    limit: u16,
+) -> Vec<PositionedItem<workspace_model::ExternalLink>> {
+    let selected: Vec<_> = rows
+        .iter()
+        .filter(|row| ItemRef::from(row.item.source.clone()) == *source)
+        .map(|row| PositionedItem {
+            position: row.position,
+            item: row.item.clone(),
+        })
+        .collect();
+    ordered_page(&selected, after, limit)
+}
+#[must_use]
 pub fn ordered_page<T: Clone>(
     rows: &[PositionedItem<T>],
     after: ChangePosition,
@@ -129,16 +180,17 @@ pub fn inbox_page(
     changes.sort_by_key(|row| row.change.position);
     changes
         .into_iter()
-        .filter_map(|row| {
-            reads
+        .map(|row| InboxEntry {
+            position: row.change.position,
+            change: row.change.clone(),
+            item: reads
                 .current_items
                 .iter()
                 .find(|item| item.item_ref() == row.change.item)
-                .map(|item| InboxEntry {
-                    position: row.change.position,
-                    change: row.change.clone(),
-                    item: item.clone(),
-                })
+                .cloned()
+                .unwrap_or_else(|| ItemView::Removed {
+                    item: row.change.item.clone(),
+                }),
         })
         .take(usize::from(limit))
         .collect()

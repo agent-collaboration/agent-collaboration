@@ -47,6 +47,41 @@ fn r7_a_c_d_cycles_cross_project_duplicates_and_incoming_blockers() {
             .sql
             .starts_with("INSERT INTO deliverable_dependencies")
     }));
+    let mutation = output.batch.statements.first().unwrap();
+    assert_eq!(mutation.expect, central_storage::RowExpectation::Exactly(1));
+    assert_eq!(
+        mutation.statement.args,
+        vec![
+            central_storage::SqlValue::Text("01890f2e-7b4c-7cc0-98c4-00000000001e".to_owned()),
+            central_storage::SqlValue::Text("01890f2e-7b4c-7cc0-98c4-00000000000a".to_owned()),
+            central_storage::SqlValue::Text("01890f2e-7b4c-7cc0-98c4-00000000000c".to_owned()),
+            central_storage::SqlValue::Text("2026-11-13T12:00:00+00:00".to_owned()),
+            central_storage::SqlValue::Text("2026-11-13T12:00:00+00:00".to_owned())
+        ]
+    );
+    let removed = change_dependency(
+        &context,
+        &DependencyCommand::Remove {
+            dependency_id: id(20),
+        },
+        DependencyReads {
+            deliverables: &rows,
+            dependencies: &edges,
+        },
+    )
+    .unwrap();
+    let mutation = removed.batch.statements.first().unwrap();
+    assert_eq!(mutation.expect, central_storage::RowExpectation::Exactly(1));
+    assert_eq!(
+        mutation.statement.sql,
+        "DELETE FROM deliverable_dependencies WHERE dependency_id=?"
+    );
+    assert_eq!(
+        mutation.statement.args,
+        vec![central_storage::SqlValue::Text(
+            "01890f2e-7b4c-7cc0-98c4-000000000014".to_owned()
+        )]
+    );
     if let Some(row) = rows.last_mut() {
         row.project_id = id(99);
     }
@@ -113,12 +148,15 @@ proptest::proptest! {
                 else {
                     let plan=result.unwrap();proptest::prop_assert_eq!(plan.batch.statements.len(),2);
                     proptest::prop_assert_eq!(plan.batch.statements.first().unwrap().statement.sql,"INSERT INTO deliverable_dependencies (dependency_id,blocking_deliverable_id,blocked_deliverable_id,created_at,updated_at) VALUES (?,?,?,?,?)");
+                    let mutation=plan.batch.statements.first().unwrap();
+                    proptest::prop_assert_eq!(mutation.expect,central_storage::RowExpectation::Exactly(1));
+                    proptest::prop_assert_eq!(&mutation.statement.args,&vec![central_storage::SqlValue::Text(dependency_id.to_string()),central_storage::SqlValue::Text(blocking.to_string()),central_storage::SqlValue::Text(blocked.to_string()),central_storage::SqlValue::Text("2026-11-13T12:00:00+00:00".to_owned()),central_storage::SqlValue::Text("2026-11-13T12:00:00+00:00".to_owned())]);
                     edges[from][to]=true;dependencies.push(DeliverableDependency {dependency_id,blocking,blocked});
                 }
             } else {
                 let plan=change_dependency(&context,&DependencyCommand::Remove {dependency_id:dependency_id.clone()},DependencyReads {deliverables:&rows,dependencies:&dependencies}).unwrap();
                 proptest::prop_assert_eq!(plan.batch.statements.is_empty(),!edges[from][to]);
-                if edges[from][to] {proptest::prop_assert_eq!(plan.batch.statements.first().unwrap().statement.sql,"DELETE FROM deliverable_dependencies WHERE dependency_id=?");}
+                if edges[from][to] {let mutation=plan.batch.statements.first().unwrap();proptest::prop_assert_eq!(mutation.statement.sql,"DELETE FROM deliverable_dependencies WHERE dependency_id=?");proptest::prop_assert_eq!(mutation.expect,central_storage::RowExpectation::Exactly(1));proptest::prop_assert_eq!(&mutation.statement.args,&vec![central_storage::SqlValue::Text(dependency_id.to_string())]);}
                 edges[from][to]=false;dependencies.retain(|row|row.dependency_id != dependency_id);
             }
             let reachable=transitive_closure(&edges);proptest::prop_assert!((0..6).all(|node|!reachable[node][node]));

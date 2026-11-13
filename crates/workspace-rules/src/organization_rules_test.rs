@@ -81,6 +81,51 @@ fn r6_issue_without_deliverable_is_not_planned() {
 }
 
 #[test]
+fn r1_b_thread_and_backlog_cannot_use_another_workspaces_area() {
+    let context = context();
+    let mut area = area();
+    area.workspace_id = id(99);
+    let thread = crate::change_thread(
+        &context,
+        &workspace_model::ThreadCommand::CreateThread {
+            thread_id: id(8),
+            member_id: id(9),
+            area_id: id(4),
+            title: name("Thread"),
+        },
+        crate::ThreadReads {
+            area: Some(&area),
+            ..Default::default()
+        },
+    );
+    assert_eq!(
+        thread.unwrap_err(),
+        RefusalReason::NotFound {
+            item: workspace_model::ItemRef::Area(id(4))
+        }
+    );
+    let backlog = crate::change_backlog(
+        &context,
+        &workspace_model::BacklogCommand::Add {
+            item_id: id(10),
+            area_id: id(4),
+            title: name("Item"),
+            description: crate::fixtures::description("Details"),
+        },
+        crate::BacklogReads {
+            area: Some(&area),
+            item: None,
+        },
+    );
+    assert_eq!(
+        backlog.unwrap_err(),
+        RefusalReason::NotFound {
+            item: workspace_model::ItemRef::Area(id(4))
+        }
+    );
+}
+
+#[test]
 fn e7_a_rules_in_two_workspaces_use_the_same_resolved_identity_without_registry_writes() {
     let first = context();
     let mut second = context();
