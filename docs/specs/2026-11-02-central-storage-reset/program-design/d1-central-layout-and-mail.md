@@ -83,7 +83,7 @@ Each table below moves into the Fleet store under its new name and its JSON `rec
 | `registry_lease_incarnation` | `lease_incarnation`, the one monotonic incarnation counter (see Lease versions) |
 | library lease tables `_fleet_sync_databases`, `_fleet_sync_leases`, `_fleet_sync_epoch_floor`, … (11) | names kept (L10); typed columns in the library; keyed per project, they don't need their own store |
 | library session tables `_fleet_sync_sessions`, `_fleet_sync_notices`, `_fleet_sync_attach_sequences` | names kept; typed columns in the library; already keyed per machine peer |
-| journal and migration bookkeeping (`_fleet_sync_operations`, `_fleet_sync_steps`, `_fleet_sync_schema`, `_fleet_sync_migrations`, `central_schema_migrations`, `central_schema_migration_failures`) | `central_schema_migrations` and `central_schema_migration_failures` (codex-router's own corpus) gain `applied_at` and `failed_at`. The journal tables `_fleet_sync_operations`, `_fleet_sync_steps` and `_fleet_sync_schema` (every store) and `_fleet_sync_migrations` (native SQLite stores only; a Durable Object store bootstraps its schema version without receipts, `durable_object_store.rs:44–60`) gain a UUIDv7 key where they lack one and `created_at` and `updated_at` in the journal library (`durable-steps`), so **every** store gets them: the Fleet, project objects and every machine (owner, 2026-11-03: “yes they should get timestamp columns”). This is an additive column migration in each store. Task input stays the task's own serialized form, which the library never queries by field |
+| journal and migration bookkeeping (`_fleet_sync_operations`, `_fleet_sync_steps`, `_fleet_sync_schema`, `_fleet_sync_migrations`, `central_schema_migrations`, `central_schema_migration_failures`) | `central_schema_migrations` (codex-router's own record of applied migrations) follows sqlx's own migrations table (sqlx-sqlite 0.9.0 `migrate.rs:93–100`) for every column whose meaning it shares (owner, 2026-11-04: match the standards of the systems we use): `version` INTEGER, `description` TEXT, `installed_on`, `success`, `checksum` BLOB of the raw SHA-384 bytes, and `execution_time` INTEGER. It departs from sqlx in three places, each for a stated reason: `corpus` is part of the key with `UNIQUE(corpus, version)`, because five migration sets with their own version numbers share one store; `row_id` UUIDv7 and `created_at` and `updated_at` follow the owner's key-and-timestamp rule; and times, `installed_on` included, are integer milliseconds from the injected clock, the owner's time rule (on a Worker the clock does not advance inside one request, so `execution_time` can read 0 there). `central_schema_migration_failures` keeps its reason and `failed_at`, with `version` INTEGER: sqlx marks a failed migration with `success = false`, but central rolls the failed migration back in its transaction and records why afterwards, which a flag cannot carry. The journal tables `_fleet_sync_operations`, `_fleet_sync_steps` and `_fleet_sync_schema` (every store) and `_fleet_sync_migrations` (native SQLite stores only; a Durable Object store bootstraps its schema version without receipts, `durable_object_store.rs:44–60`) gain a UUIDv7 key where they lack one and `created_at` and `updated_at` in the journal library (`durable-steps`), so **every** store gets them: the Fleet, project objects and every machine (owner, 2026-11-03: “yes they should get timestamp columns”). This is an additive column migration in each store. Task input (`_fleet_sync_operations.input`) and the completed step output (`_fleet_sync_operations.result`, per the operation contract in `durable-steps` `operation_contract.rs`) stay the task's own serialized form: the library stores and returns them whole and never queries them by field, and each step's own type owns their shape. The journal's own bookkeeping records, `_fleet_sync_steps.intent` (the stored call intent with its reach and retry state) and `_fleet_sync_operations.failure` (the operation failure), are serialized the same way for the same reason: `durable-steps` writes and reads each one whole, and nothing queries them by field. `central_schema_migrations.checksum` is declared `BLOB NOT NULL` and holds the migration's raw SHA-384 bytes exactly as sqlx's own migrations table does (owner, 2026-11-04: "match sqlx"), never a JSON array or a text encoding |
 
 ### Deleted from central
 
@@ -211,6 +211,36 @@ Fleet keeps what it needs after the content is dropped on the outbox item itself
 5. Remove the Mailbox role (mail items, controls, fetch cycle) once codex-router no longer uses it.
 6. Lease-change hook: a consumer callback inside every lease-change transaction (see “Lease-change hook”).
 
+## Rules added during delivery (owner decisions and review fixes, 2026-11-04/05)
+
+These were decided while D1 was being built and are in merged code (codex-router `614c03b75`, agent-fleet-sync `84935ef`).
+
+### Revoked machines (owner decision A)
+
+- Every new shared mutation (mail submit and push, leases, replication, forwarded requests, project settle) reads the sender machine's current enrollment and expiry inside the same Fleet transaction that selects the work. A missing, revoked or expired machine gets an operation-specific typed refusal (`senderNotEnrolled`, `callerNotEnrolled`, `HolderNotEnrolled`), and nothing is dispatched. Work selected before the revocation commits may finish.
+- Read-only and own-stream requests are unchanged. Delivery **reports** stay allowed: refusing them would strand a message's final status.
+- A refusal of this kind is temporary on the machine. The library's durable calls treat `callerNotEnrolled` and `HolderNotEnrolled` as retryable and don't cache them as answers, so after readmission (same peer, fresh session) the same operation resumes. The Host's inline snapshot renewal does the same: it keeps the installation pending, never persisting the refusal as file authority (review F4).
+- Seed Page/Complete keep the library's existing SourceLost/reseed behavior under the same operation.
+
+### In-flight mail at upgrade (owner decision B)
+
+No one-time switch-over code. Mail that never left a machine carries forward through the existing journal and is delivered once under its original id. Mail already handed to the old Mailbox keeps its old status and is never re-sent.
+
+### Re-enrollment
+
+Forget-on-enroll also clears the machine's central mail status cursor (`_fleet_sync_outbox_status`) in both unfinished reset phases, before Completed. Catch-up after a central wipe then reads the fresh stream from the start (review F2).
+
+### Cancel results
+
+A replayed Push receipt keeps its cancel result. A cancel-result improvement (Pending to Prevented or TooLate) is published as a new version even when the status is already terminal. Final results never regress (review F3, library).
+
+### Cutover tool (`crates/board-staging-cutover`)
+
+- It's one-time and offline, run under the Host lock: inspect, seal, publish, archive, claim, verify, canary. It carries current project data to the new central (owner: "we need it, current data").
+- The source must be the machine's current native file with retained authority. Obsolete, superseded, retired or rejected files are refused before anything is published, both on a fresh run and when resuming a saved bundle (review F1). A saved bundle is also refused if the source changed since sealing.
+- Verify fails closed. Projects whose pending work isn't the recognised local intent recovery report "unverified" (R5 allows losing queued pre-cutover mail).
+- Staging and production tooling: the guarded fleet-ops D1 reset and redeploy, and this tool, refuse production. The production rollout is a separate, owner-authorized step (`tmp/2026-11-05-d1-production-rollout-plan.md` in the design worktree).
+
 ## Not in D1
 
 Fleet sending its own messages and remote create (D2); renaming Router app tables, JSON files, and moving session addresses to the machine id (D3); wakes and notifications (D4a); schedules (D4b). Until D3, `machine_enrollments` keeps `service_id` because every session address still carries it. Project tables are out of scope.
@@ -291,3 +321,14 @@ Library batch (L4, lease workflow tables). Every library-owned answer, refusal a
 | `_fleet_sync_transfers` | `attempt` PK; `database`; `new_epoch`; outcome (granted lease, pending transfer, failure, refusal fields); current phase (`phase_kind`, final position); cleanup failure |
 | `_fleet_sync_transfer_phase_history` | `id` UUIDv7 PK; `attempt`; `position` (0–7); `phase_kind`; final position; `entered_at`; UNIQUE(`attempt`, `position`); written in the parent's transaction |
 | `_fleet_sync_lifecycle_attempts` | `attempt` PK; `database`; intent (`intent_kind`, `writer`, origin, `import_digest`, expected fence); outcome and answer (lease view, `replayed` boolean); refusal and mismatch fields; `retired_at` |
+
+Third batch (receipts, imports, feed and request ledger), approved 2026-11-04 before the query rewrites. The full column lists are in [d1-c6-column-lists.md](d1-c6-column-lists.md):
+
+| Table | In one line |
+| --- | --- |
+| `fleet_decision_receipts` | ordered typed effect rows per request, UNIQUE(`request_id`, `ordinal`), FK to the request decision, no polymorphic resource FK |
+| `fleet_admin_imports` | typed import header plus phase (`reserved`, `published`, `complete`), UNIQUE(`project_id`, `digest`), no directory FK (same as before) |
+| `fleet_admin_import_manifest_tables` | the manifest's ordered table list as child rows, UNIQUE(`import_id`, `ordinal`) |
+| `fleet_feed` | typed snapshot columns per record kind plus the envelope; a Request entry points at its immutable decision |
+| `fleet_request_decisions` and refusal-reason rows | the typed request ledger with its full ordered refusal tree |
+| `fleet_workspace_repository_refs` (new) | a workspace's repository list as ordered child rows, plus `repository_count` on `fleet_workspaces`, so import's offered order and the digest are preserved exactly |

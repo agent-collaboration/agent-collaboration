@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>D1 review: overview, changes, design and decisions</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content"></ex-nav>
+<ex-document id="content">
+<h1>D1 review: overview, changes, design and decisions</h1>
+<p>The D1 design holds. Building it surfaced five places where my design was wrong or incomplete. Each one is now fixed or decided, and none of them changes the overall shape. D1 is not PR-ready yet: the two-Router run, the cutover tool and staging haven't run. This page is the one place to check the design, what changed and what still needs you. The central storage reset Lead wrote it, and the Fleet access Lead concurs (design commit e9471dc79, with its two wording changes folded in).</p>
+
+<ex-callout title="Needs you" tone="question" icon="clock">
+<p><strong>1. Remote session on an offline machine</strong> (explained under “Open decisions” below): queue it, or refuse it. <strong>2.</strong> Staging login and Touch ID, but not yet: only once the cutover tool passes on the isolated test central, and I'll ask then. The debug Router is being started now under your go-ahead.</p>
+</ex-callout>
+
+<h2 id="design">The design as built</h2>
+<p>Each organization has one central Fleet store, plus one store per project. Each machine has an inbox and an outbox. Central has an outbox only. A message travels like this:</p>
+<ex-flow cols="4">
+  <ex-card id="a-out" title="A's outbox" tone="note" icon="hard-drives"><p>A saves the message, then sends it to central.</p></ex-card>
+  <ex-card id="fleet-out" title="Fleet outbox" tone="note" icon="cloud"><p>Central checks the sender and admits the message once; a repeat send gets “already have it”.</p></ex-card>
+  <ex-card id="b-in" title="B's inbox" tone="note" icon="hard-drives"><p>B saves the message first, then says “got it”. If B is full, central retries later.</p></ex-card>
+  <ex-card id="status" title="Status to A" tone="note" icon="envelope"><p>B reports delivered or refused; central tells A, then drops the content and keeps a small record.</p></ex-card>
+  <ex-arrow from="a-out" to="fleet-out" label="send"></ex-arrow>
+  <ex-arrow from="fleet-out" to="b-in" label="push"></ex-arrow>
+  <ex-arrow from="b-in" to="status" label="report"></ex-arrow>
+</ex-flow>
+<p>Every message has one UUIDv7 id, created by the sender. That id is the key of A's outbox record, of central's record and of B's inbox record, and all three are removed 60 days after the time in that id. Nothing else is removed by this rule. Each Router has one store for its link to central (<a href="stores.html">stores.html</a>, agreed with Fleet access).</p>
+
+<h2 id="corrections">Five corrections made while building</h2>
+<table>
+<thead><tr><th>What I had assumed</th><th>What the code showed</th><th>Decision</th><th>Who decided</th><th>Status</th></tr></thead>
+<tbody>
+<tr><td>After the staging wipe, a project file could restart at lease epoch 1</td><td>A file's epoch anchors its history; central's import only takes epoch 1; a Router ignores lower lease numbers</td><td>A one-time cutover tool outside the core: export each project, import it, keep the old file as a backup, and the Router claims it fresh. The rejoin protocol is dropped.</td><td>You</td><td>The tool is designed. The Router lane builds it after its current commit, and you've asked for full tests plus staging.</td></tr>
+<tr><td>(not designed) What happens to mail queued for a machine that gets removed</td><td>The old Mailbox ended it as “recipient revoked”; the new outbox has no such step</td><td>Keep it waiting. If the same machine is enrolled again it's delivered; if not, it expires at day 60.</td><td>Lead (reversible)</td><td>Central is building it, with tests for removed, re-enrolled and never-returns.</td></tr>
+<tr><td>A message's sender is the machine that sent it</td><td>Project mail is sent by whichever machine writes the project. After a takeover, the new writer's resend was refused (reproduced on real Push and Inbox).</td><td>The sender comes from the message's own source. Project mail belongs to the project, and central checks that the asking machine holds the project's lease. Session mail belongs to the machine.</td><td>Lead, matching your “sender from message source”</td><td>The library is building the typed sender (Machine or Project), and the status path is keyed the same way. Central adopts it next.</td></tr>
+<tr><td>Re-enrollment resets central-derived state by deleting the cache file</td><td>That would also delete the machine's login and kept state</td><td>Clear only named cache tables, in one transaction; the file stays.</td><td>Lead</td><td>Written and tested (normal, crash, rollback). Not committed yet.</td></tr>
+<tr><td>A new database for machine login was fine</td><td>Database sprawl, against your rule</td><td>No new database or crate. One Router store for central, <code>fleet.sqlite</code>; <code>fleet-outbox.sqlite</code> merges into it in D3. <code>fleet/enrollment.json</code> stays untouched until Fleet access step 2, then keeps only the Access reference, and is deleted at step 3.</td><td>You (“consolidate”), agreed with Fleet access</td><td><a href="stores.html">stores.html</a> is agreed; D3 does the merge.</td></tr>
+</tbody>
+</table>
+
+<h2 id="bugs">Bugs found and fixed</h2>
+<p>Paired Verifiers, the Advisor and the Implementers found these, and each was fixed where the code that owns it lives. No test was weakened to get past one.</p>
+<ul>
+<li>Migrations accepted corrupt old rows, and new ids weren't checked on read (library <code>9cac5fd</code>).</li>
+<li>One migration dropped an index, so the Router refused its own store (library <code>0f5007a</code>).</li>
+<li>Over-long SQL expressions overflowed the stack in writes and in all four library migrations (library <code>0f5007a</code>, <code>f616005</code>, <code>7b69ca0</code>; v0.4.0 files untouched).</li>
+<li>The Cloudflare Worker build was 551 MB, over its limit; it's now 302 MB (central <code>1962b04b9</code>).</li>
+<li>A project create could be cancelled by its own grant notice (Router <code>d46b9e8d6</code>).</li>
+<li>Messages that existed before the upgrade would never be removed. A once-per-store startup backfill now handles them (library <code>1e76a3f</code>, Router uncommitted).</li>
+<li>The sender never got “delivered”, because central's status wake was dropped. The cause is found; central's fix is in progress.</li>
+</ul>
+
+<h2 id="open">Open decisions</h2>
+<ex-callout title="Decided: refuse a remote session on an offline machine (workaround until redesign)" tone="decision" icon="users">
+<p><strong>Your decision (2026-11-03):</strong> refuse for now. It is marked as a temporary workaround in the D2 design (R18 and its failure case) and, when it is built, in a code comment at the refusal, until remote start is redesigned.</p>
+<p><strong>The situation:</strong> an agent on your laptop asks for a new session on your desktop, and the desktop is off or disconnected right then.</p>
+<p><strong>Queue (D2's current design):</strong> central keeps the request in its outbox. When the desktop reconnects, possibly hours later, the session gets created and the asker is told then. If the desktop never comes back within 60 days, the asker is told “expired”. You gain: nothing is lost, and it works with machines that sleep. You pay: a session can appear much later, when the asking agent has moved on.</p>
+<p><strong>Refuse (Fleet access's current design):</strong> central answers “that machine is offline” straight away, and nothing is kept. You gain: an immediate, simple answer, and nothing surprising later. You pay: the asker has to try again when the machine is online.</p>
+<p><strong>Recommendation (central storage reset Lead):</strong> refuse, for now. A remote session matters while the asker is waiting for it, and a late surprise session is worse than a clear “offline”. Queueing can come later if you want it. <strong>Fleet access Lead:</strong> also refuse, for now. A remote start is checked against the machine's current enrollment and permissions when it's asked. A queued one would need the same checks again when it's delivered, days later, plus a rule that it never starts twice. That's real extra machinery for a case nobody has asked for yet. If you choose queue later, both designs change together.</p>
+</ex-callout>
+<ul>
+<li><strong>D4b:</strong> whether a schedule carries a project for runs that start a fresh session. Fleet access is holding its code for this.</li>
+<li><strong>D4a and D4b policies, and the D2 tables:</strong> these were open before and are unchanged (<a href="next.html">next.html</a>).</li>
+</ul>
+
+<h2 id="unproven">Not proven yet</h2>
+<ul>
+<li>Two Routers exchanging real mail through central (O1, O3), once Central's status fix and the Router's commit land.</li>
+<li>Delivery into a session with a real model turn (O9), now that the debug Router is starting.</li>
+<li>The cutover tool on the isolated test central, then on staging.</li>
+<li>An independent Sol xhigh review of the whole design and code, before the PR.</li>
+</ul>
+</ex-document>
+</body>
+</html>
