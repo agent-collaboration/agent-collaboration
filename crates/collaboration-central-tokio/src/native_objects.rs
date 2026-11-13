@@ -18,6 +18,7 @@ pub(crate) struct SessionConnectionSnapshot {
     registration: fleet_sync_session::ConnectionRegistration,
 }
 
+use crate::object_clock::SharedClock;
 use crate::object_keys::{address_from_key, address_key};
 
 use crate::object_storage::{ObjectStorage, StoreMigrations};
@@ -47,19 +48,6 @@ type CopyRuntime = ObjectRuntime<CopyKind, NativeHost, TokioObjectIo>;
 type FleetRuntime = ObjectRuntime<FleetKind, NativeHost, TokioObjectIo>;
 
 #[derive(Clone)]
-pub(crate) struct SharedClock(Arc<dyn Clock>);
-impl SharedClock {
-    pub(crate) fn new(clock: Arc<dyn Clock>) -> Self {
-        Self(clock)
-    }
-}
-impl Clock for SharedClock {
-    fn now(&self) -> SyncTime {
-        self.0.now()
-    }
-}
-
-#[derive(Clone)]
 pub struct TokioObjectIo {
     objects: Weak<NativeObjects>,
     clock: SharedClock,
@@ -70,10 +58,6 @@ pub struct TokioObjectIo {
 }
 impl Clock for TokioObjectIo {
     fn now(&self) -> SyncTime {
-        #[cfg(feature = "conformance")]
-        if let Some(now) = self.faults.clock() {
-            return SyncTime::from_unix_millis(now.0.timestamp_millis());
-        }
         self.clock.now()
     }
 }
@@ -293,7 +277,7 @@ impl NativeObjects {
             migrations,
             slots: Mutex::default(),
             workspace_stores: Mutex::default(),
-            clock: SharedClock(clock),
+            clock: SharedClock::new(clock),
             config,
             delivery,
             holder_answer_timeout,
@@ -338,14 +322,19 @@ impl NativeObjects {
             slots
                 .entry(key.clone())
                 .or_insert_with(|| {
+                    let clock = self.clock.clone();
+                    #[cfg(feature = "conformance")]
+                    let faults = self.startup_controls.faults_for(&key);
+                    #[cfg(feature = "conformance")]
+                    let clock = clock.with_controls(faults.clone());
                     Arc::new(ObjectSlot {
                         io: TokioObjectIo {
                             objects: Arc::downgrade(self),
-                            clock: self.clock.clone(),
-                            ids: Arc::new(ClockIds::new(self.clock.clone())),
+                            clock: clock.clone(),
+                            ids: Arc::new(ClockIds::new(clock)),
                             wake: Arc::new(TokioWakeTimer::new(self.clock.clone())),
                             #[cfg(feature = "conformance")]
-                            faults: self.startup_controls.faults_for(&key),
+                            faults,
                         },
                         host: OnceCell::new(),
                         runtime: OnceCell::new(),
@@ -758,6 +747,11 @@ impl Drop for NativeObjects {
 }
 
 const WORKSPACE_STORE_DIRECTORY: &str = "workspace-stores";
+
+#[cfg(test)]
+#[cfg(feature = "conformance")]
+#[path = "native_objects_test.rs"]
+mod tests;
 
 fn no_route() -> CallFailure {
     CallFailure::NotSent {

@@ -52,7 +52,7 @@ integration tests, run with `pnpm --dir verification run test:workerd` after bui
 the central Worker's test-support bundle:
 
 ```sh
-worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --features test-support
+worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --features test-support,conformance
 ```
 
 `workerd-central-storage.test.ts` covers the storage boundary on the Cloudflare host
