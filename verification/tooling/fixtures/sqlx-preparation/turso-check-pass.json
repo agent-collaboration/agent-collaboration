@@ -22,12 +22,7 @@
         }
       },
       {
-        "command": [
-          "cargo",
-          "clean",
-          "--package",
-          "path+file://<root>/crates/interaction-storage"
-        ],
+        "command": ["cargo", "clean", "--package", "path+file://<root>/crates/interaction-storage"],
         "environment": {
           "SQLX_OFFLINE": "true"
         }
