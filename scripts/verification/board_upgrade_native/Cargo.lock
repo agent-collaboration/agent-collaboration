@@ -3,35 +3,6 @@
 version = 4
 
 [[package]]
-name = "acp-client-runtime"
-version = "0.1.142"
-dependencies = [
- "agent-client-protocol",
- "futures-util",
- "rustix 1.1.4",
- "serde",
- "serde_json",
- "session-event-model",
- "thiserror",
- "tokio",
- "tokio-util",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "acp-provider-adapters"
-version = "0.1.142"
-dependencies = [
- "acp-client-runtime",
- "serde",
- "serde_json",
- "session-event-model",
- "tokio",
- "url",
-]
-
-[[package]]
 name = "aead"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -39,16 +10,6 @@ checksum = "d122413f284cf2d62fb1b7db97e02edb8cda96d769b16e443a4f6195e35662b0"
 dependencies = [
  "crypto-common 0.1.7",
  "generic-array",
-]
-
-[[package]]
-name = "aead"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1973cfbc1a2daf9cf550e74e1f088c28e7f7d8c1e1418fb6c9dc5184b7e84c99"
-dependencies = [
- "crypto-common 0.2.2",
- "inout 0.2.2",
 ]
 
 [[package]]
@@ -68,20 +29,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b169f7a6d4742236a0a00c541b845991d0ac43e546831af1249753ab4c3aa3a0"
 dependencies = [
  "cfg-if",
- "cipher 0.4.4",
+ "cipher",
  "cpufeatures 0.2.17",
-]
-
-[[package]]
-name = "aes"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "35f0f96ce78e38c3dc6d8948aa8163d06385be74000f3c7a95bf1eef35d3ea32"
-dependencies = [
- "cipher 0.5.2",
- "cpubits",
- "cpufeatures 0.3.1",
- "zeroize",
 ]
 
 [[package]]
@@ -90,135 +39,26 @@ version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "831010a0f742e1209b3bcea8fab6a8e149051ba6099432c8cb2cc117dec3ead1"
 dependencies = [
- "aead 0.5.2",
- "aes 0.8.4",
- "cipher 0.4.4",
- "ctr 0.9.2",
- "ghash 0.5.1",
+ "aead",
+ "aes",
+ "cipher",
+ "ctr",
+ "ghash",
  "subtle",
 ]
 
 [[package]]
-name = "aes-gcm"
-version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7f2b8006a0c83f52b62ba44a97b58bf76fe2f70a329e588f67f89691d93d498f"
-dependencies = [
- "aead 0.6.1",
- "aes 0.9.3",
- "cipher 0.5.2",
- "ctr 0.10.1",
- "ctutils",
- "ghash 0.6.0",
- "zeroize",
-]
-
-[[package]]
 name = "agent-automation"
-version = "0.1.142"
+version = "0.1.147"
 dependencies = [
  "chrono",
  "chrono-tz",
  "croner",
- "schemars 1.2.2",
+ "schemars",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "thiserror",
- "uuid",
-]
-
-[[package]]
-name = "agent-client-protocol"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13f780597b2c88ab83d02509bcc3e86366751f86fa12114005e35c55ed691763"
-dependencies = [
- "agent-client-protocol-derive",
- "agent-client-protocol-schema",
- "async-io",
- "async-process",
- "blocking",
- "futures",
- "futures-concurrency",
- "rustc-hash 2.1.2",
- "rustix 1.1.4",
- "schemars 1.2.2",
- "serde",
- "serde_json",
- "shell-words",
- "tracing",
- "uuid",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "agent-client-protocol-derive"
-version = "2.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4893bfb11e0e193aa5a64611a126ee87567acb1879556519c902722899229de"
-dependencies = [
- "quote",
- "syn 3.0.5",
-]
-
-[[package]]
-name = "agent-client-protocol-schema"
-version = "1.9.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d595a79e1665d02c91c7dd1bedd118501e75cc0a3d5b1651b5150ec4c5c1e0d"
-dependencies = [
- "anyhow",
- "derive_more",
- "schemars 1.2.2",
- "serde",
- "serde_json",
- "serde_with",
- "strum 0.28.0",
- "tracing",
-]
-
-[[package]]
-name = "agent-router-update"
-version = "0.1.142"
-dependencies = [
- "automation-storage",
- "board-fleet-sync",
- "board-sync-protocol",
- "chrono",
- "clap",
- "codex-router-host",
- "codex-router-secret-store",
- "codex-router-state",
- "collaboration-central-admin-protocol",
- "collaboration-central-core",
- "collaboration-client",
- "collaboration-contracts",
- "collaboration-protocol",
- "collaboration-runtime",
- "collaboration-service",
- "durable-steps",
- "fleet-admission",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-writer",
- "interaction-storage",
- "message-board",
- "message-board-storage",
- "nix",
- "reqwest",
- "runtime-primitives",
- "rusqlite",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "sqlx",
- "sqlx-turso",
- "tempfile",
- "thiserror",
- "tokio",
- "tracing",
- "tracing-subscriber",
  "uuid",
 ]
 
@@ -267,56 +107,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "anstream"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "824a212faf96e9acacdbd09febd34438f8f711fb84e09a8916013cd7815ca28d"
-dependencies = [
- "anstyle",
- "anstyle-parse",
- "anstyle-query",
- "anstyle-wincon",
- "colorchoice",
- "is_terminal_polyfill",
- "utf8parse",
-]
-
-[[package]]
-name = "anstyle"
-version = "1.0.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "940b3a0ca603d1eade50a4846a2afffd5ef57a9feac2c0e2ec2e14f9ead76000"
-
-[[package]]
-name = "anstyle-parse"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52ce7f38b242319f7cabaa6813055467063ecdc9d355bbb4ce0c68908cd8130e"
-dependencies = [
- "utf8parse",
-]
-
-[[package]]
-name = "anstyle-query"
-version = "1.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "40c48f72fd53cd289104fc64099abca73db4166ad86ea0b4341abe65af83dadc"
-dependencies = [
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "anstyle-wincon"
-version = "3.0.11"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "291e6a250ff86cd4a820112fb8898808a366d8f9f58ce16d1f538353ad55747d"
-dependencies = [
- "anstyle",
- "once_cell_polyfill",
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "antithesis_sdk"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -337,17 +127,6 @@ name = "anyhow"
 version = "1.0.103"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2a4385e2e34eb35d6b3efe798b9eb88096925d87726c0798709bf56d9ed84af3"
-
-[[package]]
-name = "apple-native-keyring-store"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b350bfd03649e07aa05c0a81b3e15934374e585c98204a57e20b9d49f49bb9a"
-dependencies = [
- "keyring-core",
- "log",
- "security-framework",
-]
 
 [[package]]
 name = "arc-swap"
@@ -383,89 +162,6 @@ name = "assoc"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bfdc70193dadb9d7287fa4b633f15f90c876915b31f6af17da307fc59c9859a8"
-
-[[package]]
-name = "async-channel"
-version = "2.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "924ed96dd52d1b75e9c1a3e6275715fd320f5f9439fb5a4a11fa51f4221158d2"
-dependencies = [
- "concurrent-queue",
- "event-listener-strategy",
- "futures-core",
- "pin-project-lite",
-]
-
-[[package]]
-name = "async-io"
-version = "2.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "456b8a8feb6f42d237746d4b3e9a178494627745c3c56c6ea55d92ba50d026fc"
-dependencies = [
- "autocfg",
- "cfg-if",
- "concurrent-queue",
- "futures-io",
- "futures-lite",
- "parking",
- "polling",
- "rustix 1.1.4",
- "slab",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "async-lock"
-version = "3.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "290f7f2596bd5b78a9fec8088ccd89180d7f9f55b94b0576823bbbdc72ee8311"
-dependencies = [
- "event-listener",
- "event-listener-strategy",
- "pin-project-lite",
-]
-
-[[package]]
-name = "async-process"
-version = "2.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fc50921ec0055cdd8a16de48773bfeec5c972598674347252c0399676be7da75"
-dependencies = [
- "async-channel",
- "async-io",
- "async-lock",
- "async-signal",
- "async-task",
- "blocking",
- "cfg-if",
- "event-listener",
- "futures-lite",
- "rustix 1.1.4",
-]
-
-[[package]]
-name = "async-signal"
-version = "0.2.14"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52b5aaafa020cf5053a01f2a60e8ff5dccf550f0f77ec54a4e47285ac2bab485"
-dependencies = [
- "async-io",
- "async-lock",
- "atomic-waker",
- "cfg-if",
- "futures-core",
- "futures-io",
- "rustix 1.1.4",
- "signal-hook-registry",
- "slab",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "async-task"
-version = "4.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b75356056920673b02621b35afd0f7dda9306d03c79a30f5c56c44cf256e3de"
 
 [[package]]
 name = "async-trait"
@@ -514,25 +210,6 @@ name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
-
-[[package]]
-name = "automation-storage"
-version = "0.1.142"
-dependencies = [
- "agent-automation",
- "chrono",
- "collaboration-mail-protocol",
- "collaboration-protocol",
- "message-board",
- "serde",
- "serde_json",
- "sqlite-storage-maintenance",
- "sqlx",
- "thiserror",
- "tokio",
- "tracing",
- "uuid",
-]
 
 [[package]]
 name = "aws-lc-rs"
@@ -641,7 +318,7 @@ version = "0.69.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "271383c67ccabffb7381723dea0672a673f292304fcb45c01cc648c7a8d58088"
 dependencies = [
- "bitflags 2.13.0",
+ "bitflags",
  "cexpr",
  "clang-sys",
  "itertools",
@@ -672,12 +349,6 @@ name = "bit-vec"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7"
-
-[[package]]
-name = "bitflags"
-version = "1.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
 
 [[package]]
 name = "bitflags"
@@ -719,52 +390,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "blocking"
-version = "1.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a70e4329df6cb94385eed412ec92375c3cdd8a6e502493d1229b6414e4036dfa"
-dependencies = [
- "async-channel",
- "async-task",
- "futures-io",
- "futures-lite",
- "piper",
-]
-
-[[package]]
-name = "board-fleet-sync"
-version = "0.1.142"
-dependencies = [
- "board-sync-protocol",
- "chrono",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-session",
- "fleet-sync-tokio-runner",
- "fleet-sync-writer",
- "futures-util",
- "message-board",
- "message-board-storage",
- "reqwest",
- "reqwest-websocket",
- "runtime-primitives",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "board-sync-protocol"
-version = "0.1.142"
+version = "0.1.147"
 dependencies = [
  "chrono",
  "collaboration-mail-protocol",
- "fleet-sync-protocol",
+ "fleet-sync-protocol 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "message-board",
- "schemars 1.2.2",
+ "schemars",
  "serde",
  "serde_json",
 ]
@@ -773,18 +406,17 @@ dependencies = [
 name = "board-upgrade-native-observer"
 version = "0.0.0"
 dependencies = [
- "agent-router-update",
  "collaboration-central-conformance",
  "collaboration-central-tokio",
  "collaboration-protocol",
  "fleet-admission",
- "fleet-sync-lease",
- "fleet-sync-protocol",
+ "fleet-sync-lease 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090)",
+ "fleet-sync-protocol 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090)",
  "message-board",
  "message-board-storage",
  "serde",
  "serde_json",
- "sqlx-turso",
+ "sqlx-turso 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090)",
  "tokio",
 ]
 
@@ -801,15 +433,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e426eb5cc1900033930ec955317b302e68f19f326cc7bb0c8a86865a826cdf0c"
 dependencies = [
  "rustc_version",
-]
-
-[[package]]
-name = "bs58"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf88ba1141d185c399bee5288d850d63b8369520c1eafc32a0430b5b6c287bf4"
-dependencies = [
- "tinyvec",
 ]
 
 [[package]]
@@ -885,12 +508,6 @@ checksum = "9330f8b2ff13f34540b44e946ef35111825727b38d33286ef986142615121801"
 
 [[package]]
 name = "cfg_aliases"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fd16c4719339c4530435d38e511904438d07cce7950afa3718a84ac36c10e89e"
-
-[[package]]
-name = "cfg_aliases"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
@@ -943,18 +560,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773f3b9af64447d2ce9850330c473515014aa235e6a783b02db81ff39e4a3dad"
 dependencies = [
  "crypto-common 0.1.7",
- "inout 0.1.4",
-]
-
-[[package]]
-name = "cipher"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8cf2a2c93cd704877c0858356ed03480ff301ee950b43f1cbe4573b088bfa6c"
-dependencies = [
- "block-buffer 0.12.1",
- "crypto-common 0.2.2",
- "inout 0.2.2",
+ "inout",
 ]
 
 [[package]]
@@ -966,61 +572,6 @@ dependencies = [
  "glob",
  "libc",
  "libloading",
-]
-
-[[package]]
-name = "clap"
-version = "4.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ddb117e43bbf7dacf0a4190fef4d345b9bad68dfc649cb349e7d17d28428e51"
-dependencies = [
- "clap_builder",
- "clap_derive",
-]
-
-[[package]]
-name = "clap_builder"
-version = "4.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "714a53001bf66416adb0e2ef5ac857140e7dc3a0c48fb28b2f10762fc4b5069f"
-dependencies = [
- "anstream",
- "anstyle",
- "clap_lex",
- "strsim",
- "terminal_size",
-]
-
-[[package]]
-name = "clap_derive"
-version = "4.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f2ce8604710f6733aa641a2b3731eaa1e8b3d9973d5e3565da11800813f997a9"
-dependencies = [
- "heck",
- "proc-macro2",
- "quote",
- "syn 2.0.118",
-]
-
-[[package]]
-name = "clap_lex"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
-
-[[package]]
-name = "claude-code-peer-messaging"
-version = "0.1.142"
-dependencies = [
- "agent-automation",
- "collaboration-protocol",
- "rustix 1.1.4",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror",
- "tokio",
 ]
 
 [[package]]
@@ -1039,28 +590,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
 
 [[package]]
-name = "codex-acp-adapter"
-version = "0.1.142"
-dependencies = [
- "base64 0.22.1",
- "chrono",
- "codex-native-integration",
- "collaboration-protocol",
- "jsonschema",
- "message-board",
- "serde",
- "serde_json",
- "session-event-model",
- "sha2 0.10.9",
- "sqlx",
- "thiserror",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
 name = "codex-native-integration"
-version = "0.1.142"
+version = "0.1.147"
 dependencies = [
  "futures-util",
  "jsonschema",
@@ -1078,145 +609,20 @@ dependencies = [
 ]
 
 [[package]]
-name = "codex-router-core"
-version = "0.1.142"
-dependencies = [
- "hmac 0.12.1",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror",
- "toml 1.1.2+spec-1.1.0",
-]
-
-[[package]]
-name = "codex-router-host"
-version = "0.1.142"
-dependencies = [
- "acp-client-runtime",
- "acp-provider-adapters",
- "agent-automation",
- "automation-storage",
- "board-fleet-sync",
- "board-sync-protocol",
- "chrono",
- "claude-code-peer-messaging",
- "codex-acp-adapter",
- "codex-native-integration",
- "codex-router-core",
- "codex-router-secret-store",
- "codex-router-state",
- "collaboration-client",
- "collaboration-contracts",
- "collaboration-mcp",
- "collaboration-protocol",
- "collaboration-runtime",
- "collaboration-service",
- "durable-steps",
- "fleet-admission",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-receiver",
- "fleet-sync-session",
- "fleet-sync-tokio-runner",
- "fleet-sync-writer",
- "futures-util",
- "httparse",
- "interaction-storage",
- "jsonc-parser",
- "lifecycle-observation",
- "message-board",
- "message-board-storage",
- "nix",
- "opentelemetry",
- "reqwest",
- "runtime-primitives",
- "rustix 1.1.4",
- "serde",
- "serde_json",
- "session-event-model",
- "sha2 0.10.9",
- "sqlx",
- "thiserror",
- "tokio",
- "tokio-util",
- "toml 1.1.2+spec-1.1.0",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "codex-router-quota"
-version = "0.1.142"
-dependencies = [
- "codex-router-core",
- "thiserror",
-]
-
-[[package]]
-name = "codex-router-secret-store"
-version = "0.1.142"
-dependencies = [
- "aes-gcm 0.11.1",
- "apple-native-keyring-store",
- "base64 0.22.1",
- "codex-router-core",
- "fs2",
- "getrandom 0.4.3",
- "keyring-core",
- "rustix 1.1.4",
- "security-framework",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror",
- "tracing",
- "uuid",
- "zeroize",
-]
-
-[[package]]
-name = "codex-router-selection"
-version = "0.1.142"
-dependencies = [
- "base64 0.22.1",
- "codex-router-core",
- "codex-router-quota",
- "hmac 0.12.1",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror",
-]
-
-[[package]]
-name = "codex-router-state"
-version = "0.1.142"
-dependencies = [
- "codex-router-core",
- "codex-router-selection",
- "futures-util",
- "sqlite-storage-maintenance",
- "sqlx",
- "thiserror",
- "tokio",
-]
-
-[[package]]
 name = "collaboration-central-admin-protocol"
-version = "0.1.142"
+version = "0.1.147"
 dependencies = [
  "board-sync-protocol",
  "chrono",
  "fleet-admission",
- "fleet-sync-protocol",
+ "fleet-sync-protocol 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "message-board",
  "serde",
 ]
 
 [[package]]
 name = "collaboration-central-conformance"
-version = "0.1.142"
+version = "0.1.147"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1224,9 +630,9 @@ dependencies = [
  "chrono",
  "collaboration-central-core",
  "collaboration-client",
- "durable-steps",
+ "durable-steps 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "fleet-admission",
- "fleet-sync-protocol",
+ "fleet-sync-protocol 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "fleet-sync-session",
  "futures-util",
  "message-board",
@@ -1242,7 +648,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-core"
-version = "0.1.142"
+version = "0.1.147"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1250,21 +656,21 @@ dependencies = [
  "chrono",
  "collaboration-central-admin-protocol",
  "collaboration-mail-protocol",
- "durable-steps",
+ "durable-steps 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "fleet-admission",
  "fleet-identity-protocol",
  "fleet-sync-delivery",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-query-gen",
+ "fleet-sync-lease 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "fleet-sync-protocol 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "fleet-sync-query-gen 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "fleet-sync-receiver",
  "fleet-sync-session",
  "futures-channel",
  "futures-util",
  "http",
  "message-board",
- "runtime-primitives",
- "schemars 1.2.2",
+ "runtime-primitives 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "schemars",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -1276,7 +682,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-central-tokio"
-version = "0.1.142"
+version = "0.1.147"
 dependencies = [
  "aws-lc-rs",
  "axum",
@@ -1284,20 +690,20 @@ dependencies = [
  "chrono",
  "collaboration-central-conformance",
  "collaboration-central-core",
- "durable-steps",
- "fleet-sync-lease",
- "fleet-sync-protocol",
+ "durable-steps 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "fleet-sync-lease 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "fleet-sync-protocol 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "fleet-sync-session",
  "fleet-sync-tokio-runner",
  "futures-util",
  "message-board",
  "reqwest",
  "ring",
- "runtime-primitives",
+ "runtime-primitives 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "serde",
  "serde_json",
  "sqlx-core",
- "sqlx-turso",
+ "sqlx-turso 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "thiserror",
  "tokio",
  "tokio-util",
@@ -1306,7 +712,7 @@ dependencies = [
 
 [[package]]
 name = "collaboration-client"
-version = "0.1.142"
+version = "0.1.147"
 dependencies = [
  "board-sync-protocol",
  "codex-native-integration",
@@ -1317,7 +723,8 @@ dependencies = [
  "message-board",
  "reqwest",
  "rmcp",
- "schemars 1.2.2",
+ "router-clock",
+ "schemars",
  "serde",
  "serde_json",
  "sqlx",
@@ -1329,34 +736,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "collaboration-contracts"
-version = "0.1.142"
-dependencies = [
- "agent-automation",
- "automation-storage",
- "board-sync-protocol",
- "collaboration-mail-protocol",
- "collaboration-protocol",
- "fleet-sync-protocol",
- "fleet-sync-writer",
- "message-board",
- "message-board-storage",
- "nix",
- "runtime-primitives",
- "serde",
- "serde_json",
- "session-event-model",
- "thiserror",
- "tokio",
-]
-
-[[package]]
 name = "collaboration-mail-protocol"
-version = "0.1.142"
+version = "0.1.147"
 dependencies = [
  "chrono",
  "message-board",
- "schemars 1.2.2",
+ "schemars",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -1364,32 +749,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "collaboration-mcp"
-version = "0.1.142"
-dependencies = [
- "axum",
- "board-sync-protocol",
- "codex-native-integration",
- "collaboration-client",
- "collaboration-contracts",
- "collaboration-protocol",
- "collaboration-runtime",
- "collaboration-service",
- "futures-util",
- "http",
- "message-board",
- "rmcp",
- "schemars 1.2.2",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
 name = "collaboration-protocol"
-version = "0.1.142"
+version = "0.1.147"
 dependencies = [
  "agent-automation",
  "board-sync-protocol",
@@ -1398,7 +759,7 @@ dependencies = [
  "fleet-identity-protocol",
  "jsonschema",
  "message-board",
- "schemars 1.2.2",
+ "schemars",
  "serde",
  "serde_json",
  "serde_json_canonicalizer",
@@ -1407,101 +768,6 @@ dependencies = [
  "thiserror",
  "uuid",
 ]
-
-[[package]]
-name = "collaboration-runtime"
-version = "0.1.142"
-dependencies = [
- "agent-automation",
- "automation-storage",
- "base64 0.22.1",
- "board-fleet-sync",
- "board-sync-protocol",
- "chrono",
- "codex-acp-adapter",
- "codex-native-integration",
- "collaboration-contracts",
- "collaboration-mail-protocol",
- "collaboration-protocol",
- "durable-steps",
- "fleet-admission",
- "fleet-sync-delivery",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-tokio-runner",
- "fleet-sync-writer",
- "futures-util",
- "getrandom 0.3.4",
- "interaction-storage",
- "lifecycle-observation",
- "message-board",
- "message-board-storage",
- "nix",
- "runtime-primitives",
- "serde",
- "serde_json",
- "session-event-model",
- "sqlite-storage-maintenance",
- "sqlx",
- "thiserror",
- "tokio",
- "tokio-tungstenite",
- "tokio-util",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "collaboration-service"
-version = "0.1.142"
-dependencies = [
- "agent-automation",
- "automation-storage",
- "base64 0.22.1",
- "board-fleet-sync",
- "board-sync-protocol",
- "chrono",
- "claude-code-peer-messaging",
- "codex-acp-adapter",
- "codex-native-integration",
- "collaboration-contracts",
- "collaboration-mail-protocol",
- "collaboration-protocol",
- "collaboration-runtime",
- "durable-steps",
- "fleet-admission",
- "fleet-sync-delivery",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-tokio-runner",
- "fleet-sync-writer",
- "futures-util",
- "getrandom 0.3.4",
- "interaction-storage",
- "lifecycle-observation",
- "message-board",
- "message-board-storage",
- "nix",
- "petgraph",
- "runtime-primitives",
- "serde",
- "serde_json",
- "session-event-model",
- "sha2 0.10.9",
- "sqlx",
- "thiserror",
- "tokio",
- "tokio-tungstenite",
- "tokio-util",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "colorchoice"
-version = "1.0.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 
 [[package]]
 name = "concurrent-queue"
@@ -1519,35 +785,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
 
 [[package]]
-name = "convert_case"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "633458d4ef8c78b72454de2d54fd6ab2e60f9e02be22f3c6104cdc8a4e0fceb9"
-dependencies = [
- "unicode-segmentation",
-]
-
-[[package]]
-name = "core-foundation"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2a6cd9ae233e7f62ba4e9353e81a88df7fc8a5987b8d445b4d90c879bd156f6"
-dependencies = [
- "core-foundation-sys",
- "libc",
-]
-
-[[package]]
 name = "core-foundation-sys"
 version = "0.8.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "773648b94d0e5d620f64f280777445740e61fe701025087ec8b57f45c791888b"
-
-[[package]]
-name = "cpubits"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15b85f9c39137c3a891689859392b1bd49812121d0d61c9caf00d46ed5ce06ae"
 
 [[package]]
 name = "cpufeatures"
@@ -1652,9 +893,7 @@ version = "0.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ce6e4c961d6cd6c9a86db418387425e8bdeaf05b3c8bc1411e6dca4c252f1453"
 dependencies = [
- "getrandom 0.4.3",
  "hybrid-array",
- "rand_core 0.10.1",
 ]
 
 [[package]]
@@ -1663,16 +902,7 @@ version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0369ee1ad671834580515889b80f2ea915f23b8be8d0daa4bbaf2ac5c7590835"
 dependencies = [
- "cipher 0.4.4",
-]
-
-[[package]]
-name = "ctr"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "baaca1c4b237092596f64d571e9db6ce4109c4ef9742e27590f1709594461f21"
-dependencies = [
- "cipher 0.5.2",
+ "cipher",
 ]
 
 [[package]]
@@ -1696,16 +926,6 @@ dependencies = [
 
 [[package]]
 name = "darling"
-version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25ae13da2f202d56bd7f91c25fba009e7717a1e4a1cc98a76d844b65ae912e9d"
-dependencies = [
- "darling_core 0.23.0",
- "darling_macro 0.23.0",
-]
-
-[[package]]
-name = "darling"
 version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed17f5901b6630b993ca003def43f2f8ef4014fc13b047b57aad617ff32bc2ec"
@@ -1721,19 +941,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0d00b9596d185e565c2207a0b01f8bd1a135483d02d9b7b0a54b11da8d53412e"
 dependencies = [
  "fnv",
- "ident_case",
- "proc-macro2",
- "quote",
- "strsim",
- "syn 2.0.118",
-]
-
-[[package]]
-name = "darling_core"
-version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9865a50f7c335f53564bb694ef660825eb8610e0a53d3e11bf1b0d3df31e03b0"
-dependencies = [
  "ident_case",
  "proc-macro2",
  "quote",
@@ -1767,17 +974,6 @@ dependencies = [
 
 [[package]]
 name = "darling_macro"
-version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ac3984ec7bd6cfa798e62b4a642426a5be0e68f9401cfc2a01e3fa9ea2fcdb8d"
-dependencies = [
- "darling_core 0.23.0",
- "quote",
- "syn 2.0.118",
-]
-
-[[package]]
-name = "darling_macro"
 version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2ac7135c3ef02b2f7833bbeb1be5ba7f966dcde8a87c6b87f65a778d71a02785"
@@ -1794,44 +990,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4ae5f15dda3c708c0ade84bfee31ccab44a3da4f88015ed22f63732abe300c8"
 
 [[package]]
-name = "defmt"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2953bfe4f93bbd20cc71198842756f77d161884c99ebbabc41d80231ded88d1"
-dependencies = [
- "bitflags 1.3.2",
- "defmt-macros",
-]
-
-[[package]]
-name = "defmt-macros"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bad9c72e7ca2137e0dc3813245a0d282fd6daad32fd800af018306a9169b5fe8"
-dependencies = [
- "defmt-parser",
- "proc-macro2",
- "quote",
- "syn 2.0.118",
-]
-
-[[package]]
-name = "defmt-parser"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10d60334b3b2e7c9d91ef8150abfb6fa4c1c39ebbcf4a81c2e346aad939fee3e"
-dependencies = [
- "thiserror",
-]
-
-[[package]]
 name = "deranged"
 version = "0.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7cd812cc2bc1d69d4764bd80df88b4317eaef9e773c75226407d9bc0876b211c"
-dependencies = [
- "serde_core",
-]
 
 [[package]]
 name = "derive_builder"
@@ -1862,29 +1024,6 @@ checksum = "ab63b0e2bf4d5928aff72e83a7dace85d7bba5fe12dcc3c5a572d78caffd3f3c"
 dependencies = [
  "derive_builder_core",
  "syn 2.0.118",
-]
-
-[[package]]
-name = "derive_more"
-version = "2.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d751e9e49156b02b44f9c1815bcb94b984cdcc4396ecc32521c739452808b134"
-dependencies = [
- "derive_more-impl",
-]
-
-[[package]]
-name = "derive_more-impl"
-version = "2.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "799a97264921d8623a957f6c3b9011f3b5492f557bbb7a5a19b7fa6d06ba8dcb"
-dependencies = [
- "convert_case",
- "proc-macro2",
- "quote",
- "rustc_version",
- "syn 2.0.118",
- "unicode-xid",
 ]
 
 [[package]]
@@ -1939,13 +1078,29 @@ version = "0.4.0"
 source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
  "futures-util",
- "runtime-primitives",
+ "runtime-primitives 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090)",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sqlx-core",
+ "thiserror",
+ "uuid",
+]
+
+[[package]]
+name = "durable-steps"
+version = "0.4.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687#b75d072c116afa46cfa82facd34db6317f380687"
+dependencies = [
+ "fleet-sync-query-gen 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "futures-util",
+ "runtime-primitives 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "serde",
  "serde_json",
  "sha2 0.10.9",
  "sqlx",
  "sqlx-core",
- "sqlx-turso",
+ "sqlx-turso 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "thiserror",
  "tokio",
  "uuid",
@@ -2032,26 +1187,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "event-listener-strategy"
-version = "0.5.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8be9f3dfaaffdae2972880079a491a1a8bb7cbed0b8dd7a347f668b4150a3b93"
-dependencies = [
- "event-listener",
- "pin-project-lite",
-]
-
-[[package]]
 name = "fallible-iterator"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2acce4a10f12dc2fb14a218589d4f1f62ef011b2d0cc4b3cb1bba8e94da14649"
-
-[[package]]
-name = "fallible-streaming-iterator"
-version = "0.1.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
 
 [[package]]
 name = "fancy-regex"
@@ -2095,10 +1234,10 @@ checksum = "1d674e81391d1e1ab681a28d99df07927c6d4aa5b027d7da16ba32d1d21ecd99"
 
 [[package]]
 name = "fleet-admission"
-version = "0.1.142"
+version = "0.1.147"
 dependencies = [
  "chrono",
- "fleet-sync-protocol",
+ "fleet-sync-protocol 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "message-board",
  "serde",
  "serde_json",
@@ -2108,23 +1247,23 @@ dependencies = [
 
 [[package]]
 name = "fleet-identity-protocol"
-version = "0.1.142"
+version = "0.1.147"
 dependencies = [
  "chrono",
  "message-board",
- "schemars 1.2.2",
+ "schemars",
  "serde",
 ]
 
 [[package]]
 name = "fleet-sync-delivery"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687#b75d072c116afa46cfa82facd34db6317f380687"
 dependencies = [
- "durable-steps",
- "fleet-sync-protocol",
- "fleet-sync-query-gen",
- "runtime-primitives",
+ "durable-steps 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "fleet-sync-protocol 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "fleet-sync-query-gen 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "runtime-primitives 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -2138,10 +1277,27 @@ name = "fleet-sync-lease"
 version = "0.4.0"
 source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
- "durable-steps",
- "fleet-sync-protocol",
- "fleet-sync-query-gen",
- "runtime-primitives",
+ "durable-steps 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090)",
+ "fleet-sync-protocol 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090)",
+ "fleet-sync-query-gen 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090)",
+ "runtime-primitives 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090)",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "sqlx-core",
+ "thiserror",
+ "uuid",
+]
+
+[[package]]
+name = "fleet-sync-lease"
+version = "0.4.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687#b75d072c116afa46cfa82facd34db6317f380687"
+dependencies = [
+ "durable-steps 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "fleet-sync-protocol 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "fleet-sync-query-gen 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "runtime-primitives 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "serde",
  "serde_json",
  "sqlx",
@@ -2155,7 +1311,21 @@ name = "fleet-sync-protocol"
 version = "0.4.0"
 source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
- "runtime-primitives",
+ "runtime-primitives 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090)",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror",
+ "turso_parser",
+ "uuid",
+]
+
+[[package]]
+name = "fleet-sync-protocol"
+version = "0.4.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687#b75d072c116afa46cfa82facd34db6317f380687"
+dependencies = [
+ "runtime-primitives 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -2176,13 +1346,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "fleet-sync-query-gen"
+version = "0.4.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687#b75d072c116afa46cfa82facd34db6317f380687"
+dependencies = [
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "thiserror",
+]
+
+[[package]]
 name = "fleet-sync-receiver"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687#b75d072c116afa46cfa82facd34db6317f380687"
 dependencies = [
- "durable-steps",
- "fleet-sync-protocol",
- "fleet-sync-query-gen",
+ "durable-steps 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "fleet-sync-protocol 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "fleet-sync-query-gen 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "serde",
  "serde_json",
  "sqlx",
@@ -2195,13 +1376,13 @@ dependencies = [
 [[package]]
 name = "fleet-sync-session"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687#b75d072c116afa46cfa82facd34db6317f380687"
 dependencies = [
  "bytes",
- "durable-steps",
- "fleet-sync-protocol",
- "fleet-sync-query-gen",
- "runtime-primitives",
+ "durable-steps 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "fleet-sync-protocol 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "fleet-sync-query-gen 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "runtime-primitives 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "serde",
  "serde_json",
  "sqlx",
@@ -2213,21 +1394,21 @@ dependencies = [
 [[package]]
 name = "fleet-sync-tokio-runner"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687#b75d072c116afa46cfa82facd34db6317f380687"
 dependencies = [
- "durable-steps",
- "fleet-sync-protocol",
- "fleet-sync-query-gen",
+ "durable-steps 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "fleet-sync-protocol 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "fleet-sync-query-gen 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "fleet-sync-receiver",
  "fleet-sync-session",
  "fleet-sync-writer",
  "futures-util",
- "runtime-primitives",
+ "runtime-primitives 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "serde",
  "serde_json",
  "sqlx",
  "sqlx-core",
- "sqlx-turso",
+ "sqlx-turso 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "thiserror",
  "tokio",
  "tracing",
@@ -2237,22 +1418,22 @@ dependencies = [
 [[package]]
 name = "fleet-sync-writer"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687#b75d072c116afa46cfa82facd34db6317f380687"
 dependencies = [
- "durable-steps",
+ "durable-steps 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "either",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "fleet-sync-query-gen",
+ "fleet-sync-lease 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "fleet-sync-protocol 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "fleet-sync-query-gen 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "fleet-sync-receiver",
  "futures-core",
  "futures-util",
- "runtime-primitives",
+ "runtime-primitives 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "serde",
  "serde_json",
  "sqlx",
  "sqlx-core",
- "sqlx-turso",
+ "sqlx-turso 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "thiserror",
  "tokio",
  "turso",
@@ -2366,19 +1547,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "futures-concurrency"
-version = "7.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "175cd8cca9e1d45b87f18ffa75088f2099e3c4fe5e2f83e42de112560bea8ea6"
-dependencies = [
- "fixedbitset",
- "futures-core",
- "futures-lite",
- "pin-project",
- "smallvec",
-]
-
-[[package]]
 name = "futures-core"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2411,19 +1579,6 @@ name = "futures-io"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "53c0fa8157de1303bfffdaa1cc2a673bfffb60102f76b0ef4441659124373fed"
-
-[[package]]
-name = "futures-lite"
-version = "2.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f78e10609fe0e0b3f4157ffab1876319b5b0db102a2c60dc4626306dc46b44ad"
-dependencies = [
- "fastrand",
- "futures-core",
- "futures-io",
- "parking",
- "pin-project-lite",
-]
 
 [[package]]
 name = "futures-macro"
@@ -2553,17 +1708,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f0d8a4362ccb29cb0b265253fb0a2728f592895ee6854fd9bc13f2ffda266ff1"
 dependencies = [
  "opaque-debug",
- "polyval 0.6.2",
-]
-
-[[package]]
-name = "ghash"
-version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2eecf2d5dc9b66b732b97707a0210906b1d30523eb773193ab777c0c84b3e8d5"
-dependencies = [
- "polyval 0.7.3",
- "zeroize",
+ "polyval",
 ]
 
 [[package]]
@@ -2571,12 +1716,6 @@ name = "glob"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
-
-[[package]]
-name = "hashbrown"
-version = "0.12.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 
 [[package]]
 name = "hashbrown"
@@ -2607,15 +1746,6 @@ dependencies = [
  "allocator-api2 0.2.21",
  "equivalent",
  "foldhash 0.2.0",
-]
-
-[[package]]
-name = "hashlink"
-version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7382cf6263419f2d8df38c55d7da83da5c18aef87fc7a7fc1fb1e344edfe14c1"
-dependencies = [
- "hashbrown 0.15.5",
 ]
 
 [[package]]
@@ -2982,17 +2112,6 @@ dependencies = [
 
 [[package]]
 name = "indexmap"
-version = "1.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd070e393353796e801d209ad339e89596eb4c8d430d18ede6a1cced8fafbd99"
-dependencies = [
- "autocfg",
- "hashbrown 0.12.3",
- "serde",
-]
-
-[[package]]
-name = "indexmap"
 version = "2.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d466e9454f08e4a911e14806c24e16fba1b4c121d1ea474396f396069cf949d9"
@@ -3013,37 +2132,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "inout"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4250ce6452e92010fdf7268ccc5d14faa80bb12fc741938534c58f16804e03c7"
-dependencies = [
- "hybrid-array",
-]
-
-[[package]]
-name = "interaction-storage"
-version = "0.1.142"
-dependencies = [
- "chrono",
- "collaboration-mail-protocol",
- "collaboration-protocol",
- "durable-steps",
- "fleet-sync-delivery",
- "fleet-sync-protocol",
- "message-board",
- "serde",
- "serde_json",
- "session-event-model",
- "sqlx",
- "sqlx-turso",
- "thiserror",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "intrusive-collections"
 version = "0.9.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3058,7 +2146,7 @@ version = "0.7.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4d09b98f7eace8982db770e4408e7470b028ce513ac28fecdc6bf4c30fe92b62"
 dependencies = [
- "bitflags 2.13.0",
+ "bitflags",
  "cfg-if",
  "libc",
 ]
@@ -3068,12 +2156,6 @@ name = "ipnet"
 version = "2.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d98f6fed1fde3f8c21bc40a1abb88dd75e67924f9cffc3ef95607bad8017f8e2"
-
-[[package]]
-name = "is_terminal_polyfill"
-version = "1.70.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a6cb138bb79a146c1bd460005623e142ef0181e3d0219cb493e02f7d08a35695"
 
 [[package]]
 name = "itertools"
@@ -3089,60 +2171,6 @@ name = "itoa"
 version = "1.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
-
-[[package]]
-name = "jiff"
-version = "0.2.37"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ab1baf72f08796de0260609515130699b890ac25f30e610ad894bc5856cafdb"
-dependencies = [
- "defmt",
- "jiff-core",
- "jiff-static",
- "jiff-tzdb-platform",
- "log",
- "portable-atomic",
- "portable-atomic-util",
- "serde_core",
- "windows-link",
-]
-
-[[package]]
-name = "jiff-core"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5e52fe76043ccecc9005d2305ebaadf7d7fc0cc89ca6baa10a94d6bc68c7128c"
-dependencies = [
- "defmt",
- "log",
-]
-
-[[package]]
-name = "jiff-static"
-version = "0.2.37"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "378268a1116ad67ae6228701118ac9f491d78fda38a40a1f1a9e1348de6f7212"
-dependencies = [
- "jiff-core",
- "proc-macro2",
- "quote",
- "syn 2.0.118",
-]
-
-[[package]]
-name = "jiff-tzdb"
-version = "0.1.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "142bd39932ad231f10513df9ab62661fead8719872150b7ad02a2df79f4e141e"
-
-[[package]]
-name = "jiff-tzdb-platform"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "875a5a69ac2bab1a891711cf5eccbec1ce0341ea805560dcd90b7a2e925132e8"
-dependencies = [
- "jiff-tzdb",
-]
 
 [[package]]
 name = "jobserver"
@@ -3163,15 +2191,6 @@ dependencies = [
  "cfg-if",
  "futures-util",
  "wasm-bindgen",
-]
-
-[[package]]
-name = "jsonc-parser"
-version = "0.34.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ecded084f9b9a718d39668a42657c32253663d1f6afb3fbb9134f0305f73f48"
-dependencies = [
- "serde_json",
 ]
 
 [[package]]
@@ -3228,15 +2247,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "keyring-core"
-version = "1.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb1e621458ca9c51aa110bd0339d4751a056b9576bf1253aee1aa560dda0fc9d"
-dependencies = [
- "log",
-]
-
-[[package]]
 name = "lazy_static"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3279,24 +2289,6 @@ dependencies = [
  "cc",
  "pkg-config",
  "vcpkg",
-]
-
-[[package]]
-name = "lifecycle-observation"
-version = "0.1.142"
-dependencies = [
- "base64 0.22.1",
- "chrono",
- "codex-native-integration",
- "collaboration-protocol",
- "serde",
- "serde_json",
- "sqlite-storage-maintenance",
- "sqlx",
- "thiserror",
- "tokio",
- "tokio-util",
- "tracing",
 ]
 
 [[package]]
@@ -3413,11 +2405,11 @@ dependencies = [
 
 [[package]]
 name = "message-board"
-version = "0.1.142"
+version = "0.1.147"
 dependencies = [
  "chrono",
  "petgraph",
- "schemars 1.2.2",
+ "schemars",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -3428,16 +2420,16 @@ dependencies = [
 
 [[package]]
 name = "message-board-storage"
-version = "0.1.142"
+version = "0.1.147"
 dependencies = [
  "base64 0.22.1",
  "board-sync-protocol",
  "chrono",
  "collaboration-mail-protocol",
- "durable-steps",
+ "durable-steps 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "fleet-admission",
- "fleet-sync-lease",
- "fleet-sync-protocol",
+ "fleet-sync-lease 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "fleet-sync-protocol 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "fleet-sync-receiver",
  "fleet-sync-session",
  "fleet-sync-writer",
@@ -3446,8 +2438,9 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sqlite-storage-maintenance",
  "sqlx",
- "sqlx-turso",
+ "sqlx-turso 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "thiserror",
  "tokio",
  "tracing",
@@ -3504,18 +2497,6 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "nix"
-version = "0.28.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab2156c4fce2f8df6c499cc1c763e4394b7482525bf2a9701c9d79d215f519e4"
-dependencies = [
- "bitflags 2.13.0",
- "cfg-if",
- "cfg_aliases 0.1.1",
- "libc",
 ]
 
 [[package]]
@@ -3628,30 +2609,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
 
 [[package]]
-name = "once_cell_polyfill"
-version = "1.70.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
-
-[[package]]
 name = "opaque-debug"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
-
-[[package]]
-name = "opentelemetry"
-version = "0.31.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b84bcd6ae87133e903af7ef497404dda70c60d0ea14895fc8a5e6722754fc2a0"
-dependencies = [
- "futures-core",
- "futures-sink",
- "js-sys",
- "pin-project-lite",
- "thiserror",
- "tracing",
-]
 
 [[package]]
 name = "outref"
@@ -3723,7 +2684,7 @@ checksum = "8701b58ea97060d5e5b155d383a69952a60943f0e6dfe30b04c287beb0b27455"
 dependencies = [
  "fixedbitset",
  "hashbrown 0.15.5",
- "indexmap 2.14.0",
+ "indexmap",
 ]
 
 [[package]]
@@ -3745,41 +2706,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "pin-project"
-version = "1.1.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2466b2336ed02bcdca6b294417127b90ec92038d1d5c4fbeac971a922e0e0924"
-dependencies = [
- "pin-project-internal",
-]
-
-[[package]]
-name = "pin-project-internal"
-version = "1.1.13"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c96395f0a926bc13b1c17622aaddda1ecb55d49c8f1bf9777e4d877800a43f8b"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.118",
-]
-
-[[package]]
 name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
-
-[[package]]
-name = "piper"
-version = "0.2.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c835479a4443ded371d6c535cbfd8d31ad92c5d23ae9770a61bc155e4992a3c1"
-dependencies = [
- "atomic-waker",
- "fastrand",
- "futures-io",
-]
 
 [[package]]
 name = "pkg-config"
@@ -3810,34 +2740,7 @@ dependencies = [
  "cfg-if",
  "cpufeatures 0.2.17",
  "opaque-debug",
- "universal-hash 0.5.1",
-]
-
-[[package]]
-name = "polyval"
-version = "0.7.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0fa31d631f2b2cb2a544d0aa321ce847a94764d701ca2becc411138b93d49cd"
-dependencies = [
- "cpubits",
- "cpufeatures 0.3.1",
- "universal-hash 0.6.1",
- "zeroize",
-]
-
-[[package]]
-name = "portable-atomic"
-version = "1.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c33a9471896f1c69cecef8d20cbe2f7accd12527ce60845ff44c153bb2a21b49"
-
-[[package]]
-name = "portable-atomic-util"
-version = "0.2.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10ab3eb7f3becc3a1cbc4f2c6f20267996cfc1a6467a873763411b136a122715"
-dependencies = [
- "portable-atomic",
+ "universal-hash",
 ]
 
 [[package]]
@@ -3924,7 +2827,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c1a41e437b6bbd489372cd4971de128e85c855f56c57f283d20ff016cf7c0a8"
 dependencies = [
  "bytes",
- "cfg_aliases 0.2.1",
+ "cfg_aliases",
  "pin-project-lite",
  "quinn-proto",
  "quinn-udp",
@@ -3965,7 +2868,7 @@ version = "0.5.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "addec6a0dcad8a8d96a771f815f0eaf55f9d1805756410b39f5fa81332574cbd"
 dependencies = [
- "cfg_aliases 0.2.1",
+ "cfg_aliases",
  "libc",
  "once_cell",
  "socket2",
@@ -4109,7 +3012,7 @@ version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed2bf2547551a7053d6fdfafda3f938979645c44812fbfcda098faae3f1a362d"
 dependencies = [
- "bitflags 2.13.0",
+ "bitflags",
 ]
 
 [[package]]
@@ -4266,13 +3169,13 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
- "indexmap 2.14.0",
+ "indexmap",
  "libc",
  "pastey",
  "pin-project-lite",
  "rand 0.10.2",
  "rmcp-macros",
- "schemars 1.2.2",
+ "schemars",
  "serde",
  "serde_json",
  "sha2 0.11.0",
@@ -4310,28 +3213,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "router-clock"
+version = "0.1.147"
+dependencies = [
+ "chrono",
+ "runtime-primitives 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "runtime-primitives"
 version = "0.4.0"
 source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
  "serde",
  "thiserror",
- "tokio",
  "uuid",
 ]
 
 [[package]]
-name = "rusqlite"
-version = "0.37.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "165ca6e57b20e1351573e3729b958bc62f0e48025386970b6e4d29e7a7e71f3f"
+name = "runtime-primitives"
+version = "0.4.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687#b75d072c116afa46cfa82facd34db6317f380687"
 dependencies = [
- "bitflags 2.13.0",
- "fallible-iterator",
- "fallible-streaming-iterator",
- "hashlink 0.10.0",
- "libsqlite3-sys",
- "smallvec",
+ "serde",
+ "thiserror",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -4371,7 +3280,7 @@ version = "0.38.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fdb5bc1ae2baa591800df16c9ca78619bf65c0488b41b96ccec5d11220d8c154"
 dependencies = [
- "bitflags 2.13.0",
+ "bitflags",
  "errno",
  "libc",
  "linux-raw-sys 0.4.15",
@@ -4384,7 +3293,7 @@ version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190"
 dependencies = [
- "bitflags 2.13.0",
+ "bitflags",
  "errno",
  "libc",
  "linux-raw-sys 0.12.1",
@@ -4446,18 +3355,6 @@ checksum = "04d056b875a9d2e6cb9a61d127afee9ac5999b9f87bcb32079d1318e505be714"
 
 [[package]]
 name = "schemars"
-version = "0.9.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cd191f9397d57d581cddd31014772520aa448f65ef991055d7f61582c65165f"
-dependencies = [
- "dyn-clone",
- "ref-cast",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "schemars"
 version = "1.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "687274d293b6cdc6e73e0fee520bf2049650090d7164f87672d212a3c530cf4a"
@@ -4493,29 +3390,6 @@ name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
-
-[[package]]
-name = "security-framework"
-version = "3.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7f4bc775c73d9a02cde8bf7b2ec4c9d12743edf609006c7facc23998404cd1d"
-dependencies = [
- "bitflags 2.13.0",
- "core-foundation",
- "core-foundation-sys",
- "libc",
- "security-framework-sys",
-]
-
-[[package]]
-name = "security-framework-sys"
-version = "2.17.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ce2691df843ecc5d231c0b14ece2acc3efb62c0a398c7e1d875f3983ce020e3"
-dependencies = [
- "core-foundation-sys",
- "libc",
-]
 
 [[package]]
 name = "semver"
@@ -4570,7 +3444,6 @@ version = "1.0.150"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8014e44b4736ed0538adeecded0fce2a272f22dc9578a7eb6b2d9993c74cfb9"
 dependencies = [
- "indexmap 2.14.0",
  "itoa",
  "memchr",
  "serde",
@@ -4631,45 +3504,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_with"
-version = "3.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee78f1fbe43ac4a0e47aadb3dbd357b69eb0d3793e948624cd03dd2750ab1c0a"
-dependencies = [
- "base64 0.22.1",
- "bs58",
- "chrono",
- "hex",
- "indexmap 1.9.3",
- "indexmap 2.14.0",
- "jiff",
- "schemars 0.9.0",
- "schemars 1.2.2",
- "serde_core",
- "serde_json",
- "serde_with_macros",
- "time",
-]
-
-[[package]]
-name = "serde_with_macros"
-version = "3.22.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8705578779c2b6bd90d84d66eb2e206b708b1a4d7b9f17641b293545bf1c7e46"
-dependencies = [
- "darling 0.23.0",
- "proc-macro2",
- "quote",
- "syn 2.0.118",
-]
-
-[[package]]
 name = "session-event-model"
-version = "0.1.142"
+version = "0.1.147"
 dependencies = [
  "base64 0.22.1",
  "message-board",
- "schemars 1.2.2",
+ "schemars",
  "serde",
  "serde_json",
  "uuid",
@@ -4733,12 +3573,6 @@ checksum = "f40ca3c46823713e0d4209592e8d6e826aa57e928f09752619fc696c499637f6"
 dependencies = [
  "lazy_static",
 ]
-
-[[package]]
-name = "shell-words"
-version = "1.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc6fe69c597f9c37bfeeeeeb33da3530379845f10be461a66d16d03eca2ded77"
 
 [[package]]
 name = "shlex"
@@ -4845,11 +3679,14 @@ dependencies = [
 
 [[package]]
 name = "sqlite-storage-maintenance"
-version = "0.1.142"
+version = "0.1.147"
 dependencies = [
+ "chrono",
  "fs2",
+ "runtime-primitives 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "sqlx",
  "thiserror",
+ "tokio",
  "tracing",
 ]
 
@@ -4885,8 +3722,8 @@ dependencies = [
  "futures-io",
  "futures-util",
  "hashbrown 0.16.1",
- "hashlink 0.11.1",
- "indexmap 2.14.0",
+ "hashlink",
+ "indexmap",
  "log",
  "memchr",
  "percent-encoding",
@@ -4945,7 +3782,7 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "90b8020fe17c5f2c245bfa2505d7ef59c5604839527c740266ad2214acebea27"
 dependencies = [
- "bitflags 2.13.0",
+ "bitflags",
  "byteorder",
  "bytes",
  "crc",
@@ -4973,7 +3810,7 @@ checksum = "87a2bdd6e83f6b3ea525ca9fee568030508b58355a43d0b2c1674d5f79dcd65e"
 dependencies = [
  "atoi",
  "base64 0.22.1",
- "bitflags 2.13.0",
+ "bitflags",
  "byteorder",
  "crc",
  "dotenvy",
@@ -5030,7 +3867,16 @@ version = "0.4.0"
 source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
 dependencies = [
  "sqlx",
- "sqlx-turso-core",
+ "sqlx-turso-core 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090)",
+]
+
+[[package]]
+name = "sqlx-turso"
+version = "0.4.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687#b75d072c116afa46cfa82facd34db6317f380687"
+dependencies = [
+ "sqlx",
+ "sqlx-turso-core 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "sqlx-turso-macros",
 ]
 
@@ -5038,6 +3884,25 @@ dependencies = [
 name = "sqlx-turso-core"
 version = "0.4.0"
 source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
+dependencies = [
+ "either",
+ "futures-core",
+ "futures-util",
+ "log",
+ "percent-encoding",
+ "serde",
+ "sqlx-core",
+ "thiserror",
+ "tokio",
+ "turso",
+ "turso_parser",
+ "url",
+]
+
+[[package]]
+name = "sqlx-turso-core"
+version = "0.4.0"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687#b75d072c116afa46cfa82facd34db6317f380687"
 dependencies = [
  "chrono",
  "either",
@@ -5058,13 +3923,13 @@ dependencies = [
 [[package]]
 name = "sqlx-turso-macros"
 version = "0.4.0"
-source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=0b2742975ca8b20270929b89f4959c1987bdb090#0b2742975ca8b20270929b89f4959c1987bdb090"
+source = "git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687#b75d072c116afa46cfa82facd34db6317f380687"
 dependencies = [
  "proc-macro-crate",
  "proc-macro2",
  "quote",
  "sqlx-macros-core",
- "sqlx-turso-core",
+ "sqlx-turso-core 0.4.0 (git+https://github.com/agent-collaboration/agent-fleet-sync.git?rev=b75d072c116afa46cfa82facd34db6317f380687)",
  "syn 2.0.118",
 ]
 
@@ -5237,16 +4102,6 @@ dependencies = [
  "fastrand",
  "getrandom 0.4.3",
  "once_cell",
- "rustix 1.1.4",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "terminal_size"
-version = "0.4.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "230a1b821ccbd75b185820a1f1ff7b14d21da1e442e22c0863ea5f08771a8874"
-dependencies = [
  "rustix 1.1.4",
  "windows-sys 0.61.2",
 ]
@@ -5433,7 +4288,7 @@ version = "1.1.2+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "81f3d15e84cbcd896376e6730314d59fb5a87f31e4b038454184435cd57defee"
 dependencies = [
- "indexmap 2.14.0",
+ "indexmap",
  "serde_core",
  "serde_spanned 1.1.1",
  "toml_datetime 1.1.1+spec-1.1.0",
@@ -5466,7 +4321,7 @@ version = "0.22.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "41fe8c660ae4257887cf66394862d21dbca4a6ddd26f04a3560410406a2f819a"
 dependencies = [
- "indexmap 2.14.0",
+ "indexmap",
  "serde",
  "serde_spanned 0.6.9",
  "toml_datetime 0.6.11",
@@ -5480,7 +4335,7 @@ version = "0.25.11+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b59c4d22ed448339746c59b905d24568fcbb3ab65a500494f7b8c3e97739f2b"
 dependencies = [
- "indexmap 2.14.0",
+ "indexmap",
  "toml_datetime 1.1.1+spec-1.1.0",
  "toml_parser",
  "winnow 1.0.3",
@@ -5528,7 +4383,7 @@ version = "0.6.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4cfcf7e2740e6fc6d4d688b4ef00650406bb94adf4731e43c096c3a19fe40840"
 dependencies = [
- "bitflags 2.13.0",
+ "bitflags",
  "bytes",
  "futures-util",
  "http",
@@ -5610,16 +4465,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tracing-serde"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "704b1aeb7be0d0a84fc9828cae51dab5970fee5088f83d1dd7ee6f6246fc6ff1"
-dependencies = [
- "serde",
- "tracing-core",
-]
-
-[[package]]
 name = "tracing-subscriber"
 version = "0.3.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5629,15 +4474,12 @@ dependencies = [
  "nu-ansi-term",
  "once_cell",
  "regex-automata",
- "serde",
- "serde_json",
  "sharded-slab",
  "smallvec",
  "thread_local",
  "tracing",
  "tracing-core",
  "tracing-log",
- "tracing-serde",
 ]
 
 [[package]]
@@ -5702,18 +4544,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "58e5f09aaead5dfc87c5a22a2b3e95fb85e2d666e27e5f4a2474c42198af20ec"
 dependencies = [
  "aegis",
- "aes 0.8.4",
- "aes-gcm 0.10.3",
+ "aes",
+ "aes-gcm",
  "allocator-api2 0.4.0",
  "antithesis_sdk",
  "arc-swap",
  "aristo",
  "bigdecimal",
- "bitflags 2.13.0",
+ "bitflags",
  "branches",
  "bumpalo",
  "bytemuck",
- "cfg_aliases 0.2.1",
+ "cfg_aliases",
  "cfg_block",
  "chrono",
  "crc32c",
@@ -5796,7 +4638,7 @@ version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25b6d3428f16fff69a13bf7f966628d9fc8e0d097fec6cd84ce1af3d5a9be6b1"
 dependencies = [
- "bitflags 2.13.0",
+ "bitflags",
  "memchr",
  "miette",
  "strum 0.26.3",
@@ -5933,22 +4775,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7df058c713841ad818f1dc5d3fd88063241cc61f49f5fbea4b951e8cf5a8d71d"
 
 [[package]]
-name = "unicode-segmentation"
-version = "1.13.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6f5d3c3b1bf09027a88a6bc961fc00497d651009560b5463668dc81b0fa87a8"
-
-[[package]]
 name = "unicode-width"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7dd6e30e90baa6f72411720665d41d89b9a3d039dc45b8faea1ddd07f617f6af"
-
-[[package]]
-name = "unicode-xid"
-version = "0.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
 
 [[package]]
 name = "universal-hash"
@@ -5958,16 +4788,6 @@ checksum = "fc1de2c688dc15305988b563c3854064043356019f97a4b46276fe734c4f07ea"
 dependencies = [
  "crypto-common 0.1.7",
  "subtle",
-]
-
-[[package]]
-name = "universal-hash"
-version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4987bdc12753382e0bec4a65c50738ffaabc998b9cdd1f952fb5f39b0048a96"
-dependencies = [
- "crypto-common 0.2.2",
- "ctutils",
 ]
 
 [[package]]
@@ -6005,12 +4825,6 @@ name = "utf8_iter"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
-
-[[package]]
-name = "utf8parse"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"

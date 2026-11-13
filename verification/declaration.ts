@@ -5,7 +5,6 @@ export const fileSchema = z.object({
   path: absolutePath,
   sha256: z.string().regex(/^[a-f0-9]{64}$/),
 });
-export const sealedCopySchema = fileSchema.extend({ copyRoot: absolutePath });
 export const artifactSchema = fileSchema.extend({
   identifier: z.string().min(1),
   team: z.string().min(1),
@@ -105,7 +104,6 @@ export const runSourceSchema = z.object({
   productVersion: z.string().regex(/^\d+\.\d+\.\d+$/),
   harnessPin: z.string().regex(/^[a-f0-9]{40}$/),
   purpose: z.enum(["discovery", "confirmation"]),
-  importer: artifactSchema,
   evidenceDirectory: absolutePath,
   vd: z.object({
     repository: absolutePath,
@@ -118,7 +116,6 @@ export type RunSource = z.infer<typeof runSourceSchema>;
 export const declarationSchema = runSourceSchema
   .extend({
     dataBoundary: z.literal("syntheticOnly"),
-    syntheticFixture: fileSchema,
     rung: z.enum(["R1", "R2", "R3"]),
     rows: z
       .array(z.string().min(1))
