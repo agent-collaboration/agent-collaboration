@@ -17,10 +17,6 @@ export interface TursoPreparationTarget {
 
 export const tursoPreparationTargets: readonly TursoPreparationTarget[] = [
   {
-    packageName: "agent-router-update",
-    migrationSources: ["crates/interaction-storage/migrations"],
-  },
-  {
     packageName: "interaction-storage",
     migrationSources: ["crates/interaction-storage/migrations"],
   },

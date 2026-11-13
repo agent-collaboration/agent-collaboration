@@ -14,6 +14,8 @@ cargo nextest run --locked --profile ci -p agent-collaboration --features quota-
   `board-debug-runtime` artifacts, then sets `CODEX_ROUTER_E2E_HOST_BINARY` and
   `CODEX_ROUTER_E2E_PARENT` before running this target serially. These cases
   remain excluded from the main workspace test job.
+- The central journey root retains BC01–BC04 and BC06. BC05 and its legacy-import
+  fixture helpers were removed with the board-import command.
 - Other directories hold case expansions and reusable fixtures. An aggregate
   declares each shared helper implementation once. Colocated `*_test.rs`
   files retain helper unit cases; test-only namespace modules preserve every

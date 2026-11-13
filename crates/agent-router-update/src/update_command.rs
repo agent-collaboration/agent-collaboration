@@ -1,21 +1,16 @@
 //! `agent-router-update`: run a Router root's pending one-time steps, list them with
-//! `--dry-run`, or import a legacy board with `board-import`.
-use crate::import_command::ImportCommand;
+//! `--dry-run`.
 use agent_router_update::{RouterUpdatePlan, plan_router_update, run_router_update};
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use std::{io::Write, path::PathBuf};
 
 #[derive(Parser)]
 #[command(
     name = "agent-router-update",
     version,
-    about = "Run the one-time updates a Router root needs, with its Host stopped",
-    args_conflicts_with_subcommands = true,
-    subcommand_negates_reqs = true
+    about = "Run the one-time updates a Router root needs, with its Host stopped"
 )]
 pub struct RouterUpdateCommand {
-    #[command(subcommand)]
-    command: Option<RouterUpdateSubcommand>,
     /// The Router root to update, such as ~/.codex-router.
     #[arg(long, required = true)]
     router_root: Option<PathBuf>,
@@ -24,18 +19,9 @@ pub struct RouterUpdateCommand {
     dry_run: bool,
 }
 
-#[derive(Subcommand)]
-enum RouterUpdateSubcommand {
-    /// Upgrade a closed legacy board store through central's owner import.
-    BoardImport(ImportCommand),
-}
-
 impl RouterUpdateCommand {
     /// Returns whether the command succeeded; failures are already reported on stderr.
     pub async fn execute(self) -> Result<bool, Box<dyn std::error::Error>> {
-        if let Some(RouterUpdateSubcommand::BoardImport(import)) = self.command {
-            return import.execute().await;
-        }
         let Some(root) = self.router_root else {
             return Err("--router-root is required".into());
         };
