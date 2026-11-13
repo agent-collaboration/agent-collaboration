@@ -11,6 +11,7 @@ mod conformance_store;
 mod native_logging;
 mod native_objects;
 mod native_server;
+mod object_clock;
 mod object_keys;
 mod object_storage;
 mod sqlite_object_store;

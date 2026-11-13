@@ -34,7 +34,7 @@ pub struct TokioCentralPlatform {
     clock: Arc<dyn Clock>,
     observe: Arc<dyn Fn(CentralObservation) + Send + Sync>,
     objects: Arc<crate::native_objects::NativeObjects>,
-    ids: Arc<ClockIds<crate::native_objects::SharedClock>>,
+    ids: Arc<ClockIds<crate::object_clock::SharedClock>>,
 }
 
 impl TokioCentralPlatform {
@@ -173,7 +173,7 @@ impl TokioCentralPlatform {
             controls,
         )
         .await?;
-        let ids = Arc::new(ClockIds::new(crate::native_objects::SharedClock::new(
+        let ids = Arc::new(ClockIds::new(crate::object_clock::SharedClock::new(
             clock.clone(),
         )));
         Ok(Self {

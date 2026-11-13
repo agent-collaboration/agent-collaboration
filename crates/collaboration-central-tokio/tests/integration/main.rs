@@ -275,6 +275,9 @@ mod revocation_writer_recovery;
 
 #[cfg(test)]
 #[cfg(feature = "test-support")]
+mod alarm_publication_order;
+#[cfg(test)]
+#[cfg(feature = "test-support")]
 mod central_object_batches;
 #[cfg(test)]
 #[cfg(feature = "test-support")]

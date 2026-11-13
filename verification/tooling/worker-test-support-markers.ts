@@ -3,6 +3,8 @@
 // Object classes.
 export const testSupportMarkers: readonly string[] = [
   "/test-support/storage/",
+  "/test-support/object-clock-ids",
+  "/test/object-clock-ids",
   "/test-support/call-store/",
   "/test-support/driver/",
   "DriverScenarioObject",

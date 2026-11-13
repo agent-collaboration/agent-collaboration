@@ -693,7 +693,7 @@ jobs:
       # SQLite-backed Durable Objects under the pinned Miniflare and workerd.
       - name: Run the storage boundary cases in workerd
         run: |
-          worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --locked --features test-support
+          worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --locked --features test-support,conformance
           pnpm --dir verification run test:workerd
       - name: Save pinned Worker build tool
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.worker_tools.outputs.cache-hit != 'true'
