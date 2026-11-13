@@ -55,3 +55,9 @@ O1), with a test-only `widgets` schema from `collaboration-central-core`'s
 Run: `cargo nextest run -p collaboration-central-tokio --features test-support`.
 The kept enrollment, Access and session-upgrade behavior is proven by
 `collaboration-central-core`'s tests.
+
+- `alarm_publication_order`: holds an older real commit before alarm publication,
+  then forces a newer batch to queue or expose the forbidden commit order. It covers
+  set/set, clear/set and set/clear, with alarm readback compared to stored rows.
+- `src/native_objects_test.rs`: controls the real object clock and checks UUIDv7
+  milliseconds minted through that same object, including a later clock advance.

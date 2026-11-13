@@ -3,6 +3,7 @@
 // the central Worker built with its test-support feature. Expected values come from
 // Program Design #storage-boundary; the Worker only executes the steps.
 import assert from "node:assert/strict";
+import { z } from "zod";
 import { after, before, describe, test } from "node:test";
 import { WorkerdStorage, centralTestBundle } from "./workerd-storage.ts";
 
@@ -353,4 +354,23 @@ describe("the SQLx Durable Object driver's scenarios", () => {
     }
     assert.deepEqual(failures, []);
   });
+});
+
+test("actual object ids follow held and advanced conformance time", async () => {
+  const observation = z.object({ nowMs: z.number().int(), ids: z.array(z.string()).length(2) });
+  for (const heldAtMs of [FAR_ALARM_MS, FAR_ALARM_MS + 123]) {
+    const response = await fetch(`${central.origin}/test-support/object-clock-ids`, {
+      method: "POST",
+      body: JSON.stringify(new Date(heldAtMs).toISOString()),
+    });
+    assert.equal(response.status, 200, await response.clone().text());
+    const result = observation.parse(await response.json());
+    assert.equal(result.nowMs, heldAtMs);
+    for (const id of result.ids) {
+      assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+      assert.equal(Number.parseInt(id.replaceAll("-", "").slice(0, 12), 16), heldAtMs);
+    }
+    assert.equal(new Set(result.ids).size, 2);
+    assert.deepEqual(result.ids, [...result.ids].sort());
+  }
 });
