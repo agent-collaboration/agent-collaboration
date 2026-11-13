@@ -5,7 +5,7 @@ import { installedExecutables } from "./publish-homebrew-tap-local.ts";
 
 export function releaseCommandFixture(
   root: string,
-  importerVersion: string = "0.1.102",
+  sessionsVersion = "0.1.102",
 ): {
   readonly environment: NodeJS.ProcessEnv;
   readonly formula: string;
@@ -36,9 +36,9 @@ export function releaseCommandFixture(
       root,
       log,
       version: "0.1.102",
+      sessionsVersion,
       commit: "be7e61e8bca32ebac172eb743e8064d2c7d6ffe7",
       asset,
-      importerVersion,
     }),
   );
   return {

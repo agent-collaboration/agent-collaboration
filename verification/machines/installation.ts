@@ -3,7 +3,7 @@ import { resolve } from "node:path";
 import { setTimeout } from "node:timers/promises";
 import { z } from "zod";
 import { createServer } from "node:net";
-import type { Artifact, Machine } from "../declaration.ts";
+import type { Machine } from "../declaration.ts";
 import type { Receipt } from "../receipt.ts";
 import { decode, encode } from "../exact-json.ts";
 import { RouterMcp } from "../clients/router-mcp.ts";
@@ -36,19 +36,15 @@ import {
   type InstallationIdentity,
   type UpgradeBaseline,
 } from "./installation-baseline.ts";
-import { observeInstallationStopWindow } from "./installation-stop-window.ts";
 import {
   sanitizedInstallationFailure,
   type InstallationStage,
   type InstallationFailure,
 } from "./installation-failure.ts";
-import { qualifyRootUpdater, updateStoppedInstallationRoot } from "./installation-root-update.ts";
 import {
   loadStoppedOwnedRoot,
   inspectStoppedOwnedRoot,
-  inspectInterruptedOwnedUpgrade,
   assertStoppedFileIdentities,
-  assertContinuationController,
   type StoppedOwnedRootDeclaration,
 } from "./installation-stopped-root.ts";
 
@@ -168,8 +164,7 @@ export class Installation {
       );
     }
     // Provider isolation must reach the file the declared product reads: releases before
-    // 0.1.142 read providers.json; later ones read settings.jsonc (agent-router-update carries
-    // an old providers.json into it on upgrade).
+    // 0.1.142 read providers.json; later ones read settings.jsonc.
     const disabledProviders = {
       claude: { enabled: false, executable: null, arguments: [] },
       cursor: { enabled: false, executable: null, arguments: [] },
@@ -233,87 +228,11 @@ export class Installation {
     }
   }
 
-  /** Finish an interrupted updater without relaunching the old product or enrolling. */
-  static async resumeStoppedUpgrade(input: {
-    declaration: unknown;
-    receipt: Receipt;
-    router: Artifact;
-    cli: Artifact;
-    updater: Artifact;
-    productVersion: string;
-    sourceHead: string;
-  }): Promise<Installation> {
-    if (readsLegacyProvidersFile(input.productVersion))
-      throw new Error("interrupted upgrade must target the current settings layout");
-    z.string()
-      .regex(/^[a-f0-9]{40}$/)
-      .parse(input.sourceHead);
-    const initial = await loadStoppedOwnedRoot(input.declaration);
-    const release = await registerCommandRoot(initial.declaration.root);
-    let replacement: Installation | undefined;
-    let guard: CodexHomeGuard | undefined;
-    try {
-      const context = await inspectInterruptedOwnedUpgrade(initial.declaration);
-      const machine = { ...context.machine, router: input.router, cli: input.cli };
-      for (const artifact of [input.router, input.cli])
-        await qualifyArtifact(artifact, machine.root);
-      await qualifyRootUpdater({
-        root: machine.root,
-        updater: input.updater,
-        targetVersion: input.productVersion,
-        receipt: input.receipt,
-      });
-      guard = await CodexHomeGuard.captureExistingStaging({
-        machine,
-        home: context.original.stagingHome,
-        expected: context.declaration.homes,
-      });
-      await input.receipt.record("interruptedUpgradeResumed", {
-        root: machine.root,
-        originalBaseline: context.baseline,
-        sourceHead: input.sourceHead,
-        updater: input.updater,
-        oldProductRelaunched: false,
-      });
-      const environment: NodeJS.ProcessEnv = {
-        ...process.env,
-        HOME: context.original.stagingHome,
-        CODEX_HOME: machine.codexHome,
-      };
-      delete environment.CODEX_ROUTER_HOST_INHERITED_LOCK;
-      delete environment.CODEX_ROUTER_USE_HOME_DEFAULT;
-      await updateStoppedInstallationRoot({
-        root: machine.root,
-        updater: input.updater,
-        receipt: input.receipt,
-        environment,
-      });
-      replacement = new Installation({
-        machine,
-        remote: undefined,
-        guard,
-        repository: context.original.repository,
-        productVersion: input.productVersion,
-        receipt: input.receipt,
-        releaseCommandRoot: release,
-        stagingHome: context.original.stagingHome,
-        continuation: {
-          kind: "owned",
-          declaration: context.declaration,
-          baseline: context.baseline,
-        },
-      });
-      await replacement.start();
-      await replacement.verifyOriginalEnrollment(context.baseline);
-      return replacement;
-    } catch (error: unknown) {
-      if (replacement !== undefined) await replacement.close();
-      else {
-        release();
-        await guard?.verify(input.receipt);
-      }
-      throw error;
-    }
+  /** Refuse the retired in-place upgrade before any inspection or child shutdown. */
+  static async resumeStoppedUpgrade(_input: unknown): Promise<never> {
+    throw new Error(
+      "retired: the updater was replaced by scripts/one-off/2026-11-convert-router-root.ts",
+    );
   }
   configurationEligibility(): ConfigurationEligibility {
     return this.guard.eligibility;
@@ -670,100 +589,10 @@ export class Installation {
     if ((await enrollInvocationsSince(this.machine.root, baseline.baselineId)) !== 0)
       throw new Error("enrollment occurred after original baseline marker");
   }
-  async upgrade(input: {
-    baseline: UpgradeBaseline;
-    router: Machine["router"];
-    cli: Machine["cli"];
-    productVersion: string;
-    sourceHead: string;
-    updater: Artifact;
-    /** The observer owns its root registration and receipts; failure leaves old children stopped. */
-    observeStoppedOld?: () => Promise<void>;
-  }): Promise<Installation> {
-    if (this.remote !== undefined || this.state.kind !== "ready")
-      throw new Error("upgrade requires the ready owned local installation");
-    const baseline = upgradeBaselineSchema.parse(input.baseline);
-    if (
-      this.continuation !== undefined &&
-      baseline.baselineId !== this.continuation.baseline.baselineId
-    )
-      throw new Error("continued root must use its original baseline marker");
-    if (this.continuation !== undefined)
-      await assertStoppedFileIdentities(this.continuation.declaration);
-    if (this.continuation !== undefined)
-      await assertContinuationController(this.continuation.declaration);
-    z.string()
-      .regex(/^[a-f0-9]{40}$/)
-      .parse(input.sourceHead);
-    if (baseline.root !== this.machine.root)
-      throw new Error("upgrade root differs from expected enrolled root");
-    await this.verifyOriginalEnrollment(baseline);
-    await qualifyArtifact(input.router, this.machine.root);
-    await qualifyArtifact(input.cli, this.machine.root);
-    await qualifyRootUpdater({
-      root: this.machine.root,
-      updater: input.updater,
-      targetVersion: input.productVersion,
-      receipt: this.input.receipt,
-    });
-    await this.input.receipt.record("installationUpgradeRequested", {
-      root: this.machine.root,
-      sourceHead: input.sourceHead,
-      productVersion: input.productVersion,
-      router: input.router,
-      cli: input.cli,
-      baselineId: baseline.baselineId,
-    });
-    // close owns only this instance's Host/Router children. The root and enrollment stay in place.
-    await observeInstallationStopWindow({
-      stopOwnedChildren: (): Promise<void> => this.close(),
-      ...(input.observeStoppedOld === undefined
-        ? {}
-        : { observeStoppedOld: input.observeStoppedOld }),
-      updateStoppedRoot: (): Promise<void> => {
-        const environment: NodeJS.ProcessEnv = {
-          ...process.env,
-          CODEX_HOME: this.machine.codexHome,
-          ...(this.input.stagingHome === undefined ? {} : { HOME: this.input.stagingHome }),
-        };
-        delete environment.CODEX_ROUTER_HOST_INHERITED_LOCK;
-        delete environment.CODEX_ROUTER_USE_HOME_DEFAULT;
-        return updateStoppedInstallationRoot({
-          root: this.machine.root,
-          updater: input.updater,
-          receipt: this.input.receipt,
-          environment,
-        });
-      },
-    });
-    const releaseCommandRoot = await registerCommandRoot(this.machine.root);
-    const replacement = new Installation({
-      machine: { ...this.machine, router: input.router, cli: input.cli },
-      remote: undefined,
-      guard: this.guard,
-      repository: this.input.repository,
-      productVersion: input.productVersion,
-      receipt: this.input.receipt,
-      releaseCommandRoot,
-      ...(this.input.stagingHome === undefined ? {} : { stagingHome: this.input.stagingHome }),
-      ...(this.continuation === undefined ? {} : { continuation: this.continuation }),
-    });
-    replacement.generation = this.generation;
-    try {
-      await replacement.start();
-      await replacement.verifyOriginalEnrollment(baseline);
-      await this.input.receipt.record("installationUpgradeObserved", {
-        root: this.machine.root,
-        sourceHead: input.sourceHead,
-        productVersion: input.productVersion,
-        baselineId: baseline.baselineId,
-        enrollInvocations: 0,
-      });
-      return replacement;
-    } catch (error: unknown) {
-      await replacement.close();
-      throw error;
-    }
+  async upgrade(_input: unknown): Promise<never> {
+    throw new Error(
+      "retired: the updater was replaced by scripts/one-off/2026-11-convert-router-root.ts",
+    );
   }
   async stopHost(): Promise<void> {
     if (this.state.kind !== "ready") throw new Error("no ready Host to stop");

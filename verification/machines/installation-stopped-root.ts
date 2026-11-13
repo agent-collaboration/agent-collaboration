@@ -18,7 +18,6 @@ import {
 } from "./command-ledger.ts";
 import { existingStagingHomesSchema, validateExistingStagingHomes } from "./codex-home.ts";
 import { upgradeBaselineSchema, type UpgradeBaseline } from "./installation-baseline.ts";
-import { requireDisabledUpdateConfiguration } from "./installation-root-update.ts";
 
 export const stoppedFileSchema = z
   .object({
@@ -319,20 +318,11 @@ export async function inspectStoppedOwnedRoot(
   }
 }
 
-/** Resume only the same stopped root after its updater carried the provider file. */
-export async function inspectInterruptedOwnedUpgrade(
-  raw: unknown,
-): Promise<Awaited<ReturnType<typeof loadStoppedOwnedRoot>>> {
-  const context = await loadStoppedOwnedRoot(raw);
-  const release = await registerCommandRoot(context.declaration.root);
-  try {
-    await inspectRegisteredStoppedRoot(context, () =>
-      requireDisabledUpdateConfiguration(context.declaration.root),
-    );
-    return context;
-  } finally {
-    release();
-  }
+/** Refuse the retired updater continuation before touching the declared root. */
+export async function inspectInterruptedOwnedUpgrade(_raw: unknown): Promise<never> {
+  throw new Error(
+    "retired: the updater was replaced by scripts/one-off/2026-11-convert-router-root.ts",
+  );
 }
 
 async function inspectRegisteredStoppedRoot(

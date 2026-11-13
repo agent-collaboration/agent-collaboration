@@ -11,4 +11,3 @@ mod fleet_enrollment_cli;
 mod fleet_enrollment_producer;
 mod proxy_overload_passthrough;
 mod responses_account_recovery;
-mod router_update_guard_cli;

@@ -43,7 +43,7 @@ readonly DEVELOPER_ID_TEAM="974QD84WVC"
 
 debug_identifier_for() {
   case "$(basename "$1")" in
-    codex-router | agent-collaboration | agent-sessions | agent-router-update | board-debug-runtime)
+    codex-router | agent-collaboration | agent-sessions | board-debug-runtime)
       echo "dev.shravansunder.$(basename "$1").debug"
       ;;
     *)

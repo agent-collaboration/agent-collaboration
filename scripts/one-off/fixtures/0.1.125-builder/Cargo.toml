@@ -1,0 +1,13 @@
+[package]
+name = "router-root-0125-fixture-builder"
+version = "0.0.0"
+edition = "2024"
+autotests = false
+publish = false
+
+[workspace]
+
+[dependencies]
+codex-router-core = { git = "https://github.com/agent-collaboration/agent-collaboration.git", rev = "cbf56bad640ae981900c646ff2ae0b64aaaebd3b" }
+codex-router-state = { git = "https://github.com/agent-collaboration/agent-collaboration.git", rev = "cbf56bad640ae981900c646ff2ae0b64aaaebd3b" }
+tokio = { version = "=1.53.3", features = ["macros", "rt-multi-thread"] }
