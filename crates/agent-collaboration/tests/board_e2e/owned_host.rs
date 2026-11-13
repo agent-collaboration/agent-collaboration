@@ -197,7 +197,9 @@ impl BoardHost {
     fn spawn_owned(directory: &Path, session: Option<&Path>) -> FixtureResult<Self> {
         let binary = std::env::var_os("CODEX_ROUTER_E2E_HOST_BINARY")
             .map(PathBuf::from)
-            .ok_or("set CODEX_ROUTER_E2E_HOST_BINARY to prebuilt target/debug/examples/board-debug-runtime")?;
+            .ok_or(
+                "set CODEX_ROUTER_E2E_HOST_BINARY to prebuilt target/debug/board-debug-runtime",
+            )?;
         let stderr = OpenOptions::new()
             .write(true)
             .create_new(true)

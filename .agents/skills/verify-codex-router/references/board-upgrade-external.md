@@ -29,7 +29,7 @@ G4's caller supplies:
   `target/debug/agent-router-update`,
   `target/debug/board-upgrade-native-observer`,
   `target/debug/board-upgrade-central` (local qualification only),
-  `target/debug/examples/board-debug-runtime`, and
+  `target/debug/board-debug-runtime`, and
   `target/debug/agent-collaboration`. Their owner builds and signs them normally,
   then copies them into one private, flat artifact directory. Supply that set's
   receipt; the driver verifies and executes the copies without rebuilding or

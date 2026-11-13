@@ -1,0 +1,79 @@
+[package]
+autotests = false
+name = "codex-router-debug-hosts"
+description = "Development-only debug Host launchers; never a dependency of a production crate."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[features]
+# The feature set the former codex-router-host examples (board-debug-runtime,
+# debug_host_acceptance, imagegen-debug-acceptance, provider-only-debug-host) were
+# built with: Host runtime test hooks, the Keychain test guard and ACP test
+# observation. automation-debug-host runs without it, as the former normal bin did.
+runtime-test-support = [
+    "codex-router-host/runtime-test-support",
+    "codex-router-host/keychain-test-support",
+    "codex-router-secret-store/keychain-test-guard",
+    "codex-router-secret-store/test-support",
+    "acp-client-runtime/test-observation",
+]
+
+# Keep the launchers' colocated unit tests discoverable by nextest.
+[[bin]]
+name = "automation-debug-host"
+path = "src/bin/automation-debug-host.rs"
+test = true
+bench = false
+
+[[bin]]
+name = "board-debug-runtime"
+path = "src/bin/board-debug-runtime.rs"
+test = true
+bench = false
+
+[[bin]]
+name = "debug_host_acceptance"
+path = "src/bin/debug_host_acceptance.rs"
+test = true
+bench = false
+
+[[bin]]
+name = "imagegen-debug-acceptance"
+path = "src/bin/imagegen-debug-acceptance.rs"
+test = true
+bench = false
+
+[[bin]]
+name = "provider-only-debug-host"
+path = "src/bin/provider-only-debug-host.rs"
+test = true
+bench = false
+
+[dependencies]
+acp-client-runtime = { path = "../acp-client-runtime", version = "0.1.40" }
+codex-native-integration.workspace = true
+codex-router-host = { path = "../codex-router-host", version = "0.1.148" }
+codex-router-secret-store = { path = "../codex-router-secret-store", version = "0.1.4" }
+codex-router-state = { path = "../codex-router-state", version = "0.1.4" }
+collaboration-client = { path = "../collaboration-client", version = "0.1.14" }
+collaboration-protocol = { path = "../collaboration-protocol", version = "0.1.14" }
+collaboration-runtime = { version = "0.1.105", path = "../collaboration-runtime" }
+fleet-sync-protocol.workspace = true
+futures-util.workspace = true
+interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
+message-board = { path = "../message-board", version = "0.1.20" }
+node-test-fixture = { path = "../node-test-fixture", version = "0.1.105" }
+rustix = { workspace = true, features = ["event"] }
+serde.workspace = true
+serde_json.workspace = true
+tempfile = "3.27.0"
+tokio = { workspace = true, features = ["io-std"] }
+tokio-tungstenite.workspace = true
+toml = "1.1.2"
+tracing.workspace = true
+tracing-subscriber.workspace = true

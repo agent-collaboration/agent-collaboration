@@ -35,7 +35,7 @@ supplies that tree when this checkout contains release placeholders.
 ## Declared artifacts and launch
 
 Provide qualified prebuilt `target/debug/agent-collaboration`,
-`target/debug/examples/board-debug-runtime` and `target/debug/board-upgrade-central`.
+`target/debug/board-debug-runtime` and `target/debug/board-upgrade-central`.
 The central helper source is `scripts/verification/board_upgrade_native/src/central.rs`.
 Coordinate its build with the shared build owner; this driver never builds.
 The caller's `artifacts` JSON array contains `path`, `sha256`, `identifier`, `team`

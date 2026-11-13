@@ -4,7 +4,7 @@
 // application state.
 //
 // The prepared context is the automation Host's own marker in its run directory
-// (codex-router-host examples/automation-debug-host.rs DebugHostContext, camelCase, unknown
+// (codex-router-debug-hosts src/bin/automation-debug-host.rs DebugHostContext, camelCase, unknown
 // fields denied), whose fields its --resume-run-directory admission compares
 // (validate_resume_run_directory, validate_resume_binding). The marker lives in the run
 // directory beside its agent-workspace. This journey selects explicit --router-root and
