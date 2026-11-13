@@ -4,7 +4,6 @@ members = [
     "crates/router-clock",
     "crates/tailnet-verification-host",
     "crates/board-central-test-support",
-    "crates/agent-router-update",
     "crates/board-fleet-sync",
     "crates/board-sync-protocol",
     "crates/message-board",

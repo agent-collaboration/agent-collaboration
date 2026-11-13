@@ -13,12 +13,11 @@ affected.
   mismatched page size can expose uninitialized page-cache memory of the process
   that opens it. That is local information disclosure.
 - **Where we open such files:** the Router's own databases in its state folder,
-  and any file an operator passes to `agent-router-update import --source`. The
-  import opens the named file wherever it lives, not only under the Router root.
-  Opening it read-only and checking its schema afterwards do not protect against
-  the underlying SQLite read bug.
-- **How to stay safe until the fix:** only import legacy databases from a trusted
-  source.
+  including a stopped root being converted by the one-off proxy script. The
+  former updater and its arbitrary-path import command have been removed.
+  Opening a database read-only and checking its schema afterwards do not protect
+  against the underlying SQLite read bug.
+- **How to stay safe until the fix:** only open Router roots from a trusted source.
 - **What this is:** the owner accepted the risk on 2026-11-09. It is not fixed.
 
 ## Why we stay on crates.io SQLx

@@ -3,10 +3,7 @@ import { mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { installedExecutables } from "./publish-homebrew-tap-local.ts";
 
-export function releaseCommandFixture(
-  root: string,
-  importerVersion: string = "0.1.102",
-): {
+export function releaseCommandFixture(root: string): {
   readonly environment: NodeJS.ProcessEnv;
   readonly formula: string;
   readonly log: string;
@@ -38,7 +35,6 @@ export function releaseCommandFixture(
       version: "0.1.102",
       commit: "be7e61e8bca32ebac172eb743e8064d2c7d6ffe7",
       asset,
-      importerVersion,
     }),
   );
   return {

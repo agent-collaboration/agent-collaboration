@@ -285,7 +285,10 @@ fn picker_does_not_read_the_old_routers_jsonc_and_names_the_update() {
     };
     let notice = error.to_string();
     assert!(notice.contains("routers.jsonc"), "{notice}");
-    assert!(notice.contains("agent-router-update"), "{notice}");
+    assert!(
+        notice.contains("scripts/one-off/2026-11-convert-router-root.ts"),
+        "{notice}"
+    );
 }
 
 #[test]

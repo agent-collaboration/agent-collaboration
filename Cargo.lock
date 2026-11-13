@@ -293,36 +293,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "agent-router-update"
-version = "0.1.148"
-dependencies = [
- "agent-session-inventory",
- "chrono",
- "clap",
- "codex-router-core",
- "codex-router-host",
- "codex-router-secret-store",
- "codex-router-state",
- "collaboration-central-conformance",
- "collaboration-central-tokio",
- "collaboration-runtime",
- "fleet-sync-lease",
- "fleet-sync-protocol",
- "interaction-storage",
- "message-board-storage",
- "nix",
- "owned-process-test-support",
- "rusqlite",
- "serde_json",
- "sha2 0.10.9",
- "sqlx",
- "sqlx-turso",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
-]
-
-[[package]]
 name = "agent-session-inventory"
 version = "0.1.148"
 dependencies = [
@@ -1346,7 +1316,6 @@ version = "0.1.148"
 dependencies = [
  "agent-collaboration-tui",
  "agent-router-quota-tui",
- "agent-router-update",
  "base64 0.22.1",
  "board-central-test-support",
  "chrono",

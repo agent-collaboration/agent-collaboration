@@ -183,115 +183,104 @@ test("same-root composition keeps original marker and overlays execution without
   }
 });
 
-for (const mode of ["continueOld", "resumeUpgrade"] as const)
-  for (const invalid of [
-    "root",
-    "enrollment",
-    "enrollInvocation",
-    "missingStop",
-    "artifact",
-    "activePort",
-  ] as const)
-    test(`stopped-root ${mode} ${invalid} refusal launches no daemon`, async () => {
-      const f = await fixture(),
-        declaration = structuredClone(f.declaration);
-      let listener: ReturnType<typeof createServer> | undefined;
-      try {
-        if (invalid === "root") declaration.root = `${f.parent}/other`;
-        if (invalid === "enrollment") await writeFile(`${f.root}/fleet/enrollment.json`, "changed");
-        if (invalid === "enrollInvocation") {
-          const id = "01900000-0000-7000-8000-000000000007";
-          await appendFile(
-            `${f.root}/verification-commands.jsonl`,
-            [
-              {
-                kind: "started",
-                at,
-                commandId: id,
-                mode: "command",
-                executable: f.machine.router.path,
-                arguments: ["fleet", "enroll"],
-                cwd: f.root,
-                environmentKeys: [],
-              },
-              { kind: "ended", at, commandId: id, pid: 900003, exit: 0, signal: null, error: null },
-            ]
-              .map((row) => encode(row))
-              .join("\n") + "\n",
-          );
-        }
-        if (invalid === "missingStop")
-          await writeFile(
-            `${f.root}/verification-commands.jsonl`,
-            f.ledger
-              .filter((row) => row.kind !== "ended")
-              .map((row) => encode(row))
-              .join("\n") + "\n",
-          );
-        if (invalid === "artifact") await writeFile(f.machine.cli.path, "changed executable bytes");
-        if (invalid === "activePort") {
-          listener = createServer();
-          await new Promise<void>((accept, reject) => {
-            listener?.once("error", reject);
-            listener?.listen(0, "127.0.0.1", accept);
-          });
-          const address = listener.address();
-          assert.ok(address !== null && typeof address !== "string");
-          // Keep the original and continuation declarations bound to the same allocated port.
-          const original = {
-            ...(await loadStoppedOwnedRoot(declaration)).original,
-            machine: { ...f.machine, port: address.port },
-          };
-          await writeFile(declaration.original.plan.path, encode(original));
-          declaration.original.plan.sha256 = await fingerprint(declaration.original.plan.path);
-          // Port refusal precedes signature or version probes; configs retain the old port,
-          // so update both minimal configs and their exact inventory to reach that guard.
-          const profile = `${f.machine.codexHome}/codex-router-debug.config.toml`;
-          await writeFile(
-            profile,
-            (await readFile(profile, "utf8")).replace(":18827/", `:${address.port}/`),
-          );
-          declaration.homes = await snapshotExistingStagingHomes({
-            machine: { ...f.machine, port: address.port },
-            home: f.home,
-          });
-        }
-        const reasons = {
-          root: /root or original creator/,
-          enrollment: /fingerprint changed/,
-          enrollInvocation: /enrollment occurred/,
-          missingStop: /terminal ledger/,
-          artifact: /overlay artifact changed/,
-          activePort: /EADDRINUSE/,
-        };
-        await assert.rejects(
-          mode === "continueOld"
-            ? Installation.continueStoppedOwned({ declaration, receipt: new Receipt(f.parent) })
-            : Installation.resumeStoppedUpgrade({
-                declaration,
-                receipt: new Receipt(f.parent),
-                router: f.machine.router,
-                cli: f.machine.cli,
-                updater: f.machine.cli,
-                productVersion: "0.1.145",
-                sourceHead: "b".repeat(40),
-              }),
-          reasons[invalid],
+for (const invalid of [
+  "root",
+  "enrollment",
+  "enrollInvocation",
+  "missingStop",
+  "artifact",
+  "activePort",
+] as const)
+  test(`stopped-root continueOld ${invalid} refusal launches no daemon`, async () => {
+    const f = await fixture(),
+      declaration = structuredClone(f.declaration);
+    let listener: ReturnType<typeof createServer> | undefined;
+    try {
+      if (invalid === "root") declaration.root = `${f.parent}/other`;
+      if (invalid === "enrollment") await writeFile(`${f.root}/fleet/enrollment.json`, "changed");
+      if (invalid === "enrollInvocation") {
+        const id = "01900000-0000-7000-8000-000000000007";
+        await appendFile(
+          `${f.root}/verification-commands.jsonl`,
+          [
+            {
+              kind: "started",
+              at,
+              commandId: id,
+              mode: "command",
+              executable: f.machine.router.path,
+              arguments: ["fleet", "enroll"],
+              cwd: f.root,
+              environmentKeys: [],
+            },
+            { kind: "ended", at, commandId: id, pid: 900003, exit: 0, signal: null, error: null },
+          ]
+            .map((row) => encode(row))
+            .join("\n") + "\n",
         );
-        assert.equal(
-          (await readCommandLedger(f.root)).filter(
-            (row) => row.kind === "started" && row.mode === "daemon",
-          ).length,
-          2,
-        );
-      } finally {
-        if (listener !== undefined)
-          await new Promise<void>((accept, reject) =>
-            listener?.close((error) => (error === undefined ? accept() : reject(error))),
-          );
-        await rm(f.parent, { recursive: true });
       }
-    });
+      if (invalid === "missingStop")
+        await writeFile(
+          `${f.root}/verification-commands.jsonl`,
+          f.ledger
+            .filter((row) => row.kind !== "ended")
+            .map((row) => encode(row))
+            .join("\n") + "\n",
+        );
+      if (invalid === "artifact") await writeFile(f.machine.cli.path, "changed executable bytes");
+      if (invalid === "activePort") {
+        listener = createServer();
+        await new Promise<void>((accept, reject) => {
+          listener?.once("error", reject);
+          listener?.listen(0, "127.0.0.1", accept);
+        });
+        const address = listener.address();
+        assert.ok(address !== null && typeof address !== "string");
+        // Keep the original and continuation declarations bound to the same allocated port.
+        const original = {
+          ...(await loadStoppedOwnedRoot(declaration)).original,
+          machine: { ...f.machine, port: address.port },
+        };
+        await writeFile(declaration.original.plan.path, encode(original));
+        declaration.original.plan.sha256 = await fingerprint(declaration.original.plan.path);
+        // Port refusal precedes signature or version probes; configs retain the old port,
+        // so update both minimal configs and their exact inventory to reach that guard.
+        const profile = `${f.machine.codexHome}/codex-router-debug.config.toml`;
+        await writeFile(
+          profile,
+          (await readFile(profile, "utf8")).replace(":18827/", `:${address.port}/`),
+        );
+        declaration.homes = await snapshotExistingStagingHomes({
+          machine: { ...f.machine, port: address.port },
+          home: f.home,
+        });
+      }
+      const reasons = {
+        root: /root or original creator/,
+        enrollment: /fingerprint changed/,
+        enrollInvocation: /enrollment occurred/,
+        missingStop: /terminal ledger/,
+        artifact: /overlay artifact changed/,
+        activePort: /EADDRINUSE/,
+      };
+      await assert.rejects(
+        Installation.continueStoppedOwned({ declaration, receipt: new Receipt(f.parent) }),
+        reasons[invalid],
+      );
+      assert.equal(
+        (await readCommandLedger(f.root)).filter(
+          (row) => row.kind === "started" && row.mode === "daemon",
+        ).length,
+        2,
+      );
+    } finally {
+      if (listener !== undefined)
+        await new Promise<void>((accept, reject) =>
+          listener?.close((error) => (error === undefined ? accept() : reject(error))),
+        );
+      await rm(f.parent, { recursive: true });
+    }
+  });
 
 test("owned stop accepts raw Router SIGTERM but rejects abnormal or contradictory receipts", async () => {
   const f = await fixture();
@@ -537,3 +526,10 @@ async function fixtureMachine(parent: string, root: string) {
   } as const;
   return machine;
 }
+
+test("retired upgrade resume refuses before declared-root inspection", async (): Promise<void> => {
+  await assert.rejects(
+    Installation.resumeStoppedUpgrade({}),
+    /retired: the updater was replaced by scripts\/one-off\/2026-11-convert-router-root\.ts/,
+  );
+});

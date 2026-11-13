@@ -14,11 +14,7 @@ pub mod repositories;
 pub mod selection_projection;
 pub mod session_account_affinity;
 pub mod sqlite;
-pub use provider_proxy_store::{
-    FORMER_PROVIDER_PROXY_DATABASE_FILE_NAME, PROVIDER_PROXY_DATABASE_FILE_NAME,
-    ProviderProxyCheckpointError, checkpoint_provider_proxy_database,
-    former_provider_proxy_database_path, provider_proxy_database_path,
-};
+pub use provider_proxy_store::{PROVIDER_PROXY_DATABASE_FILE_NAME, provider_proxy_database_path};
 pub mod window_observation;
 
 /// Returns this crate's package name.

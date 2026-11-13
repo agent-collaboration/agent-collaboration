@@ -126,7 +126,7 @@ jobs:
         background: true
         run: |
           set -euo pipefail
-          production_graph="$(cargo tree --locked --color never --target aarch64-apple-darwin -p codex-router-cli -p agent-collaboration -p agent-router-update -e normal,build,features)"
+          production_graph="$(cargo tree --locked --color never --target aarch64-apple-darwin -p codex-router-cli -p agent-collaboration -e normal,build,features)"
           if grep -Eq -- '-test-support v[0-9]|feature "test-support"' <<< "$production_graph"; then
             echo 'production dependency graph includes a test-support crate or feature' >&2
             exit 1

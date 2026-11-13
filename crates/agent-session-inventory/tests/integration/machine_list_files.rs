@@ -72,7 +72,10 @@ fn old_machine_list_alone_lists_no_machines_and_names_the_update() {
     let notice = picker_notice(read_router_registry(root.path()));
 
     assert!(notice.contains("routers.jsonc"), "{notice}");
-    assert!(notice.contains("agent-router-update"), "{notice}");
+    assert!(
+        notice.contains("scripts/one-off/2026-11-convert-router-root.ts"),
+        "{notice}"
+    );
     assert!(!notice.contains("Old machine"), "{notice}");
 }
 

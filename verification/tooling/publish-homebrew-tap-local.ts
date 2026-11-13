@@ -11,12 +11,7 @@ export const repository = "ShravanSunder/codex-router";
 export const tapName = "shravansunder/taps";
 export const formulaName = `${tapName}/codex-router`;
 export const formulaRelativePath = "Formula/codex-router.rb";
-export const installedExecutables = [
-  "codex-router",
-  "agent-collaboration",
-  "agent-sessions",
-  "agent-router-update",
-];
+export const installedExecutables = ["codex-router", "agent-collaboration", "agent-sessions"];
 export class PublishError extends Error {}
 
 export function workspaceVersion(cargoText: string): string {

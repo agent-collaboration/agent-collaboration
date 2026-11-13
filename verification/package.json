@@ -5,9 +5,9 @@
   "scripts": {
     "check": "tsc --noEmit && pnpm run check:behavior-peer",
     "check:behavior-peer": "tsc --noEmit -p tsconfig.behavior-peer.json",
-    "lint": "oxlint --deny-warnings . \"${PWD%/*}/crates/acp-client-runtime/tests/support/behavior-agent.ts\" \"${PWD%/*}/crates/acp-client-runtime/tests/support/behavior-agent.test.ts\"",
-    "format": "oxfmt . \"${PWD%/*}/crates/acp-client-runtime/tests/support/behavior-agent.ts\" \"${PWD%/*}/crates/acp-client-runtime/tests/support/behavior-agent.test.ts\"",
-    "format:check": "oxfmt --check . \"${PWD%/*}/crates/acp-client-runtime/tests/support/behavior-agent.ts\" \"${PWD%/*}/crates/acp-client-runtime/tests/support/behavior-agent.test.ts\"",
+    "lint": "oxlint --deny-warnings . \"${PWD%/*}/crates/acp-client-runtime/tests/support/behavior-agent.ts\" \"${PWD%/*}/crates/acp-client-runtime/tests/support/behavior-agent.test.ts\" \"${PWD%/*}/scripts/one-off\"",
+    "format": "oxfmt . \"${PWD%/*}/crates/acp-client-runtime/tests/support/behavior-agent.ts\" \"${PWD%/*}/crates/acp-client-runtime/tests/support/behavior-agent.test.ts\" \"${PWD%/*}/scripts/one-off\"",
+    "format:check": "oxfmt --check . \"${PWD%/*}/crates/acp-client-runtime/tests/support/behavior-agent.ts\" \"${PWD%/*}/crates/acp-client-runtime/tests/support/behavior-agent.test.ts\" \"${PWD%/*}/scripts/one-off\"",
     "test:tooling": "node --test \"tooling/**/*.test.ts\"",
     "test:fixtures": "node --test \"fixtures/**/*.test.ts\"",
     "test:observations": "node --test \"observations/**/*.test.ts\"",

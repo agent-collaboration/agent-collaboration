@@ -101,8 +101,7 @@ pub(crate) fn read_router_settings_section<T: DeserializeOwned>(
 }
 
 /// One section as JSON, read and checked the way the Host reads it; `None` when
-/// the file or the section is absent. `agent-router-update` compares a carried
-/// file with it before removing that file.
+/// the file or the section is absent. This read does not change the settings.
 pub fn read_router_settings_section_json(
     router_root: &Path,
     section: RouterSettingsSection,

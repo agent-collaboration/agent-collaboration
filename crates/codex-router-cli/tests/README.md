@@ -6,11 +6,9 @@ Run with the feature set used by the main workspace CI job:
 cargo nextest run --locked --profile ci -p codex-router-cli --features keychain-test-support
 ```
 
-`integration/main.rs` gathers 12 roots covering account and recovery commands,
-debug isolation and logging, compiled Host lifecycle, enrollment, proxy
-overload, and the update guard that refuses `host` and account commands on a
-root still needing `agent-router-update` (on a copy of the update tool's
-`populated-root` fixture). `e2e/main.rs` retains the one ignored default-port
+`integration/main.rs` covers account and recovery commands, debug isolation and
+logging, compiled Host lifecycle, enrollment and proxy overload. The retired
+root-updater guard and its dedicated journeys were removed. `e2e/main.rs` retains the one ignored default-port
 cutover case selected by its separate CI job. Ordinary package runs keep that
 case ignored. Library and binary unit tests remain colocated.
 

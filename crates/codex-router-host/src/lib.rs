@@ -56,10 +56,6 @@ pub use enrollment_reset::{
     ENROLLMENT_RESTART_INSTRUCTION, completed_enrollment_reset_journal,
     finish_enrollment_reset_for_update, fleet_enrollment_restart_required,
 };
-mod router_dead_files;
-pub use router_dead_files::{
-    LEGACY_APPROVAL_ROUTES_FILE, router_dead_files, router_schema_export_folders,
-};
 mod global_claude_executable;
 pub use fleet_enrollment_file::{
     FleetAccess, FleetAccessReference, FleetEnrollmentDocument, FleetEnrollmentMetadata,
@@ -102,11 +98,6 @@ pub type ProviderSteeringOutcome =
     acp_client_runtime::ProviderSteeringOutcome<collaboration_protocol::OperationId>;
 mod router_compatibility;
 mod router_executable_observation;
-mod router_update_requirement;
-pub use router_update_requirement::{
-    RequiredRouterUpdate, RouterUpdateInspectionError, RouterUpdateRequirement,
-    inspect_router_update_requirement, router_fleet_cache_database, router_fleet_database,
-};
 mod session_message_route_composition;
 
 pub use app_server_endpoint_guard::AppServerEndpointError;

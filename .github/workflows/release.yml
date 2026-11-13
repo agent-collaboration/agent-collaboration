@@ -150,7 +150,7 @@ jobs:
         id: release_binaries
         background: true
         working-directory: release-source
-        run: cargo build --locked --release -p codex-router-cli -p agent-collaboration -p agent-router-update --bins --timings
+        run: cargo build --locked --release -p codex-router-cli -p agent-collaboration --bins --timings
 
       # Optimized macOS code generation reproduces the FuturesUnordered
       # waker-identity regression; a development-profile test cannot replace it.
@@ -193,12 +193,12 @@ jobs:
         working-directory: release-source
         run: |
           set -euo pipefail
-          dependency_features="$(cargo tree --locked -p codex-router-cli -p agent-collaboration -p agent-router-update -e normal,build,features -i codex-router-secret-store)"
+          dependency_features="$(cargo tree --locked -p codex-router-cli -p agent-collaboration -e normal,build,features -i codex-router-secret-store)"
           if grep -q 'keychain-test-guard' <<< "$dependency_features"; then
             echo 'release dependency graph includes keychain-test-guard' >&2
             exit 1
           fi
-          production_graph="$(cargo tree --locked --color never -p codex-router-cli -p agent-collaboration -p agent-router-update -e normal,build,features)"
+          production_graph="$(cargo tree --locked --color never -p codex-router-cli -p agent-collaboration -e normal,build,features)"
           if grep -Eq -- '-test-support v[0-9]|feature "test-support"' <<< "$production_graph"; then
             echo 'production dependency graph includes a test-support crate or feature' >&2
             exit 1
@@ -244,7 +244,7 @@ jobs:
             echo "no Developer ID Application identity for team ${DEVELOPER_ID_TEAM}" >&2
             exit 1
           fi
-          for executable in codex-router agent-collaboration agent-sessions agent-router-update; do
+          for executable in codex-router agent-collaboration agent-sessions; do
             codesign --force --sign "${signing_identity}" \
               --identifier "${CODE_IDENTIFIER_PREFIX}.${executable}" \
               --options runtime --timestamp \
@@ -306,17 +306,6 @@ jobs:
             exit 1
           fi
 
-          update_binary="target/release/agent-router-update"
-          if [[ "$(file "${update_binary}")" != *"Mach-O 64-bit executable arm64"* ]]; then
-            echo "agent-router-update binary is not Mach-O arm64" >&2
-            exit 1
-          fi
-          verify_release_signature "${update_binary}"
-          if [[ "$("${update_binary}" --version)" != "agent-router-update ${RELEASE_VERSION}" ]]; then
-            echo "agent-router-update version does not match release tag" >&2
-            exit 1
-          fi
-
           asset_name="codex-router-v${RELEASE_VERSION}-aarch64-apple-darwin.tar.gz"
           release_directory="${RUNNER_TEMP}/codex-router-release"
           payload_directory="${release_directory}/payload"
@@ -324,13 +313,12 @@ jobs:
           install -m 0755 "${release_binary}" "${payload_directory}/codex-router"
           install -m 0755 "${collaboration_binary}" "${payload_directory}/agent-collaboration"
           install -m 0755 "${session_binary}" "${payload_directory}/agent-sessions"
-          install -m 0755 "${update_binary}" "${payload_directory}/agent-router-update"
           cp -R target/protocol-schemas "${payload_directory}/protocol-schemas"
           install -m 0644 docs/agent-guidance/agent-collaboration.md "${payload_directory}/agent-collaboration-guide.md"
           COPYFILE_DISABLE=1 tar \
             -C "${payload_directory}" \
             -czf "${release_directory}/${asset_name}" \
-            codex-router agent-collaboration agent-sessions agent-router-update \
+            codex-router agent-collaboration agent-sessions \
             protocol-schemas agent-collaboration-guide.md
           asset_sha256="$(shasum -a 256 "${release_directory}/${asset_name}" | cut -d ' ' -f 1)"
 
@@ -551,7 +539,7 @@ jobs:
             exit 1
           fi
 
-          for executable in agent-collaboration agent-sessions agent-router-update; do
+          for executable in agent-collaboration agent-sessions; do
             installed_executable="$(brew --prefix codex-router)/bin/${executable}"
             if [[ ! -x "${installed_executable}" ]]; then
               echo "Homebrew did not install ${executable}" >&2
