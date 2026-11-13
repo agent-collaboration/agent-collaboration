@@ -2,7 +2,7 @@
 
 use crate::access_verification::{InvocationLabels, VerificationLayer};
 use crate::worker_clock::CloudflareClock;
-use collaboration_central_core::storage::{StoreCall, StoreFailure, StoreReply};
+use central_storage::{StoreCall, StoreFailure, StoreReply};
 use collaboration_central_core::{
     AccessJwk, CentralObservation, CentralPlatform, ClockIds, KeyFetchFailure, RawJwks,
     SignatureValidity, VerifyFailure,

@@ -1,8 +1,6 @@
 //! Shared helpers: a held clock, a platform over a temporary root, and row readers.
 
-use collaboration_central_core::storage::{
-    ReadOutcome, SqlValue, Statement, StoreCall, StoreReply,
-};
+use central_storage::{ReadOutcome, SqlValue, Statement, StoreCall, StoreReply};
 use collaboration_central_core::{CentralPlatform, DeliveryConfig};
 use collaboration_central_tokio::{StoreMigrations, TokioCentralPlatform};
 use message_board::WorkspaceId;

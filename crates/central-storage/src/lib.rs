@@ -4,7 +4,7 @@
 //! arguments) and hands a batch to its host, which runs every statement in one
 //! transaction: stock SQLx SQLite on Tokio, the SQLx Durable Object driver inside
 //! the object's storage transaction on Cloudflare. The same shapes travel to a
-//! workspace store through [`crate::CentralPlatform::call_store`].
+//! workspace store through central core’s platform capability.
 
 use serde::Serialize;
 

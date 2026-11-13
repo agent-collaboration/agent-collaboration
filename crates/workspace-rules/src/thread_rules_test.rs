@@ -1,0 +1,207 @@
+use super::{ThreadReads, change_thread};
+use crate::fixtures::{context, id, member, thread};
+use workspace_model::{
+    MemberRole, MembershipState, NotificationSetting, PostText, RefusalReason, ThreadCommand,
+    ThreadState,
+};
+#[test]
+fn r4_creator_only_and_repeated_resolution() {
+    let mut context = context();
+    let mut thread = thread();
+    let command = ThreadCommand::ResolveThread { thread_id: id(8) };
+    context.actor = id(99);
+    assert_eq!(
+        change_thread(
+            &context,
+            &command,
+            ThreadReads {
+                thread: Some(&thread),
+                ..Default::default()
+            }
+        )
+        .unwrap_err(),
+        RefusalReason::NotCreator { creator: id(2) }
+    );
+    context.actor = id(2);
+    let plan = change_thread(
+        &context,
+        &command,
+        ThreadReads {
+            thread: Some(&thread),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(
+        plan.batch
+            .statements
+            .first()
+            .unwrap()
+            .statement
+            .sql
+            .contains("creator=? AND state='open'")
+    );
+    thread.state = ThreadState::Resolved;
+    assert!(matches!(
+        change_thread(
+            &context,
+            &command,
+            ThreadReads {
+                thread: Some(&thread),
+                ..Default::default()
+            }
+        ),
+        Err(RefusalReason::ThreadResolved { .. })
+    ));
+}
+#[test]
+fn r5_observer_participant_and_left_member_posting() {
+    let context = context();
+    let thread = thread();
+    let mut member = member(context.actor.clone(), MemberRole::Observer);
+    let command = ThreadCommand::ThreadPost {
+        post_id: id(30),
+        thread_id: id(8),
+        body: PostText::try_from("message".to_owned()).unwrap(),
+        addressees: vec![],
+    };
+    assert!(matches!(
+        change_thread(
+            &context,
+            &command,
+            ThreadReads {
+                thread: Some(&thread),
+                caller_member: Some(&member),
+                ..Default::default()
+            }
+        ),
+        Err(RefusalReason::NotParticipant { .. })
+    ));
+    member.role = MemberRole::Participant;
+    let plan = change_thread(
+        &context,
+        &command,
+        ThreadReads {
+            thread: Some(&thread),
+            caller_member: Some(&member),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(
+        plan.batch
+            .statements
+            .first()
+            .unwrap()
+            .statement
+            .sql
+            .starts_with("INSERT INTO posts")
+    );
+    member.state = MembershipState::Left { at: context.now };
+    assert!(matches!(
+        change_thread(
+            &context,
+            &command,
+            ThreadReads {
+                thread: Some(&thread),
+                caller_member: Some(&member),
+                ..Default::default()
+            }
+        ),
+        Err(RefusalReason::NotMember { .. })
+    ));
+}
+#[test]
+fn r32_only_creator_adds_or_promotes_and_self_join_is_observer() {
+    let mut context = context();
+    let thread = thread();
+    let target = member(id(40), MemberRole::Observer);
+    let command = ThreadCommand::AddThreadMember {
+        thread_id: id(8),
+        member_id: id(41),
+        actor: id(40),
+        role: MemberRole::Participant,
+    };
+    context.actor = id(99);
+    for target_member in [None, Some(&target)] {
+        assert!(
+            matches!(change_thread(&context,&command,ThreadReads {thread:Some(&thread),target_member,..Default::default()}),Err(RefusalReason::NotCreator {creator}) if creator == id(2))
+        );
+    }
+    let joined = change_thread(
+        &context,
+        &ThreadCommand::JoinThread {
+            thread_id: id(8),
+            member_id: id(50),
+        },
+        ThreadReads {
+            thread: Some(&thread),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(
+        joined
+            .batch
+            .statements
+            .first()
+            .unwrap()
+            .statement
+            .sql
+            .contains("'observer'")
+    );
+    context.actor = id(2);
+    assert!(
+        change_thread(
+            &context,
+            &command,
+            ThreadReads {
+                thread: Some(&thread),
+                ..Default::default()
+            }
+        )
+        .is_ok()
+    );
+    let promoted = change_thread(
+        &context,
+        &command,
+        ThreadReads {
+            thread: Some(&thread),
+            target_member: Some(&target),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(
+        promoted
+            .batch
+            .statements
+            .first()
+            .unwrap()
+            .statement
+            .sql
+            .starts_with("UPDATE thread_members SET member_role=")
+    );
+}
+#[test]
+fn notifications_off_keeps_membership() {
+    let context = context();
+    let thread = thread();
+    let member = member(context.actor.clone(), MemberRole::Participant);
+    let plan = change_thread(
+        &context,
+        &ThreadCommand::SetNotifications {
+            thread_id: id(8),
+            setting: NotificationSetting::Off,
+        },
+        ThreadReads {
+            thread: Some(&thread),
+            caller_member: Some(&member),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let sql = plan.batch.statements.first().unwrap().statement.sql;
+    assert!(sql.starts_with("UPDATE thread_members SET notifications="));
+    assert!(!sql.contains("SET left_at"));
+}

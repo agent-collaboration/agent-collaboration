@@ -1,7 +1,7 @@
 //! Test-only schema and statements both hosts run to prove the storage boundary
 //! (Verification O1). Built only with the non-default `test-support` feature.
 
-use crate::storage::{
+use central_storage::{
     AlarmUpdate, GuardedStatement, RowExpectation, SafeInteger, SqlValue, Statement,
 };
 use sqlx_core::migrate::{Migration, MigrationType, Migrator};

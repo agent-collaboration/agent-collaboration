@@ -56,5 +56,9 @@
   "sqlx-durable-object": [],
   "sqlx-durable-object-core": [],
   "ui-preference-store": [],
-  "workspace-architecture-check": []
+  "workspace-architecture-check": [],
+  "workspace-ids": [],
+  "workspace-model": [],
+  "central-storage": [],
+  "workspace-rules": []
 }

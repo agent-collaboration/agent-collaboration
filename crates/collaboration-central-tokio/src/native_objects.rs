@@ -24,7 +24,7 @@ use crate::object_keys::{address_from_key, address_key};
 use crate::object_storage::{ObjectStorage, StoreMigrations};
 use crate::{SocketCommand, TokioStorageHost};
 use axum::extract::ws::{CloseFrame, Message, WebSocket};
-use collaboration_central_core::storage::{StoreCall, StoreFailure, StoreReply};
+use central_storage::{StoreCall, StoreFailure, StoreReply};
 use collaboration_central_core::{
     AdmissionOrigin, ClockIds, CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectRuntime,
     PlatformIo,
@@ -557,7 +557,7 @@ impl NativeObjects {
         match call {
             // A workspace store has no alarm: central owns every timer.
             StoreCall::Batch(mut batch) => {
-                batch.alarm = collaboration_central_core::storage::AlarmUpdate::Unchanged;
+                batch.alarm = central_storage::AlarmUpdate::Unchanged;
                 store.run_batch(batch).await.map(StoreReply::Batch)
             }
             StoreCall::Read(statement) => store.read(statement).await.map(StoreReply::Read),

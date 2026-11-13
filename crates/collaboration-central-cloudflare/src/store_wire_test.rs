@@ -1,5 +1,5 @@
 use super::{OwnedStoreCall, StoreAnswer};
-use collaboration_central_core::storage::{
+use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, SafeInteger, SqlValue, Statement,
     StatementBatch, StoreCall, StoreFailure, StoreReply,
 };

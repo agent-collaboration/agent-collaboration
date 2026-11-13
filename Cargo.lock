@@ -1077,6 +1077,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "central-storage"
+version = "0.1.149"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "cexpr"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1745,6 +1754,7 @@ version = "0.1.149"
 dependencies = [
  "axum",
  "base64 0.22.1",
+ "central-storage",
  "chrono",
  "collaboration-central-conformance",
  "collaboration-central-core",
@@ -1809,6 +1819,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "board-sync-protocol",
+ "central-storage",
  "chrono",
  "collaboration-central-admin-protocol",
  "collaboration-mail-protocol",
@@ -1850,6 +1861,7 @@ dependencies = [
  "base64 0.22.1",
  "board-fleet-sync",
  "board-sync-protocol",
+ "central-storage",
  "chrono",
  "collaboration-central-admin-protocol",
  "collaboration-central-conformance",
@@ -7888,6 +7900,35 @@ dependencies = [
  "syn 2.0.118",
  "thiserror 2.0.18",
  "toml 1.1.2+spec-1.1.0",
+]
+
+[[package]]
+name = "workspace-ids"
+version = "0.1.149"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
+name = "workspace-model"
+version = "0.1.149"
+dependencies = [
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "workspace-ids",
+]
+
+[[package]]
+name = "workspace-rules"
+version = "0.1.149"
+dependencies = [
+ "central-storage",
+ "workspace-model",
 ]
 
 [[package]]

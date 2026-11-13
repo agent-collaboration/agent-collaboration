@@ -1,7 +1,7 @@
 //! Batches on one object's file: atomicity, constraint mapping and the kept alarm.
 
 use crate::storage_support::{single_integer, texts_in_column};
-use collaboration_central_core::storage::{
+use central_storage::{
     AlarmUpdate, BatchOutcome, ConstraintKind, RowExpectation, SafeInteger, SqlValue,
     StatementBatch,
 };
@@ -34,7 +34,7 @@ fn due(milliseconds: i64) -> Option<SafeInteger> {
 
 async fn apply(
     storage: &ObjectStorage,
-    statements: Vec<collaboration_central_core::storage::GuardedStatement>,
+    statements: Vec<central_storage::GuardedStatement>,
     alarm: AlarmUpdate,
 ) -> BatchOutcome {
     storage
@@ -256,7 +256,7 @@ async fn integers_at_plus_and_minus_two_to_the_53_minus_one_round_trip_as_intege
         }
     );
 
-    let due_column = |widget: &str, outcome: &collaboration_central_core::storage::ReadOutcome| {
+    let due_column = |widget: &str, outcome: &central_storage::ReadOutcome| {
         outcome
             .rows
             .iter()
@@ -281,15 +281,15 @@ async fn a_stored_integer_wider_than_the_contract_reads_as_corrupt_not_truncated
     let root = tempfile::tempdir().unwrap();
     let storage = open_storage(&root);
     let answer = storage
-        .read(collaboration_central_core::storage::Statement {
+        .read(central_storage::Statement {
             sql: "SELECT 9007199254740992 AS too_wide",
             args: Vec::new(),
         })
         .await;
     assert_eq!(
         answer,
-        Err(collaboration_central_core::storage::StoreFailure::Corrupt {
-            reason: collaboration_central_core::storage::CorruptReason::BadValue {
+        Err(central_storage::StoreFailure::Corrupt {
+            reason: central_storage::CorruptReason::BadValue {
                 column: "too_wide".to_owned()
             }
         })

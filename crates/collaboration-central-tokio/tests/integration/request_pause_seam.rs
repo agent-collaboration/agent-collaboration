@@ -2,7 +2,7 @@
 //! a crash at a held point, with rows read back from the workspace store's file.
 
 use crate::storage_support::{HeldClock, open_platform, read_store, single_integer, workspace};
-use collaboration_central_core::storage::{
+use central_storage::{
     AlarmUpdate, BatchOutcome, RowExpectation, StatementBatch, StoreCall, StoreReply,
 };
 use collaboration_central_core::storage_conformance::{

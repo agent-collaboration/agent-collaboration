@@ -5,7 +5,7 @@
 //! together or roll back together. The store knows no business table.
 
 use crate::store_wire::{OwnedAlarmUpdate, OwnedBatch, OwnedStatement};
-use collaboration_central_core::storage::{
+use central_storage::{
     BatchOutcome, ConstraintKind, CorruptReason, ReadOutcome, SafeInteger, SqlValue, StoreFailure,
 };
 use sqlx_core::column::Column;

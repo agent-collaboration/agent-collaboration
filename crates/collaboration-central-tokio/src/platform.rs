@@ -4,7 +4,7 @@ use axum::{
     extract::{FromRequestParts, ws::WebSocketUpgrade},
     response::IntoResponse,
 };
-use collaboration_central_core::storage::{StoreCall, StoreFailure, StoreReply};
+use central_storage::{StoreCall, StoreFailure, StoreReply};
 use collaboration_central_core::{
     AccessJwk, AdmissionOrigin, CentralObservation, CentralPlatform, ClockIds, CoreHost,
     KeyFetchFailure, RawJwks, SerializedObjectCall, SignatureValidity, UpgradeFailure,

@@ -92,12 +92,9 @@ impl CentralPlatform for FixturePlatform {
     async fn call_store(
         &self,
         _: message_board::WorkspaceId,
-        _: collaboration_central_core::storage::StoreCall,
-    ) -> Result<
-        collaboration_central_core::storage::StoreReply,
-        collaboration_central_core::storage::StoreFailure,
-    > {
-        Err(collaboration_central_core::storage::StoreFailure::Unavailable)
+        _: central_storage::StoreCall,
+    ) -> Result<central_storage::StoreReply, central_storage::StoreFailure> {
+        Err(central_storage::StoreFailure::Unavailable)
     }
     async fn transport_object(
         &self,

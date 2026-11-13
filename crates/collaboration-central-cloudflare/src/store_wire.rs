@@ -4,7 +4,7 @@
 //! Core's `Statement` holds `sql: &'static str`, which cannot be deserialized. At
 //! this edge the SQL becomes an owned `String`; nothing else changes shape.
 
-use collaboration_central_core::storage::{
+use central_storage::{
     AlarmUpdate, GuardedStatement, RowExpectation, SqlValue, Statement, StatementBatch, StoreCall,
     StoreFailure, StoreReply,
 };
