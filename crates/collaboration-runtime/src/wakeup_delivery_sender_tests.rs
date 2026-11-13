@@ -51,8 +51,10 @@ impl SessionMessageDelivery for ProviderSessionNotFound {
     }
 }
 
-#[tokio::test]
-async fn provider_session_not_found_finishes_wake_after_one_attempt() {
+async fn dispatch_fixture_wake(
+    delivery: Arc<dyn SessionMessageDelivery>,
+    mode: collaboration_protocol::MessageDelivery,
+) -> automation_storage::DeliveryRecord<SessionRef, CodexGeneration, serde_json::Value> {
     let clock = Arc::new(
         router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
             1792432800000,
@@ -74,7 +76,7 @@ async fn provider_session_not_found_finishes_wake_after_one_attempt() {
     let message: SavedMessage = serde_json::from_value(json!({
         "target":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"claude-local"},"sessionId":"empty-session"},
         "content":{"kind":"humanUser","text":"wake fixture"},
-        "delivery":"auto"
+        "delivery":mode
     }))
     .expect("saved message without an explicit generation guard");
     let wake = store
@@ -119,7 +121,7 @@ async fn provider_session_not_found_finishes_wake_after_one_attempt() {
     let sender = WakeDeliverySender {
         clock: clock.clone(),
         interactions,
-        delivery: Arc::new(ProviderSessionNotFound),
+        delivery,
         configuration: AutomationConfigurationHandle::default(),
         machine_identity: collaboration_contracts::MachineIdentity::new(
             wake.definition.message.target.endpoint.service_id.clone(),
@@ -139,6 +141,25 @@ async fn provider_session_not_found_finishes_wake_after_one_attempt() {
         .read_delivery::<SessionRef, CodexGeneration, serde_json::Value>(&delivery_id)
         .await
         .expect("delivery record");
+    assert!(
+        store
+            .lock()
+            .await
+            .eligible_delivery_ids(clock.now().unix_millis() + 60_000, 4)
+            .await
+            .expect("future eligible deliveries")
+            .is_empty()
+    );
+    record
+}
+
+#[tokio::test]
+async fn provider_session_not_found_finishes_wake_after_one_attempt() {
+    let record = dispatch_fixture_wake(
+        Arc::new(ProviderSessionNotFound),
+        collaboration_protocol::MessageDelivery::Auto,
+    )
+    .await;
     assert_eq!(
         serde_json::to_value(record.status).expect("status"),
         json!("failed")
@@ -152,13 +173,95 @@ async fn provider_session_not_found_finishes_wake_after_one_attempt() {
         record.receipt.as_ref().expect("receipt")["outcome"]["clientCode"],
         -32002
     );
-    assert!(
-        store
-            .lock()
-            .await
-            .eligible_delivery_ids(clock.now().unix_millis() + 60_000, 4)
-            .await
-            .expect("future eligible deliveries")
-            .is_empty()
-    );
+}
+
+struct QueueUnsupportedRoute;
+
+impl collaboration_contracts::SessionDeliveryRoute for QueueUnsupportedRoute {
+    fn reachability(&self) -> SessionReachability {
+        SessionReachability::CodexAppServer
+    }
+    fn supports_delivery_mode(
+        &self,
+        _: &SessionRef,
+        mode: collaboration_protocol::MessageDelivery,
+    ) -> bool {
+        mode != collaboration_protocol::MessageDelivery::Queue
+    }
+    fn claim(
+        &self,
+        _: &SessionRef,
+    ) -> DeliveryFuture<'_, collaboration_contracts::NativeRouteClaim> {
+        Box::pin(async { Ok(collaboration_contracts::NativeRouteClaim::holds()) })
+    }
+    fn presence(
+        &self,
+        _: &SessionRef,
+    ) -> DeliveryFuture<'_, collaboration_contracts::RoutePresence> {
+        Box::pin(async { Ok(collaboration_contracts::RoutePresence::Running) })
+    }
+    fn deliver<'a>(
+        &'a self,
+        request: collaboration_contracts::layer_zero::DeliveryRequest,
+        sink: &'a dyn AttemptEvidenceSink,
+    ) -> DeliveryFuture<'a, collaboration_contracts::NativeDeliveryResult> {
+        assert_eq!(request.mode, collaboration_protocol::MessageDelivery::Steer);
+        assert!(request.payload.line.as_str().contains("wake fixture"));
+        Box::pin(async move {
+            let mut effects = agent_automation::NativeEffectEvidence {
+                permission_differences: Vec::new(),
+                target: Some(request.target),
+                generation: Some(
+                    serde_json::from_value(json!({
+                        "serviceEpoch":"00000000-0000-4000-8000-000000000001", "generation":1
+                    }))
+                    .expect("fixture generation"),
+                ),
+                client_user_message_id: Some(request.correlation.as_str().to_owned()),
+                native_turn_id: None,
+                native_submission_id: None,
+                allocation: agent_automation::PreparationEffect::NotRequested,
+                resume: agent_automation::PreparationEffect::NotRequested,
+                submission: agent_automation::SubmissionEffect::Dispatching,
+                cessation: agent_automation::CessationEvidence::NotApplicable,
+            };
+            sink.record(agent_automation::RouteEffectEvidence::CodexAppServer(
+                effects.clone(),
+            ))
+            .await?;
+            effects.submission = agent_automation::SubmissionEffect::Accepted;
+            effects.native_turn_id = Some("wake-active-turn".to_owned());
+            sink.record(agent_automation::RouteEffectEvidence::CodexAppServer(
+                effects,
+            ))
+            .await?;
+            Ok(collaboration_contracts::scripted_delivery_result(
+                DeliveryReceipt {
+                    outcome: DeliveryOutcome::Steered,
+                    reachability: Some(SessionReachability::CodexAppServer),
+                    client: None,
+                },
+            ))
+        })
+    }
+    fn reconcile_attempt(
+        &self,
+        _: AttemptReconciliationContext,
+    ) -> DeliveryFuture<'_, AttemptReconciliation> {
+        Box::pin(async { Ok(AttemptReconciliation::StillUnknown) })
+    }
+}
+
+#[tokio::test]
+async fn queued_wake_without_queue_support_records_one_accepted_steer() {
+    let delivery = Arc::new(crate::SessionDeliveryRouter::new(vec![Arc::new(
+        QueueUnsupportedRoute,
+    )]));
+    let record =
+        dispatch_fixture_wake(delivery, collaboration_protocol::MessageDelivery::Queue).await;
+    assert_eq!(record.status, agent_automation::DeliveryStatus::Accepted);
+    assert_eq!(record.attempt.as_ref().expect("attempt").attempt_number, 1);
+    let receipt: DeliveryReceipt =
+        serde_json::from_value(record.receipt.expect("receipt")).expect("typed receipt");
+    assert_eq!(receipt.outcome, DeliveryOutcome::Steered);
 }

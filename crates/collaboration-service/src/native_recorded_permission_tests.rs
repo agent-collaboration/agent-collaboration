@@ -21,6 +21,13 @@ const EPOCH: &str = "110a92d0-e607-4947-86ca-45838ac90a96";
 const THREAD: &str = "recorded-cold-thread";
 
 fn backend(root: &Path) -> (NativeControlBackend, CodexGeneration, EndpointDescription) {
+    backend_with_queue_support(root, true)
+}
+
+fn backend_with_queue_support(
+    root: &Path,
+    queue_supported: bool,
+) -> (NativeControlBackend, CodexGeneration, EndpointDescription) {
     let mut definitions = serde_json::Map::new();
     for name in [
         "ThreadRead",
@@ -34,6 +41,9 @@ fn backend(root: &Path) -> (NativeControlBackend, CodexGeneration, EndpointDescr
         "ThreadQueueAdd",
         "ThreadQueueList",
     ] {
+        if name == "ThreadQueueAdd" && !queue_supported {
+            continue;
+        }
         definitions.insert(format!("{name}Params"), json!({"type":"object"}));
         definitions.insert(format!("{name}Response"), json!({"type":"object"}));
     }
