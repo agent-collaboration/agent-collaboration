@@ -13,3 +13,9 @@ colocated with their implementation (`src/*_test.rs`).
   separate test bundle (`build-test-support/`). The cases themselves live in
   `verification/targets/workerd-central-storage.test.ts`; the production bundle check
   refuses a bundle that carries any of these routes.
+
+The O1 bundle is built with `--features test-support,conformance`. Its actual-object
+clock case calls the real `FleetObject` clock control and `IdSource`, checks held
+and advanced UUIDv7 milliseconds, and fails if the route is absent. The route is
+compiled only when both test features are enabled and is rejected by the production
+bundle marker check.

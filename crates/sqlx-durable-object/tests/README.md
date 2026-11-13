@@ -12,7 +12,7 @@ driver and now run inside the central Worker's `test-support` bundle
 walks every scenario under the pinned workerd:
 
 ```sh
-worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --features test-support
+worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --features test-support,conformance
 pnpm --dir verification run test:workerd
 ```
 

@@ -26,6 +26,16 @@ pub(crate) async fn route(
     env: &Env,
 ) -> Result<std::result::Result<Response, Request>> {
     let path = request.path();
+    #[cfg(feature = "conformance")]
+    if path == "/test-support/object-clock-ids" {
+        return Ok(Ok(crate::composed_control::forward(
+            env,
+            &collaboration_central_core::ObjectAddress::Fleet,
+            "/test/object-clock-ids",
+            Some(request.text().await?),
+        )
+        .await?));
+    }
     if let Some(scenario) = path.strip_prefix(DRIVER_PREFIX) {
         return Ok(Ok(crate::driver_scenarios::route(scenario, env).await?));
     }
