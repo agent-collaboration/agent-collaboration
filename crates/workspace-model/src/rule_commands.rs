@@ -221,16 +221,41 @@ pub enum WorkLogCommand {
 )]
 pub enum ListQuery {
     Areas,
-    Projects { area_id: AreaId },
-    Threads { area_id: AreaId },
-    Posts { thread_id: ThreadId },
-    Deliverables { project_id: ProjectId },
-    Issues { deliverable_id: DeliverableId },
-    WorkLog { project_id: ProjectId },
-    Backlog { area_id: AreaId },
-    ReferencesTo { item: ItemRef },
-    ReferencesFrom { item: ItemRef },
-    Links { item: ItemRef },
+    Projects {
+        area_id: AreaId,
+    },
+    Threads {
+        area_id: AreaId,
+    },
+    Posts {
+        thread_id: ThreadId,
+    },
+    Deliverables {
+        project_id: ProjectId,
+    },
+    Issues {
+        deliverable_id: DeliverableId,
+    },
+    WorkLog {
+        project_id: ProjectId,
+    },
+    Backlog {
+        area_id: AreaId,
+    },
+    ReferencesTo {
+        item: ItemRef,
+    },
+    ReferencesFrom {
+        item: ItemRef,
+    },
+    Links {
+        item: ItemRef,
+    },
+    SearchPosts {
+        area_id: Option<AreaId>,
+        thread_id: Option<ThreadId>,
+        text: crate::SearchQuery,
+    },
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(

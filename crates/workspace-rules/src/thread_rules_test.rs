@@ -151,16 +151,28 @@ fn r32_only_creator_adds_or_promotes_and_self_join_is_observer() {
             .contains("'observer'")
     );
     context.actor = id(2);
-    assert!(
-        change_thread(
-            &context,
-            &command,
-            ThreadReads {
-                thread: Some(&thread),
-                ..Default::default()
-            }
-        )
-        .is_ok()
+    let added = change_thread(
+        &context,
+        &command,
+        ThreadReads {
+            thread: Some(&thread),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let insertion = &added.batch.statements.first().unwrap().statement;
+    assert_eq!(
+        insertion.sql,
+        "INSERT INTO thread_members (thread_member_id,thread_id,actor_identity_id,member_role,notifications,left_at,created_at,updated_at) VALUES (?,?,?,?,1,NULL,?,?)"
+    );
+    assert_eq!(
+        insertion.args.iter().take(4).cloned().collect::<Vec<_>>(),
+        vec![
+            central_storage::SqlValue::Text("01890f2e-7b4c-7cc0-98c4-000000000029".to_owned()),
+            central_storage::SqlValue::Text("01890f2e-7b4c-7cc0-98c4-000000000008".to_owned()),
+            central_storage::SqlValue::Text("01890f2e-7b4c-7cc0-98c4-000000000028".to_owned()),
+            central_storage::SqlValue::Text("participant".to_owned())
+        ]
     );
     let promoted = change_thread(
         &context,
@@ -181,6 +193,19 @@ fn r32_only_creator_adds_or_promotes_and_self_join_is_observer() {
             .statement
             .sql
             .starts_with("UPDATE thread_members SET member_role=")
+    );
+    let mutation = &promoted.batch.statements.first().unwrap().statement;
+    assert_eq!(
+        mutation.sql,
+        "UPDATE thread_members SET member_role=?,updated_at=? WHERE thread_member_id=? AND left_at IS NULL"
+    );
+    assert_eq!(
+        mutation.args,
+        vec![
+            central_storage::SqlValue::Text("participant".to_owned()),
+            central_storage::SqlValue::Text("2026-11-13T12:00:00+00:00".to_owned()),
+            central_storage::SqlValue::Text("01890f2e-7b4c-7cc0-98c4-000000000009".to_owned())
+        ]
     );
 }
 #[test]

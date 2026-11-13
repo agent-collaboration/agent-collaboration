@@ -42,17 +42,13 @@ fn r33_a_issue_statuses_and_reopen_have_guarded_values() {
     let context = context();
     let project = project();
     let children = [deliverable(10)];
-    let statuses = [
-        WorkStatus::Backlog,
-        WorkStatus::Open,
-        WorkStatus::OnHold,
-        WorkStatus::Closed,
-        WorkStatus::Open,
+    let transitions = [
+        (WorkStatus::Backlog, WorkStatus::Open, "backlog", "open"),
+        (WorkStatus::Open, WorkStatus::OnHold, "open", "onHold"),
+        (WorkStatus::OnHold, WorkStatus::Closed, "onHold", "closed"),
+        (WorkStatus::Closed, WorkStatus::Open, "closed", "open"),
     ];
-    for pair in statuses.windows(2) {
-        let Some((&before, &after)) = pair.first().zip(pair.get(1)) else {
-            continue;
-        };
+    for (before, after, old_value, new_value) in transitions {
         let row = issue(11, 10, before);
         let output = set_work_status(
             &context,
@@ -68,20 +64,20 @@ fn r33_a_issue_statuses_and_reopen_have_guarded_values() {
             },
         )
         .unwrap();
-        assert!(
-            output
-                .batch
-                .statements
-                .iter()
-                .any(|statement| statement.statement.sql
-                    == "UPDATE issues SET status=?,updated_at=? WHERE issue_id=? AND status=?")
+        let mutation = &output.batch.statements.first().unwrap().statement;
+        assert_eq!(
+            mutation.sql,
+            "UPDATE issues SET status=?,updated_at=? WHERE issue_id=? AND status=?"
         );
-        assert!(output.batch.statements.iter().any(|statement| {
-            statement
-                .statement
-                .args
-                .contains(&SqlValue::Text(super::status_name(after).to_owned()))
-        }));
+        assert_eq!(
+            mutation.args,
+            vec![
+                SqlValue::Text(new_value.to_owned()),
+                SqlValue::Text("2026-11-13T12:00:00+00:00".to_owned()),
+                SqlValue::Text("01890f2e-7b4c-7cc0-98c4-00000000000b".to_owned()),
+                SqlValue::Text(old_value.to_owned())
+            ]
+        );
     }
 }
 #[test]
@@ -127,7 +123,7 @@ fn r33_b_d_project_closure_names_deliverable_and_issue_including_empty() {
                 ..Default::default()
             }
         ),
-        Err(RefusalReason::ChildrenNotClosed { .. })
+        Err(RefusalReason::ChildrenNotClosed { blockers }) if blockers.iter().any(|row| row.item == ItemRef::Deliverable(id(10)) && row.title == "Deliverable 10")
     ));
     let issues = [issue(11, 10, WorkStatus::Closed)];
     assert!(

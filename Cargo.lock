@@ -7928,6 +7928,7 @@ name = "workspace-rules"
 version = "0.1.149"
 dependencies = [
  "central-storage",
+ "proptest",
  "workspace-model",
 ]
 

@@ -54,6 +54,7 @@ macro_rules! bounded_text {
     };
 }
 bounded_text!(ResourceName, 1, 256, true, false);
+bounded_text!(SearchQuery, 1, 256, true, false);
 bounded_text!(IssueTitle, 1, 256, true, true);
 bounded_text!(Description, 0, 16 * 1024, false, false);
 

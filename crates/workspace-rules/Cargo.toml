@@ -10,5 +10,8 @@ autotests = false
 workspace-model.workspace = true
 central-storage.workspace = true
 
+[dev-dependencies]
+proptest.workspace = true
+
 [lints]
 workspace = true

@@ -84,3 +84,44 @@ fn ported_long_cycle_witness_keeps_the_real_path() {
         matches!(result,Err(RefusalReason::WouldCycle {path}) if path.len() == 302 && path.first() == path.last())
     );
 }
+
+// Independent matrix oracle ported from message-board's task-link property case.
+fn transitive_closure(edges: &[[bool; 6]; 6]) -> [[bool; 6]; 6] {
+    let mut reachable = *edges;
+    for through in 0..6 {
+        for from in 0..6 {
+            for to in 0..6 {
+                reachable[from][to] |= reachable[from][through] && reachable[through][to];
+            }
+        }
+    }
+    reachable
+}
+proptest::proptest! {
+    #[test]
+    fn ported_dependency_edit_sequences_preserve_acyclicity_and_atomic_edits(edits in proptest::collection::vec((0usize..6,0usize..6,proptest::prelude::any::<bool>()),0..100)) {
+        let context=context();let rows:Vec<_>=(0..6).map(|value|deliverable(value+10)).collect();
+        let mut edges=[[false;6];6];let mut dependencies=Vec::new();
+        for (from,to,add) in edits {
+            let dependency_id:workspace_model::DependencyId=id(100+u32::try_from(from*6+to).unwrap());
+            let blocking=rows[from].deliverable_id.clone();let blocked=rows[to].deliverable_id.clone();
+            if add {
+                let reachable=transitive_closure(&edges);
+                let result=change_dependency(&context,&DependencyCommand::Add {dependency_id:dependency_id.clone(),blocking:blocking.clone(),blocked:blocked.clone()},DependencyReads {deliverables:&rows,dependencies:&dependencies});
+                if edges[from][to] {proptest::prop_assert!(matches!(result,Err(RefusalReason::DuplicateDependency {..})),"duplicate must be refused");}
+                else if from == to || reachable[to][from] {proptest::prop_assert!(matches!(result,Err(RefusalReason::WouldCycle {..})),"cycle must be refused");}
+                else {
+                    let plan=result.unwrap();proptest::prop_assert_eq!(plan.batch.statements.len(),2);
+                    proptest::prop_assert_eq!(plan.batch.statements.first().unwrap().statement.sql,"INSERT INTO deliverable_dependencies (dependency_id,blocking_deliverable_id,blocked_deliverable_id,created_at,updated_at) VALUES (?,?,?,?,?)");
+                    edges[from][to]=true;dependencies.push(DeliverableDependency {dependency_id,blocking,blocked});
+                }
+            } else {
+                let plan=change_dependency(&context,&DependencyCommand::Remove {dependency_id:dependency_id.clone()},DependencyReads {deliverables:&rows,dependencies:&dependencies}).unwrap();
+                proptest::prop_assert_eq!(plan.batch.statements.is_empty(),!edges[from][to]);
+                if edges[from][to] {proptest::prop_assert_eq!(plan.batch.statements.first().unwrap().statement.sql,"DELETE FROM deliverable_dependencies WHERE dependency_id=?");}
+                edges[from][to]=false;dependencies.retain(|row|row.dependency_id != dependency_id);
+            }
+            let reachable=transitive_closure(&edges);proptest::prop_assert!((0..6).all(|node|!reachable[node][node]));
+        }
+    }
+}
