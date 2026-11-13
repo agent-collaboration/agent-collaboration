@@ -11,7 +11,7 @@ impl Write for CapturedDiagnostics {
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
         self.0
             .lock()
-            .expect("capture lock")
+            .map_err(|_| std::io::Error::other("capture lock"))?
             .extend_from_slice(bytes);
         Ok(bytes.len())
     }

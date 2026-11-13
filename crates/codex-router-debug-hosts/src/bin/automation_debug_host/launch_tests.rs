@@ -172,7 +172,7 @@ fn resume_rejects_marker_for_another_root() -> Result<(), Box<dyn std::error::Er
 
     let error = validate_resume_run_directory(&run.0, 18787, &run.0.join("agent-communication"))
         .expect_err("foreign marker must fail");
-    assert!(error.to_string().contains("does not match"));
+    ensure_test!(error.to_string().contains("does not match"));
     Ok(())
 }
 
@@ -190,7 +190,7 @@ fn resume_rejects_invalid_context_marker() -> Result<(), Box<dyn std::error::Err
         let error =
             validate_resume_run_directory(&run.0, 18787, &run.0.join("agent-communication"))
                 .expect_err("invalid native model or effort marker must fail");
-        assert!(error.to_string().contains("does not match"));
+        ensure_test!(error.to_string().contains("does not match"));
     }
     Ok(())
 }
@@ -202,7 +202,7 @@ fn resume_rejects_live_prior_host_process() -> Result<(), Box<dyn std::error::Er
 
     let error = validate_resume_run_directory(&run.0, 18787, &run.0.join("agent-communication"))
         .expect_err("live marker PID must fail");
-    assert!(error.to_string().contains("still alive"));
+    ensure_test!(error.to_string().contains("still alive"));
     Ok(())
 }
 
@@ -241,8 +241,8 @@ fn resume_replaces_marker_without_changing_service_data() -> Result<(), Box<dyn 
     replace_resumed_context(&resumed_context)?;
 
     let published = read_existing_context(&run.0)?;
-    assert_eq!(published.host_pid, 4242);
-    assert_eq!(std::fs::read(database_path)?, b"preserved-board-state");
+    ensure_test_eq!(published.host_pid, 4242);
+    ensure_test_eq!(std::fs::read(database_path)?, b"preserved-board-state");
     Ok(())
 }
 
@@ -261,7 +261,7 @@ fn resume_rejects_symlinked_context_marker() -> Result<(), Box<dyn std::error::E
 
     let error = validate_resume_run_directory(&run.0, 18787, &run.0.join("agent-communication"))
         .expect_err("symlink marker must fail");
-    assert!(error.to_string().contains("regular file"));
+    ensure_test!(error.to_string().contains("regular file"));
     Ok(())
 }
 
@@ -464,7 +464,7 @@ fn resume_refuses_changed_credential_root_or_provider_command()
     context.claude_provider = options.claude_provider.clone();
     validate_resume_binding(&context, &options)?;
     options.router_root = Some("/tmp/another-store".into());
-    assert!(validate_resume_binding(&context, &options).is_err());
+    ensure_test!(validate_resume_binding(&context, &options).is_err());
     options.router_root = context.router_root.clone();
     options
         .claude_provider
@@ -472,7 +472,7 @@ fn resume_refuses_changed_credential_root_or_provider_command()
         .expect("provider")
         .arguments
         .push("--different".into());
-    assert!(validate_resume_binding(&context, &options).is_err());
+    ensure_test!(validate_resume_binding(&context, &options).is_err());
     Ok(())
 }
 
@@ -573,11 +573,11 @@ fn full_native_argument_order_preserves_owned_hooks_and_merged_profile_controls(
         request_compression_enabled: Some(false),
         network_proxy_enabled: Some(false),
     };
-    assert_eq!(
+    ensure_test_eq!(
         observe_ordered_native_feature_controls(&arguments),
         expected
     );
-    assert!(!arguments.iter().any(|argument| {
+    ensure_test!(!arguments.iter().any(|argument| {
         argument
             .to_str()
             .is_some_and(|value| value.starts_with("features="))
@@ -590,9 +590,9 @@ fn full_native_argument_order_preserves_owned_hooks_and_merged_profile_controls(
         OsString::from("features={enable_request_compression=false}"),
     ]);
     let broken = observe_ordered_native_feature_controls(&legacy);
-    assert_ne!(broken, expected);
-    assert_eq!(broken.hooks_enabled, None);
-    assert_eq!(broken.network_proxy_enabled, None);
+    ensure_test_ne!(broken, expected);
+    ensure_test_eq!(broken.hooks_enabled, None);
+    ensure_test_eq!(broken.network_proxy_enabled, None);
     Ok(())
 }
 

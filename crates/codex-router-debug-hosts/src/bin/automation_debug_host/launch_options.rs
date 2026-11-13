@@ -324,7 +324,7 @@ mod collaboration_tests {
         let root = tempfile::tempdir()?;
         let public_service = root.path().join("agent-communication");
         // The old RUN projection points discovery at a different token owner.
-        assert_ne!(
+        ensure_test_ne!(
             run.path().join("agent-communication").parent(),
             public_service.parent()
         );
@@ -339,11 +339,11 @@ mod collaboration_tests {
             public_service.as_os_str().to_owned(),
         ])?
         .ok_or("launch options absent")?;
-        assert_eq!(options.selected_collaboration_directory(), public_service);
+        ensure_test_eq!(options.selected_collaboration_directory(), public_service);
         let socket_arguments = super::super::proof_permissions::automation_proof_startup_arguments(
             &options.selected_collaboration_directory(),
         )?;
-        assert!(socket_arguments.iter().any(|arg| {
+        ensure_test!(socket_arguments.iter().any(|arg| {
             arg.to_string_lossy().contains(
                 root.path()
                     .canonicalize()
@@ -372,8 +372,8 @@ mod collaboration_tests {
         super::super::validate_resume_binding(&context, &resumed)?;
         let mut removed = resumed.clone();
         removed.collaboration_directory = None;
-        assert!(super::super::validate_resume_binding(&context, &removed).is_err());
-        assert_eq!(
+        ensure_test!(super::super::validate_resume_binding(&context, &removed).is_err());
+        ensure_test_eq!(
             resumed,
             DebugHostOptions {
                 run_directory_admission: RunDirectoryAdmission::Resume,
@@ -406,15 +406,15 @@ mod collaboration_tests {
         std::fs::DirBuilder::new().mode(0o700).create(&service)?;
         super::super::validate_collaboration_directory(&options)?;
         std::fs::write(service.join("service.json"), b"existing publication")?;
-        assert!(super::super::validate_collaboration_directory(&options).is_err());
+        ensure_test!(super::super::validate_collaboration_directory(&options).is_err());
         std::fs::remove_file(service.join("service.json"))?;
         std::fs::set_permissions(&service, std::fs::Permissions::from_mode(0o755))?;
-        assert!(super::super::validate_collaboration_directory(&options).is_err());
+        ensure_test!(super::super::validate_collaboration_directory(&options).is_err());
         std::fs::set_permissions(&service, std::fs::Permissions::from_mode(0o700))?;
         let alias = root_path.join("foreign-service");
         std::os::unix::fs::symlink(&service, &alias)?;
         options.collaboration_directory = Some(alias);
-        assert!(super::super::validate_collaboration_directory(&options).is_err());
+        ensure_test!(super::super::validate_collaboration_directory(&options).is_err());
         let other_root = tempfile::tempdir()?;
         std::fs::set_permissions(other_root.path(), std::fs::Permissions::from_mode(0o700))?;
         let other_path = other_root.path().canonicalize()?;
@@ -422,10 +422,10 @@ mod collaboration_tests {
         std::os::unix::fs::symlink(&service, &linked_service)?;
         options.router_root = Some(other_path);
         options.collaboration_directory = Some(linked_service);
-        assert!(super::super::validate_collaboration_directory(&options).is_err());
+        ensure_test!(super::super::validate_collaboration_directory(&options).is_err());
         options.collaboration_directory = Some(service);
         options.router_root = Some(root_path.join("."));
-        assert!(super::super::validate_collaboration_directory(&options).is_err());
+        ensure_test!(super::super::validate_collaboration_directory(&options).is_err());
         Ok(())
     }
 
