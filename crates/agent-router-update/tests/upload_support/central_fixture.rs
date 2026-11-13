@@ -3,7 +3,7 @@ use collaboration_central_conformance::{JwksFixtureServer, fixture_policy};
 use collaboration_central_tokio::{TokioServer, TokioSettings};
 use fleet_sync_lease::{LeasePolicy, RegistryConfig};
 use fleet_sync_protocol::ReceiverId;
-use std::{path::Path, time::Duration};
+use std::time::Duration;
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
 pub async fn start_server(
