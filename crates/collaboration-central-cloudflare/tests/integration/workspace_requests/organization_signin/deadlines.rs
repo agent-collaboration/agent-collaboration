@@ -107,9 +107,9 @@ async fn each_signed_deadline_refuses_at_the_bound_and_admits_a_read_one_millise
         ("snapshot deadline", snapshot_bound),
     ];
     for (bound, adjust) in cases {
-        for (released_after, refused) in [(30_000, true), (29_999, false)] {
-            let f = Fixture::new().await;
-            ready(&f).await;
+        let f = Fixture::new().await;
+        ready(&f).await;
+        for (released_after, refused) in [(29_999, false), (30_000, true)] {
             let before = counts(&f).await;
             let answer = held_read(&f, adjust, released_after).await;
             let after = counts(&f).await;
@@ -136,17 +136,17 @@ async fn each_signed_deadline_refuses_at_the_bound_and_admits_a_read_one_millise
                     "the admitted read reserves one proof without a held workspace effect"
                 );
             }
-            f.close().await;
         }
+        f.close().await;
     }
 }
 
 #[tokio::test]
 async fn applying_request_window_refuses_exactly_sixty_five_seconds_old_and_admits_before() {
     // Both the proof iat and UUIDv7 jti predate NOW by exactly one second.
-    for (released_after, refused) in [(64_000, true), (63_999, false)] {
-        let f = Fixture::new().await;
-        ready(&f).await;
+    let f = Fixture::new().await;
+    ready(&f).await;
+    for (released_after, refused) in [(63_999, false), (64_000, true)] {
         let before = counts(&f).await;
         let answer = held_read(&f, |_| {}, released_after).await;
         assert_eq!(answer.0, 200);
@@ -159,9 +159,14 @@ async fn applying_request_window_refuses_exactly_sixty_five_seconds_old_and_admi
             );
         } else {
             assert_eq!(answer.1.get("result"), Some(&json!("records")));
+            assert_eq!(
+                counts(&f).await.rows,
+                vec![vec![number(0), number(1), number(1), number(0)]],
+                "the admitted read reserves exactly one proof"
+            );
         }
-        f.close().await;
     }
+    f.close().await;
 }
 
 async fn assert_read_refused(f: &Fixture, person: &signed::Person, case: &str, expected: &str) {
