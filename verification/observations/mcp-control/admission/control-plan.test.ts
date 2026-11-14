@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -174,7 +175,7 @@ test("a correct plan passes --check and names the manifest's MCP endpoint", () =
   });
 });
 
-test("a wrong build, service, source, caller, budget, deadline or sentinel is refused", () => {
+test("a wrong build, service, source, caller, budget, deadline or releaseSocket is refused", () => {
   withFixture((plan, root) => {
     const refusals: [Partial<ControlPlan>, RegExp][] = [
       [{ host: { ...plan.host, sha256: "0".repeat(64) } }, /hash differs/],
@@ -568,5 +569,32 @@ test("a reload continuation validates the exact kept record before any effect", 
     );
     writeFileSync(join(root, "provider-launch.ts"), "launch v2");
     assert.throws(() => checkControlPlan(base, NOW), /same provider launch/);
+  });
+});
+
+test("controlled release paths require a private parent and a short Unix socket name", (): void => {
+  withFixture((plan, root) => {
+    assert.equal(plan.peer.kind, "controlled");
+    if (plan.peer.kind !== "controlled") return;
+    const controlledPeer = plan.peer;
+    const publicParent = join(root, "public-release");
+    mkdirSync(publicParent);
+    chmodSync(publicParent, 0o755);
+    assert.throws(
+      () =>
+        checkControlPlan(
+          { ...plan, peer: { ...controlledPeer, releaseSocket: join(publicParent, "release") } },
+          NOW,
+        ),
+      /owned private directory/,
+    );
+    assert.throws(
+      () =>
+        checkControlPlan(
+          { ...plan, peer: { ...controlledPeer, releaseSocket: join(root, "x".repeat(104)) } },
+          NOW,
+        ),
+      /under 104 bytes/,
+    );
   });
 });

@@ -165,11 +165,11 @@ function settingsOptions(): unknown[] {
     },
   ];
 }
-function queueReleaseContention(): void {
-  if (process.env.BEHAVIOR_PEER_RELEASE_STAT_CONTENTION !== "1") return;
-  recordReleaseDiagnostic("stat-pool-contention-start");
-  pbkdf2("fixture", "fixture", 2_000_000, 32, "sha256", () => {
-    recordReleaseDiagnostic("stat-pool-contention-finished");
+function queueReleasePoolContention(): void {
+  if (process.env.BEHAVIOR_PEER_RELEASE_POOL_CONTENTION !== "1") return;
+  recordReleaseDiagnostic("release-pool-contention-start");
+  pbkdf2("fixture", "fixture", 1_000, 32, "sha256", () => {
+    recordReleaseDiagnostic("release-pool-contention-finished");
   });
 }
 if (releaseSocket !== undefined && existsSync(releaseSocket))
@@ -405,7 +405,7 @@ for (;;) {
     }
     if (text === "hold") {
       held = request;
-      queueReleaseContention();
+      queueReleasePoolContention();
       publishUpdate(
         { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "HOLDING" } },
         sessionId,

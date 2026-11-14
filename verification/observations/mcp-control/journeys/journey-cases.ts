@@ -38,7 +38,7 @@ import {
   requireSettled,
 } from "./journey-steps.ts";
 import type { PeerReceiptCounts } from "../evidence/peer-receipt.ts";
-import { releaseHeldWork } from "../evidence/release-sentinel.ts";
+import { releaseHeldWork } from "../evidence/release-control.ts";
 
 /** A prompt case's oracle verdict, or a negative case that met exactly its required typed refusal. */
 export type CaseVerdict =

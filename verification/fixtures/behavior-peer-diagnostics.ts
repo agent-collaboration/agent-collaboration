@@ -1,3 +1,4 @@
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { objectSchema } from "../exact-json.ts";
@@ -53,5 +54,34 @@ export function reportPeerPhase(props: {
           ? readFileSync(diagnostics, "utf8")
           : undefined,
     }) + "\n",
+  );
+}
+export function spawnBehaviorPeer(props: {
+  receipt: string;
+  profile: "lifecycle" | "manual";
+  authentication: boolean;
+  release: boolean;
+  releaseSocket: string;
+  releasePoolContention: boolean;
+}): ChildProcessWithoutNullStreams {
+  return spawn(
+    process.execPath,
+    [
+      new URL("../../crates/acp-client-runtime/tests/support/behavior-agent.ts", import.meta.url)
+        .pathname,
+      props.receipt,
+      props.profile,
+      ...(props.authentication ? ["cursor_login"] : []),
+      ...(props.release ? [props.releaseSocket] : []),
+    ],
+    {
+      env: props.releasePoolContention
+        ? {
+            ...process.env,
+            UV_THREADPOOL_SIZE: "1",
+            BEHAVIOR_PEER_RELEASE_POOL_CONTENTION: "1",
+          }
+        : process.env,
+    },
   );
 }

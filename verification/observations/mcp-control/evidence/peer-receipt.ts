@@ -1,5 +1,5 @@
 // Reads the controlled ACP peer's own record of what it received. behavior-agent.ts appends each
-// raw `session/prompt` request as one JSON line; in its release-file mode it also appends each
+// raw `session/prompt` request as one JSON line; in its private release-control mode it also appends each
 // raw `session/cancel` and a `{kind: "release", sessionId}` row when the release claims the held
 // request (Implementer push 01a1a955). So the provider side, not the Router, says how often work
 // was dispatched, cancelled or released, and in which order.

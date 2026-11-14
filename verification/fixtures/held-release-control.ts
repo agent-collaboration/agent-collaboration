@@ -11,6 +11,15 @@ const releaseReply = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("refused"), ownerId: z.string() }).strict(),
 ]);
 
+function parseReleaseLine(line: string): z.infer<typeof releaseRequest> | undefined {
+  try {
+    const parsed = releaseRequest.safeParse(JSON.parse(line));
+    return parsed.success ? parsed.data : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function listenForHeldRelease(props: {
   socketPath: string;
   releaseOwner: (ownerId: string) => boolean;
@@ -19,13 +28,18 @@ export async function listenForHeldRelease(props: {
   const server = createServer((connection): void => {
     const lines = createInterface({ input: connection });
     lines.once("line", (line: string): void => {
-      const request = releaseRequest.safeParse(JSON.parse(line));
-      const ownerId = request.success ? request.data.ownerId : "invalid";
-      const kind = request.success && props.releaseOwner(ownerId) ? "released" : "refused";
+      const request = parseReleaseLine(line);
+      const ownerId = request?.ownerId ?? "invalid";
+      const kind = request !== undefined && props.releaseOwner(ownerId) ? "released" : "refused";
       const reply = releaseReply.parse({ kind, ownerId });
       props.recordReply(reply);
       connection.end(`${JSON.stringify(reply)}\n`);
       lines.close();
+    });
+    connection.on("error", (): void => {
+      props.recordReply({ kind: "refused", ownerId: "disconnected" });
+      lines.close();
+      connection.destroy();
     });
     connection.once("close", (): void => lines.close());
   });

@@ -177,10 +177,25 @@ export function checkControlPlan(plan: ControlPlan, now: Date): CheckedTarget {
   checkInventory(plan);
   if (existsSync(plan.evidence) && readdirSync(plan.evidence).length > 0)
     throw new Error("the evidence directory is not fresh");
-  if (plan.peer.kind === "controlled" && existsSync(plan.peer.releaseSocket)) {
-    const socket = statSync(plan.peer.releaseSocket);
-    if (!socket.isSocket() || (socket.mode & 0o777) !== 0o600 || socket.uid !== process.getuid?.())
-      throw new Error("the release control must be an owned private socket");
+  if (plan.peer.kind === "controlled") {
+    if (Buffer.byteLength(plan.peer.releaseSocket) >= 104)
+      throw new Error("the private release socket path must be under 104 bytes");
+    const parent = statSync(dirname(plan.peer.releaseSocket));
+    if (
+      !parent.isDirectory() ||
+      (parent.mode & 0o777) !== 0o700 ||
+      parent.uid !== process.getuid?.()
+    )
+      throw new Error("the release control parent must be an owned private directory");
+    if (existsSync(plan.peer.releaseSocket)) {
+      const socket = statSync(plan.peer.releaseSocket);
+      if (
+        !socket.isSocket() ||
+        (socket.mode & 0o777) !== 0o600 ||
+        socket.uid !== process.getuid?.()
+      )
+        throw new Error("the release control must be an owned private socket");
+    }
   }
   checkContinuationRecord(plan);
   return { mcpEndpoint: service.mcp.url, providerStore };

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -9,6 +9,7 @@ import { test, type TestContext } from "node:test";
 import {
   frameMetadata,
   reportPeerPhase,
+  spawnBehaviorPeer,
 } from "../../../../verification/fixtures/behavior-peer-diagnostics.ts";
 import { signalHeldRelease } from "../../../../verification/fixtures/held-release-control.ts";
 import { decode, field, objectSchema } from "../../../../verification/exact-json.ts";
@@ -53,17 +54,17 @@ for (const ending of ["release", "cancel", "close", "preexisting"] as const) {
     `held behavior peer ${ending} has one terminal owner and truthful receipts`,
     { timeout: 5000 },
     async (context: TestContext): Promise<void> => {
-      // Arrange: real fixture process, with an owned absent sentinel and captured protocol/stderr.
+      // Arrange: real fixture process, with an owned unused release socket and captured protocol/stderr.
       const root = mkdtempSync(join(tmpdir(), "facade-behavior-"));
       const receipt = join(root, "receipt.jsonl");
-      const sentinel = join(root, "release");
-      if (ending === "preexisting") writeFileSync(sentinel, "too early");
+      const releaseSocket = join(root, "release");
+      if (ending === "preexisting") writeFileSync(releaseSocket, "too early");
       const child = spawn(process.execPath, [
         new URL("./behavior-agent.ts", import.meta.url).pathname,
         receipt,
         "manual",
         "cursor_login",
-        sentinel,
+        releaseSocket,
       ]);
       const settled = once(child, "close");
       let stderr = "";
@@ -119,10 +120,10 @@ for (const ending of ["release", "cancel", "close", "preexisting"] as const) {
           field(frame, "params", "update", "content", "text") === "HOLDING",
       );
 
-      // Act: release competes with an actual cancel or close on the same held prompt.
+      // Act: independent transports may choose either valid terminal winner.
       if (ending === "cancel") send(undefined, "session/cancel", { sessionId: "session-1" });
       if (ending === "close") send("close", "session/close", { sessionId: "session-1" });
-      const released = await signalHeldRelease({ socketPath: sentinel, ownerId: "session-1" });
+      const released = await signalHeldRelease({ socketPath: releaseSocket, ownerId: "session-1" });
       const terminal = await until((frame) => frame.id === "prompt");
       assert.equal(
         released.kind,
@@ -152,7 +153,7 @@ for (const ending of ["release", "cancel", "close", "preexisting"] as const) {
 interface BehaviorPeer {
   readonly root: string;
   readonly receipt: string;
-  readonly sentinel: string;
+  readonly releaseSocket: string;
   readonly frames: Record<string, unknown>[];
   readonly initialized: Record<string, unknown>;
   send(id: string | undefined, method: string, params: unknown): void;
@@ -164,52 +165,23 @@ interface BehaviorPeer {
   finish(): Promise<void>;
 }
 
-function spawnBehaviorPeer(props: {
-  receipt: string;
-  profile: "lifecycle" | "manual";
-  authentication: boolean;
-  release: boolean;
-  sentinel: string;
-  releaseStatContention: boolean;
-}): ChildProcessWithoutNullStreams {
-  return spawn(
-    process.execPath,
-    [
-      new URL("./behavior-agent.ts", import.meta.url).pathname,
-      props.receipt,
-      props.profile,
-      ...(props.authentication ? ["cursor_login"] : []),
-      ...(props.release ? [props.sentinel] : []),
-    ],
-    {
-      env: props.releaseStatContention
-        ? {
-            ...process.env,
-            UV_THREADPOOL_SIZE: "1",
-            BEHAVIOR_PEER_RELEASE_STAT_CONTENTION: "1",
-          }
-        : process.env,
-    },
-  );
-}
-
 async function openBehaviorPeer(props: {
   readonly context: TestContext;
   readonly profile: "lifecycle" | "manual";
   readonly release: boolean;
   readonly authenticate?: boolean;
-  readonly releaseStatContention?: boolean;
+  readonly releasePoolContention?: boolean;
 }): Promise<BehaviorPeer> {
   const root = mkdtempSync(join(tmpdir(), "facade-lifecycle-"));
   const receipt = join(root, "receipt.jsonl");
-  const sentinel = join(root, "release");
+  const releaseSocket = join(root, "release");
   const child = spawnBehaviorPeer({
     receipt,
     profile: props.profile,
     authentication: props.authenticate !== false,
     release: props.release,
-    sentinel,
-    releaseStatContention: props.releaseStatContention === true,
+    releaseSocket,
+    releasePoolContention: props.releasePoolContention === true,
   });
   const settled = once(child, "close");
   let stderr = "";
@@ -290,7 +262,7 @@ async function openBehaviorPeer(props: {
   const initialized = await request("initialize", "initialize", {});
   if (props.authenticate !== false)
     await request("authenticate", "authenticate", { methodId: "cursor_login" });
-  return { root, receipt, sentinel, frames, initialized, send, until, request, finish };
+  return { root, receipt, releaseSocket, frames, initialized, send, until, request, finish };
 }
 
 async function createKnownSession(peer: BehaviorPeer, requestId: string): Promise<string> {
@@ -506,7 +478,7 @@ for (const release of [false, true]) {
       await peer.request("late-close", "session/close", { sessionId: owner });
       if (release) {
         assert.equal(
-          (await signalHeldRelease({ socketPath: peer.sentinel, ownerId: owner })).kind,
+          (await signalHeldRelease({ socketPath: peer.releaseSocket, ownerId: owner })).kind,
           "refused",
         );
       }
@@ -527,7 +499,7 @@ test(
   "lifecycle refuses a second held admission without losing the first owner",
   { timeout: 5000 },
   async (context: TestContext): Promise<void> => {
-    // Arrange: the existing sentinel is explicitly a single owned held-work gate.
+    // Arrange: the private release socket controls one named held-work owner.
     if (process.env.BEHAVIOR_PEER_RELEASE_DIAGNOSTICS === "1")
       process.stderr.write(
         `${JSON.stringify({ event: "case-start", atMs: Date.now(), budgetMs: 5000 })}\n`,
@@ -536,7 +508,7 @@ test(
       context,
       profile: "lifecycle",
       release: true,
-      releaseStatContention: true,
+      releasePoolContention: true,
     });
     const owner = await createKnownSession(peer, "new-a");
     const other = await createKnownSession(peer, "new-b");
@@ -560,15 +532,15 @@ test(
     assertInvalidReply(second);
     assert.equal(peer.frames.filter((frame) => frame.id === "first-held").length, 0);
     assert.equal(
-      (await signalHeldRelease({ socketPath: peer.sentinel, ownerId: other })).kind,
+      (await signalHeldRelease({ socketPath: peer.releaseSocket, ownerId: other })).kind,
       "refused",
     );
     assert.equal(
-      (await signalHeldRelease({ socketPath: peer.sentinel, ownerId: owner })).kind,
+      (await signalHeldRelease({ socketPath: peer.releaseSocket, ownerId: owner })).kind,
       "released",
     );
     assert.equal(
-      (await signalHeldRelease({ socketPath: peer.sentinel, ownerId: owner })).kind,
+      (await signalHeldRelease({ socketPath: peer.releaseSocket, ownerId: owner })).kind,
       "refused",
     );
     if (process.env.BEHAVIOR_PEER_RELEASE_DIAGNOSTICS === "1")
@@ -593,5 +565,15 @@ test(
       .split("\n")
       .map((line) => objectSchema.parse(decode(line)));
     assert.equal(rows.filter((row) => row.kind === "release" && row.sessionId === owner).length, 1);
+    assert.deepEqual(
+      rows
+        .filter((row) => row.kind === "release-control")
+        .map((row) => ({ outcome: row.outcome, ownerId: row.ownerId })),
+      [
+        { outcome: "refused", ownerId: other },
+        { outcome: "released", ownerId: owner },
+        { outcome: "refused", ownerId: owner },
+      ],
+    );
   },
 );
