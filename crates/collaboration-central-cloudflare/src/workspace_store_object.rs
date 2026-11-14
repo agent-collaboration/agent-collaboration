@@ -46,17 +46,18 @@ impl WorkspaceStoreObject {
         Ok(())
     }
 
-    async fn answer(&self, call: OwnedStoreCall) -> StoreAnswer {
+    async fn answer(
+        &self,
+        call: OwnedStoreCall,
+        migrator: std::sync::Arc<sqlx_core::migrate::Migrator>,
+    ) -> StoreAnswer {
         if !self.migrated.get() {
-            statement_store::migrate(
-                &self.connection,
-                crate::object_migrations::workspace_store(),
-            )
-            .await
-            .map_err(|failure| {
-                worker::console_warn!("workspace store migration failed: {failure}");
-                StoreFailure::Unavailable
-            })?;
+            statement_store::migrate(&self.connection, migrator)
+                .await
+                .map_err(|failure| {
+                    worker::console_warn!("workspace store migration failed: {failure}");
+                    StoreFailure::Unavailable
+                })?;
             self.migrated.set(true);
         }
         match call {
@@ -85,10 +86,37 @@ impl DurableObject for WorkspaceStoreObject {
 
     async fn fetch(&self, mut request: Request) -> Result<Response> {
         self.check_address(&request)?;
+        #[cfg(feature = "test-support")]
+        if request.path() == "/test/crash" {
+            self.state
+                .block_concurrency_while(async {
+                    Err::<(), worker::Error>(worker::Error::RustError(
+                        "workspace store fixture crash".to_owned(),
+                    ))
+                })
+                .await?;
+            return Response::error("object did not reset", 500);
+        }
         if request.path() != "/store" {
             return Response::error("unknown store route", 404);
         }
         let call: OwnedStoreCall = request.json().await?;
-        Response::from_json(&self.answer(call).await)
+        let migrator = crate::object_migrations::workspace_store();
+        #[cfg(feature = "test-support")]
+        let migrator =
+            if request.headers().get("x-workspace-fixture")?.as_deref() == Some("widgets") {
+                crate::object_migrations::widgets_store()
+            } else if request.headers().get("x-workspace-fixture")?.as_deref()
+                == Some("failingBusiness")
+            {
+                std::sync::Arc::new(
+                    collaboration_central_core::workspace_migrations::failing_upgrade(
+                        collaboration_central_core::workspace_migrations::workspace_migrator(),
+                    ),
+                )
+            } else {
+                migrator
+            };
+        Response::from_json(&self.answer(call, migrator).await)
     }
 }

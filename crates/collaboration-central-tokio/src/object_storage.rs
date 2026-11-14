@@ -38,7 +38,7 @@ pub struct ObjectStorage {
     alarm: watch::Sender<Option<SyncTime>>,
     #[cfg(feature = "test-support")]
     publication_pause: Option<(
-        message_board::WorkspaceId,
+        workspace_ids::WorkspaceId,
         collaboration_central_core::PausePoints,
     )>,
     #[cfg(feature = "test-support")]
@@ -131,7 +131,7 @@ impl ObjectStorage {
     /// Uses the existing pause seam after commit and before publishing the retained alarm.
     pub fn with_publication_pause(
         mut self,
-        workspace: message_board::WorkspaceId,
+        workspace: workspace_ids::WorkspaceId,
         pauses: collaboration_central_core::PausePoints,
     ) -> Self {
         self.publication_pause = Some((workspace, pauses));

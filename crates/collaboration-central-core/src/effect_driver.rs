@@ -12,7 +12,7 @@
 
 use crate::session_store::SessionTransportEffect;
 use crate::{
-    CoreHost, ObjectHost, PlatformIo,
+    CoreHost, LegacyObjectHost, PlatformIo,
     session_store::{PendingWelcome, SessionCommit},
     step_driver::CommittedEffects,
 };
@@ -31,12 +31,12 @@ mod installation_reads;
 mod mail_submit;
 mod sender_mail;
 
-pub(crate) struct EffectDriver<Host: ObjectHost, Io: PlatformIo> {
+pub(crate) struct EffectDriver<Host: LegacyObjectHost, Io: PlatformIo> {
     host: Arc<Host>,
     shared_host: Arc<CoreHost<Io>>,
     replies: Arc<crate::holder_reply_hub::HolderReplyHub>,
 }
-impl<Host: ObjectHost, Io: PlatformIo> Clone for EffectDriver<Host, Io> {
+impl<Host: LegacyObjectHost, Io: PlatformIo> Clone for EffectDriver<Host, Io> {
     fn clone(&self) -> Self {
         Self {
             host: self.host.clone(),
@@ -54,7 +54,7 @@ pub(crate) struct PublishedSessionEffects {
     wake_at: Option<runtime_primitives::SyncTime>,
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
+impl<Host: LegacyObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
     pub(crate) fn new(
         host: Arc<Host>,
         shared_host: Arc<CoreHost<Io>>,

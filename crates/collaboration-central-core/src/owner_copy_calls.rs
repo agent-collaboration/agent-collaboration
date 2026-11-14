@@ -1,6 +1,6 @@
 //! Repair is the existing Copy alarm path, with retirement checked first.
 use crate::{
-    CallerKind, CopyKind, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, CopyKind, LegacyObjectHost, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     object_call_envelope::ObjectCallEnvelope,
     object_runtime::ObjectWork,
@@ -18,7 +18,7 @@ pub enum CopyCallClass {
     Health,
     Ordinary,
 }
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

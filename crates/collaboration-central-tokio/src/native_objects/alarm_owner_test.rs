@@ -1,7 +1,7 @@
 //! One-shot failures occur at real timer-consumed store boundaries, without HTTP nudges.
 
 use super::super::*;
-use collaboration_central_core::ObjectHost;
+use collaboration_central_core::LegacyObjectHost;
 use durable_steps::{
     AtomicStore, JournalScope, OperationContext, OperationFailure, RequestKey, Task,
     storage::{JournalStorage, OperationExecution},
@@ -123,7 +123,7 @@ struct SavedCopyProbe;
 impl Task for SavedCopyProbe {
     const KIND: &'static str = "central.conformance-copy-task";
     const VERSION: u32 = 1;
-    type Store = <NativeHost as ObjectHost>::Store;
+    type Store = <NativeHost as LegacyObjectHost>::Store;
     type Input = Value;
     type Output = Value;
     async fn run<Context: OperationContext<Store = Self::Store>>(
@@ -249,7 +249,7 @@ struct SavedFleetNotice;
 impl Task for SavedFleetNotice {
     const KIND: &'static str = "central.fleet-notice";
     const VERSION: u32 = 1;
-    type Store = <NativeHost as ObjectHost>::Store;
+    type Store = <NativeHost as LegacyObjectHost>::Store;
     type Input = Value;
     type Output = ();
     async fn run<Context: OperationContext<Store = Self::Store>>(

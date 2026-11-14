@@ -1,6 +1,6 @@
 use super::WorkspaceTurns;
-use message_board::WorkspaceId;
 use std::sync::Arc;
+use workspace_ids::WorkspaceId;
 
 fn workspace(id: &str) -> WorkspaceId {
     WorkspaceId::try_from(id.to_owned()).unwrap()

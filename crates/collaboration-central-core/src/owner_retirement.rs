@@ -1,7 +1,7 @@
 //! The library commits retirement; existing alarm publication owns Directory.
 use crate::FleetKind;
 use crate::{
-    ObjectHost, ObjectRuntime, PlatformIo,
+    LegacyObjectHost, ObjectRuntime, PlatformIo,
     object_runtime::ObjectWork,
     owner_registry_calls::{
         OwnerBlockedSubject, OwnerRetirement, OwnerRetirementAnswer, OwnerRetirementPhase,
@@ -23,7 +23,7 @@ use sqlx_core::{
 };
 use std::convert::Infallible;
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

@@ -11,7 +11,7 @@
 )]
 
 use crate::{
-    CoreHost, ObjectHost, PlatformIo, RegistrationEdits, RegistrationSnapshot,
+    CoreHost, LegacyObjectHost, PlatformIo, RegistrationEdits, RegistrationSnapshot,
     effect_driver::EffectDriver,
     session_scope::CoreSessionScope,
     step_driver::{StepCallback, StepDriver},
@@ -132,11 +132,11 @@ pub(crate) struct SessionCommit {
     pub wake_at: Option<SyncTime>,
 }
 
-pub(crate) struct CoreSessionStore<Host: ObjectHost, Io: PlatformIo> {
+pub(crate) struct CoreSessionStore<Host: LegacyObjectHost, Io: PlatformIo> {
     host: Arc<Host>,
     effects: EffectDriver<Host, Io>,
 }
-impl<Host: ObjectHost, Io: PlatformIo> CoreSessionStore<Host, Io> {
+impl<Host: LegacyObjectHost, Io: PlatformIo> CoreSessionStore<Host, Io> {
     pub(crate) fn new(
         host: Arc<Host>,
         shared_host: Arc<CoreHost<Io>>,
@@ -156,7 +156,7 @@ type SessionTransactionCallback<Host, Io, Output> =
         ) -> BoxFuture<'scope, Result<Output, StoreError>>
         + Send;
 
-struct SessionTransaction<Host: ObjectHost, Io: PlatformIo, Output>
+struct SessionTransaction<Host: LegacyObjectHost, Io: PlatformIo, Output>
 where
     Host::Store: ReborrowScope,
 {
@@ -166,7 +166,7 @@ where
     finalize_fault: Option<crate::SessionFinalizeFault>,
     marker: PhantomData<fn() -> (Host, Io)>,
 }
-impl<Host: ObjectHost, Io: PlatformIo, Output> StepCallback<Host::Store, Host::Database>
+impl<Host: LegacyObjectHost, Io: PlatformIo, Output> StepCallback<Host::Store, Host::Database>
     for SessionTransaction<Host, Io, Output>
 where
     Host::Store: ReborrowScope,
@@ -231,7 +231,7 @@ where
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> AtomicStore for CoreSessionStore<Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> AtomicStore for CoreSessionStore<Host, Io>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:

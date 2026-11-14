@@ -3,7 +3,7 @@
 use crate::session_store::PendingWelcome;
 use crate::session_store::SessionTransportEffect;
 use crate::{
-    ObjectHost, PlatformIo, RegistrationEdits, RegistrationSnapshot,
+    LegacyObjectHost, PlatformIo, RegistrationEdits, RegistrationSnapshot,
     session_store::CoreSessionStore,
 };
 use durable_steps::{
@@ -26,7 +26,7 @@ mod fleet_reads;
 mod forwards;
 mod operations;
 
-pub(crate) struct CoreSessionScope<'transaction, Host: ObjectHost, Io: PlatformIo>
+pub(crate) struct CoreSessionScope<'transaction, Host: LegacyObjectHost, Io: PlatformIo>
 where
     Host::Store: ReborrowScope,
 {
@@ -39,7 +39,7 @@ where
     pub marker: PhantomData<fn() -> Io>,
 }
 
-impl<'transaction, Host: ObjectHost, Io: PlatformIo> TransactionScope
+impl<'transaction, Host: LegacyObjectHost, Io: PlatformIo> TransactionScope
     for CoreSessionScope<'transaction, Host, Io>
 where
     Host::Store: ReborrowScope,
@@ -55,7 +55,7 @@ where
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> SessionScope for CoreSessionScope<'_, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> SessionScope for CoreSessionScope<'_, Host, Io>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -115,7 +115,7 @@ fn session_error(error: impl std::fmt::Display) -> fleet_sync_session::StoreErro
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> CoreSessionScope<'_, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> CoreSessionScope<'_, Host, Io>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -272,7 +272,7 @@ where
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> JournalScope for CoreSessionScope<'_, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> JournalScope for CoreSessionScope<'_, Host, Io>
 where
     Host::Store: ReborrowScope,
 {
@@ -301,7 +301,7 @@ where
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> JournalStorage for CoreSessionScope<'_, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> JournalStorage for CoreSessionScope<'_, Host, Io>
 where
     Host::Store: ReborrowScope,
 {
@@ -359,7 +359,7 @@ where
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> CoreSessionScope<'_, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> CoreSessionScope<'_, Host, Io>
 where
     Host::Store: ReborrowScope,
 {

@@ -9,11 +9,8 @@ mod case_steps;
 
 pub use case_object::StorageCaseObject;
 
-use crate::access_verification::{InvocationLabels, VerificationLayer};
-use crate::platform::CloudflareCentralPlatform;
 use case_steps::CaseStoreCall;
 use central_storage::StoreCall;
-use collaboration_central_core::CentralPlatform;
 use worker::{Env, Headers, Method, Request, RequestInit, Response, Result, js_sys};
 
 const STORAGE_PREFIX: &str = "/test-support/storage/";
@@ -22,9 +19,15 @@ const DRIVER_PREFIX: &str = "/test-support/driver/";
 
 /// Answers a test-support route, or returns the request for the central router.
 pub(crate) async fn route(
-    mut request: Request,
+    request: Request,
     env: &Env,
 ) -> Result<std::result::Result<Response, Request>> {
+    let request =
+        match crate::workspace_central_object::workspace_cases::route(request, env).await? {
+            Ok(response) => return Ok(Ok(response)),
+            Err(request) => request,
+        };
+    let mut request = request;
     let path = request.path();
     #[cfg(feature = "conformance")]
     if path == "/test-support/object-clock-ids" {
@@ -61,20 +64,14 @@ pub(crate) async fn route(
         return Ok(Ok(stub.fetch_with_request(forwarded).await?));
     }
     if let Some(workspace) = path.strip_prefix(CALL_STORE_PREFIX) {
-        let workspace = message_board::WorkspaceId::try_from(workspace.to_owned())
+        let workspace = workspace_ids::WorkspaceId::try_from(workspace.to_owned())
             .map_err(|error| worker::Error::RustError(error.to_string()))?;
         let call = match request.json::<CaseStoreCall>().await? {
             CaseStoreCall::Batch(batch) => StoreCall::Batch(batch.into_batch()),
             CaseStoreCall::Read(read) => StoreCall::Read(read.statement()),
         };
-        let platform = CloudflareCentralPlatform::new(
-            String::new(),
-            InvocationLabels::for_request(&request)?,
-            VerificationLayer::Edge,
-            env.clone(),
-        );
         return Ok(Ok(Response::from_json(
-            &platform.call_store(workspace, call).await,
+            &crate::cloudflare_transport::call_widget_store(env, workspace, call.into()).await,
         )?));
     }
     Ok(Err(request))

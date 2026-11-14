@@ -18,6 +18,8 @@ mod sqlite_object_store;
 #[cfg(feature = "test-support")]
 pub use object_storage::ObjectStorage;
 pub use object_storage::StoreMigrations;
+mod workspace_host;
+pub use workspace_host::{TokioWorkspaceHost, TokioWorkspaceStores};
 mod platform;
 mod self_hosted_issuer;
 pub use self_hosted_issuer::{IssuerError, SelfHostedIssuer};
@@ -32,7 +34,7 @@ pub use native_server::{TokioServer, TokioServerError, TokioSettings};
 pub use platform::{TokioCentralPlatform, TokioPlatformError};
 pub use socket_host::SocketCommand;
 
-use collaboration_central_core::ObjectHost;
+use collaboration_central_core::LegacyObjectHost;
 use durable_steps::Host;
 use fleet_sync_tokio_runner::TokioObject;
 use std::sync::Arc;
@@ -127,7 +129,23 @@ impl<SharedHost: Host> TokioStorageHost<SharedHost> {
     }
 }
 
-impl<SharedHost: Host> ObjectHost for TokioStorageHost<SharedHost> {
+impl<SharedHost: Host> collaboration_central_core::ObjectHost for TokioStorageHost<SharedHost> {
+    async fn run_batch(
+        &self,
+        batch: central_storage::StatementBatch,
+    ) -> Result<central_storage::BatchOutcome, central_storage::StoreFailure> {
+        self.storage.run_batch(batch).await
+    }
+
+    async fn read(
+        &self,
+        statement: central_storage::Statement,
+    ) -> Result<central_storage::ReadOutcome, central_storage::StoreFailure> {
+        self.storage.read(statement).await
+    }
+}
+
+impl<SharedHost: Host> LegacyObjectHost for TokioStorageHost<SharedHost> {
     type Database = sqlx_turso::Turso;
     #[cfg(not(feature = "conformance"))]
     type Store = TokioObject<SharedHost>;
@@ -155,18 +173,6 @@ impl<SharedHost: Host> ObjectHost for TokioStorageHost<SharedHost> {
     }
     fn wake(&self) -> &Self::Wake {
         self.wake.as_ref()
-    }
-    async fn run_batch(
-        &self,
-        batch: central_storage::StatementBatch,
-    ) -> Result<central_storage::BatchOutcome, central_storage::StoreFailure> {
-        self.storage.run_batch(batch).await
-    }
-    async fn read(
-        &self,
-        statement: central_storage::Statement,
-    ) -> Result<central_storage::ReadOutcome, central_storage::StoreFailure> {
-        self.storage.read(statement).await
     }
     async fn with_local_section<Output: Send + 'static>(
         &self,

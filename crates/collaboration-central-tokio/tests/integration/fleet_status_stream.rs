@@ -2,7 +2,9 @@
 #![cfg(feature = "conformance")]
 
 use board_sync_protocol::BoardDeliveryTypes;
-use collaboration_central_core::{CoreHost, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo};
+use collaboration_central_core::{
+    CoreHost, LegacyObjectHost, ObjectAddress, ObjectRuntime, PlatformIo,
+};
 use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{
     AtomicStore, CallFailure, CallId, OperationId, StepName, StoreError, Uuid,

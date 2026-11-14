@@ -2,7 +2,7 @@
 use crate::FleetKind;
 
 use crate::{
-    CallerKind, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, LegacyObjectHost, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     object_call_envelope::ObjectCallEnvelope,
     object_runtime::ObjectWork,
@@ -34,7 +34,7 @@ enum SessionRegistryReply {
     Refused,
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

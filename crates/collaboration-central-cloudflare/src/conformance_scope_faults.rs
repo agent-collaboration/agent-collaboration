@@ -130,7 +130,7 @@ pub(crate) async fn session_barrier<H: Host>(
     faults: &RuntimeFaults,
     connection: fleet_sync_protocol::ConnectionId,
 ) -> worker::Result<()> {
-    use collaboration_central_core::ObjectHost;
+    use collaboration_central_core::LegacyObjectHost;
     faults
         .consume_session_barrier(connection)
         .map_err(|error| worker::Error::RustError(error.to_string()))?;
@@ -154,7 +154,7 @@ pub(crate) async fn session_journal<H: Host>(
     host: &crate::CloudflareStorageHost<H>,
     operation: durable_steps::OperationId,
 ) -> worker::Result<SessionJournalObservation> {
-    use collaboration_central_core::ObjectHost;
+    use collaboration_central_core::LegacyObjectHost;
     use durable_steps::storage::JournalStorage;
     host.store()
         .transaction(move |scope| {

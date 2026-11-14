@@ -46,9 +46,25 @@ mod conformance_fleet_entity;
 pub use conformance_access::{AccessCallerClass, AccessVerificationOutcome};
 mod connection_admission;
 pub use connection_admission::AdmissionOrigin;
+mod object_host;
 mod platform_capabilities;
+pub use object_host::ObjectHost;
+mod workspace_runtime;
+pub use workspace_runtime::{WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls};
+mod workspace_actor_identity;
+mod workspace_admission;
+mod workspace_change_records;
+mod workspace_decode_error;
+mod workspace_item_reads;
+mod workspace_json_records;
+pub mod workspace_migrations;
+mod workspace_read_queries;
+mod workspace_request_gate;
+mod workspace_request_log;
+mod workspace_row_codec;
+mod workspace_rule_dispatch;
 pub use platform_capabilities::{
-    CallOutcome, CentralPlatform, KeyFetchFailure, LocalSectionFailure, ObjectHost, RawJwks,
+    CallOutcome, CentralPlatform, KeyFetchFailure, LegacyObjectHost, LocalSectionFailure, RawJwks,
     RegistrationEdits, RegistrationSnapshot, SocketFailure, UpgradeFailure, VerifyFailure,
 };
 mod caller_context;

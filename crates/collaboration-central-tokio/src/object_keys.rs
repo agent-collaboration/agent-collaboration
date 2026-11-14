@@ -6,7 +6,7 @@ pub(crate) fn address_key(address: &ObjectAddress) -> Result<String, StoreError>
         ObjectAddress::Copy(project) => Ok(format!("copy-{project}")),
         ObjectAddress::Fleet => Ok("fleet".into()),
         // Workspace stores are not runtime objects: they live under their own directory.
-        ObjectAddress::WorkspaceStore(_) => Err(StoreError::Aborted {
+        ObjectAddress::WorkspaceStore(_) | ObjectAddress::Central(_) => Err(StoreError::Aborted {
             reason: "a workspace store is not a native runtime object".into(),
         }),
     }

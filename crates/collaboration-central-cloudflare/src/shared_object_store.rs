@@ -14,8 +14,8 @@ use crate::binding_attachment::BindingAttachment;
 use crate::statement_store::{self, AlarmPolicy, MigrationFailure};
 use central_storage::{BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreFailure};
 use collaboration_central_core::{
-    AdmissionOrigin, LocalSectionFailure, ObjectHost, RegistrationEdits, RegistrationSnapshot,
-    SocketFailure,
+    AdmissionOrigin, LegacyObjectHost, LocalSectionFailure, RegistrationEdits,
+    RegistrationSnapshot, SocketFailure,
 };
 use durable_steps::{Host, durable_object_store::DurableObjectStore};
 use fleet_sync_protocol::{CloseReason, ConnectionId};
@@ -229,7 +229,32 @@ impl<SharedHost: Host> CloudflareStorageHost<SharedHost> {
     }
 }
 
-impl<SharedHost: Host> ObjectHost for CloudflareStorageHost<SharedHost> {
+impl<SharedHost: Host> collaboration_central_core::ObjectHost
+    for CloudflareStorageHost<SharedHost>
+{
+    fn run_batch(
+        &self,
+        batch: StatementBatch,
+    ) -> impl Future<Output = Result<BatchOutcome, StoreFailure>> + Send {
+        SendFuture::new(async move {
+            statement_store::run_batch(
+                &self.statements,
+                batch.into(),
+                AlarmPolicy::Apply(self.state.storage()),
+            )
+            .await
+        })
+    }
+
+    fn read(
+        &self,
+        statement: Statement,
+    ) -> impl Future<Output = Result<ReadOutcome, StoreFailure>> + Send {
+        SendFuture::new(statement_store::read(&self.statements, statement.into()))
+    }
+}
+
+impl<SharedHost: Host> LegacyObjectHost for CloudflareStorageHost<SharedHost> {
     type Database = sqlx_durable_object::Do;
     type Store = RuntimeStore<SharedHost>;
     type Wake = AlarmOwner;
@@ -260,25 +285,6 @@ impl<SharedHost: Host> ObjectHost for CloudflareStorageHost<SharedHost> {
         &self,
     ) -> Result<Vec<durable_steps::OperationId>, durable_steps::StoreError> {
         self.store.rejected_operations()
-    }
-    fn run_batch(
-        &self,
-        batch: StatementBatch,
-    ) -> impl Future<Output = Result<BatchOutcome, StoreFailure>> + Send {
-        SendFuture::new(async move {
-            statement_store::run_batch(
-                &self.statements,
-                batch.into(),
-                AlarmPolicy::Apply(self.state.storage()),
-            )
-            .await
-        })
-    }
-    fn read(
-        &self,
-        statement: Statement,
-    ) -> impl Future<Output = Result<ReadOutcome, StoreFailure>> + Send {
-        SendFuture::new(statement_store::read(&self.statements, statement.into()))
     }
     fn wake(&self) -> &Self::Wake {
         &self.wake

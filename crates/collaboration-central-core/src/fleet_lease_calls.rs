@@ -1,6 +1,6 @@
 //! Registry calls publish lease facts and discharge claim debt at the Fleet owner.
 use crate::{
-    CallerKind, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, FleetKind, LegacyObjectHost, ObjectAddress, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     fleet_lease_step::StoreClaimGrant,
     lease_projection::{ClaimGrantedUpdate, LeaseProjectionResult},
@@ -25,7 +25,7 @@ impl CallTarget for ClaimGranted {
     type Answer = LeaseProjectionResult;
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

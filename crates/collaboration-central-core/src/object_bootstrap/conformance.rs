@@ -2,8 +2,8 @@
 
 use super::{
     AtomicStore, BoxFuture, ColumnIndex, Database, Decode, Deserialize, Encode, EngineSchema,
-    Executor, Infallible, IntoArguments, ObjectBootstrap, ObjectHost, Serialize, StepCallback,
-    StepResult, StoreError, TransactionScope, Type, corrupt,
+    Executor, Infallible, IntoArguments, LegacyObjectHost, ObjectBootstrap, Serialize,
+    StepCallback, StepResult, StoreError, TransactionScope, Type, corrupt,
 };
 use crate::generated_bootstrap_probes as queries;
 use board_sync_protocol::BoardDeliveryTypes;
@@ -105,7 +105,7 @@ pub enum BootstrapReply {
     CopyStatus(Box<ReplicationAnswer>),
 }
 
-impl<Host: ObjectHost> ObjectBootstrap<Host>
+impl<Host: LegacyObjectHost> ObjectBootstrap<Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

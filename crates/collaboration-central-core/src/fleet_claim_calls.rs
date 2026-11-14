@@ -1,6 +1,6 @@
 //! Only Registry object calls may reserve or settle a native claim attempt.
 use crate::{
-    CallerKind, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, FleetKind, LegacyObjectHost, ObjectAddress, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     fleet_claim_step::{ClaimStep, ClaimStepResult},
     object_call_envelope::ObjectCallEnvelope,
@@ -16,7 +16,7 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

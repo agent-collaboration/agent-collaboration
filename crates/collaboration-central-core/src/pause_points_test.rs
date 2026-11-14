@@ -1,5 +1,5 @@
 use super::{PausePoint, PausePoints};
-use message_board::WorkspaceId;
+use workspace_ids::WorkspaceId;
 
 fn workspace() -> WorkspaceId {
     WorkspaceId::try_from("019f0000-0000-7000-8000-000000000001".to_owned()).unwrap()

@@ -74,7 +74,7 @@ impl<SharedHost: Host> CloudflareStorageHost<SharedHost> {
         connection: ConnectionId,
         fault: crate::conformance_admission::AttachmentFault,
     ) -> Result<crate::shared_object_store::RegistrationSnapshot, SocketFailure> {
-        use collaboration_central_core::ObjectHost as _;
+        use collaboration_central_core::LegacyObjectHost as _;
         let socket = self.socket(connection)?;
         match fault {
             crate::conformance_admission::AttachmentFault::Missing => {

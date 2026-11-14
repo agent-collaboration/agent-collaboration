@@ -1,4 +1,6 @@
-use crate::statement_plans::{RulePlan, WriteContext, exact, not_found, plan, text, unchanged};
+use crate::statement_plans::{
+    RulePlan, WriteContext, change_metadata, exact, not_found, plan, text, unchanged,
+};
 use workspace_model::{
     Blocker, BlockerStatus, Deliverable, DeliverableStatus, DeliverableView, Initiative, Issue,
     ItemRef, Project, RefusalReason, RuleAnswer, StatusCommand, WorkStatus,
@@ -180,12 +182,24 @@ pub fn set_work_status(
             text(status_name(original)),
         ],
     )];
-    Ok(plan(
-        context,
-        item.clone(),
-        "stateChanged",
-        statements,
-        RuleAnswer::Updated { item },
+    let project = match command {
+        StatusCommand::SetIssue { .. } | StatusCommand::SetProject { .. } => {
+            reads.project.map(|row| &row.project_id)
+        }
+        StatusCommand::SetInitiative { .. } => None,
+    };
+    Ok(change_metadata(
+        plan(
+            context,
+            item.clone(),
+            "stateChanged",
+            statements,
+            RuleAnswer::Updated { item },
+        ),
+        None,
+        project,
+        None,
+        None,
     ))
 }
 pub(crate) const fn status_name(status: WorkStatus) -> &'static str {

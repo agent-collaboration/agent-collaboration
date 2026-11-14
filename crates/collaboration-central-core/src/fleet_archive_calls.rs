@@ -1,8 +1,8 @@
 //! The authenticated Session supplies the installation; Fleet supplies report time.
 use crate::{
-    CallerKind, FleetKind, ObjectHost, ObjectRuntime, PlatformIo, caller_context::CallAuthority,
-    fleet_archive_step::ReportArchive, object_call_envelope::ObjectCallEnvelope,
-    object_runtime::ObjectWork, step_driver::StepDriver,
+    CallerKind, FleetKind, LegacyObjectHost, ObjectRuntime, PlatformIo,
+    caller_context::CallAuthority, fleet_archive_step::ReportArchive,
+    object_call_envelope::ObjectCallEnvelope, object_runtime::ObjectWork, step_driver::StepDriver,
 };
 use durable_steps::{
     AtomicStore, CallFailure, CallTarget, NotSentReason, storage::TransactionScope,
@@ -21,7 +21,7 @@ impl CallTarget for FleetArchiveReport {
     type Answer = fleet_admission::ArchiveReportOutcome;
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

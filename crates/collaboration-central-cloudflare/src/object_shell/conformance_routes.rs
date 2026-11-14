@@ -1,6 +1,6 @@
 //! Private conformance controls on the actual object and platform capabilities.
 use super::{
-    ObjectHost, Request, Response, Result, RuntimeFace, ShellActor, StoreHost, SyncTime,
+    LegacyObjectHost, Request, Response, Result, RuntimeFace, ShellActor, StoreHost, SyncTime,
     WakeScheduler, error,
 };
 

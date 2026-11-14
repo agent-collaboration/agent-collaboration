@@ -33,7 +33,6 @@ use durable_steps::{BoxFuture, CallFailure, NotSentReason, StoreError};
 use fleet_sync_lease::RegistryConfig;
 use fleet_sync_session::ConnectionBinding;
 use fleet_sync_tokio_runner::{ObjectKey, ObjectOptions, ObjectStore};
-use message_board::WorkspaceId;
 use runtime_primitives::{Clock, IdSource, SyncTime, TokioWakeTimer, WakeFailure, WakeScheduler};
 use std::{
     collections::BTreeMap,
@@ -42,6 +41,7 @@ use std::{
 };
 use tokio::sync::{Mutex, OnceCell};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use workspace_ids::WorkspaceId;
 
 type NativeHost = TokioStorageHost<CoreHost<TokioObjectIo>>;
 type CopyRuntime = ObjectRuntime<CopyKind, NativeHost, TokioObjectIo>;
@@ -379,7 +379,7 @@ impl NativeObjects {
             .runtime
             .get_or_try_init(|| async {
                 let runtime = match &address {
-                    ObjectAddress::WorkspaceStore(_) => {
+                    ObjectAddress::WorkspaceStore(_) | ObjectAddress::Central(_) => {
                         return Err(StoreError::Aborted {
                             reason: "workspace store takes only store calls".into(),
                         });
@@ -639,7 +639,7 @@ impl NativeObjects {
         &self,
         service: Option<&message_board::ServiceId>,
     ) -> Result<Vec<SessionConnectionSnapshot>, collaboration_central_core::SocketFailure> {
-        use collaboration_central_core::ObjectHost;
+        use collaboration_central_core::LegacyObjectHost;
         let slot = self.slots.lock().await.get("fleet").cloned();
         let host = slot
             .as_ref()
@@ -664,7 +664,7 @@ impl NativeObjects {
     pub(crate) async fn socket_inventory(
         &self,
     ) -> Result<Vec<SocketOwnerSnapshot>, collaboration_central_core::SocketFailure> {
-        use collaboration_central_core::ObjectHost;
+        use collaboration_central_core::LegacyObjectHost;
         let slots = self.slots.lock().await.clone();
         let mut inventory = Vec::new();
         for (key, slot) in slots {
@@ -690,7 +690,7 @@ impl NativeObjects {
         &self,
         service: &message_board::ServiceId,
     ) -> Result<Vec<AdmissionOrigin>, collaboration_central_core::SocketFailure> {
-        use collaboration_central_core::ObjectHost;
+        use collaboration_central_core::LegacyObjectHost;
         let slot = self.slots.lock().await.get("fleet").cloned();
         let host = slot
             .as_ref()

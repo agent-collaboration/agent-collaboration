@@ -15,6 +15,9 @@ conformance = ["collaboration-central-core/conformance", "dep:collaboration-cent
 
 [dependencies]
 central-storage.workspace = true
+workspace-model.workspace = true
+workspace-ids.workspace = true
+fleet-identity-protocol = {path="../fleet-identity-protocol",version="0.1.149"}
 board-sync-protocol = { version = "0.1.96", path = "../board-sync-protocol", optional = true }
 reqwest-websocket = { version = "=0.5.1", optional = true }
 collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance", optional = true, default-features = false }

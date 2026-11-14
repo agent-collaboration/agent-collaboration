@@ -1,8 +1,8 @@
 //! The Fleet face owns central's nonreplicated application state.
 
 use crate::{
-    CallerKind, CoreHost, EngineSchema, FleetKind, ObjectAddress, ObjectBootstrap, ObjectHost,
-    ObjectRuntime, PlatformIo,
+    CallerKind, CoreHost, EngineSchema, FleetKind, LegacyObjectHost, ObjectAddress,
+    ObjectBootstrap, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     fleet_effects_read::ReadFleetEffects,
     holder_reply_hub::HolderReplyHub,
@@ -45,7 +45,7 @@ impl CallTarget for FleetRequestEffects {
     type Answer = board_sync_protocol::BoardReadPage;
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     Host::Store: durable_steps::ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -506,7 +506,7 @@ fn bind_mail_push<Host, Io>(
     timeout: Duration,
 ) -> PushDispatcher
 where
-    Host: ObjectHost,
+    Host: LegacyObjectHost,
     Io: PlatformIo,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

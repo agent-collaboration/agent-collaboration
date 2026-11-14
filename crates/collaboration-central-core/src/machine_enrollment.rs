@@ -3,7 +3,7 @@ use crate::FleetKind;
 
 use crate::machine_enrollment_record::{EnrollmentState, StoredMachine, corrupt, valid_hash};
 use crate::{
-    AccessClientId, AdmissionOrigin, ObjectHost, ObjectRuntime, OwnerIdentity, PlatformIo,
+    AccessClientId, AdmissionOrigin, LegacyObjectHost, ObjectRuntime, OwnerIdentity, PlatformIo,
     generated_enrollment as queries,
     object_runtime::ObjectWork,
     step_driver::{StepCallback, StepDriver, StepResult},
@@ -108,7 +108,7 @@ impl AdmittedMachine {
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

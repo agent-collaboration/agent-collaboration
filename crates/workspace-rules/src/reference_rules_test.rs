@@ -57,7 +57,7 @@ fn r22_a_c_missing_foreign_and_complete_reverse_lookup() {
                 ..Default::default()
             }
         ),
-        Err(RefusalReason::TargetOutsideWorkspace { .. })
+        Err(RefusalReason::NotFound { .. })
     ));
     target.workspace_id = id(1);
     assert!(

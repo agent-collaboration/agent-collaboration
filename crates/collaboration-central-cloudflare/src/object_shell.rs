@@ -4,7 +4,7 @@ use crate::worker_clock::ObjectClock;
 use crate::{CloudflareStorageHost, binding_attachment::BindingAttachment, cloudflare_transport};
 use collaboration_central_core::ClockIds;
 use collaboration_central_core::{
-    CopyKind, CoreHost, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CopyKind, CoreHost, FleetKind, LegacyObjectHost, ObjectAddress, ObjectRuntime, PlatformIo,
 };
 use durable_steps::{CallFailure, NotSentReason};
 use fleet_sync_lease::RegistryConfig;
@@ -254,7 +254,7 @@ impl ShellActor {
         }
         let io = self.object_io(host.wake().clone());
         let runtime = match address {
-            ObjectAddress::WorkspaceStore(_) => {
+            ObjectAddress::WorkspaceStore(_) | ObjectAddress::Central(_) => {
                 return Err(error("workspace store takes only store calls"));
             }
             ObjectAddress::Copy(project) => RuntimeFace::Copy(ObjectRuntime::copy(

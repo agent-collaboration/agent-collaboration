@@ -1,13 +1,13 @@
 //! Translate Fleet-owned read scopes; unrelated cursors remain invalid.
 use super::{
-    ConnectionId, CoreSessionScope, ObjectHost, PlatformIo, ReborrowScope, SessionTransportEffect,
-    StoreError,
+    ConnectionId, CoreSessionScope, LegacyObjectHost, PlatformIo, ReborrowScope,
+    SessionTransportEffect, StoreError,
 };
 use crate::fleet_read_calls::FleetReadRequest;
 use board_sync_protocol::{BoardConsumerProtocol, BoardReadCursor, BoardReadScope};
 use fleet_sync_protocol::{FrameId, OperationAnswer, ServerFrame};
 use fleet_sync_session::{SessionEffect, SessionKey};
-impl<Host: ObjectHost, Io: PlatformIo> CoreSessionScope<'_, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> CoreSessionScope<'_, Host, Io>
 where
     Host::Store: ReborrowScope,
 {

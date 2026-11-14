@@ -1,7 +1,7 @@
 //! Bind shared copy targets to one configured receiver and one physical database.
 
 use crate::{
-    CallerKind, CopyKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, CopyKind, LegacyObjectHost, ObjectAddress, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     copy_mutations::{CopyMutation, CopyMutationAnswer},
     copy_read_calls::CopySessionRead,
@@ -22,7 +22,7 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
@@ -187,7 +187,7 @@ fn refused() -> CallFailure {
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<crate::FleetKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<crate::FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

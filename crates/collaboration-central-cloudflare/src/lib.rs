@@ -32,6 +32,7 @@ mod statement_store;
 mod storage_cases;
 mod store_wire;
 mod worker_clock;
+mod workspace_central_object;
 mod workspace_store_object;
 #[cfg(feature = "test-support")]
 pub use driver_scenarios::DriverScenarioObject;
@@ -39,6 +40,7 @@ pub use shared_object_store::CloudflareStorageHost;
 #[cfg(feature = "test-support")]
 pub use storage_cases::StorageCaseObject;
 use worker::{Context, Env, Request, Response, Result, event};
+pub use workspace_central_object::CentralObject;
 pub use workspace_store_object::WorkspaceStoreObject;
 #[event(fetch)]
 pub async fn main(request: Request, env: Env, _context: Context) -> Result<Response> {

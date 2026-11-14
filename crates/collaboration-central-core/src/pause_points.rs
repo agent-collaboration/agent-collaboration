@@ -5,10 +5,10 @@
 //! until the case releases it, or until the case drops the object (a simulated crash)
 //! and the held request's future goes with it. Built only with `test-support`.
 
-use message_board::WorkspaceId;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, PoisonError};
 use tokio::sync::watch;
+use workspace_ids::WorkspaceId;
 
 /// Where a request can be held.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]

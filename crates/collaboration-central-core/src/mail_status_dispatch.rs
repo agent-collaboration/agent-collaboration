@@ -1,7 +1,7 @@
 //! The status stream's peer hop is local socket I/O, never an object call.
 
 use crate::{
-    ObjectHost, PlatformIo,
+    LegacyObjectHost, PlatformIo,
     holder_reply_hub::HolderReplyHub,
     step_driver::{StepCallback, StepDriver, StepResult},
 };
@@ -53,7 +53,7 @@ pub(crate) fn bind<Host, Io>(
     timeout: Duration,
 ) -> PublicationDispatcher
 where
-    Host: ObjectHost,
+    Host: LegacyObjectHost,
     Io: PlatformIo,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

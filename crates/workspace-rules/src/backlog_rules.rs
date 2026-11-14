@@ -68,7 +68,7 @@ pub fn change_backlog(
         }
         BacklogCommand::Remove { item_id } => {
             if reads.item.is_none() {
-                return Ok(crate::statement_plans::unchanged());
+                return Err(not_found(ItemRef::BacklogItem(item_id.clone())));
             }
             reads
                 .item

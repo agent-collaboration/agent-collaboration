@@ -1,7 +1,7 @@
 //! Owner requests admit local work, then drive the existing library outside it.
 use crate::FleetKind;
 use crate::{
-    CallerKind, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, LegacyObjectHost, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     object_call_envelope::{ObjectCallEnvelope, encode_refusal},
     object_runtime::ObjectWork,
@@ -25,7 +25,7 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

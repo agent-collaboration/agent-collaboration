@@ -1,9 +1,11 @@
 //! Closed workspace vocabulary. Identity, transport and storage have other owners.
 mod entity_records;
 mod item_references;
+mod request_contract;
 mod rule_commands;
 mod rule_results;
 mod validated_values;
+pub use request_contract::*;
 
 pub use entity_records::*;
 pub use item_references::*;
@@ -21,6 +23,6 @@ pub fn encode_json(value: &impl serde::Serialize) -> Result<String, ValueValidat
 pub use workspace_ids::{
     ActorIdentityId, AreaId, BacklogItemId, ChangeId, DeliverableId, DeliverableRoleId,
     DependencyId, InitiativeId, IssueId, LinkId, MachineId, PersonId, PostId, ProjectId,
-    ProjectRoleId, ReadMarkId, ReferenceId, ThreadId, ThreadMemberId, WorkLogEntryId, WorkLogTagId,
-    WorkspaceId,
+    ProjectRoleId, ReadMarkId, ReferenceId, RequestId, ThreadId, ThreadMemberId, WorkLogEntryId,
+    WorkLogTagId, WorkspaceId,
 };

@@ -169,7 +169,9 @@ impl PlatformIo for Io {
             ObjectAddress::Copy(database) if database.to_string() == PROJECT => {
                 project(bytes).await
             }
-            ObjectAddress::Copy(_) | ObjectAddress::WorkspaceStore(_) => Err(no_route()),
+            ObjectAddress::Central(_)
+            | ObjectAddress::Copy(_)
+            | ObjectAddress::WorkspaceStore(_) => Err(no_route()),
         }
     }
 }
@@ -389,7 +391,7 @@ impl Fixture {
             .await?;
         self.runtime.on_alarm().await?;
         self.runtime.on_socket_closed(binding).await?;
-        collaboration_central_core::ObjectHost::quarantine_connections(
+        collaboration_central_core::LegacyObjectHost::quarantine_connections(
             self.host.as_ref(),
             vec![binding.connection],
         )

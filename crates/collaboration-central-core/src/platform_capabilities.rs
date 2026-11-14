@@ -1,5 +1,6 @@
 //! Capabilities supplied by the runtime for one central object.
 
+use crate::ObjectHost;
 use durable_steps::AtomicStore;
 use fleet_sync_protocol::{CloseReason, ConnectionId};
 use fleet_sync_session::{Bytes, ConnectionRegistration};
@@ -11,9 +12,7 @@ use std::{future::Future, sync::Arc};
 use crate::{
     AccessJwk, AdmissionOrigin, CentralObservation, SerializedObjectCall, SignatureValidity,
 };
-use central_storage::{
-    BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
-};
+use central_storage::{StoreCall, StoreFailure, StoreReply};
 
 pub struct RawJwks {
     pub body: Vec<u8>,
@@ -46,7 +45,7 @@ pub enum UpgradeFailure {
 }
 
 pub trait CentralPlatform: Clone + Send + Sync + 'static {
-    type Host: ObjectHost;
+    type Host: LegacyObjectHost;
     fn clock(&self) -> &dyn runtime_primitives::Clock;
     fn ids(&self) -> &dyn runtime_primitives::IdSource;
     fn transport_object(
@@ -70,12 +69,12 @@ pub trait CentralPlatform: Clone + Send + Sync + 'static {
     /// Runs one call on a workspace store; a batch runs atomically.
     fn call_store(
         &self,
-        workspace: message_board::WorkspaceId,
+        workspace: workspace_ids::WorkspaceId,
         call: StoreCall,
     ) -> impl Future<Output = Result<StoreReply, StoreFailure>> + Send;
 }
 
-pub trait ObjectHost: Send + Sync + 'static {
+pub trait LegacyObjectHost: ObjectHost {
     type Database: Database;
     type Store: AtomicStore;
     type Wake: WakeScheduler;
@@ -102,16 +101,6 @@ pub trait ObjectHost: Send + Sync + 'static {
             reason: "drive-token observation is unavailable on this fixture host".into(),
         })
     }
-    /// Runs every statement in one transaction; a failed guard or constraint rolls it all
-    /// back. `AlarmUpdate::SetFromQuery` runs last in that transaction and sets the alarm.
-    fn run_batch(
-        &self,
-        batch: StatementBatch,
-    ) -> impl Future<Output = Result<BatchOutcome, StoreFailure>> + Send;
-    fn read(
-        &self,
-        statement: Statement,
-    ) -> impl Future<Output = Result<ReadOutcome, StoreFailure>> + Send;
     fn wake(&self) -> &Self::Wake;
     fn with_local_section<Output: Send + 'static>(
         &self,

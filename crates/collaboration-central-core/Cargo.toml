@@ -16,6 +16,11 @@ test-support = ["sqlx-core/migrate"]
 
 [dependencies]
 central-storage.workspace = true
+workspace-model.workspace = true
+workspace-ids.workspace = true
+workspace-rules = {path="../workspace-rules",version="0.1.149"}
+serde_json_canonicalizer.workspace = true
+sqlx = { version = "=0.9.0", default-features = false, features = ["macros", "migrate"] }
 fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.118" }
 schemars.workspace = true
 collaboration-central-admin-protocol = { version = "0.1.96", path = "../collaboration-central-admin-protocol" }

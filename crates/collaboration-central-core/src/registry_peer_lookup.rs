@@ -1,7 +1,7 @@
 //! Resolve a library holder from committed rows in the registry's own store.
 
 use crate::{
-    ObjectHost, generated_enrollment,
+    LegacyObjectHost, generated_enrollment,
     machine_enrollment_record::service_for_stored_peer,
     step_driver::{StepCallback, StepDriver, StepResult},
 };
@@ -22,7 +22,7 @@ use std::{
 pub(crate) type PeerDirectory =
     Arc<dyn Fn(PeerId) -> BoxFuture<'static, Result<ServiceId, CallFailure>> + Send + Sync>;
 
-pub(crate) fn bind<Host: ObjectHost>(host: Weak<Host>) -> PeerDirectory
+pub(crate) fn bind<Host: LegacyObjectHost>(host: Weak<Host>) -> PeerDirectory
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
