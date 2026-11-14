@@ -20,7 +20,7 @@ SELECT 'entry' AS row_kind,json_object('entryId',e.entry_id,'projectId',e.projec
 )
 UNION ALL
 SELECT * FROM (
-SELECT 'backlog' AS row_kind,json_object('itemId',b.item_id,'areaId',b.area_id,'title',b.title,'description',b.description,'creator',b.creator) AS payload FROM backlog_items b WHERE b.item_id IN (?2,?3,(SELECT id FROM relation_sources))
+SELECT 'backlog' AS row_kind,json_object('itemId',b.item_id,'areaId',b.area_id,'title',b.title,'description',b.description,'creator',b.creator,'status',b.status,'closingNote',b.closing_note) AS payload FROM backlog_items b WHERE b.item_id IN (?2,?3,(SELECT id FROM relation_sources))
 UNION ALL
 SELECT 'reference' AS row_kind,json_object('referenceId',r.reference_id,'source',json(json_object('kind',r.source_kind,'id',r.source_id)),'target',json(json_object('kind',r.target_kind,'id',r.target_id)),'details',r.details) AS payload FROM item_references r WHERE r.reference_id=?2
 UNION ALL

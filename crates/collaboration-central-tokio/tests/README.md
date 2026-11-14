@@ -69,3 +69,6 @@ The kept enrollment, Access and session-upgrade behavior is proven by
   cached success/refusal/no-op and 24-hour expiry, corruption rejection, clock-behind
   reopen, and causal write-turn races. Fixtures own their temporary host roots;
   fault writes use the actual owning file through the existing test-support store.
+  `owner_changes` and `backlog_boundaries` cover atomic backlog close/note/reference
+  and change rows, replay, late-statement rollback, workspace and stored-value
+  boundaries, and self-join roles with real post admission.

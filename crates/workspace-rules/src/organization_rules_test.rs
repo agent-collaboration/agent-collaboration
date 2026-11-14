@@ -115,6 +115,7 @@ fn r1_b_thread_and_backlog_cannot_use_another_workspaces_area() {
         crate::BacklogReads {
             area: Some(&area),
             item: None,
+            ..Default::default()
         },
     );
     assert_eq!(

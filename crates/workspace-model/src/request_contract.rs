@@ -111,6 +111,7 @@ pub enum WorkspaceOperation {
     },
     JoinThread {
         thread_id: ThreadId,
+        role: MemberRole,
     },
     AddThreadMember {
         thread_id: ThreadId,
@@ -163,6 +164,11 @@ pub enum WorkspaceOperation {
     },
     RemoveBacklogItem {
         item_id: BacklogItemId,
+    },
+    CloseBacklogItem {
+        item_id: BacklogItemId,
+        note: Description,
+        link: Option<ItemRef>,
     },
     AddReference {
         source: ReferenceSource,
@@ -313,3 +319,7 @@ pub struct WorkspaceRequest {
     pub workspace_id: Option<crate::WorkspaceId>,
     pub operation: WorkspaceOperation,
 }
+
+#[cfg(test)]
+#[path = "request_contract_test.rs"]
+mod tests;

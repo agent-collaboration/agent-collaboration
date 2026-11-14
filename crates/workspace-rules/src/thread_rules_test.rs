@@ -112,7 +112,7 @@ fn r5_observer_participant_and_left_member_posting() {
     ));
 }
 #[test]
-fn r32_only_creator_adds_or_promotes_and_self_join_is_observer() {
+fn r32_only_creator_adds_or_promotes_and_self_join_selects_role() {
     let mut context = context();
     let thread = thread();
     let target = member(id(40), MemberRole::Observer);
@@ -133,6 +133,7 @@ fn r32_only_creator_adds_or_promotes_and_self_join_is_observer() {
         &ThreadCommand::JoinThread {
             thread_id: id(8),
             member_id: id(50),
+            role: MemberRole::Observer,
         },
         ThreadReads {
             thread: Some(&thread),
@@ -147,8 +148,8 @@ fn r32_only_creator_adds_or_promotes_and_self_join_is_observer() {
             .first()
             .unwrap()
             .statement
-            .sql
-            .contains("'observer'")
+            .args
+            .contains(&central_storage::SqlValue::Text("observer".to_owned()))
     );
     context.actor = id(2);
     let added = change_thread(
@@ -229,4 +230,52 @@ fn notifications_off_keeps_membership() {
     let sql = plan.batch.statements.first().unwrap().statement.sql;
     assert!(sql.starts_with("UPDATE thread_members SET notifications="));
     assert!(!sql.contains("SET left_at"));
+}
+
+#[test]
+fn r32_self_join_promotes_only_the_callers_observer_and_preserves_notifications() {
+    let mut context = context();
+    context.actor = id(99);
+    let thread = thread();
+    let mut observer = member(context.actor.clone(), MemberRole::Observer);
+    observer.notifications = NotificationSetting::Off;
+    let command = ThreadCommand::JoinThread {
+        thread_id: id(8),
+        member_id: id(60),
+        role: MemberRole::Participant,
+    };
+    let plan = change_thread(
+        &context,
+        &command,
+        ThreadReads {
+            thread: Some(&thread),
+            caller_member: Some(&observer),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let mutation = &plan.batch.statements[0].statement;
+    assert_eq!(
+        mutation.sql,
+        "UPDATE thread_members SET member_role='participant',updated_at=? WHERE thread_member_id=? AND left_at IS NULL"
+    );
+    assert_eq!(
+        mutation.args[1],
+        central_storage::SqlValue::Text(observer.thread_member_id.to_string())
+    );
+    let fresh = change_thread(
+        &context,
+        &command,
+        ThreadReads {
+            thread: Some(&thread),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert!(
+        fresh.batch.statements[0]
+            .statement
+            .args
+            .contains(&central_storage::SqlValue::Text("participant".to_owned()))
+    );
 }
