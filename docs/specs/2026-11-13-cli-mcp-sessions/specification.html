@@ -224,7 +224,8 @@ flowchart LR
 <tbody>
 <tr><td><code>send_message</code></td><td>SendMessage { to, body }</td></tr>
 <tr><td><code>inbox</code>, <code>mark_read</code></td><td>Inbox { afterPosition, limit }, MarkRead { scope, throughPosition }</td></tr>
-<tr><td><code>set_wake</code>, <code>cancel_wake</code></td><td>SetWake { target, dueAt, text }, CancelWake { wakeId }</td></tr>
+<tr><td><code>set_wake</code>, <code>cancel_wake</code></td><td>SetWake { target, dueAt, text }, CancelWake { wakeId }. The wake and automation tool schemas state central's five-minute grid and 7-day limits (central R34), and refuse values off the grid rather than rounding them.</td></tr>
+<tr><td><code>set_notice_cadence</code></td><td>SetNoticeCadence { cadence: M15 | M25 | M55 }, default M15. It sets the calling session's own notice cadence, and only a session caller may use it. A subscribe or join that offers cadence sends this first, then the join; a refused join keeps the cadence. Added by Lead A, 2026-11-14.</td></tr>
 <tr><td><code>set_automation</code>, <code>disable_automation</code></td><td>SetAutomation { target, timing, text }, DisableAutomation { automationId }</td></tr>
 </tbody>
 </table>
