@@ -183,7 +183,7 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
         .await;
     let resolved = runtime.resolve_command(&request.operation, &actor).await?;
     let decision = match &resolved {
-        Ok(command) => crate::workspace_rule_dispatch::run_rule(&context, command, &rows),
+        Ok(command) => crate::workspace_rule_inputs::run_rule(&context, command, &rows),
         Err(refusal) => Err(refusal.clone()),
     };
     let (mut batch, answer) = match decision {
@@ -284,7 +284,7 @@ fn unchanged_item(operation: &m::WorkspaceOperation) -> Result<m::ItemRef, Store
         Op::SetInitiativeStatus { initiative_id, .. } => {
             Ok(m::ItemRef::Initiative(initiative_id.clone()))
         }
-        Op::JoinThread { thread_id }
+        Op::JoinThread { thread_id, .. }
         | Op::SetNotifications { thread_id, .. }
         | Op::AddThreadMember { thread_id, .. } => Ok(m::ItemRef::Thread(thread_id.clone())),
         _ => Err(corrupt("unchanged item")),

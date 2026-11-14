@@ -59,7 +59,7 @@ SELECT 'post' AS row_kind,json_object('postId',p.post_id,'threadId',p.thread_id,
 UNION ALL
 SELECT 'entry' AS row_kind,json_object('entryId',e.entry_id,'projectId',e.project_id,'author',e.author,'body',json(CASE e.redacted WHEN 1 THEN CASE WHEN e.body IS NULL THEN '{"kind":"redacted"}' ELSE NULL END WHEN 0 THEN json_object('kind','visible','body',e.body) ELSE NULL END),'tags',json((SELECT json_group_array(tag) FROM work_log_tags g WHERE g.entry_id=e.entry_id ORDER BY g.work_log_tag_id))) AS payload FROM work_log_entries e WHERE EXISTS(SELECT 1 FROM view_items v WHERE v.kind='workLogEntry' AND v.id=e.entry_id)
 UNION ALL
-SELECT 'backlog' AS row_kind,json_object('itemId',b.item_id,'areaId',b.area_id,'title',b.title,'description',b.description,'creator',b.creator) AS payload FROM backlog_items b WHERE EXISTS(SELECT 1 FROM view_items v WHERE v.kind='backlogItem' AND v.id=b.item_id)
+SELECT 'backlog' AS row_kind,json_object('itemId',b.item_id,'areaId',b.area_id,'title',b.title,'description',b.description,'creator',b.creator,'status',b.status,'closingNote',b.closing_note) AS payload FROM backlog_items b WHERE EXISTS(SELECT 1 FROM view_items v WHERE v.kind='backlogItem' AND v.id=b.item_id)
 UNION ALL
 SELECT 'reference' AS row_kind,json_object('referenceId',r.reference_id,'source',json(json_object('kind',r.source_kind,'id',r.source_id)),'target',json(json_object('kind',r.target_kind,'id',r.target_id)),'details',r.details) AS payload FROM item_references r WHERE EXISTS(SELECT 1 FROM view_items v WHERE v.kind='reference' AND v.id=r.reference_id)
 )

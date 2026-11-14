@@ -84,6 +84,8 @@ pub enum RefusalReason {
     },
     #[error("backlog description must not be empty")]
     EmptyDescription,
+    #[error("backlog item {item_id} is closed")]
+    BacklogItemClosed { item_id: crate::BacklogItemId },
     #[error("source kind is not allowed: {item:?}")]
     SourceKindNotAllowed { item: ItemRef },
     #[error("cannot close: children {blockers:?} remain open")]

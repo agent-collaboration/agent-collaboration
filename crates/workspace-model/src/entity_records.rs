@@ -24,6 +24,7 @@ closed_states!(WorkStatus {
     Closed
 });
 closed_states!(DeliverableStatus { Open, Closed });
+closed_states!(BacklogStatus { Open, Closed });
 closed_states!(WorkspaceState { Active, Archived });
 closed_states!(AreaState { Open, Archived });
 closed_states!(ThreadState { Open, Resolved });
@@ -87,7 +88,7 @@ records! {
     ThreadMember { thread_member_id: ThreadMemberId, thread_id: ThreadId, actor_identity_id: ActorIdentityId, role: MemberRole, notifications: NotificationSetting, state: MembershipState },
     Post { post_id: PostId, thread_id: ThreadId, author: ActorIdentityId, body: PostText, addressees: Vec<Addressee> },
     WorkLogEntry { entry_id: WorkLogEntryId, project_id: ProjectId, author: ActorIdentityId, body: WorkLogBody, tags: Vec<TrailTag> },
-    BacklogItem { item_id: BacklogItemId, area_id: AreaId, title: ResourceName, description: BacklogDescription, creator: ActorIdentityId },
+    BacklogItem { item_id: BacklogItemId, area_id: AreaId, title: ResourceName, description: BacklogDescription, creator: ActorIdentityId, status: BacklogStatus, closing_note: Option<String> },
     Change { change_id: ChangeId, position: ChangePosition, item: ItemRef, actor: ActorIdentityId, event: ChangeEvent },
     ReadMark { read_mark_id: ReadMarkId, actor_identity_id: ActorIdentityId, scope: ReadScope, through_position: ChangePosition }
 }
