@@ -1,5 +1,6 @@
 // Starts the established loader. Requests and business assertions belong to Rust.
 import { createInterface } from "node:readline";
+import type { Writable } from "node:stream";
 import { access, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
@@ -74,7 +75,6 @@ const host = await WorkerdStorage.start(
         return milliseconds ?? null;
       },
 );
-process.stdout.write(`${JSON.stringify({ origin: host.origin })}\n`);
 
 async function control(
   organization: string,
@@ -132,14 +132,28 @@ async function answer(line: string): Promise<unknown> {
   }
 }
 
+async function writeAnswer(output: Writable, answer: unknown): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    output.once("error", reject);
+    output.write(`${JSON.stringify(answer)}\n`, (error) => {
+      if (error !== null && error !== undefined) reject(error);
+      else {
+        output.off("error", reject);
+        resolve();
+      }
+    });
+  });
+}
+
 try {
+  await writeAnswer(process.stdout, { origin: host.origin });
   const commands = createInterface({ input: process.stdin, terminal: false });
   for await (const command of commands) {
     if (command === "close") {
       commands.close();
       break;
     }
-    if (command.trim() !== "") process.stderr.write(`${JSON.stringify(await answer(command))}\n`);
+    if (command.trim() !== "") await writeAnswer(process.stderr, await answer(command));
   }
 } finally {
   await host.close();

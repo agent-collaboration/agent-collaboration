@@ -237,16 +237,17 @@ export class WorkerdStorage {
       ];
     }
     const root = await mkdtemp(join(tmpdir(), "workerd-central-"));
-    const runtime = new Miniflare(
-      convertV4MiniflareOptions({
-        host: "127.0.0.1",
-        port: 0,
-        resourcePersistencePath: root,
-        cf: false,
-        workers,
-      }),
-    );
+    let runtime: Miniflare | undefined;
     try {
+      runtime = new Miniflare(
+        convertV4MiniflareOptions({
+          host: "127.0.0.1",
+          port: 0,
+          resourcePersistencePath: root,
+          cf: false,
+          workers,
+        }),
+      );
       const ready = await runtime.ready;
       if (
         ready.hostname !== "127.0.0.1" ||
@@ -255,15 +256,21 @@ export class WorkerdStorage {
         throw new Error("workerd did not bind a permitted loopback port");
       return new WorkerdStorage(ready.origin, runtime, root);
     } catch (error: unknown) {
-      await runtime.dispose();
-      await rm(root, { recursive: true, force: true });
+      try {
+        await runtime?.dispose();
+      } finally {
+        await rm(root, { recursive: true, force: true });
+      }
       throw error;
     }
   }
 
   async close(): Promise<void> {
-    await this.runtime.dispose();
-    await rm(this.root, { recursive: true, force: true });
+    try {
+      await this.runtime.dispose();
+    } finally {
+      await rm(this.root, { recursive: true, force: true });
+    }
   }
 
   async dispatchJson(path: string, body: unknown): Promise<unknown> {

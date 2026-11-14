@@ -106,3 +106,16 @@ held; independent read admission does not substitute for those effects.
 connection policy against real workerd. A byte-transparent relay observes upstream
 idle EOF and forces its ordering against one next clock POST. Each call runs once;
 the oracle uses connection events, without sleeps or relaxed deadlines.
+
+`workerd_host::lifecycle_tests` checks real parent SIGKILL and panic, the inherited
+nextest process group, and bounded settlement of a bridge that ignores stdin EOF.
+The bridge observes EOF as disposal; Rust observes exit without reaping before
+its bounded OS wait completes, then the sole child owner kills if needed and reaps.
+No nested bridge process group escapes nextest's termination.
+
+`support/lifecycle-nextest.toml` belongs only to explicit lifecycle negative
+controls. It does not alter normal CI deadlines. The `WORKERD_LIFECYCLE_CHILD`
+timeout and leak modes require an operator to retain the emitted exact child PIDs,
+check their OS exit and settle the deliberately leaked PID immediately. They are
+inactive in ordinary suites. Worker CI retains nextest output and fails on a
+genuine `LEAK` result, including a test that nextest otherwise calls successful.

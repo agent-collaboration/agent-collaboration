@@ -99,10 +99,32 @@ impl Process {
             .unwrap_or_else(PoisonError::into_inner)
             .take()
         {
-            if let Some(mut stdin) = child.stdin.take() {
-                let _ = stdin.write_all(b"close\n");
+            // EOF is the bridge's disposal command, including parent unwinding.
+            drop(child.stdin.take());
+            let pid = rustix::process::Pid::from_raw(i32::try_from(child.id()).unwrap()).unwrap();
+            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
+            let waiter = std::thread::spawn(move || {
+                // Observe exit without reaping: only the owning thread below
+                // may release this PID, including a timeout/exit race.
+                let observed = rustix::process::waitid(
+                    rustix::process::WaitId::Pid(pid),
+                    rustix::process::WaitIdOptions::EXITED | rustix::process::WaitIdOptions::NOWAIT,
+                )
+                .map(|status| status.is_some());
+                let _ = sender.send(observed);
+            });
+            let observed = matches!(
+                receiver.recv_timeout(std::time::Duration::from_secs(5)),
+                Ok(Ok(true))
+            );
+            if !observed {
+                // Child remains owned and unreaped; kill cannot target a reused PID.
+                let _ = child.kill();
             }
             let stopped = child.wait().is_ok_and(|status| status.success());
+            if waiter.join().is_err() {
+                return false;
+            }
             if let Some(output) = self
                 .output
                 .lock()
@@ -192,6 +214,15 @@ pub(super) struct WorkerdHost {
     captured_logs: Arc<Mutex<Vec<String>>>,
     log_changed: tokio::sync::watch::Sender<usize>,
 }
+impl Drop for WorkerdHost {
+    fn drop(&mut self) {
+        // Remote handles borrow this host's runtime; they never extend its
+        // child lifetime past the owning fixture, including panic unwinding.
+        if !self.transport.process.stop() {
+            eprintln!("workerd bridge required unsuccessful forced cleanup");
+        }
+    }
+}
 impl WorkerdHost {
     pub async fn open(clock: Arc<dyn Clock>) -> Result<Self, StoreFailure> {
         Self::open_configured(clock, None).await
@@ -216,7 +247,7 @@ impl WorkerdHost {
             if let Some(plan) = plan {
                 command.arg("--signin-plan").arg(plan);
             }
-            let mut child = command
+            let child = command
                 .current_dir(root)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
@@ -227,7 +258,19 @@ impl WorkerdHost {
                 })
                 .spawn()
                 .unwrap();
-            let error_drain = child.stderr.take().map(|stderr| {
+            // Own the child before pipe setup, readiness parsing or a reader
+            // thread can fail. Every unwind closes stdin and settles the PID.
+            let process = Arc::new(Process {
+                child: Mutex::new(Some(child)),
+                output: Mutex::new(None),
+                errors: Mutex::new(None),
+            });
+            let (stdout, stderr) = {
+                let mut owned = process.child.lock().unwrap();
+                let child = owned.as_mut().unwrap();
+                (child.stdout.take().unwrap(), child.stderr.take())
+            };
+            let error_drain = stderr.map(|stderr| {
                 let logs = process_logs.clone();
                 let changed = process_changed.clone();
                 std::thread::spawn(move || {
@@ -242,12 +285,8 @@ impl WorkerdHost {
                     }
                 })
             });
-            let mut output = BufReader::new(child.stdout.take().unwrap());
-            let process = Arc::new(Process {
-                child: Mutex::new(Some(child)),
-                output: Mutex::new(None),
-                errors: Mutex::new(error_drain),
-            });
+            *process.errors.lock().unwrap() = error_drain;
+            let mut output = BufReader::new(stdout);
             let mut line = String::new();
             let read = output.read_line(&mut line).unwrap();
             if read == 0 {
@@ -422,6 +461,9 @@ impl WorkerdHost {
     }
 }
 
+#[cfg(test)]
+#[path = "workerd_lifecycle_test.rs"]
+mod lifecycle_tests;
 #[cfg(test)]
 #[path = "workerd_host_test.rs"]
 mod tests;
