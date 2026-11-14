@@ -99,8 +99,19 @@ Cases cover stamp and record atomicity, expiry and predecessor checks, current
 revision floors, signed person reads, fresh proofs, causal races, cold reopen,
 query-derived alarm activation and safe refusal observations. Public-path refusal
 uses the existing `401` edge contract. Unknown private paths return `404`.
-Create-workspace effects, non-null lookup and machine-login approval replay remain
-held; independent read admission does not substitute for those effects.
+Create-workspace effects and non-null lookup remain held in this B4b tree;
+independent read admission does not substitute for those effects.
+
+`workspace_requests::organization_signin::machine_login` drives the actual private
+Worker decision binding with exact approval snapshots, BA1 grant ordering and
+generation checks, code/receipt deadlines, live renewal and idle expiry, client/
+org/installation isolation, and genuine late-record transaction failures.
+Only workspace presence is seeded as a labelled precondition; approval/token
+effects and audit rows come from the routes. Literal Grant expectations use OD2's
+600-second composition. Revocation/ABA uses the granted `machine-login-revoke`
+control at the existing Worker test-support dispatcher, with real owner-origin
+withdrawal records and final-record rollback. It is not fixture SQL revocation,
+a production revoke route, or proof of session/connection-close delivery.
 
 `workspace_requests::workerd_host::tests` also checks the fixture's control HTTP
 connection policy against real workerd. A byte-transparent relay observes upstream

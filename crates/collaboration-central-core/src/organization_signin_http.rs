@@ -34,6 +34,14 @@ pub fn organization_signin_router<Port: OrganizationSignInPort>(port: Arc<Port>)
             AUTHORIZATION_REVISIONS_ROUTE,
             post(authorization_revision::<Port>),
         )
+        .route(
+            "/internal/device-login-decisions",
+            post(device_login::<Port>),
+        )
+        .route(
+            "/internal/machine-token-decisions",
+            post(machine_token::<Port>),
+        )
         .with_state(port.clone());
     for route in [AdminRoute::WorkspaceLookup, AdminRoute::ReadChangeRecords] {
         let port = port.clone();
@@ -45,6 +53,31 @@ pub fn organization_signin_router<Port: OrganizationSignInPort>(port: Arc<Port>)
         );
     }
     router
+}
+
+async fn device_login<Port: OrganizationSignInPort>(
+    State(port): State<Arc<Port>>,
+    request: Result<Json<crate::identity_contract::DecideDeviceLogin>, JsonRejection>,
+) -> Response {
+    let Ok(Json(request)) = request else {
+        return wrong_operation();
+    };
+    match port.device_login(&request).await {
+        Ok(answer) => (StatusCode::OK, Json(answer)).into_response(),
+        Err(_) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    }
+}
+async fn machine_token<Port: OrganizationSignInPort>(
+    State(port): State<Arc<Port>>,
+    request: Result<Json<crate::identity_contract::DecideMachineToken>, JsonRejection>,
+) -> Response {
+    let Ok(Json(request)) = request else {
+        return wrong_operation();
+    };
+    match port.machine_token(&request).await {
+        Ok(answer) => (StatusCode::OK, Json(answer)).into_response(),
+        Err(_) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
+    }
 }
 
 async fn provision<Port: OrganizationSignInPort>(

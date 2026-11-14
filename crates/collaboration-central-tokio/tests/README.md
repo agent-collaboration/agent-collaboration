@@ -97,4 +97,15 @@ produce two consecutive changes, both are drained, and replay preserves the curs
   real stamp activating a pending wake through the native alarm owner.
   Shared signers live in `collaboration-central-conformance`'s non-default
   `signin-test-support` feature. Create-workspace, non-null lookup and machine
-  login remain outside this suite until their held contracts are approved.
+  login were outside the original B4a suite; the approved B4b machine-login
+  contracts now have their own real-route family below. Workspace setup stays held.
+
+- `organization_signin::machine_login`: the real private device/token decision
+  routes, exact immutable three-field approval replies across reopen, both BA1
+  grant orders, generation-stable active repeats, code and receipt boundaries,
+  idle renewal/expiry, client/org/installation isolation and late-record rollback.
+  Workspace rows are explicitly seeded only as directory preconditions; no
+  approval, token, actor or change-record result is fabricated. Grant expectations
+  name OD2's 600-second composed lifetime. Owner revocation/ABA uses only the
+  approved closed core test-support dispatcher, with real-store owner-origin
+  multi-record rollback. No public revoke API or connection-close proof is implied.

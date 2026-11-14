@@ -108,6 +108,10 @@ pub enum AllowanceState {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(try_from = "u32", into = "u32")]
 pub struct TokenLifetimeSeconds(u32);
+impl TokenLifetimeSeconds {
+    /// OD2: the composed organization lifetime until its setting has a stored owner.
+    pub const MACHINE_LOGIN_DEFAULT: Self = Self(600);
+}
 impl TryFrom<u32> for TokenLifetimeSeconds {
     type Error = IdentityValidationError;
     fn try_from(value: u32) -> Result<Self, Self::Error> {

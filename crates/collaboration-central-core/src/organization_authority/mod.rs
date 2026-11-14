@@ -5,6 +5,8 @@ mod fleet_statement_refusal;
 mod fleet_statement_test_support;
 mod fleet_statement_wire;
 mod identity;
+pub(crate) mod machine_login;
+pub use machine_login::MachineLoginSettings;
 mod sign_in_verification;
 mod statement_replacement;
 

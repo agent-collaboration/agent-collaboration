@@ -80,6 +80,64 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
         }
         _ => {}
     }
+    if name == "DecideDeviceLogin" {
+        let first = literals.first().expect("device-login literal");
+        for field in [
+            "permissionChecked",
+            "approverSecondFactorAt",
+            "codeExpiresAt",
+        ] {
+            let mut missing = first.clone();
+            missing.as_object_mut().unwrap().remove(field);
+            invalid.push(missing);
+        }
+        for (field, bad) in [
+            ("permissionChecked", json!("machine:revoke")),
+            (
+                "installation",
+                json!("00000000-0000-4000-8000-000000000001"),
+            ),
+            (
+                "formerServiceId",
+                json!("019a3dce-2000-7000-8000-000000000001"),
+            ),
+            ("codeExpiresAt", Value::Null),
+            ("codeExpiresAt", json!(-1)),
+            ("codeExpiresAt", json!(1793448600.5)),
+            ("codeExpiresAt", json!("1793448600")),
+            ("approverSecondFactorAt", json!(-1)),
+            ("approverSecondFactorAt", json!(1.5)),
+            ("approverSecondFactorAt", json!("1793448000")),
+            (
+                "allowedWorkspaces",
+                json!(vec!["019a3dce-2000-7000-8000-000000000001"; 101]),
+            ),
+        ] {
+            let mut value = first.clone();
+            value[field] = bad;
+            invalid.push(value);
+        }
+    }
+    match name {
+        "AllowedWorkspaces" => invalid.extend([
+            json!(vec!["019a3dce-2000-7000-8000-000000000001"; 101]),
+            json!(["00000000-0000-4000-8000-000000000001"]),
+            json!(["019A3DCE-2000-7000-8000-000000000001"]),
+        ]),
+        "EnrollPermission" => invalid.extend([json!("machine:revoke"), json!("Machine:Enroll")]),
+        "DeviceLoginRefusal" => invalid.extend([
+            json!({"kind":"notOwner"}),
+            json!({"kind":"formerServiceLinkedElsewhere"}),
+            json!({"kind":"secondFactorRequired","withinSeconds":0}),
+        ]),
+        "DeviceLoginDecision" => invalid.extend([
+            json!({"result":"approved","enrollmentId":"019a3dce-2000-7000-8000-000000000002"}),
+            json!({"result":"refused","reason":{"kind":"notOwner"}}),
+            json!({"result":"refused","reason":{"kind":"formerServiceLinkedElsewhere"}}),
+            json!({"result":"refused","reason":{"kind":"secondFactorRequired","withinSeconds":0}}),
+        ]),
+        _ => {}
+    }
     invalid.extend(composed_byte_overflows(name, literals));
     invalid.extend(scalar_rule_negatives(literals));
     invalid

@@ -182,7 +182,10 @@ impl TokioWorkspaceHost {
             clock.clone(),
             ids,
         )
-        .with_mail_policy(self.mail_policy);
+        .with_mail_policy(self.mail_policy)
+        .with_machine_login_settings(
+            collaboration_central_core::organization_authority::MachineLoginSettings::production(),
+        );
         let runtime = match &self.sign_in {
             Some(trust) => match trust.for_organization(organization.clone(), clock) {
                 Ok(check) => runtime.with_sign_in_verification(check),
@@ -304,6 +307,26 @@ impl OrganizationSignInPort for TokioWorkspaceHost {
         self.central(&organization)
             .await?
             .admin_person_request(&input)
+            .await
+    }
+    async fn device_login(
+        &self,
+        request: &collaboration_central_core::identity_contract::DecideDeviceLogin,
+    ) -> Result<collaboration_central_core::identity_contract::DeviceLoginDecision, StoreFailure>
+    {
+        self.central(&request.organization_id)
+            .await?
+            .decide_device_login(request)
+            .await
+    }
+    async fn machine_token(
+        &self,
+        request: &collaboration_central_core::identity_contract::DecideMachineToken,
+    ) -> Result<collaboration_central_core::identity_contract::MachineTokenDecision, StoreFailure>
+    {
+        self.central(&request.organization_id)
+            .await?
+            .decide_machine_token(request)
             .await
     }
 }
