@@ -70,6 +70,54 @@ fn approval_plans_an_inactive_snapshot_and_allowance_records_after_its_machine()
 }
 
 #[test]
+fn duplicate_allowed_workspaces_keep_the_snapshot_but_plan_one_allowance_and_record() {
+    let duplicate_workspaces = vec![workspace(50), workspace(50)];
+    let request = DecideDeviceLogin {
+        allowed_workspaces: duplicate_workspaces.clone().try_into().unwrap(),
+        ..approval()
+    };
+    let request: DecideDeviceLogin =
+        serde_json::from_value(serde_json::to_value(request).unwrap()).unwrap();
+    let ids = CountingIds::new();
+
+    let plan = decide_device_login(&request, &empty_facts(), NOW_MS, time(NOW_MS), &ids).unwrap();
+
+    let EnrollmentChange::PutMachine(machine) = &plan.changes[0] else {
+        panic!("expected machine allowance union")
+    };
+    assert_eq!(machine.allowed_workspaces, vec![workspace(50)]);
+    let EnrollmentChange::InsertEnrollment(enrollment) = &plan.changes[1] else {
+        panic!("expected immutable approval")
+    };
+    assert_eq!(
+        enrollment.allowed_workspaces.as_slice(),
+        duplicate_workspaces.as_slice()
+    );
+    assert_eq!(
+        plan.answer,
+        DeviceLoginDecision::Approved {
+            enrollment_id: enrollment.id.clone(),
+            label: request.label.clone(),
+            allowed_workspaces: request.allowed_workspaces.clone(),
+        }
+    );
+    let audit = records(&plan);
+    assert_eq!(audit.len(), 1);
+    assert_eq!(audit[0].kind, Kind::AllowanceChanged);
+    assert_eq!(audit[0].target_id, workspace(50).as_str());
+    assert_eq!(
+        audit[0].request_id.as_str(),
+        format!(
+            "{}:allowanceChanged:{}",
+            request.request_id.as_str(),
+            workspace(50).as_str()
+        )
+    );
+    assert_eq!(plan.changes.len(), 3);
+    assert_eq!(ids.minted(), 3);
+}
+
+#[test]
 fn approving_again_preserves_the_machine_key_generation_active_state_and_existing_allowances() {
     for state in [MachineState::Enrolled, MachineState::Revoked] {
         let mut facts = empty_facts();
