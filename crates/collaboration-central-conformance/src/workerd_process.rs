@@ -68,9 +68,16 @@ impl WorkerdProcess {
             }
             Ok(())
         }));
-        ready
-            .await
-            .map_err(|_| "Miniflare harness ended before ready")?;
+        if ready.await.is_err() {
+            // Settle before returning the startup Result, so Drop cannot
+            // replace this expected error with a second cleanup panic.
+            return match owned.settle() {
+                Ok(()) => Err("Miniflare harness ended before ready".into()),
+                Err(cleanup) => {
+                    Err(format!("Miniflare harness ended before ready; cleanup: {cleanup}").into())
+                }
+            };
+        }
         let process_id = owned.child.as_ref().ok_or("Miniflare harness exited")?.id();
         println!("WORKERD owned process identity started pid={process_id}");
         Ok(owned)
@@ -114,3 +121,7 @@ impl Drop for WorkerdProcess {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "workerd_process_test.rs"]
+mod tests;
