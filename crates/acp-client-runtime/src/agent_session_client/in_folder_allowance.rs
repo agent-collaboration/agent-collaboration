@@ -118,6 +118,11 @@ impl InFolderGrant {
         let mut named_a_path = false;
         for word in words {
             if word.starts_with('-') {
+                // An option naming a path (`-o/etc/x`, `-t/elsewhere`) would
+                // escape the operand check, so it asks.
+                if word.contains('/') {
+                    return false;
+                }
                 continue;
             }
             if !within(Path::new(word), &self.scratch_folder) {

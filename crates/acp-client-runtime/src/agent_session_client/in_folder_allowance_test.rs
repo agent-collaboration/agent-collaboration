@@ -177,6 +177,14 @@ fn shell_commands_are_allowed_once_only_when_every_operand_is_in_the_scratch_fol
         (format!("find {scratch} -fprint {scratch}/out"), false),
         (format!("find {scratch} -fprintf {scratch}/out"), false),
         (format!("find {scratch} -fls {scratch}/out"), false),
+        // A path glued onto an option is a path too; it asks.
+        (format!("sort -o/etc/x {scratch}/a"), false),
+        (format!("cp -t/elsewhere {scratch}/a"), false),
+        (format!("mv -t/elsewhere {scratch}/a"), false),
+        (format!("grep -f/etc/passwd {scratch}/a"), false),
+        (format!("sort -o /etc/x {scratch}/a"), false),
+        (format!("rm -rf {scratch}/dir"), true),
+        (format!("ls -la {scratch}"), true),
     ];
     for (command, allowed) in cases {
         assert_eq!(
