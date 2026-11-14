@@ -178,10 +178,14 @@ async fn assert_read_refused(f: &Fixture, person: &signed::Person, case: &str, e
     );
 }
 
-async fn assert_healthy_read(f: &Fixture) {
+async fn assert_healthy_read(f: &Fixture, label: &str) {
     let answer = f.records(&f.owner()).await;
-    assert_eq!(answer.0, 200);
-    assert_eq!(answer.1.get("result"), Some(&json!("records")));
+    assert_eq!(answer.0, 200, "{label}: healthy read status");
+    assert_eq!(
+        answer.1.get("result"),
+        Some(&json!("records")),
+        "{label}: healthy read result"
+    );
 }
 
 #[tokio::test]
@@ -233,13 +237,13 @@ async fn missing_floors_wrong_subject_policy_and_stopped_or_deleted_org_refuse_r
         }),
     ];
     for (case, expected, adjust) in claim_cases {
-        assert_healthy_read(&f).await;
+        assert_healthy_read(&f, &format!("before {case}")).await;
         let mut person = f.owner();
         adjust(&mut person);
         assert_read_refused(&f, &person, case, expected).await;
     }
 
-    assert_healthy_read(&f).await;
+    assert_healthy_read(&f, "before inactive person").await;
     assert_eq!(
         f.post(REVISIONS, &person_revision(5, "inactive")).await.0,
         200
@@ -250,7 +254,7 @@ async fn missing_floors_wrong_subject_policy_and_stopped_or_deleted_org_refuse_r
     for case in ["stopped", "deleted"] {
         let f = Fixture::new().await;
         ready(&f).await;
-        assert_healthy_read(&f).await;
+        assert_healthy_read(&f, &format!("before {case}")).await;
         assert_eq!(f.post(REVISIONS, &org_revision(4, case)).await.0, 200);
         let mut person = f.owner();
         person.organization_revision = 4;

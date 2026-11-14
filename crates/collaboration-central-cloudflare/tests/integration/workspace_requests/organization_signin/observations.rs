@@ -76,13 +76,27 @@ async fn every_historical_profile_refusal_emits_one_closed_kind_with_empty_body_
     // Keep real cold verification for both a known key and an unpublished key.
     for index in [0, 6] {
         let f = Fixture::new().await;
+        assert_eq!(
+            f.keys.fetches(),
+            0,
+            "cold vector {index}: key cache was prewarmed"
+        );
         assert_statement_refusal(&f, index, "cold issuer-key cache").await;
+        assert!(
+            f.keys.fetches() >= 1,
+            "cold vector {index}: verification did not fetch keys"
+        );
         f.close().await;
     }
     // Refusals leave the organization unprovisioned; only this fixture's key cache is shared.
     let f = Fixture::new().await;
     for index in [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12] {
-        assert_statement_refusal(&f, index, "shared issuer-key cache").await;
+        let cache = if index == 1 {
+            "cold (first on the shared fixture)"
+        } else {
+            "shared issuer-key cache"
+        };
+        assert_statement_refusal(&f, index, cache).await;
     }
     f.close().await;
 }
@@ -109,7 +123,7 @@ async fn assert_statement_refusal(f: &Fixture, index: usize, cache: &str) {
         "{label}: refusal must have an empty body"
     );
     f.host
-        .until_log_after(log_baseline, "central organization:")
+        .until_log_after(log_baseline, &format!("refusal={}", case.refusal))
         .await;
     let after = f.host.captured_logs();
     let events = after
