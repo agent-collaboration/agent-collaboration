@@ -5,14 +5,15 @@
 /// mode and why they differ; Claude's auto stands in as acceptEdits.
 #[tokio::test]
 async fn start_and_show_report_requested_and_actual_mode_with_the_reason() {
-    use crate::external_provider_supervisor::{ExternalProviderBinding, ExternalProviderSupervisor};
+    use crate::external_provider_supervisor::{
+        ExternalProviderBinding, ExternalProviderSupervisor,
+    };
     use collaboration_contracts::ProviderConversationBackend;
     use collaboration_protocol::{
         ConversationCreateRequest, ConversationOperationSettlement,
         ConversationOperationWaitOutput, ConversationOperationWaitRequest, OperationId,
-        PositiveSeconds, ProviderModeReason, ProviderRequestedPolicy,
-        ProviderRequestedSettings, ProviderSessionInspectRequest, ProviderWorkingDirectory,
-        RouterAccess,
+        PositiveSeconds, ProviderModeReason, ProviderRequestedPolicy, ProviderRequestedSettings,
+        ProviderSessionInspectRequest, ProviderWorkingDirectory, RouterAccess,
     };
 
     let root = tempfile::tempdir().unwrap();
@@ -34,9 +35,10 @@ async fn start_and_show_report_requested_and_actual_mode_with_the_reason() {
     )
     .await
     .unwrap();
-    let store = collaboration_runtime::ProviderOperationStore::open(&base.join("operations.sqlite"))
-        .await
-        .unwrap();
+    let store =
+        collaboration_runtime::ProviderOperationStore::open(&base.join("operations.sqlite"))
+            .await
+            .unwrap();
     let binding = crate::external_provider_supervisor::tests::binding();
     let requester = crate::external_provider_supervisor::tests::requester();
     let backend = ExternalProviderSupervisor::new_with_hub(
@@ -50,7 +52,11 @@ async fn start_and_show_report_requested_and_actual_mode_with_the_reason() {
     )
     .unwrap();
     for (requested, actual, reason) in [
-        (None, "acceptEdits", Some(ProviderModeReason::EscalationUnproven)),
+        (
+            None,
+            "acceptEdits",
+            Some(ProviderModeReason::EscalationUnproven),
+        ),
         (Some("plan"), "plan", None),
     ] {
         let operation_id = OperationId::generate();

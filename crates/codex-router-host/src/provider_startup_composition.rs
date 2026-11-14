@@ -139,9 +139,10 @@ pub(crate) async fn compose_provider_startup(
                     ))
                     .map_err(io::Error::other)?,
                 };
-                let auto_realization = crate::provider_operation_settlement::provider_auto_realization(
-                    behavior.auto_permission_mode().realization,
-                );
+                let auto_realization =
+                    crate::provider_operation_settlement::provider_auto_realization(
+                        behavior.auto_permission_mode().realization,
+                    );
                 let runtime = ExternalProviderRuntime::initialize_with_mcp_http_and_hub(
                     launch,
                     provider_model_picker(binding.provider),

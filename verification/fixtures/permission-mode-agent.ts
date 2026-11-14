@@ -2,7 +2,8 @@
 // Router's auto-mode plan (D1, R3-R5). It records every session/new working
 // set, every mode it was asked to switch to and the answer to each permission
 // request it raises (a prompt's text is the ACP tool call to ask about). It
-// rewrites the receipt after each request and stays alive until stdin closes.
+// rewrites the receipt before answering each request, so a client that has its
+// answer can read the receipt, and stays alive until stdin closes.
 //
 // argv: <receipt> <claude|cursor> <grants-directories|no-directories> [clamp-auto]
 //   clamp-auto: a requested "auto" lands on "acceptEdits", as claude-agent-acp
@@ -60,6 +61,7 @@ for (;;) {
         additionalDirectories: params.additionalDirectories ?? null,
       });
       currentMode.set(sessionId, chosen.start);
+      agent.receipt(receipt, observed);
       agent.respond(request, { sessionId, configOptions: [modeOption(sessionId)] });
       break;
     }
@@ -68,6 +70,7 @@ for (;;) {
       const value = String(field(request, "params", "value"));
       observed.modeRequests.push({ sessionId, value });
       currentMode.set(sessionId, clampAuto && value === "auto" ? "acceptEdits" : value);
+      agent.receipt(receipt, observed);
       agent.respond(request, { configOptions: [modeOption(sessionId)] });
       break;
     }
@@ -96,6 +99,7 @@ for (;;) {
       });
       const answer = await agent.read();
       observed.permissionAnswers.push({ sessionId, answer: field(answer, "result") });
+      agent.receipt(receipt, observed);
       agent.endTurn(request);
       break;
     }
@@ -110,6 +114,5 @@ for (;;) {
         error: { code: -32601, message: "method not found" },
       });
   }
-  agent.receipt(receipt, observed);
 }
 agent.close();

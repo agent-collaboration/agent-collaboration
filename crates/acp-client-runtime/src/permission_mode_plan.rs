@@ -19,17 +19,6 @@ pub enum AutoRealization {
     Unknown,
 }
 
-impl AutoRealization {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::ClassifierEscalates => "classifierEscalates",
-            Self::AsksFirst => "asksFirst",
-            Self::Unknown => "unknown",
-        }
-    }
-}
-
 /// An agent's own answer to "what does auto mean for you", declared by its
 /// `ProviderBehavior`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -99,19 +88,6 @@ pub enum PermissionModeReason {
     EscalationUnproven,
     /// Setting the auto realization failed; the agent stays in its own mode.
     AutoNotApplied,
-}
-
-impl PermissionModeReason {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::AutoNotOffered => "autoNotOffered",
-            Self::AgentFellBack => "agentFellBack",
-            Self::AutoNotRealized => "autoNotRealized",
-            Self::EscalationUnproven => "escalationUnproven",
-            Self::AutoNotApplied => "autoNotApplied",
-        }
-    }
 }
 
 /// The mode to apply after the agent advertised its modes.

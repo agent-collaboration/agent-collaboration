@@ -658,6 +658,10 @@ pub enum ConversationOutputUnavailableReason {
     rename_all_fields = "camelCase",
     deny_unknown_fields
 )]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "a settled output is the common wait result; the other variants are small markers of this wire shape"
+)]
 pub enum ConversationOperationWaitOutput {
     Pending,
     Available {
