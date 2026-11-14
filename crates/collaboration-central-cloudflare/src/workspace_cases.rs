@@ -15,6 +15,8 @@ use worker::{Headers, Method, RequestInit, js_sys};
 
 #[derive(Default)]
 pub(crate) struct Controls {
+    pub(super) alarm_batch_failure:
+        std::sync::Arc<std::sync::Mutex<Option<central_storage::StoreFailure>>>,
     pub(super) lose_read: std::sync::Arc<std::sync::atomic::AtomicBool>,
     observations: RefCell<BTreeMap<workspace_ids::WorkspaceId, HeldPause>>,
     holds: RefCell<BTreeMap<(workspace_ids::WorkspaceId, Point), HeldPause>>,
@@ -123,6 +125,15 @@ pub(super) async fn control(
     }
     let runtime = object.runtime(organization).await?;
     match path.as_str() {
+        "/test/fail-alarm-batch" => {
+            let failure = request.json().await?;
+            *object
+                .controls
+                .alarm_batch_failure
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(failure);
+            Response::from_json(&true)
+        }
         "/test/drain" => {
             let workspace = request.json().await?;
             Response::from_json(&runtime.drain_workspace(&workspace).await)

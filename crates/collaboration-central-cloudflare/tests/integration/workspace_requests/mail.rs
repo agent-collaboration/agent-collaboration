@@ -9,3 +9,5 @@ mod alarm_order;
 mod time_range;
 
 mod replay;
+
+mod replay_failures;

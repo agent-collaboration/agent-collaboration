@@ -66,14 +66,25 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 return Err(corrupt("request_log.answer"));
             }
             // A committed request may have lost its alarm publication before its reply.
-            central_mail_store::applied(
-                self.host
-                    .run_batch(StatementBatch {
-                        statements: vec![],
-                        alarm: central_mail_store::alarm_update(),
-                    })
-                    .await?,
-            )?;
+            let repair = async {
+                self.validated_timers().await?;
+                central_mail_store::applied(
+                    self.host
+                        .run_batch(StatementBatch {
+                            statements: vec![],
+                            alarm: central_mail_store::alarm_update(),
+                        })
+                        .await?,
+                )
+            }
+            .await;
+            match repair {
+                Ok(()) => {}
+                Err(StoreFailure::Unavailable | StoreFailure::AnswerLost) => {
+                    return Ok(Result::OutcomeUnknown);
+                }
+                Err(error @ StoreFailure::Corrupt { .. }) => return Err(error),
+            }
             return Ok(answer);
         }
         if let Some(field) = crate::central_mail_time::refusal(&request.operation, now) {

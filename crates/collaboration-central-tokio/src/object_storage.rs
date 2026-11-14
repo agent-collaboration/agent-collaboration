@@ -34,6 +34,8 @@ pub struct ObjectStorage {
     store: OnceCell<SqliteObjectStore>,
     // A database commit and its retained alarm are one ordered object write.
     batch_order: Mutex<()>,
+    #[cfg(feature = "test-support")]
+    alarm_batch_failure: std::sync::Mutex<Option<StoreFailure>>,
     /// Kept in memory after commit (Program Design, "the one alarm"; Tokio).
     alarm: watch::Sender<Option<SyncTime>>,
     #[cfg(feature = "test-support")]
@@ -55,6 +57,8 @@ impl ObjectStorage {
             migrator,
             store: OnceCell::new(),
             batch_order: Mutex::new(()),
+            #[cfg(feature = "test-support")]
+            alarm_batch_failure: Default::default(),
             alarm: watch::Sender::new(None),
             #[cfg(feature = "test-support")]
             publication_pause: None,
@@ -80,6 +84,17 @@ impl ObjectStorage {
 
     pub async fn run_batch(&self, batch: StatementBatch) -> Result<BatchOutcome, StoreFailure> {
         let _order = self.lock_batch_order().await;
+        #[cfg(feature = "test-support")]
+        if batch.statements.is_empty()
+            && matches!(batch.alarm, central_storage::AlarmUpdate::SetFromQuery(_))
+            && let Some(failure) = self
+                .alarm_batch_failure
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take()
+        {
+            return Err(failure);
+        }
         let (outcome, alarm) = self.opened().await?.run_batch(batch).await?;
         #[cfg(feature = "test-support")]
         if matches!(outcome, BatchOutcome::Applied { .. }) {
@@ -173,6 +188,14 @@ impl ObjectStorage {
     #[must_use]
     pub fn alarm(&self) -> Option<SyncTime> {
         *self.alarm.borrow()
+    }
+
+    #[cfg(feature = "test-support")]
+    pub fn fail_next_alarm_batch(&self, failure: StoreFailure) {
+        *self
+            .alarm_batch_failure
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(failure);
     }
 
     pub async fn close(&self) {

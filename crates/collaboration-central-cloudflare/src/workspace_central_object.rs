@@ -21,6 +21,8 @@ use worker::{
 };
 
 struct CentralStatements {
+    #[cfg(feature = "test-support")]
+    alarm_batch_failure: Arc<std::sync::Mutex<Option<StoreFailure>>>,
     connection: SendWrapper<DoConnection>,
     state: Arc<SendWrapper<State>>,
 }
@@ -30,11 +32,25 @@ impl ObjectHost for CentralStatements {
         batch: StatementBatch,
     ) -> impl std::future::Future<Output = std::result::Result<BatchOutcome, StoreFailure>> + Send
     {
-        SendFuture::new(statement_store::run_batch(
-            &self.connection,
-            batch.into(),
-            AlarmPolicy::Apply(self.state.storage()),
-        ))
+        SendFuture::new(async move {
+            #[cfg(feature = "test-support")]
+            if batch.statements.is_empty()
+                && matches!(batch.alarm, central_storage::AlarmUpdate::SetFromQuery(_))
+                && let Some(failure) = self
+                    .alarm_batch_failure
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .take()
+            {
+                return Err(failure);
+            }
+            statement_store::run_batch(
+                &self.connection,
+                batch.into(),
+                AlarmPolicy::Apply(self.state.storage()),
+            )
+            .await
+        })
     }
     fn read(
         &self,
@@ -121,6 +137,8 @@ impl CentralObject {
 
     fn statement_host(&self) -> Arc<CentralStatements> {
         Arc::new(CentralStatements {
+            #[cfg(feature = "test-support")]
+            alarm_batch_failure: self.controls.alarm_batch_failure.clone(),
             connection: SendWrapper::new(DoConnection::new(self.state.storage())),
             state: self.state.clone(),
         })
