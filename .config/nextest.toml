@@ -18,7 +18,6 @@ slow-timeout = { period = "60s", terminate-after = 5 }
 [test-groups]
 process-runtime = { max-threads = 1 }
 heavy-tests = { max-threads = 1 }
-worker-ci = { max-threads = 2 }
 
 # These nested global-CLI startup cases passed in isolation but exhausted their
 # unchanged 15-second initialization budget under the complete Host suite.
@@ -342,21 +341,3 @@ threads-required = "num-test-threads"
 filter = "package(=collaboration-central-tokio) & test(page_limits::maximum_list_and_inbox_pages_retain_the_extra_row_and_skip_nothing)"
 test-group = "process-runtime"
 threads-required = "num-test-threads"
-
-# Used only by the Worker CI storage-boundary step. Inherit ci's zero retries,
-# all-case selection and 300 s deadline; local/default reservations above stay.
-# Each child owns mkdtemp persistence and port 0 (workerd-storage.ts:199-226).
-# Sign-in fixtures own TempDir plans and ephemeral JWKS listeners
-# (organization_signin/support.rs:31-51; signin_fixtures.rs:165-172).
-# Both bundles are built before tests and only read by each bridge. Per-process
-# transports, clocks and runtime maps do not share mutable fixture state.
-[profile.worker-ci]
-inherits = "ci"
-test-threads = 2
-status-level = "all"
-final-status-level = "all"
-
-[[profile.worker-ci.overrides]]
-filter = "package(=collaboration-central-cloudflare) & binary(=integration)"
-test-group = "worker-ci"
-threads-required = 1
