@@ -1,7 +1,8 @@
 //! Timer request plans and validated rows; occurrence calculation stays in TimingRule.
 use crate::{
     ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
-    central_mail_store::{encode, exact, text, timestamp},
+    central_mail_store::{encode, timestamp},
+    guarded_statements::{exact, text},
     workspace_decode_error::corrupt,
     workspace_row_codec::{json, string},
 };

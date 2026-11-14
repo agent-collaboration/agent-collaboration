@@ -13,6 +13,7 @@ workspace = true
 crate-type = ["cdylib"]
 
 [features]
+link = []
 conformance = [ "dep:collaboration-central-conformance", "collaboration-central-core/conformance"]
 conformance-faults = ["conformance", "durable-steps/test-support"]
 # The storage boundary's workerd cases (Verification O1); never in a production bundle.
@@ -57,6 +58,9 @@ web-sys = { version = "=0.3.106", features = ["WorkerGlobalScope", "Crypto", "Su
 js-sys = "=0.3.106"
 
 [dev-dependencies]
+collaboration-central-conformance = { path = "../collaboration-central-conformance", version = "0.1.150", features = ["signin-test-support"] }
+router-clock = {path="../router-clock",version="0.1.150",features=["test-support"]}
+tempfile = "3.27.0"
 reqwest = {workspace=true,features=["json"]}
 tokio.workspace = true
 

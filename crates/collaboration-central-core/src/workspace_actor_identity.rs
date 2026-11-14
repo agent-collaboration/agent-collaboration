@@ -81,12 +81,14 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     actor_identity_id: actor.clone(),
                 })
             }),
-            ActorRef::Session(session) => self
-                .resolve_identity(&Identity::AgentSession {
+            ActorRef::Session(session) => {
+                let _turn = self.take_central_turn().await;
+                self.resolve_identity(&Identity::AgentSession {
                     session: session.clone(),
                 })
                 .await
-                .map(Ok),
+                .map(Ok)
+            }
         }
     }
     pub(crate) async fn actor_views(

@@ -1,7 +1,8 @@
 //! Fixed notification windows and immutable change collation, owned by central.
 use crate::{
     ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
-    central_mail_store::{self, any, exact, text, timestamp},
+    central_mail_store::{self, timestamp},
+    guarded_statements::{any, exact, text},
     workspace_decode_error::corrupt,
     workspace_row_codec::{json, string},
 };

@@ -1,14 +1,12 @@
 //! Central-owned statement construction and validated mail rows.
+use crate::guarded_statements::{any, text};
 use crate::{ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls, workspace_decode_error::corrupt};
 use central_storage::{
-    AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, SqlValue, Statement, StoreFailure,
+    AlarmUpdate, BatchOutcome, GuardedStatement, SqlValue, Statement, StoreFailure,
 };
 use collaboration_protocol::central_mail as mail;
 use serde::Serialize;
 use workspace_model::{ActorIdentityId, SessionAddress, Timestamp};
-pub(crate) fn text(value: impl ToString) -> SqlValue {
-    SqlValue::Text(value.to_string())
-}
 pub(crate) fn encode(value: &impl Serialize) -> Result<SqlValue, StoreFailure> {
     serde_json::to_string(value)
         .map(text)
@@ -16,18 +14,6 @@ pub(crate) fn encode(value: &impl Serialize) -> Result<SqlValue, StoreFailure> {
 }
 pub(crate) fn timestamp(value: Timestamp) -> String {
     value.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
-}
-pub(crate) fn exact(sql: &'static str, args: Vec<SqlValue>) -> GuardedStatement {
-    GuardedStatement {
-        statement: Statement { sql, args },
-        expect: RowExpectation::Exactly(1),
-    }
-}
-pub(crate) fn any(sql: &'static str, args: Vec<SqlValue>) -> GuardedStatement {
-    GuardedStatement {
-        statement: Statement { sql, args },
-        expect: RowExpectation::Any,
-    }
 }
 pub const EARLIEST_DUE: &str = "SELECT CASE WHEN COUNT(*) != COUNT(unixepoch(due_at)) THEN 'invalid_due_at' ELSE MIN(unixepoch(due_at)*1000+CAST(substr(strftime('%f',due_at),4,3) AS INTEGER)) END AS earliest_due FROM (SELECT due_at FROM wakes WHERE state='active' UNION ALL SELECT next_due_at FROM automations WHERE state='active' AND next_due_at IS NOT NULL UNION ALL SELECT due_at FROM notification_windows UNION ALL SELECT drain_due_at FROM workspace_drains WHERE drain_due_at IS NOT NULL) WHERE (SELECT COUNT(*) FROM organization_identity)=1";
 pub(crate) fn alarm_update() -> AlarmUpdate {

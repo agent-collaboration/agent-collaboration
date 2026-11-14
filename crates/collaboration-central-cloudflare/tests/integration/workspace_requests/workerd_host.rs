@@ -84,6 +84,7 @@ impl AlarmReceipt {
 struct Process {
     child: Mutex<Option<Child>>,
     output: Mutex<Option<std::thread::JoinHandle<()>>>,
+    errors: Mutex<Option<std::thread::JoinHandle<()>>>,
 }
 impl Process {
     fn stop(&self) -> bool {
@@ -105,6 +106,14 @@ impl Process {
                 && output.join().is_err()
             {
                 return false;
+            }
+            if let Some(errors) = self
+                .errors
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner)
+                .take()
+            {
+                assert!(errors.join().is_ok());
             }
             return stopped;
         }
@@ -153,24 +162,64 @@ pub(super) struct WorkerdHost {
     transport: Arc<Transport>,
     clock: Arc<dyn Clock>,
     orgs: Mutex<BTreeMap<OrganizationId, Arc<RemoteRuntime>>>,
+    captured_logs: Arc<Mutex<Vec<String>>>,
+    log_changed: tokio::sync::watch::Sender<usize>,
 }
 impl WorkerdHost {
     pub async fn open(clock: Arc<dyn Clock>) -> Result<Self, StoreFailure> {
-        let (origin, process) = tokio::task::spawn_blocking(|| {
+        Self::open_configured(clock, None).await
+    }
+    pub async fn open_signin(clock: Arc<dyn Clock>, plan: &Path) -> Result<Self, StoreFailure> {
+        Self::open_configured(clock, Some(plan.to_owned())).await
+    }
+    async fn open_configured(
+        clock: Arc<dyn Clock>,
+        plan: Option<std::path::PathBuf>,
+    ) -> Result<Self, StoreFailure> {
+        let signin = plan.is_some();
+        let captured_logs = Arc::new(Mutex::new(Vec::new()));
+        let log_changed = tokio::sync::watch::channel(0usize).0;
+        let process_logs = captured_logs.clone();
+        let process_changed = log_changed.clone();
+        let (origin, process) = tokio::task::spawn_blocking(move || {
             let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
             let root = manifest.parent().unwrap().parent().unwrap();
-            let mut child = Command::new("node")
-                .arg(manifest.join("tests/support/workerd-bridge.mts"))
+            let mut command = Command::new("node");
+            command.arg(manifest.join("tests/support/workerd-bridge.mts"));
+            if let Some(plan) = plan {
+                command.arg("--signin-plan").arg(plan);
+            }
+            let mut child = command
                 .current_dir(root)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
-                .stderr(Stdio::inherit())
+                .stderr(if signin {
+                    Stdio::piped()
+                } else {
+                    Stdio::inherit()
+                })
                 .spawn()
                 .unwrap();
+            let error_drain = child.stderr.take().map(|stderr| {
+                let logs = process_logs.clone();
+                let changed = process_changed.clone();
+                std::thread::spawn(move || {
+                    for line in BufReader::new(stderr)
+                        .lines()
+                        .map_while(std::result::Result::ok)
+                    {
+                        logs.lock()
+                            .unwrap_or_else(PoisonError::into_inner)
+                            .push(line);
+                        changed.send_modify(|count| *count += 1);
+                    }
+                })
+            });
             let mut output = BufReader::new(child.stdout.take().unwrap());
             let process = Arc::new(Process {
                 child: Mutex::new(Some(child)),
                 output: Mutex::new(None),
+                errors: Mutex::new(error_drain),
             });
             let mut line = String::new();
             let read = output.read_line(&mut line).unwrap();
@@ -181,7 +230,15 @@ impl WorkerdHost {
             let drain = std::thread::spawn(move || {
                 let mut line = String::new();
                 while output.read_line(&mut line).unwrap_or(0) > 0 {
-                    eprint!("{line}");
+                    if signin {
+                        process_logs
+                            .lock()
+                            .unwrap_or_else(PoisonError::into_inner)
+                            .push(line.clone());
+                        process_changed.send_modify(|count| *count += 1);
+                    } else {
+                        eprint!("{line}");
+                    }
                     line.clear();
                 }
             });
@@ -195,13 +252,53 @@ impl WorkerdHost {
         .map_err(|_| StoreFailure::Unavailable)?;
         Ok(Self {
             transport: Arc::new(Transport {
-                origin,
+                origin: if signin {
+                    format!("{origin}/public")
+                } else {
+                    origin
+                },
                 client: reqwest::Client::new(),
                 process,
             }),
             clock,
             orgs: Mutex::new(BTreeMap::new()),
+            captured_logs,
+            log_changed,
         })
+    }
+    pub fn captured_logs(&self) -> Vec<String> {
+        self.captured_logs
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+    pub async fn until_log(&self, fragment: &str) {
+        let mut changed = self.log_changed.subscribe();
+        loop {
+            if self
+                .captured_logs()
+                .iter()
+                .any(|line| line.contains(fragment))
+            {
+                return;
+            }
+            assert!(
+                changed.changed().await.is_ok(),
+                "worker log stream ended before event"
+            );
+        }
+    }
+    pub fn signin_origin(&self) -> String {
+        format!(
+            "{}/private",
+            self.transport
+                .origin
+                .strip_suffix("/public")
+                .expect("sign-in topology")
+        )
+    }
+    pub fn public_origin(&self) -> &str {
+        &self.transport.origin
     }
     pub async fn central(&self, organization: &OrganizationId) -> Arc<RemoteRuntime> {
         let runtime = self.cold_runtime(organization);

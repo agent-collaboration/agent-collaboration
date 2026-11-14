@@ -1,3 +1,4 @@
+use crate::SignatureValidity;
 use serde::{Deserialize, Serialize};
 use std::future::Future;
 
@@ -168,11 +169,6 @@ impl AccessJwks {
         crate::access_key_profile::validate_access_key_profile(key)?;
         Ok(key)
     }
-}
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum SignatureValidity {
-    Valid,
-    Invalid,
 }
 /// Only the shell consumes this future. Parsing, key selection, claim checks
 /// and authorization remain synchronous core decisions.

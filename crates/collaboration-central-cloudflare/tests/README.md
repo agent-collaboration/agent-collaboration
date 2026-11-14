@@ -40,13 +40,14 @@ cargo nextest run -p collaboration-central-cloudflare --features test-support --
 Each case owns one workerd child and private SQLite persistence. Nextest reserves
 the existing process-runtime group so these children retain per-case isolation
 without competing for all of the host's memory. The bridge's imported loader keeps
-the pinned Miniflare/workerd versions and refuses external fetches.
+the pinned Miniflare/workerd versions. Its default mode refuses external fetches.
 
 Cases cover admission/org/workspace boundaries, caller and actor identities, all
 workspace rule families, scoped views/search/paging, persistent logs/redaction,
 request replay/expiry, corruption/migration rollback, controlled time, held-turn
 races and lost replies after actual apply. Person context is fixture-stamped;
-person sign-in and Host enforcement remain C/slice 4. The existing generic storage
+the verified-person sign-in cases use their separate private-link suite below.
+Machine login and Router Host enforcement retain their later-slice boundaries. The existing generic storage
 and driver cases stay in the verification package.
 
 `workspace_requests::mail` and `::notices` exercise central queue, window, drain and
@@ -63,3 +64,24 @@ boundaries, and self-join roles through actual Worker requests and store readbac
 
 The merged owner-change/drain case checks that backlog close and its reference
 produce two consecutive changes, both are drained, and replay preserves the cursor.
+
+## Verified organization sign-in
+
+`workspace_requests::organization_signin` sends actual HTTP requests through a
+gateway service binding to a separately compiled private-link Worker, then to the
+public Worker's owning central object. Real Worker fetch and WebCrypto verify the
+Rust fixture's published keys. Only one configured HTTPS JWKS URL maps to its
+owned loopback fixture; Rust owns signing, key rotation and all business assertions.
+
+```sh
+worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --locked --features test-support,conformance
+worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-link-test-support -- --locked --features link,test-support,conformance
+cargo nextest run --locked -p collaboration-central-cloudflare --features test-support,conformance -E 'test(organization_signin::)'
+```
+
+Cases cover stamp and record atomicity, expiry and predecessor checks, current
+revision floors, signed person reads, fresh proofs, causal races, cold reopen,
+query-derived alarm activation and safe refusal observations. Public-path refusal
+uses the existing `401` edge contract. Unknown private paths return `404`.
+Create-workspace effects, non-null lookup and machine-login approval replay remain
+held; independent read admission does not substitute for those effects.

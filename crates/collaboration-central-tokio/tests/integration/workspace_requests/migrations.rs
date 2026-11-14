@@ -13,7 +13,7 @@ async fn business_migration_upgrade_failure_rolls_back_both_real_owners_and_all_
                 .join("central")
                 .join(format!("{}.sqlite", f.caller.organization_id.as_str())),
             workspace_migrations::central_migrator as fn() -> sqlx::migrate::Migrator,
-            2,
+            3,
         ),
         (
             f.root

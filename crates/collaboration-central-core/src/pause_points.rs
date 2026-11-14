@@ -23,6 +23,8 @@ pub enum PausePoint {
     AfterDrainCommit,
     BeforeTimerCommit,
     AfterTimerCommit,
+    BeforeSignInSample,
+    AfterSignInSample,
 }
 
 type PauseKey = (WorkspaceId, PausePoint);

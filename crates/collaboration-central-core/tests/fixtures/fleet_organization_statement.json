@@ -1,0 +1,10 @@
+{
+  "purpose": "fleet-organization-stamp",
+  "version": 1,
+  "iss": "https://sign-in.example.invalid",
+  "aud": "https://central.example.invalid/identity",
+  "sub": "019f0000-0000-7000-8000-00000000ab01",
+  "organization_id": "019f0000-0000-7000-8000-00000000ab01",
+  "iat": 1799999900,
+  "exp": 1800000600
+}

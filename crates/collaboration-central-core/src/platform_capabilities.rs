@@ -1,4 +1,5 @@
 //! Capabilities supplied by the runtime for one central object.
+use crate::{KeyFetchFailure, RawJwks, VerifyFailure};
 
 use crate::ObjectHost;
 use durable_steps::AtomicStore;
@@ -13,23 +14,6 @@ use crate::{
     AccessJwk, AdmissionOrigin, CentralObservation, SerializedObjectCall, SignatureValidity,
 };
 use central_storage::{StoreCall, StoreFailure, StoreReply};
-
-pub struct RawJwks {
-    pub body: Vec<u8>,
-    pub cache_control: Option<String>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum KeyFetchFailure {
-    Unreachable,
-    BadResponse { status: u16 },
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum VerifyFailure {
-    UnsupportedKey,
-    Crypto,
-}
 
 #[derive(Debug)]
 pub enum CallOutcome<Reply> {

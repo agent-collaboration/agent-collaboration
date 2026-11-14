@@ -42,4 +42,9 @@ pub enum CentralObservation {
         outcome: AccessCheckOutcome,
         key_source: Option<AccessKeySource>,
     },
+    /// A closed refusal classification; never statement bytes, key ids or tokens.
+    OrganizationStatementRefused {
+        organization: fleet_identity_protocol::OrganizationId,
+        refusal: crate::organization_authority::FleetOrganizationStatementRefusal,
+    },
 }

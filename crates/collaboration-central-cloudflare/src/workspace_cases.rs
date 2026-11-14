@@ -33,6 +33,8 @@ enum Point {
     AfterDrainCommit,
     BeforeTimerCommit,
     AfterTimerCommit,
+    BeforeSignInSample,
+    AfterSignInSample,
 }
 impl From<Point> for PausePoint {
     fn from(point: Point) -> Self {
@@ -43,6 +45,8 @@ impl From<Point> for PausePoint {
             Point::AfterDrainCommit => Self::AfterDrainCommit,
             Point::BeforeTimerCommit => Self::BeforeTimerCommit,
             Point::AfterTimerCommit => Self::AfterTimerCommit,
+            Point::BeforeSignInSample => Self::BeforeSignInSample,
+            Point::AfterSignInSample => Self::AfterSignInSample,
         }
     }
 }
@@ -125,6 +129,10 @@ pub(super) async fn control(
     }
     let runtime = object.runtime(organization).await?;
     match path.as_str() {
+        "/test/lose-provisioning-reply" => {
+            runtime.lose_next_provisioning_reply();
+            Response::from_json(&true)
+        }
         "/test/fail-alarm-batch" => {
             let failure = request.json().await?;
             *object
@@ -141,7 +149,13 @@ pub(super) async fn control(
         "/test/alarm" => Response::from_json(&object.state.storage().get_alarm().await?),
         "/test/hold-central" => {
             let point: Point = request.json().await?;
-            if !matches!(point, Point::BeforeTimerCommit | Point::AfterTimerCommit) {
+            if !matches!(
+                point,
+                Point::BeforeTimerCommit
+                    | Point::AfterTimerCommit
+                    | Point::BeforeSignInSample
+                    | Point::AfterSignInSample
+            ) {
                 return Err(error("not a timer point"));
             }
             object

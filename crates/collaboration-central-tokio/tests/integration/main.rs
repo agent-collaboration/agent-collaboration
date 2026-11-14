@@ -113,6 +113,8 @@ mod normal_redeploy;
 mod numeric_composed;
 mod object_bootstrap;
 mod object_identity;
+#[cfg(all(feature = "test-support", unix))]
+mod organization_signin;
 mod owner_admin_sessions;
 mod owner_fence_ordering;
 mod owner_registry;

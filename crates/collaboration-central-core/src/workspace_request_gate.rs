@@ -65,7 +65,10 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
             person_id: person_id.clone(),
         },
     };
-    let actor = runtime.resolve_identity(&identity).await?;
+    let actor = {
+        let _turn = runtime.take_central_turn().await;
+        runtime.resolve_identity(&identity).await?
+    };
     let now = runtime.now()?;
     let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
     let digest = crate::workspace_request_log::digest(&request.operation)?;

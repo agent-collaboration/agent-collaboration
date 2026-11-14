@@ -86,3 +86,15 @@ The kept enrollment, Access and session-upgrade behavior is proven by
 
 The merged owner-change/drain case checks that backlog close and its reference
 produce two consecutive changes, both are drained, and replay preserves the cursor.
+
+- `organization_signin` (requires `test-support`, Unix): modern private sign-in
+  routes through `OrganizationSignInLink`, real reqwest/ring verification and
+  loopback JWKS publication, with the owning SQLite files and one `ManualClock`.
+  Cases cover stamp initialization/repeats/renewals and competing writers,
+  invalid and cold-damaged statements, retired-key refresh, floor delivery,
+  signed audit reads and null workspace lookup, person admission and fresh-proof
+  replay, pre-sample expiry and post-sample org-turn linearization, and the first
+  real stamp activating a pending wake through the native alarm owner.
+  Shared signers live in `collaboration-central-conformance`'s non-default
+  `signin-test-support` feature. Create-workspace, non-null lookup and machine
+  login remain outside this suite until their held contracts are approved.
