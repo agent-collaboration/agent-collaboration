@@ -70,8 +70,11 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             }
             _ => return Err(corrupt("actor_identities.last_notice_delivery_at")),
         };
+        let current_mark = crate::central_mail_time::aligned_at_or_after(self.now()?, 300)
+            .ok_or_else(|| corrupt("notification_windows.due_at"))?;
         last.checked_add_signed(chrono::Duration::seconds(i64::from(cadence.seconds())))
             .and_then(|due| crate::central_mail_time::aligned_at_or_after(due.max(first), 300))
+            .map(|due| due.max(current_mark))
             .filter(|due| crate::central_mail_time::supported(*due))
             .ok_or_else(|| corrupt("notification_windows.due_at"))
     }

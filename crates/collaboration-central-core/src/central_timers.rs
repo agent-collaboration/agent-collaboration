@@ -131,10 +131,6 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 {
                     continue;
                 }
-                if now > automation.expires_at {
-                    statements.push(exact("UPDATE automations SET next_due_at=NULL,state='done',updated_at=? WHERE automation_id=? AND state='active'",vec![text(timestamp(now)),text(&automation.id)]));
-                    continue;
-                }
                 let next = automation
                     .timing
                     .next_due(automation.anchor, Some(now))

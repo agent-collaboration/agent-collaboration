@@ -126,7 +126,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     .into_iter()
     .enumerate()
     {
-        assert!(matches!(
+        assert_eq!(
             request(
                 f,
                 &f.caller,
@@ -139,11 +139,17 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
             )
             .await,
             Result::Refused(Refusal::TimingViolation {
+                field: if index < 3 {
+                    "timing.seconds"
+                } else {
+                    "timing.expression"
+                }
+                .to_owned(),
                 requirement: TimingRequirement::FiveMinuteGrid,
-                ..
             })
-        ));
+        );
     }
+    admission_refusals::exercise_refusals(f, &target).await;
     let seven = request(
         f,
         &f.caller,
@@ -429,9 +435,12 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     notices::exercise_notice_cadences(f).await;
     stored_validation::exercise_stored_validation(f).await;
     exercise_expiry(f).await;
+    review_corrections::exercise_shorter_cadence(f).await;
+    review_corrections::exercise_non_utc_and_terminal_rows(f).await;
+    review_corrections::exercise_late_drain(f).await;
 }
 
-async fn exercise_expiry(f: &Fixture) {
+async fn exercise_expiry(f: &mut Fixture) {
     advance_to(f, now(f) + chrono::Duration::seconds(1));
     let admission = now(f);
     let result = request(
@@ -446,7 +455,12 @@ async fn exercise_expiry(f: &Fixture) {
         },
     )
     .await;
-    let Result::Done(Answer::AutomationSet { automation_id, .. }) = result else {
+    let Result::Done(Answer::AutomationSet {
+        automation_id,
+        next_due_at: Some(original_due),
+        ..
+    }) = result
+    else {
         panic!("expiry setup: {result:?}")
     };
     let r = f.host.central(&f.caller.organization_id).await.unwrap();
@@ -478,11 +492,32 @@ async fn exercise_expiry(f: &Fixture) {
         vec![vec![
             text("done"),
             central_storage::SqlValue::Null,
-            central_storage::SqlValue::Integer(0.try_into().unwrap())
+            central_storage::SqlValue::Integer(1.try_into().unwrap())
         ]]
     );
+    let batch = r
+        .due_for_session(&session(&f.caller), now(f))
+        .await
+        .unwrap();
+    let fired:Vec<_>=batch.messages.iter().filter(|message|matches!(&message.body,MessageBody::Automation{automation_id:id,..} if id==&automation_id)).collect();
+    assert_eq!(fired.len(), 1);
+    assert_eq!(fired[0].deliver_after, original_due);
+    assert_eq!(r.on_alarm().await.unwrap().automations_fired, 0);
+    drop(r);
+    f.reopen().await;
+    let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    assert_eq!(r.on_alarm().await.unwrap().automations_fired, 0);
+    let reopened = r
+        .due_for_session(&session(&f.caller), now(f))
+        .await
+        .unwrap();
+    assert_eq!(reopened.messages.iter().filter(|message|matches!(&message.body,MessageBody::Automation{automation_id:id,..}if id==&automation_id)).count(),1);
 }
 
 mod notices;
 
 mod stored_validation;
+
+mod review_corrections;
+
+mod admission_refusals;

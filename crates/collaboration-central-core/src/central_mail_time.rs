@@ -181,6 +181,11 @@ pub(crate) fn refusal(
                 TimingRule::After { .. } | TimingRule::Interval { .. } => "timing.seconds",
                 TimingRule::Cron { .. } => "timing.expression",
             };
+            if let TimingRule::After { seconds } | TimingRule::Interval { seconds } = timing
+                && i64::from(*seconds) > LIFETIME_SECONDS
+            {
+                return Some(violation(field, TimingRequirement::WithinSevenDays));
+            }
             // Detect malformed durations before asking the shared calculator to validate them.
             if let TimingRule::After { seconds } | TimingRule::Interval { seconds } = timing
                 && (*seconds < GRID_SECONDS || *seconds % GRID_SECONDS != 0)

@@ -35,9 +35,17 @@ async fn timing_contract_refuses_off_grid_wake_and_seven_day_overflow() {
             )
             .await
             .unwrap();
-        assert!(
-            matches!(result, Result::Refused(_)),
-            "invalid offset {offset}: {result:?}"
+        assert_eq!(
+            result,
+            Result::Refused(Refusal::TimingViolation {
+                field: "dueAt".to_owned(),
+                requirement: if offset > 604_800 {
+                    collaboration_protocol::central_mail::TimingRequirement::WithinSevenDays
+                } else {
+                    collaboration_protocol::central_mail::TimingRequirement::FiveMinuteGrid
+                },
+            }),
+            "invalid offset {offset}"
         );
     }
     fixture.host.close().await;

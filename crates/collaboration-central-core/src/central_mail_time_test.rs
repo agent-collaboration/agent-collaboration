@@ -62,3 +62,52 @@ fn cron_checks_every_selected_minute_and_utc_occurrences() {
     };
     assert!(valid_rule(&nepal, now, expiry).unwrap());
 }
+
+#[test]
+fn relative_durations_over_seven_days_report_the_horizon() {
+    use collaboration_protocol::central_mail::{
+        CentralMailOperation, CentralMailRefusal, TimingRequirement,
+    };
+    use workspace_model::SessionAddress;
+
+    let now = timestamp("2026-11-14T12:00:00Z");
+    let target = SessionAddress {
+        machine_id: "018f0000-0000-7000-8000-000000000001".parse().unwrap(),
+        endpoint: "codex-local".to_owned().try_into().unwrap(),
+        session_id: "test-session".to_owned().try_into().unwrap(),
+    };
+    for timing in [
+        TimingRule::After { seconds: 604_801 },
+        TimingRule::Interval { seconds: 604_801 },
+        TimingRule::After {
+            seconds: 31_536_001,
+        },
+        TimingRule::Interval {
+            seconds: 31_536_001,
+        },
+    ] {
+        let operation = CentralMailOperation::SetAutomation {
+            target: target.clone(),
+            timing,
+            text: "test".to_owned().try_into().unwrap(),
+        };
+        assert_eq!(
+            super::refusal(&operation, now),
+            Some(CentralMailRefusal::TimingViolation {
+                field: "timing.seconds".to_owned(),
+                requirement: TimingRequirement::WithinSevenDays,
+            })
+        );
+    }
+    for timing in [
+        TimingRule::After { seconds: 604_800 },
+        TimingRule::Interval { seconds: 604_800 },
+    ] {
+        let operation = CentralMailOperation::SetAutomation {
+            target: target.clone(),
+            timing,
+            text: "test".to_owned().try_into().unwrap(),
+        };
+        assert_eq!(super::refusal(&operation, now), None);
+    }
+}

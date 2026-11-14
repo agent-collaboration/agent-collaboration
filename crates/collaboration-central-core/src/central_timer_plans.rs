@@ -117,24 +117,27 @@ pub(crate) fn decode_automations(rows: &ReadOutcome) -> Result<Vec<AutomationRow
             if crate::central_mail_time::aligned_at_or_after(admission, 300) != Some(anchor) {
                 return Err(corrupt("automations.anchor_at"));
             }
-            if !crate::central_mail_time::valid_rule(&timing, admission, expires_at)
-                .map_err(|_| corrupt("automations.timing_rule"))?
-            {
-                return Err(corrupt("automations.timing_rule"));
+            if due.is_some_and(|due| {
+                !crate::central_mail_time::on_grid(due) || due > expires_at || due < anchor
+            }) {
+                return Err(corrupt("automations.next_due_at"));
             }
-            let initial_due = crate::central_mail_time::first_due(&timing, admission)
-                .map_err(|_| corrupt("automations.timing_rule"))?
-                .ok_or_else(|| corrupt("automations.timing_rule"))?;
-            if initial_due > expires_at
-                || (matches!(timing, TimingRule::At { .. }) && initial_due <= admission)
-            {
-                return Err(corrupt("automations.timing_rule"));
-            }
-            if let Some(due) = due {
+            if state == mail::AutomationState::Active {
+                let due = due.ok_or_else(|| corrupt("automations.next_due_at"))?;
                 let matches_rule = match &timing {
-                    TimingRule::At { .. } | TimingRule::After { .. } => due == initial_due,
+                    TimingRule::At { at } => *at > admission && due == *at,
+                    TimingRule::After { seconds } => {
+                        *seconds >= 300
+                            && *seconds <= 604_800
+                            && *seconds % 300 == 0
+                            && crate::central_mail_time::first_due(&timing, admission)
+                                .map_err(|_| corrupt("automations.timing_rule"))?
+                                == Some(due)
+                    }
                     TimingRule::Interval { seconds } => {
-                        due >= anchor
+                        *seconds >= 300
+                            && *seconds <= 604_800
+                            && *seconds % 300 == 0
                             && due.signed_duration_since(anchor).num_seconds() % i64::from(*seconds)
                                 == 0
                     }
@@ -151,11 +154,6 @@ pub(crate) fn decode_automations(rows: &ReadOutcome) -> Result<Vec<AutomationRow
                 if !matches_rule {
                     return Err(corrupt("automations.next_due_at"));
                 }
-            }
-            if due.is_some_and(|due| {
-                !crate::central_mail_time::on_grid(due) || due > expires_at || due < anchor
-            }) {
-                return Err(corrupt("automations.next_due_at"));
             }
             Ok(AutomationRow {
                 id: parse(

@@ -22,7 +22,7 @@ fn optional<T: std::str::FromStr>(
 }
 pub(crate) fn notice_messages() -> Statement {
     Statement {
-        sql: "SELECT message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,deliver_after,created_at,updated_at FROM messages WHERE message_kind='notice'",
+        sql: "SELECT message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,deliver_after,created_at,updated_at FROM messages WHERE message_kind='notice' AND state IN ('queued','ready')",
         args: vec![],
     }
 }
