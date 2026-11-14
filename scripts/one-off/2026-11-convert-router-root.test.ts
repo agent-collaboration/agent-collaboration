@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { createFixtureDirectory } from "../../verification/test-support/fixture-directory.ts";
 import { join } from "node:path";
 import { createServer } from "node:net";
 import { spawn, spawnSync } from "node:child_process";
@@ -14,9 +15,7 @@ const providers =
   '{"version":1,"providers":{"claude":{"enabled":false,"executable":null,"arguments":[]},"cursor":{"enabled":false,"executable":null,"arguments":[]}}}';
 const ports = '{"router":18827,"mcp":18828,"tailscaleHttps":443}';
 async function copiedRoot(): Promise<{ parent: string; root: string; backup: string }> {
-  const scratch = new URL("../../tmp/", import.meta.url).pathname;
-  await mkdir(scratch, { recursive: true });
-  const parent = await realpath(await mkdtemp(join(scratch, "root-conversion-")));
+  const parent = await realpath(createFixtureDirectory("root-conversion"));
   const root = join(parent, "router"),
     backup = join(parent, "router.backup-2026-11-13");
   await cp(fixture, root, { recursive: true });
