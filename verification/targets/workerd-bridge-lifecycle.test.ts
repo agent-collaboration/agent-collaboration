@@ -35,6 +35,47 @@ function stopRecordedWorkerd(pid: number): void {
   }
 }
 
+test("a readiness failure retains its cause when real disposal also rejects", async (): Promise<void> => {
+  const loader = fileURLToPath(new URL("./workerd-storage.ts", import.meta.url));
+  const injectFailure = `${observeSpawn}
+    const { WorkerdStorage } = await import(${JSON.stringify(new URL(`file://${loader}`).href)});
+    const close = WorkerdStorage.prototype.close;
+    WorkerdStorage.prototype.close = async function () {
+      await close.call(this);
+      throw new Error('deliberate bridge dispose failure');
+    };
+  `;
+  const child = spawn(
+    process.execPath,
+    ["--import", `data:text/javascript,${encodeURIComponent(injectFailure)}`, bridge],
+    { stdio: "pipe" },
+  );
+  const exited = once(child, "close");
+  let diagnostics = "";
+  child.stderr.setEncoding("utf8");
+  child.stderr.on("data", (chunk: string): void => {
+    diagnostics += chunk;
+  });
+  child.stdout.destroy();
+  child.stdin.on("error", (): void => {});
+  try {
+    const [code] = await exited;
+    assert.equal(code, 1);
+    assert.match(diagnostics, /Bridge command and cleanup failed/);
+    assert.match(diagnostics, /EPIPE/);
+    assert.match(diagnostics, /deliberate bridge dispose failure/);
+    const match = diagnostics.match(/WORKERD_OWNED_PID (\d+)/);
+    assert.ok(match !== null);
+    assert.throws(() => process.kill(Number(match[1]), 0), { code: "ESRCH" });
+  } finally {
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    for (const match of diagnostics.matchAll(/WORKERD_OWNED_PID (\d+)/g))
+      stopRecordedWorkerd(Number(match[1]));
+    child.stdin.destroy();
+    child.stderr.destroy();
+  }
+});
+
 test("readiness and command pipe failures dispose the real workerd", async (): Promise<void> => {
   for (const failedPipe of ["readiness", "command"]) {
     const child = spawn(

@@ -145,7 +145,7 @@ async function writeAnswer(output: Writable, answer: unknown): Promise<void> {
   });
 }
 
-try {
+async function runCommands(): Promise<void> {
   await writeAnswer(process.stdout, { origin: host.origin });
   const commands = createInterface({ input: process.stdin, terminal: false });
   for await (const command of commands) {
@@ -155,6 +155,18 @@ try {
     }
     if (command.trim() !== "") await writeAnswer(process.stderr, await answer(command));
   }
-} finally {
-  await host.close();
 }
+
+try {
+  await runCommands();
+} catch (error: unknown) {
+  try {
+    await host.close();
+  } catch (cleanup: unknown) {
+    throw new AggregateError([error, cleanup], "Bridge command and cleanup failed", {
+      cause: error,
+    });
+  }
+  throw error;
+}
+await host.close();

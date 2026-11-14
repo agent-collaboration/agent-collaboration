@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { test } from "node:test";
+import { test, mock } from "node:test";
+import { Miniflare } from "miniflare";
 import { createFixtureDirectory } from "../test-support/fixture-directory.ts";
 import { WorkerdStorage, type WorkerdBundle } from "./workerd-storage.ts";
 
@@ -46,6 +47,36 @@ test("constructor and readiness failures remove their owned persistence", async 
         ["bundle", "invalid-bundle"],
         "failed allocation must remove only its own persistence",
       );
+    }
+    const dispose = Miniflare.prototype.dispose;
+    const cleanupFailure = new Error("deliberate dispose failure after real settlement");
+    const replacement = mock.method(
+      Miniflare.prototype,
+      "dispose",
+      async function (this: Miniflare): Promise<void> {
+        // Failed startup can make real dispose reject after settling workerd.
+        // Replace that diagnostic deliberately to prove both errors survive.
+        await dispose.call(this).catch((): undefined => undefined);
+        throw cleanupFailure;
+      },
+    );
+    try {
+      await assert.rejects(
+        WorkerdStorage.start({ ...bundle, bundleDirectory: invalidDirectory }),
+        (error: unknown): boolean => {
+          assert.ok(error instanceof AggregateError);
+          assert.match(String(error.cause), /runtime|startup|workerd/i);
+          assert.ok(error.errors.includes(cleanupFailure));
+          return true;
+        },
+      );
+      assert.deepEqual(
+        (await readdir(root)).filter((entry: string): boolean => !entry.startsWith("miniflare-")),
+        ["bundle", "invalid-bundle"],
+        "dispose rejection still removes owned persistence",
+      );
+    } finally {
+      replacement.mock.restore();
     }
   } finally {
     if (previous === undefined) delete process.env.TMPDIR;

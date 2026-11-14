@@ -256,21 +256,37 @@ export class WorkerdStorage {
         throw new Error("workerd did not bind a permitted loopback port");
       return new WorkerdStorage(ready.origin, runtime, root);
     } catch (error: unknown) {
+      const failures: unknown[] = [error];
       try {
         await runtime?.dispose();
-      } finally {
-        await rm(root, { recursive: true, force: true });
+      } catch (cleanup: unknown) {
+        failures.push(cleanup);
       }
+      try {
+        await rm(root, { recursive: true, force: true });
+      } catch (cleanup: unknown) {
+        failures.push(cleanup);
+      }
+      if (failures.length > 1)
+        throw new AggregateError(failures, "Worker startup and cleanup failed", { cause: error });
       throw error;
     }
   }
 
   async close(): Promise<void> {
+    const failures: unknown[] = [];
     try {
       await this.runtime.dispose();
-    } finally {
-      await rm(this.root, { recursive: true, force: true });
+    } catch (error: unknown) {
+      failures.push(error);
     }
+    try {
+      await rm(this.root, { recursive: true, force: true });
+    } catch (error: unknown) {
+      failures.push(error);
+    }
+    if (failures.length > 0)
+      throw new AggregateError(failures, "Worker cleanup failed", { cause: failures[0] });
   }
 
   async dispatchJson(path: string, body: unknown): Promise<unknown> {
