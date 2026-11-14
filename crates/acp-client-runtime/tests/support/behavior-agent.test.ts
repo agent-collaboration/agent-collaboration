@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { once } from "node:events";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { test, type TestContext } from "node:test";
+import {
+  frameMetadata,
+  reportPeerPhase,
+} from "../../../../verification/fixtures/behavior-peer-diagnostics.ts";
+import { signalHeldRelease } from "../../../../verification/fixtures/held-release-control.ts";
 import { decode, field, objectSchema } from "../../../../verification/exact-json.ts";
 
 interface FixtureOutcome {
@@ -96,19 +100,18 @@ for (const ending of ["release", "cancel", "close", "preexisting"] as const) {
       await until((frame) => frame.id === "initialize");
       send("authenticate", "authenticate", { methodId: "cursor_login" });
       await until((frame) => frame.id === "authenticate");
+      if (ending === "preexisting") {
+        const [code] = await settled;
+        assert.notEqual(code, 0);
+        assert.match(stderr, /release socket already exists before fixture startup/);
+        return;
+      }
       send("create", "session/new", {});
       await until((frame) => frame.id === "create");
       send("prompt", "session/prompt", {
         sessionId: "session-1",
         prompt: [{ type: "text", text: "hold" }],
       });
-      if (ending === "preexisting") {
-        // A pre-existing sentinel must fail loudly, never provide a false detached-completion pass.
-        const [code] = await settled;
-        assert.notEqual(code, 0);
-        assert.match(stderr, /release sentinel already exists before held prompt/);
-        return;
-      }
       await until(
         (frame) =>
           frame.method === "session/update" &&
@@ -119,7 +122,8 @@ for (const ending of ["release", "cancel", "close", "preexisting"] as const) {
       // Act: release competes with an actual cancel or close on the same held prompt.
       if (ending === "cancel") send(undefined, "session/cancel", { sessionId: "session-1" });
       if (ending === "close") send("close", "session/close", { sessionId: "session-1" });
-      writeFileSync(sentinel, "release");
+      const released = await signalHeldRelease({ socketPath: sentinel, ownerId: "session-1" });
+      assert.equal(released.kind, ending === "release" ? "released" : "refused");
       const terminal = await until((frame) => frame.id === "prompt");
       assert.ok(
         ["end_turn", "cancelled"].includes(String(field(terminal, "result", "stopReason"))),
@@ -156,27 +160,33 @@ interface BehaviorPeer {
   finish(): Promise<void>;
 }
 
-function frameMetadata(
-  frame: Readonly<Record<string, unknown>>,
-): Readonly<Record<string, unknown>> {
-  const params = objectSchema.safeParse(frame.params);
-  const sessionId = params.success ? params.data.sessionId : undefined;
-  const update = objectSchema.safeParse(params.success ? params.data.update : undefined);
-  const error = objectSchema.safeParse(frame.error);
-  return {
-    id:
-      typeof frame.id === "string" && /^[a-z][a-z0-9-]{0,40}$/.test(frame.id)
-        ? frame.id
-        : typeof frame.id,
-    method: typeof frame.method === "string" ? frame.method.slice(0, 64) : undefined,
-    sessionId:
-      typeof sessionId === "string" && /^session-[0-9]+$/.test(sessionId) ? sessionId : undefined,
-    update: String((update.success ? update.data.sessionUpdate : undefined) ?? "absent").slice(
-      0,
-      64,
-    ),
-    errorCode: String((error.success ? error.data.code : undefined) ?? "absent").slice(0, 32),
-  };
+function spawnBehaviorPeer(props: {
+  receipt: string;
+  profile: "lifecycle" | "manual";
+  authentication: boolean;
+  release: boolean;
+  sentinel: string;
+  releaseStatContention: boolean;
+}): ChildProcessWithoutNullStreams {
+  return spawn(
+    process.execPath,
+    [
+      new URL("./behavior-agent.ts", import.meta.url).pathname,
+      props.receipt,
+      props.profile,
+      ...(props.authentication ? ["cursor_login"] : []),
+      ...(props.release ? [props.sentinel] : []),
+    ],
+    {
+      env: props.releaseStatContention
+        ? {
+            ...process.env,
+            UV_THREADPOOL_SIZE: "1",
+            BEHAVIOR_PEER_RELEASE_STAT_CONTENTION: "1",
+          }
+        : process.env,
+    },
+  );
 }
 
 async function openBehaviorPeer(props: {
@@ -184,39 +194,35 @@ async function openBehaviorPeer(props: {
   readonly profile: "lifecycle" | "manual";
   readonly release: boolean;
   readonly authenticate?: boolean;
+  readonly releaseStatContention?: boolean;
 }): Promise<BehaviorPeer> {
   const root = mkdtempSync(join(tmpdir(), "facade-lifecycle-"));
   const receipt = join(root, "receipt.jsonl");
   const sentinel = join(root, "release");
-  const authentication = props.authenticate !== false;
-  const child = spawn(process.execPath, [
-    new URL("./behavior-agent.ts", import.meta.url).pathname,
+  const child = spawnBehaviorPeer({
     receipt,
-    props.profile,
-    ...(authentication ? ["cursor_login"] : []),
-    ...(props.release ? [sentinel] : []),
-  ]);
+    profile: props.profile,
+    authentication: props.authenticate !== false,
+    release: props.release,
+    sentinel,
+    releaseStatContention: props.releaseStatContention === true,
+  });
   const settled = once(child, "close");
   let stderr = "";
   const frames: Record<string, unknown>[] = [];
   let pendingPhase = "initial peer readiness";
   let pendingRequest: Readonly<Record<string, unknown>> | undefined;
-  function reportPendingPhase(reason: string): void {
-    process.stderr.write(
-      `${JSON.stringify({
-        fixture: "behavior-peer",
-        reason,
-        pendingPhase,
-        pendingRequest,
-        frameCount: frames.length,
-        frames: frames.slice(-16).map(frameMetadata),
-        exitCode: child.exitCode,
-        signalCode: child.signalCode,
-        stderrBytes: Buffer.byteLength(stderr),
-        stderrSha256: createHash("sha256").update(stderr).digest("hex"),
-      })}\n`,
-    );
-  }
+  const reportPendingPhase = (reason: string): void =>
+    reportPeerPhase({
+      reason,
+      receipt,
+      pendingPhase,
+      pendingRequest,
+      frames,
+      exitCode: child.exitCode,
+      signalCode: child.signalCode,
+      stderr,
+    });
   const reportAbort = (): void => reportPendingPhase("test context aborted");
   props.context.signal.addEventListener("abort", reportAbort, { once: true });
   child.stderr.setEncoding("utf8").on("data", (chunk: string): void => {
@@ -246,6 +252,8 @@ async function openBehaviorPeer(props: {
       }
       const frame = objectSchema.parse(decode(next.value));
       frames.push(frame);
+      if (process.env.BEHAVIOR_PEER_RELEASE_DIAGNOSTICS === "1" && frame.id === "first-held")
+        process.stderr.write(`${JSON.stringify({ event: "terminal-frame", atMs: Date.now() })}\n`);
       if (predicate(frame)) return frame;
     }
   }
@@ -276,7 +284,8 @@ async function openBehaviorPeer(props: {
     assert.equal(stderr, "");
   }
   const initialized = await request("initialize", "initialize", {});
-  if (authentication) await request("authenticate", "authenticate", { methodId: "cursor_login" });
+  if (props.authenticate !== false)
+    await request("authenticate", "authenticate", { methodId: "cursor_login" });
   return { root, receipt, sentinel, frames, initialized, send, until, request, finish };
 }
 
@@ -491,7 +500,12 @@ for (const release of [false, true]) {
       assert.equal(field(terminals[0], "result", "stopReason"), "cancelled");
       peer.send(undefined, "session/cancel", { sessionId: owner });
       await peer.request("late-close", "session/close", { sessionId: owner });
-      if (release) writeFileSync(peer.sentinel, "late release");
+      if (release) {
+        assert.equal(
+          (await signalHeldRelease({ socketPath: peer.sentinel, ownerId: owner })).kind,
+          "refused",
+        );
+      }
       await peer.finish();
       // Assert: no second settlement or invented wire cancellation/release after close.
       assert.equal(peer.frames.filter((frame) => frame.id === "held").length, 1);
@@ -510,7 +524,16 @@ test(
   { timeout: 5000 },
   async (context: TestContext): Promise<void> => {
     // Arrange: the existing sentinel is explicitly a single owned held-work gate.
-    const peer = await openBehaviorPeer({ context, profile: "lifecycle", release: true });
+    if (process.env.BEHAVIOR_PEER_RELEASE_DIAGNOSTICS === "1")
+      process.stderr.write(
+        `${JSON.stringify({ event: "case-start", atMs: Date.now(), budgetMs: 5000 })}\n`,
+      );
+    const peer = await openBehaviorPeer({
+      context,
+      profile: "lifecycle",
+      release: true,
+      releaseStatContention: true,
+    });
     const owner = await createKnownSession(peer, "new-a");
     const other = await createKnownSession(peer, "new-b");
     peer.send("first-held", "session/prompt", {
@@ -532,12 +555,27 @@ test(
     assert.equal(second.id, "second-held");
     assertInvalidReply(second);
     assert.equal(peer.frames.filter((frame) => frame.id === "first-held").length, 0);
-    writeFileSync(peer.sentinel, "release first owner");
+    assert.equal(
+      (await signalHeldRelease({ socketPath: peer.sentinel, ownerId: other })).kind,
+      "refused",
+    );
+    assert.equal(
+      (await signalHeldRelease({ socketPath: peer.sentinel, ownerId: owner })).kind,
+      "released",
+    );
+    assert.equal(
+      (await signalHeldRelease({ socketPath: peer.sentinel, ownerId: owner })).kind,
+      "refused",
+    );
+    if (process.env.BEHAVIOR_PEER_RELEASE_DIAGNOSTICS === "1")
+      process.stderr.write(
+        `${JSON.stringify({ event: "release-control-confirmed", atMs: Date.now() })}\n`,
+      );
     assert.equal(
       field(
         await peer.until(
           (frame) => frame.id === "first-held",
-          "first owner terminal after sentinel release",
+          "first owner terminal after explicit release",
         ),
         "result",
         "stopReason",

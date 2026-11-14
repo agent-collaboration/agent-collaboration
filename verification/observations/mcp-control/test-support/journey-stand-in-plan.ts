@@ -121,7 +121,7 @@ export function standInPlan(
     peer: {
       kind: "controlled",
       receipt: standIn.receipt,
-      releaseSentinel: join(standIn.root, "release"),
+      releaseSocket: join(standIn.root, "release"),
     },
     cases,
     promptText: "facade-controlled-proof",

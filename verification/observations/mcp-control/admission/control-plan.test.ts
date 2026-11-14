@@ -143,7 +143,7 @@ function fixture(root: string): ControlPlan {
     peer: {
       kind: "controlled",
       receipt: join(root, "receipt.jsonl"),
-      releaseSentinel: join(root, "release"),
+      releaseSocket: join(root, "release"),
     },
     cases: ["lifecycle", "callerLoss"],
     promptText: "ordinary",
@@ -194,7 +194,10 @@ test("a wrong build, service, source, caller, budget, deadline or sentinel is re
     for (const [change, expected] of refusals)
       assert.throws(() => checkControlPlan({ ...plan, ...change }, NOW), expected);
     writeFileSync(join(root, "release"), "stale");
-    assert.throws(() => checkControlPlan(plan, NOW), /release sentinel already exists/);
+    assert.throws(
+      () => checkControlPlan(plan, NOW),
+      /release control must be an owned private socket/,
+    );
   });
 });
 

@@ -254,7 +254,7 @@ async function withStandIn(
       peer: {
         kind: "controlled",
         receipt: standIn.receipt,
-        releaseSentinel: join(root, "release"),
+        releaseSocket: join(root, "release"),
       },
       cases: ["lifecycle"],
       promptText: "ordinary",
