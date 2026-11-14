@@ -604,7 +604,7 @@ jobs:
   wasm:
     name: Central Worker build and local workerd conformance
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       CARGO_TERM_COLOR: always
       RUST_TOOLCHAIN: 1.98.1
@@ -661,30 +661,82 @@ jobs:
       # Legacy default/conformance and Fleet feed/notice/outbox launchers retire
       # under decisions508/513. Their remaining functional obligations, including
       # normal Worker session/holder equivalence and G18, stay in the removal map.
-      - name: Prove current composed controls, transactions and physical restart
+      - name: Build the legacy scenario launchers once
         run: |
+          cargo build --locked -p collaboration-central-tokio --features conformance --example composed_scope_workerd --example step_scope_workerd --example bootstrap_scope_workerd --example session_scope_workerd
+      - name: Prove legacy workerd scenarios with two isolated processes
+        shell: bash
+        run: |
+          set -euo pipefail
           worker-build crates/collaboration-central-cloudflare --dev --no-opt -- --locked --features conformance-faults
           node verification/tooling/check-central-worker-bundle.ts faults
-          for scenario in runtime-controls composed-copy-suite composed-transactions composed-numeric composed-fleet-conflict; do
-            TIMEFORMAT=$'WORKERD_TEST\t%3R\tcomposed_scope_workerd/'"$scenario"
-            time cargo run --locked -p collaboration-central-tokio --features conformance --example composed_scope_workerd -- "$scenario" node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957
+          # Keep the same 21 cases, arguments and deadlines. Only independent
+          # processes overlap; each owns a distinct port, persistence and log.
+          cases=(
+            composed_scope_workerd/composed-copy-suite
+            composed_scope_workerd/runtime-controls
+            session_scope_workerd/forward-real-timer
+            composed_scope_workerd/composed-transactions
+            composed_scope_workerd/composed-numeric
+            composed_scope_workerd/composed-fleet-conflict
+            step_scope_workerd
+            bootstrap_scope_workerd
+            session_scope_workerd/access-sessions
+            session_scope_workerd/access-carryover
+            session_scope_workerd/session-carryover
+            session_scope_workerd/forward-boundary
+            session_scope_workerd/forward-overlap
+            session_scope_workerd/forward-state
+            session_scope_workerd/forward-terminal
+            session_scope_workerd/mailbox-identity
+            session_scope_workerd/mailbox-capacity
+            session_scope_workerd/mailbox-cancel
+            session_scope_workerd/fleet-mail-expiry
+            session_scope_workerd/mailbox-held-retention
+            session_scope_workerd/mailbox-report-terminal
+          )
+          log_root="$RUNNER_TEMP/central-legacy-logs"
+          mkdir -p "$log_root"
+          run_case() {
+            local case_name="$1" port="$2"
+            local example="${case_name%%/*}" scenario="${case_name#*/}"
+            local arguments=(node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-${case_name//\//-}" "$port")
+            if [[ "$example" == composed_scope_workerd ]]; then
+              arguments=("$scenario" "${arguments[@]}")
+            elif [[ "$example" == session_scope_workerd ]]; then
+              arguments+=("$scenario")
+            fi
+            local started ended status=0
+            started="$(date +%s.%N)"
+            cargo run --locked -p collaboration-central-tokio --features conformance --example "$example" -- "${arguments[@]}" || status=$?
+            ended="$(date +%s.%N)"
+            awk -v started="$started" -v ended="$ended" -v case_name="$case_name" 'BEGIN { printf "WORKERD_TEST\t%.3f\t%s\n", ended - started, case_name }'
+            return "$status"
+          }
+          for ((offset=0; offset<${#cases[@]}; offset+=2)); do
+            process_ids=()
+            case_logs=()
+            for ((index=offset; index<offset+2 && index<${#cases[@]}; index++)); do
+              case_name="${cases[index]}"
+              case_log="$log_root/${case_name//\//-}.log"
+              run_case "$case_name" "$((8957+index))" >"$case_log" 2>&1 &
+              process_ids+=("$!")
+              case_logs+=("$case_log")
+            done
+            batch_status=0
+            for process_id in "${process_ids[@]}"; do
+              if ! wait "$process_id"; then batch_status=1; fi
+            done
+            for case_log in "${case_logs[@]}"; do cat "$case_log"; done
+            if ((batch_status != 0)); then exit "$batch_status"; fi
           done
-          for example in step_scope_workerd bootstrap_scope_workerd; do
-            TIMEFORMAT=$'WORKERD_TEST\t%3R\t'"$example"
-            time cargo run --locked -p collaboration-central-tokio --features conformance --example "$example" -- node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$example" 8957
-          done
-      - name: Prove bounded normal Access and session cases
+      - name: Print legacy scenario logs after failure or cancellation
+        if: failure() || cancelled()
+        shell: bash
         run: |
-          for scenario in access-sessions access-carryover session-carryover; do
-            TIMEFORMAT=$'WORKERD_TEST\t%3R\tsession_scope_workerd/'"$scenario"
-            time cargo run --locked -p collaboration-central-tokio --features conformance --example session_scope_workerd -- node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957 "$scenario"
-          done
-      - name: Prove forwarding and mailbox rules on workerd
-        run: |
-          for scenario in forward-boundary forward-overlap forward-state forward-terminal forward-real-timer mailbox-identity mailbox-capacity mailbox-cancel fleet-mail-expiry mailbox-held-retention mailbox-report-terminal; do
-            TIMEFORMAT=$'WORKERD_TEST\t%3R\tsession_scope_workerd/'"$scenario"
-            time cargo run --locked -p collaboration-central-tokio --features conformance --example session_scope_workerd -- node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-$scenario" 8957 "$scenario"
-          done
+          shopt -s nullglob
+          case_logs=("$RUNNER_TEMP"/central-legacy-logs/*.log)
+          if ((${#case_logs[@]})); then cat "${case_logs[@]}"; fi
       - name: Build the deployment candidate without test features
         run: |
           worker-build crates/collaboration-central-cloudflare --profile worker-release --no-opt -- --locked --no-default-features
@@ -700,7 +752,7 @@ jobs:
           worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --locked --features test-support,conformance
           worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-link-test-support -- --locked --no-default-features --features link,test-support,conformance
           pnpm --dir verification run test:workerd
-          cargo nextest run --locked --profile ci -p collaboration-central-cloudflare --features test-support --test integration
+          cargo nextest run --locked --profile worker-ci -p collaboration-central-cloudflare --features test-support --test integration
           pnpm --dir verification exec oxlint --deny-warnings "$GITHUB_WORKSPACE/crates/collaboration-central-cloudflare/tests/support/workerd-bridge.mts"
           pnpm --dir verification exec oxfmt --check "$GITHUB_WORKSPACE/crates/collaboration-central-cloudflare/tests/support/workerd-bridge.mts"
           pnpm --dir verification exec tsc --ignoreConfig --noEmit --strict --target esnext --module nodenext --allowImportingTsExtensions --skipLibCheck --typeRoots node_modules/@types "$GITHUB_WORKSPACE/crates/collaboration-central-cloudflare/tests/support/workerd-bridge.mts"
