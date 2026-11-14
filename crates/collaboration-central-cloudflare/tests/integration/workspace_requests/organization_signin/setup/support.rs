@@ -1,7 +1,5 @@
 //! Shared setup proof inputs and owning-row oracles, with real signed requests.
-pub(super) use super::super::support::{
-    DIGEST, Fixture, LOOKUP, ORG, PROVISION, REVISIONS, person_revision,
-};
+pub(super) use super::super::support::{Fixture, LOOKUP, ORG, REVISIONS, person_revision};
 pub(super) use collaboration_central_conformance::signin_fixtures::{self as signed, NOW_SECONDS};
 pub(super) use serde_json::{Value, json};
 pub(super) fn number(value: i64) -> central_storage::SqlValue {

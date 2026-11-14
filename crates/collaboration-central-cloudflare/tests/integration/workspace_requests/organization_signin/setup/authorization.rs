@@ -188,13 +188,12 @@ async fn create_requires_fresh_factor_bound_proof_and_dpop_target() {
             owner.second_factor_at = Some(NOW_SECONDS - 901);
         }
         let mut proof_headers = headers(&owner, &intent, NOW_SECONDS);
-        if case == "bearer" {
-            if let Some((_, authorization)) = proof_headers
+        if case == "bearer"
+            && let Some((_, authorization)) = proof_headers
                 .iter_mut()
                 .find(|(name, _)| *name == "authorization")
-            {
-                *authorization = authorization.replacen("DPoP ", "Bearer ", 1);
-            }
+        {
+            *authorization = authorization.replacen("DPoP ", "Bearer ", 1);
         }
         if case == "wrong target" {
             proof_headers = owner

@@ -10,10 +10,6 @@ use collaboration_central_core::MAX_ALARM_UNIX_MILLIS;
 use serde_json::json;
 use tokio::io::{AsyncBufReadExt, BufReader};
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Startup and update refusals must preserve the real child clock without material dumps."
-)]
 async fn invalid_initial_and_update(time_ms: i64) -> TestResult {
     let keys = signed::SignInKeys::start().await?;
     let root = tempfile::Builder::new().prefix("sil-").tempdir()?;

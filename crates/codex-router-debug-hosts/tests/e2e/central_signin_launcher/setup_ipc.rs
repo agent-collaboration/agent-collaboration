@@ -74,10 +74,6 @@ fn assert_setup_observation(
     )
 }
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "A real create and lookup must preserve the final settled workspace answer shape."
-)]
 async fn create_lookup_and_replay(child: &LauncherChild) -> TestResult<(Vec<u8>, Vec<String>)> {
     let (created, create_id) =
         person_bytes(child, signed::CREATE, &create_body(), &create_intent()).await?;
@@ -109,10 +105,6 @@ async fn create_lookup_and_replay(child: &LauncherChild) -> TestResult<(Vec<u8>,
     Ok((created, vec![create_id, lookup_id, replay_id]))
 }
 
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "The full public audit response independently proves Person origin omitted from minimal IPC."
-)]
 async fn assert_person_audit(child: &LauncherChild) -> TestResult<String> {
     let (answer, proof_id) = person_bytes(
         child,
