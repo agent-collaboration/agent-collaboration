@@ -1,7 +1,7 @@
 //! Real Fleet transaction selection must refuse revoked callers before shared work is staged.
 use crate::fleet_storage_fixture::{FixtureIo, FleetStorageFixture, NOW, TestError};
 use crate::session_scope::CoreSessionScope;
-use crate::{LocalSectionFailure, ObjectHost, SocketFailure};
+use crate::{LegacyObjectHost, LocalSectionFailure, SocketFailure};
 use durable_steps::storage::TransactionScope;
 use durable_steps::{AtomicStore, ReborrowScope, StoreError};
 use fleet_sync_protocol::{ConnectionId, FrameId, OperationRequest, SessionId};
@@ -18,24 +18,28 @@ struct ScopeHost {
     store: Arc<Store>,
     wake: FixtureIo,
 }
-impl ObjectHost for ScopeHost {
-    type Database = sqlx_turso::Turso;
-    type Store = Store;
-    type Wake = FixtureIo;
-    fn store(&self) -> &Arc<Store> {
-        &self.store
-    }
+impl crate::ObjectHost for ScopeHost {
     async fn run_batch(
         &self,
         _: central_storage::StatementBatch,
     ) -> Result<central_storage::BatchOutcome, central_storage::StoreFailure> {
         Err(central_storage::StoreFailure::Unavailable)
     }
+
     async fn read(
         &self,
         _: central_storage::Statement,
     ) -> Result<central_storage::ReadOutcome, central_storage::StoreFailure> {
         Err(central_storage::StoreFailure::Unavailable)
+    }
+}
+
+impl LegacyObjectHost for ScopeHost {
+    type Database = sqlx_turso::Turso;
+    type Store = Store;
+    type Wake = FixtureIo;
+    fn store(&self) -> &Arc<Store> {
+        &self.store
     }
     fn wake(&self) -> &FixtureIo {
         &self.wake

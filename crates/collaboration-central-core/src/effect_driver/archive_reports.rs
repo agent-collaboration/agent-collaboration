@@ -1,12 +1,12 @@
 //! Automated archive outcomes return through the same native Session that reported.
 use super::EffectDriver;
-use crate::{ObjectHost, PlatformIo, fleet_archive_calls::FleetArchiveReport};
+use crate::{LegacyObjectHost, PlatformIo, fleet_archive_calls::FleetArchiveReport};
 use board_sync_protocol::{ArchiveSeen, BoardConsumerAnswer, BoardConsumerProtocol, BoardPayload};
 use durable_steps::Host as _;
 use fleet_sync_protocol::{ConnectionId, FrameId, OperationAnswer, ServerFrame};
 use fleet_sync_session::SessionKey;
 
-impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
+impl<Host: LegacyObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
     pub(super) async fn answer_archive_report(
         &self,
         connection: ConnectionId,

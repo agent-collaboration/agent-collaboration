@@ -45,6 +45,12 @@ pub enum BlockerStatus {
     deny_unknown_fields
 )]
 pub enum RefusalReason {
+    #[error("dependency {dependency_id} was not found")]
+    DependencyNotFound { dependency_id: crate::DependencyId },
+    #[error("machine is revoked, unknown, or its credential is invalid")]
+    MachineRevoked,
+    #[error("request id was reused by another caller or operation")]
+    RequestIdReused,
     #[error("workspace is not allowed")]
     WorkspaceNotAllowed,
     #[error("item not found: {item:?}")]
@@ -78,8 +84,6 @@ pub enum RefusalReason {
     },
     #[error("backlog description must not be empty")]
     EmptyDescription,
-    #[error("target is outside this workspace: {item:?}")]
-    TargetOutsideWorkspace { item: ItemRef },
     #[error("source kind is not allowed: {item:?}")]
     SourceKindNotAllowed { item: ItemRef },
     #[error("cannot close: children {blockers:?} remain open")]

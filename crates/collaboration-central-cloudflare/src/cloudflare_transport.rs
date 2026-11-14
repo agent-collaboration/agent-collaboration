@@ -102,12 +102,33 @@ pub(crate) async fn call_store(
     workspace: message_board::WorkspaceId,
     call: crate::store_wire::OwnedStoreCall,
 ) -> std::result::Result<central_storage::StoreReply, central_storage::StoreFailure> {
+    store_call(env, workspace, call, None).await
+}
+#[cfg(feature = "test-support")]
+pub(crate) async fn call_widget_store(
+    env: &Env,
+    workspace: message_board::WorkspaceId,
+    call: crate::store_wire::OwnedStoreCall,
+) -> std::result::Result<central_storage::StoreReply, central_storage::StoreFailure> {
+    store_call(env, workspace, call, Some("widgets")).await
+}
+async fn store_call(
+    env: &Env,
+    workspace: message_board::WorkspaceId,
+    call: crate::store_wire::OwnedStoreCall,
+    fixture: Option<&str>,
+) -> std::result::Result<central_storage::StoreReply, central_storage::StoreFailure> {
     use central_storage::StoreFailure;
     let address = ObjectAddress::WorkspaceStore(workspace);
     let stub = stub(env, &address).map_err(|_| StoreFailure::Unavailable)?;
     let body = serde_json::to_vec(&call).map_err(|_| StoreFailure::Unavailable)?;
     let headers = Headers::new();
     address_header(&headers, &address).map_err(|_| StoreFailure::Unavailable)?;
+    if let Some(fixture) = fixture {
+        headers
+            .set("x-workspace-fixture", fixture)
+            .map_err(|_| StoreFailure::Unavailable)?;
+    }
     let mut init = RequestInit::new();
     init.with_method(Method::Post)
         .with_headers(headers)
@@ -125,4 +146,13 @@ pub(crate) async fn call_store(
         .json::<crate::store_wire::StoreAnswer>()
         .await
         .map_err(|_| StoreFailure::AnswerLost)?
+}
+
+#[cfg(feature = "test-support")]
+pub(crate) async fn call_failing_workspace_store(
+    env: &Env,
+    workspace: message_board::WorkspaceId,
+    call: crate::store_wire::OwnedStoreCall,
+) -> std::result::Result<central_storage::StoreReply, central_storage::StoreFailure> {
+    store_call(env, workspace, call, Some("failingBusiness")).await
 }

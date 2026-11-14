@@ -1,6 +1,6 @@
 //! Fleet reads stay inside the canonical Fleet owner after leaving the session.
 use crate::{
-    CallerKind, FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, FleetKind, LegacyObjectHost, ObjectAddress, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority, fleet_read_step::ReadFleet,
     object_call_envelope::ObjectCallEnvelope, object_runtime::ObjectWork, step_driver::StepDriver,
 };
@@ -40,7 +40,7 @@ impl CallTarget for FleetRead {
     type Request = FleetReadRequest;
     type Answer = BoardReadPage;
 }
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

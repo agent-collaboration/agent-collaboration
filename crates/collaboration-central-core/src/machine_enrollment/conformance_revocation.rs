@@ -3,7 +3,7 @@ use crate::FleetKind;
 
 use super::{
     AtomicStore, BoxFuture, ColumnIndex, Database, Decode, Deserialize, Encode, EnrollmentState,
-    Infallible, IntoArguments, ObjectHost, ObjectRuntime, ObjectWork, PeerId, PlatformIo,
+    Infallible, IntoArguments, LegacyObjectHost, ObjectRuntime, ObjectWork, PeerId, PlatformIo,
     Serialize, ServiceId, StepCallback, StepDriver, StepResult, StoreError, StoredMachine,
     TransactionScope, Type, corrupt, queries,
 };
@@ -197,7 +197,7 @@ pub(crate) async fn control<Platform: CentralPlatform>(
     )
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

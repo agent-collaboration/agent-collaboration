@@ -1,7 +1,7 @@
 //! The connection's existing journal makes old revocation calls harmless on replay.
 
 use crate::{
-    DeliveryKind, ObjectHost, ObjectRuntime, PlatformIo,
+    DeliveryKind, LegacyObjectHost, ObjectRuntime, PlatformIo,
     machine_enrollment::EndPeerSessions,
     object_call_envelope::{ObjectCallEnvelope, encode_refusal},
     object_runtime::ObjectWork,
@@ -28,7 +28,7 @@ pub(crate) struct EndSessionsInput {
 }
 
 pub(crate) struct EndSessionsTask<Host, Io>(pub PhantomData<fn() -> (Host, Io)>);
-impl<Host: ObjectHost, Io: PlatformIo> Task for EndSessionsTask<Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> Task for EndSessionsTask<Host, Io>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -86,7 +86,7 @@ where
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<DeliveryKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<DeliveryKind, Host, Io>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:

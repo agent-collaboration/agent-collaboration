@@ -1,7 +1,7 @@
 //! One journaled append owns the machine position; session notices carry its live hint.
 use crate::machine_notice_contract::MachineNoticeAppend;
 use crate::{
-    CallerKind, DeliveryKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, DeliveryKind, LegacyObjectHost, ObjectAddress, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     object_call_envelope::{ObjectCallEnvelope, encode_refusal},
     object_runtime::ObjectWork,
@@ -32,7 +32,7 @@ impl CallTarget for DeliverMachineNotice {
     type Answer = ();
 }
 pub(crate) struct MachineNoticeTask<Host, Io>(pub PhantomData<fn() -> (Host, Io)>);
-impl<Host: ObjectHost, Io: PlatformIo> Task for MachineNoticeTask<Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> Task for MachineNoticeTask<Host, Io>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -117,7 +117,7 @@ where
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<DeliveryKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<DeliveryKind, Host, Io>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:

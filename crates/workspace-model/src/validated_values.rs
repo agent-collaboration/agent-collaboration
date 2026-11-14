@@ -140,6 +140,11 @@ identity_text!(
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(try_from = "u64", into = "u64")]
 pub struct ChangePosition(u64);
+impl Default for ChangePosition {
+    fn default() -> Self {
+        Self::ZERO
+    }
+}
 impl ChangePosition {
     pub const ZERO: Self = Self(0);
     #[must_use]

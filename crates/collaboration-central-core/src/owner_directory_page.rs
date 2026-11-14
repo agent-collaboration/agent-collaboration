@@ -1,6 +1,6 @@
 //! Owner paging reads one bounded set of canonical directory identities in one step.
 use crate::{
-    CallerKind, FleetKind, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, FleetKind, LegacyObjectHost, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     object_call_envelope::ObjectCallEnvelope,
     object_runtime::ObjectWork,
@@ -13,7 +13,7 @@ use sqlx_core::{
     encode::Encode, types::Type,
 };
 use std::convert::Infallible;
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

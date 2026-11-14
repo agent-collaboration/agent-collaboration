@@ -1,8 +1,8 @@
 //! New outgoing calls need current Fleet enrollment; existing correlations remain independent.
 use crate::fleet_storage_fixture::{FixtureIo, FleetStorageFixture, NOW, TestError};
 use crate::{
-    AdmissionOrigin, LocalSectionFailure, ObjectHost, RegistrationEdits, RegistrationSnapshot,
-    SocketFailure,
+    AdmissionOrigin, LegacyObjectHost, LocalSectionFailure, RegistrationEdits,
+    RegistrationSnapshot, SocketFailure,
 };
 use durable_steps::{AtomicStore, StoreError, storage::TransactionScope};
 use fleet_sync_protocol::{ConnectionId, PeerId, ReleaseRequest, ServerCall, SessionId};
@@ -24,24 +24,28 @@ struct SelectionHost {
     sends: AtomicUsize,
     io: FixtureIo,
 }
-impl ObjectHost for SelectionHost {
-    type Database = sqlx_turso::Turso;
-    type Store = Store;
-    type Wake = FixtureIo;
-    fn store(&self) -> &Arc<Store> {
-        &self.store
-    }
+impl crate::ObjectHost for SelectionHost {
     async fn run_batch(
         &self,
         _: central_storage::StatementBatch,
     ) -> Result<central_storage::BatchOutcome, central_storage::StoreFailure> {
         Err(central_storage::StoreFailure::Unavailable)
     }
+
     async fn read(
         &self,
         _: central_storage::Statement,
     ) -> Result<central_storage::ReadOutcome, central_storage::StoreFailure> {
         Err(central_storage::StoreFailure::Unavailable)
+    }
+}
+
+impl LegacyObjectHost for SelectionHost {
+    type Database = sqlx_turso::Turso;
+    type Store = Store;
+    type Wake = FixtureIo;
+    fn store(&self) -> &Arc<Store> {
+        &self.store
     }
     fn wake(&self) -> &FixtureIo {
         &self.io

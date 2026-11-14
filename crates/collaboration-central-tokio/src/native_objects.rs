@@ -379,7 +379,7 @@ impl NativeObjects {
             .runtime
             .get_or_try_init(|| async {
                 let runtime = match &address {
-                    ObjectAddress::WorkspaceStore(_) => {
+                    ObjectAddress::WorkspaceStore(_) | ObjectAddress::Central(_) => {
                         return Err(StoreError::Aborted {
                             reason: "workspace store takes only store calls".into(),
                         });
@@ -639,7 +639,7 @@ impl NativeObjects {
         &self,
         service: Option<&message_board::ServiceId>,
     ) -> Result<Vec<SessionConnectionSnapshot>, collaboration_central_core::SocketFailure> {
-        use collaboration_central_core::ObjectHost;
+        use collaboration_central_core::LegacyObjectHost;
         let slot = self.slots.lock().await.get("fleet").cloned();
         let host = slot
             .as_ref()
@@ -664,7 +664,7 @@ impl NativeObjects {
     pub(crate) async fn socket_inventory(
         &self,
     ) -> Result<Vec<SocketOwnerSnapshot>, collaboration_central_core::SocketFailure> {
-        use collaboration_central_core::ObjectHost;
+        use collaboration_central_core::LegacyObjectHost;
         let slots = self.slots.lock().await.clone();
         let mut inventory = Vec::new();
         for (key, slot) in slots {
@@ -690,7 +690,7 @@ impl NativeObjects {
         &self,
         service: &message_board::ServiceId,
     ) -> Result<Vec<AdmissionOrigin>, collaboration_central_core::SocketFailure> {
-        use collaboration_central_core::ObjectHost;
+        use collaboration_central_core::LegacyObjectHost;
         let slot = self.slots.lock().await.get("fleet").cloned();
         let host = slot
             .as_ref()

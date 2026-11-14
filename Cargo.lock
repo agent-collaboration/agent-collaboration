@@ -1759,6 +1759,7 @@ dependencies = [
  "collaboration-central-conformance",
  "collaboration-central-core",
  "durable-steps",
+ "fleet-identity-protocol",
  "fleet-sync-lease",
  "fleet-sync-protocol",
  "fleet-sync-session",
@@ -1767,6 +1768,7 @@ dependencies = [
  "http",
  "js-sys",
  "message-board",
+ "reqwest 0.12.28",
  "runtime-primitives",
  "serde",
  "serde-wasm-bindgen",
@@ -1777,12 +1779,14 @@ dependencies = [
  "sqlx-durable-object",
  "sqlx-durable-object-core",
  "thiserror 2.0.18",
+ "tokio",
  "tower-service",
  "uuid",
  "web-sys",
  "worker",
  "worker-macros",
  "worker-sys",
+ "workspace-model",
 ]
 
 [[package]]
@@ -1842,7 +1846,9 @@ dependencies = [
  "schemars 1.2.2",
  "serde",
  "serde_json",
+ "serde_json_canonicalizer",
  "sha2 0.10.9",
+ "sqlx",
  "sqlx-core",
  "sqlx-turso",
  "tempfile",
@@ -1850,6 +1856,9 @@ dependencies = [
  "tokio",
  "url",
  "uuid",
+ "workspace-ids",
+ "workspace-model",
+ "workspace-rules",
 ]
 
 [[package]]
@@ -1871,6 +1880,7 @@ dependencies = [
  "collaboration-service",
  "durable-steps",
  "fleet-admission",
+ "fleet-identity-protocol",
  "fleet-sync-delivery",
  "fleet-sync-lease",
  "fleet-sync-protocol",
@@ -1898,6 +1908,7 @@ dependencies = [
  "tracing-subscriber",
  "turso_parser",
  "uuid",
+ "workspace-model",
 ]
 
 [[package]]

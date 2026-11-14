@@ -1,7 +1,8 @@
 //! Refuse new shared mutations in the transaction selecting their dispatch.
 use super::{
     AtomicStore, ColumnIndex, CoreSessionScope, Database, Decode, Encode, IntoArguments,
-    ObjectHost, PeerId, PlatformIo, ReborrowScope, StoreError, SyncTime, TransactionScope, Type,
+    LegacyObjectHost, PeerId, PlatformIo, ReborrowScope, StoreError, SyncTime, TransactionScope,
+    Type,
 };
 use board_sync_protocol::{
     BoardConsumerAnswer, BoardConsumerProtocol, BoardConsumerRequest, BoardPayload, ForwardOutcome,
@@ -14,7 +15,7 @@ use fleet_sync_protocol::{
     Submitter,
 };
 
-impl<Host: ObjectHost, Io: PlatformIo> CoreSessionScope<'_, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> CoreSessionScope<'_, Host, Io>
 where
     Host::Store: ReborrowScope,
     for<'t> <Host::Store as AtomicStore>::Scope<'t>: TransactionScope<Database = Host::Database>,

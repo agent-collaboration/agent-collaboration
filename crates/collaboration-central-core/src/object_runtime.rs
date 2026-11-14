@@ -1,13 +1,13 @@
 //! One physical Fleet or project owner.
-use crate::{CoreHost, ObjectHost, ObjectKind, PlatformIo};
+use crate::{CoreHost, LegacyObjectHost, ObjectKind, PlatformIo};
 use std::{marker::PhantomData, sync::Arc};
 
-pub struct ObjectRuntime<Face: ObjectKind, Host: ObjectHost, Io: PlatformIo> {
+pub struct ObjectRuntime<Face: ObjectKind, Host: LegacyObjectHost, Io: PlatformIo> {
     pub(crate) work: ObjectWork<Host, Io>,
     pub(crate) face: PhantomData<fn() -> Face>,
 }
 
-pub(crate) enum ObjectWork<Host: ObjectHost, Io: PlatformIo> {
+pub(crate) enum ObjectWork<Host: LegacyObjectHost, Io: PlatformIo> {
     Fleet {
         host: Arc<Host>,
         io: Arc<Io>,

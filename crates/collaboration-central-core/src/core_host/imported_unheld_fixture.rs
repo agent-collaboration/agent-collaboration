@@ -2,7 +2,7 @@
 use super::{CoreHost, DatabaseId, IdSource, PlatformIo};
 use crate::FleetKind;
 use crate::{
-    CallerContext, EdgeKind, ObjectHost, ObjectRuntime, OwnerIdentity,
+    CallerContext, EdgeKind, LegacyObjectHost, ObjectRuntime, OwnerIdentity,
     copy_write_calls::{AdminCopySeedRequest, CopyAdminSeed},
     object_runtime::ObjectWork,
 };
@@ -26,7 +26,7 @@ pub enum ConformanceBoardState {
     Open,
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

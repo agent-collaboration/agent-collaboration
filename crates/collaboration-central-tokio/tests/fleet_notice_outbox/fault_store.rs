@@ -1,6 +1,6 @@
 //! Inject a real uniqueness error after the Fleet callback, inside its transaction.
 use collaboration_central_core::{
-    CoreHost, ObjectHost, PlatformIo, RegistrationEdits, RegistrationSnapshot, SocketFailure,
+    CoreHost, LegacyObjectHost, PlatformIo, RegistrationEdits, RegistrationSnapshot, SocketFailure,
 };
 use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::{AtomicStore, BoxFuture, StoreError, storage::TransactionScope};
@@ -60,24 +60,28 @@ pub struct FaultHost<Io: PlatformIo> {
     pub native: Arc<TokioStorageHost<CoreHost<Io>>>,
     pub store: Arc<FaultStore<Io>>,
 }
-impl<Io: PlatformIo> ObjectHost for FaultHost<Io> {
-    type Database = sqlx_turso::Turso;
-    type Store = FaultStore<Io>;
-    type Wake = CoreHost<Io>;
-    fn store(&self) -> &Arc<Self::Store> {
-        &self.store
-    }
+impl<Io: PlatformIo> collaboration_central_core::ObjectHost for FaultHost<Io> {
     async fn run_batch(
         &self,
         batch: central_storage::StatementBatch,
     ) -> Result<central_storage::BatchOutcome, central_storage::StoreFailure> {
         self.native.run_batch(batch).await
     }
+
     async fn read(
         &self,
         statement: central_storage::Statement,
     ) -> Result<central_storage::ReadOutcome, central_storage::StoreFailure> {
         self.native.read(statement).await
+    }
+}
+
+impl<Io: PlatformIo> LegacyObjectHost for FaultHost<Io> {
+    type Database = sqlx_turso::Turso;
+    type Store = FaultStore<Io>;
+    type Wake = CoreHost<Io>;
+    fn store(&self) -> &Arc<Self::Store> {
+        &self.store
     }
     fn wake(&self) -> &Self::Wake {
         self.native.wake()

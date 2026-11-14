@@ -154,8 +154,9 @@ proptest::proptest! {
                     edges[from][to]=true;dependencies.push(DeliverableDependency {dependency_id,blocking,blocked});
                 }
             } else {
-                let plan=change_dependency(&context,&DependencyCommand::Remove {dependency_id:dependency_id.clone()},DependencyReads {deliverables:&rows,dependencies:&dependencies}).unwrap();
-                proptest::prop_assert_eq!(plan.batch.statements.is_empty(),!edges[from][to]);
+                let result=change_dependency(&context,&DependencyCommand::Remove {dependency_id:dependency_id.clone()},DependencyReads {deliverables:&rows,dependencies:&dependencies});
+                if !edges[from][to] {proptest::prop_assert!(matches!(result,Err(RefusalReason::DependencyNotFound {..})),"missing dependency must refuse");continue;}
+                let plan=result.unwrap();
                 if edges[from][to] {let mutation=plan.batch.statements.first().unwrap();proptest::prop_assert_eq!(mutation.statement.sql,"DELETE FROM deliverable_dependencies WHERE dependency_id=?");proptest::prop_assert_eq!(mutation.expect,central_storage::RowExpectation::Exactly(1));proptest::prop_assert_eq!(&mutation.statement.args,&vec![central_storage::SqlValue::Text(dependency_id.to_string())]);}
                 edges[from][to]=false;dependencies.retain(|row|row.dependency_id != dependency_id);
             }

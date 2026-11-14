@@ -1,7 +1,7 @@
 //! Library-owned copy mutations release change notifications only after commit.
 
 use crate::{
-    CopyKind, ObjectHost, ObjectRuntime, PlatformIo,
+    CopyKind, LegacyObjectHost, ObjectRuntime, PlatformIo,
     object_runtime::ObjectWork,
     step_driver::{StepCallback, StepDriver, StepResult},
 };
@@ -33,7 +33,7 @@ struct MutateCopy {
     now: SyncTime,
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

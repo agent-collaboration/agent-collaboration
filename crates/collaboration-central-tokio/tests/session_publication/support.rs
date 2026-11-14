@@ -1,5 +1,5 @@
 use collaboration_central_core::{
-    CoreHost, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo, RegistrationEdits,
+    CoreHost, LegacyObjectHost, ObjectAddress, ObjectRuntime, PlatformIo, RegistrationEdits,
     RegistrationSnapshot, SocketFailure,
 };
 use collaboration_central_tokio::{SocketCommand, TokioStorageHost};
@@ -197,24 +197,28 @@ pub struct TestHost {
     pub send_failure: Mutex<Option<ConnectionId>>,
     welcome: Arc<PublicationProbe>,
 }
-impl ObjectHost for TestHost {
-    type Database = sqlx_turso::Turso;
-    type Store = TestStore;
-    type Wake = CoreHost<Transport>;
-    fn store(&self) -> &Arc<Self::Store> {
-        &self.store
-    }
+impl collaboration_central_core::ObjectHost for TestHost {
     async fn run_batch(
         &self,
         batch: central_storage::StatementBatch,
     ) -> Result<central_storage::BatchOutcome, central_storage::StoreFailure> {
         self.native.run_batch(batch).await
     }
+
     async fn read(
         &self,
         statement: central_storage::Statement,
     ) -> Result<central_storage::ReadOutcome, central_storage::StoreFailure> {
         self.native.read(statement).await
+    }
+}
+
+impl LegacyObjectHost for TestHost {
+    type Database = sqlx_turso::Turso;
+    type Store = TestStore;
+    type Wake = CoreHost<Transport>;
+    fn store(&self) -> &Arc<Self::Store> {
+        &self.store
     }
     fn wake(&self) -> &Self::Wake {
         self.native.wake()

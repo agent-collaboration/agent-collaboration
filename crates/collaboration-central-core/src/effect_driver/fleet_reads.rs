@@ -2,7 +2,7 @@
 
 use super::EffectDriver;
 use crate::{
-    ObjectHost, PlatformIo,
+    LegacyObjectHost, PlatformIo,
     fleet_read_calls::{FleetRead, FleetReadRequest},
     fleet_runtime::FleetRequestEffects,
 };
@@ -12,7 +12,7 @@ use fleet_sync_protocol::{ConnectionId, FrameId, OperationAnswer, ServerFrame};
 use fleet_sync_session::SessionKey;
 use message_board::RequestEffectsRequest;
 
-impl<Host: ObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
+impl<Host: LegacyObjectHost, Io: PlatformIo> EffectDriver<Host, Io> {
     pub(super) async fn answer_fleet_read(
         &self,
         connection: ConnectionId,

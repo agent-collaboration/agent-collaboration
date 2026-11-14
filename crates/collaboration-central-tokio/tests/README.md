@@ -61,3 +61,11 @@ The kept enrollment, Access and session-upgrade behavior is proven by
   set/set, clear/set and set/clear, with alarm readback compared to stored rows.
 - `src/native_objects_test.rs`: controls the real object clock and checks UUIDv7
   milliseconds minted through that same object, including a later clock advance.
+
+- `workspace_requests`: the modern org-scoped request owner on approved central and
+  workspace SQLite schemas. Cases cover live credential allowance, org isolation,
+  pure-rule dispatch, views/search/inbox/read marks, actor identities, atomic role
+  replacement, dependency walks, status closure, reference/link/backlog/log rows,
+  cached success/refusal/no-op and 24-hour expiry, corruption rejection, clock-behind
+  reopen, and causal write-turn races. Fixtures own their temporary host roots;
+  fault writes use the actual owning file through the existing test-support store.

@@ -1,7 +1,7 @@
 //! Forward slots are reserved and retired in the owning session transaction.
 use super::{
     AtomicStore, ColumnIndex, CoreSessionScope, Database, Decode, Encode, IntoArguments,
-    JournalScope, ObjectHost, PlatformIo, ReborrowScope, SessionTransportEffect, StoreError,
+    JournalScope, LegacyObjectHost, PlatformIo, ReborrowScope, SessionTransportEffect, StoreError,
     SyncTime, TransactionScope, Type,
 };
 use crate::{
@@ -15,7 +15,7 @@ use board_sync_protocol::{
 use fleet_sync_protocol::{FrameId, OperationAnswer, ServerFrame};
 use fleet_sync_session::SessionKey;
 
-impl<Host: ObjectHost, Io: PlatformIo> CoreSessionScope<'_, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> CoreSessionScope<'_, Host, Io>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:

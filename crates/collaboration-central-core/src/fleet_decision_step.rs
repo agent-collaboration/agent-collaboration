@@ -3,7 +3,7 @@
 use crate::generated_statements;
 #[cfg(feature = "conformance")]
 use crate::{
-    ObjectHost,
+    LegacyObjectHost,
     step_driver::{CommittedEffects, StepCallback, StepDriver, StepResult},
 };
 #[cfg(feature = "conformance")]
@@ -288,7 +288,7 @@ fn corrupt(field: &str, message: impl std::fmt::Display) -> StoreError {
 }
 
 #[cfg(feature = "conformance")]
-impl<Host: ObjectHost> StepDriver<Host>
+impl<Host: LegacyObjectHost> StepDriver<Host>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

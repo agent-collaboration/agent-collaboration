@@ -104,7 +104,9 @@ pub fn change_dependency(
                 .iter()
                 .find(|row| row.dependency_id == *dependency_id)
             else {
-                return Ok(crate::statement_plans::unchanged());
+                return Err(RefusalReason::DependencyNotFound {
+                    dependency_id: dependency_id.clone(),
+                });
             };
             let item = ItemRef::Deliverable(edge.blocked.clone());
             Ok(plan(

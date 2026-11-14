@@ -2,8 +2,8 @@
 
 use crate::{
     AccessCaller, CallerContext, CallerKind, CentralApplication, CentralPlatform, EdgeKind,
-    FleetKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo, StepConformance, StepControl,
-    StepControlReply,
+    FleetKind, LegacyObjectHost, ObjectAddress, ObjectRuntime, PlatformIo, StepConformance,
+    StepControl, StepControlReply,
     caller_context::CallAuthority,
     object_call_envelope::{ObjectCallEnvelope, encode_shared_call},
     object_runtime::ObjectWork,
@@ -61,7 +61,7 @@ pub(crate) async fn control<Platform: CentralPlatform>(
     .await;
     crate::conformance_holder::probe_response(result)
 }
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

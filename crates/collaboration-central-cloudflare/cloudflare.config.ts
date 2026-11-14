@@ -23,6 +23,7 @@ export default {
         worker: "replace-worker-name",
         exportName: "ProjectCopyObject",
       },
+      CENTRAL: { type: "durable-object", worker: "replace-worker-name", exportName: "CentralObject" },
       FLEET: { type: "durable-object", worker: "replace-worker-name", exportName: "FleetObject" },
       // One store per workspace, named by its workspace id; it runs only the statements
       // central sends it.
@@ -34,6 +35,7 @@ export default {
     },
     exports: {
       ProjectCopyObject: { type: "durable-object", storage: "sqlite" },
+      CentralObject: { type: "durable-object", storage: "sqlite" },
       FleetObject: { type: "durable-object", storage: "sqlite" },
       WorkspaceStoreObject: { type: "durable-object", storage: "sqlite" },
     },

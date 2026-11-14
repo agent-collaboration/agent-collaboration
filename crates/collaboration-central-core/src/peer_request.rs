@@ -1,7 +1,7 @@
 //! Select a live binding under exclusion, then send without holding that section.
 
 use crate::{
-    ObjectHost,
+    LegacyObjectHost,
     holder_reply_hub::{HolderReplyHub, ReplyWaiter},
     object_call_envelope::encode_refusal,
 };
@@ -29,7 +29,7 @@ pub(crate) async fn begin_peer_request<Host, Time, MakeDeadline, Deadline>(
     deadline_after: MakeDeadline,
 ) -> Result<ReplyWaiter, CallFailure>
 where
-    Host: ObjectHost,
+    Host: LegacyObjectHost,
     for<'t> <Host::Store as AtomicStore>::Scope<'t>: TransactionScope<Database = Host::Database>,
     <Host::Database as Database>::Arguments: IntoArguments<Host::Database>,
     for<'v> String: Type<Host::Database> + Encode<'v, Host::Database> + Decode<'v, Host::Database>,

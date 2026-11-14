@@ -34,6 +34,7 @@ pub struct RegistryTime(pub DateTime<Utc>);
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "value", rename_all = "camelCase")]
 pub enum ObjectAddress {
+    Central(fleet_identity_protocol::OrganizationId),
     Copy(DatabaseId),
     Fleet,
     /// One workspace's store: it holds the tables and runs the statements it is given.
@@ -47,6 +48,7 @@ impl ObjectAddress {
             Self::Copy(_) => Some(crate::CallerKind::Copy),
             Self::Fleet => Some(crate::CallerKind::Fleet),
             Self::WorkspaceStore(_) => None,
+            Self::Central(_) => None,
         }
     }
 }

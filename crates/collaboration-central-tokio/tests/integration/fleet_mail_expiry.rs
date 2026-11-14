@@ -4,7 +4,7 @@ use super::{
     fleet_mail_query::query,
 };
 use board_sync_protocol::BoardDeliveryTypes;
-use collaboration_central_core::ObjectHost;
+use collaboration_central_core::LegacyObjectHost;
 use durable_steps::StoreError;
 use fleet_sync_protocol::{
     DeliveryAnswer, DeliveryEnvelope, DeliveryItem, DeliveryStatus, ItemStatusState, PushResult,

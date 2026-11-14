@@ -1,6 +1,6 @@
 #![cfg(feature = "conformance")]
 
-use collaboration_central_core::{FleetDecisionFault, ObjectHost, StepConformance};
+use collaboration_central_core::{FleetDecisionFault, LegacyObjectHost, StepConformance};
 use collaboration_central_tokio::TokioStorageHost;
 use durable_steps::storage::TransactionScope;
 use durable_steps::{AtomicStore, BoxFuture, CallFailure, CallId, CallTarget, Host, StoreError};
@@ -386,22 +386,26 @@ struct HeldHost {
     store: Arc<HeldStore>,
     native: TokioStorageHost<FixtureHost>,
 }
-impl ObjectHost for HeldHost {
-    type Database = sqlx_turso::Turso;
-    type Store = HeldStore;
-    type Wake = FixtureHost;
+impl collaboration_central_core::ObjectHost for HeldHost {
     async fn run_batch(
         &self,
         batch: central_storage::StatementBatch,
     ) -> Result<central_storage::BatchOutcome, central_storage::StoreFailure> {
         self.native.run_batch(batch).await
     }
+
     async fn read(
         &self,
         statement: central_storage::Statement,
     ) -> Result<central_storage::ReadOutcome, central_storage::StoreFailure> {
         self.native.read(statement).await
     }
+}
+
+impl LegacyObjectHost for HeldHost {
+    type Database = sqlx_turso::Turso;
+    type Store = HeldStore;
+    type Wake = FixtureHost;
     fn wake(&self) -> &Self::Wake {
         self.native.wake()
     }

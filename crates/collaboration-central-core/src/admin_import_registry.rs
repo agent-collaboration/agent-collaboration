@@ -2,7 +2,7 @@
 use crate::FleetKind;
 
 use crate::{
-    CallerKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, LegacyObjectHost, ObjectAddress, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     object_call_envelope::ObjectCallEnvelope,
     object_runtime::ObjectWork,
@@ -41,7 +41,7 @@ pub(crate) enum ReservationAnswer {
     Resolved(ImportAnswer),
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

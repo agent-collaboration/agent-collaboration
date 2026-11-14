@@ -45,6 +45,7 @@ macro_rules! workspace_identifiers {
 
 workspace_identifiers!(
     WorkspaceId,
+    RequestId,
     MachineId,
     PersonId,
     AreaId,

@@ -1,7 +1,7 @@
 //! Conformance-only raw owning rows and completed route callbacks, never a forwarding store.
 use crate::FleetKind;
 use crate::{
-    ObjectHost, ObjectRuntime, PlatformIo,
+    LegacyObjectHost, ObjectRuntime, PlatformIo,
     object_runtime::ObjectWork,
     step_driver::{StepCallback, StepDriver, StepResult},
 };
@@ -66,7 +66,7 @@ impl ForwardRouteProbe {
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,

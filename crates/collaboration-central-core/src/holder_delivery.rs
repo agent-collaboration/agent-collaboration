@@ -2,7 +2,7 @@
 use crate::FleetKind;
 
 use crate::{
-    CallerKind, DeliveryKind, ObjectAddress, ObjectHost, ObjectRuntime, PlatformIo,
+    CallerKind, DeliveryKind, LegacyObjectHost, ObjectAddress, ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     object_call_envelope::{ObjectCallEnvelope, encode_refusal},
     object_runtime::ObjectWork,
@@ -21,7 +21,7 @@ use sqlx_core::{
 };
 use std::{marker::PhantomData, sync::Arc};
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
@@ -169,7 +169,7 @@ enum HolderReplyKind {
     Withdrawal,
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<DeliveryKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<DeliveryKind, Host, Io>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:

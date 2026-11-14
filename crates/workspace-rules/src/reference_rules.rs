@@ -1,6 +1,4 @@
-use crate::statement_plans::{
-    RulePlan, WriteContext, change_metadata, exact, plan, text, unchanged,
-};
+use crate::statement_plans::{RulePlan, WriteContext, change_metadata, exact, plan, text};
 use central_storage::SqlValue;
 use workspace_model::{
     ExternalLink, ItemRef, Reference, ReferenceCommand, ReferenceSource, RefusalReason, RuleAnswer,
@@ -90,7 +88,7 @@ fn require_item(
         .filter(|row| row.item == *item)
         .ok_or_else(|| RefusalReason::NotFound { item: item.clone() })?;
     if row.workspace_id != context.workspace_id {
-        return Err(RefusalReason::TargetOutsideWorkspace { item: item.clone() });
+        return Err(RefusalReason::NotFound { item: item.clone() });
     }
     Ok(())
 }
@@ -211,7 +209,9 @@ pub fn change_reference(
                 .reference
                 .filter(|row| row.reference_id == *reference_id)
             else {
-                return Ok(unchanged());
+                return Err(RefusalReason::NotFound {
+                    item: ItemRef::Reference(reference_id.clone()),
+                });
             };
             let parent = source_parent(&row.source, &reads)?;
             let item = ItemRef::Reference(reference_id.clone());
@@ -231,7 +231,9 @@ pub fn change_reference(
         }
         ReferenceCommand::RemoveLink { link_id } => {
             let Some(row) = reads.link.filter(|row| row.link_id == *link_id) else {
-                return Ok(unchanged());
+                return Err(RefusalReason::NotFound {
+                    item: ItemRef::Link(link_id.clone()),
+                });
             };
             let parent = source_parent(&row.source, &reads)?;
             let item = ItemRef::Link(link_id.clone());

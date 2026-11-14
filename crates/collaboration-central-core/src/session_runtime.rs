@@ -2,7 +2,7 @@
 use crate::FleetKind;
 
 use crate::{
-    CoreHost, ObjectHost, ObjectRuntime, PlatformIo, object_runtime::ObjectWork,
+    CoreHost, LegacyObjectHost, ObjectRuntime, PlatformIo, object_runtime::ObjectWork,
     session_store::CoreSessionStore,
 };
 use durable_steps::{AtomicStore, ReborrowScope, StoreError, storage::TransactionScope};
@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 type SessionRuntimeHandles<Host, Io> = (Arc<CoreSessionStore<Host, Io>>, Arc<CoreHost<Io>>);
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     Host::Store: ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:

@@ -318,3 +318,14 @@ priority = 50
 [[profile.ci.overrides]]
 filter = "package(=collaboration-service) & binary(=integration) & test(=bounded_window_reads::subscription_and_content_pages_bound_their_body_and_followup_reads)"
 priority = 50
+
+# Each modern Worker case owns an isolated workerd child and private SQLite state.
+[[profile.default.overrides]]
+filter = "package(=collaboration-central-cloudflare) & binary(=integration)"
+test-group = "process-runtime"
+threads-required = "num-test-threads"
+
+[[profile.ci.overrides]]
+filter = "package(=collaboration-central-cloudflare) & binary(=integration)"
+test-group = "process-runtime"
+threads-required = "num-test-threads"

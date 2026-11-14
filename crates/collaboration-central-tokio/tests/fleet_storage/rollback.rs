@@ -1,7 +1,7 @@
 //! Inject after actual writes, before the real Turso transaction commits.
 use super::support::{Fixture, Io, TestResult, bundle, import_bytes};
 use collaboration_central_core::{
-    CoreHost, FleetKind, LocalSectionFailure, ObjectHost, ObjectRuntime, RegistrationEdits,
+    CoreHost, FleetKind, LegacyObjectHost, LocalSectionFailure, ObjectRuntime, RegistrationEdits,
     RegistrationSnapshot, SocketFailure,
 };
 use collaboration_central_tokio::TokioStorageHost;
@@ -76,24 +76,28 @@ struct FaultHost {
     native: Arc<TokioStorageHost<CoreHost<Io>>>,
     store: Arc<FaultStore>,
 }
-impl ObjectHost for FaultHost {
-    type Database = sqlx_turso::Turso;
-    type Store = FaultStore;
-    type Wake = CoreHost<Io>;
-    fn store(&self) -> &Arc<Self::Store> {
-        &self.store
-    }
+impl collaboration_central_core::ObjectHost for FaultHost {
     async fn run_batch(
         &self,
         batch: central_storage::StatementBatch,
     ) -> Result<central_storage::BatchOutcome, central_storage::StoreFailure> {
         self.native.run_batch(batch).await
     }
+
     async fn read(
         &self,
         statement: central_storage::Statement,
     ) -> Result<central_storage::ReadOutcome, central_storage::StoreFailure> {
         self.native.read(statement).await
+    }
+}
+
+impl LegacyObjectHost for FaultHost {
+    type Database = sqlx_turso::Turso;
+    type Store = FaultStore;
+    type Wake = CoreHost<Io>;
+    fn store(&self) -> &Arc<Self::Store> {
+        &self.store
     }
     fn wake(&self) -> &Self::Wake {
         self.native.wake()

@@ -77,7 +77,7 @@ impl Socket {
         Ok(socket)
     }
     pub(super) async fn fill_send_queue(&self, fixture: &Fixture) -> TestResult {
-        use collaboration_central_core::ObjectHost;
+        use collaboration_central_core::LegacyObjectHost;
         // Valid transport frames occupy the actual native queue; this receiver deliberately holds them.
         let frame = serde_json::to_vec(&ServerFrame::<BoardConsumerProtocol>::Welcome {
             session_id: self.session_id,

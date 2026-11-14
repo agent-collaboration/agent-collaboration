@@ -1,7 +1,7 @@
 //! Authenticated Session writes and owner seed publication enter the same copy rules.
 use crate::{
-    CallerKind, CopyDirectorySummary, CopyKind, CoreHost, ObjectAddress, ObjectHost, ObjectRuntime,
-    PlatformIo,
+    CallerKind, CopyDirectorySummary, CopyKind, CoreHost, LegacyObjectHost, ObjectAddress,
+    ObjectRuntime, PlatformIo,
     caller_context::CallAuthority,
     object_call_envelope::ObjectCallEnvelope,
     object_runtime::ObjectWork,
@@ -154,7 +154,7 @@ pub(crate) fn write_database(request: &ReplicationRequest<BoardAnnotation>) -> O
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io>
 where
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
         TransactionScope<Database = Host::Database>,
@@ -276,7 +276,7 @@ where
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io> {
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<CopyKind, Host, Io> {
     pub(crate) async fn drive_copy_followups(&self) -> Result<(), StoreError> {
         let ObjectWork::Copy {
             host,

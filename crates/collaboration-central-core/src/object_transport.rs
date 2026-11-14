@@ -3,7 +3,7 @@ use crate::FleetKind;
 
 use crate::object_call_envelope::{ObjectCallEnvelope, encode_envelope, encode_refusal};
 use crate::{
-    CallerContext, CallerKind, Dispatch, MayCall, ObjectAddress, ObjectHost, ObjectKind,
+    CallerContext, CallerKind, Dispatch, LegacyObjectHost, MayCall, ObjectAddress, ObjectKind,
     ObjectRuntime, PlatformIo, RegistryCall, RegistryResult, WireCall, WireKind,
     caller_context::CallAuthority,
 };
@@ -111,7 +111,7 @@ fn refused() -> CallFailure {
     }
 }
 
-impl<Host: ObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
+impl<Host: LegacyObjectHost, Io: PlatformIo> ObjectRuntime<FleetKind, Host, Io>
 where
     Host::Store: durable_steps::ReborrowScope,
     for<'transaction> <Host::Store as AtomicStore>::Scope<'transaction>:
