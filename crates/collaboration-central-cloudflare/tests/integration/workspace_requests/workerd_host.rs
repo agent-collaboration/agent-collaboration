@@ -135,6 +135,14 @@ struct Transport {
     client: reqwest::Client,
     process: Arc<Process>,
 }
+fn workerd_control_http_client() -> reqwest::Client {
+    // These independent fixture RPCs must not borrow an idle socket while
+    // workerd closes it. A lost POST is not a missing object clock.
+    reqwest::Client::builder()
+        .pool_max_idle_per_host(0)
+        .build()
+        .expect("workerd control HTTP client")
+}
 impl Transport {
     async fn control<T: DeserializeOwned>(
         &self,
@@ -152,7 +160,21 @@ impl Transport {
             .json(body)
             .send()
             .await
-            .map_err(|_| StoreFailure::Unavailable)?;
+            .map_err(|failure| {
+                let mut source = std::error::Error::source(&failure);
+                let mut io_kind = None;
+                while let Some(error) = source {
+                    if let Some(error) = error.downcast_ref::<std::io::Error>() {
+                        io_kind = Some(error.kind());
+                    }
+                    source = error.source();
+                }
+                eprintln!(
+                    "workerd control {operation}: transport failure connect={} timeout={} request={} body={} io_kind={io_kind:?}",
+                    failure.is_connect(), failure.is_timeout(), failure.is_request(), failure.is_body()
+                );
+                StoreFailure::Unavailable
+            })?;
         if !response.status().is_success() {
             eprintln!("workerd control {operation}: HTTP {}", response.status());
             return Err(StoreFailure::Unavailable);
@@ -282,7 +304,7 @@ impl WorkerdHost {
                 } else {
                     origin
                 },
-                client: reqwest::Client::new(),
+                client: workerd_control_http_client(),
                 process,
             }),
             clock,
@@ -395,6 +417,10 @@ impl WorkerdHost {
         self.central(organization).await.apply_clock().await;
     }
 }
+
+#[cfg(test)]
+#[path = "workerd_host_test.rs"]
+mod tests;
 pub(super) struct RemoteRuntime {
     organization: OrganizationId,
     transport: Arc<Transport>,

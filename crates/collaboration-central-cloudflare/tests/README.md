@@ -85,3 +85,8 @@ query-derived alarm activation and safe refusal observations. Public-path refusa
 uses the existing `401` edge contract. Unknown private paths return `404`.
 Create-workspace effects, non-null lookup and machine-login approval replay remain
 held; independent read admission does not substitute for those effects.
+
+`workspace_requests::workerd_host::tests` also checks the fixture's control HTTP
+connection policy against real workerd. A byte-transparent relay observes upstream
+idle EOF and forces its ordering against one next clock POST. Each call runs once;
+the oracle uses connection events, without sleeps or relaxed deadlines.
