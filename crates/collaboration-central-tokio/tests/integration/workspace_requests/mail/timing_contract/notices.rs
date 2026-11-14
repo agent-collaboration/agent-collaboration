@@ -349,6 +349,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         let after = notice_contents(r.due_for_session(&recipients[0].1, now(f)).await.unwrap());
         assert_retained_notices(before, after, workspace, thread);
     }
+    sustained::exercise_continued_activity(f, &threads).await;
 }
 fn notice_contents(
     batch: collaboration_protocol::central_mail::SessionDueBatch,
@@ -401,3 +402,5 @@ fn assert_retained_notices(
     );
     assert_eq!(after, expected);
 }
+
+mod sustained;
