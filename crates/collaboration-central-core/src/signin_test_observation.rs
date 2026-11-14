@@ -96,7 +96,10 @@ impl SignInObservation {
 
 // One SQLite statement supplies one snapshot. Do not page, cap, or open another
 // store here: every row in the already-addressed owning store must be observed.
+// workerd rejects a six-term compound SELECT. Each CTE stays below that limit;
+// the outer two-term SELECT preserves per-row results without a large JSON aggregate.
 const SNAPSHOT: &str = r#"
+WITH identity_records_and_organization_floor AS (
 SELECT 0 AS row_group,id AS row_id,json_object('kind','identity','row',json_object(
  'id',id,'statement',organization_statement,'created_at',created_at,'updated_at',updated_at)) AS payload
  FROM organization_identity
@@ -108,7 +111,8 @@ UNION ALL SELECT 2,id,json_object('kind','organizationFloor','row',json_object(
  'id',id,'minimum_revision',minimum_revision,'state',state,'policy_digest',permission_policy_digest,
  'reject_through_ms',request_reject_through_ms,'created_at',created_at,'updated_at',updated_at))
  FROM organization_authorization_floors
-UNION ALL SELECT 3,person_id,json_object('kind','personFloor','row',json_object(
+), person_proofs_and_workspaces AS (
+SELECT 3 AS row_group,person_id AS row_id,json_object('kind','personFloor','row',json_object(
  'id',id,'organization_id',organization_id,'person_id',person_id,'minimum_revision',minimum_revision,
  'state',state,'created_at',created_at,'updated_at',updated_at))
  FROM person_organization_authorization_floors
@@ -120,6 +124,9 @@ UNION ALL SELECT 4,id,json_object('kind','usedRequest','row',json_object(
 UNION ALL SELECT 5,workspace_id,json_object('kind','workspace','row',json_object(
  'workspaceId',workspace_id,'name',name,'state',state,'createdAt',created_at,'updatedAt',updated_at))
  FROM workspaces
+)
+SELECT * FROM identity_records_and_organization_floor
+UNION ALL SELECT * FROM person_proofs_and_workspaces
 ORDER BY row_group,row_id
 "#;
 
