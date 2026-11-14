@@ -60,6 +60,11 @@ impl ManualClock {
         result
     }
 
+    /// Models a corrected wall clock without rewinding elapsed deadlines.
+    pub fn set_utc(&self, utc: DateTime<Utc>) {
+        self.reading.send_modify(|reading| reading.utc = utc);
+    }
+
     pub fn advance_to(&self, deadline: SyncTime) -> Result<(), ClockAdvanceError> {
         let step_ms = deadline
             .unix_millis()

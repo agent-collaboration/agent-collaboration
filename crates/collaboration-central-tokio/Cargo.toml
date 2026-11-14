@@ -15,6 +15,8 @@ conformance = ["collaboration-central-core/conformance", "dep:collaboration-cent
 
 [dependencies]
 central-storage.workspace = true
+router-clock.workspace = true
+collaboration-protocol = { version = "0.1.149", path = "../collaboration-protocol" }
 workspace-model.workspace = true
 workspace-ids.workspace = true
 fleet-identity-protocol = {path="../fleet-identity-protocol",version="0.1.149"}
@@ -47,6 +49,7 @@ fleet-sync-tokio-runner.workspace = true
 sqlx-turso = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "b75d072c116afa46cfa82facd34db6317f380687", default-features = false }
 
 [dev-dependencies]
+router-clock = { workspace = true, features = ["test-support"] }
 collaboration-central-core = { version = "0.1.96", path = "../collaboration-central-core", features = ["test-support"] }
 uuid.workspace = true
 tokio = { workspace = true, features = ["test-util"] }

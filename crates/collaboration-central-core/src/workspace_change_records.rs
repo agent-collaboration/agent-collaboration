@@ -5,7 +5,7 @@ use workspace_model::{
     ActorIdentityId, Change, ChangeEvent, ChangeId, ChangePosition, ItemRef, ProjectId, RoleName,
     ThreadId,
 };
-#[derive(Deserialize)]
+#[derive(Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(crate) struct StoredChange {
     pub change_id: ChangeId,
@@ -17,6 +17,8 @@ pub(crate) struct StoredChange {
     pub project_id: Option<ProjectId>,
     pub subject_actor: Option<ActorIdentityId>,
     pub role: Option<String>,
+    #[serde(default)]
+    pub created_at: Option<workspace_model::Timestamp>,
 }
 impl StoredChange {
     pub fn change(&self) -> Result<Change, StoreFailure> {

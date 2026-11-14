@@ -1,4 +1,5 @@
 //! Public communication contracts without process, storage or transport ownership.
+pub mod central_mail;
 mod wake_authority;
 pub use wake_authority::{WakeCreator, WakeRefusal};
 mod mail_boundary_conversions;

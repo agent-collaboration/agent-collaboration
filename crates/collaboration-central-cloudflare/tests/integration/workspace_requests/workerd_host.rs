@@ -2,7 +2,8 @@
 use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
-use collaboration_central_core::WorkspaceCaller;
+use collaboration_central_core::{AlarmResult, DrainResult, WorkspaceCaller};
+use collaboration_protocol::central_mail::{CentralMailRequest, CentralMailResult};
 use fleet_identity_protocol::OrganizationId;
 use runtime_primitives::Clock;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -18,6 +19,67 @@ use workspace_model::{RequestId, WorkspaceId, WorkspaceReply, WorkspaceRequest};
 #[serde(deny_unknown_fields)]
 struct Ready {
     origin: String,
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct AlarmReceipt {
+    pub organization: Option<OrganizationId>,
+    pub initialized_cold: bool,
+    pub alarm_before: Option<i64>,
+    pub alarm_after: Option<i64>,
+    pub result: AlarmReceiptResult,
+}
+#[derive(Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+pub(super) enum AlarmReceiptResult {
+    Applied {
+        wakes_fired: usize,
+        automations_fired: usize,
+        windows_fired: usize,
+        workspaces_drained: usize,
+    },
+    Error {
+        message: String,
+        failure: Option<StoreFailure>,
+    },
+    Unprovisioned,
+}
+impl AlarmReceipt {
+    fn into_result(
+        self,
+        organization: &OrganizationId,
+        require_cold: bool,
+    ) -> Result<AlarmResult, StoreFailure> {
+        if require_cold && !self.initialized_cold {
+            return Err(StoreFailure::Unavailable);
+        }
+        match self.result {
+            AlarmReceiptResult::Applied {
+                wakes_fired,
+                automations_fired,
+                windows_fired,
+                workspaces_drained,
+            } if self.organization.as_ref() == Some(organization) => Ok(AlarmResult {
+                wakes_fired,
+                automations_fired,
+                windows_fired,
+                workspaces_drained,
+            }),
+            AlarmReceiptResult::Unprovisioned if self.organization.is_none() => {
+                Ok(AlarmResult::default())
+            }
+            AlarmReceiptResult::Error { message, failure } => {
+                eprintln!("workerd alarm failed: {message}");
+                Err(failure.unwrap_or(StoreFailure::Unavailable))
+            }
+            _ => Err(StoreFailure::Unavailable),
+        }
+    }
 }
 struct Process {
     child: Mutex<Option<Child>>,
@@ -142,8 +204,12 @@ impl WorkerdHost {
         })
     }
     pub async fn central(&self, organization: &OrganizationId) -> Arc<RemoteRuntime> {
-        let runtime = self
-            .orgs
+        let runtime = self.cold_runtime(organization);
+        runtime.apply_clock().await;
+        runtime
+    }
+    pub fn cold_runtime(&self, organization: &OrganizationId) -> Arc<RemoteRuntime> {
+        self.orgs
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
             .entry(organization.clone())
@@ -155,9 +221,7 @@ impl WorkerdHost {
                     lost_answers: Mutex::new(vec![]),
                 })
             })
-            .clone();
-        runtime.apply_clock().await;
-        runtime
+            .clone()
     }
     pub async fn request(
         &self,
@@ -167,6 +231,16 @@ impl WorkerdHost {
         self.central(&caller.organization_id)
             .await
             .request(caller, request)
+            .await
+    }
+    pub async fn request_central(
+        &self,
+        caller: &WorkspaceCaller,
+        request: CentralMailRequest,
+    ) -> Result<CentralMailResult, StoreFailure> {
+        self.central(&caller.organization_id)
+            .await
+            .request_central(caller, request)
             .await
     }
     pub async fn close(&self) {
@@ -223,6 +297,49 @@ impl RemoteRuntime {
     }
     pub fn statement_host(&self) -> &Self {
         self
+    }
+    pub async fn request_central(
+        &self,
+        caller: &WorkspaceCaller,
+        request: CentralMailRequest,
+    ) -> Result<CentralMailResult, StoreFailure> {
+        self.apply_clock().await;
+        let losses = std::mem::take(
+            &mut *self
+                .lost_answers
+                .lock()
+                .unwrap_or_else(PoisonError::into_inner),
+        );
+        for id in losses {
+            let _: bool = self.control("lose-reply", &id).await?;
+        }
+        self.control("mail", &serde_json::json!({"organizationId":caller.organization_id,"caller":caller.caller,"credentialHash":caller.credential_hash,"request":request})).await?
+    }
+    pub async fn drain_workspace(
+        &self,
+        workspace: &WorkspaceId,
+    ) -> Result<DrainResult, StoreFailure> {
+        self.apply_clock().await;
+        self.control("drain", workspace).await?
+    }
+    pub async fn on_alarm(&self) -> Result<AlarmResult, StoreFailure> {
+        self.apply_clock().await;
+        let _: bool = self
+            .control("raw-arm-alarm", &self.clock.now().unix_millis())
+            .await?;
+        let receipt: AlarmReceipt = self.control("raw-until-alarm", &()).await?;
+        receipt.into_result(&self.organization, false)
+    }
+    pub async fn cold_alarm(&self) -> Result<AlarmResult, StoreFailure> {
+        let _: bool = self.control("raw-clear-alarm-receipt", &()).await?;
+        let reset: Result<bool, StoreFailure> = self
+            .control("raw-arm-cold-alarm", &self.clock.now().unix_millis())
+            .await;
+        if reset.is_ok() {
+            return Err(StoreFailure::Unavailable);
+        }
+        let receipt: AlarmReceipt = self.control("raw-until-alarm", &()).await?;
+        receipt.into_result(&self.organization, true)
     }
     pub async fn run_batch(&self, batch: StatementBatch) -> Result<BatchOutcome, StoreFailure> {
         self.control("central-batch", &batch).await?

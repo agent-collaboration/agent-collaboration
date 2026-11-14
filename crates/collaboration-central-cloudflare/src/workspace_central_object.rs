@@ -82,7 +82,19 @@ pub(crate) struct CentralRequest {
     pub credential_hash: String,
     pub request: workspace_model::WorkspaceRequest,
 }
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct CentralMailRequest {
+    pub organization_id: OrganizationId,
+    pub caller: workspace_model::Caller,
+    pub credential_hash: String,
+    pub request: collaboration_protocol::central_mail::CentralMailRequest,
+}
 type OrgRuntime = WorkspaceRuntime<CentralStatements, WorkspaceTransport>;
+enum AlarmFailure {
+    Store(StoreFailure),
+    Platform(worker::Error),
+}
 #[durable_object]
 pub struct CentralObject {
     state: Arc<SendWrapper<State>>,
@@ -94,22 +106,49 @@ pub struct CentralObject {
     controls: workspace_cases::Controls,
 }
 impl CentralObject {
-    async fn runtime(&self, organization: OrganizationId) -> Result<Arc<OrgRuntime>> {
-        let mut initialized = self.runtime.lock().await;
-        if let Some(runtime) = initialized.as_ref() {
-            return Ok(runtime.clone());
+    fn check_physical_organization(&self, organization: &OrganizationId) -> Result<()> {
+        if self
+            .env
+            .durable_object("CENTRAL")?
+            .id_from_name(organization.as_str())?
+            .to_string()
+            != self.state.id().to_string()
+        {
+            return Err(worker::Error::RustError("wrong physical org".to_owned()));
         }
+        Ok(())
+    }
+
+    fn statement_host(&self) -> Arc<CentralStatements> {
+        Arc::new(CentralStatements {
+            connection: SendWrapper::new(DoConnection::new(self.state.storage())),
+            state: self.state.clone(),
+        })
+    }
+    async fn migrate(&self) -> std::result::Result<(), StoreFailure> {
         statement_store::migrate(
             &self.connection,
             Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
         )
         .await
-        .map_err(|failure| worker::Error::RustError(failure.to_string()))?;
-        let host = Arc::new(CentralStatements {
-            connection: SendWrapper::new(DoConnection::new(self.state.storage())),
-            state: self.state.clone(),
-        });
-        let runtime = Arc::new(WorkspaceRuntime::new(
+        .map_err(|_| StoreFailure::Unavailable)
+    }
+    async fn runtime(&self, organization: OrganizationId) -> Result<Arc<OrgRuntime>> {
+        self.runtime_checked(organization)
+            .await
+            .map_err(|error| worker::Error::RustError(error.to_string()))
+    }
+    async fn runtime_checked(
+        &self,
+        organization: OrganizationId,
+    ) -> std::result::Result<Arc<OrgRuntime>, StoreFailure> {
+        let mut initialized = self.runtime.lock().await;
+        if let Some(runtime) = initialized.as_ref() {
+            return Ok(runtime.clone());
+        }
+        self.migrate().await?;
+        let host = self.statement_host();
+        let runtime = WorkspaceRuntime::new(
             organization,
             host,
             WorkspaceTransport {
@@ -119,9 +158,34 @@ impl CentralObject {
             },
             Arc::new(self.clock.clone()),
             Arc::new(ClockIds::new(self.clock.clone())),
-        ));
+        );
+        #[cfg(feature = "test-support")]
+        let runtime = runtime.with_mail_policy(self.controls.mail_policy.get().unwrap_or_default());
+        let runtime = Arc::new(runtime);
+        runtime.recompute_alarm().await?;
         *initialized = Some(runtime.clone());
         Ok(runtime)
+    }
+    async fn alarm_runtime(
+        &self,
+    ) -> std::result::Result<Option<(OrganizationId, Arc<OrgRuntime>)>, AlarmFailure> {
+        self.migrate().await.map_err(AlarmFailure::Store)?;
+        let host = self.statement_host();
+        let identity = collaboration_central_core::prepare_central_alarm(host.as_ref())
+            .await
+            .map_err(AlarmFailure::Store)?;
+        let collaboration_central_core::CentralOrganizationIdentity::Stamped { organization_id } =
+            identity
+        else {
+            return Ok(None);
+        };
+        self.check_physical_organization(&organization_id)
+            .map_err(AlarmFailure::Platform)?;
+        let runtime = self
+            .runtime_checked(organization_id.clone())
+            .await
+            .map_err(AlarmFailure::Store)?;
+        Ok(Some((organization_id, runtime)))
     }
 }
 impl DurableObject for CentralObject {
@@ -137,6 +201,10 @@ impl DurableObject for CentralObject {
         }
     }
     async fn fetch(&self, mut request: Request) -> Result<Response> {
+        #[cfg(feature = "test-support")]
+        if request.path().starts_with("/test/raw-") {
+            return workspace_cases::raw_control(self, request).await;
+        }
         let address = request
             .headers()
             .get("x-central-object-address")?
@@ -144,14 +212,34 @@ impl DurableObject for CentralObject {
         let ObjectAddress::Central(organization) = serde_json::from_str(&address)? else {
             return Response::error("wrong object kind", 400);
         };
-        let namespace = self.env.durable_object("CENTRAL")?;
-        if namespace.id_from_name(organization.as_str())?.to_string() != self.state.id().to_string()
+        self.check_physical_organization(&organization)?;
+        self.migrate()
+            .await
+            .map_err(|error| worker::Error::RustError(error.to_string()))?;
+        let identity =
+            collaboration_central_core::read_central_organization(self.statement_host().as_ref())
+                .await
+                .map_err(|error| worker::Error::RustError(error.to_string()))?;
+        if matches!(identity, collaboration_central_core::CentralOrganizationIdentity::Stamped { organization_id } if organization_id != organization)
         {
-            return Response::error("wrong physical org", 403);
+            return Response::error("central organization mismatch", 403);
         }
         #[cfg(feature = "test-support")]
         if request.path().starts_with("/test/") {
             return workspace_cases::control(self, organization, request).await;
+        }
+        if request.path() == "/mail" {
+            let call: CentralMailRequest = request.json().await?;
+            if call.organization_id != organization {
+                return Response::error("wrong organization", 403);
+            }
+            let runtime = self.runtime(organization).await?;
+            let caller = WorkspaceCaller {
+                organization_id: call.organization_id,
+                caller: call.caller,
+                credential_hash: call.credential_hash,
+            };
+            return Response::from_json(&runtime.request_central(&caller, call.request).await);
         }
         let call: CentralRequest = request.json().await?;
         if call.organization_id != organization {
@@ -164,6 +252,27 @@ impl DurableObject for CentralObject {
             credential_hash: call.credential_hash,
         };
         Response::from_json(&runtime.request(&caller, call.request).await)
+    }
+
+    async fn alarm(&self) -> Result<Response> {
+        #[cfg(feature = "test-support")]
+        return workspace_cases::alarm_with_receipt(self).await;
+        #[cfg(not(feature = "test-support"))]
+        {
+            let runtime = match self.alarm_runtime().await {
+                Ok(Some((_, runtime))) => runtime,
+                Ok(None) => return Response::ok("unprovisioned"),
+                Err(AlarmFailure::Store(error)) => {
+                    return Err(worker::Error::RustError(error.to_string()));
+                }
+                Err(AlarmFailure::Platform(error)) => return Err(error),
+            };
+            runtime
+                .on_alarm()
+                .await
+                .map_err(|error| worker::Error::RustError(error.to_string()))?;
+            Response::ok("alarm applied")
+        }
     }
 }
 

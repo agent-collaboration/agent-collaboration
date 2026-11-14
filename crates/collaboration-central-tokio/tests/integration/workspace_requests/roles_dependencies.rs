@@ -73,7 +73,7 @@ async fn role_history_unknown_actors_and_dependency_graph_decisions_use_current_
             blocked: outside
         })
     );
-    let runtime = f.host.central(&f.caller.organization_id).await;
+    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
     let edges=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT dependency_id FROM deliverable_dependencies WHERE blocking_deliverable_id=? AND blocked_deliverable_id=?",args:vec![text(first),text(second)]}).await.unwrap();
     let SqlValue::Text(edge) = &edges.rows[0][0] else {
         panic!("edge");

@@ -5,7 +5,7 @@ async fn role_replacement_rolls_back_after_end_old_and_lost_success_replays_befo
     let f = Fixture::new().await;
     let area = f.area(400).await;
     let project = f.project(401, area).await;
-    let runtime = f.host.central(&f.caller.organization_id).await;
+    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
     let original = f
         .call(
             0,
@@ -169,7 +169,12 @@ async fn restart_with_clock_behind_keeps_change_positions_and_current_only_rows(
     else {
         panic!("post");
     };
-    f.clock.0.fetch_sub(100_000, Ordering::SeqCst);
+    f.clock.set_utc(
+        chrono::DateTime::from_timestamp_millis(
+            runtime_primitives::Clock::now(&*f.clock).unix_millis() - 100_000,
+        )
+        .unwrap(),
+    );
     f.reopen().await;
     for request in [423, 424] {
         let later = f
@@ -198,7 +203,7 @@ async fn restart_with_clock_behind_keeps_change_positions_and_current_only_rows(
     assert!(
         matches!(inbox.result,m::WorkspaceResult::Done(m::WorkspaceAnswer::Inbox{entries,..}) if entries.len()==2 && entries[0].position<entries[1].position)
     );
-    let runtime = f.host.central(&f.caller.organization_id).await;
+    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
     for table in ["deliverables", "changes"] {
         let schema = runtime
             .inspect_workspace(

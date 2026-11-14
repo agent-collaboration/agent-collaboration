@@ -69,3 +69,13 @@ The kept enrollment, Access and session-upgrade behavior is proven by
   cached success/refusal/no-op and 24-hour expiry, corruption rejection, clock-behind
   reopen, and causal write-turn races. Fixtures own their temporary host roots;
   fault writes use the actual owning file through the existing test-support store.
+
+- `workspace_requests::mail`: central queue replay/expiry, typed senders and bodies,
+  wake/automation lifecycle, finite and late schedules, actual injected-clock driver,
+  interrupted alarm publication and earlier-deadline ordering, transaction rollback,
+  timestamp bounds and sign-in stamp identity on startup. Fixtures seed the stamp;
+  provisioning and signature verification remain slice 4.
+- `workspace_requests::notices`: immediate recipients, drain-time roles, fixed and
+  injected-policy windows, cancellations, explicit non-session skips/inbox retention,
+  workspace-turn races, independent uniqueness, before/after commit recovery,
+  cross-workspace deadline isolation and position-based progress after clock rollback.

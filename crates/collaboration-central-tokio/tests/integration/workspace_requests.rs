@@ -1,10 +1,7 @@
 //! Real org core requests, actual approved migrations and owning SQLite readback.
 use central_storage::{SqlValue, Statement};
 use collaboration_central_tokio::TokioWorkspaceHost;
-use std::sync::{
-    Arc,
-    atomic::{AtomicI64, Ordering},
-};
+use std::sync::Arc;
 use workspace_model as m;
 
 mod support;
@@ -13,7 +10,12 @@ use support::*;
 #[tokio::test]
 async fn central_replay_and_real_workspace_project_thread_rules() {
     let root = tempfile::tempdir().unwrap();
-    let clock = Arc::new(HeldClock(AtomicI64::new(1_794_571_200_000)));
+    let clock = Arc::new(
+        HeldClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+            1_794_571_200_000,
+        ))
+        .unwrap(),
+    );
     let host = TokioWorkspaceHost::open(root.path(), clock).await.unwrap();
     let caller = caller();
     seed(&host, &caller).await;
@@ -125,7 +127,12 @@ async fn central_replay_and_real_workspace_project_thread_rules() {
 #[tokio::test]
 async fn admission_checks_real_rows_and_orgs_keep_distinct_central_databases() {
     let root = tempfile::tempdir().unwrap();
-    let clock = Arc::new(HeldClock(AtomicI64::new(1_794_571_200_000)));
+    let clock = Arc::new(
+        HeldClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+            1_794_571_200_000,
+        ))
+        .unwrap(),
+    );
     let host = TokioWorkspaceHost::open(root.path(), clock).await.unwrap();
     let first = caller();
     assert!(matches!(
@@ -183,7 +190,12 @@ async fn admission_checks_real_rows_and_orgs_keep_distinct_central_databases() {
 #[tokio::test]
 async fn real_issue_status_and_computed_views_guard_project_closure() {
     let root = tempfile::tempdir().unwrap();
-    let clock = Arc::new(HeldClock(AtomicI64::new(1_794_571_200_000)));
+    let clock = Arc::new(
+        HeldClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+            1_794_571_200_000,
+        ))
+        .unwrap(),
+    );
     let host = TokioWorkspaceHost::open(root.path(), clock).await.unwrap();
     let caller = caller();
     seed(&host, &caller).await;
@@ -318,7 +330,12 @@ async fn real_issue_status_and_computed_views_guard_project_closure() {
 #[tokio::test]
 async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_are_new() {
     let root = tempfile::tempdir().unwrap();
-    let clock = Arc::new(HeldClock(AtomicI64::new(1_794_571_200_000)));
+    let clock = Arc::new(
+        HeldClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+            1_794_571_200_000,
+        ))
+        .unwrap(),
+    );
     let host = TokioWorkspaceHost::open(root.path(), clock.clone())
         .await
         .unwrap();
@@ -352,7 +369,7 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
     ) else {
         panic!("thread");
     };
-    let runtime = host.central(&caller.organization_id).await;
+    let runtime = host.central(&caller.organization_id).await.unwrap();
     runtime.lose_reply_after_apply(id(32));
     let operation = m::WorkspaceOperation::ResolveThread {
         thread_id: thread_id.clone(),
@@ -405,7 +422,9 @@ async fn lost_post_apply_reply_replays_the_exact_first_resolve_and_expired_ids_a
         .result,
         m::WorkspaceResult::Refused(m::RefusalReason::RequestIdReused)
     ));
-    clock.0.fetch_add(86_400_001, Ordering::SeqCst);
+    clock
+        .advance(std::time::Duration::from_millis(86_400_001))
+        .unwrap();
     let recreated = call(
         &host,
         &caller,
@@ -460,3 +479,7 @@ mod status_and_advisor;
 mod review_read_boundaries;
 
 mod page_limits;
+
+mod mail;
+
+mod notices;

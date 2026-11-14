@@ -48,3 +48,11 @@ request replay/expiry, corruption/migration rollback, controlled time, held-turn
 races and lost replies after actual apply. Person context is fixture-stamped;
 person sign-in and Host enforcement remain C/slice 4. The existing generic storage
 and driver cases stay in the verification package.
+
+`workspace_requests::mail` and `::notices` exercise central queue, window, drain and
+wake/automation state through real platform alarm callbacks. Test-only controls arm
+storage's alarm and observe the callback's persisted receipt; cold cases require a
+fresh owner and read the SQL organization stamp before any addressed warmup. Callback
+entry/exit alarm readbacks distinguish platform dispatch from transaction rollback.
+Fixture stamps do not establish provisioning or signature verification. Delivery,
+link reconnect and acknowledgements remain later slices.

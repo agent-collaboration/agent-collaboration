@@ -19,6 +19,10 @@ pub enum PausePoint {
     AfterStoreApplied,
     /// After the notices committed.
     AfterNoticesCommitted,
+    BeforeDrainCommit,
+    AfterDrainCommit,
+    BeforeTimerCommit,
+    AfterTimerCommit,
 }
 
 type PauseKey = (WorkspaceId, PausePoint);
@@ -27,6 +31,7 @@ type PauseKey = (WorkspaceId, PausePoint);
 pub struct PausePoints {
     armed: Arc<Mutex<BTreeMap<PauseKey, ArmedPause>>>,
     held: Arc<Mutex<BTreeMap<WorkspaceId, Vec<PausePoint>>>>,
+    central: Arc<Mutex<BTreeMap<PausePoint, ArmedPause>>>,
 }
 
 struct ArmedPause {
@@ -59,6 +64,34 @@ impl Drop for HeldPause {
 }
 
 impl PausePoints {
+    #[must_use]
+    pub fn hold_central(&self, point: PausePoint) -> HeldPause {
+        let (arrived_sender, arrived) = watch::channel(false);
+        let (release, release_receiver) = watch::channel(false);
+        self.central
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .insert(
+                point,
+                ArmedPause {
+                    arrived: arrived_sender,
+                    release: release_receiver,
+                },
+            );
+        HeldPause { arrived, release }
+    }
+
+    pub async fn reached_central(&self, point: PausePoint) {
+        let armed = self
+            .central
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .remove(&point);
+        if let Some(mut armed) = armed {
+            armed.arrived.send_replace(true);
+            let _ = armed.release.wait_for(|released| *released).await;
+        }
+    }
     /// Arms `point` for `workspace`: the next request to reach it waits for the release.
     #[must_use]
     pub fn hold(&self, workspace: &WorkspaceId, point: PausePoint) -> HeldPause {

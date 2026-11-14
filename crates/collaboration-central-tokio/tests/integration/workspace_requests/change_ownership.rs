@@ -34,7 +34,7 @@ async fn deliverable_issue_and_dependency_changes_carry_the_exact_owning_project
         },
     )
     .await;
-    let runtime = f.host.central(&f.caller.organization_id).await;
+    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
     let edge=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT dependency_id FROM deliverable_dependencies WHERE blocked_deliverable_id=?",args:vec![text(&second)]}).await.unwrap();
     let SqlValue::Text(edge) = &edge.rows[0][0] else {
         panic!("edge");

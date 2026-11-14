@@ -14,7 +14,7 @@ async fn business_upgrade_failure_preserves_both_owners_and_every_history_column
         .inspect_workspace(&f.workspace, history())
         .await
         .unwrap();
-    assert_eq!(central.rows.len(), 1);
+    assert_eq!(central.rows.len(), 2);
     assert_eq!(workspace.rows.len(), 1);
     assert_eq!(central.columns.len(), 6);
     assert_eq!(workspace.columns.len(), 6);

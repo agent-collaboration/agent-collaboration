@@ -46,6 +46,7 @@ pub(super) fn caller() -> WorkspaceCaller {
 pub(super) async fn seed(host: &WorkerdHost, caller: &WorkspaceCaller) {
     let runtime = host.central(&caller.organization_id).await;
     let statements=[
+        ("INSERT INTO organization_identity(id,organization_statement,created_at,updated_at) VALUES (?,'fixture organization statement',0,0)",vec![text(caller.organization_id.as_str())]),
         ("INSERT INTO machines (machine_id,installation_id,label,state,allowed_workspaces,created_at,updated_at) VALUES (?,?,?,'enrolled',?,?,?)",vec![text(caller.caller.machine_id()),text(id::<m::WorkspaceId>(3)),text("Machine"),text("[]"),text("2026-11-13T00:00:00Z"),text("2026-11-13T00:00:00Z")]),
         ("INSERT INTO machine_credentials (credential_id,machine_id,token_hash,expires_at,created_at,updated_at) VALUES (?,?,?,?,?,?)",vec![text(id::<m::WorkspaceId>(4)),text(caller.caller.machine_id()),text(&caller.credential_hash),text("2030-01-01T00:00:00Z"),text("2026-11-13T00:00:00Z"),text("2026-11-13T00:00:00Z")]),
     ].into_iter().map(|(sql,args)|GuardedStatement {statement:Statement {sql,args},expect:RowExpectation::Exactly(1)}).collect();
@@ -132,7 +133,7 @@ pub(super) struct Fixture {
 }
 impl Fixture {
     pub async fn new() -> Self {
-        let clock = Arc::new(HeldClock(AtomicI64::new(1_794_571_200_000)));
+        let clock = Arc::new(HeldClock(AtomicI64::new(1_861_920_000_000)));
         let host = WorkerdHost::open(clock.clone()).await.unwrap();
         let caller = caller();
         seed(&host, &caller).await;

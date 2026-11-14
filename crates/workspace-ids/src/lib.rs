@@ -66,7 +66,12 @@ workspace_identifiers!(
     ReferenceId,
     LinkId,
     ChangeId,
-    ReadMarkId
+    ReadMarkId,
+    MessageId,
+    NotificationWindowId,
+    NotificationWindowItemId,
+    WakeId,
+    AutomationId
 );
 
 #[cfg(test)]
