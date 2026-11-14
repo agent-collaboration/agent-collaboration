@@ -700,21 +700,25 @@ jobs:
           run_case() {
             local case_name="$1" port="$2"
             local example="${case_name%%/*}" scenario="${case_name#*/}"
-            local arguments=(node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-${case_name//[/]/-}" "$port")
+            local arguments=(node "$RUNNER_TEMP/central-node-tools/node_modules/miniflare/dist/src/index.js" "$RUNNER_TEMP/central-workerd-${case_name//\//-}" "$port")
             if [[ "$example" == composed_scope_workerd ]]; then
               arguments=("$scenario" "${arguments[@]}")
             elif [[ "$example" == session_scope_workerd ]]; then
               arguments+=("$scenario")
             fi
-            TIMEFORMAT=$'WORKERD_TEST\t%3R\t'"$case_name"
-            time cargo run --locked -p collaboration-central-tokio --features conformance --example "$example" -- "${arguments[@]}"
+            local started ended status=0
+            started="$(date +%s.%N)"
+            cargo run --locked -p collaboration-central-tokio --features conformance --example "$example" -- "${arguments[@]}" || status=$?
+            ended="$(date +%s.%N)"
+            awk -v started="$started" -v ended="$ended" -v case_name="$case_name" 'BEGIN { printf "WORKERD_TEST\t%.3f\t%s\n", ended - started, case_name }'
+            return "$status"
           }
           for ((offset=0; offset<${#cases[@]}; offset+=2)); do
             process_ids=()
             case_logs=()
             for ((index=offset; index<offset+2 && index<${#cases[@]}; index++)); do
               case_name="${cases[index]}"
-              case_log="$log_root/${case_name//[/]/-}.log"
+              case_log="$log_root/${case_name//\//-}.log"
               run_case "$case_name" "$((8957+index))" >"$case_log" 2>&1 &
               process_ids+=("$!")
               case_logs+=("$case_log")
@@ -726,6 +730,13 @@ jobs:
             for case_log in "${case_logs[@]}"; do cat "$case_log"; done
             if ((batch_status != 0)); then exit "$batch_status"; fi
           done
+      - name: Print legacy scenario logs after failure or cancellation
+        if: failure() || cancelled()
+        shell: bash
+        run: |
+          shopt -s nullglob
+          case_logs=("$RUNNER_TEMP"/central-legacy-logs/*.log)
+          if ((${#case_logs[@]})); then cat "${case_logs[@]}"; fi
       - name: Build the deployment candidate without test features
         run: |
           worker-build crates/collaboration-central-cloudflare --profile worker-release --no-opt -- --locked --no-default-features
