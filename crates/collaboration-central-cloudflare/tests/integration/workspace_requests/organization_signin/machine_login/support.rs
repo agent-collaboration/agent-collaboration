@@ -1,4 +1,20 @@
 //! Real private decision routes; workspace rows below are labelled preconditions.
+impl MachineFixture {
+    pub async fn raw_batch(
+        &self,
+        statement: central_storage::GuardedStatement,
+    ) -> Result<central_storage::BatchOutcome> {
+        Ok(self
+            .inner
+            .runtime()
+            .await
+            .run_batch(central_storage::StatementBatch {
+                statements: vec![statement],
+                alarm: central_storage::AlarmUpdate::Unchanged,
+            })
+            .await?)
+    }
+}
 
 pub(super) type RevokeResult = std::result::Result<
     Option<collaboration_central_core::identity_contract::EndedMachineClient>,

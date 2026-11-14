@@ -109,3 +109,8 @@ produce two consecutive changes, both are drained, and replay preserves the curs
   name OD2's 600-second composed lifetime. Owner revocation/ABA uses only the
   approved closed core test-support dispatcher, with real-store owner-origin
   multi-record rollback. No public revoke API or connection-close proof is implied.
+  The invariant case enumerates six bounded three-login operation sequences,
+  checking one-enrolled and the independent generation model after every step.
+  Separate raw-row constraint probes carry the historical second-enrolled and
+  duplicate-request/client engine checks, with fresh PKs, rollback snapshots and
+  valid control inserts. These planted constraint rows are not login journeys.

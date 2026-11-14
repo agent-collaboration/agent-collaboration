@@ -112,6 +112,11 @@ effects and audit rows come from the routes. Literal Grant expectations use OD2'
 control at the existing Worker test-support dispatcher, with real owner-origin
 withdrawal records and final-record rollback. It is not fixture SQL revocation,
 a production revoke route, or proof of session/connection-close delivery.
+The invariant case enumerates six bounded three-login operation sequences and
+checks active-row cardinality and its independent generation model after every
+step. Engine-only constraint probes separately reject a second enrolled row and
+duplicate request/client values under fresh PKs, then accept valid full-row
+controls. Planted constraint rows are labelled storage proof, not route effects.
 
 `workspace_requests::workerd_host::tests` also checks the fixture's control HTTP
 connection policy against real workerd. A byte-transparent relay observes upstream
