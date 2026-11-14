@@ -256,6 +256,20 @@ async fn derived_window_above_alarm_ceiling_preserves_workspace_write_and_rolls_
     let area = f.area(7530).await;
     let thread = f.thread(7531, area).await;
     let (_, recipient) = joined_observer(&f, &thread).await;
+    // Retire the creator's join-activity window before moving the one clock.
+    // Otherwise the real driver correctly fires that unrelated old window.
+    assert!(matches!(
+        f.call(
+            7533,
+            m::WorkspaceOperation::SetNotifications {
+                thread_id: thread.clone(),
+                setting: m::NotificationSetting::Off
+            }
+        )
+        .await
+        .result,
+        m::WorkspaceResult::Done(m::WorkspaceAnswer::Updated { .. })
+    ));
     let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
     execute(
         &f,
@@ -279,7 +293,7 @@ async fn derived_window_above_alarm_ceiling_preserves_workspace_write_and_rolls_
         effects_before.rows,
         vec![vec![
             SqlValue::Integer(0.try_into().unwrap()),
-            SqlValue::Integer(1.try_into().unwrap()),
+            SqlValue::Integer(0.try_into().unwrap()),
             SqlValue::Integer(0.try_into().unwrap())
         ]]
     );

@@ -24,15 +24,15 @@ async fn execute(f: &Fixture, sql: &'static str, args: Vec<SqlValue>) {
 async fn invalid_open_window_is_rejected_before_alarm_changes_queue_or_cursor() {
     for (sql, expected_column) in [
         (
-            "UPDATE notification_windows SET due_at='not-a-timestamp'",
+            "UPDATE notification_windows SET due_at='not-a-timestamp' WHERE recipient_actor=?",
             "notification_windows.due_at",
         ),
         (
-            "UPDATE notification_windows SET due_at='2020-01-01T00:00:00Z'",
+            "UPDATE notification_windows SET due_at='2020-01-01T00:00:00Z' WHERE recipient_actor=?",
             "notification_windows.due_at",
         ),
         (
-            "UPDATE notification_windows SET recipient_actor='invalid-uuid'",
+            "UPDATE notification_windows SET recipient_actor='invalid-uuid' WHERE recipient_actor=?",
             "notification_windows.recipient_actor",
         ),
     ] {
@@ -52,7 +52,7 @@ async fn invalid_open_window_is_rejected_before_alarm_changes_queue_or_cursor() 
         assert_eq!(before.rows[0][3], SqlValue::Integer(0.try_into().unwrap()));
         let prior_alarm: Option<i64> = runtime.control("raw-alarm-time", &()).await.unwrap();
         assert!(prior_alarm.is_some());
-        execute(&f, sql, vec![]).await;
+        execute(&f, sql, vec![text(&actor)]).await;
         let error = runtime.on_alarm().await.unwrap_err();
         assert!(
             matches!(error, StoreFailure::Corrupt { reason: CorruptReason::BadValue { column } } if column == expected_column)
