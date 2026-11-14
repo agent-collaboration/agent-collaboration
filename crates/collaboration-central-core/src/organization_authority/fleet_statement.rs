@@ -68,6 +68,25 @@ impl<Crypto: Ed25519Verification, Keys: IssuerKeySource>
         &self,
         statement: &str,
     ) -> Result<VerifiedFleetOrganizationStatement, FleetOrganizationStatementRefusal> {
+        let verified = self.verify_signature_and_profile(statement).await?;
+        // Sample after key fetch/crypto, so verification cannot outlive its exp.
+        verified.require_valid_at(self.clock.now())?;
+        Ok(verified)
+    }
+
+    /// Read signed stored facts without granting current organization standing.
+    /// Both time bounds remain facts, including after expiry or clock rollback.
+    pub async fn verify_stored_statement_facts(
+        &self,
+        statement: &str,
+    ) -> Result<VerifiedFleetOrganizationStatement, FleetOrganizationStatementRefusal> {
+        self.verify_signature_and_profile(statement).await
+    }
+
+    async fn verify_signature_and_profile(
+        &self,
+        statement: &str,
+    ) -> Result<VerifiedFleetOrganizationStatement, FleetOrganizationStatementRefusal> {
         let parsed = ParsedFleetStatement::parse(statement)?;
         if parsed.header.typ != "fleet-organization-stamp+jwt" {
             return Err(FleetOrganizationStatementRefusal::WrongTokenType);
@@ -109,17 +128,14 @@ impl<Crypto: Ed25519Verification, Keys: IssuerKeySource>
         if parsed.claims.exp.0 - parsed.claims.iat.0 > MAXIMUM_STATEMENT_LIFETIME_SECONDS {
             return Err(FleetOrganizationStatementRefusal::LifetimeExceedsPolicy);
         }
-        let verified = VerifiedFleetOrganizationStatement {
+        Ok(VerifiedFleetOrganizationStatement {
             organization: parsed.claims.organization_id,
             key_id: parsed.header.kid,
             issued_at: UnixSeconds(parsed.claims.iat.0),
             expires_at: UnixSeconds(parsed.claims.exp.0),
             replaces: parsed.claims.replaces,
             digest: OrganizationStatementDigest::of_compact_jws(statement),
-        };
-        // Sample after key fetch/crypto, so verification cannot outlive its exp.
-        verified.require_valid_at(self.clock.now())?;
-        Ok(verified)
+        })
     }
 }
 

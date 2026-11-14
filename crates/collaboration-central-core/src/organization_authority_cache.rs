@@ -125,6 +125,16 @@ impl OrganizationAuthority {
 /// A host that configured no sign-in trust can never accept a stamp.
 struct UnconfiguredStatementCheck;
 impl SignInVerification for UnconfiguredStatementCheck {
+    fn verify_stored_statement_facts<'a>(
+        &'a self,
+        _statement: &'a str,
+    ) -> BoxFuture<'a, Result<VerifiedFleetOrganizationStatement, FleetOrganizationStatementRefusal>>
+    {
+        Box::pin(std::future::ready(Err(
+            FleetOrganizationStatementRefusal::InvalidConfiguration,
+        )))
+    }
+
     fn verify_statement<'a>(
         &'a self,
         _statement: &'a str,

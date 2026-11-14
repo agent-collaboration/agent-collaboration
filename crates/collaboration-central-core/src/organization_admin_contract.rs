@@ -4,8 +4,7 @@ use message_board::{Description, ResourceName, WorkspaceId, WorkspaceState};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-/// The historical wire view; creating it from modern storage remains held
-/// until the workspace description representation is approved.
+/// The verified admin view of the org-owned workspace directory.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WorkspaceView {
@@ -32,10 +31,8 @@ pub enum OrganizationAdminAnswer {
     deny_unknown_fields
 )]
 pub enum OrganizationAdminResult {
-    /// Retained as a wire contract; the create-workspace route remains held.
     Applied {
         workspace: WorkspaceView,
-        already_existed: bool,
     },
     Found {
         workspace: Option<WorkspaceView>,
@@ -51,6 +48,7 @@ pub enum OrganizationAdminResult {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum AdminRefusal {
+    NameInUse,
     NotPermitted,
     SecondFactorRequired,
     RefreshRequired,

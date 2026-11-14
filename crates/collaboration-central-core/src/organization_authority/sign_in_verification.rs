@@ -19,6 +19,13 @@ pub trait SignInVerification: Send + Sync + 'static {
         statement: &'a str,
     ) -> BoxFuture<'a, Result<VerifiedFleetOrganizationStatement, FleetOrganizationStatementRefusal>>;
 
+    /// Verify the stored signature and profile for a facts-only digest read.
+    /// This skips both current-time bounds and must never grant Valid standing.
+    fn verify_stored_statement_facts<'a>(
+        &'a self,
+        statement: &'a str,
+    ) -> BoxFuture<'a, Result<VerifiedFleetOrganizationStatement, FleetOrganizationStatementRefusal>>;
+
     fn verify_person_request<'a>(
         &'a self,
         input: &'a PersonRequestInput,
@@ -51,6 +58,14 @@ where
     ) -> BoxFuture<'a, Result<VerifiedFleetOrganizationStatement, FleetOrganizationStatementRefusal>>
     {
         Box::pin(self.statements.verify(statement))
+    }
+
+    fn verify_stored_statement_facts<'a>(
+        &'a self,
+        statement: &'a str,
+    ) -> BoxFuture<'a, Result<VerifiedFleetOrganizationStatement, FleetOrganizationStatementRefusal>>
+    {
+        Box::pin(self.statements.verify_stored_statement_facts(statement))
     }
 
     fn verify_person_request<'a>(

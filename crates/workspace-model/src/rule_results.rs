@@ -53,6 +53,8 @@ pub enum RefusalReason {
     RequestIdReused,
     #[error("workspace is not allowed")]
     WorkspaceNotAllowed,
+    #[error("workspace name is already in use: {name:?}")]
+    WorkspaceNameInUse { name: crate::ResourceName },
     #[error("item not found: {item:?}")]
     NotFound { item: ItemRef },
     #[error("only lead {lead} may grant roles")]

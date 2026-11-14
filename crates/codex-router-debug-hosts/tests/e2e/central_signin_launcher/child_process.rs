@@ -17,6 +17,41 @@ use tokio::{
 const SERVICE: &str = "019f0000-0000-7000-8000-00000000e501";
 const LEGACY: &str = "019f0000-0000-7000-8000-00000000e5f0";
 
+pub(super) fn launcher_command(
+    root: &Path,
+    socket: &Path,
+    keys: &signed::SignInKeys,
+    time_ms: i64,
+) -> Command {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_central_sign_in_launcher"));
+    command
+        .arg("--root")
+        .arg(root)
+        .arg("--socket")
+        .arg(socket)
+        .arg("--issuer")
+        .arg(signed::ISSUER)
+        .arg("--audience")
+        .arg(signed::AUDIENCE)
+        .arg("--admin-audience")
+        .arg(signed::ADMIN_AUDIENCE)
+        .arg("--public-origin")
+        .arg(signed::PUBLIC_ORIGIN)
+        .arg("--jwks-url")
+        .arg(&keys.url)
+        .arg("--service-id")
+        .arg(SERVICE)
+        .arg("--legacy-organization")
+        .arg(LEGACY)
+        .arg("--fixed-time-ms")
+        .arg(time_ms.to_string())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    command
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Readiness {
@@ -83,32 +118,16 @@ impl LauncherChild {
         socket: &Path,
         keys: &signed::SignInKeys,
     ) -> TestResult<Self> {
-        let mut child = Command::new(env!("CARGO_BIN_EXE_central_sign_in_launcher"))
-            .arg("--root")
-            .arg(root)
-            .arg("--socket")
-            .arg(socket)
-            .arg("--issuer")
-            .arg(signed::ISSUER)
-            .arg("--audience")
-            .arg(signed::AUDIENCE)
-            .arg("--admin-audience")
-            .arg(signed::ADMIN_AUDIENCE)
-            .arg("--public-origin")
-            .arg(signed::PUBLIC_ORIGIN)
-            .arg("--jwks-url")
-            .arg(&keys.url)
-            .arg("--service-id")
-            .arg(SERVICE)
-            .arg("--legacy-organization")
-            .arg(LEGACY)
-            .arg("--fixed-time-ms")
-            .arg((signed::NOW_SECONDS * 1000).to_string())
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .kill_on_drop(true)
-            .spawn()?;
+        Self::start_at(root, socket, keys, signed::NOW_SECONDS * 1000).await
+    }
+
+    pub(super) async fn start_at(
+        root: &Path,
+        socket: &Path,
+        keys: &signed::SignInKeys,
+        time_ms: i64,
+    ) -> TestResult<Self> {
+        let mut child = launcher_command(root, socket, keys, time_ms).spawn()?;
         let input = child.stdin.take().ok_or("launcher stdin missing")?;
         let mut output =
             BufReader::new(child.stdout.take().ok_or("launcher stdout missing")?).lines();
@@ -223,6 +242,16 @@ impl LauncherChild {
         body: &Value,
         headers: &[(&str, String)],
     ) -> TestResult<Value> {
+        serde_json::from_slice(&self.post_bytes(path, body, headers).await?)
+            .map_err(|_| "launcher private HTTP answer was not JSON".into())
+    }
+
+    pub(super) async fn post_bytes(
+        &self,
+        path: &str,
+        body: &Value,
+        headers: &[(&str, String)],
+    ) -> TestResult<Vec<u8>> {
         let mut request = self
             .client
             .post(format!("{}{path}", self.base_url))
@@ -234,8 +263,7 @@ impl LauncherChild {
         if response.status().as_u16() != 200 {
             return Err("launcher private HTTP request did not succeed".into());
         }
-        serde_json::from_slice(&response.bytes().await?)
-            .map_err(|_| "launcher private HTTP answer was not JSON".into())
+        Ok(response.bytes().await?.to_vec())
     }
 
     pub(super) async fn terminate_with_stdin_open(self) -> TestResult {

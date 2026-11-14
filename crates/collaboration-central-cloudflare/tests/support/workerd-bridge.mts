@@ -69,9 +69,9 @@ const host = await WorkerdStorage.start(
       },
   milliseconds === undefined
     ? undefined
-    : (organization: string): number | null => {
+    : (organization: string): number => {
         organizations.add(organization);
-        return milliseconds ?? null;
+        return workerdLauncherTimeSchema.parse(milliseconds);
       },
 );
 process.stdout.write(`${JSON.stringify({ origin: host.origin })}\n`);

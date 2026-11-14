@@ -228,3 +228,141 @@ async fn fleet_statement_refuses_null_malformed_or_unsigned_profile_fields() {
         Refusal::Malformed
     );
 }
+
+#[tokio::test]
+async fn stored_facts_keep_expired_bounds_without_changing_normal_verification() {
+    // Arrange: the same real signature is read at and after its signed expiry.
+    let (verifier, clock) = verifier();
+    let statement = signed_statement(&header(), &claims());
+    for now in [1_800_000_600_000, 1_800_000_601_000] {
+        clock.0.store(now, Ordering::SeqCst);
+
+        // Act: facts verification shares the real signature/profile verifier.
+        let facts = verifier
+            .verify_stored_statement_facts(&statement)
+            .await
+            .unwrap();
+
+        // Assert: the factual result grants no current validity to any caller.
+        assert_eq!(facts.organization_id(), &organization(ORGANIZATION));
+        assert_eq!(facts.key_id(), "stamp-fixture");
+        assert_eq!(facts.expires_at().0, 1_800_000_600);
+        assert_eq!(
+            facts.require_valid_at(runtime_primitives::SyncTime::from_unix_millis(now)),
+            Err(Refusal::Expired)
+        );
+        assert_eq!(
+            verifier.verify(&statement).await.unwrap_err(),
+            Refusal::Expired
+        );
+    }
+}
+
+#[tokio::test]
+async fn stored_facts_keep_future_issuance_without_changing_normal_verification() {
+    // Arrange: a valid signature whose issuance is after the injected clock.
+    let (verifier, _) = verifier();
+    let mut input = claims();
+    input["iat"] = json!(1_800_000_001);
+    let statement = signed_statement(&header(), &input);
+
+    // Act / Assert: rollback does not hide facts or authorize a future stamp.
+    let facts = verifier
+        .verify_stored_statement_facts(&statement)
+        .await
+        .unwrap();
+    assert_eq!(facts.issued_at().0, 1_800_000_001);
+    assert_eq!(facts.expires_at().0, 1_800_000_600);
+    assert_eq!(
+        facts.require_valid_at(runtime_primitives::SyncTime::from_unix_millis(
+            1_800_000_000_000
+        )),
+        Err(Refusal::NotYetValid)
+    );
+    assert_eq!(
+        verifier.verify(&statement).await.unwrap_err(),
+        Refusal::NotYetValid
+    );
+}
+
+#[tokio::test]
+async fn stored_facts_and_normal_verification_share_signature_and_profile_refusals() {
+    let (verifier, _) = verifier();
+    let valid = signed_statement(&header(), &claims());
+    let (signed, _) = valid.rsplit_once('.').unwrap();
+    let forged = format!("{signed}.{}", URL_SAFE_NO_PAD.encode([0; 64]));
+    assert_eq!(
+        verifier
+            .verify_stored_statement_facts(&forged)
+            .await
+            .unwrap_err(),
+        Refusal::BadSignature
+    );
+    assert_eq!(
+        verifier.verify(&forged).await.unwrap_err(),
+        Refusal::BadSignature
+    );
+
+    // Every expected refusal is independent of current-time admission.
+    for (field, value, expected) in [
+        ("purpose", json!("person-token"), Refusal::WrongPurpose),
+        ("version", json!(2), Refusal::UnsupportedVersion),
+        (
+            "iss",
+            json!("https://another.example.invalid"),
+            Refusal::WrongIssuer,
+        ),
+        (
+            "aud",
+            json!("https://another.example.invalid/identity"),
+            Refusal::WrongAudience,
+        ),
+        (
+            "organization_id",
+            json!(FOREIGN_ORGANIZATION),
+            Refusal::OrganizationMismatch,
+        ),
+        (
+            "sub",
+            json!(FOREIGN_ORGANIZATION),
+            Refusal::OrganizationMismatch,
+        ),
+        ("exp", json!(1_799_999_900), Refusal::Malformed),
+        (
+            "exp",
+            json!(1_799_999_900 + super::MAXIMUM_STATEMENT_LIFETIME_SECONDS + 1),
+            Refusal::LifetimeExceedsPolicy,
+        ),
+        ("iat", json!(-1), Refusal::Malformed),
+    ] {
+        let mut input = claims();
+        input[field] = value;
+        let statement = signed_statement(&header(), &input);
+        assert_eq!(
+            verifier
+                .verify_stored_statement_facts(&statement)
+                .await
+                .unwrap_err(),
+            expected
+        );
+        assert_eq!(verifier.verify(&statement).await.unwrap_err(), expected);
+    }
+    for (field, value, expected) in [
+        ("typ", json!("at+jwt"), Refusal::WrongTokenType),
+        ("alg", json!("RS256"), Refusal::UnsupportedAlgorithm),
+        ("kid", json!(""), Refusal::Malformed),
+        ("crit", json!(["future"]), Refusal::Malformed),
+    ] {
+        let mut input = header();
+        input[field] = value;
+        let statement = signed_statement(&input, &claims());
+        assert_eq!(
+            verifier
+                .verify_stored_statement_facts(&statement)
+                .await
+                .unwrap_err(),
+            expected
+        );
+        assert_eq!(verifier.verify(&statement).await.unwrap_err(), expected);
+    }
+}

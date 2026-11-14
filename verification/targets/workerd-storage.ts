@@ -63,14 +63,14 @@ export interface WorkerdSignInOptions {
   readonly jwks: z.infer<typeof jwksMappingSchema>;
 }
 
-function signInClockService(readClock: (organization: string) => number | null): V4FetchHandler {
+function signInClockService(readClock: (organization: string) => number): V4FetchHandler {
   return async (request: Parameters<V4FetchHandler>[0]): Promise<Response> => {
     const prefix = "https://signin-clock.test/clock/";
     const organization = request.url.startsWith(prefix) ? request.url.slice(prefix.length) : "";
     const parsed = z.uuidv7().safeParse(organization);
     if (request.method !== "GET" || !parsed.success)
       return new Response("invalid clock request", { status: 400 });
-    const milliseconds = z.number().int().safe().nullable().parse(readClock(parsed.data));
+    const milliseconds = workerdLauncherTimeSchema.parse(readClock(parsed.data));
     return Response.json({ milliseconds });
   };
 }
@@ -180,7 +180,7 @@ export class WorkerdStorage {
   static async start(
     bundle: WorkerdBundle,
     signIn?: WorkerdSignInOptions,
-    clock?: (organization: string) => number | null,
+    clock?: (organization: string) => number,
   ): Promise<WorkerdStorage> {
     const require = createRequire(import.meta.url);
     z.object({ version: z.literal("5.20261012.0-beta") }).parse(require("miniflare/package.json"));

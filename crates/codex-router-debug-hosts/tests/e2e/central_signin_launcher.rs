@@ -1,6 +1,8 @@
 //! The launcher consumer's real child/Unix-link/stdin/stderr lifecycle.
 mod child_process;
+mod clock_boundaries;
 mod observation_assertions;
+mod setup_ipc;
 
 use child_process::LauncherChild;
 use collaboration_central_conformance::signin_fixtures as signed;

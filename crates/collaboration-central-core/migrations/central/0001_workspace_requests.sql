@@ -4,6 +4,9 @@ CREATE TABLE machines (machine_id TEXT PRIMARY KEY, installation_id TEXT NOT NUL
 CREATE UNIQUE INDEX machines_installation ON machines(installation_id);
 CREATE TABLE machine_credentials (credential_id TEXT PRIMARY KEY, machine_id TEXT NOT NULL REFERENCES machines(machine_id), token_hash TEXT NOT NULL, expires_at TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE UNIQUE INDEX machine_credentials_hash ON machine_credentials(token_hash);
-CREATE TABLE workspaces (workspace_id TEXT PRIMARY KEY, name TEXT NOT NULL, state TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE workspaces (workspace_id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', state TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+-- Names ignore surrounding ASCII spaces and ASCII letter case; SQLite lower()
+-- does not perform Unicode case folding. The lookup uses this same expression.
+CREATE UNIQUE INDEX workspaces_canonical_name ON workspaces(lower(trim(name)));
 CREATE TABLE request_log (request_id TEXT PRIMARY KEY, caller TEXT NOT NULL, content_digest TEXT NOT NULL, answer TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE INDEX request_log_age ON request_log(created_at);
