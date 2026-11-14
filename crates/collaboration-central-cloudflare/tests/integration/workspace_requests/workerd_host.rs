@@ -12,7 +12,10 @@ use std::{
     io::{BufRead, BufReader, Write},
     path::Path,
     process::{Child, Command, Stdio},
-    sync::{Arc, Mutex, PoisonError},
+    sync::{
+        Arc, Mutex, PoisonError,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 use workspace_model::{RequestId, WorkspaceId, WorkspaceReply, WorkspaceRequest};
 #[derive(Deserialize)]
@@ -134,6 +137,7 @@ struct Transport {
     origin: String,
     client: reqwest::Client,
     process: Arc<Process>,
+    clock_responses: AtomicUsize,
 }
 fn workerd_control_http_client() -> reqwest::Client {
     // These independent fixture RPCs must not borrow an idle socket while
@@ -178,6 +182,9 @@ impl Transport {
         if !response.status().is_success() {
             eprintln!("workerd control {operation}: HTTP {}", response.status());
             return Err(StoreFailure::Unavailable);
+        }
+        if operation == "clock" {
+            self.clock_responses.fetch_add(1, Ordering::SeqCst);
         }
         response.json().await.map_err(|error| {
             eprintln!("workerd control {operation} decode: {error}");
@@ -306,6 +313,7 @@ impl WorkerdHost {
                 },
                 client: workerd_control_http_client(),
                 process,
+                clock_responses: AtomicUsize::new(0),
             }),
             clock,
             orgs: Mutex::new(BTreeMap::new()),
@@ -376,8 +384,7 @@ impl WorkerdHost {
         caller: &WorkspaceCaller,
         request: WorkspaceRequest,
     ) -> Result<WorkspaceReply, StoreFailure> {
-        self.central(&caller.organization_id)
-            .await
+        self.cold_runtime(&caller.organization_id)
             .request(caller, request)
             .await
     }
@@ -386,8 +393,7 @@ impl WorkerdHost {
         caller: &WorkspaceCaller,
         request: CentralMailRequest,
     ) -> Result<CentralMailResult, StoreFailure> {
-        self.central(&caller.organization_id)
-            .await
+        self.cold_runtime(&caller.organization_id)
             .request_central(caller, request)
             .await
     }
@@ -418,10 +424,13 @@ impl WorkerdHost {
             .body("null")
             .send()
             .await;
-        self.central(organization).await.apply_clock().await;
+        self.central(organization).await;
     }
 }
 
+#[cfg(test)]
+#[path = "workerd_clock_dispatch_test.rs"]
+mod clock_dispatch_tests;
 #[cfg(test)]
 #[path = "workerd_host_test.rs"]
 mod tests;
