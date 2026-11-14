@@ -30,9 +30,6 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         if let Err(reason) = self.admit_workspace(caller, None).await? {
             return Ok(Result::Refused(Refusal::Workspace(reason)));
         }
-        if let Some(field) = crate::central_mail_time::refusal(&request.operation, self.now()?) {
-            return Ok(Result::Refused(Refusal::TimeOutOfRange { field }));
-        }
         let identity = match &caller.caller {
             m::Caller::Session(session) => m::Identity::AgentSession {
                 session: session.clone(),
@@ -41,7 +38,6 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 person_id: person_id.clone(),
             },
         };
-        let actor = self.resolve_identity(&identity).await?;
         let digest = crate::workspace_request_log::digest(&request.operation)?;
         let _turn = self.take_central_turn().await;
         let now = self.now()?;
@@ -54,6 +50,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             ))
             .await?;
         if let Some(row) = rows.rows.first() {
+            let actor = self.resolve_identity(&identity).await?;
             if string(&rows, row, "caller")? != actor.as_str()
                 || string(&rows, row, "content_digest")? != digest
             {
@@ -68,8 +65,21 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             ) {
                 return Err(corrupt("request_log.answer"));
             }
+            // A committed request may have lost its alarm publication before its reply.
+            central_mail_store::applied(
+                self.host
+                    .run_batch(StatementBatch {
+                        statements: vec![],
+                        alarm: central_mail_store::alarm_update(),
+                    })
+                    .await?,
+            )?;
             return Ok(answer);
         }
+        if let Some(field) = crate::central_mail_time::refusal(&request.operation, now) {
+            return Ok(Result::Refused(Refusal::TimeOutOfRange { field }));
+        }
+        let actor = self.resolve_identity(&identity).await?;
         let decision =
             if let mail::CentralMailOperation::SendMessage { to, body } = &request.operation {
                 if !self.known_session(to).await? {
