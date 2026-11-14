@@ -495,3 +495,72 @@ async fn full_uuid_owner_lookup_does_not_truncate_substring_candidates() {
     assert!(invocations(&fixture).unwrap().is_empty());
     api.stop().await.unwrap();
 }
+
+#[tokio::test]
+async fn ordinary_stored_claude_resume_forwards_harness_arguments() {
+    let fixture = ClaudeProcessFixture::new().await.unwrap();
+    let api = serve_job(&fixture, "stopped").unwrap();
+    write_jobs(&fixture, json!([])).unwrap();
+    seed_transcript(&fixture).unwrap();
+    let arguments = [
+        "--model",
+        "claude-haiku-5-5",
+        "--effort",
+        "low",
+        "--name",
+        "literal --bg value",
+    ];
+    let mut command = selected_command(&fixture, &["--provider", "claude", "--id", SESSION, "--"]);
+    command.args(arguments).env(
+        "CLAUDE_FIXTURE_FLOW",
+        fixture.root.path().join("flow.jsonl"),
+    );
+    let output = command.output().await.unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let calls = invocations(&fixture).unwrap();
+    assert_eq!(calls.len(), 1);
+    let mut expected = vec!["--resume", SESSION];
+    expected.extend(arguments);
+    assert_eq!(calls[0].arguments, expected);
+    assert_eq!(calls[0].working_directory, fixture.working_directory);
+    api.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn claude_resume_dry_run_includes_harness_arguments_without_launching() {
+    let fixture = ClaudeProcessFixture::new().await.unwrap();
+    let api = serve_job(&fixture, "working").unwrap();
+    let output = selected_command(
+        &fixture,
+        &[
+            "--provider",
+            "claude",
+            "--id",
+            SESSION,
+            "--dry-run",
+            "--",
+            "--model",
+            "haiku",
+            "--effort",
+            "low",
+        ],
+    )
+    .output()
+    .await
+    .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        output.stdout,
+        b"claude attach deadbeef --model haiku --effort low\n"
+    );
+    assert!(invocations(&fixture).unwrap().is_empty());
+    api.stop().await.unwrap();
+}

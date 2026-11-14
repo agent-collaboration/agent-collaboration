@@ -195,7 +195,7 @@ async fn login_seed(scenario: Scenario) {
     assert_eq!(
         target.login_state,
         if scenario == Scenario::LoginSucceeded {
-            QuotaLoginState::NotRequired
+            QuotaLoginState::SignedIn
         } else {
             QuotaLoginState::Required
         }

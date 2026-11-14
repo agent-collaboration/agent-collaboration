@@ -140,7 +140,7 @@ export async function planConversion(
     if ((await present(join(root, "state.sqlite"))) && (await present(sidecar)))
       throw new Error(`${sidecar}: destination sidecar already exists`);
   }
-  // Only the proxy store survives. Every other top-level path stays in the verified backup.
+  // Proxy accounts need their encrypted credentials; quota preferences belong to the proxy too.
   const proxyNames = new Set([
     "state.sqlite",
     "state.sqlite-wal",
@@ -150,6 +150,10 @@ export async function planConversion(
     "provider-proxy.sqlite-wal",
     "provider-proxy.sqlite-shm",
     "provider-proxy.sqlite.credential-locks",
+    "secrets",
+    "agent-proxy-ui.sqlite",
+    "agent-proxy-ui.sqlite-wal",
+    "agent-proxy-ui.sqlite-shm",
   ]);
   for (const name of (await readdir(root)).sort())
     if (!proxyNames.has(name)) actions.push({ kind: "backupOnly", source: join(root, name) });
@@ -233,7 +237,7 @@ function printPlan(plan: ConversionPlan, dryRun: boolean): void {
   );
   for (const action of plan.actions) console.log(`${action.kind}: ${action.source}`);
   console.log(
-    "Only the provider proxy store carries over; the Router starts with default settings. All other paths remain in the backup only.",
+    "The provider proxy (accounts, credentials, quota preferences) carries over. The Router starts with default settings. Everything else stays in the backup.",
   );
 }
 if (import.meta.main) {

@@ -52,7 +52,7 @@ function observation(): ReturnType<typeof quotaObservationSchema.parse> {
 				rows: [
 					{
 						accountId: 'effect-account-0',
-						loginState: 'NotRequired',
+						loginState: 'SignedIn',
 						label: 'effect-alpha',
 						provider: 'openai',
 						status: 'Account(Available)',

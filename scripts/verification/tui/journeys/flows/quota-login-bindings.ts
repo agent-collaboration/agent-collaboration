@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { requireHandoffChildEntry } from '../../terminal/loop-ending-handoff.ts';
 import type { MarkedInputEvidence } from '../../terminal/marker-input-session.ts';
 import { gridLines } from '../../terminal/terminal-grid.ts';
+import type { TerminalGrid } from '../../terminal/terminal-grid.ts';
 import type { AuthoredFlowPlan } from './authored-flow-plan.ts';
 import type { FlowCheck } from './flow-definition.ts';
 import type { FlowInvocation } from './flow-executor.ts';
@@ -143,8 +144,7 @@ export function quotaLoginBindings(options: {
 			failures: string[] = [];
 		const account = pose.rows.find((row) => row.accountId === 'effect-account-0');
 		if (name === 'login-primary-by-status') {
-			const label = account?.loginState === 'Required' ? 'Log in again' : 'Close';
-			if (!quotaPrimary(context.frame.grid, 'Account details', label))
+			if (!quotaLoginPrimaryMatches(context.frame.grid, account?.loginState))
 				failures.push('Details primary mark does not match the independently observed login state');
 		} else if (name === 'exact-login-command' && observed === null) {
 			if (!quotaLoginCommandMatches(detailsBody))
@@ -161,7 +161,7 @@ export function quotaLoginBindings(options: {
 			const text = gridLines(context.frame.grid).join(' ').replace(/\s+/gu, ' ');
 			if (pose.mount !== 2 || pose.listSelection !== 'effect-account-0')
 				failures.push('login did not return on a fresh mount with captured A selected');
-			if (exit === 0 && account?.loginState !== 'NotRequired')
+			if (exit === 0 && account?.loginState !== 'SignedIn')
 				failures.push('successful login returned stale login state');
 			if (exit === 130 && !text.includes('Login cancelled: effect-alpha'))
 				failures.push('cancelled login lacks its plain message');
@@ -247,6 +247,14 @@ export function quotaLoginBindings(options: {
 			names.map((name) => [name, async (context, value) => check(name, context, value)]),
 		),
 	};
+}
+
+export function quotaLoginPrimaryMatches(
+	grid: TerminalGrid,
+	loginState: string | undefined,
+): boolean {
+	const label = loginState === 'Required' || loginState === 'SignedOut' ? 'Log in again' : 'Close';
+	return quotaPrimary(grid, 'Account details', label);
 }
 
 /** Captured command text is distinct from the later actual child argv proof. */

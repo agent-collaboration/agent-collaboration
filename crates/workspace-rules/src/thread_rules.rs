@@ -108,24 +108,36 @@ pub fn change_thread(
                 )],
             )
         }
-        ThreadCommand::JoinThread { member_id, .. } => {
-            if current.is_some() {
-                return Ok(unchanged());
-            }
-            (
-                ItemRef::Thread(thread_id.clone()),
-                "joined",
-                Some(&context.actor),
-                vec![exact(
-                    "INSERT INTO thread_members (thread_member_id,thread_id,actor_identity_id,member_role,notifications,left_at,created_at,updated_at) VALUES (?,?,?,'observer',1,NULL,?,?)",
+        ThreadCommand::JoinThread {
+            member_id, role, ..
+        } => {
+            let statement = if let Some(member) = current {
+                // Joining never demotes an existing participant or resets notifications.
+                if member.role == *role || member.role == MemberRole::Participant {
+                    return Ok(unchanged());
+                }
+                exact(
+                    "UPDATE thread_members SET member_role='participant',updated_at=? WHERE thread_member_id=? AND left_at IS NULL",
+                    vec![now(), text(&member.thread_member_id)],
+                )
+            } else {
+                exact(
+                    "INSERT INTO thread_members (thread_member_id,thread_id,actor_identity_id,member_role,notifications,left_at,created_at,updated_at) VALUES (?,?,?,?,1,NULL,?,?)",
                     vec![
                         text(member_id),
                         text(thread_id),
                         text(&context.actor),
+                        text(member_role_name(*role)),
                         now(),
                         now(),
                     ],
-                )],
+                )
+            };
+            (
+                ItemRef::Thread(thread_id.clone()),
+                "joined",
+                Some(&context.actor),
+                vec![statement],
             )
         }
         ThreadCommand::AddThreadMember {

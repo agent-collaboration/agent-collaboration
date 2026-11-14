@@ -1,8 +1,8 @@
 //! `agent-sessions --provider claude` list and launch commands.
 
 use super::claude_terminal_launch::{
-    ClaudeTerminalAction, ClaudeTerminalRequest, RESUME_OVERRIDES_MESSAGE, plan_claude_resume,
-    prepare_claude_terminal, run_claude_terminal,
+    ClaudeTerminalAction, ClaudeTerminalRequest, plan_claude_resume, prepare_claude_terminal,
+    run_claude_terminal,
 };
 use super::{
     SessionsCommand, SessionsCommandError, SessionsFormat, claude_launch_target::ClaudeLaunchTarget,
@@ -22,11 +22,6 @@ pub fn run_claude_sessions_command<W: Write>(
         return write_claude_session_listing(stdout, command, &launch_target);
     }
     let session_id = command.id.as_deref();
-    if session_id.is_some() && !command.codex_args.is_empty() {
-        return Err(SessionsCommandError::ClaudeLaunch(
-            RESUME_OVERRIDES_MESSAGE.to_owned(),
-        ));
-    }
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -35,7 +30,7 @@ pub fn run_claude_sessions_command<W: Write>(
         let arguments = match session_id {
             Some(session_id) => runtime
                 .block_on(plan_claude_resume(&launch_target, session_id))?
-                .arguments(),
+                .arguments(&command.codex_args),
             None => command.codex_args.clone(),
         };
         return write_claude_dry_run(stdout, &arguments);
@@ -45,7 +40,10 @@ pub fn run_claude_sessions_command<W: Write>(
         ClaudeTerminalAction::New {
             arguments: &command.codex_args,
         },
-        |session_id| ClaudeTerminalAction::Resume { session_id },
+        |session_id| ClaudeTerminalAction::Resume {
+            session_id,
+            arguments: &command.codex_args,
+        },
     );
     let attach = runtime.block_on(prepare_claude_terminal(
         &launch_target,

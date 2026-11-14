@@ -70,6 +70,10 @@ The kept enrollment, Access and session-upgrade behavior is proven by
   reopen, and causal write-turn races. Fixtures own their temporary host roots;
   fault writes use the actual owning file through the existing test-support store.
 
+- `owner_changes` and `backlog_boundaries` cover atomic backlog close/note/reference
+  and change rows, replay, late-statement rollback, workspace and stored-value
+  boundaries, and self-join roles with real post admission.
+
 - `workspace_requests::mail`: central queue replay/expiry, typed senders and bodies,
   wake/automation lifecycle, finite and late schedules, actual injected-clock driver,
   interrupted alarm publication and earlier-deadline ordering, transaction rollback,
@@ -79,3 +83,6 @@ The kept enrollment, Access and session-upgrade behavior is proven by
   injected-policy windows, cancellations, explicit non-session skips/inbox retention,
   workspace-turn races, independent uniqueness, before/after commit recovery,
   cross-workspace deadline isolation and position-based progress after clock rollback.
+
+The merged owner-change/drain case checks that backlog close and its reference
+produce two consecutive changes, both are drained, and replay preserves the cursor.

@@ -428,9 +428,9 @@ async fn native_details_actions_keep_identity_across_background_and_terminal_han
                 matches!(&outcome,Some(SessionsPickerOutcome::InterruptedClientAction(retained)) if retained.as_ref()==effect)
             );
         } else {
-            assert!(
-                actual_arguments.is_empty(),
-                "opening keeps saved settings even with global arguments"
+            assert_eq!(
+                *actual_arguments, arguments,
+                "resume forwards harness arguments"
             );
             assert!(
                 matches!(&outcome,Some(SessionsPickerOutcome::LaunchNativeClaude(retained, agent_session_inventory::sessions::claude_terminal_launch::ClaudeTerminalMode::Foreground)) if retained.as_ref()==effect)

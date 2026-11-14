@@ -56,3 +56,10 @@ fresh owner and read the SQL organization stamp before any addressed warmup. Cal
 entry/exit alarm readbacks distinguish platform dispatch from transaction rollback.
 Fixture stamps do not establish provisioning or signature verification. Delivery,
 link reconnect and acknowledgements remain later slices.
+
+`owner_changes` and `backlog_boundaries` drive backlog close/note/reference and
+change-row atomicity, replay, late-statement rollback, workspace/stored-value
+boundaries, and self-join roles through actual Worker requests and store readback.
+
+The merged owner-change/drain case checks that backlog close and its reference
+produce two consecutive changes, both are drained, and replay preserves the cursor.

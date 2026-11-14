@@ -248,6 +248,21 @@ pub fn reset_pace_view_model_from_snapshot(
     let multiple_hundredths = quota_pace_load(snapshot, now_unix_seconds);
     let impact_label = reset_pace_impact_label(snapshot, multiple_hundredths, now_unix_seconds);
     let mut view_model = reset_pace_view_model_from_multiple_basis_points(multiple_hundredths);
+    if view_model.state == ResetPaceState::Unavailable {
+        let reason = if snapshot.reset_unix_seconds.is_none() {
+            Some("reset time unknown")
+        } else {
+            match snapshot.confidence {
+                QuotaRunRateConfidence::Insufficient => Some("collecting quota samples"),
+                QuotaRunRateConfidence::Stale => Some("quota samples stale"),
+                QuotaRunRateConfidence::Unknown => Some("no usable quota history"),
+                QuotaRunRateConfidence::Low | QuotaRunRateConfidence::Normal => None,
+            }
+        };
+        if let Some(reason) = reason {
+            view_model.unavailable_reason = Some(reason.to_owned());
+        }
+    }
     if let Some(multiple_hundredths) = multiple_hundredths {
         let (left_filled, right_filled) =
             reset_pace_meter_fill_for_snapshot(snapshot, multiple_hundredths, now_unix_seconds);
@@ -270,8 +285,10 @@ pub fn short_reset_pace_view_model_from_snapshot(
 ) -> ResetPaceViewModel {
     let mut view_model = reset_pace_view_model_from_snapshot(snapshot, now_unix_seconds);
     if view_model.state == ResetPaceState::Unavailable
-        && snapshot
-            .is_some_and(|snapshot| snapshot.confidence == QuotaRunRateConfidence::Insufficient)
+        && snapshot.is_some_and(|snapshot| {
+            snapshot.reset_unix_seconds.is_some()
+                && snapshot.confidence == QuotaRunRateConfidence::Insufficient
+        })
     {
         view_model.semantic_label = "collecting data";
         view_model.multiple_label = "collecting data".to_owned();

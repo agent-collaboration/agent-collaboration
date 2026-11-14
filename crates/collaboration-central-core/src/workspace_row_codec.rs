@@ -85,7 +85,21 @@ impl WorkspaceRows {
                     &[("addressees", "posts.addressees")],
                 )?),
                 "entry" => rows.entries.push(json(payload, "work_log_entries")?),
-                "backlog" => rows.backlog.push(json(payload, "backlog_items")?),
+                "backlog" => {
+                    let item: workspace_model::BacklogItem = json(payload, "backlog_items")?;
+                    match (item.status, item.closing_note.as_deref()) {
+                        (workspace_model::BacklogStatus::Open, None) => {}
+                        (workspace_model::BacklogStatus::Closed, Some(note)) => {
+                            let note = workspace_model::Description::try_from(note.to_owned())
+                                .map_err(|_| corrupt("backlog_items.closing_note"))?;
+                            if note.as_str().trim().is_empty() {
+                                return Err(corrupt("backlog_items.closing_note"));
+                            }
+                        }
+                        _ => return Err(corrupt("backlog_items.closing_note")),
+                    }
+                    rows.backlog.push(item);
+                }
                 "reference" => rows.references.push(crate::workspace_json_records::decode(
                     payload,
                     "item_references",

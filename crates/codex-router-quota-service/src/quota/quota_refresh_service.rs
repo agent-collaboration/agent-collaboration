@@ -436,7 +436,7 @@ where
             .map_err(|error| QuotaServiceError::ProviderResponse {
                 message: error.to_string(),
             })?;
-            for window in response.windows {
+            for window in &response.windows {
                 let window_kind = match window.limit_window_seconds {
                     18_000 => WindowKind::FiveHour,
                     604_800 => WindowKind::Weekly,
@@ -462,6 +462,15 @@ where
                     .record_window_observation(&observation, current_unix_seconds)
                     .await?
                 {
+                    append_success_quota_history_observation(
+                        &quota_history_state,
+                        account,
+                        RouteBand::ClaudeMessages.as_str(),
+                        window,
+                        observation_started_at,
+                        response.reset_credits_available,
+                    )
+                    .await?;
                     observations_recorded = observations_recorded.saturating_add(1);
                 }
             }

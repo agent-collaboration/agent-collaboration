@@ -61,7 +61,7 @@ pub(crate) fn read_statement(
             text(deliverable_id),
             SqlValue::Null,
         ),
-        Op::JoinThread { thread_id }
+        Op::JoinThread { thread_id, .. }
         | Op::AddThreadMember { thread_id, .. }
         | Op::LeaveThread { thread_id }
         | Op::SetNotifications { thread_id, .. }
@@ -95,6 +95,12 @@ pub(crate) fn read_statement(
             include_str!("workspace_sql/statuses.sql"),
             text(initiative_id),
             SqlValue::Null,
+        ),
+        Op::CloseBacklogItem { item_id, link, .. } => (
+            include_str!("workspace_sql/relations.sql"),
+            text(item_id),
+            link.as_ref()
+                .map_or(SqlValue::Null, |target| text(target.kind_and_id().1)),
         ),
         Op::UpdateBacklogItem { item_id, .. } | Op::RemoveBacklogItem { item_id } => (
             include_str!("workspace_sql/backlog.sql"),

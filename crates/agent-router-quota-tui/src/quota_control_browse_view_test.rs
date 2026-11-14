@@ -14,17 +14,21 @@ fn assert_stacked_accounts(frame: &str, width: usize, selected_index: usize) {
             .position(|line| line.contains(label))
             .unwrap_or_else(|| panic!("missing list account {label}:\n{frame}"))
     });
-    // Header/rule, provider heading, account content, two empty lines. At 100
+    // Name, provider/activity, login, routing, then two empty lines. At 100
     // cells the provider/client caption wraps, adding one line to each account.
     let (expected, account_height) = if width == 180 {
-        ([6, 11, 17], 3)
-    } else {
         ([6, 12, 19], 4)
+    } else {
+        ([6, 13, 21], 5)
     };
     assert_eq!(tops, expected, "{width}-cell list:\n{frame}");
     assert!(rows[5].contains("OpenAI (2)"), "{frame}");
     assert!(rows[tops[2] - 1].contains("Claude (1)"), "{frame}");
     for top in tops {
+        assert!(
+            rows[top + account_height - 2].contains("Signed in"),
+            "{frame}"
+        );
         assert!(
             rows[top + account_height - 1].contains("available"),
             "{frame}"

@@ -342,7 +342,6 @@ fn run_interactive_session(
                 mode,
                 &crate::session_environment::collaboration_service_directory(context)?,
                 context.env_var("HOME").map(std::path::Path::new),
-                &command.codex_args,
             )
         }
     }

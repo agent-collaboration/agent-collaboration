@@ -63,6 +63,7 @@ mod workspace_request_gate;
 mod workspace_request_log;
 mod workspace_row_codec;
 mod workspace_rule_dispatch;
+mod workspace_rule_inputs;
 pub use platform_capabilities::{
     CallOutcome, CentralPlatform, KeyFetchFailure, LegacyObjectHost, LocalSectionFailure, RawJwks,
     RegistrationEdits, RegistrationSnapshot, SocketFailure, UpgradeFailure, VerifyFailure,

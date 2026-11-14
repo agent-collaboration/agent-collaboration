@@ -1,5 +1,5 @@
 use crate::{
-    ActorIdentityId, Addressee, AreaId, BacklogItemId, ChangePosition, DeliverableId,
+    ActorIdentityId, Addressee, AreaId, BacklogItemId, ChangeId, ChangePosition, DeliverableId,
     DeliverableRole, DeliverableRoleId, DependencyId, Description, ExternalLink, InitiativeId,
     IssueId, IssueTitle, ItemRef, LinkId, MemberRole, NotificationSetting, PostId, PostText,
     ProjectId, ProjectRole, ProjectRoleId, ReadScope, Reference, ReferenceId, ResourceName,
@@ -96,6 +96,7 @@ pub enum ThreadCommand {
     JoinThread {
         thread_id: ThreadId,
         member_id: ThreadMemberId,
+        role: MemberRole,
     },
     AddThreadMember {
         thread_id: ThreadId,
@@ -128,6 +129,11 @@ pub enum ThreadCommand {
     deny_unknown_fields
 )]
 pub enum BacklogCommand {
+    Close {
+        item_id: BacklogItemId,
+        note: Description,
+        link: Option<BacklogClosingReference>,
+    },
     Add {
         item_id: BacklogItemId,
         area_id: AreaId,
@@ -142,6 +148,14 @@ pub enum BacklogCommand {
     Remove {
         item_id: BacklogItemId,
     },
+}
+
+/// An optional close reference carries its own creation change for reference paging.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct BacklogClosingReference {
+    pub reference: Reference,
+    pub change_id: ChangeId,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(

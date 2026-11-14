@@ -20,6 +20,7 @@ async fn joined_observer(
         7100,
         m::WorkspaceOperation::JoinThread {
             thread_id: thread.clone(),
+            role: m::MemberRole::Observer,
         },
     )
     .await;

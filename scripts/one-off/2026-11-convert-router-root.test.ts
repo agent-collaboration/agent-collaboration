@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createServer } from "node:net";
 import { spawn, spawnSync } from "node:child_process";
@@ -15,7 +14,9 @@ const providers =
   '{"version":1,"providers":{"claude":{"enabled":false,"executable":null,"arguments":[]},"cursor":{"enabled":false,"executable":null,"arguments":[]}}}';
 const ports = '{"router":18827,"mcp":18828,"tailscaleHttps":443}';
 async function copiedRoot(): Promise<{ parent: string; root: string; backup: string }> {
-  const parent = await realpath(await mkdtemp(join(tmpdir(), "root-conversion-")));
+  const scratch = new URL("../../tmp/", import.meta.url).pathname;
+  await mkdir(scratch, { recursive: true });
+  const parent = await realpath(await mkdtemp(join(scratch, "root-conversion-")));
   const root = join(parent, "router"),
     backup = join(parent, "router.backup-2026-11-13");
   await cp(fixture, root, { recursive: true });
@@ -23,6 +24,12 @@ async function copiedRoot(): Promise<{ parent: string; root: string; backup: str
   await writeFile(join(root, "ports.json"), ports);
   await writeFile(join(root, "unknown-future-file"), "backup-only unknown bytes");
   await writeFile(join(root, "routers.jsonc"), '// machine list\n{"machines": []}\n');
+  await writeFile(join(root, "agent-sessions.jsonc"), '{"version":1,"routers":[]}');
+  await writeFile(join(root, "settings.jsonc"), '{"ports":{"router":18827}}');
+  await mkdir(join(root, "fleet"));
+  await writeFile(join(root, "fleet", "enrollment.json"), "old enrollment");
+  await mkdir(join(root, "activation"));
+  await writeFile(join(root, "activation", "old-marker"), "old activation");
   await mkdir(join(root, "state.sqlite.credential-locks"));
   await writeFile(join(root, "state.sqlite.credential-locks", "account.lock"), "lock bytes");
   await mkdir(join(root, "agent-communication", "projects"), { recursive: true });
@@ -50,10 +57,16 @@ async function copiedRoot(): Promise<{ parent: string; root: string; backup: str
   );
   await mkdir(join(root, "snapshot-install-attempts"));
   await writeFile(join(root, "snapshot-install-attempts", "attempt.json"), "old attempt");
-  await mkdir(join(root, "secrets"));
+  await mkdir(join(root, "secrets"), { mode: 0o700 });
   await writeFile(join(root, "secrets", "fixture-secret"), "do not print this fixture marker", {
     mode: 0o600,
   });
+  for (const name of [
+    "agent-proxy-ui.sqlite",
+    "agent-proxy-ui.sqlite-wal",
+    "agent-proxy-ui.sqlite-shm",
+  ])
+    await writeFile(join(root, name), `quota preferences ${name}`, { mode: 0o600 });
   return { parent, root, backup };
 }
 function accountRows(path: string): unknown {
@@ -119,7 +132,25 @@ test("released writer fixture converts with verified backup, WAL rows and curren
       (await readdir(input.root))
         .filter((name) => !name.endsWith("-wal") && !name.endsWith("-shm"))
         .sort(),
-      ["provider-proxy.sqlite", "provider-proxy.sqlite.credential-locks"],
+      [
+        "agent-proxy-ui.sqlite",
+        "provider-proxy.sqlite",
+        "provider-proxy.sqlite.credential-locks",
+        "secrets",
+      ],
+    );
+    const carriedNames = new Set([
+      "secrets",
+      "agent-proxy-ui.sqlite",
+      "agent-proxy-ui.sqlite-wal",
+      "agent-proxy-ui.sqlite-shm",
+    ]);
+    assert.deepEqual(
+      (await rootInventory(input.root)).filter((entry) =>
+        carriedNames.has(entry.relative.split("/")[0] ?? ""),
+      ),
+      before.filter((entry) => carriedNames.has(entry.relative.split("/")[0] ?? "")),
+      "credentials and quota preferences retain every byte and permission bit",
     );
     assert.equal(await readFile(join(input.backup, "providers.json"), "utf8"), providers);
     assert.equal(await readFile(join(input.backup, "ports.json"), "utf8"), ports);
@@ -144,7 +175,10 @@ test("dry run plans backup-only routes without creating backup or changing any b
       encoding: "utf8",
     });
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /Only the provider proxy store carries over/);
+    assert.match(
+      result.stdout,
+      /The provider proxy \(accounts, credentials, quota preferences\) carries over/,
+    );
     assert.ok(!result.stdout.includes("do not print this fixture marker"));
     assert.deepEqual(await rootInventory(input.root), before);
     assert.deepEqual(await readdir(input.parent), ["router"]);

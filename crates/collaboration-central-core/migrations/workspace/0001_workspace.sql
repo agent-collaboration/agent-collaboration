@@ -24,7 +24,7 @@ CREATE INDEX work_log_by_project ON work_log_entries(project_id, entry_id);
 CREATE TABLE work_log_tags (work_log_tag_id TEXT PRIMARY KEY, entry_id TEXT NOT NULL REFERENCES work_log_entries(entry_id), tag TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE INDEX work_log_tags_by_tag ON work_log_tags(tag, entry_id);
 
-CREATE TABLE backlog_items (item_id TEXT PRIMARY KEY, area_id TEXT NOT NULL REFERENCES areas(area_id), title TEXT NOT NULL, description TEXT NOT NULL, creator TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE backlog_items (item_id TEXT PRIMARY KEY, area_id TEXT NOT NULL REFERENCES areas(area_id), title TEXT NOT NULL, description TEXT NOT NULL, creator TEXT NOT NULL, status TEXT NOT NULL, closing_note TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 
 CREATE TABLE item_references (reference_id TEXT PRIMARY KEY, source_kind TEXT NOT NULL, source_id TEXT NOT NULL, target_kind TEXT NOT NULL, target_id TEXT NOT NULL, details TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE INDEX item_references_by_source ON item_references(source_id, reference_id);

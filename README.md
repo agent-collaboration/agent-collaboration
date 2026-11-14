@@ -146,6 +146,10 @@ list their matches; use a full UUID and `--provider codex|claude` to choose.
 Claude background jobs keep their background mode; ordinary stored Claude sessions
 resume in the foreground from the directory recorded in their transcript.
 Live foreground sessions and sessions with uncertain state or directory are refused.
+For native Claude launches, arguments after `--` are forwarded unchanged, including
+resume and attach. Claude decides whether each option is supported; native
+errors are reported without retrying the launch.
+
 Use `--dry-run` to inspect the chosen command, or `--provider codex|claude --new`
 to start a new session.
 

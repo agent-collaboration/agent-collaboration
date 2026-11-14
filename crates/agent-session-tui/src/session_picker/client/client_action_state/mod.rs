@@ -267,7 +267,7 @@ impl SessionsPickerModel {
                         action: SourceNativeClaudeAction::Resume {
                             target: target.clone(),
                             directory,
-                            arguments: Vec::new(),
+                            arguments: self.request.native_arguments.clone(),
                         },
                     },
                 )

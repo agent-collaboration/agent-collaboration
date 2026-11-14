@@ -140,6 +140,7 @@ async fn only_creator_adds_or_promotes_members_and_posts_require_active_particip
     other.caller = m::Caller::Session(other_session);
     let join = m::WorkspaceOperation::JoinThread {
         thread_id: thread.clone(),
+        role: m::MemberRole::Observer,
     };
     assert!(matches!(
         call(&f.host, &other, Some(f.workspace.clone()), 532, join)

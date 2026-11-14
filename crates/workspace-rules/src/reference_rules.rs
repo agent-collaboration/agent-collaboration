@@ -79,7 +79,7 @@ fn with_parent(plan: RulePlan, parent: RelationParent) -> RulePlan {
         RelationParent::Workspace => plan,
     }
 }
-fn require_item(
+pub(crate) fn require_item(
     context: &WriteContext,
     item: &ItemRef,
     row: Option<&LocatedItem>,
