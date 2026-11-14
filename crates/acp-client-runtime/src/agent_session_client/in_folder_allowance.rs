@@ -14,16 +14,34 @@ use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
-/// Programs a scratch-only shell command may run without asking: each reads or
-/// changes the files it is given and runs no code taken from them.
-const FILE_UTILITIES: &[&str] = &[
-    "ls", "cat", "head", "tail", "wc", "stat", "file", "du", "diff", "cmp", "sort", "uniq", "grep",
-    "mkdir", "rmdir", "rm", "cp", "mv", "touch", "ln", "chmod", "find",
-];
-
-/// Options a scratch-only shell command may carry: each takes no value.
-const VALUELESS_OPTIONS: &[&str] = &[
-    "-r", "-R", "-f", "-rf", "-fr", "-Rf", "-fR", "-p", "-l", "-a", "-la", "-al", "-lh", "-h", "-v",
+/// Programs a scratch-only shell command may run without asking, each with the
+/// options it may carry. Every program reads or changes only the files it is
+/// given and runs no code taken from them; every option takes no value and
+/// reads nothing indirectly (checked against the BSD and GNU manuals). A
+/// program with no options listed takes none.
+const FILE_UTILITIES: &[(&str, &[&str])] = &[
+    ("rm", &["-r", "-R", "-f", "-rf", "-fr", "-Rf", "-fR", "-v"]),
+    ("rmdir", &["-v"]),
+    ("mkdir", &["-p", "-v"]),
+    ("cp", &["-R", "-p", "-v"]),
+    ("mv", &["-v"]),
+    ("ls", &["-l", "-a", "-la", "-al", "-lh", "-h"]),
+    ("chmod", &["-R"]),
+    ("ln", &["-s"]),
+    ("cat", &[]),
+    ("head", &[]),
+    ("tail", &[]),
+    ("wc", &[]),
+    ("stat", &[]),
+    ("file", &[]),
+    ("du", &[]),
+    ("diff", &[]),
+    ("cmp", &[]),
+    ("sort", &[]),
+    ("uniq", &[]),
+    ("grep", &[]),
+    ("touch", &[]),
+    ("find", &[]),
 ];
 
 /// The folders an auto-mode session acts in without asking, canonical at grant.
@@ -87,9 +105,9 @@ impl InFolderGrant {
         }
     }
 
-    /// A file utility from [`FILE_UTILITIES`], with no shell syntax that could
-    /// reach another path or program, whose operands are all paths in the
-    /// scratch folder, with at least one.
+    /// A file utility from [`FILE_UTILITIES`] with only its own options, no
+    /// shell syntax that could reach another path or program, and operands
+    /// that are all paths in the scratch folder, with at least one.
     fn command_stays_in_scratch(&self, command: &str) -> bool {
         const SHELL_SYNTAX: &[char] = &[
             '$', '`', '|', ';', '&', '<', '>', '(', ')', '{', '}', '*', '?', '[', ']', '~', '\\',
@@ -105,18 +123,21 @@ impl InFolderGrant {
         // Only file utilities that run no code given to them: an interpreter,
         // `env` or `xargs` would run a script the agent first wrote to scratch,
         // and that script could act anywhere (owner Q3).
-        if !FILE_UTILITIES.contains(&program) {
+        let Some((_, options)) = FILE_UTILITIES
+            .iter()
+            .find(|(utility, _)| *utility == program)
+        else {
             return false;
-        }
+        };
         // Every operand is an absolute path in the scratch folder; a bare word
         // could name a file in the project, so it is not allowed here.
         let mut named_a_path = false;
         for word in words {
             if word.starts_with('-') {
                 // An option's meaning is not read from its characters: only
-                // known options that take no value pass, so a path glued onto
-                // an option (`-ooutside.txt`, `-t/elsewhere`) asks.
-                if !VALUELESS_OPTIONS.contains(&word) {
+                // this utility's listed options pass, so a path glued onto an
+                // option (`-ooutside.txt`) or an indirect one (`file -f`) asks.
+                if !options.contains(&word) {
                     return false;
                 }
                 continue;

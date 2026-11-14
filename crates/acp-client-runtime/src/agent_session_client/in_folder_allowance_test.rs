@@ -192,7 +192,16 @@ fn shell_commands_are_allowed_once_only_when_every_operand_is_in_the_scratch_fol
         (format!("cp --target-directory {scratch}/a"), false),
         (format!("head -n 5 {scratch}/a"), false),
         (format!("mkdir -p {scratch}/x/y"), true),
-        (format!("cp -r {scratch}/a {scratch}/b"), true),
+        // Options belong to their utility: `file -f` reads the paths named
+        // inside its operand, and `cp -r` follows symbolic links on BSD.
+        (format!("file -f {scratch}/m"), false),
+        (format!("grep -r {scratch}"), false),
+        (format!("cp -f {scratch}/a {scratch}/b"), false),
+        (format!("cp -r {scratch}/a {scratch}/b"), false),
+        (format!("rmdir -p {scratch}/x/y"), false),
+        (format!("cp -R {scratch}/a {scratch}/b"), true),
+        (format!("ln -s {scratch}/a {scratch}/b"), true),
+        (format!("rmdir -v {scratch}/x"), true),
     ];
     for (command, allowed) in cases {
         assert_eq!(
