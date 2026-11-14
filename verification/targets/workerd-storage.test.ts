@@ -1,12 +1,72 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { createServer, type Server } from "node:http";
-import { mkdir, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { copyFile, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 import { createFixtureDirectory } from "../test-support/fixture-directory.ts";
 import { WorkerdStorage, type WorkerdBundle } from "./workerd-storage.ts";
 
 const sourceUrl = "https://signin.test/.well-known/jwks.json";
+
+test("bridge names every absent public or private artifact before readiness", async (): Promise<void> => {
+  const fixture = createFixtureDirectory("workerd-missing-bundle");
+  const repository = fileURLToPath(new URL("../../", import.meta.url));
+  const bridgePath = "crates/collaboration-central-cloudflare/tests/support/workerd-bridge.mts";
+  try {
+    await mkdir(join(fixture, dirname(bridgePath)), { recursive: true });
+    await mkdir(join(fixture, "verification/targets"), { recursive: true });
+    await writeFile(join(fixture, "package.json"), '{"type":"module"}');
+    await copyFile(join(repository, bridgePath), join(fixture, bridgePath));
+    await copyFile(
+      join(repository, "verification/targets/workerd-storage.ts"),
+      join(fixture, "verification/targets/workerd-storage.ts"),
+    );
+    await symlink(
+      join(repository, "verification/node_modules"),
+      join(fixture, "verification/node_modules"),
+      "dir",
+    );
+    const plan = join(fixture, "plan.json");
+    await writeFile(
+      plan,
+      JSON.stringify({
+        textBindings: { CENTRAL_SIGN_IN_JWKS_URL: sourceUrl },
+        jwksFixtureUrl: "http://127.0.0.1:12345/jwks",
+      }),
+    );
+    for (const directory of ["build-test-support", "build-link-test-support"]) {
+      await mkdir(join(fixture, "crates/collaboration-central-cloudflare", directory));
+    }
+    const paths = [
+      "build-test-support/index.js",
+      "build-test-support/index_bg.wasm",
+      "build-link-test-support/index.js",
+      "build-link-test-support/index_bg.wasm",
+    ];
+    for (const missing of paths) {
+      for (const path of paths) {
+        const absolute = join(fixture, "crates/collaboration-central-cloudflare", path);
+        if (path === missing) await rm(absolute, { force: true });
+        else await writeFile(absolute, "fixture must never start");
+      }
+      const result = spawnSync(
+        process.execPath,
+        [join(fixture, bridgePath), "--signin-plan", plan],
+        { encoding: "utf8" },
+      );
+      assert.equal(result.status, 1);
+      assert.equal(result.stdout, "", "missing artifacts must never publish readiness");
+      assert.equal(
+        result.stderr.trim(),
+        `WORKERD_BUNDLE_MISSING ${JSON.stringify({ path: join(fixture, "crates/collaboration-central-cloudflare", missing) })}`,
+      );
+    }
+  } finally {
+    await rm(fixture, { recursive: true });
+  }
+});
 const publicSource = `
 export class CentralObject {
   constructor(state) { this.state = state; }

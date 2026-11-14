@@ -21,6 +21,11 @@ struct Ready {
     origin: String,
 }
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MissingBundle {
+    path: std::path::PathBuf,
+}
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct AlarmReceipt {
     pub organization: Option<OrganizationId>,
@@ -223,6 +228,26 @@ impl WorkerdHost {
             });
             let mut line = String::new();
             let read = output.read_line(&mut line).unwrap();
+            if read == 0 {
+                // Join the stderr drain before reading its final diagnostic. Never
+                // print arbitrary bridge logs: only a known build artifact path.
+                process.stop();
+                let logs = process_logs.lock().unwrap_or_else(PoisonError::into_inner);
+                let missing = logs.iter().find_map(|line| {
+                    let diagnostic = line.strip_prefix("WORKERD_BUNDLE_MISSING ")?;
+                    let missing: MissingBundle = serde_json::from_str(diagnostic).ok()?;
+                    ["build-test-support", "build-link-test-support"]
+                        .iter()
+                        .flat_map(|directory| {
+                            ["index.js", "index_bg.wasm"]
+                                .map(|name| manifest.join(directory).join(name))
+                        })
+                        .find(|expected| *expected == missing.path)
+                });
+                if let Some(path) = missing {
+                    panic!("workerd bridge missing bundle: {}", path.display());
+                }
+            }
             assert!(read > 0, "workerd bridge exited before readiness");
             let ready: Ready = serde_json::from_str(&line).unwrap();
             let url = reqwest::Url::parse(&ready.origin).unwrap();

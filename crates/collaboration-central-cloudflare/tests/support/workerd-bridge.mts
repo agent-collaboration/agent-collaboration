@@ -1,6 +1,7 @@
 // Starts the established loader. Requests and business assertions belong to Rust.
 import { createInterface } from "node:readline";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import {
   WorkerdStorage,
   centralTestBundle,
@@ -19,6 +20,18 @@ const plan =
     ? undefined
     : workerdSignInPlanSchema.parse(JSON.parse(await readFile(planPath, "utf8")));
 const bundle = centralTestBundle();
+const linkBundle = plan === undefined ? undefined : centralLinkTestBundle();
+for (const selected of linkBundle === undefined ? [bundle] : [bundle, linkBundle]) {
+  for (const name of ["index.js", "index_bg.wasm"]) {
+    const path = join(selected.bundleDirectory, name);
+    try {
+      await access(path);
+    } catch {
+      process.stderr.write(`WORKERD_BUNDLE_MISSING ${JSON.stringify({ path })}\n`);
+      process.exit(1);
+    }
+  }
+}
 const sourceUrl = plan?.textBindings.CENTRAL_SIGN_IN_JWKS_URL;
 if (plan !== undefined && sourceUrl === undefined)
   throw new Error("sign-in plan requires CENTRAL_SIGN_IN_JWKS_URL");
@@ -28,11 +41,11 @@ const host = await WorkerdStorage.start(
     textBindings: { ...bundle.textBindings, ...plan?.textBindings },
     durableObjects: { ...bundle.durableObjects, CENTRAL: "CentralObject" },
   },
-  plan === undefined || sourceUrl === undefined
+  plan === undefined || sourceUrl === undefined || linkBundle === undefined
     ? undefined
     : {
         linkBundle: {
-          ...centralLinkTestBundle(),
+          ...linkBundle,
           textBindings: { ...bundle.textBindings, ...plan.textBindings },
         },
         jwks: { sourceUrl, fixtureUrl: plan.jwksFixtureUrl },
