@@ -47,6 +47,18 @@ async fn computed_json_text_cast_preserves_the_runtime_text_type_through_a_cte()
         if label == "cast" {
             assert_eq!(reported_type, "TEXT");
             assert_eq!(typed_text.unwrap(), r#"{"value":1}"#);
+        } else if label == "cte" {
+            assert_eq!(
+                reported_type, "BLOB",
+                "UW-15 changed: run the documented CAST removal check"
+            );
+            assert!(
+                typed_text.is_err(),
+                "UW-15 fixed: run the documented CAST removal check"
+            );
+        } else {
+            assert_eq!(reported_type, "TEXT");
+            assert!(typed_text.is_ok());
         }
     }
 }
@@ -157,10 +169,7 @@ async fn stamped_store(records: usize) -> TursoConnection {
 fn nothing_stored_matches_the_canonical_private_ipc_fixture() {
     // Arrange / Act: callers use this path without opening an unknown org store.
     let observed = serde_json::to_value(SignInObservation::nothing_stored()).unwrap();
-    let fixture: Value = serde_json::from_str(include_str!(
-        "../tests/fixtures/signin-observation-empty.json"
-    ))
-    .unwrap();
+    let fixture: Value = serde_json::from_str(super::EMPTY_SIGNIN_OBSERVATION_JSON).unwrap();
     // Assert: this is empty, so assertion output contains no statement material.
     assert_eq!(observed, fixture);
 }

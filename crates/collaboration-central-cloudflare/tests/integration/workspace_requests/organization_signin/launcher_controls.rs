@@ -34,6 +34,8 @@ impl Bridge {
             .arg(manifest.join("tests/support/workerd-bridge.mts"))
             .arg("--signin-plan")
             .arg(plan)
+            .arg("--launcher-time-ms")
+            .arg((signed::NOW_SECONDS * 1000).to_string())
             .current_dir(root)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -151,9 +153,9 @@ impl Bridge {
     reason = "Fixture equality must fail without dumping a raw observation into an assertion diff."
 )]
 fn assert_empty(observation: &Value) -> ConformanceResult<()> {
-    let expected: Value = serde_json::from_str(include_str!(
-        "../../../../../collaboration-central-core/tests/fixtures/signin-observation-empty.json"
-    ))?;
+    let expected: Value = serde_json::from_str(
+        collaboration_central_core::signin_test_observation::EMPTY_SIGNIN_OBSERVATION_JSON,
+    )?;
     assert!(
         observation == &expected,
         "unknown organization must be completely empty"
@@ -219,9 +221,9 @@ async fn bridge_controls_share_time_with_live_and_future_orgs_and_fresh_process_
     let mut bridge = Bridge::start(&plan).await?;
 
     // Act/Assert: observing an unopened org must not register or create an object.
-    bridge.set_time(now, 0).await?;
     assert_empty(&bridge.observe(organization_a).await?)?;
-    bridge.set_time(now, 0).await?;
+    // No setTimeMs command precedes this first signed request: the required
+    // initial launcher time must already own verification and record timestamps.
     let first = signed::stamp(organization_a, signed::NOW_SECONDS)?;
     bridge.provision(organization_a, &first).await?;
     assert_statement_and_records(&bridge.observe(organization_a).await?, &first, &[now])?;

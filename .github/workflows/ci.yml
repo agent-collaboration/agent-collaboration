@@ -148,6 +148,8 @@ jobs:
       - name: Lint Rust workspace
         id: rust_lint
         run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Lint the non-default sign-in launcher
+        run: cargo clippy --locked -p codex-router-debug-hosts --features signin-test-support --all-targets -- -D warnings
       - name: Challenge TUI terminal input ownership
         run: node verification/tooling/check-tui-input-ownership.ts
       - name: Check the shared asynchronous core on native and wasm
@@ -570,7 +572,8 @@ jobs:
       - name: Build the real local entry points
         run: |
           cargo build --locked -p agent-collaboration --all-features --bins
-          cargo build --locked -p codex-router-debug-hosts --features runtime-test-support,signin-test-support --bin board-debug-runtime --bin central_sign_in_launcher
+          cargo build --locked -p codex-router-debug-hosts --features runtime-test-support --bin board-debug-runtime
+          cargo build --locked -p codex-router-debug-hosts --features signin-test-support --bin central_sign_in_launcher
       - name: Build E2E test binaries
         run: |
           cargo nextest run --locked --profile ci --success-output final -p agent-collaboration --all-features --test e2e --test-threads 1 --color never --status-level all --final-status-level all --no-run
@@ -578,10 +581,10 @@ jobs:
       - name: Run the deterministic local process journeys
         run: |
           set -o pipefail
-          cargo nextest run --locked --profile ci -p codex-router-debug-hosts --features signin-test-support --test integration --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee "$CODEX_ROUTER_E2E_PARENT/signin-launcher.log"
+          cargo nextest run --locked --profile ci -p codex-router-debug-hosts --features signin-test-support --test e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee "$CODEX_ROUTER_E2E_PARENT/signin-launcher.log"
           cargo nextest run --locked --profile ci -p collaboration-central-tokio --features conformance --test e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee "$CODEX_ROUTER_E2E_PARENT/nextest.log"
           cargo nextest run --locked --profile ci --success-output final -p agent-collaboration --all-features --test e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee -a "$CODEX_ROUTER_E2E_PARENT/nextest.log"
-          if grep -Eq '^[[:space:]]*LEAK[[:space:]]' "$CODEX_ROUTER_E2E_PARENT/nextest.log"; then
+          if grep -Eq '^[[:space:]]*LEAK[[:space:]]' "$CODEX_ROUTER_E2E_PARENT/nextest.log" "$CODEX_ROUTER_E2E_PARENT/signin-launcher.log"; then
             echo "End-to-end child lifecycle leak detected" >&2
             exit 1
           fi

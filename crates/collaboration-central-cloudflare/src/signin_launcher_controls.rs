@@ -7,7 +7,7 @@ use worker::{Response, Result};
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ClockSample {
-    milliseconds: Option<central_storage::SafeInteger>,
+    milliseconds: central_storage::SafeInteger,
 }
 
 pub(crate) async fn sample_clock(
@@ -18,6 +18,10 @@ pub(crate) async fn sample_clock(
     let Ok(source) = object.env.service("TEST_SIGNIN_CLOCK") else {
         return Ok(());
     };
+    let mut sampled = object.launcher_clock_sampled.lock().await;
+    if *sampled {
+        return Ok(());
+    }
     let mut response: Response = source
         .fetch(
             format!("https://signin-clock.test/clock/{}", organization.as_str()),
@@ -31,9 +35,8 @@ pub(crate) async fn sample_clock(
         ));
     }
     let sample: ClockSample = response.json().await?;
-    if let Some(milliseconds) = sample.milliseconds {
-        object.clock.hold(milliseconds.into());
-    }
+    object.clock.hold(sample.milliseconds.into());
+    *sampled = true;
     Ok(())
 }
 

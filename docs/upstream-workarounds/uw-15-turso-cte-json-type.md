@@ -31,10 +31,10 @@ cte:    runtime=text, driver=BLOB, typed_text=false
 cast:   runtime=text, driver=TEXT, typed_text=true
 ```
 
-Raw reproduction: `tmp/2026-11-14-signin-launcher/gates/upstream-reduction.log`,
-1 passed / 0 failed, exit0. The prior full snapshot regression is preserved in
-`core-tests-final.log`: 2 passed / 2 failed, exit100; both populated paths fail
-at the strict String read before domain decoding.
+The reduced reproduction passed 1/1, exit0. The prior full snapshot regression
+was 2 passed / 2 failed, exit100; both populated paths failed at the strict String
+read before domain decoding. The permanent reduced test asserts the uncast BLOB
+metadata and failed typed read, so an upstream fix fails it with the removal check.
 
 The pinned source chain is Turso `src/lib.rs` `Statement::columns` →
 `column_decltype`; adapter `sqlx-turso-core/src/column.rs` `from_turso` →

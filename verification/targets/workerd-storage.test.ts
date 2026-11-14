@@ -9,7 +9,12 @@ import { createInterface } from "node:readline";
 import { once } from "node:events";
 import { z } from "zod";
 import { createFixtureDirectory } from "../test-support/fixture-directory.ts";
-import { WorkerdStorage, type WorkerdBundle } from "./workerd-storage.ts";
+import {
+  WorkerdStorage,
+  centralTestBundle,
+  workerdLauncherTimeSchema,
+  type WorkerdBundle,
+} from "./workerd-storage.ts";
 
 const sourceUrl = "https://signin.test/.well-known/jwks.json";
 
@@ -75,7 +80,12 @@ export class CentralObject {
   constructor(state, env) { this.state = state; this.env = env; }
   async fetch(request) {
     const url = new URL(request.url);
+    if (url.pathname === "/clock-presence")
+      return Response.json(this.env.TEST_SIGNIN_CLOCK !== undefined);
     if (url.pathname === "/fixture-control") {
+      if (url.searchParams.get("operation") === "clock" &&
+          url.searchParams.get("organization").endsWith("d214"))
+        return new Response("fixture push failure", {status: 503});
       const clock = await this.env.TEST_SIGNIN_CLOCK.fetch(
         "https://signin-clock.test/clock/" + url.searchParams.get("organization"));
       const {milliseconds} = await clock.json();
@@ -108,7 +118,7 @@ export default { async fetch(request, env) {
       "&operation=" + control[2];
     return env.CENTRAL.get(env.CENTRAL.idFromName(control[1])).fetch(new Request(target, request));
   }
-  if (url.pathname === "/counter" || url.pathname === "/clock")
+  if (["/counter", "/clock", "/clock-presence"].includes(url.pathname))
     return env.CENTRAL.get(env.CENTRAL.idFromName("same-central")).fetch(request);
   if (url.pathname === "/outbound") {
     try { return await fetch(url.searchParams.get("url"), { method: request.method, redirect: "manual",
@@ -119,7 +129,7 @@ export default { async fetch(request, env) {
 } };
 `;
 const linkSource = `export default { async fetch(request, env) {
-  if (!["/counter", "/clock"].includes(new URL(request.url).pathname)) return new Response("link missing", { status: 404 });
+  if (!["/counter", "/clock", "/clock-presence"].includes(new URL(request.url).pathname)) return new Response("link missing", { status: 404 });
   return env.CENTRAL.get(env.CENTRAL.idFromName("same-central")).fetch(request);
 } };`;
 
@@ -185,8 +195,7 @@ before(async () => {
 
 const bridgeRelativePath =
   "crates/collaboration-central-cloudflare/tests/support/workerd-bridge.mts";
-const emptyObservationPath =
-  "crates/collaboration-central-core/tests/fixtures/signin-observation-empty.json";
+const emptyObservationPath = "crates/collaboration-central-core/src/signin_observation_empty.json";
 const bridgeAnswerSchema = z.object({ answer: z.string() }).catchall(z.json());
 type BridgeControl = (command: unknown) => Promise<z.infer<typeof bridgeAnswerSchema>>;
 
@@ -194,8 +203,19 @@ async function assertBridgeControls(props: {
   readonly baseUrl: string;
   readonly control: BridgeControl;
   readonly empty: unknown;
+  readonly launcher: boolean;
 }): Promise<void> {
-  const { baseUrl, control, empty } = props;
+  const { baseUrl, control, empty, launcher } = props;
+  const presence = await fetch(`${baseUrl}/clock-presence`);
+  assert.equal(await presence.json(), launcher, "only launcher mode installs the clock binding");
+  if (!launcher) {
+    assert.equal((await control({ setTimeMs: 1_900_000_000_000 })).answer, "refused");
+    assert.equal(
+      (await control({ observe: "019f0000-0000-7000-8000-00000000d211" })).answer,
+      "refused",
+    );
+    return;
+  }
   const organization = "019f0000-0000-7000-8000-00000000d211";
   const later = "019f0000-0000-7000-8000-00000000d212";
   const probe = "019f0000-0000-7000-8000-00000000d213";
@@ -214,7 +234,7 @@ async function assertBridgeControls(props: {
     organization,
     observation: empty,
   });
-  assert.deepEqual(await touch(probe), { complete: true, fixtureMilliseconds: null });
+  assert.deepEqual(await touch(probe), { complete: true, fixtureMilliseconds: 1_800_000_000_000 });
   const milliseconds = 1_900_000_000_000;
   assert.deepEqual(await control({ setTimeMs: milliseconds }), {
     answer: "timeSet",
@@ -240,7 +260,23 @@ async function assertBridgeControls(props: {
     fixtureMilliseconds: milliseconds + 5000,
   });
   assert.equal((await control({ restartFresh: true })).answer, "refused");
-  assert.equal((await control({ setTimeMs: 1.5 })).answer, "refused");
+  for (const invalid of [1.5, -1, 9_223_372_036_855, Number.MAX_SAFE_INTEGER, null, "123"]) {
+    assert.equal((await control({ setTimeMs: invalid })).answer, "refused");
+    assert.deepEqual(await touch(organization), {
+      complete: true,
+      fixtureMilliseconds: milliseconds + 5000,
+    });
+  }
+  const untouched = "019f0000-0000-7000-8000-00000000d215";
+  assert.deepEqual(await touch(untouched), {
+    complete: true,
+    fixtureMilliseconds: milliseconds + 5000,
+  });
+  await touch("019f0000-0000-7000-8000-00000000d214");
+  assert.deepEqual(await control({ setTimeMs: milliseconds + 10000 }), {
+    answer: "failed",
+    error: "bridge time may be partly applied",
+  });
 }
 
 async function createBridgeControlFixture(): Promise<string> {
@@ -281,6 +317,30 @@ async function createBridgeControlFixture(): Promise<string> {
   return fixture;
 }
 
+test("launcher rejects invalid initial time before readiness or object creation", async (): Promise<void> => {
+  const fixture = await createBridgeControlFixture();
+  try {
+    for (const initial of ["1.5", "-1", "9223372036855", "NaN", "", undefined]) {
+      const result = spawnSync(
+        process.execPath,
+        [
+          join(fixture, bridgeRelativePath),
+          "--launcher-time-ms",
+          ...(initial === undefined ? [] : [initial]),
+        ],
+        { encoding: "utf8" },
+      );
+      assert.equal(result.status, 1);
+      assert.equal(result.stdout, "", "invalid time must not publish readiness");
+      assert.match(result.stderr, /launcher time must be a supported integer millisecond/);
+    }
+    assert.equal(workerdLauncherTimeSchema.parse(0), 0);
+    assert.equal(workerdLauncherTimeSchema.parse(9_223_372_036_854), 9_223_372_036_854);
+  } finally {
+    await rm(fixture, { recursive: true });
+  }
+});
+
 test(
   "bridge IPC controls use the shared clock and external fresh-store restart",
   { timeout: 30_000 },
@@ -292,12 +352,17 @@ test(
     // Each child has fresh persistence. These JS responses test transport only;
     // signed provisioning and actual core observations remain Rust-owned.
     for (const privateTopology of [false, true]) {
-      for (let generation = 0; generation < 2; generation++) {
+      for (let generation = 0; generation < 3; generation++) {
+        const launcher = generation !== 0;
         const fixture = await createBridgeControlFixture();
         const plan = join(fixture, "plan.json");
         const child = spawn(
           process.execPath,
-          [join(fixture, bridgeRelativePath), ...(privateTopology ? ["--signin-plan", plan] : [])],
+          [
+            join(fixture, bridgeRelativePath),
+            ...(privateTopology ? ["--signin-plan", plan] : []),
+            ...(launcher ? ["--launcher-time-ms", "1800000000000"] : []),
+          ],
           { stdio: "pipe" },
         );
         child.stdin.on("error", (error: NodeJS.ErrnoException): void => {
@@ -335,7 +400,7 @@ test(
           if (ready.value === undefined) throw new Error("missing readiness line");
           const { origin } = z.object({ origin: z.url() }).strict().parse(JSON.parse(ready.value));
           const baseUrl = `${origin}${privateTopology ? "/public" : ""}`;
-          await assertBridgeControls({ baseUrl, control, empty });
+          await assertBridgeControls({ baseUrl, control, empty, launcher });
           assert.deepEqual(readyLines, [ready.value], "only one stdout readiness line");
           completed = true;
         } finally {
@@ -539,5 +604,46 @@ test("optional clock binding reads one live cell without restarting durable stat
     } finally {
       await controlled.close();
     }
+  }
+});
+
+test("actual central samples launcher time once per object instance", async (): Promise<void> => {
+  // The callback is the external clock boundary; the object and its latch are Rust/Wasm.
+  const samples = new Map<string, number>();
+  const bundle = centralTestBundle();
+  const controlled = await WorkerdStorage.start(
+    { ...bundle, durableObjects: { ...bundle.durableObjects, CENTRAL: "CentralObject" } },
+    undefined,
+    (organization: string): number => {
+      samples.set(organization, (samples.get(organization) ?? 0) + 1);
+      return 1_800_000_000_000;
+    },
+  );
+  const first = "019f0000-0000-7000-8000-00000000d221";
+  const second = "019f0000-0000-7000-8000-00000000d222";
+  const path = (organization: string): string => `/test-support/workspace/${organization}`;
+  try {
+    assert.equal(await controlled.dispatchJson(`${path(first)}/clock`, 1_800_000_001_000), true);
+    assert.equal(await controlled.dispatchJson(`${path(first)}/clock`, 1_800_000_002_000), true);
+    assert.equal(await controlled.dispatchJson(`${path(second)}/clock`, 1_800_000_003_000), true);
+    assert.deepEqual(
+      [...samples],
+      [
+        [first, 1],
+        [second, 1],
+      ],
+    );
+    // The established crash control discards the instance, then the next touch samples again.
+    await assert.rejects(controlled.dispatchJson(`${path(first)}/crash`, {}));
+    assert.equal(await controlled.dispatchJson(`${path(first)}/clock`, 1_800_000_004_000), true);
+    assert.deepEqual(
+      [...samples],
+      [
+        [first, 2],
+        [second, 1],
+      ],
+    );
+  } finally {
+    await controlled.close();
   }
 });

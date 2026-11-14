@@ -30,6 +30,15 @@ Worker's `CentralObject` and `WorkspaceStoreObject`. The TypeScript bridge at
 loopback origin, forwards fixture clock/observation commands and closes it;
 Rust owns business assertions and signing.
 
+Ordinary bridge mode installs no launcher clock binding, preserving production
+request-entry concurrency for the existing Worker cases. Launcher controls require
+`--launcher-time-ms <milliseconds>` before readiness. Only that mode installs the
+clock binding; each object instance samples it on first touch, then receives live
+time pushes. The first-touch outside await is a named test-only difference; it is
+absent from ordinary mode and production. A cold object samples the current cell.
+Invalid time input is refused before any effect. A mid-push transport failure can
+leave time partly applied, fails the run, and has no retry or rollback machinery.
+
 From the repository root:
 
 ```sh

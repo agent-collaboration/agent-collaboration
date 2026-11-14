@@ -83,8 +83,11 @@ export const workerdSignInPlanSchema = z
   })
   .strict();
 
+// Match central_mail_time::MAX_ALARM_UNIX_MILLIS on both storage hosts.
+export const workerdLauncherTimeSchema = z.number().int().safe().min(0).max(9_223_372_036_854);
+
 export const workerdBridgeCommandSchema = z.union([
-  z.object({ setTimeMs: z.number().int().safe() }).strict(),
+  z.object({ setTimeMs: workerdLauncherTimeSchema }).strict(),
   z.object({ observe: z.uuidv7() }).strict(),
 ]);
 

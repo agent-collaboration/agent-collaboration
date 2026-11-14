@@ -153,7 +153,7 @@ impl LauncherChild {
         self.root.join("fleet.db").exists() || self.organization_file(LEGACY).exists()
     }
 
-    async fn command(&mut self, command: &StdinCommand<'_>) -> TestResult<StderrAnswer> {
+    async fn command(&mut self, command: &impl Serialize) -> TestResult<StderrAnswer> {
         let mut bytes =
             serde_json::to_vec(command).map_err(|_| "launcher command serialization failed")?;
         bytes.push(b'\n');
@@ -175,6 +175,13 @@ impl LauncherChild {
             }
             return serde_json::from_value(envelope)
                 .map_err(|_| "launcher stderr answer did not match its typed IPC contract".into());
+        }
+    }
+
+    pub(super) async fn expect_refused(&mut self, command: &Value) -> TestResult {
+        match self.command(command).await? {
+            StderrAnswer::Refused { .. } => Ok(()),
+            _ => Err("invalid launcher command did not receive a refused answer".into()),
         }
     }
 
@@ -231,23 +238,33 @@ impl LauncherChild {
             .map_err(|_| "launcher private HTTP answer was not JSON".into())
     }
 
-    pub(super) async fn terminate_with_stdin_open(mut self) -> TestResult {
+    pub(super) async fn terminate_with_stdin_open(self) -> TestResult {
+        self.shutdown_with_stdin_open(rustix::process::Signal::TERM)
+            .await
+    }
+
+    pub(super) async fn interrupt_with_stdin_open(self) -> TestResult {
+        self.shutdown_with_stdin_open(rustix::process::Signal::INT)
+            .await
+    }
+
+    async fn shutdown_with_stdin_open(mut self, signal: rustix::process::Signal) -> TestResult {
         if self.input.is_none() || self.child.try_wait()?.is_some() {
-            return Err("launcher stopped or stdin closed before SIGTERM".into());
+            return Err("launcher stopped or stdin closed before the shutdown signal".into());
         }
         let pid = self.child.id().ok_or("launcher child PID missing")?;
         let pid = rustix::process::Pid::from_raw(i32::try_from(pid)?)
             .ok_or("launcher child PID invalid")?;
-        rustix::process::kill_process(pid, rustix::process::Signal::TERM)?;
+        rustix::process::kill_process(pid, signal)?;
         // Keep the write end alive until the actual child has exited. Closing
-        // stdin first would hide a reader that cannot be cancelled by SIGTERM.
+        // stdin first would hide a reader that cannot be cancelled by the signal.
         let status = self.child.wait().await?;
         self.input.take();
         if status.code() != Some(0) {
-            return Err("launcher SIGTERM exit was not zero".into());
+            return Err("launcher shutdown signal exit was not zero".into());
         }
         if self.socket.exists() {
-            return Err("launcher SIGTERM left its private socket behind".into());
+            return Err("launcher shutdown signal left its private socket behind".into());
         }
         if self.output.next_line().await?.is_some() {
             return Err("launcher stdout contained a line beyond readiness".into());

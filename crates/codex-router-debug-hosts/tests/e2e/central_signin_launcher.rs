@@ -68,7 +68,8 @@ async fn real_launcher_keeps_private_ipc_clock_observation_and_fresh_restart_con
 -> TestResult {
     // Wrong builds caught: parser-only readiness, wrong socket permissions,
     // unknown observation opening a store, one clock not reaching live/future
-    // orgs, fabricated observation rows, or shutdown waiting for stdin EOF.
+    // orgs, fabricated observation rows, command refusal ending the process,
+    // either shutdown signal ignored, or shutdown waiting for stdin EOF.
     let keys = signed::SignInKeys::start().await?;
     let first_root = tempfile::Builder::new().prefix("sil-").tempdir()?;
     let mut child = LauncherChild::start(
@@ -163,10 +164,22 @@ async fn real_launcher_keeps_private_ipc_clock_observation_and_fresh_restart_con
         moved * 1000,
     )?;
     assert_eq!(child.set_time_ms(moved * 1000).await?, 2);
+    for invalid_command in [json!({"restartFresh":true}), json!({"setTimeMs":1.5})] {
+        child.expect_refused(&invalid_command).await?;
+        assert_eq!(
+            child.set_time_ms(moved * 1000).await?,
+            2,
+            "the next valid command must still answer after each refusal"
+        );
+        assert!(
+            child.observe(signed::ORGANIZATION).await? == renewed,
+            "a refused command must preserve the existing organization observation"
+        );
+    }
     child.terminate_with_stdin_open().await?;
 
     // The only fresh restart is an external new process on a fresh root.
-    // No restartFresh JSON command or live-registry reset exists in this test.
+    // The restartFresh request above was refused; no live-registry reset occurred.
     let fresh_root = tempfile::Builder::new().prefix("sil-").tempdir()?;
     let mut fresh = LauncherChild::start(
         &fresh_root.path().join("data"),
@@ -182,6 +195,6 @@ async fn real_launcher_keeps_private_ipc_clock_observation_and_fresh_restart_con
             && !fresh.organization_file(SECOND).exists(),
         "fresh-store observation recreated a previous org"
     );
-    fresh.terminate_with_stdin_open().await?;
+    fresh.interrupt_with_stdin_open().await?;
     keys.shutdown().await
 }

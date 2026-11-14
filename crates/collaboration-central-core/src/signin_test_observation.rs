@@ -16,6 +16,9 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use workspace_model::{PersonId, RequestId, ResourceName, Timestamp, WorkspaceId, WorkspaceState};
 
+/// Canonical empty fixture shared with launcher apparatus under test-support.
+pub const EMPTY_SIGNIN_OBSERVATION_JSON: &str = include_str!("signin_observation_empty.json");
+
 /// The agreed minimal sign-in facts from the owning modern store.
 /// Deliberately has no Debug: `statement` belongs only in the private IPC answer.
 #[derive(Clone, Eq, PartialEq, Serialize, Deserialize)]

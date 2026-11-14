@@ -121,6 +121,8 @@ pub struct CentralObject {
     clock: WorkspaceClock,
     #[cfg(feature = "test-support")]
     controls: workspace_cases::Controls,
+    #[cfg(feature = "test-support")]
+    launcher_clock_sampled: Mutex<bool>,
 }
 impl CentralObject {
     fn check_physical_organization(&self, organization: &OrganizationId) -> Result<()> {
@@ -234,6 +236,8 @@ impl DurableObject for CentralObject {
             clock: WorkspaceClock::default(),
             #[cfg(feature = "test-support")]
             controls: workspace_cases::Controls::default(),
+            #[cfg(feature = "test-support")]
+            launcher_clock_sampled: Mutex::new(false),
         }
     }
     async fn fetch(&self, mut request: Request) -> Result<Response> {

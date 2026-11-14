@@ -40,8 +40,8 @@ test = true
 bench = false
 
 [[test]]
-name = "integration"
-path = "tests/integration/main.rs"
+name = "e2e"
+path = "tests/e2e/main.rs"
 required-features = ["signin-test-support"]
 
 [[bin]]
