@@ -1,5 +1,9 @@
 //! SQLite quota snapshot DTOs.
 
+#[cfg(test)]
+#[path = "quota_snapshot_test.rs"]
+mod tests;
+
 use codex_router_core::credit_usage::CreditUsagePolicy;
 use codex_router_core::ids::AccountId;
 use codex_router_core::provider::Provider;
@@ -47,6 +51,8 @@ pub enum QuotaSnapshotSource {
     MockEndpoint,
     /// OpenAI quota endpoint.
     OpenAiEndpoint,
+    /// Claude OAuth usage endpoint.
+    ClaudeEndpoint,
     /// Stale marker written after credential mutation.
     CredentialMutation,
 }
@@ -58,6 +64,7 @@ impl QuotaSnapshotSource {
         match self {
             Self::MockEndpoint => "mock_endpoint",
             Self::OpenAiEndpoint => "openai_endpoint",
+            Self::ClaudeEndpoint => "claude_endpoint",
             Self::CredentialMutation => "credential_mutation",
         }
     }
@@ -68,6 +75,7 @@ impl QuotaSnapshotSource {
         match value {
             "mock_endpoint" => Some(Self::MockEndpoint),
             "openai_endpoint" => Some(Self::OpenAiEndpoint),
+            "claude_endpoint" => Some(Self::ClaudeEndpoint),
             "credential_mutation" => Some(Self::CredentialMutation),
             _ => None,
         }

@@ -207,7 +207,7 @@ async fn literal_claude_new_starts_foreground_and_preserves_routed_process_bound
 }
 
 #[tokio::test]
-async fn claude_resume_rejects_override_arguments_without_starting_a_copy() {
+async fn claude_resume_with_arguments_still_requires_discoverable_session() {
     let fixture = ClaudeProcessFixture::new().await.unwrap();
     let session_id = "018f47d2-24d5-7a68-b9ec-6f759c39458f";
     let output = tokio::time::timeout(
@@ -236,9 +236,9 @@ async fn claude_resume_rejects_override_arguments_without_starting_a_copy() {
     .unwrap();
     assert!(!output.status.success());
     assert!(!fixture.root.path().join("invocations.txt").exists());
-    assert_eq!(fixture.health_requests.load(Ordering::SeqCst), 0);
+    assert_eq!(fixture.health_requests.load(Ordering::SeqCst), 1);
     assert!(
-        String::from_utf8_lossy(&output.stderr).contains("without them to continue this session")
+        !String::from_utf8_lossy(&output.stderr).contains("without them to continue this session")
     );
 }
 

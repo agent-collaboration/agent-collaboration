@@ -547,7 +547,7 @@ async fn quota_status_renderer_uses_reset_pace_fields_without_parsing_strings() 
         selection_projection_degraded: false,
         serving_clients: None,
         rows: vec![QuotaStatusAccountViewModel {
-            login_state: Default::default(),
+            login_state: codex_router_quota_service::quota_display_model::QuotaLoginState::SignedIn,
             provider: codex_router_core::provider::Provider::Openai,
             account_id: test_account_id("ssdev"),
             account_tag: "test-tag".to_owned(),

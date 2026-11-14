@@ -46,9 +46,30 @@ pub struct QuotaStatusAccountViewModel {
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub enum QuotaLoginState {
-    #[default]
-    NotRequired,
+    SignedIn,
     Required,
+    SignedOut,
+    Retrying,
+    InProgress,
+    #[default]
+    Unknown,
+}
+
+impl QuotaLoginState {
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::SignedIn => "Signed in",
+            Self::Required => "Sign-in required",
+            Self::SignedOut => "Signed out",
+            Self::Retrying => "Renewal retrying",
+            Self::InProgress => "Sign-in pending",
+            Self::Unknown => "Sign-in unknown",
+        }
+    }
+
+    pub const fn requires_login(self) -> bool {
+        matches!(self, Self::Required | Self::SignedOut)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -129,6 +150,7 @@ impl Default for ResetPaceViewModel {
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct QuotaSelectedAccountViewModel {
     pub account: String,
+    pub login: String,
     pub status: String,
     pub reason: String,
     pub short_window: String,

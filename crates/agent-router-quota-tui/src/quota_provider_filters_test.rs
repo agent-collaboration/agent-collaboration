@@ -175,7 +175,7 @@ fn mixed_provider_filter_view_model() -> QuotaStatusViewModel {
     .enumerate()
     .map(
         |(index, (label, provider, enabled))| QuotaStatusAccountViewModel {
-            login_state: Default::default(),
+            login_state: codex_router_quota_service::quota_display_model::QuotaLoginState::SignedIn,
             provider,
             account_id: test_account_id(label),
             account: label.to_owned(),

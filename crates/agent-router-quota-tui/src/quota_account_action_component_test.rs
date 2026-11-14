@@ -31,7 +31,7 @@ where
 
 #[tokio::test]
 async fn details_login_is_primary_only_when_the_captured_account_requires_login() {
-    for login_state in [QuotaLoginState::NotRequired, QuotaLoginState::Required] {
+    for login_state in [QuotaLoginState::SignedIn, QuotaLoginState::Required] {
         let mut model = quota_two_account_view_model();
         model.rows[1].login_state = login_state;
         let target = AccountActionTarget::from_row(&model.rows[1], 1).unwrap();
@@ -76,7 +76,7 @@ async fn details_login_is_primary_only_when_the_captured_account_requires_login(
             "{frame}"
         );
         sender.send(control_event(KeyCode::Enter)).unwrap();
-        if login_state == QuotaLoginState::NotRequired {
+        if login_state == QuotaLoginState::SignedIn {
             let returned = account_checkpoint(frames.as_mut(), "Quota ·").await;
             assert!(!returned.to_string().contains("Account details"));
             assert_eq!(*fixture.outcome.lock().unwrap(), None);

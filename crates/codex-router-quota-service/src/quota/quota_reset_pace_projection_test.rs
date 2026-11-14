@@ -279,6 +279,45 @@ fn quota_status_reset_pace_unavailable_has_marker_meter() {
 }
 
 #[test]
+fn unavailable_pace_names_the_missing_evidence_with_reset_priority() {
+    for (reset, confidence, reason) in [
+        (
+            None,
+            QuotaRunRateConfidence::Insufficient,
+            "reset time unknown",
+        ),
+        (
+            Some(NOW + 1000),
+            QuotaRunRateConfidence::Insufficient,
+            "collecting quota samples",
+        ),
+        (
+            Some(NOW + 1000),
+            QuotaRunRateConfidence::Stale,
+            "quota samples stale",
+        ),
+        (
+            Some(NOW + 1000),
+            QuotaRunRateConfidence::Unknown,
+            "no usable quota history",
+        ),
+    ] {
+        let snapshot = QuotaPaceSnapshot {
+            remaining_headroom: 75,
+            reset_unix_seconds: reset,
+            projected_exhaustion_unix_seconds: None,
+            projected_candidate_burn_basis_points_per_hour: None,
+            aggregate_burn_basis_points_per_hour: None,
+            per_connection_burn_basis_points_per_hour: None,
+            confidence,
+        };
+        let view = reset_pace_view_model_from_snapshot(Some(snapshot), NOW);
+        assert_eq!(view.state, ResetPaceState::Unavailable);
+        assert_eq!(view.unavailable_reason.as_deref(), Some(reason));
+    }
+}
+
+#[test]
 fn quota_status_short_reset_pace_collects_data_for_insufficient_snapshot_samples() {
     let snapshot = QuotaPaceSnapshot {
         remaining_headroom: 99,

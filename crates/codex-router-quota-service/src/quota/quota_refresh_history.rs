@@ -4,6 +4,7 @@ use super::{
     QuotaServiceError, QuotaSnapshotSource, SelectorQuotaWindowStatus, V1_SHORT_WINDOW_SECONDS,
     V1_WEEKLY_WINDOW_SECONDS,
 };
+use codex_router_core::provider::Provider;
 
 pub async fn append_success_quota_history_observation(
     state: &AsyncSqliteStateStore,
@@ -33,13 +34,18 @@ pub fn success_quota_history_observation(
     observed_unix_seconds: u64,
     reset_credits_available: Option<u32>,
 ) -> Result<PersistedQuotaHistoryObservation, QuotaServiceError> {
-    let remaining_headroom =
-        window
-            .headroom
-            .percent()
-            .ok_or_else(|| QuotaServiceError::ProviderResponse {
-                message: "OpenAI quota history window was not expressed as a percent".to_owned(),
-            })?;
+    // History and the estimator use whole percentages for both providers.
+    let remaining_headroom = match account.provider() {
+        Provider::Openai => window.headroom.percent(),
+        Provider::Claude => window.headroom.basis_points().map(|value| value / 100),
+    }
+    .ok_or_else(|| QuotaServiceError::ProviderResponse {
+        message: "quota history window used unexpected provider headroom units".to_owned(),
+    })?;
+    let refresh_source = match account.provider() {
+        Provider::Openai => QuotaSnapshotSource::OpenAiEndpoint,
+        Provider::Claude => QuotaSnapshotSource::ClaudeEndpoint,
+    };
     let status = if remaining_headroom == 0 {
         SelectorQuotaWindowStatus::Ineligible
     } else {
@@ -55,7 +61,7 @@ pub fn success_quota_history_observation(
     )
     .with_effective(window.effective)
     .with_window_status(status)
-    .with_refresh_source(QuotaSnapshotSource::OpenAiEndpoint)
+    .with_refresh_source(refresh_source)
     .with_refresh_outcome(QuotaHistoryRefreshOutcome::Success);
     if let Some(reset_unix_seconds) = window.reset_unix_seconds {
         observation = observation.with_reset_unix_seconds(reset_unix_seconds);
@@ -90,6 +96,10 @@ pub fn failure_quota_history_observations(
     observed_unix_seconds: u64,
     error_class: QuotaRefreshErrorClass,
 ) -> [PersistedQuotaHistoryObservation; 2] {
+    let refresh_source = match account.provider() {
+        Provider::Openai => QuotaSnapshotSource::OpenAiEndpoint,
+        Provider::Claude => QuotaSnapshotSource::ClaudeEndpoint,
+    };
     [V1_SHORT_WINDOW_SECONDS, V1_WEEKLY_WINDOW_SECONDS].map(|limit_window_seconds| {
         PersistedQuotaHistoryObservation::new(
             account.account_id().clone(),
@@ -100,10 +110,14 @@ pub fn failure_quota_history_observations(
             0,
         )
         .with_window_status(SelectorQuotaWindowStatus::Unknown)
-        .with_refresh_source(QuotaSnapshotSource::OpenAiEndpoint)
+        .with_refresh_source(refresh_source)
         .with_refresh_outcome(QuotaHistoryRefreshOutcome::Failure { error_class })
     })
 }
+
+#[cfg(test)]
+#[path = "quota_refresh_history_test.rs"]
+mod tests;
 
 pub async fn purge_old_quota_history(
     state: &AsyncSqliteStateStore,

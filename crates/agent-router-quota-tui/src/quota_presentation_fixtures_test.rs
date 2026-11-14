@@ -10,7 +10,7 @@ fn quota_view_model() -> QuotaStatusViewModel {
         selection_projection_degraded: false,
         serving_clients: None,
         rows: vec![QuotaStatusAccountViewModel {
-            login_state: Default::default(),
+            login_state: codex_router_quota_service::quota_display_model::QuotaLoginState::SignedIn,
             provider: codex_router_core::provider::Provider::Openai,
             account_id: test_account_id("ssdev"),
             account_tag: "test-tag".to_owned(),
@@ -114,7 +114,7 @@ pub(crate) fn quota_two_account_view_model() -> QuotaStatusViewModel {
         serving_clients: None,
         rows: vec![
             QuotaStatusAccountViewModel {
-                login_state: Default::default(),
+                login_state: codex_router_quota_service::quota_display_model::QuotaLoginState::SignedIn,
                 provider: codex_router_core::provider::Provider::Openai,
                 account_id: test_account_id("alpha"),
                 account_tag: "alpha-tag".to_owned(),
@@ -151,7 +151,7 @@ pub(crate) fn quota_two_account_view_model() -> QuotaStatusViewModel {
                 details: alpha_details.clone(),
             },
             QuotaStatusAccountViewModel {
-                login_state: Default::default(),
+                login_state: codex_router_quota_service::quota_display_model::QuotaLoginState::SignedIn,
                 provider: codex_router_core::provider::Provider::Openai,
                 account_id: test_account_id("beta"),
                 account_tag: "beta-tag".to_owned(),
@@ -199,7 +199,7 @@ fn quota_many_account_view_model() -> QuotaStatusViewModel {
         let account = format!("acct{index:02}");
         let details = selected_account_details(&account, &format!("account {index:02} detail"));
         rows.push(QuotaStatusAccountViewModel {
-            login_state: Default::default(),
+            login_state: codex_router_quota_service::quota_display_model::QuotaLoginState::SignedIn,
             provider: codex_router_core::provider::Provider::Openai,
             account_id: test_account_id(&account),
             account_tag: format!("tag-{index:02}"),
@@ -281,6 +281,7 @@ fn quota_no_authoritative_selection_view_model() -> QuotaStatusViewModel {
 fn selected_account_details(account: &str, reason: &str) -> QuotaSelectedAccountViewModel {
     QuotaSelectedAccountViewModel {
         account: account.to_owned(),
+        login: "Signed in · saved credentials · live provider validation not checked".to_owned(),
         status: "available".to_owned(),
         reason: reason.to_owned(),
         short_window: "█████ 99% left, reset 5h".to_owned(),
@@ -412,7 +413,7 @@ fn quota_state_color_row(
         unavailable_reason: None,
     };
     QuotaStatusAccountViewModel {
-        login_state: Default::default(),
+        login_state: codex_router_quota_service::quota_display_model::QuotaLoginState::SignedIn,
         provider: codex_router_core::provider::Provider::Openai,
         account_id: test_account_id(account),
         account_tag: format!("{account}-tag"),

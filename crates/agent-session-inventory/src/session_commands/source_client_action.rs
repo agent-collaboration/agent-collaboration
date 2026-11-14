@@ -98,7 +98,6 @@ pub fn run_local_claude_terminal(
     mode: super::claude_terminal_launch::ClaudeTerminalMode,
     service_directory: &std::path::Path,
     home_directory: Option<&std::path::Path>,
-    global_arguments: &[std::ffi::OsString],
 ) -> Result<(), super::SessionsCommandError> {
     use super::SessionsCommandError;
     if request.source != PickerSourceContext::DefaultHosted {
@@ -111,7 +110,6 @@ pub fn run_local_claude_terminal(
     else {
         return Err(SessionsCommandError::SessionSourceUnqualified);
     };
-    let resume = matches!(action, SourceNativeClaudeAction::Resume { .. });
     if mode == super::claude_terminal_launch::ClaudeTerminalMode::BackgroundThenAttach
         && !matches!(action, SourceNativeClaudeAction::New { .. })
     {
@@ -143,11 +141,6 @@ pub fn run_local_claude_terminal(
     drop(runtime);
     // Match the existing Codex terminal owner: the native child inherits this TTY.
     super::claude_terminal_launch::run_claude_terminal(command)?;
-    if resume && !global_arguments.is_empty() {
-        println!(
-            "Opened with its saved settings; options given to agent-sessions apply to new sessions only."
-        );
-    }
     Ok(())
 }
 

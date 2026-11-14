@@ -20,6 +20,49 @@ fn render(row: &QuotaStatusAccountViewModel, width: usize) -> Canvas {
     render_account_groups(row, width, false).render(None)
 }
 
+#[test]
+fn account_third_line_shows_login_independently_from_routing_and_quota() {
+    let mut row = account();
+    row.status = codex_router_quota_service::quota_display_facts::QuotaRowStatus::Account(
+        codex_router_quota_service::quota_display_facts::QuotaAccountStatus::Blocked,
+    );
+    row.display_weekly = known(42, true);
+    let canvas = render(&row, 120);
+    let frame = canvas.to_string();
+    let lines = frame.lines().collect::<Vec<_>>();
+    assert!(lines[2].contains("Signed in"), "{frame}");
+    assert!(!lines[2].contains("blocked"), "{frame}");
+    assert!(
+        lines[3].contains("blocked"),
+        "routing stays visible: {frame}"
+    );
+    assert!(frame.contains("Weekly · stale"), "{frame}");
+    assert!(!row.details.status.is_empty(), "routing remains in Details");
+}
+
+#[test]
+fn narrow_account_column_wraps_login_and_preserves_separate_routing() {
+    let mut row = account();
+    row.login_state = codex_router_quota_service::quota_display_model::QuotaLoginState::Required;
+    row.status = codex_router_quota_service::quota_display_facts::QuotaRowStatus::Account(
+        codex_router_quota_service::quota_display_facts::QuotaAccountStatus::Blocked,
+    );
+    for width in [17_u32, 12] {
+        let canvas = element!(View(width, flex_direction:FlexDirection::Column) {
+            #(account_group(&row, false))
+        })
+        .render(None);
+        let frame = canvas.to_string();
+        let words = frame.split_whitespace().collect::<Vec<_>>().join(" ");
+        let login = words
+            .find("Sign-in required")
+            .expect("wrapped login words remain visible");
+        let routing = words.find("blocked").expect("routing remains visible");
+        assert!(login < routing, "{width}: {frame}");
+        assert!(canvas.width() <= width as usize, "{width}: {frame}");
+    }
+}
+
 fn quota_lines(canvas: &Canvas) -> Vec<String> {
     let frame = canvas.to_string();
     let lines = frame.lines().collect::<Vec<_>>();

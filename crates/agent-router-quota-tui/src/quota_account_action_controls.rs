@@ -13,7 +13,6 @@ use agent_collaboration_tui::{
     controls::{fields::button_target, menu::menu_overlay},
     surfaces::{focus_model::TargetId, surface_handle::SurfaceStackHandle},
 };
-use codex_router_quota_service::quota_display_model::QuotaLoginState;
 
 pub(crate) fn account_dialog_controls(
     stack: SurfaceStackHandle,
@@ -90,7 +89,7 @@ pub(crate) fn account_dialog_controls(
     )?;
     let primary = context
         .target_row(&target)
-        .filter(|row| row.login_state == QuotaLoginState::Required)
+        .filter(|row| row.login_state.requires_login())
         .map(|_| action_id("login"))
         .transpose()?;
     if primary.is_some()

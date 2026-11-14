@@ -291,7 +291,7 @@ pub(super) fn validate(scenario: Scenario, summary: &Value) -> FixtureResult<()>
                     .as_array()
                     .unwrap()
                     .iter()
-                    .any(|row| row["accountId"] == target && row["loginState"] == "NotRequired"),
+                    .any(|row| row["accountId"] == target && row["loginState"] == "SignedIn"),
                 "actual restarted report still requires login",
             )?;
         }

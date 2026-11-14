@@ -81,9 +81,6 @@ pub async fn execute_native_claude(
     if !Path::new(directory.as_str()).is_dir() {
         return Err(SourceRejection::DirectoryUnavailable);
     }
-    if matches!(action, SourceNativeClaudeAction::Resume { .. }) && !arguments.is_empty() {
-        return Err(SourceRejection::InvalidRequest);
-    }
     if let Some(target) = target {
         let summary =
             validate_native_target(request, service_epoch, target, directory.as_str()).await?;
@@ -208,22 +205,22 @@ pub(super) async fn prepare_terminal_command(
     validate_source(&launch, &request.expected_service, service_epoch)
         .await
         .map_err(rejected)?;
-    let (directory, terminal_action, session_id) = match action {
+    let (directory, arguments, session_id) = match action {
         SourceNativeClaudeAction::New {
             directory,
             arguments,
-        } => (directory, Some(arguments.as_slice()), None),
+        } => (directory, arguments.as_slice(), None),
         SourceNativeClaudeAction::Resume {
             target,
             directory,
             arguments,
-        } if arguments.is_empty() => {
+        } => {
             validate_native_target(request, service_epoch, target, directory.as_str())
                 .await
                 .map_err(rejected)?;
             (
                 directory,
-                None,
+                arguments.as_slice(),
                 Some(String::from(target.session_id.clone())),
             )
         }
@@ -236,10 +233,12 @@ pub(super) async fn prepare_terminal_command(
     validate_source(&launch, &request.expected_service, service_epoch)
         .await
         .map_err(rejected)?;
-    let action = match (terminal_action, session_id.as_deref()) {
-        (Some(arguments), None) => ClaudeTerminalAction::New { arguments },
-        (None, Some(session_id)) => ClaudeTerminalAction::Resume { session_id },
-        _ => return Err(rejected(SourceRejection::InvalidRequest)),
+    let action = match session_id.as_deref() {
+        None => ClaudeTerminalAction::New { arguments },
+        Some(session_id) => ClaudeTerminalAction::Resume {
+            session_id,
+            arguments,
+        },
     };
     prepare_claude_terminal(
         &launch,

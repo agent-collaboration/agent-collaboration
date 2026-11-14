@@ -60,7 +60,7 @@ fn summary_deduplicates_only_adjacent_compact_equals_and_preserves_every_retaine
         ("/listSelection", Value::Null),
         ("/captured", json!({"kind":"other"})),
         ("/rows/0/accountId", json!("other-account")),
-        ("/rows/0/loginState", json!("NotRequired")),
+        ("/rows/0/loginState", json!("SignedIn")),
         ("/actions/0/id", json!("quota:group-status")),
         ("/actions/0/checked", json!(false)),
         ("/actions/1/checked", json!(true)),

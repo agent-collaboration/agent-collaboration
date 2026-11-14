@@ -332,6 +332,34 @@ async fn real_http_refresh_replaces_stale_weekly_zero_and_clears_parse_failure()
         assert_eq!(observation.reset_unix_seconds(), Some(expected_reset));
         assert_eq!(observation.observation_started_at(), observation_started_at);
     }
+
+    let state = AsyncSqliteStateStore::open_read_only(
+        &codex_router_state::provider_proxy_database_path(&fixture.router_root),
+    )
+    .await
+    .expect("read-only history store");
+    let history = state
+        .quota_history_observations_for_window(
+            &fixture.account_id,
+            RouteBand::ClaudeMessages.as_str(),
+            V1_WEEKLY_WINDOW_SECONDS,
+            observation_started_at,
+            observation_started_at,
+        )
+        .await
+        .expect("Claude weekly history");
+    assert_eq!(
+        history.len(),
+        1,
+        "successful Claude refresh must retain estimator history"
+    );
+    assert_eq!(history[0].remaining_headroom(), 65);
+    assert_eq!(
+        history[0].refresh_source(),
+        QuotaSnapshotSource::ClaudeEndpoint
+    );
+    assert_eq!(history[0].reset_unix_seconds(), Some(1_791_072_000));
+    state.close().await.expect("close history store");
 }
 
 #[tokio::test]

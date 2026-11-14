@@ -20,13 +20,13 @@ pub(crate) fn render_account_details(
     login_target: Option<&super::AccountActionTarget>,
 ) -> AnyElement<'static> {
     let label_width = FormFields::label_width_for([
-        "Status", "Reason", "weekly", "5h", "sample", "rate", "conn", "clients", "guards", "reset",
-        "note",
+        "Login", "Status", "Reason", "weekly", "5h", "sample", "rate", "conn", "clients", "guards",
+        "reset", "note",
     ]);
     element!(View(width:u32::try_from(width).unwrap_or(u32::MAX),max_width:100pct) {DialogSections {
         DialogSection(heading:String::new()) {FormFields(stacked:width<32,minimum_label_width:Some(label_width)) {
-            #(vec![field("Status",details.status.clone(),UiTextRole::Body),field("Reason",details.reason.clone(),UiTextRole::Body)])
-            #(login_target.map(|target|field("Login",login_command_preview(target),UiTextRole::Secondary)))
+            #(vec![field("Login",details.login.clone(),UiTextRole::Body),field("Status",details.status.clone(),UiTextRole::Body),field("Reason",details.reason.clone(),UiTextRole::Body)])
+            #(login_target.map(|target|field("Command",login_command_preview(target),UiTextRole::Secondary)))
         }}
         DialogSection(heading:"Quota windows".to_owned()) {FormFields(stacked:width<32,minimum_label_width:Some(label_width)) {
             #(vec![field("weekly",details.weekly_window.clone(),UiTextRole::Body),field("5h",details.short_window.clone(),UiTextRole::Body)])
@@ -58,18 +58,5 @@ fn login_command_preview(target: &super::AccountActionTarget) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    fn login_preview_quotes_the_captured_label_and_uses_its_provider() {
-        let mut row = crate::quota_browse_presentation_test::quota_two_account_view_model()
-            .rows
-            .remove(0);
-        row.account = "O'Neil Research $literal".to_owned();
-        row.provider = codex_router_core::provider::Provider::Claude;
-        let target = crate::AccountActionTarget::from_row(&row, 0).unwrap();
-        assert_eq!(
-            super::login_command_preview(&target),
-            "codex-router account login --provider claude --label 'O'\\''Neil Research $literal'"
-        );
-    }
-}
+#[path = "quota_account_details_view_test.rs"]
+mod tests;

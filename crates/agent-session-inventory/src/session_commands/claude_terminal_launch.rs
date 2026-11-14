@@ -11,8 +11,6 @@ use std::{
     time::Duration,
 };
 
-pub const RESUME_OVERRIDES_MESSAGE: &str = "Claude would start a copy if resumed with extra options. Run it again without them to continue this session, or use Fork to start a copy with new options.";
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ClaudeTerminalMode {
     Foreground,
@@ -74,8 +72,13 @@ pub fn run_claude_terminal(mut command: Command) -> Result<(), SessionsCommandEr
 }
 
 pub enum ClaudeTerminalAction<'a> {
-    New { arguments: &'a [OsString] },
-    Resume { session_id: &'a str },
+    New {
+        arguments: &'a [OsString],
+    },
+    Resume {
+        session_id: &'a str,
+        arguments: &'a [OsString],
+    },
 }
 
 pub struct ClaudeTerminalRequest<'a> {
@@ -92,7 +95,10 @@ pub async fn prepare_claude_terminal(
         ClaudeTerminalAction::New { arguments } => {
             Ok(launch.foreground_command(arguments, request.working_directory, environment))
         }
-        ClaudeTerminalAction::Resume { session_id } => {
+        ClaudeTerminalAction::Resume {
+            session_id,
+            arguments,
+        } => {
             let plan = plan_claude_resume(launch, session_id).await?;
             if request
                 .working_directory
@@ -100,7 +106,7 @@ pub async fn prepare_claude_terminal(
             {
                 return Err(SessionsCommandError::ClaudeLaunch("Claude's working directory changed. Refresh the list before opening this session.".to_owned()));
             }
-            let command = plan.command(launch, environment.clone());
+            let command = plan.command(launch, arguments, environment.clone());
             if matches!(plan.mode, ClaudeResumeMode::RestartBackground { .. }) {
                 let handle = start_background_and_read_handle(command).await?;
                 Ok(launch.attach_command(&handle, Some(&plan.working_directory), environment))
@@ -124,8 +130,8 @@ enum ClaudeResumeMode {
 }
 
 impl ClaudeResumePlan {
-    pub(super) fn arguments(&self) -> Vec<OsString> {
-        match &self.mode {
+    pub(super) fn arguments(&self, passthrough: &[OsString]) -> Vec<OsString> {
+        let mut arguments = match &self.mode {
             ClaudeResumeMode::Foreground { session_id } => {
                 vec!["--resume".into(), session_id.into()]
             }
@@ -135,16 +141,19 @@ impl ClaudeResumePlan {
             ClaudeResumeMode::RestartBackground { session_id } => {
                 vec!["--bg".into(), "--resume".into(), session_id.into()]
             }
-        }
+        };
+        arguments.extend_from_slice(passthrough);
+        arguments
     }
 
     fn command(
         &self,
         launch: &ClaudeLaunchTarget,
+        arguments: &[OsString],
         environment: RoutedClaudeEnvironment,
     ) -> Command {
         launch.foreground_command(
-            &self.arguments(),
+            &self.arguments(arguments),
             Some(&self.working_directory),
             environment,
         )
