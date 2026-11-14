@@ -581,9 +581,11 @@ jobs:
       - name: Run the deterministic local process journeys
         run: |
           set -o pipefail
-          cargo nextest run --locked --profile ci -p codex-router-debug-hosts --features signin-test-support --test e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee "$CODEX_ROUTER_E2E_PARENT/signin-launcher.log"
           cargo nextest run --locked --profile ci -p collaboration-central-tokio --features conformance --test e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee "$CODEX_ROUTER_E2E_PARENT/nextest.log"
           cargo nextest run --locked --profile ci --success-output final -p agent-collaboration --all-features --test e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee -a "$CODEX_ROUTER_E2E_PARENT/nextest.log"
+          # This integration target rebuilds sibling debug-host bins without runtime-test-support.
+          # Run it after all journeys that consume the prebuilt board-debug-runtime.
+          cargo nextest run --locked --profile ci -p codex-router-debug-hosts --features signin-test-support --test e2e --test-threads 1 --no-fail-fast --color never --status-level all --final-status-level all 2>&1 | tee "$CODEX_ROUTER_E2E_PARENT/signin-launcher.log"
           if grep -Eq '^[[:space:]]*LEAK[[:space:]]' "$CODEX_ROUTER_E2E_PARENT/nextest.log" "$CODEX_ROUTER_E2E_PARENT/signin-launcher.log"; then
             echo "End-to-end child lifecycle leak detected" >&2
             exit 1
