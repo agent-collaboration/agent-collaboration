@@ -6,7 +6,7 @@ use crate::{
     person_admission_plans::prepare_person_admission,
     person_request::{AdminOperation, PersonRequestInput, PersonRequestRefusal},
 };
-use central_storage::{BatchOutcome, SqlValue, Statement, StatementBatch, StoreFailure};
+use central_storage::{BatchOutcome, StatementBatch, StoreFailure};
 impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
     pub async fn admin_person_request(
         &self,
@@ -63,21 +63,30 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
                 ));
             }
         };
+        let mut statements = plan.statements;
+        let mut operation = None;
         let result = match &verified.operation {
-            AdminOperation::CreateWorkspace(_) => return Err(StoreFailure::Unavailable), // Owner-held mapping is never a fabricated success.
-            AdminOperation::WorkspaceLookup(request) => {
-                let rows = self
-                    .host
-                    .read(Statement {
-                        sql: "SELECT workspace_id FROM workspaces WHERE workspace_id=?",
-                        args: vec![SqlValue::Text(request.workspace_id.as_str().to_owned())],
-                    })
+            AdminOperation::CreateWorkspace(request) => {
+                let created = self
+                    .prepare_workspace_create(&verified, request, now)
                     .await?;
-                // The existing-workspace representation is held with create-workspace.
-                if !rows.rows.is_empty() {
-                    return Err(StoreFailure::Unavailable);
-                }
-                OrganizationAdminResult::Found { workspace: None }
+                statements.extend(created.statements);
+                operation = Some(created.operation);
+                created.result
+            }
+            AdminOperation::WorkspaceLookup(request) => {
+                let workspace = request
+                    .workspace_id
+                    .as_str()
+                    .to_owned()
+                    .try_into()
+                    .map_err(|_| crate::workspace_decode_error::corrupt("workspace_id"))?;
+                let found =
+                    crate::workspace_directory_rows::read_by_id(self.host.as_ref(), &workspace)
+                        .await?
+                        .map(crate::organization_workspace_plans::workspace_view)
+                        .transpose()?;
+                OrganizationAdminResult::Found { workspace: found }
             }
             AdminOperation::ReadChangeRecords(request) => OrganizationAdminResult::Records {
                 records: crate::organization_change_rows::read_page(
@@ -95,12 +104,25 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         match self
             .host
             .run_batch(StatementBatch {
-                statements: plan.statements,
+                statements,
                 alarm: central_storage::AlarmUpdate::Unchanged,
             })
             .await?
         {
-            BatchOutcome::Applied { .. } => Ok(OrganizationAdminAnswer::Answered(result)),
+            BatchOutcome::Applied { .. } => {
+                // Reuse the existing operation-id loss hook after a known commit;
+                // no record-only API or fake committed answer is introduced.
+                #[cfg(feature = "test-support")]
+                if operation
+                    .as_ref()
+                    .is_some_and(|id| self.take_lost_reply(id))
+                {
+                    return Err(StoreFailure::AnswerLost);
+                }
+                #[cfg(not(feature = "test-support"))]
+                let _retained_operation = operation;
+                Ok(OrganizationAdminAnswer::Answered(result))
+            }
             _ => Ok(OrganizationAdminAnswer::Answered(
                 OrganizationAdminResult::Refused {
                     reason: AdminRefusal::Conflict,

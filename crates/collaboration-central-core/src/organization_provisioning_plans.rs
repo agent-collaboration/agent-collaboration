@@ -202,21 +202,17 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
             return Err(Failure::OrganizationMismatch);
         }
         let _turn = self.take_central_turn().await;
-        self.prepare_signin_authority().await?;
-        let now = self.clock.now();
-        match self.signin_authority.standing(now) {
-            StampStanding::Unprovisioned => return Err(Failure::Unprovisioned),
-            StampStanding::Refused => return Err(Failure::Unavailable),
-            StampStanding::Valid => {}
-        }
         let StoredStampRead::Stamped(stamp) =
             organization_stamp_rows::read(self.host.as_ref()).await?
         else {
             return Err(Failure::Unprovisioned);
         };
+        if stamp.organization_id() != &self.organization {
+            return Err(Failure::Unavailable);
+        }
         let check = self.signin_authority.check().ok_or(Failure::Unavailable)?;
         let verified = check
-            .verify_statement(stamp.statement())
+            .verify_stored_statement_facts(stamp.statement())
             .await
             .map_err(|_| Failure::Unavailable)?;
         Ok(OrganizationStatementDigestReply {

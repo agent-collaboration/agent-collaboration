@@ -2,10 +2,7 @@
 use crate::workspace_decode_error::corrupt;
 use crate::workspace_row_codec::WorkspaceRows;
 use crate::{ObjectHost, WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls};
-use central_storage::{
-    AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, SqlValue, Statement,
-    StatementBatch, StoreFailure,
-};
+use central_storage::{AlarmUpdate, BatchOutcome, StatementBatch, StoreFailure};
 use workspace_model as m;
 
 fn reply(result: m::WorkspaceResult) -> m::WorkspaceReply {
@@ -65,19 +62,17 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
             person_id: person_id.clone(),
         },
     };
-    let actor = {
-        let _turn = runtime.take_central_turn().await;
-        runtime.resolve_identity(&identity).await?
-    };
-    let now = runtime.now()?;
-    let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
-    let digest = crate::workspace_request_log::digest(&request.operation)?;
     if let m::WorkspaceOperation::CreateWorkspace { name } = &request.operation {
         let request_id = request
             .request_id
             .as_ref()
             .ok_or_else(|| corrupt("request_id"))?;
         let _turn = runtime.take_central_turn().await;
+        let now = runtime.now()?;
+        let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
+        let digest = crate::workspace_request_log::digest(&request.operation)?;
+        let actor_plan = runtime.prepare_identity(&identity, now).await?;
+        let actor = actor_plan.actor;
         let logged = runtime
             .host
             .read(crate::workspace_request_log::lookup(request_id, &cutoff))
@@ -85,26 +80,28 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
         if let Some(answer) = crate::workspace_request_log::replay(&logged, &actor, &digest)? {
             return Ok(reply(answer));
         }
-        let workspace = m::Workspace {
-            workspace_id: runtime.mint()?,
-            name: name.clone(),
-            state: m::WorkspaceState::Active,
+        let mut statements = actor_plan.statements;
+        let answer = if crate::workspace_directory_rows::read_by_name(runtime.host.as_ref(), name)
+            .await?
+            .is_some()
+        {
+            m::WorkspaceResult::Refused(m::RefusalReason::WorkspaceNameInUse { name: name.clone() })
+        } else {
+            let workspace = m::Workspace {
+                workspace_id: runtime.mint()?,
+                name: name.clone(),
+                state: m::WorkspaceState::Active,
+            };
+            let description = m::Description::try_from(String::new())
+                .map_err(|_| corrupt("workspaces.description"))?;
+            statements.push(crate::workspace_directory_rows::insert(
+                &workspace.workspace_id,
+                name,
+                &description,
+                now,
+            )?);
+            m::WorkspaceResult::Done(m::WorkspaceAnswer::WorkspaceCreated { workspace })
         };
-        let answer = m::WorkspaceResult::Done(m::WorkspaceAnswer::WorkspaceCreated {
-            workspace: workspace.clone(),
-        });
-        let mut statements = vec![GuardedStatement {
-            statement: Statement {
-                sql: "INSERT INTO workspaces (workspace_id,name,state,created_at,updated_at) VALUES (?,?,'active',?,?)",
-                args: vec![
-                    SqlValue::Text(workspace.workspace_id.to_string()),
-                    SqlValue::Text(name.as_str().to_owned()),
-                    SqlValue::Text(now.to_rfc3339()),
-                    SqlValue::Text(now.to_rfc3339()),
-                ],
-            },
-            expect: RowExpectation::Exactly(1),
-        }];
         statements.extend(crate::workspace_request_log::retain(
             request_id,
             &actor,
@@ -129,6 +126,13 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
         }
         return Ok(reply(answer));
     }
+    let actor = {
+        let _turn = runtime.take_central_turn().await;
+        runtime.resolve_identity(&identity).await?
+    };
+    let now = runtime.now()?;
+    let cutoff = (now - chrono::Duration::hours(24)).to_rfc3339();
+    let digest = crate::workspace_request_log::digest(&request.operation)?;
     let workspace = request
         .workspace_id
         .as_ref()

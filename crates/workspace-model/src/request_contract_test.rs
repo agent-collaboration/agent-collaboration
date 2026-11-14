@@ -12,3 +12,22 @@ fn owner_close_backlog_and_self_join_roles_are_admitted_semantic_inputs() {
         assert_eq!(serde_json::to_value(operation).unwrap(), input);
     }
 }
+
+#[test]
+fn workspace_name_collision_preserves_the_typed_name_in_its_wire_refusal() {
+    let name = crate::ResourceName::try_from("Research".to_owned()).unwrap();
+    let refusal = crate::RefusalReason::WorkspaceNameInUse { name };
+    let expected = serde_json::json!({"kind":"workspaceNameInUse","name":"Research"});
+
+    assert_eq!(serde_json::to_value(&refusal).unwrap(), expected);
+    assert_eq!(
+        serde_json::from_value::<crate::RefusalReason>(expected).unwrap(),
+        refusal
+    );
+    assert!(
+        serde_json::from_value::<crate::RefusalReason>(
+            serde_json::json!({"kind":"workspaceNameInUse","name":""})
+        )
+        .is_err()
+    );
+}
