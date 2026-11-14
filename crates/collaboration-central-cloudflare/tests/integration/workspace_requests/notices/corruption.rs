@@ -177,16 +177,36 @@ async fn later_drain_statement_failure_rolls_back_notices_windows_and_cursor_the
             SqlValue::Integer(2.try_into().unwrap())
         ]
     );
-    let duplicate = runtime.statement_host().run_batch(StatementBatch { statements: vec![GuardedStatement { statement: Statement {
-        sql: "INSERT INTO notification_window_items(window_item_id,window_id,change_id,created_at,updated_at) SELECT ?,window_id,change_id,created_at,updated_at FROM notification_window_items", args: vec![text(id::<m::WorkspaceId>(7513))],
-    }, expect: RowExpectation::Exactly(1) }], alarm: AlarmUpdate::Unchanged }).await;
-    assert!(matches!(
-        duplicate,
-        Ok(BatchOutcome::ConstraintViolated {
-            index: 0,
-            kind: ConstraintKind::Unique
+    let pair = runtime.read(Statement {
+        sql: "SELECT window_id,change_id FROM notification_window_items ORDER BY window_id,change_id LIMIT 1",
+        args: vec![],
+    }).await.unwrap();
+    assert_eq!(pair.rows.len(), 1);
+    let fresh_key = id::<m::WorkspaceId>(7513);
+    let existing = runtime
+        .read(Statement {
+            sql: "SELECT COUNT(*) FROM notification_window_items WHERE window_item_id=?",
+            args: vec![text(&fresh_key)],
         })
-    ));
+        .await
+        .unwrap();
+    assert_eq!(
+        existing.rows,
+        vec![vec![SqlValue::Integer(0.try_into().unwrap())]]
+    );
+    let duplicate = runtime.statement_host().run_batch(StatementBatch { statements: vec![GuardedStatement { statement: Statement {
+        sql: "INSERT INTO notification_window_items(window_item_id,window_id,change_id,created_at,updated_at) SELECT ?,window_id,change_id,created_at,updated_at FROM notification_window_items WHERE window_id=? AND change_id=?", args: vec![text(fresh_key), pair.rows[0][0].clone(), pair.rows[0][1].clone()],
+    }, expect: RowExpectation::Exactly(1) }], alarm: AlarmUpdate::Unchanged }).await;
+    assert!(
+        matches!(
+            duplicate,
+            Ok(BatchOutcome::ConstraintViolated {
+                index: 0,
+                kind: ConstraintKind::Unique
+            })
+        ),
+        "pair-index probe must refuse the duplicate: {duplicate:?}"
+    );
     f.host.close().await;
 }
 
