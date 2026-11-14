@@ -676,7 +676,9 @@ jobs:
           set -euo pipefail
           worker-build crates/collaboration-central-cloudflare --dev --no-opt -- --locked --features conformance-faults
           node verification/tooling/check-central-worker-bundle.ts faults
-          # Keep the same 21 cases, arguments and deadlines. Only independent
+          # Keep the same 21 cases and arguments. The 45-minute job bounds
+          # their lifecycle waits; there are no per-scenario harness timers.
+          # Only independent
           # processes overlap; each owns a distinct port, persistence and log.
           cases=(
             composed_scope_workerd/composed-copy-suite

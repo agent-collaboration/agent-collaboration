@@ -39,6 +39,7 @@ for (const mode of ["timeout", "leak"]) {
     },
   );
   const output = result.stdout + result.stderr;
+  let witnessPid: number | undefined;
   writeFileSync(resolve(evidence, `${mode}.log`), output);
   if (result.error !== undefined) throw result.error;
   if (mode === "timeout") {
@@ -46,12 +47,14 @@ for (const mode of ["timeout", "leak"]) {
     assert.match(output, /1 timed out/);
     const match = output.match(/WORKERD_LIFECYCLE_READY (\d+) (\d+)/);
     assert.ok(match !== null, "zero-match or pre-readiness failure is not a timeout proof");
-    for (const raw of match.slice(1))
-      assert.throws(() => process.kill(Number(raw), 0), { code: "ESRCH" });
+    // The bridge can remain an init-owned zombie on Linux after group death.
+    // workerd is the resource the bridge must dispose/reap before it exits.
+    assert.throws(() => process.kill(Number(match[2]), 0), { code: "ESRCH" });
   } else {
     const match = output.match(/WORKERD_LIFECYCLE_LEAK_PID (\d+)/);
     assert.ok(match !== null, "zero-match cannot establish a leak");
     const pid = Number(match[1]);
+    witnessPid = pid;
     try {
       assert.equal(result.status, 0);
       assert.match(output, /^\s*LEAK\s/m);
@@ -78,6 +81,7 @@ for (const mode of ["timeout", "leak"]) {
           `test(=${`workspace_requests::workerd_host::lifecycle_tests::${selector}`})`,
         ],
         exit: result.status,
+        witnessPid,
       },
       null,
       2,

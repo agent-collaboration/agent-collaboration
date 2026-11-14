@@ -128,7 +128,10 @@ pnpm --dir verification exec node tooling/workerd-lifecycle-negative-controls.ts
 ```
 
 It runs the explicit ignored timeout/leak selectors, fails on missing readiness
-or zero matches, observes timeout child exit and settles its deliberate leak.
+or zero matches, and observes workerd exit after timeout. The bridge may remain
+an init-owned zombie after group termination. The driver requests SIGTERM for
+its deliberate plain Node leak witness and records its PID; an exact OS exit
+readback is required before reporting that witness settled.
 Worker CI records nextest output in the job log and fails on a
 genuine `LEAK` result, including a test that nextest otherwise calls successful.
 An always-run `pgrep -x workerd` gate also rejects workerd-only orphans whose

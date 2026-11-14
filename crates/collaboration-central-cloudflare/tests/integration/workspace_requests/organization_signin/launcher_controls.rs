@@ -60,6 +60,50 @@ fn launcher_panic_disposes_real_workerd() {
     super::super::workerd_host::lifecycle_tests::run_parent_death(&selector, &["panic"]);
 }
 
+#[tokio::test]
+async fn launcher_startup_error_survives_unsuccessful_child_cleanup() {
+    let root = tempfile::tempdir().unwrap();
+    let plan = root.path().join("invalid-plan.json");
+    std::fs::write(&plan, "invalid fixture plan").unwrap();
+    let Err(error) = Bridge::start(&plan).await else {
+        panic!("invalid plan started a bridge");
+    };
+    assert!(
+        error.to_string().contains("invalid bridge readiness"),
+        "startup diagnostic was replaced: {error}"
+    );
+}
+
+#[tokio::test]
+async fn launcher_command_error_settles_real_bridge_before_returning() {
+    let fixture = super::support::Fixture::new().await;
+    let mut bridge = Bridge::start(&fixture._plan_root.path().join("signin-plan.json"))
+        .await
+        .unwrap();
+    let pid = bridge.process.with_child(|child| child.id());
+    let workerd = super::super::workerd_host::lifecycle_tests::workerd_child(pid);
+    let pid_value = rustix::process::Pid::from_raw(i32::try_from(pid).unwrap()).unwrap();
+    rustix::process::kill_process(pid_value, rustix::process::Signal::TERM).unwrap();
+    let result = bridge
+        .command(json!({"observe":signed::ORGANIZATION}))
+        .await;
+    assert!(result.is_err(), "terminated bridge cannot answer a command");
+    drop(bridge);
+    super::super::workerd_host::lifecycle_tests::require_exited(pid, workerd);
+    fixture.close().await;
+}
+
+fn stop_after_failure(
+    process: &Process,
+    error: Box<dyn std::error::Error + Send + Sync>,
+) -> Box<dyn std::error::Error + Send + Sync> {
+    if process.stop() {
+        error
+    } else {
+        format!("{error}; launcher bridge exited unsuccessfully during cleanup").into()
+    }
+}
+
 impl Bridge {
     async fn start(plan: &Path) -> ConformanceResult<Self> {
         let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
@@ -98,22 +142,36 @@ impl Bridge {
             let _ = ready_sender.send(result);
             for _ in output.lines().map_while(Result::ok) {}
         }));
-        let ready = ready_receiver.await??;
-        let ready: Ready = serde_json::from_str(&ready).map_err(|_| "invalid bridge readiness")?;
-        let url = reqwest::Url::parse(&ready.origin)?;
-        assert_eq!(url.host_str(), Some("127.0.0.1"));
+        let startup: ConformanceResult<(Ready, reqwest::Client)> = async {
+            let ready = ready_receiver.await??;
+            let ready: Ready =
+                serde_json::from_str(&ready).map_err(|_| "invalid bridge readiness")?;
+            let url = reqwest::Url::parse(&ready.origin)?;
+            if url.host_str() != Some("127.0.0.1") {
+                return Err("bridge readiness is not loopback".into());
+            }
+            let client = reqwest::Client::builder()
+                .no_proxy()
+                .pool_max_idle_per_host(0)
+                .build()?;
+            Ok((ready, client))
+        }
+        .await;
+        let (ready, client) = startup.map_err(|error| stop_after_failure(&process, error))?;
         Ok(Self {
             process,
             stderr,
             origin: ready.origin,
-            client: reqwest::Client::builder()
-                .no_proxy()
-                .pool_max_idle_per_host(0)
-                .build()?,
+            client,
         })
     }
 
     async fn command(&mut self, command: Value) -> ConformanceResult<Value> {
+        let result = self.command_inner(command).await;
+        result.map_err(|error| stop_after_failure(&self.process, error))
+    }
+
+    async fn command_inner(&mut self, command: Value) -> ConformanceResult<Value> {
         let encoded = serde_json::to_string(&command)?;
         self.process.with_child(|child| {
             let stdin = child

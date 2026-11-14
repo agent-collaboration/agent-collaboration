@@ -289,7 +289,19 @@ pub(crate) fn run_parent_death(selector: &str, modes: &[&str]) {
         );
         // EOF on stderr observes both parent and its inheriting bridge exit.
         let _ = drain.join().unwrap();
-        require_exited(bridge, workerd);
+        if mode == "sigkill" {
+            // The bridge may remain an init-owned zombie after its parent is
+            // killed. Its stderr EOF follows disposal/reaping of workerd.
+            assert!(
+                matches!(
+                    test_kill_process(process_id(workerd)),
+                    Err(rustix::io::Errno::SRCH)
+                ),
+                "workerd survived bridge stderr EOF"
+            );
+        } else {
+            require_exited(bridge, workerd);
+        }
         let mut remainder = String::new();
         output.read_to_string(&mut remainder).unwrap();
         if mode == "panic" {
