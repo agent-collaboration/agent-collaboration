@@ -24,9 +24,9 @@ commands do not deploy it. The existing deployment flow uploads that prebuilt
 artifact: `wrangler.config.ts` retains `noBundle`, and the public cf-format
 `cloudflare.config.ts` disables workers.dev and preview URLs. Account, routing
 and real Access values belong to the private ops configuration. The public
-template contains placeholders and three SQLite Durable Object bindings: `PROJECT_COPIES`, the kept project copy, `FLEET`,
-central's object, and `WORKSPACE_STORE`, one store per workspace named by its
-workspace id. A workspace store holds tables and runs the statement batches central
+template contains placeholders and binds `CENTRAL` to each organization's central,
+`PROJECT_COPIES` to the kept project copy, `FLEET` to the legacy object, and
+`WORKSPACE_STORE` to one store per workspace named by its workspace id. A workspace store holds tables and runs the statement batches central
 sends it; it has no rules of its own. Deploying the new `WORKSPACE_STORE` class
 needs a deployment-side Durable Object migration entry; that belongs to the
 deployment deliverable (E), and nothing in this repository deploys it yet.
@@ -93,3 +93,26 @@ process logs, which are kept outside the public tree.
 Complete normal Worker session/holder equivalence and G18 panic rollback with
 subsequent store usability remain PR3 obligations. The removed legacy fixtures
 do not count as proof of those behaviors on the shared core.
+
+## Private organization sign-in link
+
+The `link` feature builds a separate Worker for the five private sign-in routes.
+Its `CENTRAL` binding addresses the public Worker's `CentralObject` namespace;
+it owns no separate Durable Object namespace. The deployment template is
+`cloudflare-link.config.ts`, with public URLs and preview URLs disabled.
+
+Build and inspect its production artifacts from the repository root:
+
+```sh
+worker-build crates/collaboration-central-cloudflare --profile worker-release --no-opt --out-dir build-link -- --locked --no-default-features --features link
+node verification/tooling/check-central-worker-bundle.ts production --bundle-directory crates/collaboration-central-cloudflare/build-link
+```
+
+Trust settings belong to the public central object: `CENTRAL_SIGN_IN_ISSUER`,
+`CENTRAL_SIGN_IN_AUDIENCE`, `CENTRAL_SIGN_IN_JWKS_URL`, `CENTRAL_ADMIN_AUDIENCE`,
+`CENTRAL_PUBLIC_ORIGIN`, and `CENTRAL_SIGN_IN_SERVICE_ID` for person admin calls.
+The runtime verifies organization stamps and person proofs with its injected clock,
+then applies static guarded batches under the organization turn. The active routes
+cover provisioning, statement digest, revision delivery, change records and unknown
+workspace lookup. Workspace creation, existing-workspace view mapping and machine
+login decisions await their separate approved contracts.

@@ -50,11 +50,17 @@ impl InvocationLabels {
     }
 
     pub(crate) fn observe(&self, layer: VerificationLayer, observation: CentralObservation) {
-        let CentralObservation::AccessCheck {
-            route_class,
-            outcome,
-            key_source,
-        } = observation;
+        let (route_class, outcome, key_source) = match observation {
+            CentralObservation::AccessCheck {
+                route_class,
+                outcome,
+                key_source,
+            } => (route_class, outcome, key_source),
+            event @ CentralObservation::OrganizationStatementRefused { .. } => {
+                observe_signin(event);
+                return;
+            }
+        };
         let outcome = match outcome {
             AccessCheckOutcome::AcceptedMachine => "accepted machine".to_owned(),
             AccessCheckOutcome::AcceptedOwner => "accepted owner".to_owned(),
@@ -103,5 +109,19 @@ fn log_safe(value: &str) -> &str {
         value
     } else {
         "unprintable"
+    }
+}
+
+/// Modern org runtime sink; only the core closed classification crosses here.
+pub(crate) fn observe_signin(observation: CentralObservation) {
+    if let CentralObservation::OrganizationStatementRefused {
+        organization,
+        refusal,
+    } = observation
+    {
+        worker::console_log!(
+            "central organization: organization={} refusal={refusal:?}",
+            organization.as_str()
+        );
     }
 }

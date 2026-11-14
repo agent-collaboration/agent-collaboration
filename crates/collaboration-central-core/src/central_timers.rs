@@ -1,8 +1,9 @@
 //! The central alarm validates and fires due work under one serialized turn.
 use crate::{
     ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
-    central_mail_store::{alarm_update, applied, exact, insert_message, text, timestamp},
+    central_mail_store::{alarm_update, applied, insert_message, timestamp},
     central_timer_plans::{AutomationRow, WakeRow, decode_automations, decode_wakes},
+    guarded_statements::{exact, text},
     workspace_decode_error::corrupt,
 };
 use central_storage::{SqlValue, Statement, StatementBatch, StoreFailure};

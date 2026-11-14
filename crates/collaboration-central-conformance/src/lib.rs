@@ -2,6 +2,8 @@
 #![forbid(unsafe_code)]
 #[cfg(feature = "client")]
 mod admin_import_scenario;
+#[cfg(all(feature = "signin-test-support", not(target_arch = "wasm32")))]
+pub mod signin_fixtures;
 #[cfg(feature = "client")]
 pub use admin_import_scenario::AdminImportScenario;
 #[cfg(feature = "client")]

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { parse } from "smol-toml";
 import { z } from "zod";
 import { conformanceMarkers } from "./worker-bundle-markers.ts";
@@ -34,6 +34,7 @@ function booleanTuple(values: readonly boolean[]): string {
 export function checkWorkerBundle(
   mode: "production" | "faults",
   repositoryRoot: string = process.cwd(),
+  artifactDirectory: string = "crates/collaboration-central-cloudflare/build",
 ): { readonly status: number; readonly message: string } {
   const read = (path: string): string => readFileSync(join(repositoryRoot, path), "utf8");
   const manifest = z
@@ -62,7 +63,7 @@ export function checkWorkerBundle(
       message: "Worker production prebuild must select --profile worker-release",
     };
   const artifacts = ["index.js", "index_bg.wasm"].map((name) =>
-    join(repositoryRoot, "crates/collaboration-central-cloudflare/build", name),
+    join(resolve(repositoryRoot, artifactDirectory), name),
   );
   if (artifacts.some((path) => !existsSync(path) || !statSync(path).isFile()))
     return { status: 1, message: "Worker bundle missing; build it before checking" };
@@ -106,12 +107,21 @@ export function checkWorkerBundle(
 }
 
 export function main(arguments_: readonly string[] = process.argv.slice(2)): number {
-  const [mode] = arguments_;
-  if (arguments_.length !== 1 || (mode !== "production" && mode !== "faults")) {
-    console.error("usage: check-central-worker-bundle.ts {production,faults}");
+  const [mode, option, directory] = arguments_;
+  if (
+    (mode !== "production" && mode !== "faults") ||
+    (arguments_.length !== 1 &&
+      (arguments_.length !== 3 ||
+        option !== "--bundle-directory" ||
+        directory === undefined ||
+        directory.trim() === ""))
+  ) {
+    console.error(
+      "usage: check-central-worker-bundle.ts {production,faults} [--bundle-directory <path>]",
+    );
     return 2;
   }
-  const result = checkWorkerBundle(mode);
+  const result = checkWorkerBundle(mode, process.cwd(), directory);
   console.log(result.message);
   return result.status;
 }

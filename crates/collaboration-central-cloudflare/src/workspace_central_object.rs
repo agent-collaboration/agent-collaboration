@@ -1,5 +1,6 @@
 //! Org-scoped central: shared core over a statement-only DO adapter, no Fleet engine.
 use crate::{
+    sign_in_trust::CloudflareSignInTrust,
     statement_store::{self, AlarmPolicy},
     worker_clock::WorkspaceClock,
 };
@@ -166,20 +167,33 @@ impl CentralObject {
         }
         self.migrate().await?;
         let host = self.statement_host();
+        let clock: Arc<dyn runtime_primitives::Clock> = Arc::new(self.clock.clone());
         let runtime = WorkspaceRuntime::new(
-            organization,
+            organization.clone(),
             host,
             WorkspaceTransport {
                 env: Arc::new(SendWrapper::new(self.env.clone())),
                 #[cfg(feature = "test-support")]
                 lose_read: self.controls.lose_read.clone(),
             },
-            Arc::new(self.clock.clone()),
+            clock.clone(),
             Arc::new(ClockIds::new(self.clock.clone())),
         );
+        let runtime = match crate::organization_signin_link::trust_settings(&self.env) {
+            Ok(Some(settings)) => match CloudflareSignInTrust::new(settings).for_organization(organization, clock) {
+                Ok(check) => runtime.with_sign_in_verification(check),
+                Err(collaboration_central_core::organization_authority::FleetOrganizationStatementRefusal::InvalidConfiguration) => runtime,
+                Err(_) => return Err(StoreFailure::Unavailable),
+            },
+            // Invalid/missing trust never permits sign-in. The default checker
+            // returns the closed InvalidConfiguration refusal for core to observe.
+            Ok(None) | Err(_) => runtime,
+        };
         #[cfg(feature = "test-support")]
         let runtime = runtime.with_mail_policy(self.controls.mail_policy.get().unwrap_or_default());
-        let runtime = Arc::new(runtime);
+        let runtime = Arc::new(
+            runtime.with_sign_in_observer(Arc::new(crate::access_verification::observe_signin)),
+        );
         runtime.recompute_alarm().await?;
         *initialized = Some(runtime.clone());
         Ok(runtime)
@@ -240,11 +254,33 @@ impl DurableObject for CentralObject {
                 .map_err(|error| worker::Error::RustError(error.to_string()))?;
         if matches!(identity, collaboration_central_core::CentralOrganizationIdentity::Stamped { organization_id } if organization_id != organization)
         {
+            if crate::organization_signin_link::is_signin_path(&request.path()) {
+                return Response::empty().map(|response| response.with_status(503));
+            }
             return Response::error("central organization mismatch", 403);
         }
         #[cfg(feature = "test-support")]
         if request.path().starts_with("/test/") {
             return workspace_cases::control(self, organization, request).await;
+        }
+        if crate::organization_signin_link::is_signin_path(&request.path()) {
+            let runtime = match self.runtime_checked(organization).await {
+                Ok(runtime) => runtime,
+                Err(_) => return Response::empty().map(|response| response.with_status(503)),
+            };
+            let request: worker::HttpRequest = request.try_into()?;
+            let (parts, body) = request.into_parts();
+            let body = match crate::http_body::complete(body).await? {
+                crate::http_body::BodyCompletion::Complete(body) => body,
+                crate::http_body::BodyCompletion::OverLimit => {
+                    return crate::http_body::over_limit();
+                }
+            };
+            use tower_service::Service;
+            let response = collaboration_central_core::organization_signin_router(runtime)
+                .call(http::Request::from_parts(parts, body))
+                .await?;
+            return response.try_into();
         }
         if request.path() == "/mail" {
             let call: CentralMailRequest = request.json().await?;

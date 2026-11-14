@@ -45,6 +45,32 @@ impl TokioServer {
         Self::start_on(settings, SocketAddr::from(([127, 0, 0, 1], 0))).await
     }
 
+    /// Real public-listener proof can share the scenario's single clock.
+    #[cfg(feature = "test-support")]
+    pub async fn start_with_clock(
+        settings: TokioSettings,
+        clock: Arc<dyn runtime_primitives::Clock>,
+    ) -> Result<Self, TokioServerError> {
+        let platform = TokioCentralPlatform::new(
+            &settings.jwks_url,
+            clock,
+            crate::native_logging::observe,
+            &settings.root,
+            settings.registry,
+            settings.delivery,
+            settings.holder_answer_timeout,
+            settings.copy_ack_wait,
+        )
+        .await?;
+        Self::serve_platform(
+            settings,
+            SocketAddr::from(([127, 0, 0, 1], 0)),
+            platform,
+            None,
+        )
+        .await
+    }
+
     pub async fn start_on(
         settings: TokioSettings,
         listen: SocketAddr,

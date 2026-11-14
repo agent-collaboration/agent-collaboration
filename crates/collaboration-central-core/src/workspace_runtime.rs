@@ -30,7 +30,11 @@ pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     pub(crate) clock: Arc<dyn Clock>,
     pub(crate) ids: Arc<dyn IdSource>,
     pub(crate) turns: WorkspaceTurns,
+    pub(crate) signin_observer: Arc<dyn Fn(crate::CentralObservation) + Send + Sync>,
+    pub(crate) signin_authority: crate::organization_authority_cache::OrganizationAuthority,
     pub(crate) central_turn: tokio::sync::Mutex<()>,
+    #[cfg(feature = "test-support")]
+    lost_provisioning_reply: std::sync::atomic::AtomicBool,
     #[cfg(feature = "test-support")]
     central_waiting: tokio::sync::watch::Sender<usize>,
     pub(crate) mail_policy: collaboration_protocol::central_mail::MailPolicy,
@@ -56,8 +60,12 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             ids,
             turns: WorkspaceTurns::default(),
             central_turn: tokio::sync::Mutex::new(()),
+            signin_authority: Default::default(),
+            signin_observer: Arc::new(|_| {}),
             #[cfg(feature = "test-support")]
             central_waiting: tokio::sync::watch::channel(0).0,
+            #[cfg(feature = "test-support")]
+            lost_provisioning_reply: Default::default(),
             mail_policy: Default::default(),
             drain_retry_seconds: Default::default(),
             #[cfg(feature = "test-support")]
@@ -65,6 +73,30 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             #[cfg(feature = "test-support")]
             lost_answers: Default::default(),
         }
+    }
+    #[cfg(feature = "test-support")]
+    pub fn lose_next_provisioning_reply(&self) {
+        self.lost_provisioning_reply
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+    #[cfg(feature = "test-support")]
+    pub(crate) fn take_lost_provisioning_reply(&self) -> bool {
+        self.lost_provisioning_reply
+            .swap(false, std::sync::atomic::Ordering::SeqCst)
+    }
+    pub fn with_sign_in_observer(
+        mut self,
+        observer: Arc<dyn Fn(crate::CentralObservation) + Send + Sync>,
+    ) -> Self {
+        self.signin_observer = observer;
+        self
+    }
+    pub fn with_sign_in_verification(
+        self,
+        check: Arc<dyn crate::organization_authority::SignInVerification>,
+    ) -> Self {
+        self.signin_authority.install_check(check);
+        self
     }
     pub fn with_mail_policy(
         mut self,

@@ -1,12 +1,20 @@
 //! Native composition of org cores over the statement-only SQLite capability.
-use crate::object_storage::ObjectStorage;
+use crate::{object_storage::ObjectStorage, sign_in_trust::NativeSignInTrust};
 #[path = "workspace_alarm_owner.rs"]
 mod workspace_alarm_owner;
 use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
 use collaboration_central_core::{
-    ClockIds, ObjectHost, WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls,
+    ClockIds, ObjectHost, OrganizationAdminAnswer, OrganizationSignInPort, SignInTrustSettings,
+    WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls,
+    identity_contract::{
+        AuthorizationRevision, AuthorizationRevisionAcknowledgement,
+        OrganizationStatementDigestReply, ProvisionOrganization, ProvisionOrganizationResult,
+        ReadOrganizationStatementDigest,
+    },
+    organization_authority::OrganizationProvisioningFailure,
+    person_request::PersonRequestInput,
 };
 use collaboration_protocol::central_mail::{CentralMailRequest, CentralMailResult, MailPolicy};
 use fleet_identity_protocol::OrganizationId;
@@ -79,6 +87,7 @@ pub struct TokioWorkspaceHost {
     root: PathBuf,
     clock: Arc<dyn RuntimeClock>,
     mail_policy: MailPolicy,
+    sign_in: Option<Arc<NativeSignInTrust>>,
     stores: TokioWorkspaceStores,
     orgs:
         Mutex<BTreeMap<OrganizationId, Arc<WorkspaceRuntime<ObjectStorage, TokioWorkspaceStores>>>>,
@@ -93,6 +102,25 @@ impl TokioWorkspaceHost {
         clock: Arc<dyn RuntimeClock>,
         mail_policy: MailPolicy,
     ) -> Result<Self, StoreFailure> {
+        Self::open_configured(root, clock, mail_policy, None).await
+    }
+
+    /// Sign-in trust is supplied before reopening any on-disk organization.
+    pub async fn open_with_signin(
+        root: &Path,
+        clock: Arc<dyn RuntimeClock>,
+        settings: SignInTrustSettings,
+    ) -> Result<Self, StoreFailure> {
+        let trust = NativeSignInTrust::new(settings).map_err(|_| StoreFailure::Unavailable)?;
+        Self::open_configured(root, clock, MailPolicy::default(), Some(Arc::new(trust))).await
+    }
+
+    async fn open_configured(
+        root: &Path,
+        clock: Arc<dyn RuntimeClock>,
+        mail_policy: MailPolicy,
+        sign_in: Option<Arc<NativeSignInTrust>>,
+    ) -> Result<Self, StoreFailure> {
         tokio::fs::create_dir_all(root.join("central"))
             .await
             .map_err(|_| StoreFailure::Unavailable)?;
@@ -100,6 +128,7 @@ impl TokioWorkspaceHost {
             root: root.to_owned(),
             clock,
             mail_policy,
+            sign_in,
             stores: TokioWorkspaceStores {
                 root: root.join("workspace-stores"),
                 stores: Default::default(),
@@ -143,17 +172,29 @@ impl TokioWorkspaceHost {
                 .join(format!("{}.sqlite", organization.as_str())),
             Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
         ));
-        let ids: Arc<dyn IdSource> = Arc::new(ClockIds::new(ClockHandle(self.clock.clone())));
-        let runtime = Arc::new(
-            WorkspaceRuntime::new(
-                organization.clone(),
-                storage,
-                self.stores.clone(),
-                Arc::new(ClockHandle(self.clock.clone())),
-                ids,
-            )
-            .with_mail_policy(self.mail_policy),
-        );
+        let clock_handle = ClockHandle(self.clock.clone());
+        let ids: Arc<dyn IdSource> = Arc::new(ClockIds::new(clock_handle.clone()));
+        let clock: Arc<dyn Clock> = Arc::new(clock_handle);
+        let runtime = WorkspaceRuntime::new(
+            organization.clone(),
+            storage,
+            self.stores.clone(),
+            clock.clone(),
+            ids,
+        )
+        .with_mail_policy(self.mail_policy);
+        let runtime = match &self.sign_in {
+            Some(trust) => match trust.for_organization(organization.clone(), clock) {
+                Ok(check) => runtime.with_sign_in_verification(check),
+                // The default checker explicitly refuses every offered statement with
+                // InvalidConfiguration, at the core observation boundary.
+                Err(collaboration_central_core::organization_authority::FleetOrganizationStatementRefusal::InvalidConfiguration) => runtime,
+                Err(_) => return Err(StoreFailure::Unavailable),
+            },
+            None => runtime,
+        };
+        let runtime =
+            Arc::new(runtime.with_sign_in_observer(Arc::new(crate::native_logging::observe)));
         runtime.recompute_alarm().await?;
         self.alarms.lock().await.push(WorkspaceAlarmOwner::start(
             runtime.clone(),
@@ -193,5 +234,51 @@ impl TokioWorkspaceHost {
         for store in self.stores.stores.lock().await.values() {
             store.close().await;
         }
+    }
+}
+
+impl OrganizationSignInPort for TokioWorkspaceHost {
+    async fn provision(
+        &self,
+        request: &ProvisionOrganization,
+    ) -> Result<ProvisionOrganizationResult, OrganizationProvisioningFailure> {
+        self.central(&request.organization_id)
+            .await
+            .map_err(|_| OrganizationProvisioningFailure::Unavailable)?
+            .provision_organization(request)
+            .await
+    }
+
+    async fn digest(
+        &self,
+        request: &ReadOrganizationStatementDigest,
+    ) -> Result<OrganizationStatementDigestReply, OrganizationProvisioningFailure> {
+        self.central(&request.organization_id)
+            .await
+            .map_err(|_| OrganizationProvisioningFailure::Unavailable)?
+            .read_statement_digest(request)
+            .await
+    }
+
+    async fn revision(
+        &self,
+        request: &AuthorizationRevision,
+    ) -> Result<AuthorizationRevisionAcknowledgement, OrganizationProvisioningFailure> {
+        self.central(request.organization_id())
+            .await
+            .map_err(|_| OrganizationProvisioningFailure::Unavailable)?
+            .deliver_authorization_revision(request)
+            .await
+    }
+
+    async fn admin(
+        &self,
+        organization: OrganizationId,
+        input: PersonRequestInput,
+    ) -> Result<OrganizationAdminAnswer, StoreFailure> {
+        self.central(&organization)
+            .await?
+            .admin_person_request(&input)
+            .await
     }
 }

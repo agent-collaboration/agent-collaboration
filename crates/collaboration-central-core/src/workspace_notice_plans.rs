@@ -1,7 +1,8 @@
 //! Position-ordered notice decisions from a single workspace snapshot.
 use crate::{
     ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
-    central_mail_store::{any, text, timestamp},
+    central_mail_store::timestamp,
+    guarded_statements::{any, text},
     notification_windows::{NotificationWindow, delete_window, notice_item, window_statements},
     workspace_decode_error::corrupt,
     workspace_row_codec::WorkspaceRows,

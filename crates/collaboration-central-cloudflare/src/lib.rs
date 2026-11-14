@@ -1,5 +1,12 @@
 //! Cloudflare capabilities for the shared asynchronous application core.
 #![forbid(unsafe_code)]
+#![cfg_attr(
+    feature = "link",
+    expect(
+        dead_code,
+        reason = "the private link build shares object exports but mounts only its private fetch entry"
+    )
+)]
 mod access_crypto;
 mod access_verification;
 mod binding_attachment;
@@ -22,9 +29,12 @@ mod http_body;
 mod object_location;
 mod object_migrations;
 mod object_shell;
+mod organization_signin_link;
 mod platform;
 mod reply_deadline;
 mod shared_object_store;
+mod sign_in_crypto;
+mod sign_in_trust;
 mod storage_measurement;
 pub use object_shell::{FleetObject, ProjectCopyObject};
 mod statement_store;
@@ -39,9 +49,11 @@ pub use driver_scenarios::DriverScenarioObject;
 pub use shared_object_store::CloudflareStorageHost;
 #[cfg(feature = "test-support")]
 pub use storage_cases::StorageCaseObject;
+#[cfg(not(feature = "link"))]
 use worker::{Context, Env, Request, Response, Result, event};
 pub use workspace_central_object::CentralObject;
 pub use workspace_store_object::WorkspaceStoreObject;
+#[cfg(not(feature = "link"))]
 #[event(fetch)]
 pub async fn main(request: Request, env: Env, _context: Context) -> Result<Response> {
     #[cfg(feature = "test-support")]

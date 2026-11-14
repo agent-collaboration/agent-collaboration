@@ -126,6 +126,8 @@ pub(crate) enum CasePausePoint {
     AfterDrainCommit,
     BeforeTimerCommit,
     AfterTimerCommit,
+    BeforeSignInSample,
+    AfterSignInSample,
 }
 
 impl From<CasePausePoint> for PausePoint {
@@ -138,6 +140,8 @@ impl From<CasePausePoint> for PausePoint {
             CasePausePoint::AfterDrainCommit => Self::AfterDrainCommit,
             CasePausePoint::BeforeTimerCommit => Self::BeforeTimerCommit,
             CasePausePoint::AfterTimerCommit => Self::AfterTimerCommit,
+            CasePausePoint::BeforeSignInSample => Self::BeforeSignInSample,
+            CasePausePoint::AfterSignInSample => Self::AfterSignInSample,
         }
     }
 }
@@ -151,6 +155,8 @@ impl From<PausePoint> for CasePausePoint {
             PausePoint::AfterDrainCommit => Self::AfterDrainCommit,
             PausePoint::BeforeTimerCommit => Self::BeforeTimerCommit,
             PausePoint::AfterTimerCommit => Self::AfterTimerCommit,
+            PausePoint::BeforeSignInSample => Self::BeforeSignInSample,
+            PausePoint::AfterSignInSample => Self::AfterSignInSample,
         }
     }
 }

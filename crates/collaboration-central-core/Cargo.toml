@@ -60,6 +60,7 @@ uuid = { version = "=1.26.0", features = ["v7", "js"] }
 fleet-sync-query-gen.workspace = true
 
 [dev-dependencies]
+ring = "0.17.14"
 jsonschema.workspace = true
 fleet-sync-tokio-runner.workspace = true
 tokio.workspace = true

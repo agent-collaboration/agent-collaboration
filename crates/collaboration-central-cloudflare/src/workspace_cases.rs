@@ -33,6 +33,8 @@ enum Point {
     AfterDrainCommit,
     BeforeTimerCommit,
     AfterTimerCommit,
+    BeforeSignInSample,
+    AfterSignInSample,
 }
 impl From<Point> for PausePoint {
     fn from(point: Point) -> Self {
@@ -43,6 +45,8 @@ impl From<Point> for PausePoint {
             Point::AfterDrainCommit => Self::AfterDrainCommit,
             Point::BeforeTimerCommit => Self::BeforeTimerCommit,
             Point::AfterTimerCommit => Self::AfterTimerCommit,
+            Point::BeforeSignInSample => Self::BeforeSignInSample,
+            Point::AfterSignInSample => Self::AfterSignInSample,
         }
     }
 }
@@ -125,6 +129,10 @@ pub(super) async fn control(
     }
     let runtime = object.runtime(organization).await?;
     match path.as_str() {
+        "/test/lose-provisioning-reply" => {
+            runtime.lose_next_provisioning_reply();
+            Response::from_json(&true)
+        }
         "/test/fail-alarm-batch" => {
             let failure = request.json().await?;
             *object
@@ -141,7 +149,13 @@ pub(super) async fn control(
         "/test/alarm" => Response::from_json(&object.state.storage().get_alarm().await?),
         "/test/hold-central" => {
             let point: Point = request.json().await?;
-            if !matches!(point, Point::BeforeTimerCommit | Point::AfterTimerCommit) {
+            if !matches!(
+                point,
+                Point::BeforeTimerCommit
+                    | Point::AfterTimerCommit
+                    | Point::BeforeSignInSample
+                    | Point::AfterSignInSample
+            ) {
                 return Err(error("not a timer point"));
             }
             object
@@ -422,12 +436,15 @@ pub(super) async fn raw_control(object: &CentralObject, mut request: Request) ->
         }
         "/test/raw-read" => {
             let statement: OwnedStatement = request.json().await?;
-            if statement.sql
-                != "SELECT (SELECT COUNT(*) FROM wakes WHERE state='active'), (SELECT COUNT(*) FROM wakes WHERE state='done'), (SELECT COUNT(*) FROM messages WHERE message_kind='wake')"
+            if ![
+                "SELECT (SELECT COUNT(*) FROM wakes WHERE state='active'), (SELECT COUNT(*) FROM wakes WHERE state='done'), (SELECT COUNT(*) FROM messages WHERE message_kind='wake')",
+                "SELECT id,organization_statement,created_at,updated_at FROM organization_identity ORDER BY id",
+                "SELECT * FROM organization_change_records ORDER BY id",
+            ].contains(&statement.sql.as_str())
                 || !statement.args.is_empty()
             {
                 return Err(error(
-                    "raw read only permits the alarm corruption observation",
+                    "raw read only permits named corruption snapshots",
                 ));
             }
             Response::from_json(&statement_store::read(&object.connection, statement).await)

@@ -65,8 +65,8 @@ mod workspace_row_codec;
 mod workspace_rule_dispatch;
 mod workspace_rule_inputs;
 pub use platform_capabilities::{
-    CallOutcome, CentralPlatform, KeyFetchFailure, LegacyObjectHost, LocalSectionFailure, RawJwks,
-    RegistrationEdits, RegistrationSnapshot, SocketFailure, UpgradeFailure, VerifyFailure,
+    CallOutcome, CentralPlatform, LegacyObjectHost, LocalSectionFailure, RegistrationEdits,
+    RegistrationSnapshot, SocketFailure, UpgradeFailure,
 };
 mod caller_context;
 pub use caller_context::CallerContext;
@@ -478,6 +478,7 @@ pub use wire_contract::*;
 pub use core_contract::*;
 
 mod central_mail_store;
+mod guarded_statements;
 pub use central_mail_store::EARLIEST_DUE;
 mod central_mail_requests;
 mod central_timer_plans;
@@ -494,3 +495,35 @@ pub use central_organization_identity::{
 };
 mod central_mail_time;
 pub use central_mail_time::MAX_ALARM_UNIX_MILLIS;
+
+// Sign-in authority on the org-scoped statement runtime.
+mod issuer_key_cache;
+mod issuer_key_resolution;
+mod issuer_signature_verifier;
+pub mod organization_authority;
+pub mod person_request;
+mod signature_verification;
+pub use issuer_key_cache::{
+    IssuerKeyCache, IssuerKeyId, IssuerKeyRefusal, IssuerKeySet, IssuerVerificationKey,
+};
+pub use issuer_key_resolution::{IssuerKeyResolutionRefusal, IssuerKeySource, resolve_issuer_key};
+pub use issuer_signature_verifier::{IssuerSignatureRefusal, IssuerSignatureVerifier};
+pub use signature_verification::{Ed25519Verification, SignatureValidity, VerifyFailure};
+mod key_source_capabilities;
+pub use key_source_capabilities::{KeyFetchFailure, RawJwks};
+mod sign_in_trust_settings;
+pub use sign_in_trust_settings::SignInTrustSettings;
+mod authorization_floor_rows;
+mod authorization_revision_plans;
+mod organization_admin_contract;
+mod organization_admin_plans;
+mod organization_authority_cache;
+mod organization_change_rows;
+mod organization_provisioning_plans;
+mod organization_signin_http;
+mod organization_signin_port;
+mod organization_stamp_rows;
+mod person_admission_plans;
+pub use organization_admin_contract::*;
+pub use organization_signin_http::organization_signin_router;
+pub use organization_signin_port::OrganizationSignInPort;

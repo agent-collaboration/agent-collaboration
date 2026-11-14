@@ -65,7 +65,7 @@ fleet-sync-delivery.workspace = true
 fleet-sync-writer.workspace = true
 reqwest-websocket = "=0.5.1"
 futures-util.workspace = true
-collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance" }
+collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance", features = ["signin-test-support"] }
 fleet-admission = { version = "0.1.96", path = "../fleet-admission" }
 fleet-sync-receiver.workspace = true
 serde.workspace = true

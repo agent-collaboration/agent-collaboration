@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 import { z } from "zod";
 import { checkDeployTemplate, checkWorkerBundle } from "./check-central-worker-bundle.ts";
@@ -91,5 +93,82 @@ test("a production bundle carrying any storage test-support marker is refused", 
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  }
+});
+
+function selectionFixture(): { root: string; defaultDirectory: string; selectedDirectory: string } {
+  const root = mkdtempSync(join(tmpdir(), "worker-bundle-selection-"));
+  const worker = join(root, "crates/collaboration-central-cloudflare");
+  const defaultDirectory = join(worker, "build");
+  const selectedDirectory = join(worker, "build-link");
+  mkdirSync(defaultDirectory, { recursive: true });
+  mkdirSync(selectedDirectory);
+  writeFileSync(join(root, "Cargo.toml"), baseline.cargo);
+  writeFileSync(join(worker, "README.md"), baseline.readme);
+  writeFileSync(join(worker, "cloudflare.config.ts"), baseline.config);
+  writeFileSync(join(worker, "wrangler.config.ts"), baseline.tooling);
+  for (const directory of [defaultDirectory, selectedDirectory]) {
+    writeFileSync(join(directory, "index.js"), "// clean production fixture");
+    writeFileSync(join(directory, "index_bg.wasm"), "");
+  }
+  return { root, defaultDirectory, selectedDirectory };
+}
+
+test("an explicit artifact directory inspects selected bytes and never falls back", (): void => {
+  const { root, defaultDirectory, selectedDirectory } = selectionFixture();
+  try {
+    writeFileSync(join(defaultDirectory, "index.js"), 'route("/test-support/workspace/")');
+    assert.equal(checkWorkerBundle("production", root).status, 1);
+    assert.equal(checkWorkerBundle("production", root, selectedDirectory).status, 0);
+    writeFileSync(join(defaultDirectory, "index.js"), "// clean production fixture");
+    writeFileSync(join(selectedDirectory, "index_bg.wasm"), "/test/fail-alarm-batch");
+    assert.deepEqual(checkWorkerBundle("production", root, selectedDirectory), {
+      status: 1,
+      message: "Worker production bundle contains the storage test-support routes",
+    });
+    rmSync(selectedDirectory, { recursive: true });
+    assert.deepEqual(checkWorkerBundle("production", root, selectedDirectory), {
+      status: 1,
+      message: "Worker bundle missing; build it before checking",
+    });
+    assert.equal(checkWorkerBundle("production", root).status, 0);
+  } finally {
+    rmSync(root, { recursive: true });
+  }
+});
+
+test("bundle-directory CLI selects actual alternate artifacts and preserves the default command", (): void => {
+  const { root, defaultDirectory, selectedDirectory } = selectionFixture();
+  const script = fileURLToPath(new URL("./check-central-worker-bundle.ts", import.meta.url));
+  const invoke = (arguments_: readonly string[]): ReturnType<typeof spawnSync> =>
+    spawnSync(process.execPath, [script, ...arguments_], { cwd: root, encoding: "utf8" });
+  try {
+    writeFileSync(join(defaultDirectory, "index.js"), 'route("/test-support/workspace/")');
+    assert.equal(invoke(["production"]).status, 1);
+    const selected = invoke([
+      "production",
+      "--bundle-directory",
+      "crates/collaboration-central-cloudflare/build-link",
+    ]);
+    assert.equal(selected.status, 0, String(selected.stderr));
+    assert.match(String(selected.stdout), /Worker production bundle: conformance-control/);
+    writeFileSync(join(defaultDirectory, "index.js"), "// clean production fixture");
+    writeFileSync(join(selectedDirectory, "index.js"), 'route("/test/fail-alarm-batch")');
+    assert.equal(invoke(["production", "--bundle-directory", selectedDirectory]).status, 1);
+    rmSync(join(selectedDirectory, "index_bg.wasm"));
+    const missing = invoke(["production", "--bundle-directory", selectedDirectory]);
+    assert.equal(missing.status, 1);
+    assert.match(String(missing.stdout), /Worker bundle missing/);
+    assert.equal(invoke(["production"]).status, 0);
+    for (const args of [
+      [],
+      ["production", "--bundle-directory"],
+      ["production", "--other", selectedDirectory],
+      ["production", "--bundle-directory", ""],
+      ["production", "--bundle-directory", selectedDirectory, "extra"],
+    ])
+      assert.equal(invoke(args).status, 2);
+  } finally {
+    rmSync(root, { recursive: true });
   }
 });

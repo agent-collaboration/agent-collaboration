@@ -689,6 +689,8 @@ jobs:
         run: |
           worker-build crates/collaboration-central-cloudflare --profile worker-release --no-opt -- --locked --no-default-features
           node verification/tooling/check-central-worker-bundle.ts production
+          worker-build crates/collaboration-central-cloudflare --profile worker-release --no-opt --out-dir build-link -- --locked --no-default-features --features link
+          node verification/tooling/check-central-worker-bundle.ts production --bundle-directory crates/collaboration-central-cloudflare/build-link
       # Verification O1 on the Cloudflare host: the storage cases run inside real
       # SQLite-backed Durable Objects under the pinned Miniflare and workerd.
       - name: Install pinned native integration runner
@@ -696,6 +698,7 @@ jobs:
       - name: Run the storage boundary cases in workerd
         run: |
           worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --locked --features test-support,conformance
+          worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-link-test-support -- --locked --no-default-features --features link,test-support,conformance
           pnpm --dir verification run test:workerd
           cargo nextest run --locked --profile ci -p collaboration-central-cloudflare --features test-support --test integration
           pnpm --dir verification exec oxlint --deny-warnings "$GITHUB_WORKSPACE/crates/collaboration-central-cloudflare/tests/support/workerd-bridge.mts"
