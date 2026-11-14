@@ -146,6 +146,10 @@ impl Bridge {
     }
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Fixture equality must fail without dumping a raw observation into an assertion diff."
+)]
 fn assert_empty(observation: &Value) -> ConformanceResult<()> {
     let expected: Value = serde_json::from_str(include_str!(
         "../../../../../collaboration-central-core/tests/fixtures/signin-observation-empty.json"
@@ -157,6 +161,10 @@ fn assert_empty(observation: &Value) -> ConformanceResult<()> {
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Opaque statement equality and literal record times are test assertions; raw statements must not be printed."
+)]
 fn assert_statement_and_records(
     observation: &Value,
     statement: &str,
