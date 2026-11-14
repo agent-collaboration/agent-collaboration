@@ -433,14 +433,29 @@ async fn dropped_human_mcp_waiter_does_not_cancel_or_redispatch_the_released_tur
         .await??;
 
         // Act: first destroy the HTTP waiter, then release that already-admitted work.
-        check!(!release.exists());
+        check!(release.exists());
+        check_eq!(
+            std::fs::metadata(&release)?.permissions().mode() & 0o777,
+            0o600
+        );
         prompt.abort();
         let aborted = prompt.await;
         check!(
             matches!(aborted, Err(ref error) if error.is_cancelled()),
             "HTTP waiter was not aborted: {aborted:?}"
         );
-        std::fs::write(&release, b"release the held turn")?;
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+        let mut release_control = tokio::net::UnixStream::connect(&release).await?;
+        release_control
+            .write_all(format!("{}\n", json!({"ownerId":target.session_id})).as_bytes())
+            .await?;
+        release_control.shutdown().await?;
+        let mut release_reply = String::new();
+        release_control.read_to_string(&mut release_reply).await?;
+        check_eq!(
+            serde_json::from_str::<Value>(&release_reply)?,
+            json!({"kind":"released","ownerId":target.session_id})
+        );
         let settled = client
             .wait_for_provider_conversation_operation(ConversationOperationWaitRequest {
                 operation_id: prompt_id.clone(),
