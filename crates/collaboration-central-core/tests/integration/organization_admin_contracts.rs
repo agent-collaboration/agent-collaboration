@@ -62,6 +62,19 @@ fn workspace_lookup_request_wire_contract() {
 
 #[test]
 fn read_change_records_request_wire_contract() {
+    // Existing exports describe serializer output. An omitted input cursor
+    // remains accepted and serializes as null; the artifact is not an input validator.
+    let absent: ReadChangeRecordsRequest = serde_json::from_value(json!({
+        "organizationId":"019a3dce-2000-7000-8000-000000000001","limit":1
+    }))
+    .unwrap();
+    assert!(absent.after.is_none());
+    assert_eq!(
+        serde_json::to_value(absent).unwrap(),
+        json!({
+            "organizationId":"019a3dce-2000-7000-8000-000000000001","after":null,"limit":1
+        })
+    );
     contract_artifacts::assert_contract::<ReadChangeRecordsRequest>(
         "ReadChangeRecordsRequest",
         vec![
