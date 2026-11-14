@@ -4,6 +4,8 @@
 mod clock_ids;
 pub mod identity_contract;
 #[cfg(feature = "test-support")]
+pub mod signin_test_observation;
+#[cfg(feature = "test-support")]
 pub mod storage_conformance;
 pub use clock_ids::ClockIds;
 mod workspace_turns;

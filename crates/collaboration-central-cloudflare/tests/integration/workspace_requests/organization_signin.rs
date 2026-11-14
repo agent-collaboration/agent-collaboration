@@ -4,6 +4,7 @@ mod causal_races;
 mod deadlines;
 mod expiry_holds;
 mod floors;
+mod launcher_controls;
 mod linearization;
 mod observations;
 mod provisioning;
