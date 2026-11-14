@@ -113,6 +113,16 @@ fn device_login_second_factor_is_required_nullable_and_serializes_null() {
         assert_eq!(serde_json::to_value(parsed).unwrap(), request);
         assert!(validator.is_valid(&request));
     }
+    for field in ["codeExpiresAt", "approverSecondFactorAt"] {
+        let mut epoch = request.clone();
+        epoch[field] = json!(0);
+        let parsed: DecideDeviceLogin = serde_json::from_value(epoch.clone()).unwrap();
+        assert_eq!(serde_json::to_value(parsed).unwrap(), epoch);
+        assert!(validator.is_valid(&epoch));
+        let mut negative = request.clone();
+        negative[field] = json!(-1);
+        assert_refused::<DecideDeviceLogin>(negative);
+    }
     request
         .as_object_mut()
         .unwrap()

@@ -20,10 +20,30 @@ pub struct DecideDeviceLogin {
     pub peer: PeerId,
     pub label: MachineLabel,
     pub allowed_workspaces: AllowedWorkspaces,
-    #[serde(deserialize_with = "Option::deserialize")]
-    #[schemars(required, schema_with = "Option::<UnixSeconds>::json_schema")]
+    #[serde(deserialize_with = "nullable_nonnegative_unix_seconds")]
+    #[schemars(required, schema_with = "Option::<UnixSeconds>::json_schema", extend("minimum" = 0))]
     pub approver_second_factor_at: Option<UnixSeconds>,
+    #[serde(deserialize_with = "nonnegative_unix_seconds")]
+    #[schemars(with = "UnixSeconds", extend("minimum" = 0))]
     pub code_expires_at: UnixSeconds,
+}
+fn nonnegative_unix_seconds<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<UnixSeconds, D::Error> {
+    let seconds = UnixSeconds::deserialize(deserializer)?;
+    if seconds.0 < 0 {
+        return Err(serde::de::Error::custom("Unix seconds must be nonnegative"));
+    }
+    Ok(seconds)
+}
+fn nullable_nonnegative_unix_seconds<'de, D: Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<UnixSeconds>, D::Error> {
+    let seconds = Option::<UnixSeconds>::deserialize(deserializer)?;
+    if seconds.is_some_and(|seconds| seconds.0 < 0) {
+        return Err(serde::de::Error::custom("Unix seconds must be nonnegative"));
+    }
+    Ok(seconds)
 }
 fn uuid_v7_installation<'de, D: Deserializer<'de>>(
     deserializer: D,
@@ -85,7 +105,11 @@ pub enum MachineTokenDecision {
     Grant {
         installation: InstallationId,
         enrollment_id: EnrollmentId,
+        #[serde(deserialize_with = "nonnegative_unix_seconds")]
+        #[schemars(with = "UnixSeconds", extend("minimum" = 0))]
         decided_at: UnixSeconds,
+        #[serde(deserialize_with = "nonnegative_unix_seconds")]
+        #[schemars(with = "UnixSeconds", extend("minimum" = 0))]
         grant_expires_at: UnixSeconds,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         superseded: Option<EndedMachineClient>,

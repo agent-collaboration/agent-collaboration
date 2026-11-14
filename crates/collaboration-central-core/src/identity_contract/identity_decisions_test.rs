@@ -19,6 +19,20 @@ fn request() -> serde_json::Value {
 #[test]
 fn device_login_requires_checked_permission_true_deadline_uuid_v7_and_bounded_workspaces() {
     assert!(serde_json::from_value::<DecideDeviceLogin>(request()).is_ok());
+    for field in ["codeExpiresAt", "approverSecondFactorAt"] {
+        for invalid in [json!(-1), json!(i64::MIN), json!(1.5), json!("1800000600")] {
+            let mut value = request();
+            value[field] = invalid;
+            assert!(serde_json::from_value::<DecideDeviceLogin>(value).is_err());
+        }
+        let mut epoch = request();
+        epoch[field] = json!(0);
+        let parsed: DecideDeviceLogin = serde_json::from_value(epoch.clone()).unwrap();
+        assert_eq!(serde_json::to_value(parsed).unwrap(), epoch);
+    }
+    let mut null_deadline = request();
+    null_deadline["codeExpiresAt"] = serde_json::Value::Null;
+    assert!(serde_json::from_value::<DecideDeviceLogin>(null_deadline).is_err());
     for field in [
         "permissionChecked",
         "approverSecondFactorAt",
@@ -107,6 +121,23 @@ fn machine_grant_serializes_superseded_only_when_an_old_client_was_ended() {
         grant_expires_at: UnixSeconds(1800000600),
         superseded: None,
     };
+    for field in ["decidedAt", "grantExpiresAt"] {
+        for invalid in [
+            json!(-1),
+            json!(i64::MIN),
+            json!(1.5),
+            json!("1800000600"),
+            serde_json::Value::Null,
+        ] {
+            let mut value = serde_json::to_value(&grant).unwrap();
+            value[field] = invalid;
+            assert!(serde_json::from_value::<MachineTokenDecision>(value).is_err());
+        }
+        let mut epoch = serde_json::to_value(&grant).unwrap();
+        epoch[field] = json!(0);
+        let parsed: MachineTokenDecision = serde_json::from_value(epoch.clone()).unwrap();
+        assert_eq!(serde_json::to_value(parsed).unwrap(), epoch);
+    }
     assert!(
         serde_json::to_value(&grant)
             .unwrap()

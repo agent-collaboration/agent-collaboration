@@ -136,6 +136,16 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
             json!({"result":"refused","reason":{"kind":"formerServiceLinkedElsewhere"}}),
             json!({"result":"refused","reason":{"kind":"secondFactorRequired","withinSeconds":0}}),
         ]),
+        "MachineTokenDecision" => {
+            let first = literals.first().expect("machine token grant literal");
+            for field in ["decidedAt", "grantExpiresAt"] {
+                for bad in [json!(-1), json!(1.5), json!("1793448600"), Value::Null] {
+                    let mut value = first.clone();
+                    value[field] = bad;
+                    invalid.push(value);
+                }
+            }
+        }
         _ => {}
     }
     invalid.extend(composed_byte_overflows(name, literals));
