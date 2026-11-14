@@ -64,7 +64,7 @@ pub(crate) async fn route(
         return Ok(Ok(stub.fetch_with_request(forwarded).await?));
     }
     if let Some(workspace) = path.strip_prefix(CALL_STORE_PREFIX) {
-        let workspace = message_board::WorkspaceId::try_from(workspace.to_owned())
+        let workspace = workspace_ids::WorkspaceId::try_from(workspace.to_owned())
             .map_err(|error| worker::Error::RustError(error.to_string()))?;
         let call = match request.json::<CaseStoreCall>().await? {
             CaseStoreCall::Batch(batch) => StoreCall::Batch(batch.into_batch()),

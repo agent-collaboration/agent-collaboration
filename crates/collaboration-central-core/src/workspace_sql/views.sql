@@ -31,7 +31,7 @@ SELECT 'post' AS kind,post_id AS id FROM posts p,request WHERE op='list' AND (q=
 positioned AS (SELECT kind,id,(SELECT MIN(position) FROM changes c WHERE c.item_kind=candidates.kind AND c.item_id=candidates.id AND c.change_kind IN ('created','posted')) AS position FROM candidates),
 selected_items(kind,id) AS (SELECT kind,id FROM positioned,request WHERE op='show' OR position>after_position ORDER BY position LIMIT (SELECT page_limit FROM request)),
 followed_threads(thread_id) AS (SELECT t.thread_id FROM threads t,request WHERE t.creator=actor OR EXISTS(SELECT 1 FROM thread_members m WHERE m.thread_id=t.thread_id AND m.actor_identity_id=actor AND m.left_at IS NULL AND m.notifications=1)),
-inbox_changes AS (SELECT c.* FROM changes c,request WHERE op='inbox' AND c.thread_id IN (SELECT thread_id FROM followed_threads) AND c.position>COALESCE(json_extract(?2,'$.after'),(SELECT through_position FROM read_marks WHERE actor_identity_id=request.actor AND json_extract(scope,'$.kind')='inbox'),0) ORDER BY c.position LIMIT (SELECT page_limit FROM request)),
+inbox_changes AS (SELECT c.* FROM changes c,request WHERE op='inbox' AND c.thread_id IN (SELECT thread_id FROM followed_threads) AND c.position>MAX(COALESCE(json_extract(?2,'$.after'),0),COALESCE((SELECT through_position FROM read_marks WHERE actor_identity_id=request.actor AND scope='{"kind":"inbox"}'),0)) ORDER BY c.position LIMIT (SELECT page_limit FROM request)),
 view_items(kind,id) AS (SELECT kind,id FROM selected_items UNION SELECT item_kind,item_id FROM inbox_changes),
 selected_threads(thread_id) AS (SELECT id FROM view_items WHERE kind='thread' UNION SELECT p.thread_id FROM posts p JOIN view_items v ON v.kind='post' AND v.id=p.post_id UNION SELECT thread_id FROM inbox_changes)
 SELECT * FROM (
@@ -55,19 +55,19 @@ SELECT 'member' AS row_kind,json_object('threadMemberId',m.thread_member_id,'thr
 )
 UNION ALL
 SELECT * FROM (
-SELECT 'post' AS row_kind,json_object('postId',p.post_id,'threadId',p.thread_id,'author',p.author,'body',p.body,'addressees',json(p.addressees)) AS payload FROM posts p WHERE EXISTS(SELECT 1 FROM view_items v WHERE v.kind='post' AND v.id=p.post_id)
+SELECT 'post' AS row_kind,json_object('postId',p.post_id,'threadId',p.thread_id,'author',p.author,'body',p.body,'addressees',p.addressees) AS payload FROM posts p WHERE EXISTS(SELECT 1 FROM view_items v WHERE v.kind='post' AND v.id=p.post_id)
 UNION ALL
 SELECT 'entry' AS row_kind,json_object('entryId',e.entry_id,'projectId',e.project_id,'author',e.author,'body',json(CASE e.redacted WHEN 1 THEN CASE WHEN e.body IS NULL THEN '{"kind":"redacted"}' ELSE NULL END WHEN 0 THEN json_object('kind','visible','body',e.body) ELSE NULL END),'tags',json((SELECT json_group_array(tag) FROM work_log_tags g WHERE g.entry_id=e.entry_id ORDER BY g.work_log_tag_id))) AS payload FROM work_log_entries e WHERE EXISTS(SELECT 1 FROM view_items v WHERE v.kind='workLogEntry' AND v.id=e.entry_id)
 UNION ALL
 SELECT 'backlog' AS row_kind,json_object('itemId',b.item_id,'areaId',b.area_id,'title',b.title,'description',b.description,'creator',b.creator) AS payload FROM backlog_items b WHERE EXISTS(SELECT 1 FROM view_items v WHERE v.kind='backlogItem' AND v.id=b.item_id)
 UNION ALL
-SELECT 'reference' AS row_kind,json_object('referenceId',r.reference_id,'source',json(json_object('kind',r.source_kind,'id',r.source_id)),'target',json(json_object('kind',r.target_kind,'id',r.target_id)),'details',json(r.details)) AS payload FROM item_references r WHERE EXISTS(SELECT 1 FROM view_items v WHERE v.kind='reference' AND v.id=r.reference_id)
+SELECT 'reference' AS row_kind,json_object('referenceId',r.reference_id,'source',json(json_object('kind',r.source_kind,'id',r.source_id)),'target',json(json_object('kind',r.target_kind,'id',r.target_id)),'details',r.details) AS payload FROM item_references r WHERE EXISTS(SELECT 1 FROM view_items v WHERE v.kind='reference' AND v.id=r.reference_id)
 )
 UNION ALL
 SELECT * FROM (
-SELECT 'link' AS row_kind,json_object('linkId',l.link_id,'source',json(json_object('kind',l.source_kind,'id',l.source_id)),'url',l.url,'title',l.title,'details',json(l.details)) AS payload FROM links l WHERE EXISTS(SELECT 1 FROM view_items v WHERE v.kind='link' AND v.id=l.link_id)
+SELECT 'link' AS row_kind,json_object('linkId',l.link_id,'source',json(json_object('kind',l.source_kind,'id',l.source_id)),'url',l.url,'title',l.title,'details',l.details) AS payload FROM links l WHERE EXISTS(SELECT 1 FROM view_items v WHERE v.kind='link' AND v.id=l.link_id)
 UNION ALL
-SELECT 'mark' AS row_kind,json_object('readMarkId',m.read_mark_id,'actorIdentityId',m.actor_identity_id,'scope',json(m.scope),'throughPosition',m.through_position) AS payload FROM read_marks m WHERE m.actor_identity_id=?4
+SELECT 'mark' AS row_kind,json_object('readMarkId',m.read_mark_id,'actorIdentityId',m.actor_identity_id,'scope',m.scope,'throughPosition',m.through_position) AS payload FROM read_marks m WHERE m.actor_identity_id=?4
 UNION ALL
 SELECT 'change' AS row_kind,json_object('changeId',c.change_id,'position',c.position,'item',json(json_object('kind',c.item_kind,'id',c.item_id)),'actor',c.actor,'changeKind',c.change_kind,'threadId',c.thread_id,'projectId',c.project_id,'subjectActor',c.subject_actor,'role',c.role) AS payload FROM changes c WHERE c.change_id IN (SELECT change_id FROM inbox_changes) OR EXISTS(SELECT 1 FROM view_items v WHERE v.kind=c.item_kind AND v.id=c.item_id AND c.change_kind IN ('created','posted'))
 UNION ALL

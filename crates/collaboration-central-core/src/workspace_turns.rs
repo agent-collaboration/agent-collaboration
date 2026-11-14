@@ -4,10 +4,10 @@
 //! decides something takes its workspace's turn, reads, writes its batch and releases.
 //! The turn is an in-memory async lock: one live central object holds every turn.
 
-use message_board::WorkspaceId;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, PoisonError};
 use tokio::sync::{OwnedMutexGuard, watch};
+use workspace_ids::WorkspaceId;
 
 #[derive(Default)]
 pub struct WorkspaceTurns {

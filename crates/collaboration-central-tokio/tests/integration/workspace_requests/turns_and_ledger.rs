@@ -27,7 +27,7 @@ async fn project_close_keeps_its_turn_until_apply_and_new_child_reads_the_closed
     )
     .await;
     let runtime = f.host.central(&f.caller.organization_id).await;
-    let seam = f.workspace.as_str().to_owned().try_into().unwrap();
+    let seam = f.workspace.clone();
     let mut held = runtime.pause_points().hold(&seam, PausePoint::AfterReads);
     let request = m::WorkspaceRequest {
         request_id: Some(id(305)),
@@ -78,7 +78,7 @@ async fn resolved_thread_is_immutable_after_held_turn_and_refusal_replay_ignores
     let area = f.area(320).await;
     let thread = f.thread(321, area).await;
     let runtime = f.host.central(&f.caller.organization_id).await;
-    let seam = f.workspace.as_str().to_owned().try_into().unwrap();
+    let seam = f.workspace.clone();
     let mut held = runtime
         .pause_points()
         .hold(&seam, PausePoint::AfterStoreApplied);
@@ -153,7 +153,7 @@ async fn failed_guard_has_no_ledger_entry_and_mark_read_is_monotonic() {
         panic!("link");
     };
     let runtime = f.host.central(&f.caller.organization_id).await;
-    let seam = f.workspace.as_str().to_owned().try_into().unwrap();
+    let seam = f.workspace.clone();
     let mut held = runtime.pause_points().hold(&seam, PausePoint::AfterReads);
     let operation = m::WorkspaceOperation::RemoveLink {
         link_id: link.clone(),
@@ -196,7 +196,7 @@ async fn failed_guard_has_no_ledger_entry_and_mark_read_is_monotonic() {
             0,
             m::WorkspaceOperation::Inbox {
                 after: None,
-                limit: 100,
+                limit: 100.try_into().unwrap(),
             },
         )
         .await;
@@ -227,7 +227,7 @@ async fn failed_guard_has_no_ledger_entry_and_mark_read_is_monotonic() {
             0,
             m::WorkspaceOperation::Inbox {
                 after: None,
-                limit: 100,
+                limit: 100.try_into().unwrap(),
             },
         )
         .await;

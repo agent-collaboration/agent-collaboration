@@ -271,7 +271,7 @@ async fn backlog_removal_cascades_both_reference_directions_and_literal_link_tex
                     item: m::ItemRef::BacklogItem(item.clone()),
                 },
                 after: m::ChangePosition::ZERO,
-                limit: 10,
+                limit: 10.try_into().unwrap(),
             },
         )
         .await;

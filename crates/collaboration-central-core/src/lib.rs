@@ -56,6 +56,7 @@ mod workspace_admission;
 mod workspace_change_records;
 mod workspace_decode_error;
 mod workspace_item_reads;
+mod workspace_json_records;
 pub mod workspace_migrations;
 mod workspace_read_queries;
 mod workspace_request_gate;

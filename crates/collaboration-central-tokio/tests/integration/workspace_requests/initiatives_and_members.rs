@@ -173,7 +173,7 @@ async fn only_creator_adds_or_promotes_members_and_posts_require_active_particip
             0,
             m::WorkspaceOperation::Inbox {
                 after: None,
-                limit: 100,
+                limit: 100.try_into().unwrap(),
             },
         )
         .await;

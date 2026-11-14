@@ -99,7 +99,7 @@ fn unreachable() -> CallFailure {
 /// arrive or parse after the call may have run is `AnswerLost`.
 pub(crate) async fn call_store(
     env: &Env,
-    workspace: message_board::WorkspaceId,
+    workspace: workspace_ids::WorkspaceId,
     call: crate::store_wire::OwnedStoreCall,
 ) -> std::result::Result<central_storage::StoreReply, central_storage::StoreFailure> {
     store_call(env, workspace, call, None).await
@@ -107,14 +107,14 @@ pub(crate) async fn call_store(
 #[cfg(feature = "test-support")]
 pub(crate) async fn call_widget_store(
     env: &Env,
-    workspace: message_board::WorkspaceId,
+    workspace: workspace_ids::WorkspaceId,
     call: crate::store_wire::OwnedStoreCall,
 ) -> std::result::Result<central_storage::StoreReply, central_storage::StoreFailure> {
     store_call(env, workspace, call, Some("widgets")).await
 }
 async fn store_call(
     env: &Env,
-    workspace: message_board::WorkspaceId,
+    workspace: workspace_ids::WorkspaceId,
     call: crate::store_wire::OwnedStoreCall,
     fixture: Option<&str>,
 ) -> std::result::Result<central_storage::StoreReply, central_storage::StoreFailure> {
@@ -151,7 +151,7 @@ async fn store_call(
 #[cfg(feature = "test-support")]
 pub(crate) async fn call_failing_workspace_store(
     env: &Env,
-    workspace: message_board::WorkspaceId,
+    workspace: workspace_ids::WorkspaceId,
     call: crate::store_wire::OwnedStoreCall,
 ) -> std::result::Result<central_storage::StoreReply, central_storage::StoreFailure> {
     store_call(env, workspace, call, Some("failingBusiness")).await

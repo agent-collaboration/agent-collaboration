@@ -33,7 +33,6 @@ use durable_steps::{BoxFuture, CallFailure, NotSentReason, StoreError};
 use fleet_sync_lease::RegistryConfig;
 use fleet_sync_session::ConnectionBinding;
 use fleet_sync_tokio_runner::{ObjectKey, ObjectOptions, ObjectStore};
-use message_board::WorkspaceId;
 use runtime_primitives::{Clock, IdSource, SyncTime, TokioWakeTimer, WakeFailure, WakeScheduler};
 use std::{
     collections::BTreeMap,
@@ -42,6 +41,7 @@ use std::{
 };
 use tokio::sync::{Mutex, OnceCell};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
+use workspace_ids::WorkspaceId;
 
 type NativeHost = TokioStorageHost<CoreHost<TokioObjectIo>>;
 type CopyRuntime = ObjectRuntime<CopyKind, NativeHost, TokioObjectIo>;

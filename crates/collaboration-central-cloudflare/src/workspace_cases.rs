@@ -10,8 +10,8 @@ use worker::{Headers, Method, RequestInit, js_sys};
 #[derive(Default)]
 pub(crate) struct Controls {
     pub(super) lose_read: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    observations: RefCell<BTreeMap<message_board::WorkspaceId, HeldPause>>,
-    holds: RefCell<BTreeMap<(message_board::WorkspaceId, Point), HeldPause>>,
+    observations: RefCell<BTreeMap<workspace_ids::WorkspaceId, HeldPause>>,
+    holds: RefCell<BTreeMap<(workspace_ids::WorkspaceId, Point), HeldPause>>,
 }
 #[derive(Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
 #[serde(rename_all = "camelCase")]
@@ -30,19 +30,19 @@ impl From<Point> for PausePoint {
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Pause {
-    workspace: message_board::WorkspaceId,
+    workspace: workspace_ids::WorkspaceId,
     point: Point,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Wait {
-    workspace: message_board::WorkspaceId,
+    workspace: workspace_ids::WorkspaceId,
     count: usize,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Store {
-    workspace: message_board::WorkspaceId,
+    workspace: workspace_ids::WorkspaceId,
     call: OwnedStoreCall,
 }
 fn error(message: impl ToString) -> worker::Error {
@@ -124,7 +124,7 @@ pub(super) async fn control(
             )
         }
         "/test/reset-store" => {
-            let workspace: message_board::WorkspaceId = request.json().await?;
+            let workspace: workspace_ids::WorkspaceId = request.json().await?;
             let address = ObjectAddress::WorkspaceStore(workspace);
             let headers = Headers::new();
             crate::cloudflare_transport::address_header(&headers, &address)?;

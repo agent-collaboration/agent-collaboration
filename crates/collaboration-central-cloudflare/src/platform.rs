@@ -177,7 +177,7 @@ impl CentralPlatform for CloudflareCentralPlatform {
 
     fn call_store(
         &self,
-        workspace: message_board::WorkspaceId,
+        workspace: workspace_ids::WorkspaceId,
         call: StoreCall,
     ) -> impl Future<Output = Result<StoreReply, StoreFailure>> + Send {
         SendFuture::new(crate::cloudflare_transport::call_store(

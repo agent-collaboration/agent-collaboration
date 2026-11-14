@@ -38,7 +38,7 @@ pub enum ObjectAddress {
     Copy(DatabaseId),
     Fleet,
     /// One workspace's store: it holds the tables and runs the statements it is given.
-    WorkspaceStore(message_board::WorkspaceId),
+    WorkspaceStore(workspace_ids::WorkspaceId),
 }
 impl ObjectAddress {
     /// The caller face an object call arrives under; a workspace store takes no object calls.

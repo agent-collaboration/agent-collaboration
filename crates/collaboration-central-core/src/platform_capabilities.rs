@@ -69,7 +69,7 @@ pub trait CentralPlatform: Clone + Send + Sync + 'static {
     /// Runs one call on a workspace store; a batch runs atomically.
     fn call_store(
         &self,
-        workspace: message_board::WorkspaceId,
+        workspace: workspace_ids::WorkspaceId,
         call: StoreCall,
     ) -> impl Future<Output = Result<StoreReply, StoreFailure>> + Send;
 }

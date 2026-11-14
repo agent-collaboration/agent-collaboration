@@ -1786,6 +1786,7 @@ dependencies = [
  "worker",
  "worker-macros",
  "worker-sys",
+ "workspace-ids",
  "workspace-model",
 ]
 
@@ -1908,6 +1909,7 @@ dependencies = [
  "tracing-subscriber",
  "turso_parser",
  "uuid",
+ "workspace-ids",
  "workspace-model",
 ]
 

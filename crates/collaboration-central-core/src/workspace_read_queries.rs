@@ -162,12 +162,9 @@ pub(crate) fn read_statement(
 }
 impl WorkspaceRows {
     pub fn created_position(&self, item: &ItemRef) -> Result<ChangePosition, StoreFailure> {
-        self.changes
-            .iter()
-            .find(|row| {
-                row.item == *item && matches!(row.change_kind.as_str(), "created" | "posted")
-            })
-            .map(|row| row.position)
+        self.created_positions
+            .get(item)
+            .copied()
             .ok_or_else(|| corrupt("created position"))
     }
 }

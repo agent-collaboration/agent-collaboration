@@ -136,6 +136,37 @@ identity_text!(
     "must start with a lowercase letter and contain only lowercase letters, digits, or hyphens"
 );
 
+/// A page always returns at least one row when a matching row exists.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "u16", into = "u16")]
+pub struct PageLimit(std::num::NonZeroU16);
+impl PageLimit {
+    #[must_use]
+    pub const fn get(self) -> u16 {
+        self.0.get()
+    }
+    #[must_use]
+    pub const fn lookahead(self) -> u32 {
+        self.0.get() as u32 + 1
+    }
+}
+impl TryFrom<u16> for PageLimit {
+    type Error = ValueValidationError;
+    fn try_from(value: u16) -> Result<Self, Self::Error> {
+        std::num::NonZeroU16::new(value)
+            .map(Self)
+            .ok_or(ValueValidationError {
+                field: "limit",
+                requirement: "must be a nonzero u16",
+            })
+    }
+}
+impl From<PageLimit> for u16 {
+    fn from(value: PageLimit) -> Self {
+        value.get()
+    }
+}
+
 /// Durable ordering is independent of ids and time, within both hosts' integer range.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 #[serde(try_from = "u64", into = "u64")]

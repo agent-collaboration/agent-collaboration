@@ -195,11 +195,11 @@ pub enum WorkspaceOperation {
     List {
         query: ListQuery,
         after: ChangePosition,
-        limit: u16,
+        limit: crate::PageLimit,
     },
     Inbox {
         after: Option<ChangePosition>,
-        limit: u16,
+        limit: crate::PageLimit,
     },
     MarkRead {
         scope: ReadScope,

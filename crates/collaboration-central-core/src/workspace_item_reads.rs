@@ -154,11 +154,10 @@ pub(crate) fn read_answer(
                     })
                 })
                 .collect::<Result<Vec<_>, StoreFailure>>()?;
-            let output =
-                workspace_rules::ordered_page(&positioned, *after, limit.saturating_add(1));
-            let next = if output.len() > usize::from(*limit) {
+            let output = workspace_rules::ordered_page(&positioned, *after, limit.lookahead());
+            let next = if output.len() > usize::from(limit.get()) {
                 output
-                    .get(usize::from(*limit).saturating_sub(1))
+                    .get(usize::from(limit.get()).saturating_sub(1))
                     .map(|row| row.position)
             } else {
                 None
@@ -166,7 +165,7 @@ pub(crate) fn read_answer(
             Ok(m::WorkspaceAnswer::Page {
                 items: output
                     .into_iter()
-                    .take(usize::from(*limit))
+                    .take(usize::from(limit.get()))
                     .map(|row| row.item)
                     .collect(),
                 next_after_position: next,
@@ -200,18 +199,18 @@ pub(crate) fn read_answer(
                     changes: &changes,
                     current_items: &items,
                 },
-                after.unwrap_or(mark),
-                limit.saturating_add(1),
+                after.unwrap_or(m::ChangePosition::ZERO).max(mark),
+                limit.lookahead(),
             );
-            let next = if entries.len() > usize::from(*limit) {
+            let next = if entries.len() > usize::from(limit.get()) {
                 entries
-                    .get(usize::from(*limit).saturating_sub(1))
+                    .get(usize::from(limit.get()).saturating_sub(1))
                     .map(|row| row.position)
             } else {
                 None
             };
             Ok(m::WorkspaceAnswer::Inbox {
-                entries: entries.into_iter().take(usize::from(*limit)).collect(),
+                entries: entries.into_iter().take(usize::from(limit.get())).collect(),
                 next_after_position: next,
                 read_through: mark,
             })

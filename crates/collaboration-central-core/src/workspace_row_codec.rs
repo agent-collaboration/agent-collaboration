@@ -53,6 +53,8 @@ pub(crate) struct WorkspaceRows {
     pub marks: Vec<workspace_model::ReadMark>,
     pub changes: Vec<crate::workspace_change_records::StoredChange>,
     pub high_water: workspace_model::ChangePosition,
+    pub created_positions:
+        std::collections::BTreeMap<workspace_model::ItemRef, workspace_model::ChangePosition>,
 }
 impl WorkspaceRows {
     pub fn decode(outcome: ReadOutcome) -> Result<Self, StoreFailure> {
@@ -77,12 +79,28 @@ impl WorkspaceRows {
                 "issue" => rows.issues.push(json(payload, "issues")?),
                 "thread" => rows.threads.push(json(payload, "threads")?),
                 "member" => rows.members.push(json(payload, "thread_members")?),
-                "post" => rows.posts.push(json(payload, "posts")?),
+                "post" => rows.posts.push(crate::workspace_json_records::decode(
+                    payload,
+                    "posts",
+                    &[("addressees", "posts.addressees")],
+                )?),
                 "entry" => rows.entries.push(json(payload, "work_log_entries")?),
                 "backlog" => rows.backlog.push(json(payload, "backlog_items")?),
-                "reference" => rows.references.push(json(payload, "item_references")?),
-                "link" => rows.links.push(json(payload, "links")?),
-                "mark" => rows.marks.push(json(payload, "read_marks")?),
+                "reference" => rows.references.push(crate::workspace_json_records::decode(
+                    payload,
+                    "item_references",
+                    &[("details", "item_references.details")],
+                )?),
+                "link" => rows.links.push(crate::workspace_json_records::decode(
+                    payload,
+                    "links",
+                    &[("details", "links.details")],
+                )?),
+                "mark" => rows.marks.push(crate::workspace_json_records::decode(
+                    payload,
+                    "read_marks",
+                    &[("scope", "read_marks.scope")],
+                )?),
                 "change" => rows.changes.push(json(payload, "changes")?),
                 "highWater" => rows.high_water = json(payload, "position")?,
                 _ => {
@@ -92,6 +110,14 @@ impl WorkspaceRows {
                         },
                     });
                 }
+            }
+        }
+        for change in &rows.changes {
+            if matches!(change.change_kind.as_str(), "created" | "posted") {
+                rows.created_positions
+                    .entry(change.item.clone())
+                    .and_modify(|position| *position = (*position).min(change.position))
+                    .or_insert(change.position);
             }
         }
         Ok(rows)

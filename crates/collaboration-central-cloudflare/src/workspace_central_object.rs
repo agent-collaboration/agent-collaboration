@@ -57,9 +57,8 @@ impl WorkspaceStoreCalls for WorkspaceTransport {
         call: StoreCall,
     ) -> impl std::future::Future<Output = std::result::Result<StoreReply, StoreFailure>> + Send
     {
-        let id = id.as_str().to_owned().try_into();
+        let id = id.clone();
         SendFuture::new(async move {
-            let id = id.map_err(|_| StoreFailure::Unavailable)?;
             #[cfg(feature = "test-support")]
             let is_read = matches!(&call, StoreCall::Read(_));
             let answer = crate::cloudflare_transport::call_store(&self.env, id, call.into()).await;

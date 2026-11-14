@@ -50,7 +50,7 @@ async fn relation_pages_use_created_positions_after_clock_behind_reopen_and_keep
                 m::WorkspaceOperation::List {
                     query: query.clone(),
                     after: m::ChangePosition::ZERO,
-                    limit: 1,
+                    limit: 1.try_into().unwrap(),
                 },
             )
             .await;
@@ -71,7 +71,7 @@ async fn relation_pages_use_created_positions_after_clock_behind_reopen_and_keep
                 m::WorkspaceOperation::List {
                     query,
                     after,
-                    limit: 1,
+                    limit: 1.try_into().unwrap(),
                 },
             )
             .await;
@@ -109,7 +109,7 @@ async fn relation_pages_use_created_positions_after_clock_behind_reopen_and_keep
             0,
             m::WorkspaceOperation::Inbox {
                 after: None,
-                limit: 100,
+                limit: 100.try_into().unwrap(),
             },
         )
         .await;

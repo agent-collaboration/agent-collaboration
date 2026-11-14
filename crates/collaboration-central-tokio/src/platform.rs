@@ -312,7 +312,7 @@ impl CentralPlatform for TokioCentralPlatform {
 
     async fn call_store(
         &self,
-        workspace: message_board::WorkspaceId,
+        workspace: workspace_ids::WorkspaceId,
         call: StoreCall,
     ) -> Result<StoreReply, StoreFailure> {
         self.objects.call_store(&workspace, call).await

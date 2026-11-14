@@ -191,7 +191,7 @@ async fn restart_with_clock_behind_keeps_change_positions_and_current_only_rows(
             0,
             m::WorkspaceOperation::Inbox {
                 after: Some(before),
-                limit: 10,
+                limit: 10.try_into().unwrap(),
             },
         )
         .await;

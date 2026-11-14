@@ -82,7 +82,7 @@ async fn reference_link_backlog_and_work_log_rows_are_real_and_removals_refuse_a
                 m::WorkspaceOperation::List {
                     query,
                     after: m::ChangePosition::ZERO,
-                    limit: 10,
+                    limit: 10.try_into().unwrap(),
                 },
             )
             .await;
@@ -101,7 +101,7 @@ async fn reference_link_backlog_and_work_log_rows_are_real_and_removals_refuse_a
                     text: "%_".to_owned().try_into().unwrap(),
                 },
                 after: m::ChangePosition::ZERO,
-                limit: 1,
+                limit: 1.try_into().unwrap(),
             },
         )
         .await;
@@ -193,7 +193,7 @@ async fn reference_link_backlog_and_work_log_rows_are_real_and_removals_refuse_a
             0,
             m::WorkspaceOperation::Inbox {
                 after: None,
-                limit: 100,
+                limit: 100.try_into().unwrap(),
             },
         )
         .await;

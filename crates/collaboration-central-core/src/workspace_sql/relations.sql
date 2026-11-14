@@ -14,7 +14,7 @@ SELECT 'issue' AS row_kind,json_object('issueId',i.issue_id,'deliverableId',i.de
 UNION ALL
 SELECT 'thread' AS row_kind,json_object('threadId',t.thread_id,'areaId',t.area_id,'title',t.title,'creator',t.creator,'state',t.state) AS payload FROM threads t WHERE t.thread_id IN (SELECT thread_id FROM selected_threads)
 UNION ALL
-SELECT 'post' AS row_kind,json_object('postId',p.post_id,'threadId',p.thread_id,'author',p.author,'body',p.body,'addressees',json(p.addressees)) AS payload FROM posts p WHERE p.post_id IN (?2,?3,(SELECT id FROM relation_sources))
+SELECT 'post' AS row_kind,json_object('postId',p.post_id,'threadId',p.thread_id,'author',p.author,'body',p.body,'addressees',p.addressees) AS payload FROM posts p WHERE p.post_id IN (?2,?3,(SELECT id FROM relation_sources))
 UNION ALL
 SELECT 'entry' AS row_kind,json_object('entryId',e.entry_id,'projectId',e.project_id,'author',e.author,'body',json(CASE e.redacted WHEN 1 THEN CASE WHEN e.body IS NULL THEN '{"kind":"redacted"}' ELSE NULL END WHEN 0 THEN json_object('kind','visible','body',e.body) ELSE NULL END),'tags',json((SELECT json_group_array(tag) FROM work_log_tags g WHERE g.entry_id=e.entry_id ORDER BY g.work_log_tag_id))) AS payload FROM work_log_entries e WHERE e.entry_id IN (?2,?3,(SELECT id FROM relation_sources))
 )
@@ -22,9 +22,9 @@ UNION ALL
 SELECT * FROM (
 SELECT 'backlog' AS row_kind,json_object('itemId',b.item_id,'areaId',b.area_id,'title',b.title,'description',b.description,'creator',b.creator) AS payload FROM backlog_items b WHERE b.item_id IN (?2,?3,(SELECT id FROM relation_sources))
 UNION ALL
-SELECT 'reference' AS row_kind,json_object('referenceId',r.reference_id,'source',json(json_object('kind',r.source_kind,'id',r.source_id)),'target',json(json_object('kind',r.target_kind,'id',r.target_id)),'details',json(r.details)) AS payload FROM item_references r WHERE r.reference_id=?2
+SELECT 'reference' AS row_kind,json_object('referenceId',r.reference_id,'source',json(json_object('kind',r.source_kind,'id',r.source_id)),'target',json(json_object('kind',r.target_kind,'id',r.target_id)),'details',r.details) AS payload FROM item_references r WHERE r.reference_id=?2
 UNION ALL
-SELECT 'link' AS row_kind,json_object('linkId',l.link_id,'source',json(json_object('kind',l.source_kind,'id',l.source_id)),'url',l.url,'title',l.title,'details',json(l.details)) AS payload FROM links l WHERE l.link_id=?2
+SELECT 'link' AS row_kind,json_object('linkId',l.link_id,'source',json(json_object('kind',l.source_kind,'id',l.source_id)),'url',l.url,'title',l.title,'details',l.details) AS payload FROM links l WHERE l.link_id=?2
 UNION ALL
 SELECT 'highWater' AS row_kind,CAST(COALESCE(MAX(position),0) AS TEXT) AS payload FROM changes
 );

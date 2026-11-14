@@ -91,7 +91,7 @@ impl CentralPlatform for FixturePlatform {
     // The native HTTP suite covers those real capabilities separately.
     async fn call_store(
         &self,
-        _: message_board::WorkspaceId,
+        _: workspace_ids::WorkspaceId,
         _: central_storage::StoreCall,
     ) -> Result<central_storage::StoreReply, central_storage::StoreFailure> {
         Err(central_storage::StoreFailure::Unavailable)

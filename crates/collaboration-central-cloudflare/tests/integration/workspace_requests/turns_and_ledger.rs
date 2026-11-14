@@ -207,7 +207,7 @@ async fn failed_guard_has_no_ledger_entry_and_mark_read_is_monotonic() {
             0,
             m::WorkspaceOperation::Inbox {
                 after: None,
-                limit: 100,
+                limit: 100.try_into().unwrap(),
             },
         )
         .await;
@@ -238,7 +238,7 @@ async fn failed_guard_has_no_ledger_entry_and_mark_read_is_monotonic() {
             0,
             m::WorkspaceOperation::Inbox {
                 after: None,
-                limit: 100,
+                limit: 100.try_into().unwrap(),
             },
         )
         .await;

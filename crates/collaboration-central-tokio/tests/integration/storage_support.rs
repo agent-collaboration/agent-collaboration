@@ -3,13 +3,13 @@
 use central_storage::{ReadOutcome, SqlValue, Statement, StoreCall, StoreReply};
 use collaboration_central_core::{CentralPlatform, DeliveryConfig};
 use collaboration_central_tokio::{StoreMigrations, TokioCentralPlatform};
-use message_board::WorkspaceId;
 use runtime_primitives::{Clock, SyncTime};
 use sqlx::migrate::Migrator;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI64, Ordering};
 use std::time::Duration;
+use workspace_ids::WorkspaceId;
 
 /// The one injected clock: it moves only when a case moves it.
 pub struct HeldClock(AtomicI64);

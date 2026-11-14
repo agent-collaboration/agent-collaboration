@@ -130,14 +130,8 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
         .workspace_id
         .as_ref()
         .ok_or_else(|| corrupt("workspace_id"))?;
-    // Existing seam ids are validated at this temporary legacy capability edge.
-    let seam_workspace: message_board::WorkspaceId = workspace
-        .as_str()
-        .to_owned()
-        .try_into()
-        .map_err(|_| corrupt("workspace_id"))?;
     let _turn = if request.operation.is_write() {
-        Some(runtime.turns.take(&seam_workspace).await)
+        Some(runtime.turns.take(workspace).await)
     } else {
         None
     };
@@ -185,7 +179,7 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
     #[cfg(feature = "test-support")]
     runtime
         .pauses
-        .reached(&seam_workspace, crate::PausePoint::AfterReads)
+        .reached(workspace, crate::PausePoint::AfterReads)
         .await;
     let resolved = runtime.resolve_command(&request.operation, &actor).await?;
     let decision = match &resolved {
@@ -247,7 +241,7 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
     #[cfg(feature = "test-support")]
     runtime
         .pauses
-        .reached(&seam_workspace, crate::PausePoint::AfterStoreApplied)
+        .reached(workspace, crate::PausePoint::AfterStoreApplied)
         .await;
     #[cfg(feature = "test-support")]
     if runtime.take_lost_reply(request_id) {

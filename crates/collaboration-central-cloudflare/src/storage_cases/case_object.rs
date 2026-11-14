@@ -8,7 +8,6 @@ use central_storage::{AlarmUpdate, RowExpectation, SafeInteger, SqlValue, Statem
 use collaboration_central_core::{
     ClockIds, HeldPause, PausePoint, PausePoints, WorkspaceTurns, storage_conformance,
 };
-use message_board::WorkspaceId;
 use runtime_primitives::{Clock, IdSource, SyncTime};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -17,6 +16,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use worker::{DurableObject, Env, Request, Response, Result, State, durable_object, wasm_bindgen};
+use workspace_ids::WorkspaceId;
 
 /// A clock a case holds still, so ids minted in one batch share one millisecond.
 struct HeldClock(SyncTime);

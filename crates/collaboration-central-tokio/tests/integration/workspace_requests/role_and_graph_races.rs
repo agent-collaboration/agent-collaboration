@@ -7,7 +7,7 @@ async fn held_pair(
     second_caller: WorkspaceCaller,
 ) -> (m::WorkspaceReply, m::WorkspaceReply) {
     let runtime = f.host.central(&f.caller.organization_id).await;
-    let seam = f.workspace.as_str().to_owned().try_into().unwrap();
+    let seam = f.workspace.clone();
     let mut first_hold = runtime.pause_points().hold(&seam, PausePoint::AfterReads);
     let request = m::WorkspaceRequest {
         request_id: Some(id(700)),

@@ -62,7 +62,7 @@ pub fn references_to(
     target: &ItemRef,
     rows: &[PositionedItem<workspace_model::Reference>],
     after: ChangePosition,
-    limit: u16,
+    limit: u32,
 ) -> Vec<PositionedItem<workspace_model::Reference>> {
     let selected: Vec<_> = rows
         .iter()
@@ -79,7 +79,7 @@ pub fn references_from(
     source: &ItemRef,
     rows: &[PositionedItem<workspace_model::Reference>],
     after: ChangePosition,
-    limit: u16,
+    limit: u32,
 ) -> Vec<PositionedItem<workspace_model::Reference>> {
     let selected: Vec<_> = rows
         .iter()
@@ -96,7 +96,7 @@ pub fn links_from(
     source: &ItemRef,
     rows: &[PositionedItem<workspace_model::ExternalLink>],
     after: ChangePosition,
-    limit: u16,
+    limit: u32,
 ) -> Vec<PositionedItem<workspace_model::ExternalLink>> {
     let selected: Vec<_> = rows
         .iter()
@@ -112,13 +112,13 @@ pub fn links_from(
 pub fn ordered_page<T: Clone>(
     rows: &[PositionedItem<T>],
     after: ChangePosition,
-    limit: u16,
+    limit: u32,
 ) -> Vec<PositionedItem<T>> {
     let mut selected: Vec<_> = rows.iter().filter(|row| row.position > after).collect();
     selected.sort_by_key(|row| row.position);
     selected
         .into_iter()
-        .take(usize::from(limit))
+        .take(usize::try_from(limit).unwrap_or(usize::MAX))
         .map(|row| PositionedItem {
             position: row.position,
             item: row.item.clone(),
@@ -130,7 +130,7 @@ pub fn work_log_page(
     rows: &[PositionedItem<WorkLogEntry>],
     project: &workspace_model::ProjectId,
     after: ChangePosition,
-    limit: u16,
+    limit: u32,
 ) -> Vec<PositionedItem<WorkLogEntry>> {
     let selected: Vec<_> = rows
         .iter()
@@ -158,7 +158,7 @@ pub fn inbox_page(
     context: &WriteContext,
     reads: InboxReads<'_>,
     after: ChangePosition,
-    limit: u16,
+    limit: u32,
 ) -> Vec<InboxEntry> {
     let followed = |thread_id: &workspace_model::ThreadId| {
         reads
@@ -192,7 +192,7 @@ pub fn inbox_page(
                     item: row.change.item.clone(),
                 }),
         })
-        .take(usize::from(limit))
+        .take(usize::try_from(limit).unwrap_or(usize::MAX))
         .collect()
 }
 
@@ -235,7 +235,7 @@ pub fn list_deliverables(
     project: &workspace_model::ProjectId,
     reads: &DeliverableReads<'_>,
     after: ChangePosition,
-    limit: u16,
+    limit: u32,
 ) -> Result<Vec<PositionedItem<ItemView>>, RefusalReason> {
     let rows = reads
         .deliverables
@@ -266,7 +266,7 @@ pub fn search_posts(
     query: &workspace_model::SearchQuery,
     reads: PostSearchReads<'_>,
     after: ChangePosition,
-    limit: u16,
+    limit: u32,
 ) -> Result<PostSearchPlan, RefusalReason> {
     let pattern = format!(
         "%{}%",

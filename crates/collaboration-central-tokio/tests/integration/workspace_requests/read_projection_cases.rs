@@ -40,7 +40,7 @@ async fn list_deliverables_computes_empty_on_hold_and_closed_and_pages_by_positi
                     project_id: project.clone(),
                 },
                 after: m::ChangePosition::ZERO,
-                limit: 2,
+                limit: 2.try_into().unwrap(),
             },
         )
         .await;
@@ -62,7 +62,7 @@ async fn list_deliverables_computes_empty_on_hold_and_closed_and_pages_by_positi
                     project_id: project.clone(),
                 },
                 after: cursor,
-                limit: 2,
+                limit: 2.try_into().unwrap(),
             },
         )
         .await;
@@ -133,7 +133,7 @@ async fn work_log_redaction_is_null_in_reopened_store_and_retains_original_order
                     project_id: project,
                 },
                 after: m::ChangePosition::ZERO,
-                limit: 10,
+                limit: 10.try_into().unwrap(),
             },
         )
         .await;
