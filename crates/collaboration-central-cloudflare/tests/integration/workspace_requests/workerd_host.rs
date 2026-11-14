@@ -320,11 +320,15 @@ impl WorkerdHost {
             .clone()
     }
     pub async fn until_log(&self, fragment: &str) {
+        self.until_log_after(0, fragment).await;
+    }
+    pub async fn until_log_after(&self, after: usize, fragment: &str) {
         let mut changed = self.log_changed.subscribe();
         loop {
             if self
                 .captured_logs()
                 .iter()
+                .skip(after)
                 .any(|line| line.contains(fragment))
             {
                 return;
