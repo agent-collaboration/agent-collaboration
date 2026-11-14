@@ -96,8 +96,10 @@ impl SignInObservation {
 
 // One SQLite statement supplies one snapshot. Do not page, cap, or open another
 // store here: every row in the already-addressed owning store must be observed.
-// workerd rejects a six-term compound SELECT. Each CTE stays below that limit;
+// workerd intentionally caps SQLITE_LIMIT_COMPOUND_SELECT at five terms
+// (cloudflare/workerd src/workerd/util/sqlite.c++, setupSecurity). Each CTE stays below it;
 // the outer two-term SELECT preserves per-row results without a large JSON aggregate.
+// CAST preserves generated JSON's TEXT type through Turso CTE metadata (UW-15).
 const SNAPSHOT: &str = r#"
 WITH identity_records_and_organization_floor AS (
 SELECT 0 AS row_group,id AS row_id,json_object('kind','identity','row',json_object(
@@ -114,7 +116,7 @@ UNION ALL SELECT 2,id,json_object('kind','organizationFloor','row',json_object(
 ), person_proofs_and_workspaces AS (
 SELECT 3 AS row_group,person_id AS row_id,json_object('kind','personFloor','row',json_object(
  'id',id,'organization_id',organization_id,'person_id',person_id,'minimum_revision',minimum_revision,
- 'state',state,'created_at',created_at,'updated_at',updated_at))
+ 'state',state,'created_at',created_at,'updated_at',updated_at)) AS payload
  FROM person_organization_authorization_floors
 UNION ALL SELECT 4,id,json_object('kind','usedRequest','row',json_object(
  'id',id,'organization_id',organization_id,'request_time_ms',request_time_ms,'operation_id',operation_id,
@@ -125,8 +127,8 @@ UNION ALL SELECT 5,workspace_id,json_object('kind','workspace','row',json_object
  'workspaceId',workspace_id,'name',name,'state',state,'createdAt',created_at,'updatedAt',updated_at))
  FROM workspaces
 )
-SELECT * FROM identity_records_and_organization_floor
-UNION ALL SELECT * FROM person_proofs_and_workspaces
+SELECT row_group,row_id,CAST(payload AS TEXT) AS payload FROM identity_records_and_organization_floor
+UNION ALL SELECT row_group,row_id,CAST(payload AS TEXT) AS payload FROM person_proofs_and_workspaces
 ORDER BY row_group,row_id
 "#;
 

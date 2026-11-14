@@ -20,6 +20,37 @@ const NOW: i64 = 1_800_000_000_000;
 const TIME: &str = "2027-01-15T08:00:00Z";
 const POLICY: &str = "2d31b5d72716e64e255d8858c231f593155289fb03ed354c4b762890667a3c22";
 
+#[tokio::test]
+async fn computed_json_text_cast_preserves_the_runtime_text_type_through_a_cte() {
+    use sqlx_core::{type_info::TypeInfo, value::ValueRef};
+    let mut connection = empty_store().await;
+    const DIRECT: &str =
+        "SELECT json_object('value',1) AS payload,typeof(json_object('value',1)) AS runtime_type";
+    const CTE: &str = "WITH payloads AS (SELECT json_object('value',1) AS payload) SELECT payload,typeof(payload) AS runtime_type FROM payloads";
+    const CAST: &str = "WITH payloads AS (SELECT json_object('value',1) AS payload) SELECT CAST(payload AS TEXT) AS payload,typeof(payload) AS runtime_type FROM payloads";
+    for (label, sql) in [("direct", DIRECT), ("cte", CTE), ("cast", CAST)] {
+        let row = query::<Turso>(sql)
+            .fetch_one(&mut connection)
+            .await
+            .unwrap();
+        let runtime_type: String = row.try_get("runtime_type").unwrap();
+        let raw = row.try_get_raw("payload").unwrap();
+        let reported_type = raw.type_info().name().to_owned();
+        let unchecked_text: String = row.try_get_unchecked("payload").unwrap();
+        let typed_text = row.try_get::<String, _>("payload");
+        eprintln!(
+            "computed JSON {label}: runtime={runtime_type}, driver={reported_type}, typed_text={}",
+            typed_text.is_ok()
+        );
+        assert_eq!(runtime_type, "text");
+        assert_eq!(unchecked_text, r#"{"value":1}"#);
+        if label == "cast" {
+            assert_eq!(reported_type, "TEXT");
+            assert_eq!(typed_text.unwrap(), r#"{"value":1}"#);
+        }
+    }
+}
+
 fn organization() -> OrganizationId {
     ORGANIZATION.to_owned().try_into().unwrap()
 }

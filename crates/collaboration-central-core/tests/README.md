@@ -22,3 +22,8 @@ Sign-in policy unit cases retain B2's statement, key-cache, signature and replac
 assertions. New floor/admission cases check the static plans and row decoders; host
 integration suites prove the private route, real cryptography and owning SQL batch.
 The standalone unit selection needs `test-support` for its existing turn seams.
+
+`fixtures/signin-observation-empty.json` is the canonical empty private launcher
+observation used by Rust and the Node bridge. Colocated `signin_test_observation`
+tests run the actual snapshot SQL over migrations, check the exact projection and
+250-record completeness, reject corrupt stored domains, and verify no writes.
