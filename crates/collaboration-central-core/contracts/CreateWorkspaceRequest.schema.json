@@ -22,7 +22,9 @@
   "additionalProperties": false,
   "properties": {
     "description": {
-      "type": "string"
+      "maxLength": 2048,
+      "type": "string",
+      "x-maxUtf8Bytes": 2048
     },
     "name": {
       "$ref": "#/$defs/WorkspaceName"

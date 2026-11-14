@@ -10,6 +10,8 @@ use serde::{Deserialize, Serialize};
 pub struct WorkspaceView {
     pub workspace_id: WorkspaceId,
     pub name: ResourceName,
+    #[serde(deserialize_with = "crate::person_request::deserialize_description")]
+    #[schemars(schema_with = "crate::person_request::description_schema")]
     pub description: Description,
     pub state: WorkspaceState,
 }

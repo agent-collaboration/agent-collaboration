@@ -136,7 +136,36 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
         _ => {}
     }
     invalid.extend(composed_byte_overflows(name, literals));
+    invalid.extend(description_byte_overflows(name, literals));
     invalid.extend(scalar_rule_negatives(literals));
+    invalid
+}
+
+fn description_byte_overflows(name: &str, literals: &[Value]) -> Vec<Value> {
+    let pointer = match name {
+        "CreateWorkspaceRequest" => "/description",
+        "OrganizationAdminResult" => "/workspace/description",
+        "OrganizationAdminIntent" => "/params/description",
+        _ => return Vec::new(),
+    };
+    let mut invalid = Vec::new();
+    for literal in literals
+        .iter()
+        .filter(|literal| literal.pointer(pointer).is_some())
+    {
+        // Multibyte values stay below maxLength while crossing the UTF-8 byte bound.
+        for description in [
+            "a".repeat(2049),
+            format!("{}a", "é".repeat(1024)),
+            format!("{}a", "😀".repeat(512)),
+            "😀".repeat(513),
+        ] {
+            assert!(description.len() > 2048);
+            let mut overflow = literal.clone();
+            *overflow.pointer_mut(pointer).unwrap() = json!(description);
+            invalid.push(overflow);
+        }
+    }
     invalid
 }
 

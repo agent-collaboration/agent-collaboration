@@ -44,6 +44,29 @@ impl AdminOperationId {
 pub const MAXIMUM_DESCRIPTION_BYTES: usize = 2048;
 pub const MAXIMUM_RECORD_PAGE: u16 = 100;
 
+pub(crate) fn description_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({
+        "type":"string",
+        "maxLength":MAXIMUM_DESCRIPTION_BYTES,
+        "x-maxUtf8Bytes":MAXIMUM_DESCRIPTION_BYTES
+    })
+}
+
+pub(crate) fn deserialize_description<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: TryFrom<String>,
+    T::Error: std::fmt::Display,
+{
+    let description = String::deserialize(deserializer)?;
+    if description.len() > MAXIMUM_DESCRIPTION_BYTES {
+        return Err(serde::de::Error::custom(
+            "description exceeds 2048 UTF-8 bytes",
+        ));
+    }
+    T::try_from(description).map_err(serde::de::Error::custom)
+}
+
 /// A workspace name exactly as the Fleet stores it: the Fleet's own
 /// `ResourceName` rules, but a name that would be trimmed is refused rather
 /// than rewritten, so the signed intent hashes the stored name.
@@ -125,6 +148,8 @@ pub struct CreateWorkspaceRequest {
     pub organization_id: OrganizationId,
     pub operation_id: AdminOperationId,
     pub name: WorkspaceName,
+    #[serde(deserialize_with = "deserialize_description")]
+    #[schemars(schema_with = "description_schema")]
     pub description: String,
 }
 
@@ -257,6 +282,8 @@ impl JsonSchema for IntentVersionOne {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CreateWorkspaceParams {
     name: WorkspaceName,
+    #[serde(deserialize_with = "deserialize_description")]
+    #[schemars(schema_with = "description_schema")]
     description: String,
 }
 

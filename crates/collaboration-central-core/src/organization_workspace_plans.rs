@@ -59,20 +59,8 @@ fn retained_result(
     request: &CreateWorkspaceRequest,
 ) -> Result<OrganizationAdminResult, StoreFailure> {
     let value: serde_json::Value = json(encoded, "request_log.answer")?;
-    // Validate only the fields this version owns. Additional retained view
-    // fields remain opaque so an older reader can return the original answer.
-    let known = match value.get("result").and_then(serde_json::Value::as_str) {
-        Some("applied") => serde_json::json!({"result":"applied","workspace":{
-            "workspaceId":value.pointer("/workspace/workspaceId"),
-            "name":value.pointer("/workspace/name"),
-            "description":value.pointer("/workspace/description"),
-            "state":value.pointer("/workspace/state")
-        }}),
-        Some("refused") => serde_json::json!({"result":"refused","reason":value.get("reason")}),
-        _ => return Err(corrupt("request_log.answer")),
-    };
     let answer: OrganizationAdminResult =
-        serde_json::from_value(known).map_err(|_| corrupt("request_log.answer"))?;
+        serde_json::from_value(value.clone()).map_err(|_| corrupt("request_log.answer"))?;
     match &answer {
         OrganizationAdminResult::Applied { workspace }
             if workspace.workspace_id.as_str() == request.operation_id.as_str()

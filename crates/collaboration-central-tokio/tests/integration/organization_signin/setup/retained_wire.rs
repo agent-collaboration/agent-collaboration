@@ -26,6 +26,11 @@ async fn corrupt_retained_answer_is_unavailable_without_any_replay_effect() -> R
         json!({"result":"records","records":[]}).to_string(),
         json!({"result":"refused","reason":"notPermitted"}).to_string(),
     ];
+    let mut unknown_top = good.clone();
+    unknown_top["futureEnvelope"] = json!(true);
+    invalid.push(unknown_top.to_string());
+    invalid
+        .push(json!({"result":"refused","reason":"nameInUse","futureEnvelope":true}).to_string());
     for (field, value) in [
         ("workspaceId", json!("019f0000-0000-7000-8000-00000000d7f4")),
         ("name", json!("Other name")),
@@ -120,10 +125,10 @@ async fn validated_retained_answer_returns_its_original_json_text() -> Result {
         .await?;
     let before = durable_effects(&fixture).await?;
     let replay = create(&fixture, &owner, operation, "Stored wire", "Retained text").await?;
-    assert_eq!(replay.status, 200);
+    assert_eq!(replay.status, 503);
     assert!(
-        replay.body == extended_text.as_bytes(),
-        "an opaque future view field must not corrupt or re-encode a validated retained answer"
+        replay.body.is_empty(),
+        "unknown retained view fields must be corrupt without publishing stored JSON"
     );
     assert!(durable_effects(&fixture).await? == before);
     fixture.close().await

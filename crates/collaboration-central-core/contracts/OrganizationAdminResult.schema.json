@@ -28,12 +28,6 @@
       "minLength": 1,
       "type": "string"
     },
-    "Description": {
-      "maxLength": 16384,
-      "minLength": 0,
-      "type": "string",
-      "x-maxUtf8Bytes": 16384
-    },
     "OrganizationChangeKind": {
       "enum": [
         "organizationProvisioned",
@@ -142,7 +136,9 @@
       "description": "The verified admin view of the org-owned workspace directory.",
       "properties": {
         "description": {
-          "$ref": "#/$defs/Description"
+          "maxLength": 2048,
+          "type": "string",
+          "x-maxUtf8Bytes": 2048
         },
         "name": {
           "$ref": "#/$defs/ResourceName"

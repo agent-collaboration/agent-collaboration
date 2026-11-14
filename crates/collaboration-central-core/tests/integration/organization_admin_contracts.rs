@@ -7,10 +7,35 @@ use collaboration_central_core::{
         ReadChangeRecordsRequest, WorkspaceLookupRequest,
     },
 };
-use serde_json::json;
+use serde_json::{Value, json};
+
+fn description_boundaries(literal: Value, pointer: &str) -> Vec<Value> {
+    [
+        String::new(),
+        "a".repeat(2048),
+        "é".repeat(1024),
+        "😀".repeat(512),
+    ]
+    .into_iter()
+    .map(|description| {
+        assert!(description.is_empty() || description.len() == 2048);
+        let mut boundary = literal.clone();
+        *boundary.pointer_mut(pointer).unwrap() = json!(description);
+        boundary
+    })
+    .collect()
+}
 
 #[test]
 fn organization_admin_result_wire_contract() {
+    let mut boundaries = description_boundaries(
+        json!({"result":"applied","workspace":{"workspaceId":"019a3dce-2000-7000-8000-000000000002","name":"Fixture workspace","description":"Fixture description","state":"active"}}),
+        "/workspace/description",
+    );
+    boundaries.extend(description_boundaries(
+        json!({"result":"found","workspace":{"workspaceId":"019a3dce-2000-7000-8000-000000000002","name":"Fixture workspace","description":"Fixture description","state":"active"}}),
+        "/workspace/description",
+    ));
     contract_artifacts::assert_contract::<OrganizationAdminResult>(
         "OrganizationAdminResult",
         vec![
@@ -33,18 +58,22 @@ fn organization_admin_result_wire_contract() {
             json!({"result":"refused","reason":"requestTime"}),
             json!({"result":"refused","reason":"requestReused"}),
             json!({"result":"refused","reason":"rejected"}),
-        ],
+        ].into_iter().chain(boundaries).collect(),
         false,
     );
 }
 
 #[test]
 fn create_workspace_request_wire_contract() {
+    let boundaries = description_boundaries(
+        json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","operationId":"019a3dce-2000-7000-8000-000000000003","name":"Fixture workspace","description":"Fixture description"}),
+        "/description",
+    );
     contract_artifacts::assert_contract::<CreateWorkspaceRequest>(
         "CreateWorkspaceRequest",
         vec![
             json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","operationId":"019a3dce-2000-7000-8000-000000000003","name":"Fixture workspace","description":"Fixture description"}),
-        ],
+        ].into_iter().chain(boundaries).collect(),
         false,
     );
 }
@@ -119,6 +148,10 @@ fn organization_admin_intent_wire_contract() {
         assert_eq!(operation.canonical_intent().unwrap(), canonical);
         literals.push(literal);
     }
+    literals.extend(description_boundaries(
+        literals[0].clone(),
+        "/params/description",
+    ));
     contract_artifacts::assert_contract::<OrganizationAdminIntent>(
         "OrganizationAdminIntent",
         literals,

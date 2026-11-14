@@ -1,6 +1,7 @@
 //! A person's signed admin operation and admission against retained floors.
 mod admin_operations;
 pub(crate) use admin_operations::MAXIMUM_DESCRIPTION_BYTES;
+pub(crate) use admin_operations::{description_schema, deserialize_description};
 mod compact_jwt;
 pub(crate) mod floor_delivery;
 mod refusal;

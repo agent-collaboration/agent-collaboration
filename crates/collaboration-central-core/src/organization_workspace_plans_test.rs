@@ -144,6 +144,16 @@ fn valid_retained_applied_and_name_in_use_answers_are_accepted() {
         retained_result(&applied().to_string(), &request()).unwrap(),
         expected
     );
+    let reordered = format!(
+        r#" {{
+            "workspace": {{
+                "state": "active", "description": "Shared research notes",
+                "name": "Research", "workspaceId": "{OPERATION}"
+            }},
+            "result": "applied"
+        }} "#
+    );
+    assert_eq!(retained_result(&reordered, &request()).unwrap(), expected);
     assert_eq!(
         retained_result(
             " { \"reason\" : \"nameInUse\", \"result\" : \"refused\" } ",
@@ -157,27 +167,21 @@ fn valid_retained_applied_and_name_in_use_answers_are_accepted() {
 }
 
 #[test]
-fn unknown_retained_fields_remain_opaque_while_known_fields_are_validated() {
+fn unknown_retained_top_level_fields_are_corrupt() {
     let mut retained = applied();
     retained["futureEnvelope"] =
         json!({"version": 2, "items": [null, true, {"result": "unknown"}]});
+    assert_corrupt(&retained.to_string());
+    assert_corrupt(r#"{"result":"refused","reason":"nameInUse","future":{"opaque":true}}"#);
+}
+
+#[test]
+fn unknown_retained_workspace_fields_are_corrupt() {
+    let mut retained = applied();
     retained["workspace"]["futureView"] = json!({"nested": ["opaque", {"state": "unknown"}]});
-    let expected: OrganizationAdminResult = serde_json::from_value(applied()).unwrap();
-    assert_eq!(
-        retained_result(&retained.to_string(), &request()).unwrap(),
-        expected
-    );
-    assert_eq!(
-        retained_result(
-            r#"{"result":"refused","reason":"nameInUse","future":{"opaque":true}}"#,
-            &request()
-        )
-        .unwrap(),
-        OrganizationAdminResult::Refused {
-            reason: AdminRefusal::NameInUse
-        }
-    );
-    // Opaque additions cannot turn a corrupt known field into a valid answer.
+    assert_corrupt(&retained.to_string());
+    retained["futureEnvelope"] = json!(true);
+    assert_corrupt(&retained.to_string());
     retained["workspace"]["state"] = json!("archiving");
     assert_corrupt(&retained.to_string());
 }
