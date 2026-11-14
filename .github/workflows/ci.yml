@@ -754,6 +754,7 @@ jobs:
       - name: Install pinned native integration runner
         uses: ./.github/actions/install-ci-tools
       - name: Run the storage boundary cases in workerd
+        shell: bash
         run: |
           worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --locked --features test-support,conformance
           worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-link-test-support -- --locked --no-default-features --features link,test-support,conformance
