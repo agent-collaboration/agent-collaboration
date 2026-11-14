@@ -295,7 +295,7 @@ flowchart LR
 <table>
 <thead><tr><th>Agent</th><th><code>autoRealization</code></th><th>If not provable</th><th>Owner</th></tr></thead>
 <tbody>
-<tr><td>Claude</td><td>ClassifierEscalates (experiment E2)</td><td>actual mode <code>acceptEdits</code>: file edits in the working and scratch folders run; shell commands whose paths are all in the scratch folder run; others ask (Q3)</td><td><code>acp-provider-adapters::claude_behavior</code></td></tr>
+<tr><td>Claude</td><td>ClassifierEscalates (experiment E2)</td><td>The Host's external provider supervisor prepares the scratch folder at create and passes it to <code>session/new</code> <code>additionalDirectories</code>. Actual mode <code>acceptEdits</code>: file edits in the working and scratch folders run; shell commands whose paths are all in the scratch folder run; others ask (Q3)</td><td><code>acp-provider-adapters::claude_behavior</code></td></tr>
 <tr><td>Codex</td><td>AsksFirst</td><td>—</td><td><code>codex-acp-adapter::session_creation</code></td></tr>
 <tr><td>Cursor</td><td>AsksFirst (E1: auto-review not honoured over ACP)</td><td>actual mode <code>agent</code>; the Router answers allow-once for file reads and edits whose locations are all inside the working folder or the session's scratch folder, and shell commands whose paths all lie in the scratch folder (Q3); everything else becomes an approval routed by the session's kind</td><td><code>acp-provider-adapters::cursor_behavior</code></td></tr>
 </tbody>

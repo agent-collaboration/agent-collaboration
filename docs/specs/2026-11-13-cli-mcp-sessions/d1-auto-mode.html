@@ -41,7 +41,7 @@ flowchart TB
   A[acp-provider-adapters<br/>claude_behavior · cursor_behavior: mode plan, fallback, in-folder allow] 
   B[acp-client-runtime<br/>provider_connection_task: additionalDirectories on session/new<br/>provider_setting_application: default auto]
   C[codex-acp-adapter<br/>session_creation: approvalsReviewer = user]
-  D[codex-router-host<br/>claude launch environment, if needed · ordered with Lead A]
+  D[codex-router-host<br/>external provider supervisor: prepares the session's scratch folder at create · ordered with Lead A]
 </script></ex-mermaid>
 <p>No storage change. The existing interaction store records any approval raised.</p>
 </section>
