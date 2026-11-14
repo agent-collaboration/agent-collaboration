@@ -123,8 +123,12 @@ for (const ending of ["release", "cancel", "close", "preexisting"] as const) {
       if (ending === "cancel") send(undefined, "session/cancel", { sessionId: "session-1" });
       if (ending === "close") send("close", "session/close", { sessionId: "session-1" });
       const released = await signalHeldRelease({ socketPath: sentinel, ownerId: "session-1" });
-      assert.equal(released.kind, ending === "release" ? "released" : "refused");
       const terminal = await until((frame) => frame.id === "prompt");
+      assert.equal(
+        released.kind,
+        field(terminal, "result", "stopReason") === "end_turn" ? "released" : "refused",
+        "release verdict must identify the actual terminal winner across independent transports",
+      );
       assert.ok(
         ["end_turn", "cancelled"].includes(String(field(terminal, "result", "stopReason"))),
       );
