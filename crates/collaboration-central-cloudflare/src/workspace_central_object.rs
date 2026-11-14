@@ -213,6 +213,10 @@ impl CentralObject {
         };
         self.check_physical_organization(&organization_id)
             .map_err(AlarmFailure::Platform)?;
+        #[cfg(feature = "test-support")]
+        signin_launcher_controls::sample_clock(self, &organization_id)
+            .await
+            .map_err(AlarmFailure::Platform)?;
         let runtime = self
             .runtime_checked(organization_id.clone())
             .await
@@ -233,10 +237,6 @@ impl DurableObject for CentralObject {
         }
     }
     async fn fetch(&self, mut request: Request) -> Result<Response> {
-        #[cfg(feature = "test-support")]
-        if request.path().starts_with("/test/raw-") {
-            return workspace_cases::raw_control(self, request).await;
-        }
         let address = request
             .headers()
             .get("x-central-object-address")?
@@ -245,6 +245,16 @@ impl DurableObject for CentralObject {
             return Response::error("wrong object kind", 400);
         };
         self.check_physical_organization(&organization)?;
+        #[cfg(feature = "test-support")]
+        {
+            signin_launcher_controls::sample_clock(self, &organization).await?;
+            if request.path() == "/test/raw-signin-observe" {
+                return signin_launcher_controls::observe(self, &organization).await;
+            }
+            if request.path().starts_with("/test/raw-") {
+                return workspace_cases::raw_control(self, request).await;
+            }
+        }
         self.migrate()
             .await
             .map_err(|error| worker::Error::RustError(error.to_string()))?;
@@ -333,3 +343,7 @@ impl DurableObject for CentralObject {
 #[cfg(feature = "test-support")]
 #[path = "workspace_cases.rs"]
 pub(crate) mod workspace_cases;
+
+#[cfg(feature = "test-support")]
+#[path = "signin_launcher_controls.rs"]
+mod signin_launcher_controls;

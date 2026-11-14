@@ -8,7 +8,13 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Miniflare, Response, convertV4MiniflareOptions, type V4WorkerOptions } from "miniflare";
+import {
+  Miniflare,
+  Response,
+  convertV4MiniflareOptions,
+  type V4FetchHandler,
+  type V4WorkerOptions,
+} from "miniflare";
 import { z } from "zod";
 
 export interface WorkerdBundle {
@@ -57,6 +63,18 @@ export interface WorkerdSignInOptions {
   readonly jwks: z.infer<typeof jwksMappingSchema>;
 }
 
+function signInClockService(readClock: (organization: string) => number | null): V4FetchHandler {
+  return async (request: Parameters<V4FetchHandler>[0]): Promise<Response> => {
+    const prefix = "https://signin-clock.test/clock/";
+    const organization = request.url.startsWith(prefix) ? request.url.slice(prefix.length) : "";
+    const parsed = z.uuidv7().safeParse(organization);
+    if (request.method !== "GET" || !parsed.success)
+      return new Response("invalid clock request", { status: 400 });
+    const milliseconds = z.number().int().safe().nullable().parse(readClock(parsed.data));
+    return Response.json({ milliseconds });
+  };
+}
+
 /** Configuration passed by the Rust fixture; contains no signer or assertion logic. */
 export const workerdSignInPlanSchema = z
   .object({
@@ -64,6 +82,18 @@ export const workerdSignInPlanSchema = z
     jwksFixtureUrl: z.string(),
   })
   .strict();
+
+export const workerdBridgeCommandSchema = z.union([
+  z.object({ setTimeMs: z.number().int().safe() }).strict(),
+  z.object({ observe: z.uuidv7() }).strict(),
+]);
+
+// Row contents are owned and validated by Rust; the bridge relays opaque JSON.
+export const workerdBridgeObservationSchema = z
+  .object({ complete: z.literal(true) })
+  .catchall(z.json());
+
+export const workerdClockAcknowledgementSchema = z.literal(true);
 
 const gatewaySource = `export default { async fetch(request, env) {
   const url = new URL(request.url);
@@ -147,11 +177,18 @@ export class WorkerdStorage {
   static async start(
     bundle: WorkerdBundle,
     signIn?: WorkerdSignInOptions,
+    clock?: (organization: string) => number | null,
   ): Promise<WorkerdStorage> {
     const require = createRequire(import.meta.url);
     z.object({ version: z.literal("5.20261012.0-beta") }).parse(require("miniflare/package.json"));
     z.object({ version: z.literal("1.20261012.1") }).parse(require("workerd"));
-    const central = { ...workerOptions(bundle), name: "verification-central" };
+    const central = {
+      ...workerOptions(bundle),
+      name: "verification-central",
+      ...(clock === undefined
+        ? {}
+        : { serviceBindings: { TEST_SIGNIN_CLOCK: signInClockService(clock) } }),
+    };
     let workers: V4WorkerOptions[] = [central];
     if (signIn !== undefined) {
       const mapping = jwksMappingSchema.parse(signIn.jwks);
@@ -224,5 +261,17 @@ export class WorkerdStorage {
   async close(): Promise<void> {
     await this.runtime.dispose();
     await rm(this.root, { recursive: true, force: true });
+  }
+
+  async dispatchJson(path: string, body: unknown): Promise<unknown> {
+    if (!path.startsWith("/") || path.startsWith("//"))
+      throw new Error("fixture control requires a relative path");
+    const response = await this.runtime.dispatchFetch(`${this.origin}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) throw new Error("Worker fixture control failed");
+    return response.json();
   }
 }

@@ -7,6 +7,9 @@ import {
   centralTestBundle,
   centralLinkTestBundle,
   workerdSignInPlanSchema,
+  workerdBridgeCommandSchema,
+  workerdBridgeObservationSchema,
+  workerdClockAcknowledgementSchema,
 } from "../../../../verification/targets/workerd-storage.ts";
 const arguments_ = process.argv.slice(2);
 const [option, planPath] = arguments_;
@@ -35,6 +38,8 @@ for (const selected of linkBundle === undefined ? [bundle] : [bundle, linkBundle
 const sourceUrl = plan?.textBindings.CENTRAL_SIGN_IN_JWKS_URL;
 if (plan !== undefined && sourceUrl === undefined)
   throw new Error("sign-in plan requires CENTRAL_SIGN_IN_JWKS_URL");
+let milliseconds: number | null = null;
+const organizations = new Set<string>();
 const host = await WorkerdStorage.start(
   {
     ...bundle,
@@ -50,14 +55,69 @@ const host = await WorkerdStorage.start(
         },
         jwks: { sourceUrl, fixtureUrl: plan.jwksFixtureUrl },
       },
+  (organization: string): number | null => {
+    organizations.add(organization);
+    return milliseconds;
+  },
 );
 process.stdout.write(`${JSON.stringify({ origin: host.origin })}\n`);
+
+async function control(
+  organization: string,
+  operation: "clock" | "raw-signin-observe",
+  body: unknown,
+): Promise<unknown> {
+  const prefix = plan === undefined ? "" : "/public";
+  return host.dispatchJson(`${prefix}/test-support/workspace/${organization}/${operation}`, body);
+}
+
+async function answer(line: string): Promise<unknown> {
+  let input: unknown;
+  try {
+    input = JSON.parse(line);
+  } catch {
+    return { answer: "refused", error: "invalid bridge command" };
+  }
+  const parsed = workerdBridgeCommandSchema.safeParse(input);
+  if (!parsed.success) return { answer: "refused", error: "invalid bridge command" };
+  try {
+    if ("setTimeMs" in parsed.data) {
+      milliseconds = parsed.data.setTimeMs;
+      const live = [...organizations];
+      for (const organization of live) {
+        workerdClockAcknowledgementSchema.parse(await control(organization, "clock", milliseconds));
+      }
+      return { answer: "timeSet", setTimeMs: milliseconds, liveFleets: live.length };
+    }
+    const organization = parsed.data.observe;
+    const observation = workerdBridgeObservationSchema.parse(
+      organizations.has(organization)
+        ? await control(organization, "raw-signin-observe", {})
+        : JSON.parse(
+            await readFile(
+              new URL(
+                "../../../collaboration-central-core/tests/fixtures/signin-observation-empty.json",
+                import.meta.url,
+              ),
+              "utf8",
+            ),
+          ),
+    );
+    return { answer: "observed", organization, observation };
+  } catch {
+    // Never serialize a failed request, compact statement or raw response here.
+    return { answer: "failed", error: "bridge control failed" };
+  }
+}
+
 try {
   const commands = createInterface({ input: process.stdin, terminal: false });
   for await (const command of commands) {
-    if (command !== "close") throw new Error("unknown bridge control");
-    commands.close();
-    break;
+    if (command === "close") {
+      commands.close();
+      break;
+    }
+    if (command.trim() !== "") process.stderr.write(`${JSON.stringify(await answer(command))}\n`);
   }
 } finally {
   await host.close();
