@@ -17,6 +17,7 @@ function declaredPlan(endpointId = "claude-local"): CapturePlan {
       sessionId: "actual-caller",
     },
     expectedModel: endpointId === "codex-local" ? "gpt-6-luna" : "claude-haiku-4-5",
+    workingDirectory: endpointId === "codex-local" ? "/owned/native-workspace" : null,
     cursorApproval: null,
     evidence: "/run/step-a",
     action: {
@@ -61,10 +62,31 @@ test("provider prompt retains its exact operation ID while native prompt omits i
   const native = declaredPlan("codex-local");
   assert.equal(promptArguments(provider)["operationId"], "019a9000-0000-7000-8000-000000000001");
   assert.equal(Object.hasOwn(promptArguments(native), "operationId"), false);
+  assert.equal(promptArguments(native)["workingDirectory"], "/owned/native-workspace");
   assert.deepEqual(promptArguments(provider)["target"], provider.target);
   assert.throws(
     (): unknown => promptArguments({ ...provider, action: { kind: "snapshot" } }),
     /no prompt/,
+  );
+});
+
+test("a recorded native route cannot dispatch without an established absolute cwd", (): void => {
+  const plan = declaredPlan("codex-local");
+  assert.throws(
+    (): void => checkCaptureScope({ ...plan, workingDirectory: null }, "service-a"),
+    /working directory/,
+  );
+  assert.equal(
+    capturePlanSchema.safeParse({ ...plan, workingDirectory: "relative" }).success,
+    false,
+  );
+  assert.equal(
+    capturePlanSchema.safeParse({ ...plan, workingDirectory: undefined }).success,
+    false,
+  );
+  assert.throws(
+    (): unknown => promptArguments({ ...plan, workingDirectory: null }),
+    /working directory/,
   );
 });
 

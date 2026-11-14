@@ -45,6 +45,7 @@ import {
   promptArguments,
   type CapturePlan,
 } from "./capture-plan.ts";
+import { captureNativeSnapshot, readNativeThreadTurns } from "./native-observation.ts";
 
 const looseRecord = z.record(z.string(), z.unknown());
 const approvalListingSchema = z.object({
@@ -117,6 +118,12 @@ function localTarget(plan: CapturePlan): {
   readonly endpoint: string;
 } {
   const runtime = loadRuntimePlan(plan.runtimePlan);
+  if (
+    plan.target.endpoint.endpointId === "codex-local" &&
+    (plan.workingDirectory === null ||
+      realpathSync(plan.workingDirectory) !== realpathSync(runtime.native_cwd))
+  )
+    throw new Error("native working directory differs from the declared runtime");
   const deadline = deadlineEpoch(runtime);
   if (!Number.isFinite(deadline) || runtimeClock.wallNow() >= deadline)
     throw new Error("runtime allocation deadline expired or invalid");
@@ -390,13 +397,12 @@ async function main(): Promise<number> {
     saveEvidence(plan.evidence, "approvals-before", await scopedApprovals(client, plan));
     let providerPages: ProviderPages | null = null;
     if (plan.target.endpoint.endpointId === "codex-local") {
-      const baseline = await callTool(client, "events_observe", {
+      const baseline = await captureNativeSnapshot({
         target: plan.target,
-        maxBytes: 1_048_576,
-        maxEvents: 500,
-        timeoutSeconds: 1,
+        expectedModel: plan.expectedModel,
+        call: (name, args): Promise<unknown> => callTool(client, name, args),
       });
-      saveEvidence(plan.evidence, "events-before", observationMetadata(baseline, plan.target));
+      saveEvidence(plan.evidence, "events-before", baseline);
     } else {
       providerPages = await providerEventPages({
         client,
@@ -418,13 +424,13 @@ async function main(): Promise<number> {
         throw new Error(`prompt ${result.kind}; inspect intent, do not replay`);
     }
     if (providerPages === null) {
-      const observation = await callTool(client, "events_observe", {
+      const observation = await captureNativeSnapshot({
         target: plan.target,
-        maxBytes: 1_048_576,
-        maxEvents: 500,
-        timeoutSeconds: 1,
+        expectedModel: plan.expectedModel,
+        call: (name, args): Promise<unknown> => callTool(client, name, args),
+        readTurns: (): Promise<unknown> => readNativeThreadTurns(plan.runtimePlan, plan.target),
       });
-      saveEvidence(plan.evidence, "events", observationMetadata(observation, plan.target));
+      saveEvidence(plan.evidence, "events", observation);
     } else {
       providerPages = await providerEventPages({
         client,

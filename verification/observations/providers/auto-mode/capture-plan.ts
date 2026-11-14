@@ -15,6 +15,7 @@ export const capturePlanSchema = z.strictObject({
   target: sessionRefSchema,
   caller: sessionRefSchema,
   expectedModel: z.string().min(1),
+  workingDirectory: absolutePath.nullable(),
   // A reference to this run's actual approval, never a standing authorization flag.
   cursorApproval: z.string().min(1).nullable(),
   evidence: absolutePath,
@@ -46,6 +47,8 @@ export function checkCaptureScope(plan: CapturePlan, serviceId: string): void {
     throw new Error("Cursor input needs this run's explicit approval reference");
   if (plan.target.endpoint.endpointId === "codex-local" && plan.expectedModel !== "gpt-6-luna")
     throw new Error("this commission permits only gpt-6-luna for Codex");
+  if (plan.target.endpoint.endpointId === "codex-local" && plan.workingDirectory === null)
+    throw new Error("native capture requires its established working directory");
   if (plan.target.endpoint.endpointId === "claude-local" && !plan.expectedModel.includes("haiku"))
     throw new Error("this commission permits only Haiku for Claude");
 }
@@ -53,13 +56,15 @@ export function checkCaptureScope(plan: CapturePlan, serviceId: string): void {
 /** Mirrors conversation_prompt: Codex has no inspectable prompt operation ID. */
 export function promptArguments(plan: CapturePlan): Readonly<Record<string, unknown>> {
   if (plan.action.kind !== "prompt") throw new Error("snapshot has no prompt");
+  if (plan.target.endpoint.endpointId === "codex-local" && plan.workingDirectory === null)
+    throw new Error("native prompt requires its established working directory");
   return {
     target: plan.target,
     requestedBy: plan.caller,
     message: { kind: "agent", sender: plan.caller, text: plan.action.text },
     timeoutSeconds: 30,
     ...(plan.target.endpoint.endpointId === "codex-local"
-      ? {}
+      ? { workingDirectory: plan.workingDirectory }
       : { operationId: plan.action.operationId }),
   };
 }
