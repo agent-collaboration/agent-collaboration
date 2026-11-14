@@ -1,5 +1,5 @@
 [
-{"kind":"notOwner"},
+{"kind":"notPermitted"},
 {"kind":"machineInAnotherOrganization"},
 {"kind":"unknownWorkspace"},
 {"kind":"secondFactorRequired","withinSeconds":900}

@@ -1,5 +1,27 @@
 {
   "$defs": {
+    "ClientId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "EndedMachineClient": {
+      "additionalProperties": false,
+      "properties": {
+        "clientId": {
+          "$ref": "#/$defs/ClientId"
+        },
+        "enrollmentId": {
+          "$ref": "#/$defs/EnrollmentId"
+        }
+      },
+      "required": [
+        "enrollmentId",
+        "clientId"
+      ],
+      "type": "object"
+    },
     "EnrollmentId": {
       "maxLength": 36,
       "minLength": 36,
@@ -80,13 +102,15 @@
       "additionalProperties": false,
       "properties": {
         "decidedAt": {
-          "$ref": "#/$defs/UnixSeconds"
+          "$ref": "#/$defs/UnixSeconds",
+          "minimum": 0
         },
         "enrollmentId": {
           "$ref": "#/$defs/EnrollmentId"
         },
         "grantExpiresAt": {
-          "$ref": "#/$defs/UnixSeconds"
+          "$ref": "#/$defs/UnixSeconds",
+          "minimum": 0
         },
         "installation": {
           "$ref": "#/$defs/InstallationId"
@@ -94,6 +118,16 @@
         "result": {
           "const": "grant",
           "type": "string"
+        },
+        "superseded": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EndedMachineClient"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       },
       "required": [
