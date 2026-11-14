@@ -10,6 +10,7 @@ mod records;
 mod replay_repair;
 mod rollback;
 mod support;
+mod setup;
 
 mod carry_edges;
 mod metadata;
