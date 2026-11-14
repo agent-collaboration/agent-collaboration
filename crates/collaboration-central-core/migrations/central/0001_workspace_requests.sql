@@ -1,4 +1,4 @@
-CREATE TABLE actor_identities (actor_identity_id TEXT PRIMARY KEY, identity_kind TEXT NOT NULL, identity TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+CREATE TABLE actor_identities (actor_identity_id TEXT PRIMARY KEY, identity_kind TEXT NOT NULL, identity TEXT NOT NULL, notice_cadence TEXT NOT NULL DEFAULT 'm15', last_notice_delivery_at TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE UNIQUE INDEX actor_identities_identity ON actor_identities(identity_kind, identity);
 CREATE TABLE machines (machine_id TEXT PRIMARY KEY, installation_id TEXT NOT NULL, label TEXT NOT NULL, state TEXT NOT NULL, allowed_workspaces TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
 CREATE UNIQUE INDEX machines_installation ON machines(installation_id);

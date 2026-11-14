@@ -32,7 +32,7 @@ async fn replay_rejects_convertible_stored_due_beyond_portable_ceiling_without_c
         fixture.clock.0.load(std::sync::atomic::Ordering::SeqCst),
     )
     .unwrap()
-        + chrono::Duration::seconds(60);
+        + chrono::Duration::seconds(300);
     let request = request(&fixture, due);
     let first = fixture
         .host
@@ -108,7 +108,7 @@ async fn repair_failure_after_cached_success(failure: StoreFailure) {
         fixture.clock.0.load(std::sync::atomic::Ordering::SeqCst),
     )
     .unwrap()
-        + chrono::Duration::seconds(60);
+        + chrono::Duration::seconds(300);
     let request = request(&fixture, due);
     let first = fixture
         .host

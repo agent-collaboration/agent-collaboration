@@ -79,10 +79,18 @@ The kept enrollment, Access and session-upgrade behavior is proven by
   interrupted alarm publication and earlier-deadline ordering, transaction rollback,
   timestamp bounds and sign-in stamp identity on startup. Fixtures seed the stamp;
   provisioning and signature verification remain slice 4.
-- `workspace_requests::notices`: immediate recipients, drain-time roles, fixed and
-  injected-policy windows, cancellations, explicit non-session skips/inbox retention,
+- `workspace_requests::notices`: addressed and role activity joins session windows,
+  stored 15/25/55-minute cadences, cancellations, explicit non-session skips/inbox retention,
   workspace-turn races, independent uniqueness, before/after commit recovery,
   cross-workspace deadline isolation and position-based progress after clock rollback.
+
+The existing direct-mail case also runs `mail::timing_contract`: five-minute and
+seven-day admission boundaries, aligned relative schedules, exact two-session
+message batches, three cadences across ten threads and two workspaces, pending
+cadence changes and reopen, source-specific cancellation, stored-value rejection,
+expiry, and idle/safety-alarm checks. It observes readiness through the typed
+non-destructive batch read and the actual injected-clock alarm driver. Link
+handover and acknowledgements remain outside this package's timing proof.
 
 The merged owner-change/drain case checks that backlog close and its reference
 produce two consecutive changes, both are drained, and replay preserves the cursor.

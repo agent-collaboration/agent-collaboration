@@ -96,7 +96,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
         });
         held.until_held().await;
         let read_messages = || Statement {
-            sql: "SELECT source_change_id,recipient_actor,body FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND state='queued'",
+            sql: "SELECT i.change_id,w.recipient_actor FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?",
             args: vec![text(&actor), text(&thread)],
         };
         let cut_cursor = runtime.statement_host().read(read_cursor()).await.unwrap();
@@ -191,19 +191,44 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
             .await
             .unwrap();
         assert_eq!(rows.rows.len(), 3);
+        // The recovered window is still pending; release it only at the original cadence mark.
+        let due = reopened
+            .statement_host()
+            .read(Statement {
+                sql: "SELECT due_at FROM notification_windows WHERE recipient_actor=?",
+                args: vec![text(&actor)],
+            })
+            .await
+            .unwrap();
+        let SqlValue::Text(due) = &due.rows[0][0] else {
+            panic!("window due")
+        };
+        let due: m::Timestamp = due.parse().unwrap();
+        f.clock.set_utc(due);
+        reopened.on_alarm().await.unwrap();
+        let batch = reopened
+            .due_for_session(
+                &m::SessionAddress {
+                    session_id: "notice-observer".to_owned().try_into().unwrap(),
+                    ..session(&f.caller)
+                },
+                due,
+            )
+            .await
+            .unwrap();
+        let encoded = serde_json::to_vec(&batch).unwrap();
+        let batch: collaboration_protocol::central_mail::SessionDueBatch =
+            serde_json::from_slice(&encoded).unwrap();
+        assert_eq!(batch.messages.len(), 1);
+        let MessageBody::Notice { items } = &batch.messages[0].body else {
+            panic!("notice body")
+        };
+        assert_eq!(items.len(), 3);
         let mut delivered = Vec::new();
-        for row in &rows.rows {
-            assert_eq!(row[1], text(&actor));
-            let (SqlValue::Text(source), SqlValue::Text(body)) = (&row[0], &row[2]) else {
-                panic!("notice fields")
-            };
-            let MessageBody::Notice { items } = serde_json::from_str::<MessageBody>(body).unwrap()
-            else {
-                panic!("notice body")
-            };
-            assert_eq!(items.len(), 1);
-            assert_eq!(source, &items[0].change_id.to_string());
-            delivered.push((items[0].position.get(), source.clone()));
+        for item in items {
+            assert_eq!(item.workspace_id, f.workspace);
+            assert_eq!(item.thread_id.as_ref(), Some(&thread));
+            delivered.push((item.position.get(), item.change_id.to_string()));
         }
         delivered.sort_by_key(|entry| entry.0);
         let expected: Vec<_> = changes
@@ -497,7 +522,7 @@ async fn drain_advances_by_position_even_when_clock_and_change_id_move_backwards
         .await
         .unwrap();
     assert_eq!(cursor.rows[0][0], stored.rows[0][0]);
-    let notice = runtime.statement_host().read(Statement { sql: "SELECT source_change_id FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' ORDER BY source_change_id", args: vec![text(&actor), text(&thread)] }).await.unwrap();
+    let notice = runtime.statement_host().read(Statement { sql: "SELECT i.change_id FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=? ORDER BY i.change_id", args: vec![text(&actor), text(&thread)] }).await.unwrap();
     assert_eq!(
         notice.rows,
         vec![vec![text(later_id)], vec![text(first_id)]]

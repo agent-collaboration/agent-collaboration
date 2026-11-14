@@ -87,32 +87,73 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             }
             return Ok(answer);
         }
-        if let Some(field) = crate::central_mail_time::refusal(&request.operation, now) {
-            return Ok(Result::Refused(Refusal::TimeOutOfRange { field }));
+        if let Some(reason) = crate::central_mail_time::refusal(&request.operation, now) {
+            return Ok(Result::Refused(reason));
         }
         let actor = self.resolve_identity(&identity).await?;
-        let decision =
-            if let mail::CentralMailOperation::SendMessage { to, body } = &request.operation {
-                if !self.known_session(to).await? {
-                    Err(Refusal::UnknownSession { target: to.clone() })
-                } else {
-                    let message = self.queued_message(
-                        mail::MessageSender::Actor(actor.clone()),
-                        to.clone(),
-                        mail::MessageBody::Direct { body: body.clone() },
-                        None,
-                        now,
-                    )?;
-                    Ok((
-                        vec![insert_message(&message)?],
-                        mail::CentralMailAnswer::Queued {
-                            message_id: message.message_id,
-                        },
-                    ))
-                }
+        let decision = if let mail::CentralMailOperation::SetNoticeCadence { cadence } =
+            &request.operation
+        {
+            if !matches!(caller.caller, m::Caller::Session(_)) {
+                Err(Refusal::NotSession)
             } else {
-                self.plan_timer_request(&request.operation, now).await?
-            };
+                let encoded =
+                    serde_json::to_value(cadence).map_err(|_| corrupt("notice cadence"))?;
+                let cadence_text = encoded.as_str().ok_or_else(|| corrupt("notice cadence"))?;
+                let mut statements = vec![crate::guarded_statements::exact(
+                    "UPDATE actor_identities SET notice_cadence=?,updated_at=? WHERE actor_identity_id=?",
+                    vec![
+                        crate::guarded_statements::text(cadence_text),
+                        crate::guarded_statements::text(central_mail_store::timestamp(now)),
+                        crate::guarded_statements::text(&actor),
+                    ],
+                )];
+                // Plan the new deadline from the existing first activity and last delivery;
+                // the actual policy and deadline writes share this request's ledger batch.
+                for window in self
+                    .notification_windows()
+                    .await?
+                    .into_iter()
+                    .filter(|window| window.recipient == actor)
+                {
+                    let due = self
+                        .notice_due_with_cadence(&actor, window.first, *cadence)
+                        .await?;
+                    statements.push(crate::guarded_statements::exact(
+                        "UPDATE notification_windows SET due_at=?,updated_at=? WHERE window_id=?",
+                        vec![
+                            crate::guarded_statements::text(central_mail_store::timestamp(due)),
+                            crate::guarded_statements::text(central_mail_store::timestamp(now)),
+                            crate::guarded_statements::text(&window.id),
+                        ],
+                    ));
+                }
+                Ok((
+                    statements,
+                    mail::CentralMailAnswer::NoticeCadenceSet { cadence: *cadence },
+                ))
+            }
+        } else if let mail::CentralMailOperation::SendMessage { to, body } = &request.operation {
+            if !self.known_session(to).await? {
+                Err(Refusal::UnknownSession { target: to.clone() })
+            } else {
+                let message = self.prepare_message_record(
+                    mail::MessageSender::Actor(actor.clone()),
+                    to.clone(),
+                    mail::MessageBody::Direct { body: body.clone() },
+                    None,
+                    now,
+                )?;
+                Ok((
+                    vec![insert_message(&message)?],
+                    mail::CentralMailAnswer::Queued {
+                        message_id: message.message_id,
+                    },
+                ))
+            }
+        } else {
+            self.plan_timer_request(&request.operation, now).await?
+        };
         let (mut statements, answer) = match decision {
             Ok((statements, answer)) => (statements, Result::Done(answer)),
             Err(reason) => (vec![], Result::Refused(reason)),

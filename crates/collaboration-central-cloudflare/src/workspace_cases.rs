@@ -118,7 +118,7 @@ pub(super) async fn control(
     }
     if path == "/test/policy" {
         let seconds = NonZeroU32::new(request.json::<u32>().await?)
-            .ok_or_else(|| error("window seconds must be nonzero"))?;
+            .ok_or_else(|| error("message interval seconds must be nonzero"))?;
         if object.runtime.lock().await.is_some() {
             return Err(error("runtime already initialized"));
         }
@@ -145,6 +145,11 @@ pub(super) async fn control(
         "/test/drain" => {
             let workspace = request.json().await?;
             Response::from_json(&runtime.drain_workspace(&workspace).await)
+        }
+        "/test/due-batch" => {
+            let (session, through): (workspace_model::SessionAddress, workspace_model::Timestamp) =
+                request.json().await?;
+            Response::from_json(&runtime.due_for_session(&session, through).await)
         }
         "/test/alarm" => Response::from_json(&object.state.storage().get_alarm().await?),
         "/test/hold-central" => {
@@ -356,6 +361,7 @@ pub(super) async fn control(
 
 const CLOCK_KEY: &str = "_workspace_test_clock_ms";
 const RECEIPT_KEY: &str = "_workspace_test_alarm_receipt";
+const ALARM_COUNT_KEY: &str = "_workspace_test_alarm_count";
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -391,6 +397,24 @@ enum AlarmReceiptResult {
 pub(super) async fn raw_control(object: &CentralObject, mut request: Request) -> Result<Response> {
     let storage = object.state.storage();
     match request.path().as_str() {
+        "/test/raw-alarm-count" => {
+            Response::from_json(&storage.get::<u64>(ALARM_COUNT_KEY).await?.unwrap_or(0))
+        }
+        "/test/raw-dispatch-due" => {
+            let now: i64 = request.json().await?;
+            // The platform scheduler uses its own time. Advance the test's one
+            // injected clock and dispatch only its actually retained deadline.
+            // A missing, later or cleared alarm must never fabricate a callback.
+            let due = storage.get_alarm().await?;
+            if due.is_none_or(|due| due > now) {
+                return Response::from_json(&false);
+            }
+            storage.put(CLOCK_KEY, &now).await?;
+            storage.delete(RECEIPT_KEY).await?;
+            object.clock.hold(now);
+            storage.set_alarm(0_i64).await?;
+            Response::from_json(&true)
+        }
         "/test/raw-alarm-status" => {
             Response::from_json(&storage.get::<AlarmReceipt>(RECEIPT_KEY).await?)
         }
@@ -501,6 +525,10 @@ pub(super) async fn raw_control(object: &CentralObject, mut request: Request) ->
 
 pub(super) async fn alarm_with_receipt(object: &CentralObject) -> Result<Response> {
     let storage = object.state.storage();
+    let count = storage.get::<u64>(ALARM_COUNT_KEY).await?.unwrap_or(0);
+    storage
+        .put(ALARM_COUNT_KEY, &count.saturating_add(1))
+        .await?;
     let alarm_before = storage.get_alarm().await?;
     if let Some(now) = storage.get::<i64>(CLOCK_KEY).await? {
         object.clock.hold(now);

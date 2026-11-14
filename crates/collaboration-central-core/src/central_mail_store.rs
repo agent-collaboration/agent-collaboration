@@ -15,7 +15,7 @@ pub(crate) fn encode(value: &impl Serialize) -> Result<SqlValue, StoreFailure> {
 pub(crate) fn timestamp(value: Timestamp) -> String {
     value.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
-pub const EARLIEST_DUE: &str = "SELECT CASE WHEN COUNT(*) != COUNT(unixepoch(due_at)) THEN 'invalid_due_at' ELSE MIN(unixepoch(due_at)*1000+CAST(substr(strftime('%f',due_at),4,3) AS INTEGER)) END AS earliest_due FROM (SELECT due_at FROM wakes WHERE state='active' UNION ALL SELECT next_due_at FROM automations WHERE state='active' AND next_due_at IS NOT NULL UNION ALL SELECT due_at FROM notification_windows UNION ALL SELECT drain_due_at FROM workspace_drains WHERE drain_due_at IS NOT NULL) WHERE (SELECT COUNT(*) FROM organization_identity)=1";
+pub const EARLIEST_DUE: &str = "SELECT CASE WHEN COUNT(*) != COUNT(unixepoch(due_at)) THEN 'invalid_due_at' ELSE MIN(unixepoch(due_at)*1000+CAST(substr(strftime('%f',due_at),4,3) AS INTEGER)) END AS earliest_due FROM (SELECT due_at FROM wakes WHERE state='active' UNION ALL SELECT next_due_at FROM automations WHERE state='active' AND next_due_at IS NOT NULL UNION ALL SELECT due_at FROM notification_windows UNION ALL SELECT deliver_after FROM messages WHERE state='queued' UNION ALL SELECT drain_due_at FROM workspace_drains WHERE drain_due_at IS NOT NULL) WHERE (SELECT COUNT(*) FROM organization_identity)=1";
 pub(crate) fn alarm_update() -> AlarmUpdate {
     AlarmUpdate::SetFromQuery(Statement {
         sql: EARLIEST_DUE,
@@ -39,13 +39,14 @@ pub(crate) fn insert_message(
     };
     let (state, failure) = match &message.state {
         mail::MessageState::Queued => ("queued", SqlValue::Null),
+        mail::MessageState::Ready => ("ready", SqlValue::Null),
         mail::MessageState::Delivered => ("delivered", SqlValue::Null),
         mail::MessageState::Cancelled => ("cancelled", SqlValue::Null),
         mail::MessageState::Failed { reason } => ("failed", text(reason)),
     };
     let source = message.source.as_ref();
     Ok(any(
-        "INSERT INTO messages(message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(source_change_id,recipient_actor) WHERE source_change_id IS NOT NULL DO NOTHING",
+        "INSERT INTO messages(message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,deliver_after,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(source_change_id,recipient_actor) WHERE source_change_id IS NOT NULL DO NOTHING",
         vec![
             text(&message.message_id),
             encode(&message.sender)?,
@@ -61,13 +62,14 @@ pub(crate) fn insert_message(
             source
                 .and_then(|source| source.thread_id.as_ref())
                 .map_or(SqlValue::Null, text),
+            text(timestamp(message.deliver_after)),
             text(timestamp(message.created_at)),
             text(timestamp(message.updated_at)),
         ],
     ))
 }
 impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
-    pub(crate) fn queued_message(
+    pub(crate) fn prepare_message_record(
         &self,
         sender: mail::MessageSender,
         target: SessionAddress,
@@ -75,13 +77,24 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         source: Option<mail::NoticeSource>,
         now: Timestamp,
     ) -> Result<mail::MessageRecord, StoreFailure> {
+        let (state, deliver_after) = if matches!(body, mail::MessageBody::Direct { .. }) {
+            let interval = self.mail_policy.direct_message_interval_seconds();
+            let after = now
+                .checked_add_signed(chrono::Duration::nanoseconds(1))
+                .and_then(|after| crate::central_mail_time::aligned_at_or_after(after, interval))
+                .ok_or_else(|| corrupt("messages.deliver_after"))?;
+            (mail::MessageState::Queued, after)
+        } else {
+            (mail::MessageState::Ready, now)
+        };
         Ok(mail::MessageRecord {
             message_id: self.mint()?,
             sender,
             target,
             body,
-            state: mail::MessageState::Queued,
+            state,
             source,
+            deliver_after,
             created_at: now,
             updated_at: now,
         })

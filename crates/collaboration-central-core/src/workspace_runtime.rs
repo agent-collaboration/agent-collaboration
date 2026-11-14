@@ -34,6 +34,8 @@ pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     pub(crate) signin_authority: crate::organization_authority_cache::OrganizationAuthority,
     pub(crate) central_turn: tokio::sync::Mutex<()>,
     #[cfg(feature = "test-support")]
+    pub(crate) completed_alarms: tokio::sync::watch::Sender<u64>,
+    #[cfg(feature = "test-support")]
     lost_provisioning_reply: std::sync::atomic::AtomicBool,
     #[cfg(feature = "test-support")]
     central_waiting: tokio::sync::watch::Sender<usize>,
@@ -60,6 +62,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             ids,
             turns: WorkspaceTurns::default(),
             central_turn: tokio::sync::Mutex::new(()),
+            #[cfg(feature = "test-support")]
+            completed_alarms: tokio::sync::watch::channel(0).0,
             signin_authority: Default::default(),
             signin_observer: Arc::new(|_| {}),
             #[cfg(feature = "test-support")]
@@ -107,6 +111,15 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     }
     pub fn statement_host(&self) -> &Host {
         &self.host
+    }
+    #[cfg(feature = "test-support")]
+    pub fn alarm_completion_count(&self) -> u64 {
+        *self.completed_alarms.borrow()
+    }
+    #[cfg(feature = "test-support")]
+    pub async fn until_alarm_completed(&self, count: u64) {
+        let mut completed = self.completed_alarms.subscribe();
+        let _ = completed.wait_for(|current| *current >= count).await;
     }
     pub(crate) async fn take_central_turn(&self) -> tokio::sync::MutexGuard<'_, ()> {
         #[cfg(not(feature = "test-support"))]

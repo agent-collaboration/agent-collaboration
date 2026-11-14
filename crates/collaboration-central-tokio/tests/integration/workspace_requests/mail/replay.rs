@@ -35,13 +35,15 @@ async fn relative_timer_replay_precedes_new_time_validation() {
             .unwrap(),
         BatchOutcome::Applied { .. }
     ));
-    let start = ceiling - chrono::Duration::seconds(90);
+    let last_grid =
+        chrono::DateTime::from_timestamp(ceiling.timestamp().div_euclid(300) * 300, 0).unwrap();
+    let start = ceiling - chrono::Duration::days(7) - chrono::Duration::seconds(30);
     fixture.clock.set_utc(start);
     let request = CentralMailRequest {
         request_id: id(1700),
         operation: Operation::SetAutomation {
             target: session(&fixture.caller),
-            timing: serde_json::from_str(r#"{"kind":"after","seconds":60}"#).unwrap(),
+            timing: serde_json::from_str(r#"{"kind":"after","seconds":300}"#).unwrap(),
             text: "replay".to_owned().try_into().unwrap(),
         },
     };
@@ -51,7 +53,7 @@ async fn relative_timer_replay_precedes_new_time_validation() {
         .await
         .unwrap();
     assert!(
-        matches!(&first, Result::Done(Answer::AutomationSet { next_due_at: Some(due), state: AutomationState::Active, .. }) if *due == ceiling - chrono::Duration::seconds(30))
+        matches!(&first, Result::Done(Answer::AutomationSet { next_due_at: Some(due), state: AutomationState::Active, .. }) if *due == last_grid - chrono::Duration::days(7) + chrono::Duration::seconds(600))
     );
     let snapshot = || Statement {
         sql: "SELECT (SELECT json_group_array(json_array(automation_id,anchor_at,next_due_at,state,created_at,updated_at)) FROM automations),(SELECT json_group_array(json_array(request_id,answer,created_at,updated_at)) FROM request_log),(SELECT COUNT(*) FROM actor_identities),(SELECT COUNT(*) FROM messages)",
@@ -91,7 +93,7 @@ async fn relative_timer_replay_precedes_new_time_validation() {
             .await
             .unwrap(),
         Result::Refused(Refusal::TimeOutOfRange {
-            field: "nextDueAt".to_owned()
+            field: "anchorAt".to_owned()
         })
     );
     assert_eq!(
@@ -115,7 +117,7 @@ async fn same_host_replay_rearms_after_interrupted_alarm_publication() {
         .central(&fixture.caller.organization_id)
         .await
         .unwrap();
-    let due = fixture.clock.utc_now() + chrono::Duration::seconds(60);
+    let due = fixture.clock.utc_now() + chrono::Duration::seconds(300);
     let request = CentralMailRequest {
         request_id: id(1710),
         operation: Operation::SetWake {

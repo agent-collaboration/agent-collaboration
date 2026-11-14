@@ -43,7 +43,7 @@ async fn invalid_open_window_is_rejected_before_alarm_changes_queue_or_cursor() 
         created(f.call(7502, post(&thread, vec![])).await);
         let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
         let read = || Statement {
-            sql: "SELECT (SELECT drained_through_position FROM workspace_drains WHERE workspace_id=?),(SELECT COUNT(*) FROM notification_windows WHERE thread_id=?),(SELECT COUNT(*) FROM notification_window_items),(SELECT COUNT(*) FROM messages WHERE message_kind='notice')",
+            sql: "SELECT (SELECT drained_through_position FROM workspace_drains WHERE workspace_id=?),(SELECT COUNT(*) FROM notification_windows WHERE window_id IN (SELECT window_id FROM notification_window_items WHERE thread_id=?)),(SELECT COUNT(*) FROM notification_window_items),(SELECT COUNT(*) FROM messages WHERE message_kind='notice')",
             args: vec![text(&f.workspace), text(&thread)],
         };
         let before = runtime.statement_host().read(read()).await.unwrap();
@@ -77,7 +77,7 @@ async fn later_drain_statement_failure_rolls_back_notices_windows_and_cursor_the
     let thread = f.thread(7511, area).await;
     let (_, observer) = joined_observer(&f, &thread).await;
     let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
-    // A distinct known agent receives the immediate notice; the observer gets a window.
+    // Addressing the author adds a second recipient while the observer remains in the same batch window.
     let actors = runtime
         .statement_host()
         .read(Statement {
@@ -104,7 +104,7 @@ async fn later_drain_statement_failure_rolls_back_notices_windows_and_cursor_the
         })
         .await
         .unwrap();
-    let baseline = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND message_kind='notice'),(SELECT COUNT(*) FROM notification_windows WHERE thread_id=?),(SELECT COUNT(*) FROM notification_window_items)", args: vec![text(&thread), text(&thread)] }).await.unwrap();
+    let baseline = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND message_kind='notice'),(SELECT COUNT(*) FROM notification_windows WHERE window_id IN (SELECT window_id FROM notification_window_items WHERE thread_id=?)),(SELECT COUNT(*) FROM notification_window_items)", args: vec![text(&thread), text(&thread)] }).await.unwrap();
     assert_eq!(
         baseline.rows,
         vec![vec![
@@ -148,30 +148,30 @@ async fn later_drain_statement_failure_rolls_back_notices_windows_and_cursor_the
         runtime.drain_workspace(&f.workspace).await,
         Err(StoreFailure::Unavailable)
     ));
-    let after_failure = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,drain_due_at,(SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND message_kind='notice'),(SELECT COUNT(*) FROM notification_windows WHERE thread_id=?),(SELECT COUNT(*) FROM notification_window_items) FROM workspace_drains WHERE workspace_id=?", args: vec![text(&thread), text(&thread), text(&f.workspace)] }).await.unwrap();
+    let after_failure = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,drain_due_at,(SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND message_kind='notice'),(SELECT COUNT(*) FROM notification_windows WHERE window_id IN (SELECT window_id FROM notification_window_items WHERE thread_id=?)),(SELECT COUNT(*) FROM notification_window_items) FROM workspace_drains WHERE workspace_id=?", args: vec![text(&thread), text(&thread), text(&f.workspace)] }).await.unwrap();
     assert_eq!(after_failure.rows[0][0], prior.rows[0][0]);
     assert!(matches!(&after_failure.rows[0][1], SqlValue::Text(_)));
     assert_eq!(&after_failure.rows[0][2..], &baseline.rows[0][..]);
     execute(&f, "DROP TRIGGER reject_drain_cursor", vec![]).await;
     let result = runtime.drain_workspace(&f.workspace).await.unwrap();
-    assert_eq!(result.notices_queued, 1);
-    assert_eq!(result.window_items_added, 1);
+    assert_eq!(result.notices_queued, 0);
+    assert_eq!(result.window_items_added, 2);
     let again = runtime.drain_workspace(&f.workspace).await.unwrap();
     assert_eq!(again.notices_queued, 0);
     assert_eq!(again.window_items_added, 0);
-    let after_retry = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,drain_due_at,(SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND recipient_actor=? AND message_kind='notice'),(SELECT COUNT(*) FROM notification_windows WHERE thread_id=? AND recipient_actor=?),(SELECT COUNT(*) FROM notification_window_items) FROM workspace_drains WHERE workspace_id=?", args: vec![text(&thread), text(&author), text(&thread), text(&observer), text(&f.workspace)] }).await.unwrap();
+    let after_retry = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,drain_due_at,(SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND recipient_actor=? AND message_kind='notice'),(SELECT COUNT(*) FROM notification_windows WHERE window_id IN (SELECT window_id FROM notification_window_items WHERE thread_id=?) AND recipient_actor=?),(SELECT COUNT(*) FROM notification_window_items) FROM workspace_drains WHERE workspace_id=?", args: vec![text(&thread), text(&author), text(&thread), text(&observer), text(&f.workspace)] }).await.unwrap();
     assert_ne!(after_retry.rows[0][0], prior.rows[0][0]);
     assert_eq!(after_retry.rows[0][1], SqlValue::Null);
     assert_eq!(
         &after_retry.rows[0][2..],
         &[
+            SqlValue::Integer(0.try_into().unwrap()),
             SqlValue::Integer(1.try_into().unwrap()),
-            SqlValue::Integer(1.try_into().unwrap()),
-            SqlValue::Integer(2.try_into().unwrap())
+            SqlValue::Integer(3.try_into().unwrap())
         ]
     );
     let duplicate = runtime.statement_host().run_batch(StatementBatch { statements: vec![GuardedStatement { statement: Statement {
-        sql: "INSERT INTO notification_window_items(window_item_id,window_id,change_id,created_at,updated_at) SELECT ?,i.window_id,i.change_id,i.created_at,i.updated_at FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND w.thread_id=?", args: vec![text(id::<m::WorkspaceId>(7513)), text(&observer), text(&thread)],
+        sql: "INSERT INTO notification_window_items(window_item_id,window_id,workspace_id,thread_id,change_id,created_at,updated_at) SELECT ?,i.window_id,i.workspace_id,i.thread_id,i.change_id,i.created_at,i.updated_at FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?", args: vec![text(id::<m::WorkspaceId>(7513)), text(&observer), text(&thread)],
     }, expect: RowExpectation::Exactly(1) }], alarm: AlarmUpdate::Unchanged }).await;
     assert!(matches!(
         duplicate,
@@ -202,8 +202,12 @@ async fn corrupt_existing_notice_body_stops_drain_before_cursor_or_new_effects()
         .await,
     );
     let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    f.clock
+        .advance(std::time::Duration::from_secs(900))
+        .unwrap();
+    runtime.on_alarm().await.unwrap();
     let before = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,(SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND message_kind='notice') FROM workspace_drains WHERE workspace_id=?", args: vec![text(&thread), text(&f.workspace)] }).await.unwrap();
-    assert_eq!(before.rows[0][1], SqlValue::Integer(1.try_into().unwrap()));
+    assert_eq!(before.rows[0][1], SqlValue::Integer(2.try_into().unwrap()));
     execute(
         &f,
         "UPDATE messages SET body='not-json' WHERE source_thread_id=? AND message_kind='notice'",
@@ -286,7 +290,7 @@ async fn derived_window_above_alarm_ceiling_preserves_workspace_write_and_rolls_
         .await
         .unwrap();
     let effects_before = runtime.statement_host().read(Statement {
-        sql: "SELECT (SELECT COUNT(*) FROM notification_windows WHERE recipient_actor=? AND thread_id=?),(SELECT COUNT(*) FROM notification_window_items),(SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND message_kind='notice')",
+        sql: "SELECT (SELECT COUNT(*) FROM notification_windows WHERE recipient_actor=? AND window_id IN (SELECT window_id FROM notification_window_items WHERE thread_id=?)),(SELECT COUNT(*) FROM notification_window_items),(SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND message_kind='notice')",
         args: vec![text(&recipient), text(&thread), text(&thread)],
     }).await.unwrap();
     assert_eq!(
@@ -346,7 +350,7 @@ async fn derived_window_above_alarm_ceiling_preserves_workspace_write_and_rolls_
         matches!(error, StoreFailure::Corrupt { reason: CorruptReason::BadValue { column } } if column == "notification_windows.due_at")
     );
     let after = runtime.statement_host().read(Statement {
-        sql: "SELECT drained_through_position,drain_due_at,(SELECT COUNT(*) FROM notification_windows WHERE recipient_actor=? AND thread_id=?),(SELECT COUNT(*) FROM notification_window_items),(SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND message_kind='notice') FROM workspace_drains WHERE workspace_id=?",
+        sql: "SELECT drained_through_position,drain_due_at,(SELECT COUNT(*) FROM notification_windows WHERE recipient_actor=? AND window_id IN (SELECT window_id FROM notification_window_items WHERE thread_id=?)),(SELECT COUNT(*) FROM notification_window_items),(SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND message_kind='notice') FROM workspace_drains WHERE workspace_id=?",
         args: vec![text(&recipient), text(&thread), text(&thread), text(&f.workspace)],
     }).await.unwrap();
     assert_eq!(&after.rows[0][..2], &pending_before.rows[0][..]);
