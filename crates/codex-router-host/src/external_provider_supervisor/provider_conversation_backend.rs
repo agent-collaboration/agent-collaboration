@@ -105,11 +105,26 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                     let created_by = request.created_by;
                     let approver = request.approver;
                     let requested_settings = request.settings.unwrap_or_default();
+                    let scratch_root = backend.inner.scratch_root.clone();
                     let completion_inner = Arc::clone(&backend.inner);
                     backend.spawn_operation(operation_id.clone(), live, async move {
+                        let scratch_folder = match super::provider_session_scratch::prepare_provider_session_scratch(scratch_root.as_deref()).await {
+                            Ok(scratch_folder) => scratch_folder,
+                            Err(message) => {
+                                return ProviderOperationCompletion::Failure(failure(
+                                    ConversationOperationFailureKind::Unavailable,
+                                    ConversationOperationFailureStage::Dispatch,
+                                    ProviderOperationEffect::None,
+                                    message,
+                                    operation_id,
+                                    None,
+                                ));
+                            }
+                        };
                         match runtime
                             .create_session_with_settings(
                                 PathBuf::from(String::from(working_directory.clone())),
+                                scratch_folder,
                                 acp_client_runtime::RequestedProviderSettings {
                                     mode: requested_settings.mode,
                                     model: requested_settings.model,

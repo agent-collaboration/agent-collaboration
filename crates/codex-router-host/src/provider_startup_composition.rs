@@ -54,6 +54,7 @@ pub(crate) async fn compose_provider_startup(
     service_id: &UuidIdentity,
     service_epoch: &UuidIdentity,
     mcp_url: &str,
+    scratch_root: Option<std::path::PathBuf>,
 ) -> io::Result<ProviderStartupComposition> {
     let hub = store
         .as_ref()
@@ -234,7 +235,7 @@ pub(crate) async fn compose_provider_startup(
     }
     let supervisor = match store {
         Some(store) if !endpoints.is_empty() => Some(Arc::new(
-            ExternalProviderSupervisor::new_with_hub(bindings, store, hub.clone())
+            ExternalProviderSupervisor::new_with_hub(bindings, store, hub.clone(), scratch_root)
                 .map_err(io::Error::other)?,
         )),
         _ => None,

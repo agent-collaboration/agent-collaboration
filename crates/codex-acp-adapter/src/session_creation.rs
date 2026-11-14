@@ -299,6 +299,9 @@ impl AcpSessionBinding {
         )
         .await?;
         fields.insert("permissions".into(), json!(profile.name()));
+        // Actions outside the sandbox come to the Router as approvals (R6);
+        // Codex's automatic reviewer would refuse them with no question asked.
+        fields.insert("approvalsReviewer".into(), json!("user"));
         if let Some(config) = configuration.native_overrides() {
             let target = fields
                 .get_mut("config")

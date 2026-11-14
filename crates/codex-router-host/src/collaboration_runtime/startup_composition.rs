@@ -236,6 +236,10 @@ impl CollaborationRuntime {
             &service_id,
             &service_epoch,
             &mcp_url,
+            inputs
+                .directory
+                .parent()
+                .map(codex_native_integration::router_scratch_root),
         )
         .await?;
         let provider_face_endpoints = startup.endpoints.clone();
