@@ -21,8 +21,10 @@ const FILE_UTILITIES: &[&str] = &[
     "mkdir", "rmdir", "rm", "cp", "mv", "touch", "ln", "chmod", "find",
 ];
 
-/// `find` actions that run a program or write outside the operands it names.
-const FIND_ACTIONS_OUTSIDE_THE_RULE: &[&str] = &["-exec", "-execdir", "-ok", "-okdir", "-fls"];
+/// Options a scratch-only shell command may carry: each takes no value.
+const VALUELESS_OPTIONS: &[&str] = &[
+    "-r", "-R", "-f", "-rf", "-fr", "-Rf", "-fR", "-p", "-l", "-a", "-la", "-al", "-lh", "-h", "-v",
+];
 
 /// The folders an auto-mode session acts in without asking, canonical at grant.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -106,21 +108,15 @@ impl InFolderGrant {
         if !FILE_UTILITIES.contains(&program) {
             return false;
         }
-        if program == "find"
-            && command.split_whitespace().any(|word| {
-                FIND_ACTIONS_OUTSIDE_THE_RULE.contains(&word) || word.starts_with("-fprint")
-            })
-        {
-            return false;
-        }
         // Every operand is an absolute path in the scratch folder; a bare word
         // could name a file in the project, so it is not allowed here.
         let mut named_a_path = false;
         for word in words {
             if word.starts_with('-') {
-                // An option naming a path (`-o/etc/x`, `-t/elsewhere`) would
-                // escape the operand check, so it asks.
-                if word.contains('/') {
+                // An option's meaning is not read from its characters: only
+                // known options that take no value pass, so a path glued onto
+                // an option (`-ooutside.txt`, `-t/elsewhere`) asks.
+                if !VALUELESS_OPTIONS.contains(&word) {
                     return false;
                 }
                 continue;

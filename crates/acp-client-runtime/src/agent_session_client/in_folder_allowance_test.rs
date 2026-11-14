@@ -160,7 +160,7 @@ fn shell_commands_are_allowed_once_only_when_every_operand_is_in_the_scratch_fol
         // File utilities that run no code given to them are allowed on scratch.
         (format!("cat {scratch}/a"), true),
         (format!("cp {scratch}/a {scratch}/b"), true),
-        (format!("find {scratch} -delete"), true),
+        (format!("find {scratch} -delete"), false),
         // A program that runs code from its operands could act anywhere once
         // the agent writes that code into scratch, so it asks (Q3).
         (format!("bash {scratch}/run.sh"), false),
@@ -185,6 +185,14 @@ fn shell_commands_are_allowed_once_only_when_every_operand_is_in_the_scratch_fol
         (format!("sort -o /etc/x {scratch}/a"), false),
         (format!("rm -rf {scratch}/dir"), true),
         (format!("ls -la {scratch}"), true),
+        // Only known value-less options; anything else, such as a relative
+        // path glued onto an option, asks.
+        (format!("sort -ooutside.txt {scratch}/a"), false),
+        (format!("grep -foutside.txt {scratch}/a"), false),
+        (format!("cp --target-directory {scratch}/a"), false),
+        (format!("head -n 5 {scratch}/a"), false),
+        (format!("mkdir -p {scratch}/x/y"), true),
+        (format!("cp -r {scratch}/a {scratch}/b"), true),
     ];
     for (command, allowed) in cases {
         assert_eq!(
