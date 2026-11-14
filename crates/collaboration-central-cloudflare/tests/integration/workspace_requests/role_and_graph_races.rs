@@ -147,15 +147,56 @@ async fn implementer_grants_serialize_and_leave_other_deliverable_untouched() {
     let project = f.project(621, area).await;
     let target = f.deliverable(622, project.clone()).await;
     let untouched = f.deliverable(623, project).await;
-    f.call(
-        624,
-        m::WorkspaceOperation::GrantDeliverableRole {
-            deliverable_id: untouched.clone(),
-            role: m::DeliverableRole::Implementer,
-            holder: m::ActorRef::Me,
+    let setup = f
+        .call(
+            624,
+            m::WorkspaceOperation::GrantDeliverableRole {
+                deliverable_id: untouched.clone(),
+                role: m::DeliverableRole::Implementer,
+                holder: m::ActorRef::Me,
+            },
+        )
+        .await;
+    assert!(
+        matches!(
+            setup.result,
+            m::WorkspaceResult::Done(m::WorkspaceAnswer::Updated { .. })
+        ),
+        "{setup:?}"
+    );
+    let runtime = f.host.central(&f.caller.organization_id).await;
+    let untouched_assignment = || Statement {
+        sql: "SELECT deliverable_role_id,deliverable_id,role,holder,granted_at,ended_at,created_at,updated_at FROM deliverable_roles WHERE deliverable_id=? AND role='implementer' ORDER BY deliverable_role_id",
+        args: vec![text(&untouched)],
+    };
+    let before = runtime
+        .inspect_workspace(&f.workspace, untouched_assignment())
+        .await
+        .unwrap();
+    assert_eq!(before.rows.len(), 1);
+    assert_eq!(
+        before.rows[0][5],
+        SqlValue::Null,
+        "untouched assignment starts active"
+    );
+    let author = runtime
+        .read(Statement {
+            sql: "SELECT identity FROM actor_identities WHERE actor_identity_id=?",
+            args: vec![before.rows[0][3].clone()],
+        })
+        .await
+        .unwrap();
+    assert_eq!(author.rows.len(), 1);
+    let SqlValue::Text(identity) = &author.rows[0][0] else {
+        panic!("holder identity missing")
+    };
+    assert_eq!(
+        serde_json::from_str::<m::Identity>(identity).unwrap(),
+        m::Identity::AgentSession {
+            session: session(&f.caller)
         },
-    )
-    .await;
+        "setup holder is the caller"
+    );
     let mut second = session(&f.caller);
     second.session_id = "first-implementer".to_owned().try_into().unwrap();
     let mut third = second.clone();
@@ -192,6 +233,14 @@ async fn implementer_grants_serialize_and_leave_other_deliverable_untouched() {
             .filter(|row| row[0] == text(target.clone()) && row[1] == SqlValue::Null)
             .count(),
         1
+    );
+    assert_eq!(
+        runtime
+            .inspect_workspace(&f.workspace, untouched_assignment())
+            .await
+            .unwrap(),
+        before,
+        "unrelated implementer assignment remains active and byte-for-byte unchanged"
     );
     assert_eq!(
         rows.rows
