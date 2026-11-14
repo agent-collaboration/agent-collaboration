@@ -27,17 +27,19 @@ export async function listenForHeldRelease(props: {
 }): Promise<Server> {
   const server = createServer((connection): void => {
     const lines = createInterface({ input: connection });
+    let replyRecorded = false;
     lines.once("line", (line: string): void => {
       const request = parseReleaseLine(line);
       const ownerId = request?.ownerId ?? "invalid";
       const kind = request !== undefined && props.releaseOwner(ownerId) ? "released" : "refused";
       const reply = releaseReply.parse({ kind, ownerId });
+      replyRecorded = true;
       props.recordReply(reply);
       connection.end(`${JSON.stringify(reply)}\n`);
       lines.close();
     });
     connection.on("error", (): void => {
-      props.recordReply({ kind: "refused", ownerId: "disconnected" });
+      if (!replyRecorded) props.recordReply({ kind: "refused", ownerId: "disconnected" });
       lines.close();
       connection.destroy();
     });

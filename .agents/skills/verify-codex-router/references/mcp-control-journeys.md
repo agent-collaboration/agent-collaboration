@@ -70,7 +70,7 @@ node verification/observations/mcp-control/run.ts PLAN.json
 - the service identity and epoch;
 - the Human against the owner lookup;
 - the effect budget, the deadline and a fresh evidence directory;
-- that any existing release endpoint is an owned mode-0600 Unix socket;
+- that the release socket has an owned mode-0700 parent directory and a path under 104 bytes, and any existing endpoint is an owned mode-0600 Unix socket;
 - the inventory: the `Cargo.lock` pin, and the locked names re-derived from the crate's registry source.
 
 The run sends only ordinary MCP: `initialize`, `tools/list` (checked against the inventory), then the declared cases. Each case creates its own Session except `continuationReload`, which must load the exact Session retained by the first lifetime.

@@ -75,6 +75,7 @@ test("an early controller disconnect leaves the release service alive", async ()
   const root = mkdtempSync(join(tmpdir(), "release-disconnect-"));
   const socketPath = join(root, "release");
   let observed: (() => void) | undefined;
+  const replies: { kind: string; ownerId: string }[] = [];
   const released = new Promise<void>((resolve): void => {
     observed = resolve;
   });
@@ -83,7 +84,8 @@ test("an early controller disconnect leaves the release service alive", async ()
     releaseOwner(): boolean {
       return true;
     },
-    recordReply(): void {
+    recordReply(reply): void {
+      replies.push(reply);
       observed?.();
     },
   });
@@ -95,6 +97,10 @@ test("an early controller disconnect leaves the release service alive", async ()
     });
     await released;
     await assert.doesNotReject(releaseHeldWork(socketPath, "second"));
+    assert.deepEqual(replies, [
+      { kind: "released", ownerId: "first" },
+      { kind: "released", ownerId: "second" },
+    ]);
   } finally {
     server.close();
     await once(server, "close");
