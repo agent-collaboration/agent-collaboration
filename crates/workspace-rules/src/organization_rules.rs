@@ -1,4 +1,6 @@
-use crate::statement_plans::{RulePlan, WriteContext, exact, not_found, plan, text};
+use crate::statement_plans::{
+    RulePlan, WriteContext, change_metadata, exact, not_found, plan, text,
+};
 use workspace_model::{
     Area, Deliverable, Initiative, ItemRef, OrganizationCommand, Project, RefusalReason, RuleAnswer,
 };
@@ -174,12 +176,24 @@ pub fn organize_work(
     } else {
         RuleAnswer::Updated { item: item.clone() }
     };
-    Ok(plan(
-        context,
-        item,
-        if created { "created" } else { "updated" },
-        statements,
-        answer,
+    let project = match command {
+        OrganizationCommand::CreateProject { project_id, .. }
+        | OrganizationCommand::CreateDeliverable { project_id, .. } => Some(project_id),
+        OrganizationCommand::CreateIssue { .. } => reads.deliverable.map(|row| &row.project_id),
+        _ => None,
+    };
+    Ok(change_metadata(
+        plan(
+            context,
+            item,
+            if created { "created" } else { "updated" },
+            statements,
+            answer,
+        ),
+        None,
+        project,
+        None,
+        None,
     ))
 }
 pub(crate) fn require_area(

@@ -1,4 +1,6 @@
-use crate::statement_plans::{RulePlan, WriteContext, exact, not_found, plan, text};
+use crate::statement_plans::{
+    RulePlan, WriteContext, change_metadata, exact, not_found, plan, text,
+};
 use std::collections::{BTreeMap, VecDeque};
 use workspace_model::{
     Deliverable, DeliverableDependency, DeliverableId, DependencyCommand, ItemRef, RefusalReason,
@@ -81,21 +83,27 @@ pub fn change_dependency(
                 return Err(RefusalReason::WouldCycle { path });
             }
             let item = ItemRef::Deliverable(blocked.clone());
-            Ok(plan(
-                context,
-                item.clone(),
-                "updated",
-                vec![exact(
-                    "INSERT INTO deliverable_dependencies (dependency_id,blocking_deliverable_id,blocked_deliverable_id,created_at,updated_at) VALUES (?,?,?,?,?)",
-                    vec![
-                        text(dependency_id),
-                        text(blocking),
-                        text(blocked),
-                        text(context.now.to_rfc3339()),
-                        text(context.now.to_rfc3339()),
-                    ],
-                )],
-                RuleAnswer::Updated { item },
+            Ok(change_metadata(
+                plan(
+                    context,
+                    item.clone(),
+                    "updated",
+                    vec![exact(
+                        "INSERT INTO deliverable_dependencies (dependency_id,blocking_deliverable_id,blocked_deliverable_id,created_at,updated_at) VALUES (?,?,?,?,?)",
+                        vec![
+                            text(dependency_id),
+                            text(blocking),
+                            text(blocked),
+                            text(context.now.to_rfc3339()),
+                            text(context.now.to_rfc3339()),
+                        ],
+                    )],
+                    RuleAnswer::Updated { item },
+                ),
+                None,
+                Some(&target.project_id),
+                None,
+                None,
             ))
         }
         DependencyCommand::Remove { dependency_id } => {
@@ -108,16 +116,27 @@ pub fn change_dependency(
                     dependency_id: dependency_id.clone(),
                 });
             };
+            let target = reads
+                .deliverables
+                .iter()
+                .find(|row| row.deliverable_id == edge.blocked)
+                .ok_or_else(|| not_found(ItemRef::Deliverable(edge.blocked.clone())))?;
             let item = ItemRef::Deliverable(edge.blocked.clone());
-            Ok(plan(
-                context,
-                item.clone(),
-                "updated",
-                vec![exact(
-                    "DELETE FROM deliverable_dependencies WHERE dependency_id=?",
-                    vec![text(dependency_id)],
-                )],
-                RuleAnswer::Updated { item },
+            Ok(change_metadata(
+                plan(
+                    context,
+                    item.clone(),
+                    "updated",
+                    vec![exact(
+                        "DELETE FROM deliverable_dependencies WHERE dependency_id=?",
+                        vec![text(dependency_id)],
+                    )],
+                    RuleAnswer::Updated { item },
+                ),
+                None,
+                Some(&target.project_id),
+                None,
+                None,
             ))
         }
     }

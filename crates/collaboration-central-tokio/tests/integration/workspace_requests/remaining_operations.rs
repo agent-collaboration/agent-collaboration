@@ -108,6 +108,21 @@ async fn archive_initiative_update_role_release_and_any_member_backlog_edit_use_
     let mut nonlead_session = session(&nonlead);
     nonlead_session.session_id = "nonlead-editor".to_owned().try_into().unwrap();
     nonlead.caller = m::Caller::Session(nonlead_session);
+    let nonlead_item = created(
+        call(
+            &f.host,
+            &nonlead,
+            Some(f.workspace.clone()),
+            913,
+            m::WorkspaceOperation::AddBacklogItem {
+                area_id: area.clone(),
+                title: name("Nonlead created"),
+                description: "Member description".to_owned().try_into().unwrap(),
+            },
+        )
+        .await,
+    );
+    assert!(matches!(nonlead_item, m::ItemRef::BacklogItem(_)));
     assert!(matches!(
         call(
             &f.host,
