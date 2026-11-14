@@ -40,7 +40,7 @@ async fn corrupt_timer_target_and_timing_fail_alarm_without_effects() {
             fixture.clock.0.load(std::sync::atomic::Ordering::SeqCst),
         )
         .unwrap()
-            + chrono::Duration::seconds(60);
+            + chrono::Duration::seconds(300);
         let target = session(&fixture.caller);
         let operation = if number == 1300 {
             Operation::SetWake {
@@ -51,7 +51,7 @@ async fn corrupt_timer_target_and_timing_fail_alarm_without_effects() {
         } else {
             Operation::SetAutomation {
                 target,
-                timing: serde_json::from_str(r#"{"kind":"after","seconds":60}"#).unwrap(),
+                timing: serde_json::from_str(r#"{"kind":"after","seconds":300}"#).unwrap(),
                 text: "automation".to_owned().try_into().unwrap(),
             }
         };
@@ -114,7 +114,7 @@ async fn later_timer_statement_failure_rolls_back_queue_lifecycle_and_alarm() {
         fixture.clock.0.load(std::sync::atomic::Ordering::SeqCst),
     )
     .unwrap()
-        + chrono::Duration::seconds(60);
+        + chrono::Duration::seconds(300);
     let operation = Operation::SetWake {
         target: session(&fixture.caller),
         due_at: due,

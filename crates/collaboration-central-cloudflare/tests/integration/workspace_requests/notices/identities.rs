@@ -81,8 +81,9 @@ async fn non_agent_addressees_are_counted_as_skipped_and_change_remains_in_works
     let _ = pending.await;
     let result = runtime.drain_workspace(&f.workspace).await.unwrap();
     assert_eq!(result.skipped_recipients, 2);
-    assert_eq!(result.notices_queued, 1);
-    let rows = runtime.statement_host().read(Statement { sql: "SELECT recipient_actor FROM messages WHERE source_thread_id=? AND message_kind='notice'", args: vec![text(&thread)] }).await.unwrap();
+    assert_eq!(result.notices_queued, 0);
+    assert_eq!(result.window_items_added, 1);
+    let rows = runtime.statement_host().read(Statement { sql: "SELECT w.recipient_actor FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE i.thread_id=? AND i.change_id=(SELECT MAX(change_id) FROM notification_window_items WHERE thread_id=i.thread_id)", args: vec![text(&thread)] }).await.unwrap();
     assert_eq!(rows.rows, vec![vec![text(&agent)]]);
     let workspace_rows = runtime.inspect_workspace(&f.workspace, Statement {
         sql: "SELECT c.position,m.actor_identity_id FROM changes c JOIN thread_members m ON m.thread_id=c.thread_id WHERE c.change_kind='posted' AND c.thread_id=? AND m.actor_identity_id IN (?,?) AND m.left_at IS NULL AND m.notifications=1 ORDER BY m.actor_identity_id",

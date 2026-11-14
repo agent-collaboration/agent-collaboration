@@ -11,3 +11,5 @@ mod time_range;
 mod replay;
 
 mod replay_failures;
+
+mod timing_contract;

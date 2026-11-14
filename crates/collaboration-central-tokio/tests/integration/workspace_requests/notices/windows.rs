@@ -56,13 +56,15 @@ async fn first_activity_deadline_collates_three_ordered_posts_at_fifteen_minutes
             panic!("change id")
         };
         expected.push(NoticeItem {
+            workspace_id: f.workspace.clone(),
+            thread_id: Some(thread.clone()),
             change_id: change_id.parse().unwrap(),
             position,
             item,
             actor: author.clone(),
             event: m::ChangeEvent::Posted,
         });
-        let window = runtime.statement_host().read(Statement { sql: "SELECT first_activity_at,due_at,(SELECT COUNT(*) FROM notification_window_items i WHERE i.window_id=w.window_id) FROM notification_windows w WHERE recipient_actor=? AND thread_id=?", args: vec![text(&recipient), text(&thread)] }).await.unwrap();
+        let window = runtime.statement_host().read(Statement { sql: "SELECT first_activity_at,due_at,(SELECT COUNT(*) FROM notification_window_items i WHERE i.window_id=w.window_id) FROM notification_windows w WHERE recipient_actor=? AND window_id IN (SELECT window_id FROM notification_window_items WHERE thread_id=?)", args: vec![text(&recipient), text(&thread)] }).await.unwrap();
         assert_eq!(window.rows.len(), 1);
         let (SqlValue::Text(start), SqlValue::Text(due)) = (&window.rows[0][0], &window.rows[0][1])
         else {
@@ -95,7 +97,7 @@ async fn first_activity_deadline_collates_three_ordered_posts_at_fifteen_minutes
         .await;
     f.clock.advance(Duration::from_secs(180)).unwrap();
     fired.until_held().await;
-    let messages = runtime.statement_host().read(Statement { sql: "SELECT sender,body,source_change_id FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND state='queued'", args: vec![text(&recipient), text(&thread)] }).await.unwrap();
+    let messages = runtime.statement_host().read(Statement { sql: "SELECT sender,body,source_change_id FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND state='ready'", args: vec![text(&recipient), text(&thread)] }).await.unwrap();
     assert_eq!(messages.rows.len(), 1);
     let (SqlValue::Text(sender), SqlValue::Text(body)) =
         (&messages.rows[0][0], &messages.rows[0][1])
@@ -113,7 +115,7 @@ async fn first_activity_deadline_collates_three_ordered_posts_at_fifteen_minutes
         }
     );
     assert_eq!(messages.rows[0][2], text(&expected[0].change_id));
-    let remaining = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM notification_windows WHERE recipient_actor=? AND thread_id=?), (SELECT COUNT(*) FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND w.thread_id=?)", args: vec![text(&recipient), text(&thread), text(&recipient), text(&thread)] }).await.unwrap();
+    let remaining = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM notification_windows WHERE recipient_actor=? AND window_id IN (SELECT window_id FROM notification_window_items WHERE thread_id=?)), (SELECT COUNT(*) FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?)", args: vec![text(&recipient), text(&thread), text(&recipient), text(&thread)] }).await.unwrap();
     assert_eq!(
         remaining.rows,
         vec![vec![

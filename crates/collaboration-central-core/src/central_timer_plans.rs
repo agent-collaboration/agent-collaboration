@@ -23,6 +23,7 @@ pub(crate) struct AutomationRow {
     pub target: SessionAddress,
     pub timing: TimingRule,
     pub anchor: Timestamp,
+    pub expires_at: Timestamp,
     pub evaluated: Option<Timestamp>,
     pub due: Option<Timestamp>,
     pub text: PostText,
@@ -45,7 +46,18 @@ pub(crate) fn decode_wakes(rows: &ReadOutcome) -> Result<Vec<WakeRow>, StoreFail
             Ok(WakeRow {
                 id: parse(string(rows, row, "wake_id")?, "wakes.wake_id")?,
                 target: json(string(rows, row, "target")?, "wakes.target")?,
-                due: parse_time(string(rows, row, "due_at")?, "wakes.due_at")?,
+                due: {
+                    let due = parse_time(string(rows, row, "due_at")?, "wakes.due_at")?;
+                    let created_at =
+                        parse_time(string(rows, row, "created_at")?, "wakes.created_at")?;
+                    let expiry = crate::central_mail_time::lifetime_end(created_at)
+                        .ok_or_else(|| corrupt("wakes.created_at"))?;
+                    if !crate::central_mail_time::on_grid(due) || due <= created_at || due > expiry
+                    {
+                        return Err(corrupt("wakes.due_at"));
+                    }
+                    due
+                },
                 text: string(rows, row, "text")?
                     .to_owned()
                     .try_into()
@@ -94,9 +106,57 @@ pub(crate) fn decode_automations(rows: &ReadOutcome) -> Result<Vec<AutomationRow
             let timing: TimingRule =
                 json(string(rows, row, "timing_rule")?, "automations.timing_rule")?;
             let anchor = parse_time(string(rows, row, "anchor_at")?, "automations.anchor_at")?;
-            timing
-                .next_due(anchor, None)
-                .map_err(|_| corrupt("automations.timing_rule"))?;
+            let expires_at =
+                parse_time(string(rows, row, "expires_at")?, "automations.expires_at")?;
+            let admission = parse_time(string(rows, row, "created_at")?, "automations.created_at")?;
+            let expected_expiry = crate::central_mail_time::lifetime_end(admission)
+                .ok_or_else(|| corrupt("automations.created_at"))?;
+            if expires_at != expected_expiry {
+                return Err(corrupt("automations.expires_at"));
+            }
+            if crate::central_mail_time::aligned_at_or_after(admission, 300) != Some(anchor) {
+                return Err(corrupt("automations.anchor_at"));
+            }
+            if !crate::central_mail_time::valid_rule(&timing, admission, expires_at)
+                .map_err(|_| corrupt("automations.timing_rule"))?
+            {
+                return Err(corrupt("automations.timing_rule"));
+            }
+            let initial_due = crate::central_mail_time::first_due(&timing, admission)
+                .map_err(|_| corrupt("automations.timing_rule"))?
+                .ok_or_else(|| corrupt("automations.timing_rule"))?;
+            if initial_due > expires_at
+                || (matches!(timing, TimingRule::At { .. }) && initial_due <= admission)
+            {
+                return Err(corrupt("automations.timing_rule"));
+            }
+            if let Some(due) = due {
+                let matches_rule = match &timing {
+                    TimingRule::At { .. } | TimingRule::After { .. } => due == initial_due,
+                    TimingRule::Interval { seconds } => {
+                        due >= anchor
+                            && due.signed_duration_since(anchor).num_seconds() % i64::from(*seconds)
+                                == 0
+                    }
+                    TimingRule::Cron { .. } => {
+                        let before = due
+                            .checked_sub_signed(chrono::Duration::seconds(1))
+                            .ok_or_else(|| corrupt("automations.next_due_at"))?;
+                        timing
+                            .next_due(admission, Some(before))
+                            .map_err(|_| corrupt("automations.timing_rule"))?
+                            == Some(due)
+                    }
+                };
+                if !matches_rule {
+                    return Err(corrupt("automations.next_due_at"));
+                }
+            }
+            if due.is_some_and(|due| {
+                !crate::central_mail_time::on_grid(due) || due > expires_at || due < anchor
+            }) {
+                return Err(corrupt("automations.next_due_at"));
+            }
             Ok(AutomationRow {
                 id: parse(
                     string(rows, row, "automation_id")?,
@@ -105,6 +165,7 @@ pub(crate) fn decode_automations(rows: &ReadOutcome) -> Result<Vec<AutomationRow
                 target: json(string(rows, row, "target")?, "automations.target")?,
                 timing,
                 anchor,
+                expires_at,
                 evaluated,
                 due,
                 text: string(rows, row, "text")?
@@ -163,7 +224,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 let rows = self
                     .host
                     .read(Statement {
-                        sql: "SELECT wake_id,target,due_at,text,state FROM wakes WHERE wake_id=?",
+                        sql: "SELECT wake_id,target,due_at,text,state,created_at FROM wakes WHERE wake_id=?",
                         args: vec![text(wake_id)],
                     })
                     .await?;
@@ -203,7 +264,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                         target: target.clone(),
                     }));
                 }
-                let first = match timing.next_due(now, None) {
+                let first = match crate::central_mail_time::first_due(timing, now) {
                     Ok(Some(first)) => first,
                     Ok(None) | Err(agent_automation::TimingError::OutOfRange) => {
                         return Ok(Err(Refusal::NoOccurrence));
@@ -214,15 +275,39 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                         }));
                     }
                 };
+                let Some(expires_at) = crate::central_mail_time::lifetime_end(now) else {
+                    return Ok(Err(Refusal::TimeOutOfRange {
+                        field: "anchorAt".to_owned(),
+                    }));
+                };
+                if first > expires_at {
+                    return Ok(Err(Refusal::TimingViolation {
+                        field: match timing {
+                            TimingRule::At { .. } => "timing.at",
+                            TimingRule::After { .. } | TimingRule::Interval { .. } => {
+                                "timing.seconds"
+                            }
+                            TimingRule::Cron { .. } => "timing.expression",
+                        }
+                        .to_owned(),
+                        requirement: mail::TimingRequirement::WithinSevenDays,
+                    }));
+                }
+                let Some(anchor) = crate::central_mail_time::aligned_at_or_after(now, 300) else {
+                    return Ok(Err(Refusal::TimeOutOfRange {
+                        field: "anchorAt".to_owned(),
+                    }));
+                };
                 let id: AutomationId = self.mint()?;
                 (
                     vec![exact(
-                        "INSERT INTO automations(automation_id,target,timing_rule,anchor_at,evaluated_through_at,text,next_due_at,state,created_at,updated_at) VALUES (?,?,?,?,NULL,?,?,'active',?,?)",
+                        "INSERT INTO automations(automation_id,target,timing_rule,anchor_at,expires_at,evaluated_through_at,text,next_due_at,state,created_at,updated_at) VALUES (?,?,?,?,?,NULL,?,?,'active',?,?)",
                         vec![
                             text(&id),
                             encode(target)?,
                             encode(timing)?,
-                            at(),
+                            text(timestamp(anchor)),
+                            text(timestamp(expires_at)),
                             text(body.as_str()),
                             text(timestamp(first)),
                             at(),
@@ -237,7 +322,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 )
             }
             Op::DisableAutomation { automation_id } => {
-                let rows=self.host.read(Statement{sql:"SELECT automation_id,target,timing_rule,anchor_at,evaluated_through_at,text,next_due_at,state FROM automations WHERE automation_id=?",args:vec![text(automation_id)]}).await?;
+                let rows=self.host.read(Statement{sql:"SELECT automation_id,target,timing_rule,anchor_at,expires_at,evaluated_through_at,text,next_due_at,state,created_at FROM automations WHERE automation_id=?",args:vec![text(automation_id)]}).await?;
                 let rows = decode_automations(&rows)?;
                 let Some(row) = rows.first() else {
                     return Ok(Err(Refusal::AutomationNotFound {
@@ -264,7 +349,9 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     },
                 )
             }
-            Op::SendMessage { .. } => return Err(corrupt("timer operation")),
+            Op::SendMessage { .. } | Op::SetNoticeCadence { .. } => {
+                return Err(corrupt("timer operation"));
+            }
         };
         Ok(Ok(decision))
     }

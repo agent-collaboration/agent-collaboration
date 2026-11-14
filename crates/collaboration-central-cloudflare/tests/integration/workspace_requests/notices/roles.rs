@@ -41,7 +41,7 @@ async fn role_grant_notifies_subject_and_role_address_uses_holder_at_drain() {
         m::WorkspaceResult::Done(m::WorkspaceAnswer::Updated { .. })
     ));
     let grant = runtime.statement_host().read(Statement {
-        sql: "SELECT COUNT(*) FROM messages WHERE recipient_actor=? AND source_workspace_id=? AND source_thread_id IS NULL AND message_kind='notice' AND state='queued'",
+        sql: "SELECT COUNT(*) FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.workspace_id=? AND i.thread_id IS NULL",
         args: vec![text(&old_holder), text(&f.workspace)],
     }).await.unwrap();
     assert_eq!(
@@ -84,9 +84,11 @@ async fn role_grant_notifies_subject_and_role_address_uses_holder_at_drain() {
         m::WorkspaceResult::Done(m::WorkspaceAnswer::Created { .. })
     ));
     let rows = runtime.statement_host().read(Statement {
-        sql: "SELECT recipient_actor FROM messages WHERE source_workspace_id=? AND source_thread_id=? AND message_kind='notice'",
+        sql: "SELECT w.recipient_actor FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE i.workspace_id=? AND i.thread_id=? AND i.change_id=(SELECT MAX(change_id) FROM notification_window_items WHERE workspace_id=i.workspace_id AND thread_id=i.thread_id) ORDER BY w.recipient_actor",
         args: vec![text(&f.workspace), text(&thread)],
     }).await.unwrap();
-    assert_eq!(rows.rows, vec![vec![text(&current_holder)]]);
+    let mut expected = vec![vec![text(&current_holder)], vec![text(&old_holder)]];
+    expected.sort_by_key(|row| format!("{:?}", row[0]));
+    assert_eq!(rows.rows, expected);
     f.host.close().await;
 }

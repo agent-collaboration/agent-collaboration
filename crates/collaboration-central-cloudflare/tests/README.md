@@ -58,6 +58,16 @@ entry/exit alarm readbacks distinguish platform dispatch from transaction rollba
 Fixture stamps do not establish provisioning or signature verification. Delivery,
 link reconnect and acknowledgements remain later slices.
 
+The existing direct-mail case also runs `mail::timing_contract`, covering the
+five-minute grid, seven-day horizon/expiry, exact two-session ready batches,
+15/25/55-minute cadences across ten threads and two workspaces, pending policy
+changes/reopen, source-specific cancellation and corruption. Its test control
+dispatches the real platform callback only when the retained alarm is due on the
+injected clock, and records callback count. Empty/later alarms cannot fabricate a
+callback. This proves deadline selection and callback effects; it does not advance
+the platform wall clock or establish C/D link handover. These assertions reuse
+the existing case's workerd process.
+
 `owner_changes` and `backlog_boundaries` drive backlog close/note/reference and
 change-row atomicity, replay, late-statement rollback, workspace/stored-value
 boundaries, and self-join roles through actual Worker requests and store readback.

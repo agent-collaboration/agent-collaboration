@@ -56,13 +56,15 @@ async fn held_drain_serializes_second_drain_and_source_index_rejects_duplicate()
         m::WorkspaceResult::Done(m::WorkspaceAnswer::Created { .. })
     ));
     assert_eq!(second.await.unwrap().notices_queued, 0);
+    f.clock.0.fetch_add(900_000, Ordering::SeqCst);
+    runtime.on_alarm().await.unwrap();
     let rows = runtime.read(Statement { sql: "SELECT COUNT(*) FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice'", args: vec![text(&actor), text(&thread)] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![SqlValue::Integer(1.try_into().unwrap())]]
     );
     let duplicate = runtime.run_batch(StatementBatch { statements: vec![GuardedStatement {
-        statement: Statement { sql: "INSERT INTO messages(message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at) SELECT ?,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at FROM messages WHERE message_kind='notice' AND source_thread_id=? AND recipient_actor=?", args: vec![text(id::<m::WorkspaceId>(7113)), text(&thread), text(&actor)] },
+        statement: Statement { sql: "INSERT INTO messages(message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,deliver_after,created_at,updated_at) SELECT ?,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,deliver_after,created_at,updated_at FROM messages WHERE message_kind='notice' AND source_thread_id=? AND recipient_actor=?", args: vec![text(id::<m::WorkspaceId>(7113)), text(&thread), text(&actor)] },
         expect: RowExpectation::Exactly(1),
     }], alarm: AlarmUpdate::Unchanged }).await;
     assert!(

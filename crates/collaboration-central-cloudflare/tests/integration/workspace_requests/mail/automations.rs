@@ -30,8 +30,8 @@ async fn interval_catches_up_once_and_after_finishes() {
         timing,
         text: "timer".to_owned().try_into().unwrap(),
     };
-    let interval = serde_json::from_str(r#"{"kind":"interval","seconds":60}"#).unwrap();
-    let after = serde_json::from_str(r#"{"kind":"after","seconds":60}"#).unwrap();
+    let interval = serde_json::from_str(r#"{"kind":"interval","seconds":300}"#).unwrap();
+    let after = serde_json::from_str(r#"{"kind":"after","seconds":300}"#).unwrap();
     let Result::Done(Answer::AutomationSet {
         automation_id: interval_id,
         next_due_at: Some(due),
@@ -40,7 +40,7 @@ async fn interval_catches_up_once_and_after_finishes() {
     else {
         panic!("interval refused")
     };
-    assert_eq!(due, start + chrono::Duration::seconds(60));
+    assert_eq!(due, start);
     let Result::Done(Answer::AutomationSet {
         automation_id: after_id,
         ..
@@ -48,16 +48,33 @@ async fn interval_catches_up_once_and_after_finishes() {
     else {
         panic!("after refused")
     };
-    for minute in 1..=3 {
+    // The first interval occurrence is the request's grid anchor itself.
+    runtime.on_alarm().await.unwrap();
+    let anchored = runtime
+        .statement_host()
+        .read(Statement {
+            sql: "SELECT COUNT(*) FROM messages WHERE message_kind='automation'",
+            args: vec![],
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        anchored.rows,
+        vec![vec![central_storage::SqlValue::Integer(
+            1.try_into().unwrap()
+        )]]
+    );
+    for step in 1..=3 {
+        let minute = step * 5;
         fixture.clock.0.store(
             (start + chrono::Duration::minutes(minute)).timestamp_millis(),
             Ordering::SeqCst,
         );
         let result = runtime.on_alarm().await.unwrap();
-        assert_eq!(result.automations_fired, if minute == 1 { 2 } else { 1 });
+        assert_eq!(result.automations_fired, if step == 1 { 2 } else { 1 });
     }
     fixture.clock.0.store(
-        (start + chrono::Duration::minutes(33)).timestamp_millis(),
+        (start + chrono::Duration::minutes(165)).timestamp_millis(),
         Ordering::SeqCst,
     );
     assert_eq!(runtime.on_alarm().await.unwrap().automations_fired, 1);
@@ -68,11 +85,11 @@ async fn interval_catches_up_once_and_after_finishes() {
         vec![vec![
             text("active"),
             text(
-                (start + chrono::Duration::minutes(34))
+                (start + chrono::Duration::minutes(170))
                     .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
             ),
             text(
-                (start + chrono::Duration::minutes(33))
+                (start + chrono::Duration::minutes(165))
                     .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
             )
         ]]
@@ -83,7 +100,7 @@ async fn interval_catches_up_once_and_after_finishes() {
         vec![vec![
             text("done"),
             central_storage::SqlValue::Null,
-            central_storage::SqlValue::Integer(5.try_into().unwrap())
+            central_storage::SqlValue::Integer(6.try_into().unwrap())
         ]]
     );
     let messages = runtime
@@ -94,7 +111,7 @@ async fn interval_catches_up_once_and_after_finishes() {
         })
         .await
         .unwrap();
-    assert_eq!(messages.rows.len(), 5);
+    assert_eq!(messages.rows.len(), 6);
     let mut interval_messages = 0;
     let mut after_messages = 0;
     for row in &messages.rows {
@@ -131,7 +148,7 @@ async fn interval_catches_up_once_and_after_finishes() {
             panic!("unexpected automation id: {automation_id}");
         }
     }
-    assert_eq!((interval_messages, after_messages), (4, 1));
+    assert_eq!((interval_messages, after_messages), (5, 1));
     assert_eq!(
         request(
             &fixture,
@@ -214,7 +231,7 @@ async fn interval_catches_up_once_and_after_finishes() {
         })
     );
     fixture.clock.0.store(
-        (start + chrono::Duration::minutes(35)).timestamp_millis(),
+        (start + chrono::Duration::minutes(175)).timestamp_millis(),
         Ordering::SeqCst,
     );
     assert_eq!(runtime.on_alarm().await.unwrap().automations_fired, 0);
@@ -224,7 +241,7 @@ async fn interval_catches_up_once_and_after_finishes() {
         vec![vec![
             central_storage::SqlValue::Integer(1.try_into().unwrap()),
             central_storage::SqlValue::Integer(1.try_into().unwrap()),
-            central_storage::SqlValue::Integer(5.try_into().unwrap())
+            central_storage::SqlValue::Integer(6.try_into().unwrap())
         ]]
     );
     assert_eq!(
@@ -243,10 +260,11 @@ async fn at_and_cron_rules_retain_their_calendar_boundaries() {
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
     let start =
         chrono::DateTime::from_timestamp_millis(fixture.clock.0.load(Ordering::SeqCst)).unwrap();
-    let at = start + chrono::Duration::minutes(2);
+    let at = start + chrono::Duration::minutes(10);
     let at_rule = serde_json::from_value(serde_json::json!({"kind":"at", "at":at})).unwrap();
-    let cron = serde_json::from_str(r#"{"kind":"cron","expression":"* * * * *","timezone":"UTC"}"#)
-        .unwrap();
+    let cron =
+        serde_json::from_str(r#"{"kind":"cron","expression":"*/5 * * * *","timezone":"UTC"}"#)
+            .unwrap();
     let set = |timing| Operation::SetAutomation {
         target: session(&fixture.caller),
         timing,
@@ -267,7 +285,7 @@ async fn at_and_cron_rules_retain_their_calendar_boundaries() {
     else {
         panic!("cron refused")
     };
-    assert_eq!(cron_due, start + chrono::Duration::minutes(1));
+    assert_eq!(cron_due, start + chrono::Duration::minutes(5));
     fixture
         .clock
         .0

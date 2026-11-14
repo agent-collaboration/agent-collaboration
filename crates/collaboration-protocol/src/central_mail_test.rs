@@ -79,7 +79,23 @@ fn sender_variants_are_closed_and_round_trip() {
 }
 
 #[test]
-fn policy_has_default_and_accepts_nonzero_duration_without_upper_bound() {
-    assert_eq!(MailPolicy::default().window_seconds(), 900);
-    assert_eq!(MailPolicy::new(NonZeroU32::MAX).window_seconds(), u32::MAX);
+fn direct_message_policy_has_one_minute_default_and_one_configurable_interval() {
+    assert_eq!(MailPolicy::default().direct_message_interval_seconds(), 60);
+    assert_eq!(
+        MailPolicy::new(NonZeroU32::MAX).direct_message_interval_seconds(),
+        u32::MAX
+    );
+}
+
+#[test]
+fn notice_cadence_request_is_closed_and_round_trips_each_allowed_value() {
+    for cadence in ["m15", "m25", "m55"] {
+        let wire = json!({"requestId":"01890f3e-7b8c-7cc0-8000-000000000001","operation":{"kind":"setNoticeCadence","cadence":cadence}});
+        let parsed: CentralMailRequest = serde_json::from_value(wire.clone()).unwrap();
+        assert_eq!(serde_json::to_value(parsed).unwrap(), wire);
+    }
+    for cadence in ["m20", "15", "", "M15"] {
+        let wire = json!({"requestId":"01890f3e-7b8c-7cc0-8000-000000000001","operation":{"kind":"setNoticeCadence","cadence":cadence}});
+        assert!(serde_json::from_value::<CentralMailRequest>(wire).is_err());
+    }
 }

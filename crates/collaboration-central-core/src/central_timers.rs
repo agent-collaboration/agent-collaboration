@@ -38,17 +38,30 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         let wakes = self
             .host
             .read(Statement {
-                sql: "SELECT wake_id,target,due_at,text,state FROM wakes",
+                sql: "SELECT wake_id,target,due_at,text,state,created_at FROM wakes",
                 args: vec![],
             })
             .await?;
         let automations = self.host.read(Statement {
-            sql: "SELECT automation_id,target,timing_rule,anchor_at,evaluated_through_at,text,next_due_at,state FROM automations",
+            sql: "SELECT automation_id,target,timing_rule,anchor_at,expires_at,evaluated_through_at,text,next_due_at,state,created_at FROM automations",
             args: vec![],
         }).await?;
         let wakes = decode_wakes(&wakes)?;
         let automations = decode_automations(&automations)?;
         self.validate_notification_due_rows().await?;
+        let messages = self
+            .host
+            .read(Statement {
+                sql: "SELECT deliver_after FROM messages WHERE state='queued'",
+                args: vec![],
+            })
+            .await?;
+        for row in &messages.rows {
+            crate::notification_windows::parse_time(
+                crate::workspace_row_codec::string(&messages, row, "deliver_after")?,
+                "messages.deliver_after",
+            )?;
+        }
         Ok((wakes, automations))
     }
 
@@ -76,6 +89,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             }
             let now = self.now()?;
             let (wakes, automations) = self.validated_timers().await?;
+            let messages=self.host.read(Statement{sql:"SELECT message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,deliver_after,created_at,updated_at FROM messages WHERE state IN ('queued','ready')",args:vec![]}).await?;
+            crate::central_mail_records::decode_messages(&messages)?;
             let mut statements = Vec::new();
             let mut wakes_fired = 0;
             let mut automations_fired = 0;
@@ -84,7 +99,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 if wake.state != mail::WakeState::Active || wake.due > now {
                     continue;
                 }
-                let message = self.queued_message(
+                let mut message = self.prepare_message_record(
                     mail::MessageSender::Central,
                     wake.target,
                     mail::MessageBody::Wake {
@@ -94,6 +109,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     None,
                     now,
                 )?;
+                message.deliver_after = wake.due;
                 statements.push(insert_message(&message)?);
                 statements.push(exact(
                     "UPDATE wakes SET state='done',updated_at=? WHERE wake_id=? AND state='active'",
@@ -115,14 +131,19 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 {
                     continue;
                 }
+                if now > automation.expires_at {
+                    statements.push(exact("UPDATE automations SET next_due_at=NULL,state='done',updated_at=? WHERE automation_id=? AND state='active'",vec![text(timestamp(now)),text(&automation.id)]));
+                    continue;
+                }
                 let next = automation
                     .timing
                     .next_due(automation.anchor, Some(now))
                     .map_err(|_| corrupt("automations.timing_rule"))?;
+                let next = next.filter(|due| *due <= automation.expires_at);
                 if next.is_some_and(|due| !crate::central_mail_time::supported(due)) {
                     return Err(corrupt("automations.next_due_at"));
                 }
-                let message = self.queued_message(
+                let mut message = self.prepare_message_record(
                     mail::MessageSender::Central,
                     automation.target,
                     mail::MessageBody::Automation {
@@ -132,6 +153,9 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     None,
                     now,
                 )?;
+                message.deliver_after = automation
+                    .due
+                    .ok_or_else(|| corrupt("automations.next_due_at"))?;
                 statements.push(insert_message(&message)?);
                 statements.push(exact(
                     "UPDATE automations SET evaluated_through_at=?,next_due_at=?,state=?,updated_at=? WHERE automation_id=? AND state='active'",
@@ -147,6 +171,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             }
             let (window_statements, windows_fired) = self.plan_due_windows(now).await?;
             statements.extend(window_statements);
+            statements.push(crate::guarded_statements::any("UPDATE messages SET state='ready',updated_at=? WHERE state='queued' AND julianday(deliver_after)<=julianday(?)",vec![text(timestamp(now)),text(timestamp(now))]));
             #[cfg(feature = "test-support")]
             self.pauses
                 .reached_central(crate::PausePoint::BeforeTimerCommit)
@@ -166,6 +191,9 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             (now, wakes_fired, automations_fired, windows_fired)
         };
         let workspaces_drained = self.drain_due_workspaces(now).await?;
+        #[cfg(feature = "test-support")]
+        self.completed_alarms
+            .send_modify(|count| *count = count.saturating_add(1));
         Ok(AlarmResult {
             wakes_fired,
             automations_fired,

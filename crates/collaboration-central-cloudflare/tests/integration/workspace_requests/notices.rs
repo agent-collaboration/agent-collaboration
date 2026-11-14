@@ -1,8 +1,7 @@
 //! Native notice decisions and durable drain coordination.
 use super::{SqlValue, Statement, support::*};
 use collaboration_central_core::WorkspaceCaller;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::sync::atomic::Ordering;
 use workspace_model as m;
 
 async fn joined_observer(
@@ -65,8 +64,9 @@ async fn posted_notice_item(
     request: u32,
     thread: &m::ThreadId,
     author: &m::ActorIdentityId,
+    addressees: Vec<m::Addressee>,
 ) -> collaboration_protocol::central_mail::NoticeItem {
-    let reply = f.call(request, post(thread, vec![])).await;
+    let reply = f.call(request, post(thread, addressees)).await;
     let m::WorkspaceResult::Done(m::WorkspaceAnswer::Created { item, position }) = reply.result
     else {
         panic!("post refused: {reply:?}")
@@ -88,6 +88,8 @@ async fn posted_notice_item(
         panic!("change id")
     };
     collaboration_protocol::central_mail::NoticeItem {
+        workspace_id: f.workspace.clone(),
+        thread_id: Some(thread.clone()),
         change_id: change_id.parse().unwrap(),
         position,
         item,
@@ -97,7 +99,7 @@ async fn posted_notice_item(
 }
 
 #[tokio::test]
-async fn first_activity_fixes_window_and_immediate_address_is_not_collated() {
+async fn first_activity_fixes_window_and_addressed_posts_join_the_session_batch() {
     let f = Fixture::new().await;
     let area = f.area(7101).await;
     let thread = f.thread(7102, area).await;
@@ -122,9 +124,9 @@ async fn first_activity_fixes_window_and_immediate_address_is_not_collated() {
         .unwrap();
     let first_time =
         chrono::DateTime::from_timestamp_millis(f.clock.0.load(Ordering::SeqCst)).unwrap();
-    let mut expected = vec![posted_notice_item(&f, 7103, &thread, &author).await];
+    let mut expected = vec![posted_notice_item(&f, 7103, &thread, &author, vec![]).await];
     let read_window = || Statement {
-        sql: "SELECT first_activity_at,due_at,(SELECT COUNT(*) FROM notification_window_items i WHERE i.window_id=w.window_id) FROM notification_windows w WHERE recipient_actor=? AND thread_id=?",
+        sql: "SELECT first_activity_at,due_at,(SELECT COUNT(*) FROM notification_window_items i WHERE i.window_id=w.window_id) FROM notification_windows w WHERE recipient_actor=? AND window_id IN (SELECT window_id FROM notification_window_items WHERE thread_id=?)",
         args: vec![text(&actor), text(&thread)],
     };
     let first = runtime.statement_host().read(read_window()).await.unwrap();
@@ -139,36 +141,36 @@ async fn first_activity_fixes_window_and_immediate_address_is_not_collated() {
     assert_eq!(due - start, chrono::Duration::minutes(15));
     assert_eq!(first.rows[0][2], SqlValue::Integer(1.try_into().unwrap()));
     f.clock.0.fetch_add(300_000, Ordering::SeqCst);
-    expected.push(posted_notice_item(&f, 7104, &thread, &author).await);
+    expected.push(posted_notice_item(&f, 7104, &thread, &author, vec![]).await);
     let second = runtime.statement_host().read(read_window()).await.unwrap();
     assert_eq!(&second.rows[0][..2], &first.rows[0][..2]);
     assert_eq!(second.rows[0][2], SqlValue::Integer(2.try_into().unwrap()));
     f.clock.0.fetch_add(420_000, Ordering::SeqCst);
-    expected.push(posted_notice_item(&f, 7106, &thread, &author).await);
+    expected.push(posted_notice_item(&f, 7106, &thread, &author, vec![]).await);
     let third = runtime.statement_host().read(read_window()).await.unwrap();
     assert_eq!(&third.rows[0][..2], &first.rows[0][..2]);
     assert_eq!(third.rows[0][2], SqlValue::Integer(3.try_into().unwrap()));
-    created(
-        f.call(
+    expected.push(
+        posted_notice_item(
+            &f,
             7105,
-            post(
-                &thread,
-                vec![m::Addressee::Actor {
-                    actor_identity_id: actor.clone(),
-                }],
-            ),
+            &thread,
+            &author,
+            vec![m::Addressee::Actor {
+                actor_identity_id: actor.clone(),
+            }],
         )
         .await,
     );
-    let after_immediate = runtime.statement_host().read(read_window()).await.unwrap();
+    let after_addressed = runtime.statement_host().read(read_window()).await.unwrap();
     assert_eq!(
-        after_immediate.rows[0][2],
-        SqlValue::Integer(3.try_into().unwrap())
+        after_addressed.rows[0][2],
+        SqlValue::Integer(4.try_into().unwrap())
     );
     let messages = runtime.statement_host().read(Statement { sql: "SELECT COUNT(*) FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND state='queued'", args: vec![text(&actor), text(&thread)] }).await.unwrap();
     assert_eq!(
         messages.rows,
-        vec![vec![SqlValue::Integer(1.try_into().unwrap())]]
+        vec![vec![SqlValue::Integer(0.try_into().unwrap())]]
     );
     assert_eq!(runtime.on_alarm().await.unwrap().windows_fired, 0);
     f.clock.0.fetch_add(180_000, Ordering::SeqCst);
@@ -236,12 +238,12 @@ async fn leave_notifications_off_and_resolution_cancel_notices_but_keep_direct_m
             .unwrap();
         assert!(matches!(sent, CentralMailResult::Done(_)));
         let runtime = f.host.central(&f.caller.organization_id).await;
-        let before = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND w.thread_id=?), (SELECT COUNT(*) FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND state='queued'), (SELECT COUNT(*) FROM messages WHERE message_kind='direct' AND state='queued')", args: vec![text(&actor), text(&thread), text(&actor), text(&thread)] }).await.unwrap();
+        let before = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?), (SELECT COUNT(*) FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND state='queued'), (SELECT COUNT(*) FROM messages WHERE message_kind='direct' AND state='queued')", args: vec![text(&actor), text(&thread), text(&actor), text(&thread)] }).await.unwrap();
         assert_eq!(
             before.rows,
             vec![vec![
-                SqlValue::Integer(1.try_into().unwrap()),
-                SqlValue::Integer(1.try_into().unwrap()),
+                SqlValue::Integer(2.try_into().unwrap()),
+                SqlValue::Integer(0.try_into().unwrap()),
                 SqlValue::Integer(1.try_into().unwrap())
             ]]
         );
@@ -271,13 +273,13 @@ async fn leave_notifications_off_and_resolution_cancel_notices_but_keep_direct_m
             result.result,
             m::WorkspaceResult::Done(m::WorkspaceAnswer::Updated { .. })
         ));
-        let after = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM notification_windows WHERE recipient_actor=? AND thread_id=?), (SELECT COUNT(*) FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND w.thread_id=?), (SELECT COUNT(*) FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND state='cancelled'), (SELECT COUNT(*) FROM messages WHERE message_kind='direct' AND state='queued')", args: vec![text(&actor), text(&thread), text(&actor), text(&thread), text(&actor), text(&thread)] }).await.unwrap();
+        let after = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM notification_windows WHERE recipient_actor=? AND window_id IN (SELECT window_id FROM notification_window_items WHERE thread_id=?)), (SELECT COUNT(*) FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?), (SELECT COUNT(*) FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND state='cancelled'), (SELECT COUNT(*) FROM messages WHERE message_kind='direct' AND state='queued')", args: vec![text(&actor), text(&thread), text(&actor), text(&thread), text(&actor), text(&thread)] }).await.unwrap();
         assert_eq!(
             after.rows,
             vec![vec![
                 SqlValue::Integer(0.try_into().unwrap()),
                 SqlValue::Integer(0.try_into().unwrap()),
-                SqlValue::Integer(1.try_into().unwrap()),
+                SqlValue::Integer(0.try_into().unwrap()),
                 SqlValue::Integer(1.try_into().unwrap())
             ]]
         );
@@ -286,39 +288,55 @@ async fn leave_notifications_off_and_resolution_cancel_notices_but_keep_direct_m
 }
 
 #[tokio::test]
-async fn construction_policy_sets_nondefault_window_deadline() {
-    let clock = Arc::new(HeldClock(AtomicI64::new(1_861_920_000_000)));
-    let host = super::WorkerdHost::open(clock.clone()).await.unwrap();
-    let caller = caller();
-    let runtime = host.cold_runtime(&caller.organization_id);
-    let _: bool = runtime.control("policy", &37_u32).await.unwrap();
-    seed(&host, &caller).await;
-    let workspace = create_workspace(&host, &caller).await;
-    let f = Fixture {
-        host,
-        caller,
-        workspace,
-        clock,
+async fn session_cadence_sets_nondefault_window_deadline() {
+    use collaboration_protocol::central_mail::{
+        CentralMailAnswer, CentralMailOperation, CentralMailRequest, CentralMailResult,
     };
+    let f = Fixture::new().await;
     let area = f.area(7140).await;
     let thread = f.thread(7141, area).await;
-    let (_, actor) = joined_observer(&f, &thread).await;
+    let (observer, actor) = joined_observer(&f, &thread).await;
+    let runtime = f.host.central(&f.caller.organization_id).await;
+    let defaults = runtime.statement_host().read(Statement {
+        sql: "SELECT notice_cadence,last_notice_delivery_at FROM actor_identities WHERE actor_identity_id=?", args: vec![text(&actor)],
+    }).await.unwrap();
+    assert_eq!(defaults.rows, vec![vec![text("m15"), SqlValue::Null]]);
+    let changed = f
+        .host
+        .request_central(
+            &observer,
+            CentralMailRequest {
+                request_id: id(7143),
+                operation: CentralMailOperation::SetNoticeCadence {
+                    cadence: m::NoticeCadence::M25,
+                },
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        changed,
+        CentralMailResult::Done(CentralMailAnswer::NoticeCadenceSet {
+            cadence: m::NoticeCadence::M25
+        })
+    );
     let first_time =
         chrono::DateTime::from_timestamp_millis(f.clock.0.load(Ordering::SeqCst)).unwrap();
     created(f.call(7142, post(&thread, vec![])).await);
-    let runtime = f.host.central(&f.caller.organization_id).await;
     let rows = runtime.statement_host().read(Statement {
-        sql: "SELECT first_activity_at,due_at FROM notification_windows WHERE recipient_actor=? AND thread_id=?",
-        args: vec![text(actor), text(thread)],
+        sql: "SELECT first_activity_at,due_at FROM notification_windows WHERE recipient_actor=?", args: vec![text(&actor)],
     }).await.unwrap();
     assert_eq!(rows.rows.len(), 1);
-    let (SqlValue::Text(start), SqlValue::Text(due)) = (&rows.rows[0][0], &rows.rows[0][1]) else {
-        panic!("window timestamps")
-    };
-    let start = chrono::DateTime::parse_from_rfc3339(start).unwrap();
-    let due = chrono::DateTime::parse_from_rfc3339(due).unwrap();
-    assert_eq!(start.timestamp_millis(), first_time.timestamp_millis());
-    assert_eq!(due - start, chrono::Duration::seconds(37));
+    assert_eq!(
+        rows.rows[0],
+        vec![
+            text(first_time.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
+            text(
+                (first_time + chrono::Duration::minutes(25))
+                    .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+            )
+        ]
+    );
     f.host.close().await;
 }
 
