@@ -157,6 +157,26 @@ fn shell_commands_are_allowed_once_only_when_every_operand_is_in_the_scratch_fol
         ("git status".to_owned(), false),
         ("touch /tmp/d1-outside".to_owned(), false),
         (String::new(), false),
+        // File utilities that run no code given to them are allowed on scratch.
+        (format!("cat {scratch}/a"), true),
+        (format!("cp {scratch}/a {scratch}/b"), true),
+        (format!("find {scratch} -delete"), true),
+        // A program that runs code from its operands could act anywhere once
+        // the agent writes that code into scratch, so it asks (Q3).
+        (format!("bash {scratch}/run.sh"), false),
+        (format!("sh {scratch}/run.sh"), false),
+        (format!("zsh {scratch}/run.sh"), false),
+        (format!("python3 {scratch}/x.py"), false),
+        (format!("node {scratch}/x.js"), false),
+        (format!("env {scratch}/run.sh"), false),
+        (format!("xargs {scratch}/run.sh"), false),
+        (format!("find {scratch} -exec {scratch}/run.sh"), false),
+        (format!("find {scratch} -execdir {scratch}/run.sh"), false),
+        (format!("find {scratch} -ok {scratch}/run.sh"), false),
+        (format!("find {scratch} -okdir {scratch}/run.sh"), false),
+        (format!("find {scratch} -fprint {scratch}/out"), false),
+        (format!("find {scratch} -fprintf {scratch}/out"), false),
+        (format!("find {scratch} -fls {scratch}/out"), false),
     ];
     for (command, allowed) in cases {
         assert_eq!(

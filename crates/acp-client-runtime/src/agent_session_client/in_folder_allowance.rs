@@ -3,9 +3,9 @@
 //!
 //! File reads, edits, deletes and moves whose locations all lie in the working
 //! folder or the session's scratch folder are allowed once. A shell command is
-//! allowed once only when it is a plain command whose every path lies in the
-//! scratch folder. Anything else, or anything the rule cannot read for
-//! certain, goes to the approval path.
+//! allowed once only when it runs one of a closed set of file utilities, with no
+//! shell syntax, on operands that all lie in the scratch folder. Anything else,
+//! or anything the rule cannot read for certain, goes to the approval path.
 
 use agent_client_protocol::schema::v1::{
     PermissionOption, PermissionOptionId, PermissionOptionKind, ToolCallUpdate, ToolKind,
@@ -13,6 +13,16 @@ use agent_client_protocol::schema::v1::{
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
 use std::sync::{Arc, RwLock};
+
+/// Programs a scratch-only shell command may run without asking: each reads or
+/// changes the files it is given and runs no code taken from them.
+const FILE_UTILITIES: &[&str] = &[
+    "ls", "cat", "head", "tail", "wc", "stat", "file", "du", "diff", "cmp", "sort", "uniq", "grep",
+    "mkdir", "rmdir", "rm", "cp", "mv", "touch", "ln", "chmod", "find",
+];
+
+/// `find` actions that run a program or write outside the operands it names.
+const FIND_ACTIONS_OUTSIDE_THE_RULE: &[&str] = &["-exec", "-execdir", "-ok", "-okdir", "-fls"];
 
 /// The folders an auto-mode session acts in without asking, canonical at grant.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -75,9 +85,9 @@ impl InFolderGrant {
         }
     }
 
-    /// A plain command (a bare program name, no shell syntax that could reach
-    /// another path or program) whose operands are all paths in the scratch
-    /// folder, with at least one.
+    /// A file utility from [`FILE_UTILITIES`], with no shell syntax that could
+    /// reach another path or program, whose operands are all paths in the
+    /// scratch folder, with at least one.
     fn command_stays_in_scratch(&self, command: &str) -> bool {
         const SHELL_SYNTAX: &[char] = &[
             '$', '`', '|', ';', '&', '<', '>', '(', ')', '{', '}', '*', '?', '[', ']', '~', '\\',
@@ -90,8 +100,17 @@ impl InFolderGrant {
         let Some(program) = words.next() else {
             return false;
         };
-        // The program is a bare name; a path program runs code from elsewhere.
-        if program.contains('/') {
+        // Only file utilities that run no code given to them: an interpreter,
+        // `env` or `xargs` would run a script the agent first wrote to scratch,
+        // and that script could act anywhere (owner Q3).
+        if !FILE_UTILITIES.contains(&program) {
+            return false;
+        }
+        if program == "find"
+            && command.split_whitespace().any(|word| {
+                FIND_ACTIONS_OUTSIDE_THE_RULE.contains(&word) || word.starts_with("-fprint")
+            })
+        {
             return false;
         }
         // Every operand is an absolute path in the scratch folder; a bare word
