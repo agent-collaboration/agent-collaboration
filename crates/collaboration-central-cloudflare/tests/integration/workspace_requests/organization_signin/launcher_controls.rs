@@ -1,12 +1,15 @@
 //! Consumer IPC against both compiled Workers, with signing owned by Rust.
+use super::super::workerd_host::Process;
 use collaboration_central_conformance::{ConformanceResult, signin_fixtures as signed};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use std::{path::Path, process::Stdio};
-use tokio::{
-    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
-    process::{Child, ChildStderr, ChildStdin, Command},
+use std::{
+    io::{BufRead, Write},
+    path::Path,
+    process::{Command, Stdio},
+    sync::Arc,
 };
+use tokio::sync::mpsc;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -15,12 +18,46 @@ struct Ready {
 }
 
 struct Bridge {
-    child: Child,
-    stdin: ChildStdin,
-    stderr: tokio::io::Lines<BufReader<ChildStderr>>,
-    stdout: tokio::task::JoinHandle<std::io::Result<()>>,
+    process: Arc<Process>,
+    stderr: mpsc::UnboundedReceiver<String>,
     origin: String,
     client: reqwest::Client,
+}
+
+impl Drop for Bridge {
+    fn drop(&mut self) {
+        assert!(
+            self.process.stop() || std::thread::panicking(),
+            "launcher bridge did not close successfully"
+        );
+    }
+}
+
+#[tokio::test]
+#[ignore = "relaunched launcher panic child"]
+async fn launcher_panic_child() {
+    assert_eq!(std::env::var("WORKERD_LIFECYCLE_CHILD").unwrap(), "panic");
+    let fixture = super::support::Fixture::new().await;
+    let bridge = Bridge::start(&fixture._plan_root.path().join("signin-plan.json"))
+        .await
+        .unwrap();
+    let bridge_pid = bridge.process.with_child(|child| child.id());
+    let workerd = super::super::workerd_host::lifecycle_tests::workerd_child(bridge_pid);
+    println!("WORKERD_LIFECYCLE_READY {bridge_pid} {workerd}");
+    std::io::stdout().flush().unwrap();
+    let mut command = [0];
+    std::io::Read::read_exact(&mut std::io::stdin(), &mut command).unwrap();
+    assert_eq!(command, [b'P']);
+    panic!("intentional launcher panic after readiness");
+}
+
+#[test]
+fn launcher_panic_disposes_real_workerd() {
+    let selector = format!(
+        "{}::launcher_panic_child",
+        module_path!().split_once("::").unwrap().1
+    );
+    super::super::workerd_host::lifecycle_tests::run_parent_death(&selector, &["panic"]);
 }
 
 impl Bridge {
@@ -30,7 +67,7 @@ impl Bridge {
             .parent()
             .and_then(Path::parent)
             .ok_or("repository root")?;
-        let mut child = Command::new("node")
+        let child = Command::new("node")
             .arg(manifest.join("tests/support/workerd-bridge.mts"))
             .arg("--signin-plan")
             .arg(plan)
@@ -40,27 +77,34 @@ impl Bridge {
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .kill_on_drop(true)
             .spawn()?;
-        let stdin = child.stdin.take().ok_or("bridge stdin")?;
-        let stderr = BufReader::new(child.stderr.take().ok_or("bridge stderr")?).lines();
-        let mut output = BufReader::new(child.stdout.take().ok_or("bridge stdout")?).lines();
-        let ready = output
-            .next_line()
-            .await?
-            .ok_or("bridge readiness missing")?;
+        let process = Arc::new(Process::own(child));
+        let (output, errors) = process
+            .with_child(|child| (child.stdout.take().unwrap(), child.stderr.take().unwrap()));
+        let (sender, stderr) = mpsc::unbounded_channel();
+        process.set_error_drain(Some(std::thread::spawn(move || {
+            for line in std::io::BufReader::new(errors)
+                .lines()
+                .map_while(Result::ok)
+            {
+                let _ = sender.send(line);
+            }
+        })));
+        let (ready_sender, ready_receiver) = tokio::sync::oneshot::channel();
+        process.set_output_drain(std::thread::spawn(move || {
+            let mut output = std::io::BufReader::new(output);
+            let mut ready = String::new();
+            let result = output.read_line(&mut ready).map(|_| ready);
+            let _ = ready_sender.send(result);
+            for _ in output.lines().map_while(Result::ok) {}
+        }));
+        let ready = ready_receiver.await??;
         let ready: Ready = serde_json::from_str(&ready).map_err(|_| "invalid bridge readiness")?;
         let url = reqwest::Url::parse(&ready.origin)?;
         assert_eq!(url.host_str(), Some("127.0.0.1"));
-        let stdout = tokio::spawn(async move {
-            while output.next_line().await?.is_some() {}
-            Ok(())
-        });
         Ok(Self {
-            child,
-            stdin,
+            process,
             stderr,
-            stdout,
             origin: ready.origin,
             client: reqwest::Client::builder()
                 .no_proxy()
@@ -70,12 +114,16 @@ impl Bridge {
     }
 
     async fn command(&mut self, command: Value) -> ConformanceResult<Value> {
-        self.stdin
-            .write_all(serde_json::to_string(&command)?.as_bytes())
-            .await?;
-        self.stdin.write_all(b"\n").await?;
-        self.stdin.flush().await?;
-        while let Some(line) = self.stderr.next_line().await? {
+        let encoded = serde_json::to_string(&command)?;
+        self.process.with_child(|child| {
+            let stdin = child
+                .stdin
+                .as_mut()
+                .ok_or_else(|| std::io::Error::other("bridge stdin closed"))?;
+            writeln!(stdin, "{encoded}")?;
+            stdin.flush()
+        })?;
+        while let Some(line) = self.stderr.recv().await {
             // Worker diagnostics are not protocol answers. Never copy them or
             // the fixture's raw compact statement into a failed assertion.
             if let Ok(answer) = serde_json::from_str::<Value>(&line)
@@ -136,14 +184,9 @@ impl Bridge {
         Ok(())
     }
 
-    async fn close(mut self) -> ConformanceResult<()> {
-        self.stdin.write_all(b"close\n").await?;
-        drop(self.stdin);
-        // Drain stderr while the child closes, so even verbose Worker output
-        // cannot fill the pipe and prevent owned process shutdown.
-        while self.stderr.next_line().await?.is_some() {}
-        assert!(self.child.wait().await?.success());
-        self.stdout.await??;
+    async fn close(self) -> ConformanceResult<()> {
+        let process = self.process.clone();
+        assert!(tokio::task::spawn_blocking(move || process.stop()).await?);
         Ok(())
     }
 }

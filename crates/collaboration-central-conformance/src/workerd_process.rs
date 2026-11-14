@@ -1,9 +1,9 @@
 use crate::ConformanceResult;
-use std::{path::PathBuf, process::Stdio, time::Duration};
-use tokio::{
-    io::{AsyncBufReadExt, BufReader},
-    process::{Child, Command},
-    task::JoinHandle,
+use std::{
+    io::{BufRead, BufReader},
+    path::PathBuf,
+    process::{Child, Command, Stdio},
+    time::Duration,
 };
 
 pub struct WorkerdSettings {
@@ -18,8 +18,8 @@ pub struct WorkerdSettings {
     pub relay_peer: fleet_sync_protocol::PeerId,
 }
 pub struct WorkerdProcess {
-    child: Child,
-    output: JoinHandle<ConformanceResult<()>>,
+    child: Option<Child>,
+    output: Option<std::thread::JoinHandle<ConformanceResult<()>>>,
 }
 impl WorkerdProcess {
     pub async fn start(settings: &WorkerdSettings) -> ConformanceResult<Self> {
@@ -30,7 +30,7 @@ impl WorkerdProcess {
         settings: &WorkerdSettings,
         relay: &str,
     ) -> ConformanceResult<Self> {
-        let mut child = Command::new(&settings.node)
+        let child = Command::new(&settings.node)
             .current_dir(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../.."))
             .arg("scripts/tooling/run-central-workerd.mjs")
             .arg(&settings.miniflare)
@@ -42,55 +42,75 @@ impl WorkerdProcess {
             .arg(relay)
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
-            .kill_on_drop(true)
+            .stdin(Stdio::piped())
             .spawn()?;
-        let mut lines =
-            BufReader::new(child.stdout.take().ok_or("Miniflare harness stdout")?).lines();
-        // Observe the platform's own ready event. No sleep-based readiness or
-        // request polling can hide a startup failure.
-        tokio::time::timeout(Duration::from_secs(60), async {
-            while let Some(line) = lines.next_line().await? {
+        let mut owned = Self {
+            child: Some(child),
+            output: None,
+        };
+        let stdout = owned
+            .child
+            .as_mut()
+            .and_then(|child| child.stdout.take())
+            .ok_or("Miniflare harness stdout")?;
+        let (ready_sender, ready) = tokio::sync::oneshot::channel();
+        owned.output = Some(std::thread::spawn(move || {
+            let mut lines = BufReader::new(stdout).lines();
+            let mut ready_sender = Some(ready_sender);
+            for line in &mut lines {
+                let line = line?;
                 println!("{line}");
-                if line.contains("Ready on") {
-                    return Ok::<(), Box<dyn std::error::Error + Send + Sync>>(());
+                if line.contains("Ready on")
+                    && let Some(sender) = ready_sender.take()
+                {
+                    let _ = sender.send(());
                 }
             }
-            Err("Miniflare harness ended before ready".into())
-        })
-        .await??;
-        let process_id = child.id().ok_or("Miniflare harness exited before ready")?;
-        println!("WORKERD owned process identity started pid={process_id}");
-        let output = tokio::spawn(async move {
-            while let Some(line) = lines.next_line().await? {
-                println!("{line}");
-            }
             Ok(())
-        });
-        Ok(Self { child, output })
+        }));
+        ready
+            .await
+            .map_err(|_| "Miniflare harness ended before ready")?;
+        let process_id = owned.child.as_ref().ok_or("Miniflare harness exited")?.id();
+        println!("WORKERD owned process identity started pid={process_id}");
+        Ok(owned)
     }
-    pub async fn stop(mut self) -> ConformanceResult<()> {
-        let pid = self.child.id().ok_or("Miniflare harness already exited")?;
-        // Signal only the process this harness owns; Miniflare then shuts down
-        // its own workerd child and closes the bound port before the restart.
-        let signal = Command::new("kill")
-            .args(["-INT", &pid.to_string()])
-            .status()
-            .await?;
-        if !signal.success() {
-            return Err("could not stop the owned Miniflare harness".into());
+    pub async fn stop(self) -> ConformanceResult<()> {
+        tokio::task::spawn_blocking(move || {
+            let mut owned = self;
+            owned.settle()
+        })
+        .await?
+    }
+    fn settle(&mut self) -> ConformanceResult<()> {
+        let Some(mut child) = self.child.take() else {
+            return Ok(());
+        };
+        let pid = child.id();
+        drop(child.stdin.take());
+        let status = child.wait()?;
+        if let Some(output) = self.output.take() {
+            output
+                .join()
+                .map_err(|_| "Miniflare output reader panicked")??;
         }
-        let status = tokio::time::timeout(Duration::from_secs(30), self.child.wait()).await??;
-        tokio::time::timeout(Duration::from_secs(10), self.output).await???;
         println!(
             "WORKERD owned process identity reaped pid={pid} exit_code={:?}",
             status.code()
         );
-        // Miniflare installs its SIGINT exit hook before the script's handler;
-        // its normal requested-interrupt path exits 128+SIGINT rather than zero.
         if !matches!(status.code(), Some(0 | 130)) {
             return Err(format!("owned Miniflare harness exited unsuccessfully: {status}").into());
         }
-        println!("WORKERD owned process stopped and reaped");
         Ok(())
+    }
+}
+impl Drop for WorkerdProcess {
+    fn drop(&mut self) {
+        if let Err(error) = self.settle() {
+            assert!(
+                std::thread::panicking(),
+                "Miniflare harness cleanup failed: {error}"
+            );
+        }
     }
 }

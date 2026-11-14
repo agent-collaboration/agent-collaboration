@@ -9,9 +9,9 @@ use runtime_primitives::Clock;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
     collections::BTreeMap,
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader},
     path::Path,
-    process::{Child, Command, Stdio},
+    process::{Command, Stdio},
     sync::{
         Arc, Mutex, PoisonError,
         atomic::{AtomicUsize, Ordering},
@@ -89,72 +89,9 @@ impl AlarmReceipt {
         }
     }
 }
-struct Process {
-    child: Mutex<Option<Child>>,
-    output: Mutex<Option<std::thread::JoinHandle<()>>>,
-    errors: Mutex<Option<std::thread::JoinHandle<()>>>,
-}
-impl Process {
-    fn stop(&self) -> bool {
-        if let Some(mut child) = self
-            .child
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .take()
-        {
-            // EOF is the bridge's disposal command, including parent unwinding.
-            drop(child.stdin.take());
-            let pid = rustix::process::Pid::from_raw(i32::try_from(child.id()).unwrap()).unwrap();
-            let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-            let waiter = std::thread::spawn(move || {
-                // Observe exit without reaping: only the owning thread below
-                // may release this PID, including a timeout/exit race.
-                let observed = rustix::process::waitid(
-                    rustix::process::WaitId::Pid(pid),
-                    rustix::process::WaitIdOptions::EXITED | rustix::process::WaitIdOptions::NOWAIT,
-                )
-                .map(|status| status.is_some());
-                let _ = sender.send(observed);
-            });
-            let observed = matches!(
-                receiver.recv_timeout(std::time::Duration::from_secs(5)),
-                Ok(Ok(true))
-            );
-            if !observed {
-                // Child remains owned and unreaped; kill cannot target a reused PID.
-                let _ = child.kill();
-            }
-            let stopped = child.wait().is_ok_and(|status| status.success());
-            if waiter.join().is_err() {
-                return false;
-            }
-            if let Some(output) = self
-                .output
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .take()
-                && output.join().is_err()
-            {
-                return false;
-            }
-            if let Some(errors) = self
-                .errors
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .take()
-            {
-                assert!(errors.join().is_ok());
-            }
-            return stopped;
-        }
-        true
-    }
-}
-impl Drop for Process {
-    fn drop(&mut self) {
-        let _ = self.stop();
-    }
-}
+#[path = "workerd_bridge_process.rs"]
+mod bridge_process;
+pub(super) use bridge_process::Process;
 struct Transport {
     origin: String,
     client: reqwest::Client,
@@ -226,7 +163,10 @@ impl Drop for WorkerdHost {
         // Remote handles borrow this host's runtime; they never extend its
         // child lifetime past the owning fixture, including panic unwinding.
         if !self.transport.process.stop() {
-            eprintln!("workerd bridge required unsuccessful forced cleanup");
+            assert!(
+                std::thread::panicking(),
+                "workerd bridge did not close successfully"
+            );
         }
     }
 }
@@ -267,16 +207,9 @@ impl WorkerdHost {
                 .unwrap();
             // Own the child before pipe setup, readiness parsing or a reader
             // thread can fail. Every unwind closes stdin and settles the PID.
-            let process = Arc::new(Process {
-                child: Mutex::new(Some(child)),
-                output: Mutex::new(None),
-                errors: Mutex::new(None),
-            });
-            let (stdout, stderr) = {
-                let mut owned = process.child.lock().unwrap();
-                let child = owned.as_mut().unwrap();
-                (child.stdout.take().unwrap(), child.stderr.take())
-            };
+            let process = Arc::new(Process::own(child));
+            let (stdout, stderr) =
+                process.with_child(|child| (child.stdout.take().unwrap(), child.stderr.take()));
             let error_drain = stderr.map(|stderr| {
                 let logs = process_logs.clone();
                 let changed = process_changed.clone();
@@ -292,7 +225,7 @@ impl WorkerdHost {
                     }
                 })
             });
-            *process.errors.lock().unwrap() = error_drain;
+            process.set_error_drain(error_drain);
             let mut output = BufReader::new(stdout);
             let mut line = String::new();
             let read = output.read_line(&mut line).unwrap();
@@ -335,10 +268,7 @@ impl WorkerdHost {
                     line.clear();
                 }
             });
-            *process
-                .output
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner) = Some(drain);
+            process.set_output_drain(drain);
             (ready.origin, process)
         })
         .await
@@ -468,11 +398,11 @@ impl WorkerdHost {
 }
 
 #[cfg(test)]
-#[path = "workerd_lifecycle_test.rs"]
-mod lifecycle_tests;
-#[cfg(test)]
 #[path = "workerd_clock_dispatch_test.rs"]
 mod clock_dispatch_tests;
+#[cfg(test)]
+#[path = "workerd_lifecycle_test.rs"]
+pub(crate) mod lifecycle_tests;
 #[cfg(test)]
 #[path = "workerd_host_test.rs"]
 mod tests;

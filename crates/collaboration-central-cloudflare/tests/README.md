@@ -107,15 +107,29 @@ connection policy against real workerd. A byte-transparent relay observes upstre
 idle EOF and forces its ordering against one next clock POST. Each call runs once;
 the oracle uses connection events, without sleeps or relaxed deadlines.
 
-`workerd_host::lifecycle_tests` checks real parent SIGKILL and panic, the inherited
-nextest process group, and bounded settlement of a bridge that ignores stdin EOF.
-The bridge observes EOF as disposal; Rust observes exit without reaping before
-its bounded OS wait completes, then the sole child owner kills if needed and reaps.
+`workerd_host::lifecycle_tests` checks real parent SIGKILL and panic, launcher and
+legacy-owner panic, the inherited nextest group and real bridge EOF disposal.
+Build the legacy bundle with `worker-build crates/collaboration-central-cloudflare
+--dev --no-opt -- --locked --features conformance-faults` before these cases;
+the Worker CI job already builds it for its legacy scenarios.
+The bridge observes EOF as disposal; Rust's sole child owner waits and reaps.
+The harness never kills
+only the bridge; nextest bounds the whole test process group if disposal stalls.
 No nested bridge process group escapes nextest's termination.
 
 `support/lifecycle-nextest.toml` belongs only to explicit lifecycle negative
 controls. It does not alter normal CI deadlines. The `WORKERD_LIFECYCLE_CHILD`
 timeout and leak modes require an operator to retain the emitted exact child PIDs,
 check their OS exit and settle the deliberately leaked PID immediately. They are
-inactive in ordinary suites. Worker CI retains nextest output and fails on a
+ignored in ordinary suites. Run the owned negative-control driver from the root:
+
+```sh
+pnpm --dir verification exec node tooling/workerd-lifecycle-negative-controls.ts
+```
+
+It runs the explicit ignored timeout/leak selectors, fails on missing readiness
+or zero matches, observes timeout child exit and settles its deliberate leak.
+Worker CI records nextest output in the job log and fails on a
 genuine `LEAK` result, including a test that nextest otherwise calls successful.
+An always-run `pgrep -x workerd` gate also rejects workerd-only orphans whose
+output pipes belong to Miniflare and cannot produce nextest's `LEAK` result.

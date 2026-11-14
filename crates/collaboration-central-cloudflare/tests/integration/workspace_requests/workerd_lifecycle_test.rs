@@ -1,22 +1,16 @@
 //! Parent death must settle the real bridge and its workerd without escaping nextest's group.
 use super::*;
-use rustix::process::{Pid, Signal, kill_process, test_kill_process};
-use std::{
-    io::Read,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        mpsc,
-    },
-    time::Duration,
-};
+use rustix::process::{Pid, test_kill_process};
+use std::io::{Read, Write};
 
 const CHILD_MODE: &str = "WORKERD_LIFECYCLE_CHILD";
 const READY_PREFIX: &str = "WORKERD_LIFECYCLE_READY ";
 
 #[test]
+#[ignore = "explicit lifecycle leak negative control"]
 fn lifecycle_leak_negative_control() {
     if std::env::var(CHILD_MODE).as_deref() != Ok("leak") {
-        return;
+        panic!("explicit leak mode required");
     }
     let child = Command::new("node")
         .args([
@@ -34,36 +28,11 @@ fn lifecycle_leak_negative_control() {
     std::mem::forget(child);
 }
 
-#[test]
-fn stop_reaps_bridge_that_ignores_stdin_eof() {
-    let mut child = Command::new("node")
-        .args(["-e", "process.stdin.resume();require('node:net').createServer(()=>{}).listen(0,'127.0.0.1',()=>console.log('READY'));"])
-        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::inherit()).spawn().unwrap();
-    let mut output = BufReader::new(child.stdout.take().unwrap());
-    let mut ready = String::new();
-    output.read_line(&mut ready).unwrap();
-    assert_eq!(ready.trim(), "READY");
-    let pid = process_id(child.id());
-    let process = Process {
-        child: Mutex::new(Some(child)),
-        output: Mutex::new(None),
-        errors: Mutex::new(None),
-    };
-    assert!(
-        !process.stop(),
-        "forced stop must retain the unsuccessful child status"
-    );
-    assert!(
-        matches!(test_kill_process(pid), Err(rustix::io::Errno::SRCH)),
-        "owned bridge must be reaped"
-    );
-}
-
 fn process_id(raw: u32) -> Pid {
     Pid::from_raw(i32::try_from(raw).unwrap()).unwrap()
 }
 
-fn workerd_child(bridge: u32) -> u32 {
+pub(crate) fn workerd_child(bridge: u32) -> u32 {
     let output = Command::new("/bin/ps")
         .args(["-axo", "pid=,ppid=,comm="])
         .output()
@@ -103,10 +72,9 @@ fn workerd_child(bridge: u32) -> u32 {
 }
 
 #[tokio::test]
+#[ignore = "relaunched lifecycle child; requires explicit mode"]
 async fn lifecycle_child_owns_real_workerd() {
-    let Ok(mode) = std::env::var(CHILD_MODE) else {
-        return;
-    };
+    let mode = std::env::var(CHILD_MODE).expect("explicit child mode required");
     let clock = Arc::new(
         router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
             1_900_000_000_000,
@@ -114,15 +82,7 @@ async fn lifecycle_child_owns_real_workerd() {
         .unwrap(),
     );
     let host = WorkerdHost::open(clock).await.unwrap();
-    let bridge = host
-        .transport
-        .process
-        .child
-        .lock()
-        .unwrap()
-        .as_ref()
-        .unwrap()
-        .id();
+    let bridge = host.transport.process.with_child(|child| child.id());
     let workerd = workerd_child(bridge);
     assert_eq!(
         rustix::process::getpgid(Some(process_id(bridge))).unwrap(),
@@ -141,39 +101,108 @@ async fn lifecycle_child_owns_real_workerd() {
     panic!("intentional parent panic after real workerd readiness");
 }
 
-fn require_exited(bridge: u32, workerd: u32) {
-    let (sender, receiver) = mpsc::channel();
-    let cancelled = Arc::new(AtomicBool::new(false));
-    let cancellation = cancelled.clone();
-    let observer = std::thread::spawn(move || {
-        while !cancellation.load(Ordering::SeqCst) {
-            let both_exited = [bridge, workerd].into_iter().all(|pid| {
-                matches!(
-                    test_kill_process(process_id(pid)),
-                    Err(rustix::io::Errno::SRCH)
-                )
-            });
-            if both_exited {
-                let _ = sender.send(());
-                return;
-            }
-            std::thread::yield_now();
-        }
-    });
-    let result = receiver.recv_timeout(Duration::from_secs(10));
-    if result.is_err() {
-        // Cleanup only the two PIDs retained from this owned child, then fail.
-        for pid in [bridge, workerd] {
-            let _ = kill_process(process_id(pid), Signal::KILL);
-        }
+pub(crate) fn require_exited(bridge: u32, workerd: u32) {
+    for pid in [bridge, workerd] {
+        assert!(
+            matches!(
+                test_kill_process(process_id(pid)),
+                Err(rustix::io::Errno::SRCH)
+            ),
+            "owned PID {pid} survived completed bridge settlement"
+        );
     }
-    cancelled.store(true, Ordering::SeqCst);
-    drop(receiver);
-    observer.join().unwrap();
-    assert!(
-        result.is_ok(),
-        "owned bridge/workerd survived parent death: {bridge}/{workerd}"
+}
+
+#[tokio::test]
+async fn legacy_owner_panic_disposes_real_workerd() {
+    use collaboration_central_conformance::{
+        JwksFixtureServer,
+        workerd_process::{WorkerdProcess, WorkerdSettings},
+    };
+    let keys = JwksFixtureServer::start().await.unwrap();
+    let persistence = tempfile::tempdir().unwrap();
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .parent()
+        .unwrap();
+    let settings = WorkerdSettings {
+        node: "node".into(),
+        miniflare: root.join("verification/node_modules/miniflare/dist/src/index.js"),
+        persistence: persistence.path().to_owned(),
+        port,
+        jwks_url: keys.url.clone(),
+        holder_answer_timeout: std::time::Duration::from_secs(2),
+        copy_ack_wait: std::time::Duration::from_secs(2),
+        relay_peer: "019f0000-0000-7000-8000-000000005240"
+            .to_owned()
+            .try_into()
+            .unwrap(),
+    };
+    let process = WorkerdProcess::start(&settings).await.unwrap();
+    let table = Command::new("/bin/ps")
+        .args(["-axo", "pid=,args="])
+        .output()
+        .unwrap();
+    assert!(table.status.success());
+    let pids: Vec<u32> = String::from_utf8(table.stdout)
+        .unwrap()
+        .lines()
+        .filter_map(|line| {
+            let (pid, command) = line.trim().split_once(' ')?;
+            (command.contains("scripts/tooling/run-central-workerd.mjs")
+                && command.contains(persistence.path().to_str().unwrap()))
+            .then(|| pid.parse().unwrap())
+        })
+        .collect();
+    assert_eq!(
+        pids.len(),
+        1,
+        "one exact legacy bridge owns the unique persistence"
     );
+    let bridge = pids[0];
+    let workerd = workerd_child(bridge);
+    let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+        let _owned = process;
+        panic!("intentional legacy owner panic");
+    }));
+    assert!(panic.is_err());
+    require_exited(bridge, workerd);
+    keys.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn real_bridge_eof_disposes_workerd() {
+    let clock = Arc::new(
+        router_clock::ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+            1_900_000_000_000,
+        ))
+        .unwrap(),
+    );
+    let host = WorkerdHost::open(clock).await.unwrap();
+    let bridge = host.transport.process.with_child(|child| child.id());
+    let workerd = workerd_child(bridge);
+    let detected = Command::new("pgrep")
+        .args(["-x", "workerd"])
+        .output()
+        .unwrap();
+    assert!(
+        detected.status.success(),
+        "the CI orphan check sees a real workerd"
+    );
+    assert!(
+        String::from_utf8(detected.stdout)
+            .unwrap()
+            .lines()
+            .any(|pid| pid.trim() == workerd.to_string())
+    );
+    host.close().await;
+    require_exited(bridge, workerd);
 }
 
 #[tokio::test]
@@ -185,15 +214,7 @@ async fn dropping_host_settles_children_even_when_a_remote_handle_remains() {
         .unwrap(),
     );
     let host = WorkerdHost::open(clock).await.unwrap();
-    let bridge = host
-        .transport
-        .process
-        .child
-        .lock()
-        .unwrap()
-        .as_ref()
-        .unwrap()
-        .id();
+    let bridge = host.transport.process.with_child(|child| child.id());
     let workerd = workerd_child(bridge);
     let organization = "019f0000-0000-7000-8000-00000000d201"
         .to_owned()
@@ -215,19 +236,29 @@ async fn dropping_host_settles_children_even_when_a_remote_handle_remains() {
 
 #[test]
 fn parent_sigkill_and_panic_leave_no_bridge_or_workerd() {
-    for mode in ["sigkill", "panic"] {
-        let selector = format!(
-            "{}::lifecycle_child_owns_real_workerd",
-            module_path!().split_once("::").unwrap().1
-        );
+    let selector = format!(
+        "{}::lifecycle_child_owns_real_workerd",
+        module_path!().split_once("::").unwrap().1
+    );
+    run_parent_death(&selector, &["sigkill", "panic"]);
+}
+
+pub(crate) fn run_parent_death(selector: &str, modes: &[&str]) {
+    for &mode in modes {
         let mut child = Command::new(std::env::current_exe().unwrap())
-            .args(["--exact", &selector, "--nocapture"])
+            .args(["--exact", selector, "--ignored", "--nocapture"])
             .env(CHILD_MODE, mode)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
+            .stderr(Stdio::piped())
             .spawn()
             .unwrap();
+        let stderr = child.stderr.take().unwrap();
+        let drain = std::thread::spawn(move || {
+            let mut result = String::new();
+            BufReader::new(stderr).read_to_string(&mut result).unwrap();
+            result
+        });
         let mut output = BufReader::new(child.stdout.take().unwrap());
         let mut line = String::new();
         let (bridge, workerd) = loop {
@@ -256,6 +287,8 @@ fn parent_sigkill_and_panic_leave_no_bridge_or_workerd() {
             !status.success(),
             "negative-control child unexpectedly passed"
         );
+        // EOF on stderr observes both parent and its inheriting bridge exit.
+        let _ = drain.join().unwrap();
         require_exited(bridge, workerd);
         let mut remainder = String::new();
         output.read_to_string(&mut remainder).unwrap();

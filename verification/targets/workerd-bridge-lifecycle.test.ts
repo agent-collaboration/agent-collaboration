@@ -68,7 +68,7 @@ test("a readiness failure retains its cause when real disposal also rejects", as
     assert.ok(match !== null);
     assert.throws(() => process.kill(Number(match[1]), 0), { code: "ESRCH" });
   } finally {
-    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
     for (const match of diagnostics.matchAll(/WORKERD_OWNED_PID (\d+)/g))
       stopRecordedWorkerd(Number(match[1]));
     child.stdin.destroy();
@@ -119,7 +119,7 @@ test("readiness and command pipe failures dispose the real workerd", async (): P
         `${failedPipe}: workerd must exit`,
       );
     } finally {
-      if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+      if (child.exitCode === null && child.signalCode === null) child.kill("SIGTERM");
       for (const match of diagnostics.matchAll(/WORKERD_OWNED_PID (\d+)/g)) {
         stopRecordedWorkerd(Number(match[1]));
       }
