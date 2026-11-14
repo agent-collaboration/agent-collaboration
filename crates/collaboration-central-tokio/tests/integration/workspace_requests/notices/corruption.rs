@@ -24,15 +24,15 @@ async fn execute(f: &Fixture, sql: &'static str, args: Vec<SqlValue>) {
 async fn invalid_open_window_is_rejected_before_alarm_changes_queue_or_cursor() {
     for (sql, expected_column) in [
         (
-            "UPDATE notification_windows SET due_at='not-a-timestamp'",
+            "UPDATE notification_windows SET due_at='not-a-timestamp' WHERE recipient_actor=?",
             "notification_windows.due_at",
         ),
         (
-            "UPDATE notification_windows SET due_at='2020-01-01T00:00:00Z'",
+            "UPDATE notification_windows SET due_at='2020-01-01T00:00:00Z' WHERE recipient_actor=?",
             "notification_windows.due_at",
         ),
         (
-            "UPDATE notification_windows SET recipient_actor='invalid-uuid'",
+            "UPDATE notification_windows SET recipient_actor='invalid-uuid' WHERE recipient_actor=?",
             "notification_windows.recipient_actor",
         ),
     ] {
@@ -47,11 +47,11 @@ async fn invalid_open_window_is_rejected_before_alarm_changes_queue_or_cursor() 
             args: vec![text(&f.workspace), text(&thread)],
         };
         let before = runtime.statement_host().read(read()).await.unwrap();
-        assert_eq!(before.rows[0][1], SqlValue::Integer(1.try_into().unwrap()));
-        assert_eq!(before.rows[0][2], SqlValue::Integer(1.try_into().unwrap()));
+        assert_eq!(before.rows[0][1], SqlValue::Integer(2.try_into().unwrap()));
+        assert_eq!(before.rows[0][2], SqlValue::Integer(2.try_into().unwrap()));
         assert_eq!(before.rows[0][3], SqlValue::Integer(0.try_into().unwrap()));
         let prior_alarm = runtime.statement_host().alarm();
-        execute(&f, sql, vec![]).await;
+        execute(&f, sql, vec![text(&actor)]).await;
         let error = runtime.on_alarm().await.unwrap_err();
         assert!(
             matches!(error, StoreFailure::Corrupt { reason: CorruptReason::BadValue { column } } if column == expected_column)
@@ -104,6 +104,15 @@ async fn later_drain_statement_failure_rolls_back_notices_windows_and_cursor_the
         })
         .await
         .unwrap();
+    let baseline = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND message_kind='notice'),(SELECT COUNT(*) FROM notification_windows WHERE thread_id=?),(SELECT COUNT(*) FROM notification_window_items)", args: vec![text(&thread), text(&thread)] }).await.unwrap();
+    assert_eq!(
+        baseline.rows,
+        vec![vec![
+            SqlValue::Integer(0.try_into().unwrap()),
+            SqlValue::Integer(1.try_into().unwrap()),
+            SqlValue::Integer(1.try_into().unwrap())
+        ]]
+    );
     let mut held = runtime
         .pause_points()
         .hold(&f.workspace, PausePoint::AfterStoreApplied);
@@ -142,14 +151,7 @@ async fn later_drain_statement_failure_rolls_back_notices_windows_and_cursor_the
     let after_failure = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,drain_due_at,(SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND message_kind='notice'),(SELECT COUNT(*) FROM notification_windows WHERE thread_id=?),(SELECT COUNT(*) FROM notification_window_items) FROM workspace_drains WHERE workspace_id=?", args: vec![text(&thread), text(&thread), text(&f.workspace)] }).await.unwrap();
     assert_eq!(after_failure.rows[0][0], prior.rows[0][0]);
     assert!(matches!(&after_failure.rows[0][1], SqlValue::Text(_)));
-    assert_eq!(
-        &after_failure.rows[0][2..],
-        &[
-            SqlValue::Integer(0.try_into().unwrap()),
-            SqlValue::Integer(0.try_into().unwrap()),
-            SqlValue::Integer(0.try_into().unwrap())
-        ]
-    );
+    assert_eq!(&after_failure.rows[0][2..], &baseline.rows[0][..]);
     execute(&f, "DROP TRIGGER reject_drain_cursor", vec![]).await;
     let result = runtime.drain_workspace(&f.workspace).await.unwrap();
     assert_eq!(result.notices_queued, 1);
@@ -165,11 +167,11 @@ async fn later_drain_statement_failure_rolls_back_notices_windows_and_cursor_the
         &[
             SqlValue::Integer(1.try_into().unwrap()),
             SqlValue::Integer(1.try_into().unwrap()),
-            SqlValue::Integer(1.try_into().unwrap())
+            SqlValue::Integer(2.try_into().unwrap())
         ]
     );
     let duplicate = runtime.statement_host().run_batch(StatementBatch { statements: vec![GuardedStatement { statement: Statement {
-        sql: "INSERT INTO notification_window_items(window_item_id,window_id,change_id,created_at,updated_at) SELECT ?,window_id,change_id,created_at,updated_at FROM notification_window_items", args: vec![text(id::<m::WorkspaceId>(7513))],
+        sql: "INSERT INTO notification_window_items(window_item_id,window_id,change_id,created_at,updated_at) SELECT ?,i.window_id,i.change_id,i.created_at,i.updated_at FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND w.thread_id=?", args: vec![text(id::<m::WorkspaceId>(7513)), text(&observer), text(&thread)],
     }, expect: RowExpectation::Exactly(1) }], alarm: AlarmUpdate::Unchanged }).await;
     assert!(matches!(
         duplicate,
@@ -269,6 +271,18 @@ async fn derived_window_above_alarm_ceiling_preserves_workspace_write_and_rolls_
         })
         .await
         .unwrap();
+    let effects_before = runtime.statement_host().read(Statement {
+        sql: "SELECT (SELECT COUNT(*) FROM notification_windows WHERE recipient_actor=? AND thread_id=?),(SELECT COUNT(*) FROM notification_window_items),(SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND message_kind='notice')",
+        args: vec![text(&recipient), text(&thread), text(&thread)],
+    }).await.unwrap();
+    assert_eq!(
+        effects_before.rows,
+        vec![vec![
+            SqlValue::Integer(0.try_into().unwrap()),
+            SqlValue::Integer(1.try_into().unwrap()),
+            SqlValue::Integer(0.try_into().unwrap())
+        ]]
+    );
     let near_ceiling = chrono::DateTime::from_timestamp_millis(
         collaboration_central_core::MAX_ALARM_UNIX_MILLIS - 30_000,
     )
@@ -322,14 +336,7 @@ async fn derived_window_above_alarm_ceiling_preserves_workspace_write_and_rolls_
         args: vec![text(&recipient), text(&thread), text(&thread), text(&f.workspace)],
     }).await.unwrap();
     assert_eq!(&after.rows[0][..2], &pending_before.rows[0][..]);
-    assert_eq!(
-        &after.rows[0][2..],
-        &[
-            SqlValue::Integer(0.try_into().unwrap()),
-            SqlValue::Integer(0.try_into().unwrap()),
-            SqlValue::Integer(0.try_into().unwrap())
-        ]
-    );
+    assert_eq!(&after.rows[0][2..], &effects_before.rows[0][..]);
     assert_eq!(runtime.inspect_workspace(&f.workspace, Statement { sql: "SELECT (SELECT COUNT(*) FROM changes WHERE thread_id=? AND change_kind='posted'),(SELECT COUNT(*) FROM request_log WHERE request_id=?)", args: vec![text(&thread), text(id::<m::RequestId>(7532))] }).await.unwrap().rows, applied.rows);
     f.host.close().await;
 }

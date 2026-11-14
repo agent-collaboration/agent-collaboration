@@ -47,8 +47,8 @@ async fn invalid_open_window_is_rejected_before_alarm_changes_queue_or_cursor() 
             args: vec![text(&f.workspace), text(&thread)],
         };
         let before = runtime.statement_host().read(read()).await.unwrap();
-        assert_eq!(before.rows[0][1], SqlValue::Integer(1.try_into().unwrap()));
-        assert_eq!(before.rows[0][2], SqlValue::Integer(1.try_into().unwrap()));
+        assert_eq!(before.rows[0][1], SqlValue::Integer(2.try_into().unwrap()));
+        assert_eq!(before.rows[0][2], SqlValue::Integer(2.try_into().unwrap()));
         assert_eq!(before.rows[0][3], SqlValue::Integer(0.try_into().unwrap()));
         let prior_alarm: Option<i64> = runtime.control("raw-alarm-time", &()).await.unwrap();
         assert!(prior_alarm.is_some());
@@ -107,11 +107,19 @@ async fn later_drain_statement_failure_rolls_back_notices_windows_and_cursor_the
     let prior = runtime
         .statement_host()
         .read(Statement {
-            sql: "SELECT drained_through_position FROM workspace_drains WHERE workspace_id=?",
-            args: vec![text(&f.workspace)],
+            sql: "SELECT drained_through_position,(SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND message_kind='notice'),(SELECT COUNT(*) FROM notification_windows WHERE thread_id=?),(SELECT COUNT(*) FROM notification_window_items) FROM workspace_drains WHERE workspace_id=?",
+            args: vec![text(&thread), text(&thread), text(&f.workspace)],
         })
         .await
         .unwrap();
+    assert_eq!(
+        &prior.rows[0][1..],
+        &[
+            SqlValue::Integer(0.try_into().unwrap()),
+            SqlValue::Integer(1.try_into().unwrap()),
+            SqlValue::Integer(1.try_into().unwrap())
+        ]
+    );
     let pause = serde_json::json!({"workspace":f.workspace,"point":"afterStoreApplied"});
     let _: bool = runtime.control("hold", &pause).await.unwrap();
     let pending = tokio::spawn({
@@ -150,14 +158,7 @@ async fn later_drain_statement_failure_rolls_back_notices_windows_and_cursor_the
     let after_failure = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,drain_due_at,(SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND message_kind='notice'),(SELECT COUNT(*) FROM notification_windows WHERE thread_id=?),(SELECT COUNT(*) FROM notification_window_items) FROM workspace_drains WHERE workspace_id=?", args: vec![text(&thread), text(&thread), text(&f.workspace)] }).await.unwrap();
     assert_eq!(after_failure.rows[0][0], prior.rows[0][0]);
     assert!(matches!(&after_failure.rows[0][1], SqlValue::Text(_)));
-    assert_eq!(
-        &after_failure.rows[0][2..],
-        &[
-            SqlValue::Integer(0.try_into().unwrap()),
-            SqlValue::Integer(0.try_into().unwrap()),
-            SqlValue::Integer(0.try_into().unwrap())
-        ]
-    );
+    assert_eq!(&after_failure.rows[0][2..], &prior.rows[0][1..]);
     execute(&f, "DROP TRIGGER reject_drain_cursor", vec![]).await;
     let result = runtime.drain_workspace(&f.workspace).await.unwrap();
     assert_eq!(result.notices_queued, 1);
@@ -173,7 +174,7 @@ async fn later_drain_statement_failure_rolls_back_notices_windows_and_cursor_the
         &[
             SqlValue::Integer(1.try_into().unwrap()),
             SqlValue::Integer(1.try_into().unwrap()),
-            SqlValue::Integer(1.try_into().unwrap())
+            SqlValue::Integer(2.try_into().unwrap())
         ]
     );
     let duplicate = runtime.statement_host().run_batch(StatementBatch { statements: vec![GuardedStatement { statement: Statement {

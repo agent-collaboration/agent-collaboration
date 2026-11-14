@@ -33,7 +33,8 @@ async fn leave_cancels_the_fired_collated_message_but_not_direct_mail() {
     };
     let runtime = f.host.central(&f.caller.organization_id).await;
     f.clock.0.fetch_add(900_000, Ordering::SeqCst);
-    assert_eq!(runtime.on_alarm().await.unwrap().windows_fired, 1);
+    // The observer's join also opened a window for the thread creator.
+    assert_eq!(runtime.on_alarm().await.unwrap().windows_fired, 2);
     let query = || Statement {
         sql: "SELECT message_id,sender,body,state FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice'",
         args: vec![text(&recipient), text(&thread)],

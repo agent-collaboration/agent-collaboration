@@ -213,6 +213,10 @@ async fn interval_catches_up_once_and_after_finishes() {
             automation_id: missing
         })
     );
+    fixture.clock.0.store(
+        (start + chrono::Duration::minutes(35)).timestamp_millis(),
+        Ordering::SeqCst,
+    );
     assert_eq!(runtime.on_alarm().await.unwrap().automations_fired, 0);
     let rows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM automations WHERE state='disabled'),(SELECT COUNT(*) FROM automations WHERE state='done'),(SELECT COUNT(*) FROM messages WHERE message_kind='automation')", args: vec![] }).await.unwrap();
     assert_eq!(

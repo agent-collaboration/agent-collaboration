@@ -94,7 +94,7 @@ async fn out_of_range_request_writes_nothing_and_last_supported_second_is_accept
         rows.rows,
         vec![vec![
             text("active"),
-            text("9999-12-31T23:59:59.000Z"),
+            text(last.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
             central_storage::SqlValue::Integer(0.try_into().unwrap())
         ]]
     );
