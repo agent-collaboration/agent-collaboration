@@ -4,8 +4,8 @@
 
 use crate::statement_store::{self, AlarmPolicy};
 use crate::store_wire::{OwnedStoreCall, StoreAnswer};
+use central_storage::{StoreFailure, StoreReply};
 use collaboration_central_core::ObjectAddress;
-use collaboration_central_core::storage::{StoreFailure, StoreReply};
 use sqlx_durable_object::DoConnection;
 use std::cell::Cell;
 use worker::{DurableObject, Env, Request, Response, Result, State, durable_object, wasm_bindgen};

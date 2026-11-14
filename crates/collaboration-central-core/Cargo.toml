@@ -15,6 +15,7 @@ conformance = []
 test-support = ["sqlx-core/migrate"]
 
 [dependencies]
+central-storage.workspace = true
 fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.118" }
 schemars.workspace = true
 collaboration-central-admin-protocol = { version = "0.1.96", path = "../collaboration-central-admin-protocol" }

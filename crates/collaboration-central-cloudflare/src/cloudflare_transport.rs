@@ -101,11 +101,8 @@ pub(crate) async fn call_store(
     env: &Env,
     workspace: message_board::WorkspaceId,
     call: crate::store_wire::OwnedStoreCall,
-) -> std::result::Result<
-    collaboration_central_core::storage::StoreReply,
-    collaboration_central_core::storage::StoreFailure,
-> {
-    use collaboration_central_core::storage::StoreFailure;
+) -> std::result::Result<central_storage::StoreReply, central_storage::StoreFailure> {
+    use central_storage::StoreFailure;
     let address = ObjectAddress::WorkspaceStore(workspace);
     let stub = stub(env, &address).map_err(|_| StoreFailure::Unavailable)?;
     let body = serde_json::to_vec(&call).map_err(|_| StoreFailure::Unavailable)?;

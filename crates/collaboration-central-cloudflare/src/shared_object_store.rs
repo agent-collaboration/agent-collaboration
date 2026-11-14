@@ -12,9 +12,7 @@
 
 use crate::binding_attachment::BindingAttachment;
 use crate::statement_store::{self, AlarmPolicy, MigrationFailure};
-use collaboration_central_core::storage::{
-    BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreFailure,
-};
+use central_storage::{BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreFailure};
 use collaboration_central_core::{
     AdmissionOrigin, LocalSectionFailure, ObjectHost, RegistrationEdits, RegistrationSnapshot,
     SocketFailure,

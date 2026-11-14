@@ -27,15 +27,15 @@ impl ObjectHost for ScopeHost {
     }
     async fn run_batch(
         &self,
-        _: crate::storage::StatementBatch,
-    ) -> Result<crate::storage::BatchOutcome, crate::storage::StoreFailure> {
-        Err(crate::storage::StoreFailure::Unavailable)
+        _: central_storage::StatementBatch,
+    ) -> Result<central_storage::BatchOutcome, central_storage::StoreFailure> {
+        Err(central_storage::StoreFailure::Unavailable)
     }
     async fn read(
         &self,
-        _: crate::storage::Statement,
-    ) -> Result<crate::storage::ReadOutcome, crate::storage::StoreFailure> {
-        Err(crate::storage::StoreFailure::Unavailable)
+        _: central_storage::Statement,
+    ) -> Result<central_storage::ReadOutcome, central_storage::StoreFailure> {
+        Err(central_storage::StoreFailure::Unavailable)
     }
     fn wake(&self) -> &FixtureIo {
         &self.wake

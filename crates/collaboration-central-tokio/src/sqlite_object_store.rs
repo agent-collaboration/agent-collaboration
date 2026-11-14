@@ -4,7 +4,7 @@
 //! the first batch. Every batch runs in one `BEGIN IMMEDIATE` transaction; a missed guard
 //! or a constraint error rolls the whole batch back. The store knows no business table.
 
-use collaboration_central_core::storage::{
+use central_storage::{
     AlarmUpdate, BatchOutcome, ConstraintKind, CorruptReason, ReadOutcome, SafeInteger, SqlValue,
     Statement, StatementBatch, StoreFailure,
 };

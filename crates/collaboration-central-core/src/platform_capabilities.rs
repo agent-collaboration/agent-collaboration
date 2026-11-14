@@ -8,11 +8,11 @@ use sqlx_core::database::Database;
 use std::collections::BTreeMap;
 use std::{future::Future, sync::Arc};
 
-use crate::storage::{
-    BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
-};
 use crate::{
     AccessJwk, AdmissionOrigin, CentralObservation, SerializedObjectCall, SignatureValidity,
+};
+use central_storage::{
+    BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
 
 pub struct RawJwks {

@@ -3,11 +3,11 @@
 use crate::storage_support::{
     HeldClock, open_platform, read_store, single_integer, texts_in_column, workspace,
 };
-use collaboration_central_core::CentralPlatform;
-use collaboration_central_core::storage::{
+use central_storage::{
     BatchOutcome, RowExpectation, SafeInteger, SqlValue, StatementBatch, StoreCall, StoreFailure,
     StoreReply,
 };
+use collaboration_central_core::CentralPlatform;
 use collaboration_central_core::storage_conformance::{
     FAILING_MIGRATION_FIRST_TABLE, alarm_from_earliest_widget_due, count_owners,
     failing_second_statement_migrator, insert_owner, insert_widget, list_applied_migrations,
@@ -75,7 +75,7 @@ async fn a_migration_failing_on_its_second_statement_leaves_no_partial_schema() 
             workspace(),
             StoreCall::Batch(StatementBatch {
                 statements: vec![insert_owner("owner-1", RowExpectation::Exactly(1))],
-                alarm: collaboration_central_core::storage::AlarmUpdate::Unchanged,
+                alarm: central_storage::AlarmUpdate::Unchanged,
             }),
         )
         .await

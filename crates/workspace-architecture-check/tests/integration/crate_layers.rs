@@ -9,7 +9,14 @@ use serde::Deserialize;
 #[path = "test_support_policy.rs"]
 mod test_support_policy;
 
-const LAYER_POLICY: [(&str, &[&str]); 18] = [
+#[path = "workspace_boundaries.rs"]
+mod workspace_boundaries;
+
+const LAYER_POLICY: [(&str, &[&str]); 22] = [
+    ("workspace-ids", &[]),
+    ("workspace-model", &["workspace-ids"]),
+    ("central-storage", &[]),
+    ("workspace-rules", &["workspace-model", "central-storage"]),
     ("router-clock", &[]),
     ("node-test-fixture", &[]),
     ("ui-preference-store", &[]),
@@ -294,6 +301,8 @@ fn collaboration_crate_layers_point_downward() -> Result<(), Box<dyn std::error:
     graph
         .check_policy()
         .inspect_err(|error| eprintln!("{error}"))?;
+    workspace_boundaries::check_boundaries(&graph)?;
+    workspace_boundaries::check_pure_dependency_tree(&root)?;
     Ok(())
 }
 

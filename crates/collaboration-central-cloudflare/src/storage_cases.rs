@@ -12,8 +12,8 @@ pub use case_object::StorageCaseObject;
 use crate::access_verification::{InvocationLabels, VerificationLayer};
 use crate::platform::CloudflareCentralPlatform;
 use case_steps::CaseStoreCall;
+use central_storage::StoreCall;
 use collaboration_central_core::CentralPlatform;
-use collaboration_central_core::storage::StoreCall;
 use worker::{Env, Headers, Method, Request, RequestInit, Response, Result, js_sys};
 
 const STORAGE_PREFIX: &str = "/test-support/storage/";

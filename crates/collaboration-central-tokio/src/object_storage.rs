@@ -2,9 +2,7 @@
 //! first use, and the alarm time its last committed batch asked for.
 
 use crate::sqlite_object_store::{AlarmChange, SqliteObjectStore};
-use collaboration_central_core::storage::{
-    BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreFailure,
-};
+use central_storage::{BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreFailure};
 use runtime_primitives::SyncTime;
 use sqlx::migrate::Migrator;
 use std::path::PathBuf;

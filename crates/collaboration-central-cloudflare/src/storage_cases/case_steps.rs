@@ -1,10 +1,10 @@
 //! The step vocabulary a workerd case sends, mapped onto core's storage conformance
 //! statements, so the SQL lives in core and the cases only compose it.
 
-use collaboration_central_core::PausePoint;
-use collaboration_central_core::storage::{
+use central_storage::{
     AlarmUpdate, RowExpectation, SafeInteger, SqlValue, Statement, StatementBatch,
 };
+use collaboration_central_core::PausePoint;
 use collaboration_central_core::storage_conformance as conformance;
 use serde::{Deserialize, Serialize};
 use sqlx_core::migrate::Migrator;

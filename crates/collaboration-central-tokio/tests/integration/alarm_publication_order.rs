@@ -1,9 +1,7 @@
 //! Commit and alarm publication share one object turn, forced at the actual commit seam.
 
 use crate::storage_support::{HeldClock, single_integer, workspace};
-use collaboration_central_core::storage::{
-    AlarmUpdate, BatchOutcome, SqlValue, Statement, StatementBatch,
-};
+use central_storage::{AlarmUpdate, BatchOutcome, SqlValue, Statement, StatementBatch};
 use collaboration_central_core::storage_conformance::{
     alarm_from_earliest_widget_due, widgets_migrator,
 };
@@ -31,15 +29,13 @@ async fn publication_order(older_due: Option<i64>, newer_due: Option<i64>) {
             statements: vec![
                 collaboration_central_core::storage_conformance::insert_owner(
                     "alarm-owner",
-                    collaboration_central_core::storage::RowExpectation::Exactly(1),
+                    central_storage::RowExpectation::Exactly(1),
                 ),
                 collaboration_central_core::storage_conformance::insert_widget(
                     "alarm-widget",
                     "alarm-owner",
                     SqlValue::Text("alarm".to_owned()),
-                    SqlValue::Integer(
-                        collaboration_central_core::storage::SafeInteger::new(1).unwrap(),
-                    ),
+                    SqlValue::Integer(central_storage::SafeInteger::new(1).unwrap()),
                     None,
                 ),
             ],
@@ -50,17 +46,15 @@ async fn publication_order(older_due: Option<i64>, newer_due: Option<i64>) {
     assert!(matches!(seeded, BatchOutcome::Applied { .. }));
     let stored_batch = |offset: Option<i64>| {
         let due = offset.map_or(SqlValue::Null, |offset| {
-            SqlValue::Integer(
-                collaboration_central_core::storage::SafeInteger::new(at + offset).unwrap(),
-            )
+            SqlValue::Integer(central_storage::SafeInteger::new(at + offset).unwrap())
         });
         StatementBatch {
-            statements: vec![collaboration_central_core::storage::GuardedStatement {
+            statements: vec![central_storage::GuardedStatement {
                 statement: Statement {
                     sql: "UPDATE widgets SET due_at_ms=? WHERE widget_id='alarm-widget'",
                     args: vec![due],
                 },
-                expect: collaboration_central_core::storage::RowExpectation::Exactly(1),
+                expect: central_storage::RowExpectation::Exactly(1),
             }],
             alarm: alarm_from_earliest_widget_due(),
         }

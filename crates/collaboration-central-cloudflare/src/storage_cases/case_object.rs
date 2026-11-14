@@ -4,9 +4,7 @@
 use super::case_steps::{CaseBatch, CaseMigrator, CasePausePoint, CaseRead};
 use crate::statement_store::{self, AlarmPolicy};
 use crate::store_wire::OwnedStatement;
-use collaboration_central_core::storage::{
-    AlarmUpdate, RowExpectation, SafeInteger, SqlValue, StatementBatch,
-};
+use central_storage::{AlarmUpdate, RowExpectation, SafeInteger, SqlValue, StatementBatch};
 use collaboration_central_core::{
     ClockIds, HeldPause, PausePoint, PausePoints, WorkspaceTurns, storage_conformance,
 };

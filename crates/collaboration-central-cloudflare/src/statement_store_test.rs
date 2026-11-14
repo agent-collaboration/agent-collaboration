@@ -1,5 +1,5 @@
 use super::{alarm_time, constraint_kind, sql_value};
-use collaboration_central_core::storage::{
+use central_storage::{
     ConstraintKind, CorruptReason, ReadOutcome, SafeInteger, SqlValue, StoreFailure,
 };
 use sqlx_durable_object::{DoArgumentValue, DoDatabaseError};

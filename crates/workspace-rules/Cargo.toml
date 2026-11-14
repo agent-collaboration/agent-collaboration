@@ -1,0 +1,17 @@
+[package]
+name = "workspace-rules"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+autotests = false
+
+[dependencies]
+workspace-model.workspace = true
+central-storage.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+
+[lints]
+workspace = true

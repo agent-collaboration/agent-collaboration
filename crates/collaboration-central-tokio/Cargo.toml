@@ -14,6 +14,7 @@ test-support = ["collaboration-central-core/test-support", "conformance", "colla
 conformance = ["collaboration-central-core/conformance", "dep:collaboration-central-conformance", "dep:sqlx-core"]
 
 [dependencies]
+central-storage.workspace = true
 board-sync-protocol = { version = "0.1.96", path = "../board-sync-protocol", optional = true }
 reqwest-websocket = { version = "=0.5.1", optional = true }
 collaboration-central-conformance = { version = "0.1.96", path = "../collaboration-central-conformance", optional = true, default-features = false }

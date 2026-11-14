@@ -1,6 +1,10 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/workspace-ids",
+    "crates/workspace-model",
+    "crates/workspace-rules",
+    "crates/central-storage",
     "crates/router-clock",
     "crates/tailnet-verification-host",
     "crates/board-central-test-support",
@@ -68,6 +72,9 @@ license = "MIT OR Apache-2.0"
 publish = false
 
 [workspace.dependencies]
+workspace-ids = { path = "crates/workspace-ids", version = "0.1.149" }
+workspace-model = { path = "crates/workspace-model", version = "0.1.149" }
+central-storage = { path = "crates/central-storage", version = "0.1.149" }
 router-clock = { path = "crates/router-clock", version = "0.1.136" }
 fleet-sync-protocol = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "b75d072c116afa46cfa82facd34db6317f380687" }
 durable-steps = { version = "0.4.0", git = "https://github.com/agent-collaboration/agent-fleet-sync.git", rev = "b75d072c116afa46cfa82facd34db6317f380687", default-features = false }

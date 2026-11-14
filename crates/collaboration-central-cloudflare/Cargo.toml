@@ -19,6 +19,7 @@ conformance-faults = ["conformance", "durable-steps/test-support"]
 test-support = ["collaboration-central-core/test-support", "dep:sqlx"]
 
 [dependencies]
+central-storage.workspace = true
 axum = { version = "0.8.9", default-features = false, features = ["json"] }
 http = "1.4.1"
 tower-service = "0.3.3"

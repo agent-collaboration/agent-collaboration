@@ -3,7 +3,6 @@
 
 mod clock_ids;
 pub mod identity_contract;
-pub mod storage;
 #[cfg(feature = "test-support")]
 pub mod storage_conformance;
 pub use clock_ids::ClockIds;
