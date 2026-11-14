@@ -22,8 +22,15 @@ cat > "$fake_tools/security" <<'EOF'
 #!/usr/bin/env bash
 if [[ -z "${FAKE_NO_IDENTITY:-}" ]]; then
   echo '  1) ABCDEF0123456789 "Developer ID Application: Test (974QD84WVC)"'
+  echo '  2) FEDCBA9876543210 "Developer ID Application: Later (974QD84WVC)"'
 fi
-echo '     1 valid identities found'
+# Exceed pipe capacity after the first match. An early-exiting reader reliably
+# breaks the producer; consuming all input must still select only the first ID.
+for ((line=0; line<4096; line++)); do
+  printf '%s\n' '     trailing identity details that must be consumed without replacing the first match'
+done
+if [[ -n "${FAKE_SECURITY_FAIL:-}" ]]; then exit 17; fi
+echo '     2 valid identities found'
 EOF
 # codesign: appends a "# SIGNED <identifier>" comment to the file it signs and
 # reports that identifier back for -dv.
@@ -45,6 +52,7 @@ case "$1" in
     identifier="" file=""
     while [[ $# -gt 0 ]]; do
       case "$1" in
+        --sign) [[ "$2" == ABCDEF0123456789 ]] || exit 19; shift 2 ;;
         --identifier) identifier="$2"; shift 2 ;;
         --*) shift ;;
         *) file="$1"; shift ;;
@@ -155,6 +163,18 @@ grep -q 'refusing to run unsigned integration-fedcba9876543210' "$fixture_root/r
 [[ ! -s "$fixture_root/refused.out" ]]
 if FAKE_NO_IDENTITY=1 "$runner" --sign-only "$profile/deps/integration-fedcba9876543210" 2> /dev/null; then
   echo "--sign-only reported success without signing" >&2
+  exit 1
+fi
+
+# A producer error after a matching identity must not be hidden by the parser.
+make_executable "$profile/deps/security-error-0123456789abcdef"
+if FAKE_SECURITY_FAIL=1 "$runner" --sign-only "$profile/deps/security-error-0123456789abcdef" > "$fixture_root/security.out" 2> "$fixture_root/security.err"; then
+  echo "runner signed after security failed" >&2
+  exit 1
+fi
+[[ ! -s "$fixture_root/security.out" ]]
+if grep -q '^# SIGNED ' "$profile/deps/security-error-0123456789abcdef"; then
+  echo "security failure signed an executable" >&2
   exit 1
 fi
 

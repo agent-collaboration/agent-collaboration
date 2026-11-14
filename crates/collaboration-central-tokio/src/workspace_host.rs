@@ -223,6 +223,31 @@ impl TokioWorkspaceHost {
             .request_central(caller, request)
             .await
     }
+    /// Reads an already opened fixture organization without creating a store.
+    #[cfg(feature = "test-support")]
+    pub async fn observe_signin_organization(
+        &self,
+        organization: &OrganizationId,
+    ) -> Result<collaboration_central_core::signin_test_observation::SignInObservation, StoreFailure>
+    {
+        use collaboration_central_core::signin_test_observation::{
+            SignInObservation, observe_signin_organization,
+        };
+        let runtime = self.orgs.lock().await.get(organization).cloned();
+        match runtime {
+            Some(runtime) => {
+                observe_signin_organization(runtime.statement_host(), organization).await
+            }
+            None => Ok(SignInObservation::nothing_stored()),
+        }
+    }
+
+    #[cfg(feature = "test-support")]
+    /// Lists already opened fixture organizations without opening another store.
+    pub async fn signin_live_organizations(&self) -> Vec<OrganizationId> {
+        self.orgs.lock().await.keys().cloned().collect()
+    }
+
     pub async fn close(&self) {
         let alarms = std::mem::take(&mut *self.alarms.lock().await);
         for alarm in alarms {
