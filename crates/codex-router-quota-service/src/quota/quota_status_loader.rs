@@ -178,7 +178,10 @@ pub async fn quota_status_report(
         attach_history_estimates_to_display_windows(
             quota_history_state,
             account.account_id(),
-            USER_QUOTA_ROUTE_BAND,
+            match account.provider() {
+                Provider::Openai => USER_QUOTA_ROUTE_BAND,
+                Provider::Claude => RouteBand::ClaudeMessages.as_str(),
+            },
             now_unix_seconds,
             &mut display_windows,
         )

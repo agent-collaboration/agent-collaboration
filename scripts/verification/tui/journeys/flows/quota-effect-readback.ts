@@ -425,7 +425,7 @@ export function checkQuotaEffectReceipt(options: {
 			scenario === 'login-succeeded' &&
 			!receipt.publishedPoses
 				.at(-1)
-				?.rows.some((row) => row.accountId === target.accountId && row.loginState === 'NotRequired')
+				?.rows.some((row) => row.accountId === target.accountId && row.loginState === 'SignedIn')
 		)
 			failures.push('login returned with stale account report');
 	}

@@ -36,7 +36,7 @@ function observation(percentage: string): ReturnType<typeof quotaObservationSche
 					provider: 'openai',
 					enabled: true,
 					status: 'Account(Available)',
-					loginState: 'NotRequired',
+					loginState: 'SignedIn',
 					weeklyWindow: percentage + ' left',
 					detailsWeeklyWindow: 'week ' + percentage + ' left',
 					resetCredits: '2 resets',

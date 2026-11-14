@@ -26,3 +26,46 @@ fn background_receipt_does_not_guess_or_accept_ambiguous_handles() {
         assert!(message.contains("claude agents") && message.contains("do not start another copy"));
     }
 }
+
+#[test]
+fn resume_plans_preserve_every_argument_without_changing_native_mode() {
+    let arguments = vec![
+        OsString::from("--model"),
+        OsString::from("haiku"),
+        OsString::from("--name"),
+        OsString::from("東京 --bg value"),
+        OsString::from("--unknown-native-option"),
+    ];
+    let cases = [
+        (
+            ClaudeResumeMode::Foreground {
+                session_id: "session".to_owned(),
+            },
+            vec![OsString::from("--resume"), OsString::from("session")],
+        ),
+        (
+            ClaudeResumeMode::Attach {
+                job_handle: "deadbeef".to_owned().try_into().unwrap(),
+            },
+            vec![OsString::from("attach"), OsString::from("deadbeef")],
+        ),
+        (
+            ClaudeResumeMode::RestartBackground {
+                session_id: "session".to_owned(),
+            },
+            vec![
+                OsString::from("--bg"),
+                OsString::from("--resume"),
+                OsString::from("session"),
+            ],
+        ),
+    ];
+    for (mode, mut expected) in cases {
+        let plan = ClaudeResumePlan {
+            working_directory: PathBuf::from("/unused"),
+            mode,
+        };
+        expected.extend_from_slice(&arguments);
+        assert_eq!(plan.arguments(&arguments), expected);
+    }
+}

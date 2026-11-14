@@ -186,16 +186,18 @@ async fn normal_short_browse_groups_retain_alpha_and_return_exactly() {
     }
     assert_eq!(
         reference_rows.len(),
-        35,
+        37,
         "independent natural row count: {reference_rows:?}"
     );
-    assert_eq!(reference_rows[10], (true, "Weekly pace".to_owned()));
-    assert_eq!(reference_rows[12], (true, "⏳".to_owned()));
-    assert_eq!(reference_rows[13], (true, "Extra".to_owned()));
-    assert_eq!(reference_rows[15], (true, "62.5k credits".to_owned()));
-    assert_eq!(reference_rows[16], (true, "2 resets".to_owned()));
-    assert_eq!(reference_rows[32], (false, "Extra".to_owned()));
-    assert_eq!(reference_rows[34], (false, "2 resets".to_owned()));
+    assert_eq!(reference_rows[5], (true, "Signed in".to_owned()));
+    assert_eq!(reference_rows[11], (true, "Weekly pace".to_owned()));
+    assert_eq!(reference_rows[13], (true, "⏳".to_owned()));
+    assert_eq!(reference_rows[14], (true, "Extra".to_owned()));
+    assert_eq!(reference_rows[16], (true, "62.5k credits".to_owned()));
+    assert_eq!(reference_rows[17], (true, "2 resets".to_owned()));
+    assert_eq!(reference_rows[25], (false, "Signed in".to_owned()));
+    assert_eq!(reference_rows[34], (false, "Extra".to_owned()));
+    assert_eq!(reference_rows[36], (false, "2 resets".to_owned()));
     assert!(
         !reference_rows
             .iter()
@@ -225,10 +227,10 @@ async fn normal_short_browse_groups_retain_alpha_and_return_exactly() {
         let visible = body_bottom - body_top;
         for (reference_row_slice, literals) in [
             (
-                17 - visible..17,
+                18 - visible..18,
                 &["Extra", "62.5k credits", "2 resets"][..],
             ),
-            (10..10 + visible, &["Weekly pace", "⏳"][..]),
+            (11..11 + visible, &["Weekly pace", "⏳"][..]),
         ] {
             let pose_canvas = reach_normal_short_group(
                 &sender,

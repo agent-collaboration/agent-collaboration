@@ -364,7 +364,7 @@ test('actual login receipt must retain A, restored terminal, exact exit and a fr
 			browseAccountId: 'effect-account-0',
 			listSelection: 'effect-account-0',
 			captured: null,
-			rows: [{ accountId: 'effect-account-0', loginState: 'NotRequired' }],
+			rows: [{ accountId: 'effect-account-0', loginState: 'SignedIn' }],
 		},
 	];
 	receipt.nativeDispatch = [

@@ -137,6 +137,8 @@ pub(crate) fn fixture_scenario_model(scenario: FixtureScenario) -> QuotaStatusVi
         };
     model.header.credential_notice = Some("Credentials locked".to_owned());
     for row in &mut model.rows {
+        row.login_state = codex_router_quota_service::quota_display_model::QuotaLoginState::Unknown;
+        row.details.login = "Sign-in unknown · credentials locked".to_owned();
         row.status = codex_router_quota_service::quota_display_facts::QuotaRowStatus::CredentialUnavailable {
             notice: "Credentials locked".to_owned(),
         };

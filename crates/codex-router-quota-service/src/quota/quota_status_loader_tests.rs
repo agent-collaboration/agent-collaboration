@@ -11,6 +11,85 @@ use tempfile::TempDir;
 
 use super::*;
 
+#[tokio::test]
+async fn claude_pace_uses_its_provider_history_and_keeps_insufficient_samples_honest() {
+    use codex_router_core::route_profile::WindowKind;
+    let directory = TempDir::new().expect("quota history root");
+    let router_root = directory.path();
+    let state = AsyncSqliteStateStore::open(&codex_router_state::provider_proxy_database_path(
+        router_root,
+    ))
+    .await
+    .expect("open state");
+    let account_id = AccountId::new("claude-history").expect("account id");
+    state
+        .upsert_account(
+            &AccountRecord::new(
+                Provider::Claude,
+                account_id.clone(),
+                "claude-history",
+                AccountStatus::Enabled,
+            )
+            .with_active_credential_generation(1),
+        )
+        .await
+        .expect("save account");
+    for (observed_at, headroom) in [(1_000, 80), (1_600, 79), (2_200, 78)] {
+        let observation = WindowObservation::new(
+            WindowObservationProps::new(
+                account_id.clone(),
+                WindowKind::Weekly,
+                headroom * 100,
+                observed_at,
+            )
+            .with_reset_unix_seconds(100_000)
+            .with_fresh_until_unix_seconds(3_000),
+        )
+        .expect("valid observation");
+        state
+            .record_window_observation(&observation, || observed_at)
+            .await
+            .expect("save observation");
+        let history = crate::quota::PersistedQuotaHistoryObservation::new(
+            account_id.clone(),
+            "claude-history",
+            RouteBand::ClaudeMessages.as_str(),
+            V1_WEEKLY_WINDOW_SECONDS,
+            observed_at,
+            headroom,
+        )
+        .with_reset_unix_seconds(100_000)
+        .with_refresh_outcome(crate::quota::QuotaHistoryRefreshOutcome::Success);
+        state
+            .append_quota_history_observation(&history)
+            .await
+            .expect("save provider history");
+        let report = quota_status_report(
+            &state,
+            &state.list_accounts().await.expect("accounts"),
+            false,
+            observed_at,
+            false,
+        )
+        .await
+        .expect("report");
+        let row = &report.rows()[0];
+        let pace = row.weekly_pace.expect("weekly pace");
+        if observed_at < 2_200 {
+            assert_eq!(pace.aggregate_burn_basis_points_per_hour, None);
+            let view = super::super::quota_status_view_model(&report, report.rows(), 120);
+            assert_eq!(
+                view.rows[0].reset_pace.unavailable_reason.as_deref(),
+                Some("collecting quota samples")
+            );
+        } else {
+            assert_eq!(pace.aggregate_burn_basis_points_per_hour, Some(600));
+            assert_eq!(pace.confidence, crate::quota::QuotaRunRateConfidence::Low);
+        }
+    }
+    state.close().await.expect("close state");
+}
+
 #[path = "quota_status_recovery_tests.rs"]
 mod recovery_tests;
 

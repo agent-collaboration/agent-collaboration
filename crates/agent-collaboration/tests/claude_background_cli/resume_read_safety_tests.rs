@@ -76,7 +76,6 @@ fn picker_terminal_preparation_child() -> Result<(), Box<dyn std::error::Error>>
         mode,
         std::path::Path::new(request.service_directory.as_str()),
         None,
-        &[],
     )?;
     Ok(())
 }
@@ -284,5 +283,73 @@ async fn explicit_fork_keeps_its_existing_policy_when_peers_are_unavailable() {
         calls[0].arguments,
         ["--bg", "--resume", SESSION, "--fork-session"]
     );
+    api.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn picker_claude_resume_forwards_captured_arguments_without_dropping_them() {
+    for state in ["working", "stopped"] {
+        let fixture = ClaudeProcessFixture::new().await.unwrap();
+        let api = serve_job(&fixture, state).unwrap();
+        let arguments = [
+            "--model",
+            "haiku",
+            "--effort",
+            "low",
+            "--name",
+            "東京 --bg value",
+        ];
+        let mut request = resume_request(&fixture, SESSION);
+        request["operation"]["action"]["arguments"] =
+            json!(arguments.map(std::ffi::OsString::from));
+        let output = picker_command(&fixture, SESSION)
+            .unwrap()
+            .env("CLAUDE_PICKER_REQUEST", request.to_string())
+            .output()
+            .await
+            .unwrap();
+        child_execution::assert_one_test_executed(&output);
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let calls = invocations(&fixture).unwrap();
+        let mut expected = if state == "stopped" {
+            vec!["--bg", "--resume", SESSION]
+        } else {
+            vec!["attach", "deadbeef"]
+        };
+        expected.extend(arguments);
+        assert_eq!(calls[0].arguments, expected);
+        assert_eq!(calls.len(), if state == "stopped" { 2 } else { 1 });
+        assert!(!String::from_utf8_lossy(&output.stdout).contains("saved settings"));
+        api.stop().await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn source_claude_resume_forwards_arguments_to_one_background_launch() {
+    let fixture = ClaudeProcessFixture::new().await.unwrap();
+    let api = serve_job(&fixture, "stopped").unwrap();
+    let arguments = ["--model", "haiku", "--name", "東京 --bg value"];
+    let mut request = resume_request(&fixture, SESSION);
+    request["operation"]["action"]["arguments"] = json!(arguments.map(std::ffi::OsString::from));
+    let output = attach_command(&fixture)
+        .args(["--source-request-v1", &request.to_string()])
+        .output()
+        .await
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let calls = invocations(&fixture).unwrap();
+    assert_eq!(calls.len(), 1);
+    let mut expected = vec!["--bg", "--resume", SESSION];
+    expected.extend(arguments);
+    assert_eq!(calls[0].arguments, expected);
+    assert_eq!(calls[0].working_directory, fixture.working_directory);
     api.stop().await.unwrap();
 }

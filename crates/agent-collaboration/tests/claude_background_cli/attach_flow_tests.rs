@@ -266,31 +266,47 @@ async fn local_claude_stopped_session_resumes_then_attaches_the_printed_handle()
 }
 
 #[tokio::test]
-async fn local_claude_resume_overrides_are_rejected_before_any_child_launch() {
-    let fixture = ClaudeProcessFixture::new().await.unwrap();
-    let output = attach_command(&fixture)
-        .args([
-            "--provider",
-            "claude",
-            "--id",
-            SESSION,
-            "--",
+async fn local_claude_resume_forwards_harness_arguments_once() {
+    for (state, prefix) in [
+        ("working", vec!["attach", "deadbeef"]),
+        ("stopped", vec!["--bg", "--resume", SESSION]),
+    ] {
+        let fixture = ClaudeProcessFixture::new().await.unwrap();
+        let api = serve_job(&fixture, state).unwrap();
+        let arguments = [
             "--model",
             "claude-haiku-5-5",
-        ])
-        .output()
-        .await
-        .unwrap();
-    assert!(!output.status.success());
-    assert!(
-        invocations(&fixture).unwrap().is_empty(),
-        "override flags must not create a copy"
-    );
-    let message = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        message.contains("without them to continue this session") && message.contains("Fork"),
-        "{message}"
-    );
+            "--effort",
+            "low",
+            "--name",
+            "literal --bg value",
+            "--permission-mode",
+            "default",
+        ];
+        let output = attach_command(&fixture)
+            .args(["--provider", "claude", "--id", SESSION, "--"])
+            .args(arguments)
+            .output()
+            .await
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let calls = invocations(&fixture).unwrap();
+        let mut expected = prefix;
+        expected.extend(arguments);
+        assert_eq!(calls[0].arguments, expected);
+        assert_eq!(calls.len(), if state == "stopped" { 2 } else { 1 });
+        if state == "stopped" {
+            assert_eq!(calls[1].arguments, ["attach", "a1b2c3d4"]);
+        }
+        for call in calls {
+            assert_eq!(call.working_directory, fixture.working_directory);
+        }
+        api.stop().await.unwrap();
+    }
 }
 
 #[tokio::test]
@@ -384,6 +400,7 @@ async fn local_claude_terminal_handoff_does_not_retarget_a_captured_directory() 
         ClaudeTerminalRequest {
             action: ClaudeTerminalAction::Resume {
                 session_id: SESSION,
+                arguments: &[],
             },
             working_directory: Some(&fixture.working_directory),
         },
@@ -393,5 +410,38 @@ async fn local_claude_terminal_handoff_does_not_retarget_a_captured_directory() 
     let error = result.expect_err("a stale captured directory must be rejected, not replaced");
     assert!(error.to_string().contains("directory changed"), "{error}");
     assert!(invocations(&fixture).unwrap().is_empty());
+    api.stop().await.unwrap();
+}
+
+#[tokio::test]
+async fn rejected_claude_resume_arguments_are_reported_without_retry_or_attach() {
+    let fixture = ClaudeProcessFixture::new().await.unwrap();
+    let api = serve_job(&fixture, "stopped").unwrap();
+    let output = attach_command(&fixture)
+        .env("CLAUDE_FIXTURE_EXIT", "21")
+        .env("CLAUDE_FIXTURE_STDERR", "native option rejected")
+        .args([
+            "--provider",
+            "claude",
+            "--id",
+            SESSION,
+            "--",
+            "--unknown-native-option",
+        ])
+        .output()
+        .await
+        .unwrap();
+    assert!(!output.status.success());
+    let calls = invocations(&fixture).unwrap();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(
+        calls[0].arguments,
+        ["--bg", "--resume", SESSION, "--unknown-native-option"]
+    );
+    let error = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        error.contains("21") && error.contains("native option rejected"),
+        "{error}"
+    );
     api.stop().await.unwrap();
 }
