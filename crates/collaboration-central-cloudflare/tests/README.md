@@ -26,8 +26,18 @@ bundle marker check.
 `integration/main.rs` is the business oracle. Its Rust cases drive typed semantic
 requests, fixture controls and actual owning-store reads through HTTP to the compiled
 Worker's `CentralObject` and `WorkspaceStoreObject`. The TypeScript bridge at
-`support/workerd-bridge.mts` only starts the existing pinned loader, reports its
-loopback origin and closes it; it has no business assertions or fabricated replies.
+`support/workerd-bridge.mts` starts the existing pinned loader, reports its
+loopback origin, forwards fixture clock/observation commands and closes it;
+Rust owns business assertions and signing.
+
+Ordinary bridge mode installs no launcher clock binding, preserving production
+request-entry concurrency for the existing Worker cases. Launcher controls require
+`--launcher-time-ms <milliseconds>` before readiness. Only that mode installs the
+clock binding; each object instance samples it on first touch, then receives live
+time pushes. The first-touch outside await is a named test-only difference; it is
+absent from ordinary mode and production. A cold object samples the current cell.
+Invalid time input is refused before any effect. A mid-push transport failure can
+leave time partly applied, fails the run, and has no retry or rollback machinery.
 
 From the repository root:
 
@@ -49,6 +59,12 @@ races and lost replies after actual apply. Person context is fixture-stamped;
 the verified-person sign-in cases use their separate private-link suite below.
 Machine login and Router Host enforcement retain their later-slice boundaries. The existing generic storage
 and driver cases stay in the verification package.
+
+`organization_signin::launcher_controls` drives the actual bridge child over stdin
+and stderr: unknown-org observation stays read-only, signed provisioning and renewal
+read the shared clock for live and future organizations, and a new bridge process
+starts with empty persistence. Raw fixture statements are compared without dumping
+their bytes into assertion failures. The existing integration command runs it.
 
 `workspace_requests::mail` and `::notices` exercise central queue, window, drain and
 wake/automation state through real platform alarm callbacks. Test-only controls arm
