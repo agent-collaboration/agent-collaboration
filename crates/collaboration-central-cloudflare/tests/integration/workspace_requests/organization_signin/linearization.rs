@@ -121,7 +121,7 @@ async fn provisioning_first_stamp_arms_pending_wake_and_actual_alarm_fires_once(
     use central_storage::SqlValue;
     let f = Fixture::new().await;
     let runtime = f.runtime().await;
-    let due = chrono::DateTime::from_timestamp(NOW_SECONDS + 60, 0).unwrap();
+    let due = chrono::DateTime::from_timestamp((NOW_SECONDS.div_euclid(300) + 1) * 300, 0).unwrap();
     let target = workspace_model::SessionAddress {
         machine_id: "019f0000-0000-7000-8000-00000000d222".parse().unwrap(),
         endpoint: "codex-local".to_owned().try_into().unwrap(),
@@ -160,7 +160,13 @@ async fn provisioning_first_stamp_arms_pending_wake_and_actual_alarm_fires_once(
     assert_eq!(f.provision().await.0, 200);
     let armed: Option<i64> = runtime.control("raw-alarm-time", &()).await.unwrap();
     assert_eq!(armed, Some(due.timestamp_millis()));
-    f.clock.advance(std::time::Duration::from_secs(60)).unwrap();
+    f.clock
+        .advance(
+            (due - chrono::DateTime::from_timestamp(NOW_SECONDS, 0).unwrap())
+                .to_std()
+                .unwrap(),
+        )
+        .unwrap();
     assert_eq!(runtime.on_alarm().await.unwrap().wakes_fired, 1);
     assert_eq!(runtime.on_alarm().await.unwrap().wakes_fired, 0);
     let rows=f.read("SELECT (SELECT COUNT(*) FROM wakes WHERE state='done'),(SELECT COUNT(*) FROM messages WHERE message_kind='wake')").await;

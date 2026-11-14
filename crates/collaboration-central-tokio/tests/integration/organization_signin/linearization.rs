@@ -167,7 +167,11 @@ async fn provisioning_the_first_stamp_activates_a_pending_wake_without_manual_al
         caller: workspace_model::Caller::Session(target.clone()),
         credential_hash: "signin-fixture-hash".into(),
     };
-    let due = f.clock.utc_now() + chrono::Duration::seconds(60);
+    let due = chrono::DateTime::from_timestamp(
+        (f.clock.utc_now().timestamp().div_euclid(300) + 1) * 300,
+        0,
+    )
+    .ok_or("wake grid mark exceeds timestamp range")?;
     let answer = f
         .host
         .request_central(
@@ -209,7 +213,7 @@ async fn provisioning_the_first_stamp_activates_a_pending_wake_without_manual_al
                 )),
         )
         .await;
-    f.clock.advance(Duration::from_secs(60))?;
+    f.clock.advance((due - f.clock.utc_now()).to_std()?)?;
     alarm.wait_for(|alarm| alarm.is_none()).await?;
     assert_eq!(
         f.rows(
