@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>D1 Auto mode</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content" src="./navigation.json"></ex-nav>
+<ex-document id="content">
+<h1>D1 · Auto mode</h1>
+<p><strong>What you'll see:</strong> sessions the Router starts get on with routine work. Claude, Codex and Cursor start in auto, each session's own scratch folder is writable, and anything outside the project becomes a question instead of a silent refusal. Smallest deliverable; ships first.</p>
+
+<section id="scope">
+<h2>What it covers</h2>
+<ex-mermaid id="d1-scope" label="D1 scope"><script type="text/plain">
+flowchart LR
+  START[session start, no mode] --> PLAN[PermissionModePlan per agent]
+  PLAN --> C[Claude: mode auto + scratch folder]
+  PLAN --> X[Codex: workspace-write + reviewer = Router]
+  PLAN --> U[Cursor: agent mode + Router allows in-folder file actions]
+  C & X & U --> REP[start/show report requested vs actual mode + reason]
+</script></ex-mermaid>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Needs</th><th>Rules</th><th>Design</th></tr></thead>
+<tbody>
+<tr><td><a href="requirements.html#U3">U3</a> Auto by default</td><td><a href="specification.html#R3">R3</a> <a href="specification.html#R4">R4</a> <a href="specification.html#R5">R5</a> <a href="specification.html#R7">R7</a></td><td><a href="program-design.html#auto">Auto permission mode</a></td></tr>
+<tr><td><a href="requirements.html#U4">U4</a> No silent refusal (local part)</td><td><a href="specification.html#R6">R6</a></td><td><a href="program-design.html#approvals">Claude denial → approval</a></td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="changes">
+<h2>What changes, where</h2>
+<ex-mermaid id="d1-changes" label="Owners touched"><script type="text/plain">
+flowchart TB
+  A[acp-provider-adapters<br/>claude_behavior · cursor_behavior: mode plan, fallback, in-folder allow] 
+  B[acp-client-runtime<br/>provider_connection_task: additionalDirectories on session/new<br/>provider_setting_application: default auto]
+  C[codex-acp-adapter<br/>session_creation: approvalsReviewer = user]
+  D[codex-router-host<br/>claude launch environment, if needed · ordered with Lead A]
+</script></ex-mermaid>
+<p>No storage change. The existing interaction store records any approval raised.</p>
+</section>
+
+<section id="depends">
+<h2>Waits on</h2>
+<ul>
+<li>Experiment E2 (Claude retry after approval) and E3 (which Codex actions ask). E1 is done: Cursor's ACP path ignores auto-review, so Cursor uses agent mode.</li>
+<li>Nothing from central or the Protocol Lead.</li>
+</ul>
+</section>
+
+<section id="proof">
+<h2>How it's proven</h2>
+<p><strong><a href="verification.html#done-d1">Done means: the full checklist</a>.</strong> Live, on a debug Router with Claude (Haiku), Codex (Luna) and Cursor (only with your per-use approval): start with no mode, read the agent's own mode, create, write and delete in temp without a question, and an outside write becomes an approval. Focused tests for mode names and the per-agent plan. <a href="verification.html#pb-auto">Details</a>.</p>
+</section>
+
+<section id="seats">
+<h2>Who builds it</h2>
+<p>One Opus Implementer and one Sol Verifier, then Lead acceptance, a Sol Reviewer, and your merge.</p>
+</section>
+</ex-document>
+</body>
+</html>
