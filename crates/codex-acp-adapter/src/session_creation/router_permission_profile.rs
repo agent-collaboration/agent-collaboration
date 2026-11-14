@@ -39,6 +39,8 @@ const fn parent_profile(access: RouterAccess) -> &'static str {
 /// beyond what the parent profile already grants.
 pub(super) struct RouterSessionProfile {
     access: RouterAccess,
+    /// The session's scratch folder as native sees it; also its shell `TMPDIR`.
+    scratch: String,
     writable_roots: BTreeSet<String>,
     read_only_exceptions: BTreeSet<String>,
 }
@@ -95,6 +97,20 @@ impl HostLocations {
             symlinked_locations,
         })
     }
+}
+
+/// `:workspace` grants native's special `:tmpdir` and `:slash_tmp` paths; a
+/// workspace-write session reads them only, so the system `$TMPDIR` and `/tmp`
+/// are not granted (R4). `:read-only` grants neither, and write-restricted
+/// keeps its explicit temporary grants.
+fn withheld_temporary_directories(access: RouterAccess) -> impl Iterator<Item = (String, Value)> {
+    let withheld: &[&str] = match access {
+        RouterAccess::WorkspaceWrite => &[":tmpdir", ":slash_tmp"],
+        RouterAccess::WriteRestricted => &[],
+    };
+    withheld
+        .iter()
+        .map(|special| ((*special).to_owned(), json!("read")))
 }
 
 /// The tool locations an access mode may write.
@@ -187,6 +203,7 @@ impl RouterSessionProfile {
             .collect();
         Self {
             access,
+            scratch: scratch.to_string_lossy().into_owned(),
             writable_roots,
             read_only_exceptions,
         }
@@ -208,8 +225,9 @@ impl RouterSessionProfile {
                     .iter()
                     .map(|path| (path.clone(), json!("read"))),
             )
+            .chain(withheld_temporary_directories(self.access))
             .collect::<Map<_, _>>();
-        Map::from_iter([
+        let mut config = Map::from_iter([
             ("default_permissions".to_owned(), json!(profile)),
             (
                 format!("permissions.{profile}.extends"),
@@ -219,7 +237,17 @@ impl RouterSessionProfile {
                 format!("permissions.{profile}.filesystem"),
                 Value::Object(filesystem),
             ),
-        ])
+        ]);
+        if self.access == RouterAccess::WorkspaceWrite {
+            // Temporary files of git, cargo or pnpm land in the session's own
+            // folder instead of asking. One dotted key leaves the user's own
+            // `set` entries in place.
+            config.insert(
+                "shell_environment_policy.set.TMPDIR".to_owned(),
+                json!(self.scratch),
+            );
+        }
+        config
     }
 
     /// Reports mismatched or unavailable permission fields without refusing setup.
@@ -240,15 +268,21 @@ impl RouterSessionProfile {
         let network_access = response
             .pointer("/sandbox/networkAccess")
             .and_then(Value::as_bool);
+        // R4: a workspace-write sandbox must exclude both system temporary
+        // directories; native reports that it does through these two flags.
+        let temporary_directories_withheld = self.access != RouterAccess::WorkspaceWrite
+            || ["/sandbox/excludeTmpdirEnvVar", "/sandbox/excludeSlashTmp"]
+                .iter()
+                .all(|flag| response.pointer(flag).and_then(Value::as_bool) == Some(true));
         // Keep exact comparisons as evidence. Missing and malformed values differ too.
-        // Temporary-directory flags and the invisible proxy state are not compared.
+        // The invisible proxy state is not compared.
         [
             (
                 profile_id != Some(self.name()),
                 PermissionDifference::Profile,
             ),
             (
-                sandbox_type != Some("workspaceWrite"),
+                sandbox_type != Some("workspaceWrite") || !temporary_directories_withheld,
                 PermissionDifference::Sandbox,
             ),
             (
@@ -302,8 +336,8 @@ mod tests {
                 "type":"workspaceWrite",
                 "writableRoots":roots,
                 "networkAccess":network_access,
-                "excludeTmpdirEnvVar":false,
-                "excludeSlashTmp":false
+                "excludeTmpdirEnvVar":true,
+                "excludeSlashTmp":true
             }
         })
     }
@@ -357,6 +391,28 @@ mod tests {
             assert_eq!(restricted_filesystem[root], "write");
             assert!(!workspace_filesystem.contains_key(root));
         }
+    }
+
+    /// Oracle: R4 (only the session's scratch folder, not the system $TMPDIR or
+    /// /tmp) under workspace-write, and the Lead's TMPDIR decision (push 01a1da9b).
+    #[test]
+    fn workspace_write_withholds_system_temporary_directories_and_points_tmpdir_at_scratch() {
+        // Arrange
+        let workspace = profile(RouterAccess::WorkspaceWrite).native_config();
+        let restricted = profile(RouterAccess::WriteRestricted).native_config();
+
+        // Act
+        let workspace_filesystem = filesystem(&workspace, "router-workspace-write");
+        let restricted_filesystem = filesystem(&restricted, "router-write-restricted");
+
+        // Assert: the `:workspace` parent's temporary-directory writes become reads.
+        assert_eq!(workspace_filesystem[":tmpdir"], "read");
+        assert_eq!(workspace_filesystem[":slash_tmp"], "read");
+        assert_eq!(workspace["shell_environment_policy.set.TMPDIR"], SCRATCH);
+        // Assert: write-restricted keeps its established explicit temporary grants.
+        assert!(!restricted_filesystem.contains_key(":tmpdir"));
+        assert!(!restricted_filesystem.contains_key(":slash_tmp"));
+        assert!(!restricted.contains_key("shell_environment_policy.set.TMPDIR"));
     }
 
     #[test]
@@ -431,6 +487,12 @@ mod tests {
         with_unexpected_root.push("/other/write-root".to_owned());
         let mut unsandboxed = native_response("router-workspace-write", &granted, true);
         unsandboxed["sandbox"]["type"] = json!("dangerFullAccess");
+        // R4: native still granting the system temporary directories is a sandbox
+        // difference, not silently accepted.
+        let mut tmpdir_writable = native_response("router-workspace-write", &granted, true);
+        tmpdir_writable["sandbox"]["excludeTmpdirEnvVar"] = json!(false);
+        let mut slash_tmp_writable = native_response("router-workspace-write", &granted, true);
+        slash_tmp_writable["sandbox"]["excludeSlashTmp"] = json!(false);
 
         // Act/assert: report exact field classes, with no native paths in the report.
         assert_eq!(
@@ -460,6 +522,8 @@ mod tests {
                 vec![PermissionDifference::Network],
             ),
             (unsandboxed, vec![PermissionDifference::Sandbox]),
+            (tmpdir_writable, vec![PermissionDifference::Sandbox]),
+            (slash_tmp_writable, vec![PermissionDifference::Sandbox]),
             (
                 native_response("router-write-restricted", &granted, true),
                 vec![PermissionDifference::Profile],

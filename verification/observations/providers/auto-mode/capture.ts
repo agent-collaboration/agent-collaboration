@@ -23,7 +23,7 @@ import {
   StreamingMcpClient,
   type McpCallOutcome,
 } from "../../mcp-control/transport/streaming-mcp-client.ts";
-import { verifyReady } from "../../runtime/runtime-configuration.ts";
+import { verifyReadyPost261 as verifyReady } from "./runtime-readiness.ts";
 import { registerGuardIdentifiers } from "../../runtime/readonly-codex-home.ts";
 import {
   deadlineEpoch,

@@ -147,6 +147,10 @@ fn expected_filesystem(scratch: &Path) -> Result<serde_json::Map<String, Value>,
     ] {
         filesystem.insert(format!("{home}/{location}"), json!("read"));
     }
+    // R4: workspace-write reads, never writes, the system temporary directories.
+    for special in [":tmpdir", ":slash_tmp"] {
+        filesystem.insert(special.to_owned(), json!("read"));
+    }
     Ok(filesystem)
 }
 
@@ -290,7 +294,7 @@ async fn cold_message_probe(case: ProbeCase) -> Result<ProbeObservation, TestErr
         } else {
             response_roots
         };
-        socket.send(Message::Text(json!({"id":resume["id"],"result":{"thread":{"id":response_id,"cwd":response_cwd},"cwd":response_cwd,"activePermissionProfile":{"id":"router-workspace-write"},"sandbox":{"type":"workspaceWrite","networkAccess":true,"writableRoots":roots}}}).to_string().into())).await?;
+        socket.send(Message::Text(json!({"id":resume["id"],"result":{"thread":{"id":response_id,"cwd":response_cwd},"cwd":response_cwd,"activePermissionProfile":{"id":"router-workspace-write"},"sandbox":{"type":"workspaceWrite","networkAccess":true,"excludeTmpdirEnvVar":true,"excludeSlashTmp":true,"writableRoots":roots}}}).to_string().into())).await?;
         let turn_started = match socket.next().await {
             Some(Ok(Message::Text(text))) => {
                 let turn: Value = serde_json::from_str(&text)?;

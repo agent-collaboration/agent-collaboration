@@ -589,7 +589,8 @@ fn recorded_loaded_steps(
             reply: NativeReply::Result(json!({
                 "thread":{"id":"target","cwd":cwd},"cwd":cwd,
                 "activePermissionProfile":{"id":"router-workspace-write"},
-                "sandbox":{"type":"workspaceWrite","networkAccess":true,"writableRoots":roots}
+                "sandbox":{"type":"workspaceWrite","networkAccess":true,"writableRoots":roots,
+                    "excludeTmpdirEnvVar":true,"excludeSlashTmp":true}
             })),
         },
     ];
