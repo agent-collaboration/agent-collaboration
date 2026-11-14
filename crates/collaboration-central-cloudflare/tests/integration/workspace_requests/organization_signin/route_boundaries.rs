@@ -1,5 +1,5 @@
 //! Active private Worker routes and the Lead-settled public refusal boundary.
-//! CreateWorkspace remains held and is not included in either active matrix.
+//! Signed Create joins reads and revisions on the approved private setup surface.
 use super::support::*;
 use central_storage::{ReadOutcome, SqlValue};
 use collaboration_central_conformance::signin_fixtures::{self as signed, NOW_SECONDS};
@@ -57,7 +57,13 @@ async fn unstamped_private_reads_and_revisions_reveal_nothing_and_unknown_routes
     let f = Fixture::new().await;
     let person = f.owner();
     let unknown_workspace = "019f0000-0000-7000-8000-00000000d298";
+    let before = owning_rows(&f).await;
     for (path, body, intent) in [
+        (
+            signed::CREATE,
+            signed::create_body(ORG, unknown_workspace, "Unstamped create"),
+            signed::create_intent(ORG, unknown_workspace, "Unstamped create"),
+        ),
         (
             RECORDS,
             json!({"organizationId":ORG,"after":null,"limit":100}),
@@ -81,7 +87,11 @@ async fn unstamped_private_reads_and_revisions_reveal_nothing_and_unknown_routes
         assert_eq!(response.0, 503);
         assert!(
             response.1.is_empty(),
-            "an unstamped signed read revealed a response payload"
+            "an unstamped signed operation revealed a response payload"
+        );
+        assert!(
+            owning_rows(&f).await == before,
+            "an unstamped signed operation changed the owning store"
         );
     }
     let revision = private_reply(&f, REVISIONS, &org_revision(1, "active"), &[]).await;
@@ -127,11 +137,42 @@ async fn every_active_private_path_is_publicly_refused_before_and_after_an_acces
     let owner = collaboration_central_conformance::owner_assertion().unwrap();
     // Only the old public404 clause changes, by Lead01a1d910-44a9: current
     // public401 carries missingAssertion or routeRefused; private404 is kept.
-    for path in [PROVISION, DIGEST, REVISIONS, LOOKUP, RECORDS] {
+    let create_operation = "019f0000-0000-7000-8000-00000000d299";
+    let person = f.owner();
+    for (path, request_body, proof) in [
+        (PROVISION, body.clone(), vec![]),
+        (DIGEST, json!({"organizationId":ORG}), vec![]),
+        (REVISIONS, org_revision(3, "active"), vec![]),
+        (
+            LOOKUP,
+            json!({"organizationId":ORG,"workspaceId":create_operation}),
+            vec![],
+        ),
+        (
+            RECORDS,
+            json!({"organizationId":ORG,"after":null,"limit":100}),
+            vec![],
+        ),
+        (
+            signed::CREATE,
+            signed::create_body(ORG, create_operation, "Publicly refused create"),
+            person
+                .headers(
+                    signed::CREATE,
+                    &signed::create_intent(ORG, create_operation, "Publicly refused create"),
+                    &signed::fresh_request_id(NOW_SECONDS).unwrap(),
+                    NOW_SECONDS,
+                )
+                .unwrap(),
+        ),
+    ] {
         for present_assertion in [false, true] {
             let mut request = client
                 .post(format!("{}{path}", f.host.public_origin()))
-                .json(&body);
+                .json(&request_body);
+            for (name, value) in &proof {
+                request = request.header(*name, value);
+            }
             if present_assertion {
                 request = request.header("Cf-Access-Jwt-Assertion", &owner);
             }

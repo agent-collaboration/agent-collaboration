@@ -50,6 +50,10 @@ async fn lost_create_answer_recovers_identical_result_after_reopen() {
         )
         .await;
     assert_eq!(replay.0, 200);
+    assert!(
+        replay.1 == retained.as_bytes(),
+        "reopen recovery must return the exact first retained answer bytes"
+    );
     assert_eq!(
         serde_json::from_slice::<Value>(&replay.1).unwrap(),
         expected
@@ -213,25 +217,36 @@ async fn generic_create_trims_names_defaults_description_and_shares_name_uniquen
 #[tokio::test]
 async fn last_statement_failure_rolls_back_directory_actor_ledger_proof_and_change() {
     let f = ready().await;
-    let before = owned_rows(&f).await;
+    member_floor(&f).await;
+    let earlier_operation = operation(0x744);
+    assert_eq!(
+        submit(&f, &f.owner(), &earlier_operation, "Earlier real create")
+            .await
+            .1["result"],
+        "applied"
+    );
+    f.clock
+        .advance(std::time::Duration::from_secs(86_401))
+        .unwrap();
+    f.runtime().await;
+    let now = NOW_SECONDS + 86_401;
+    let mut person = signed::Person::member(ORG, now).unwrap();
+    person.permissions = vec!["workspace:create".into()];
     let runtime = f.runtime().await;
-    let outcome=runtime.run_batch(StatementBatch{statements:vec![GuardedStatement{statement:Statement{sql:"CREATE TRIGGER fail_setup_ledger BEFORE INSERT ON request_log BEGIN SELECT RAISE(ABORT,'fixture last setup statement failure'); END",args:vec![]},expect:RowExpectation::Any}],alarm:AlarmUpdate::Unchanged}).await.unwrap();
+    // request_log::retain ends with this DELETE. A real older create makes
+    // its expired row eligible, so the final cleanup statement must visit it.
+    let outcome=runtime.run_batch(StatementBatch{statements:vec![GuardedStatement{statement:Statement{sql:"CREATE TRIGGER fail_setup_ledger BEFORE DELETE ON request_log BEGIN SELECT RAISE(ABORT,'fixture last setup statement failure'); END",args:vec![]},expect:RowExpectation::Any}],alarm:AlarmUpdate::Unchanged}).await.unwrap();
     assert!(matches!(outcome, BatchOutcome::Applied { .. }));
+    let before = owned_rows(&f).await;
     let operation = operation(0x743);
-    let (body, intent) = create(&operation, "Atomic", "");
-    let owner = f.owner();
-    let failed = f
-        .post_bytes(
-            signed::CREATE,
-            &body,
-            &headers(&owner, &intent, NOW_SECONDS),
-        )
-        .await;
+    let (body, intent) = create(&operation, "Atomic", "atomic description");
+    let proof = headers(&person, &intent, now);
+    let failed = f.post_bytes(signed::CREATE, &body, &proof).await;
     assert_eq!(failed.0, 503);
     assert!(failed.1.is_empty());
     assert!(
         owned_rows(&f).await == before,
-        "late ledger failure must roll back all preceding effect and proof statements"
+        "final ledger DELETE failure must roll back all six owning tables, including the new person's actor"
     );
     assert!(matches!(
         runtime
@@ -249,16 +264,21 @@ async fn last_statement_failure_rolls_back_directory_actor_ledger_proof_and_chan
             .unwrap(),
         BatchOutcome::Applied { .. }
     ));
+    let healthy = f.post_bytes(signed::CREATE, &body, &proof).await;
+    assert_eq!(healthy.0, 200);
     assert_eq!(
-        f.post_with(
-            signed::CREATE,
-            &body,
-            &headers(&owner, &intent, NOW_SECONDS)
-        )
-        .await
-        .1["result"],
-        "applied"
+        serde_json::from_slice::<Value>(&healthy.1).unwrap()["result"],
+        "applied",
+        "the exact same proof remains fresh after full rollback"
     );
-    assert_eq!(f.read("SELECT (SELECT COUNT(*) FROM workspaces),(SELECT COUNT(*) FROM request_log),(SELECT COUNT(*) FROM organization_change_records),(SELECT COUNT(*) FROM organization_used_requests)").await.rows,vec![vec![number(1),number(1),number(2),number(1)]]);
+    assert_eq!(f.read("SELECT (SELECT COUNT(*) FROM workspaces),(SELECT COUNT(*) FROM organization_change_records),(SELECT COUNT(*) FROM organization_used_requests),(SELECT COUNT(*) FROM request_log),(SELECT COUNT(*) FROM actor_identities)").await.rows,vec![vec![number(2),number(3),number(2),number(1),number(2)]]);
+    let replay = f
+        .post_bytes(signed::CREATE, &body, &headers(&person, &intent, now))
+        .await;
+    assert_eq!(replay.0, 200);
+    assert!(
+        replay.1 == healthy.1,
+        "fresh-proof retry retains the one successfully applied outcome"
+    );
     f.close().await;
 }

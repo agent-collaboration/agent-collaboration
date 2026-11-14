@@ -1,6 +1,41 @@
 use super::{owned_rows, support::*};
 
 #[tokio::test]
+async fn same_actor_changed_content_cannot_reuse_a_retained_create_operation() {
+    let f = ready().await;
+    let owner = f.owner();
+    let operation = operation(0x727);
+    let first = submit(&f, &owner, &operation, "First content").await;
+    assert_eq!(first.0, 200);
+    assert_eq!(first.1["result"], "applied");
+    let before = stable_effects(&f).await;
+    let before_markers = f
+        .read("SELECT COUNT(*) FROM organization_used_requests")
+        .await
+        .rows;
+    // This is a new valid proof over the changed body and intent, by the same
+    // currently authorized actor. Verification succeeds; retained content conflicts.
+    let changed = submit(&f, &owner, &operation, "Different content").await;
+    assert_eq!(
+        changed,
+        (200, json!({"result":"refused","reason":"conflict"}))
+    );
+    assert!(
+        stable_effects(&f).await == before,
+        "changed content must not rewrite the retained directory, ledger, actor or audit"
+    );
+    assert_eq!(before_markers, vec![vec![number(1)]]);
+    assert_eq!(
+        f.read("SELECT COUNT(*) FROM organization_used_requests")
+            .await
+            .rows,
+        vec![vec![number(2)]],
+        "the admitted conflict reserves only its new valid proof"
+    );
+    f.close().await;
+}
+
+#[tokio::test]
 async fn create_replay_requires_current_permission_and_live_floor() {
     let f = ready().await;
     member_floor(&f).await;
