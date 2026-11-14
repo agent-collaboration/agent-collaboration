@@ -37,6 +37,7 @@ mod agent_session_client;
 mod approval_presentation;
 mod external_permission_options;
 mod interaction_port;
+mod permission_mode_plan;
 mod provider_behavior;
 mod provider_capability_report;
 mod provider_connection_activity;
@@ -69,6 +70,11 @@ pub use external_permission_options::RefusedPermissionOption;
 pub(crate) use external_permission_options::map_permission_options;
 pub use interaction_port::{
     ApprovalPortOutcome, InteractionFuture, InteractionPort, RefusedApprovalOffer,
+};
+pub use permission_mode_plan::{
+    AUTO_PERMISSION_MODE, AutoPermissionMode, AutoRealization, PermissionModePlan,
+    PermissionModeReason, PermissionModeRefusal, PermissionModeReport, RequestedPermissionMode,
+    plan_permission_mode,
 };
 pub use provider_behavior::*;
 pub use provider_capability_report::ProviderCapabilityReport;

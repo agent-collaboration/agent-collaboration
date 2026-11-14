@@ -4,7 +4,7 @@ use agent_client_protocol::{ActiveSession, Agent};
 
 use crate::agent_session_client::ExternalProviderRuntimeError;
 use crate::agent_session_client::provider_setting_application::{
-    SettingSetupFailure, apply_initial_settings,
+    SettingSetupFailure, UnspecifiedMode, apply_initial_settings,
 };
 use crate::provider_session_actor::ProviderSessionRuntimeHandles;
 use crate::{
@@ -65,8 +65,15 @@ pub(crate) async fn apply_loaded_setting(
         ProviderSettingKind::Model => requested.model = Some(value.clone()),
         ProviderSettingKind::Effort => requested.effort = Some(value.clone()),
     }
-    let (_, failure) =
-        apply_initial_settings(session, &requested, &mut catalog, handles.behavior.as_ref()).await;
+    let failure = apply_initial_settings(
+        session,
+        &requested,
+        &mut catalog,
+        handles.behavior.as_ref(),
+        UnspecifiedMode::Unchanged,
+    )
+    .await
+    .failure;
     match failure {
         Some(SettingSetupFailure::Invalid { advertised, .. }) => {
             Err(ExternalProviderRuntimeError::InvalidSetting {

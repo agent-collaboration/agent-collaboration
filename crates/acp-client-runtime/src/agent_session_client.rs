@@ -2,6 +2,7 @@
 
 mod approval_turn_cancellation;
 mod external_approval_dispatch;
+mod in_folder_allowance;
 mod provider_acp_error_mapping;
 mod provider_approval_dispatch;
 mod provider_auth_status_update;
@@ -124,6 +125,9 @@ impl<P: InteractionPort> Drop for ApprovalContextGuard<P> {
 enum ProviderCommand<P: InteractionPort> {
     Create {
         cwd: PathBuf,
+        /// The session's own scratch folder, granted to agents that accept
+        /// additional directories and allowed by the in-folder rule.
+        scratch_folder: Option<PathBuf>,
         settings: crate::RequestedProviderSettings,
         reply: tokio::sync::oneshot::Sender<
             Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError>,
@@ -214,6 +218,7 @@ struct ProviderSessionRegistration<P: InteractionPort> {
     commands: tokio::sync::mpsc::Sender<ProviderSessionCommand<P>>,
     response: NewSessionResponse,
     settings_catalog: crate::ProviderSettingsCatalog,
+    permission_mode: crate::PermissionModeReport,
     setup_error: Option<ExternalProviderRuntimeError>,
 }
 
