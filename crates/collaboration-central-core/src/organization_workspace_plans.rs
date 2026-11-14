@@ -216,3 +216,7 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "organization_workspace_plans_test.rs"]
+mod tests;

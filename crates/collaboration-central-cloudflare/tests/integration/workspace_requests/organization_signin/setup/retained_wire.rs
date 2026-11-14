@@ -1,8 +1,73 @@
-use super::support::*;
+use super::{owned_rows, support::*};
 use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, SqlValue, Statement,
     StatementBatch,
 };
+
+#[tokio::test]
+async fn corrupt_retained_answer_is_unavailable_without_any_replay_effect() {
+    let fixture = ready().await;
+    let owner = fixture.owner();
+    let operation = operation(0x7f3);
+    let (body, intent) = create(&operation, "Validated retained", "description");
+    let first = fixture
+        .post_bytes(
+            signed::CREATE,
+            &body,
+            &headers(&owner, &intent, NOW_SECONDS),
+        )
+        .await;
+    assert_eq!(first.0, 200);
+    let good: Value = serde_json::from_slice(&first.1).unwrap();
+    let mut invalid = vec![
+        "not JSON".to_owned(),
+        json!({"result":"records","records":[]}).to_string(),
+        json!({"result":"refused","reason":"notPermitted"}).to_string(),
+    ];
+    for (field, value) in [
+        ("workspaceId", json!("019f0000-0000-7000-8000-00000000d7f4")),
+        ("name", json!("Other name")),
+        ("description", json!("Other description")),
+        ("state", json!("archived")),
+    ] {
+        let mut changed = good.clone();
+        changed["workspace"][field] = value;
+        invalid.push(changed.to_string());
+    }
+    for encoded in invalid {
+        let applied = fixture
+            .runtime()
+            .await
+            .run_batch(StatementBatch {
+                statements: vec![GuardedStatement {
+                    statement: Statement {
+                        sql: "UPDATE request_log SET answer=? WHERE request_id=?",
+                        args: vec![SqlValue::Text(encoded), SqlValue::Text(operation.clone())],
+                    },
+                    expect: RowExpectation::Exactly(1),
+                }],
+                alarm: AlarmUpdate::Unchanged,
+            })
+            .await
+            .unwrap();
+        assert!(matches!(applied, BatchOutcome::Applied { .. }));
+        let before = owned_rows(&fixture).await;
+        let reply = fixture
+            .post_bytes(
+                signed::CREATE,
+                &body,
+                &headers(&owner, &intent, NOW_SECONDS),
+            )
+            .await;
+        assert_eq!(reply.0, 503);
+        assert!(reply.1.is_empty());
+        assert!(
+            owned_rows(&fixture).await == before,
+            "invalid retained answer consumed a proof or committed an effect"
+        );
+    }
+    fixture.close().await;
+}
 
 #[tokio::test]
 async fn validated_retained_answer_returns_its_original_json_text() {

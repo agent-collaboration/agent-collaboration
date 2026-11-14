@@ -3,6 +3,68 @@ use serde_json::json;
 
 #[expect(
     clippy::panic_in_result_fn,
+    reason = "Corrupt retained answers must fail through the real route without consuming proof or committing effects."
+)]
+#[tokio::test]
+async fn corrupt_retained_answer_is_unavailable_without_any_replay_effect() -> Result {
+    let fixture = Fixture::new().await?;
+    fixture.ready().await?;
+    let owner = signed::Person::owner(A, signed::NOW_SECONDS)?;
+    let operation = "019f0000-0000-7000-8000-00000000d7f3";
+    let created = create(
+        &fixture,
+        &owner,
+        operation,
+        "Validated retained",
+        "description",
+    )
+    .await?;
+    assert_eq!(created.status, 200);
+    let good = created.value()?;
+    let mut invalid = vec![
+        "not JSON".to_owned(),
+        json!({"result":"records","records":[]}).to_string(),
+        json!({"result":"refused","reason":"notPermitted"}).to_string(),
+    ];
+    for (field, value) in [
+        ("workspaceId", json!("019f0000-0000-7000-8000-00000000d7f4")),
+        ("name", json!("Other name")),
+        ("description", json!("Other description")),
+        ("state", json!("archived")),
+    ] {
+        let mut changed = good.clone();
+        changed["workspace"][field] = value;
+        invalid.push(changed.to_string());
+    }
+    for encoded in invalid {
+        fixture
+            .apply(
+                A,
+                "UPDATE request_log SET answer=? WHERE request_id=?",
+                vec![text(encoded), text(operation)],
+            )
+            .await?;
+        let before = all_effects(&fixture).await?;
+        let reply = create(
+            &fixture,
+            &owner,
+            operation,
+            "Validated retained",
+            "description",
+        )
+        .await?;
+        assert_eq!(reply.status, 503);
+        assert!(reply.body.is_empty());
+        assert!(
+            all_effects(&fixture).await? == before,
+            "invalid retained answer consumed a proof or committed an effect"
+        );
+    }
+    fixture.close().await
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
     reason = "Verbatim HTTP replay must fail if the validated stored representation is re-encoded."
 )]
 #[tokio::test]
