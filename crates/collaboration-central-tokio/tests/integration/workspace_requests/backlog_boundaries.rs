@@ -172,3 +172,84 @@ async fn r21_invalid_stored_status_and_closing_note_fail_show_and_list_decode() 
     }
     f.host.close().await;
 }
+
+#[tokio::test]
+async fn r21_stored_closing_note_uses_description_utf8_byte_bound() {
+    let f = Fixture::new().await;
+    let area = f.area(2140).await;
+    let item = created(
+        f.call(
+            2141,
+            m::WorkspaceOperation::AddBacklogItem {
+                area_id: area.clone(),
+                title: name("Bounded note"),
+                description: "Details".to_owned().try_into().unwrap(),
+            },
+        )
+        .await,
+    );
+    let m::ItemRef::BacklogItem(item_id) = &item else {
+        panic!("backlog");
+    };
+    // Exercise the exact valid byte boundary and one-byte/one-character overflow.
+    // ASCII and multibyte controls distinguish bytes from Unicode scalar count.
+    for note in [
+        "a".repeat(16_384),
+        "é".repeat(8_192),
+        "a".repeat(16_385),
+        "é".repeat(8_193),
+    ] {
+        f.workspace_batch(
+            "UPDATE backlog_items SET status='closed',closing_note=? WHERE item_id=?",
+            vec![text(&note), text(item_id)],
+        )
+        .await;
+        for operation in [
+            m::WorkspaceOperation::Show { item: item.clone() },
+            m::WorkspaceOperation::List {
+                query: m::ListQuery::Backlog {
+                    area_id: area.clone(),
+                },
+                after: m::ChangePosition::ZERO,
+                limit: 10.try_into().unwrap(),
+            },
+        ] {
+            let result = f
+                .host
+                .request(
+                    &f.caller,
+                    m::WorkspaceRequest {
+                        request_id: None,
+                        workspace_id: Some(f.workspace.clone()),
+                        operation,
+                    },
+                )
+                .await;
+            if note.len() > 16_384 {
+                assert!(
+                    matches!(result, Err(StoreFailure::Corrupt { reason: CorruptReason::BadValue { column } }) if column=="backlog_items.closing_note"),
+                    "oversized stored closing note must fail decode"
+                );
+            } else {
+                let reply = result.unwrap();
+                let decoded = match reply.result {
+                    m::WorkspaceResult::Done(m::WorkspaceAnswer::Item {
+                        item: m::ItemView::BacklogItem(item),
+                    }) => item,
+                    m::WorkspaceResult::Done(m::WorkspaceAnswer::Page { mut items, .. })
+                        if items.len() == 1 =>
+                    {
+                        let m::ItemView::BacklogItem(item) = items.remove(0) else {
+                            panic!("backlog list");
+                        };
+                        item
+                    }
+                    other => panic!("boundary note must decode: {other:?}"),
+                };
+                assert_eq!(decoded.closing_note.as_deref(), Some(note.as_str()));
+                assert_eq!(decoded.status, m::BacklogStatus::Closed);
+            }
+        }
+    }
+    f.host.close().await;
+}
