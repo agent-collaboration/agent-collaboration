@@ -1,6 +1,12 @@
 //! Pure fact/plan fixtures; these do not emulate or prove a database commit.
-use super::*;
-use crate::identity_contract::*;
+use super::{
+    Decided, DecisionTime, EnrollmentChange, EnrollmentFacts, MachineLoginSettings, MachineRow,
+    MachineState, StoredEnrollment, StoredEnrollmentState, decide_machine_token,
+};
+use crate::identity_contract::{
+    DecideDeviceLogin, DecideMachineToken, EnrollPermission, MachineTokenDecision,
+    MachineTokenRefusal, PersonId,
+};
 use fleet_identity_protocol::{EnrollmentId, InstallationId, OrganizationId, UnixSeconds};
 use message_board::{MachineLabel, WorkspaceId};
 use runtime_primitives::IdSource;

@@ -2,7 +2,7 @@
 use super::decision_support::{DecisionIds, DecisionTime};
 use super::enrollment_records::*;
 use crate::identity_contract::{DecideDeviceLogin, DeviceLoginDecision, DeviceLoginRefusal};
-use crate::organization_authority::{OrganizationChangeKind, OrganizationChangeOrigin};
+use crate::organization_change_rows::{OrganizationChangeKind, OrganizationChangeOrigin};
 use crate::person_request::SECOND_FACTOR_WINDOW_SECONDS;
 use central_storage::StoreFailure;
 use fleet_identity_protocol::EnrollmentId;

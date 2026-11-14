@@ -1,7 +1,15 @@
-use super::super::policy_fixture::*;
-use super::*;
-use crate::identity_contract::MachineTokenRefusal;
-use crate::organization_authority::OrganizationChangeOrigin as Origin;
+use super::super::{
+    Decided, EnrollmentFacts, MachineState, StoredEnrollmentState,
+    policy_fixture::{
+        CountingIds, NOW_MS, NOW_S, approved, assert_refused, decide_token, empty_facts, enrolled,
+        facts, id, person, project, records, time,
+    },
+};
+use super::revoke_machine_enrollment;
+use crate::identity_contract::{
+    EndedMachineClient, EnrollmentRevocationReason, MachineTokenRefusal,
+};
+use crate::organization_change_rows::OrganizationChangeOrigin as Origin;
 
 #[test]
 fn owner_revocation_fences_pending_approvals_and_aba_without_a_public_route() {

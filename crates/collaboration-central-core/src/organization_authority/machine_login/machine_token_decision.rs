@@ -5,7 +5,7 @@ use crate::identity_contract::{
     DecideMachineToken, EndedMachineClient, EnrollmentRevocationReason, MachineTokenDecision,
     MachineTokenRefusal,
 };
-use crate::organization_authority::{OrganizationChangeKind, OrganizationChangeOrigin};
+use crate::organization_change_rows::{OrganizationChangeKind, OrganizationChangeOrigin};
 use central_storage::StoreFailure;
 use fleet_identity_protocol::UnixSeconds;
 use runtime_primitives::IdSource;

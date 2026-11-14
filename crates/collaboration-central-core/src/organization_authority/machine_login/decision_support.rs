@@ -1,6 +1,6 @@
 //! Caller-sampled decision time, typed policy settings and audit identities.
 use crate::identity_contract::TokenLifetimeSeconds;
-use crate::organization_authority::{
+use crate::organization_change_rows::{
     ChangeRequestId, OrganizationChangeKind, OrganizationChangeOrigin, OrganizationChangeRecord,
 };
 use central_storage::StoreFailure;

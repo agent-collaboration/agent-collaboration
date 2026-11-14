@@ -1,8 +1,19 @@
-use super::super::policy_fixture::*;
-use super::*;
-use crate::organization_authority::{
+use super::super::{
+    EnrollmentChange, EnrollmentFacts, MachineLoginSettings, MachineState, StoredEnrollment,
+    StoredEnrollmentState,
+    policy_fixture::{
+        CountingIds, NOW_MS, NOW_S, approved, assert_refused, decide_token, empty_facts, enrolled,
+        facts, id, person, project, records, settings, time, token,
+    },
+};
+use super::decide_machine_token;
+use crate::identity_contract::{
+    EnrollmentRevocationReason, MachineTokenDecision, MachineTokenRefusal,
+};
+use crate::organization_change_rows::{
     OrganizationChangeKind as Kind, OrganizationChangeOrigin as Origin,
 };
+use fleet_identity_protocol::UnixSeconds;
 
 #[test]
 fn ba1_first_grant_wins_in_either_order_and_never_activates_the_other_approval() {

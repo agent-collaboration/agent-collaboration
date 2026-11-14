@@ -3,7 +3,7 @@ use super::decision_support::{DecisionIds, DecisionTime};
 use super::enrollment_records::*;
 use super::machine_token_decision::append_allowance_records;
 use crate::identity_contract::{EndedMachineClient, EnrollmentRevocationReason, PersonId};
-use crate::organization_authority::{OrganizationChangeKind, OrganizationChangeOrigin};
+use crate::organization_change_rows::{OrganizationChangeKind, OrganizationChangeOrigin};
 use crate::person_request::AdminOperationId;
 use central_storage::StoreFailure;
 use runtime_primitives::IdSource;
