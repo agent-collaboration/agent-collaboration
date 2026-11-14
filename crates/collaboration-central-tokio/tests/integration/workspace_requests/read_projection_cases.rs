@@ -113,7 +113,7 @@ async fn work_log_redaction_is_null_in_reopened_store_and_retains_original_order
     )
     .await;
     f.reopen().await;
-    let runtime = f.host.central(&f.caller.organization_id).await;
+    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
     let stored = runtime
         .inspect_workspace(
             &f.workspace,

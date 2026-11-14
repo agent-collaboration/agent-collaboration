@@ -74,7 +74,7 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
             .request_id
             .as_ref()
             .ok_or_else(|| corrupt("request_id"))?;
-        let _turn = runtime.central_turn.lock().await;
+        let _turn = runtime.take_central_turn().await;
         let logged = runtime
             .host
             .read(crate::workspace_request_log::lookup(request_id, &cutoff))
@@ -147,6 +147,9 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
             )
             .await?;
         if let Some(answer) = crate::workspace_request_log::replay(&logged, &actor, &digest)? {
+            if let Err(error) = runtime.drain_workspace_held(workspace).await {
+                return drain_failure(error);
+            }
             return enrich(runtime, answer, true).await;
         }
     }
@@ -225,6 +228,16 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
         .request_id
         .as_ref()
         .ok_or_else(|| corrupt("request_id"))?;
+    if matches!(
+        answer,
+        m::WorkspaceResult::Done(
+            m::WorkspaceAnswer::Created { .. }
+                | m::WorkspaceAnswer::Updated { .. }
+                | m::WorkspaceAnswer::Removed { .. }
+        )
+    ) {
+        runtime.preset_workspace_drain(workspace, now).await?;
+    }
     batch
         .statements
         .extend(crate::workspace_request_log::retain(
@@ -247,7 +260,18 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
     if runtime.take_lost_reply(request_id) {
         return Ok(reply(m::WorkspaceResult::OutcomeUnknown));
     }
+    if let Err(error) = runtime.drain_workspace_held(workspace).await {
+        return drain_failure(error);
+    }
     enrich(runtime, answer, true).await
+}
+fn drain_failure(error: StoreFailure) -> Result<m::WorkspaceReply, StoreFailure> {
+    match error {
+        StoreFailure::Unavailable | StoreFailure::AnswerLost => {
+            Ok(reply(m::WorkspaceResult::OutcomeUnknown))
+        }
+        error @ StoreFailure::Corrupt { .. } => Err(error),
+    }
 }
 async fn enrich<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
     runtime: &WorkspaceRuntime<Host, Stores>,

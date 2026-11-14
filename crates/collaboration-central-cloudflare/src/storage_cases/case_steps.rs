@@ -118,11 +118,14 @@ pub(crate) enum CaseStoreCall {
 
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-#[expect(clippy::enum_variant_names, reason = "mirrors core's PausePoint names")]
 pub(crate) enum CasePausePoint {
     AfterReads,
     AfterStoreApplied,
     AfterNoticesCommitted,
+    BeforeDrainCommit,
+    AfterDrainCommit,
+    BeforeTimerCommit,
+    AfterTimerCommit,
 }
 
 impl From<CasePausePoint> for PausePoint {
@@ -131,16 +134,23 @@ impl From<CasePausePoint> for PausePoint {
             CasePausePoint::AfterReads => Self::AfterReads,
             CasePausePoint::AfterStoreApplied => Self::AfterStoreApplied,
             CasePausePoint::AfterNoticesCommitted => Self::AfterNoticesCommitted,
+            CasePausePoint::BeforeDrainCommit => Self::BeforeDrainCommit,
+            CasePausePoint::AfterDrainCommit => Self::AfterDrainCommit,
+            CasePausePoint::BeforeTimerCommit => Self::BeforeTimerCommit,
+            CasePausePoint::AfterTimerCommit => Self::AfterTimerCommit,
         }
     }
 }
-
 impl From<PausePoint> for CasePausePoint {
     fn from(point: PausePoint) -> Self {
         match point {
             PausePoint::AfterReads => Self::AfterReads,
             PausePoint::AfterStoreApplied => Self::AfterStoreApplied,
             PausePoint::AfterNoticesCommitted => Self::AfterNoticesCommitted,
+            PausePoint::BeforeDrainCommit => Self::BeforeDrainCommit,
+            PausePoint::AfterDrainCommit => Self::AfterDrainCommit,
+            PausePoint::BeforeTimerCommit => Self::BeforeTimerCommit,
+            PausePoint::AfterTimerCommit => Self::AfterTimerCommit,
         }
     }
 }

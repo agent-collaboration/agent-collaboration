@@ -21,7 +21,7 @@ async fn two_workspaces_share_one_actor_but_never_rows_or_foreign_area_placement
     else {
         panic!("workspace");
     };
-    let runtime = f.host.central(&f.caller.organization_id).await;
+    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
     assert!(matches!(
         runtime
             .statement_host()
@@ -301,7 +301,7 @@ async fn backlog_removal_cascades_both_reference_directions_and_literal_link_tex
         m::WorkspaceOperation::RemoveBacklogItem { item_id: item },
     )
     .await;
-    let runtime = f.host.central(&f.caller.organization_id).await;
+    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
     let rows = runtime
         .inspect_workspace(
             &f.workspace,

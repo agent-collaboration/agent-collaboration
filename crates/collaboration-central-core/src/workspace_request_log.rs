@@ -3,9 +3,9 @@ use crate::workspace_row_codec::{json, string};
 use central_storage::{
     GuardedStatement, ReadOutcome, RowExpectation, SqlValue, Statement, StoreFailure,
 };
-use workspace_model::{ActorIdentityId, RequestId, WorkspaceOperation, WorkspaceResult};
+use workspace_model::{ActorIdentityId, RequestId, WorkspaceResult};
 
-pub(crate) fn digest(operation: &WorkspaceOperation) -> Result<String, StoreFailure> {
+pub(crate) fn digest(operation: &impl serde::Serialize) -> Result<String, StoreFailure> {
     use sha2::{Digest, Sha256};
     let encoded = serde_json_canonicalizer::to_vec(operation).map_err(|_| corrupt("operation"))?;
     Ok(format!("{:x}", Sha256::digest(encoded)))
@@ -49,7 +49,7 @@ pub(crate) fn retain(
     request: &RequestId,
     caller: &ActorIdentityId,
     digest: &str,
-    answer: &WorkspaceResult,
+    answer: &impl serde::Serialize,
     now: &str,
     cutoff: &str,
 ) -> Result<Vec<GuardedStatement>, StoreFailure> {

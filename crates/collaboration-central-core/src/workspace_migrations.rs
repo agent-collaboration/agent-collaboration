@@ -15,6 +15,12 @@ pub fn failing_upgrade(original: sqlx::migrate::Migrator) -> sqlx::migrate::Migr
         sql_str::SqlStr,
     };
     let mut migrations = original.iter().cloned().collect::<Vec<_>>();
-    migrations.push(Migration::new(2,"fixture failing upgrade".into(),MigrationType::Simple,SqlStr::from_static("CREATE TABLE rollback_probe (probe_id TEXT PRIMARY KEY,created_at TEXT NOT NULL,updated_at TEXT NOT NULL); INSERT INTO missing_migration_fixture_table VALUES (1);"),false));
+    let next_version = migrations
+        .iter()
+        .map(|migration| migration.version)
+        .max()
+        .unwrap_or(0)
+        .saturating_add(1);
+    migrations.push(Migration::new(next_version,"fixture failing upgrade".into(),MigrationType::Simple,SqlStr::from_static("CREATE TABLE rollback_probe (probe_id TEXT PRIMARY KEY,created_at TEXT NOT NULL,updated_at TEXT NOT NULL); INSERT INTO missing_migration_fixture_table VALUES (1);"),false));
     Migrator::with_migrations(migrations)
 }

@@ -21,6 +21,7 @@ test-support = ["collaboration-central-core/test-support", "dep:sqlx"]
 [dependencies]
 central-storage.workspace = true
 workspace-model.workspace = true
+collaboration-protocol = { version = "0.1.149", path = "../collaboration-protocol" }
 workspace-ids.workspace = true
 fleet-identity-protocol = {path="../fleet-identity-protocol",version="0.1.149"}
 axum = { version = "0.8.9", default-features = false, features = ["json"] }

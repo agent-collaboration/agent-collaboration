@@ -37,7 +37,7 @@ async fn r21_close_cannot_link_an_existing_item_from_another_workspace() {
         panic!("second workspace");
     };
     let other = other.workspace_id;
-    let runtime = f.host.central(&f.caller.organization_id).await;
+    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
     assert!(matches!(
         runtime
             .statement_host()

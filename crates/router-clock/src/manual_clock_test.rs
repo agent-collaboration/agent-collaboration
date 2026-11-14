@@ -165,3 +165,19 @@ fn the_timeout_budget_starts_when_created_even_if_polling_is_delayed() {
         );
     });
 }
+
+#[test]
+fn correcting_utc_preserves_the_existing_elapsed_deadline() {
+    let clock = clock();
+    clock.advance(Duration::from_secs(10)).unwrap();
+    let elapsed = clock.monotonic_now();
+    clock.set_utc("2000-12-31T23:59:00Z".parse().unwrap());
+    assert_eq!(clock.monotonic_now(), elapsed);
+    assert_eq!(clock.now().unix_millis(), 978_307_140_000);
+    clock.advance(Duration::from_secs(5)).unwrap();
+    assert_eq!(clock.monotonic_now(), elapsed.after(Duration::from_secs(5)));
+    assert_eq!(
+        clock.utc_now(),
+        "2000-12-31T23:59:05Z".parse::<DateTime<Utc>>().unwrap()
+    );
+}

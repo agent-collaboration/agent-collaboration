@@ -13,6 +13,7 @@ async fn business_migration_upgrade_failure_rolls_back_both_real_owners_and_all_
                 .join("central")
                 .join(format!("{}.sqlite", f.caller.organization_id.as_str())),
             workspace_migrations::central_migrator as fn() -> sqlx::migrate::Migrator,
+            2,
         ),
         (
             f.root
@@ -20,9 +21,10 @@ async fn business_migration_upgrade_failure_rolls_back_both_real_owners_and_all_
                 .join("workspace-stores")
                 .join(format!("{}.sqlite", f.workspace)),
             workspace_migrations::workspace_migrator as fn() -> sqlx::migrate::Migrator,
+            1,
         ),
     ];
-    for (path, migrator) in cases {
+    for (path, migrator, expected_count) in cases {
         let owner = ObjectStorage::new(path.clone(), Arc::new(migrator()));
         let before = owner
             .read(storage_conformance::list_applied_migrations())
@@ -39,7 +41,7 @@ async fn business_migration_upgrade_failure_rolls_back_both_real_owners_and_all_
                 "execution_time"
             ]
         );
-        assert_eq!(before.rows.len(), 1);
+        assert_eq!(before.rows.len(), expected_count);
         owner.close().await;
         let failing = ObjectStorage::new(
             path.clone(),

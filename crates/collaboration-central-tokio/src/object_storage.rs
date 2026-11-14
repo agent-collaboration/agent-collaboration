@@ -34,6 +34,8 @@ pub struct ObjectStorage {
     store: OnceCell<SqliteObjectStore>,
     // A database commit and its retained alarm are one ordered object write.
     batch_order: Mutex<()>,
+    #[cfg(feature = "test-support")]
+    alarm_batch_failure: std::sync::Mutex<Option<StoreFailure>>,
     /// Kept in memory after commit (Program Design, "the one alarm"; Tokio).
     alarm: watch::Sender<Option<SyncTime>>,
     #[cfg(feature = "test-support")]
@@ -43,6 +45,8 @@ pub struct ObjectStorage {
     )>,
     #[cfg(feature = "test-support")]
     batch_waiting: watch::Sender<usize>,
+    #[cfg(feature = "test-support")]
+    central_publication_pauses: collaboration_central_core::PausePoints,
 }
 
 impl ObjectStorage {
@@ -53,11 +57,15 @@ impl ObjectStorage {
             migrator,
             store: OnceCell::new(),
             batch_order: Mutex::new(()),
+            #[cfg(feature = "test-support")]
+            alarm_batch_failure: Default::default(),
             alarm: watch::Sender::new(None),
             #[cfg(feature = "test-support")]
             publication_pause: None,
             #[cfg(feature = "test-support")]
             batch_waiting: watch::Sender::new(0),
+            #[cfg(feature = "test-support")]
+            central_publication_pauses: Default::default(),
         }
     }
 
@@ -76,7 +84,24 @@ impl ObjectStorage {
 
     pub async fn run_batch(&self, batch: StatementBatch) -> Result<BatchOutcome, StoreFailure> {
         let _order = self.lock_batch_order().await;
+        #[cfg(feature = "test-support")]
+        if batch.statements.is_empty()
+            && matches!(batch.alarm, central_storage::AlarmUpdate::SetFromQuery(_))
+            && let Some(failure) = self
+                .alarm_batch_failure
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take()
+        {
+            return Err(failure);
+        }
         let (outcome, alarm) = self.opened().await?.run_batch(batch).await?;
+        #[cfg(feature = "test-support")]
+        if matches!(outcome, BatchOutcome::Applied { .. }) {
+            self.central_publication_pauses
+                .reached_central(collaboration_central_core::PausePoint::AfterStoreApplied)
+                .await;
+        }
         #[cfg(feature = "test-support")]
         if matches!(outcome, BatchOutcome::Applied { .. })
             && let Some((workspace, pauses)) = &self.publication_pause
@@ -126,6 +151,18 @@ impl ObjectStorage {
         self.opened().await?.read(statement).await
     }
 
+    #[must_use]
+    pub fn subscribe_alarm(&self) -> watch::Receiver<Option<SyncTime>> {
+        self.alarm.subscribe()
+    }
+
+    #[cfg(feature = "test-support")]
+    #[must_use]
+    pub fn hold_alarm_publication(&self) -> collaboration_central_core::HeldPause {
+        self.central_publication_pauses
+            .hold_central(collaboration_central_core::PausePoint::AfterStoreApplied)
+    }
+
     #[cfg(feature = "test-support")]
     #[must_use]
     /// Uses the existing pause seam after commit and before publishing the retained alarm.
@@ -151,6 +188,14 @@ impl ObjectStorage {
     #[must_use]
     pub fn alarm(&self) -> Option<SyncTime> {
         *self.alarm.borrow()
+    }
+
+    #[cfg(feature = "test-support")]
+    pub fn fail_next_alarm_batch(&self, failure: StoreFailure) {
+        *self
+            .alarm_batch_failure
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(failure);
     }
 
     pub async fn close(&self) {

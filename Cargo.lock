@@ -1758,6 +1758,7 @@ dependencies = [
  "chrono",
  "collaboration-central-conformance",
  "collaboration-central-core",
+ "collaboration-protocol",
  "durable-steps",
  "fleet-identity-protocol",
  "fleet-sync-lease",
@@ -1821,6 +1822,7 @@ dependencies = [
 name = "collaboration-central-core"
 version = "0.1.150"
 dependencies = [
+ "agent-automation",
  "axum",
  "base64 0.22.1",
  "board-sync-protocol",
@@ -1828,6 +1830,7 @@ dependencies = [
  "chrono",
  "collaboration-central-admin-protocol",
  "collaboration-mail-protocol",
+ "collaboration-protocol",
  "durable-steps",
  "fleet-admission",
  "fleet-identity-protocol",
@@ -1877,6 +1880,7 @@ dependencies = [
  "collaboration-central-conformance",
  "collaboration-central-core",
  "collaboration-contracts",
+ "collaboration-protocol",
  "collaboration-runtime",
  "collaboration-service",
  "durable-steps",
@@ -1895,6 +1899,7 @@ dependencies = [
  "reqwest 0.12.28",
  "reqwest-websocket",
  "ring",
+ "router-clock",
  "runtime-primitives",
  "serde",
  "serde_json",
@@ -2057,6 +2062,8 @@ dependencies = [
  "sha2 0.10.9",
  "thiserror 2.0.18",
  "uuid",
+ "workspace-ids",
+ "workspace-model",
 ]
 
 [[package]]

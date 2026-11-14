@@ -201,7 +201,7 @@ async fn only_creator_adds_or_promotes_members_and_posts_require_active_particip
             thread_id: thread.clone()
         })
     );
-    let runtime = f.host.central(&f.caller.organization_id).await;
+    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
     let actors = runtime
         .statement_host()
         .read(Statement {

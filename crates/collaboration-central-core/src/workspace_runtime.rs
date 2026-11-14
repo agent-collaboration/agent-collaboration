@@ -32,6 +32,10 @@ pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     pub(crate) turns: WorkspaceTurns,
     pub(crate) central_turn: tokio::sync::Mutex<()>,
     #[cfg(feature = "test-support")]
+    central_waiting: tokio::sync::watch::Sender<usize>,
+    pub(crate) mail_policy: collaboration_protocol::central_mail::MailPolicy,
+    pub(crate) drain_retry_seconds: std::sync::Mutex<std::collections::BTreeMap<WorkspaceId, u64>>,
+    #[cfg(feature = "test-support")]
     pub(crate) pauses: crate::PausePoints,
     #[cfg(feature = "test-support")]
     lost_answers: std::sync::Mutex<std::collections::BTreeSet<workspace_model::RequestId>>,
@@ -53,13 +57,50 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             turns: WorkspaceTurns::default(),
             central_turn: tokio::sync::Mutex::new(()),
             #[cfg(feature = "test-support")]
+            central_waiting: tokio::sync::watch::channel(0).0,
+            mail_policy: Default::default(),
+            drain_retry_seconds: Default::default(),
+            #[cfg(feature = "test-support")]
             pauses: crate::PausePoints::default(),
             #[cfg(feature = "test-support")]
             lost_answers: Default::default(),
         }
     }
+    pub fn with_mail_policy(
+        mut self,
+        policy: collaboration_protocol::central_mail::MailPolicy,
+    ) -> Self {
+        self.mail_policy = policy;
+        self
+    }
     pub fn statement_host(&self) -> &Host {
         &self.host
+    }
+    pub(crate) async fn take_central_turn(&self) -> tokio::sync::MutexGuard<'_, ()> {
+        #[cfg(not(feature = "test-support"))]
+        {
+            self.central_turn.lock().await
+        }
+        #[cfg(feature = "test-support")]
+        {
+            use std::future::Future;
+            let mut acquisition = std::pin::pin!(self.central_turn.lock());
+            let mut waiting = None;
+            std::future::poll_fn(|context| match acquisition.as_mut().poll(context) {
+                std::task::Poll::Pending => {
+                    waiting
+                        .get_or_insert_with(|| CentralWaiter::enter(self.central_waiting.clone()));
+                    std::task::Poll::Pending
+                }
+                ready @ std::task::Poll::Ready(_) => ready,
+            })
+            .await
+        }
+    }
+    #[cfg(feature = "test-support")]
+    pub async fn until_central_waiting(&self, count: usize) {
+        let mut waiting = self.central_waiting.subscribe();
+        let _ = waiting.wait_for(|waiting| *waiting >= count).await;
     }
     pub(crate) fn mint<T: TryFrom<String>>(&self) -> Result<T, StoreFailure> {
         T::try_from(self.ids.new_id().to_string())
@@ -126,5 +167,21 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         statement: Statement,
     ) -> Result<ReadOutcome, StoreFailure> {
         self.read_workspace(workspace, statement).await
+    }
+}
+
+#[cfg(feature = "test-support")]
+struct CentralWaiter(tokio::sync::watch::Sender<usize>);
+#[cfg(feature = "test-support")]
+impl CentralWaiter {
+    fn enter(waiting: tokio::sync::watch::Sender<usize>) -> Self {
+        waiting.send_modify(|count| *count += 1);
+        Self(waiting)
+    }
+}
+#[cfg(feature = "test-support")]
+impl Drop for CentralWaiter {
+    fn drop(&mut self) {
+        self.0.send_modify(|count| *count -= 1);
     }
 }

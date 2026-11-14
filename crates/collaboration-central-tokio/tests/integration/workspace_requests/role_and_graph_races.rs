@@ -6,7 +6,7 @@ async fn held_pair(
     second: m::WorkspaceOperation,
     second_caller: WorkspaceCaller,
 ) -> (m::WorkspaceReply, m::WorkspaceReply) {
-    let runtime = f.host.central(&f.caller.organization_id).await;
+    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
     let seam = f.workspace.clone();
     let mut first_hold = runtime.pause_points().hold(&seam, PausePoint::AfterReads);
     let request = m::WorkspaceRequest {
@@ -119,7 +119,7 @@ async fn lead_grants_serialize_and_recheck_the_new_lead_with_one_active_assignme
             "{reply:?}"
         );
     }
-    let runtime = f.host.central(&f.caller.organization_id).await;
+    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
     let rows = runtime
         .inspect_workspace(
             &f.workspace,
@@ -184,7 +184,7 @@ async fn implementer_grants_serialize_and_leave_other_deliverable_untouched() {
             "{reply:?}"
         );
     }
-    let runtime = f.host.central(&f.caller.organization_id).await;
+    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
     let rows=runtime.inspect_workspace(&f.workspace,Statement{sql:"SELECT deliverable_id,ended_at FROM deliverable_roles WHERE role='implementer' ORDER BY deliverable_id",args:vec![]}).await.unwrap();
     assert_eq!(
         rows.rows

@@ -26,7 +26,7 @@ async fn project_close_keeps_its_turn_until_apply_and_new_child_reads_the_closed
         },
     )
     .await;
-    let runtime = f.host.central(&f.caller.organization_id).await;
+    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
     let seam = f.workspace.clone();
     let mut held = runtime.pause_points().hold(&seam, PausePoint::AfterReads);
     let request = m::WorkspaceRequest {
@@ -77,7 +77,7 @@ async fn resolved_thread_is_immutable_after_held_turn_and_refusal_replay_ignores
     let f = Fixture::new().await;
     let area = f.area(320).await;
     let thread = f.thread(321, area).await;
-    let runtime = f.host.central(&f.caller.organization_id).await;
+    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
     let seam = f.workspace.clone();
     let mut held = runtime
         .pause_points()
@@ -152,7 +152,7 @@ async fn failed_guard_has_no_ledger_entry_and_mark_read_is_monotonic() {
     ) else {
         panic!("link");
     };
-    let runtime = f.host.central(&f.caller.organization_id).await;
+    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
     let seam = f.workspace.clone();
     let mut held = runtime.pause_points().hold(&seam, PausePoint::AfterReads);
     let operation = m::WorkspaceOperation::RemoveLink {
@@ -248,7 +248,9 @@ async fn idle_expiry_treats_same_content_as_new_for_both_ledgers() {
         name: name("Same central content"),
     };
     let original_central = call(&f.host, &f.caller, None, 361, central.clone()).await;
-    f.clock.0.fetch_add(86_400_001, Ordering::SeqCst);
+    f.clock
+        .advance(std::time::Duration::from_millis(86_400_001))
+        .unwrap();
     let next = f.call(360, area).await;
     assert!(matches!(
         next.result,

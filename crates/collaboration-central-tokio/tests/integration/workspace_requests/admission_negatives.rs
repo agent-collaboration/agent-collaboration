@@ -6,7 +6,7 @@ use central_storage::{
 async fn live_admission_refuses_revoked_expired_wrong_credential_and_archived_directory_without_domain_writes()
  {
     let f = Fixture::new().await;
-    let runtime = f.host.central(&f.caller.organization_id).await;
+    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
     let operation = m::WorkspaceOperation::CreateArea {
         name: name("Must not be written"),
     };

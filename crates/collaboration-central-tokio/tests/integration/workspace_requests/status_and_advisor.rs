@@ -109,7 +109,7 @@ async fn advisor_replacement_ends_old_assignment_and_refuses_a_nonlead_advisor_g
             m::WorkspaceResult::Done(m::WorkspaceAnswer::Updated { .. })
         ));
     }
-    let runtime = f.host.central(&f.caller.organization_id).await;
+    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
     let identities = runtime
         .statement_host()
         .read(Statement {

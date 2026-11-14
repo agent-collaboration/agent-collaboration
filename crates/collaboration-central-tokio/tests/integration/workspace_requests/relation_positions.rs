@@ -19,7 +19,12 @@ async fn relation_pages_use_created_positions_after_clock_behind_reopen_and_keep
     };
     let first_reference = created(f.call(943, reference(first_area)).await);
     let first_link = created(f.call(944, link("First literal")).await);
-    f.clock.0.fetch_sub(100_000, Ordering::SeqCst);
+    f.clock.set_utc(
+        chrono::DateTime::from_timestamp_millis(
+            runtime_primitives::Clock::now(&*f.clock).unix_millis() - 100_000,
+        )
+        .unwrap(),
+    );
     f.reopen().await;
     let second_reference = created(f.call(945, reference(second_area)).await);
     let second_link = created(f.call(946, link("Second literal")).await);
@@ -79,7 +84,7 @@ async fn relation_pages_use_created_positions_after_clock_behind_reopen_and_keep
             matches!(page.result,m::WorkspaceResult::Done(m::WorkspaceAnswer::Page{items,next_after_position:None}) if items.iter().map(m::ItemView::item_ref).collect::<Vec<_>>()==vec![second])
         );
     }
-    let runtime = f.host.central(&f.caller.organization_id).await;
+    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
     for item in [
         &first_reference,
         &second_reference,

@@ -23,7 +23,7 @@ async fn zero_page_limits_fail_at_the_typed_request_boundary() {
 #[tokio::test]
 async fn maximum_list_and_inbox_pages_retain_the_extra_row_and_skip_nothing() {
     let f = Fixture::new().await;
-    let runtime = f.host.central(&f.caller.organization_id).await;
+    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
     let empty = runtime
         .inspect_workspace(
             &f.workspace,

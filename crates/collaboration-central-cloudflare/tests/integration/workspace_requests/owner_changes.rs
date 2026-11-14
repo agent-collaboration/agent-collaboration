@@ -474,3 +474,5 @@ async fn r32_self_join_roles_and_promotion_allow_posts_but_adding_others_names_c
     created(call(&f.host, &other, Some(f.workspace.clone()), 2053, post()).await);
     f.host.close().await;
 }
+
+mod merged_drains;

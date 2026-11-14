@@ -16,6 +16,8 @@ test-support = ["sqlx-core/migrate"]
 
 [dependencies]
 central-storage.workspace = true
+collaboration-protocol = {path="../collaboration-protocol",version="0.1.149"}
+agent-automation = {path="../agent-automation",version="0.1.149"}
 workspace-model.workspace = true
 workspace-ids.workspace = true
 workspace-rules = {path="../workspace-rules",version="0.1.149"}

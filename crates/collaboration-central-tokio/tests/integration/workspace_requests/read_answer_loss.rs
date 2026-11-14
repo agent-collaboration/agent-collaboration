@@ -3,7 +3,7 @@ use central_storage::{StoreCall, StoreFailure, StoreReply};
 use collaboration_central_core::{ClockIds, WorkspaceRuntime, WorkspaceStoreCalls};
 use collaboration_central_tokio::ObjectStorage;
 use runtime_primitives::{Clock, SyncTime};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 #[derive(Clone)]
 struct ArcClock(Arc<HeldClock>);
 impl Clock for ArcClock {

@@ -5,19 +5,10 @@ use central_storage::{
 };
 use collaboration_central_core::WorkspaceCaller;
 use collaboration_central_tokio::TokioWorkspaceHost;
-use runtime_primitives::{Clock, SyncTime};
-use std::sync::{
-    Arc,
-    atomic::{AtomicI64, Ordering},
-};
+use std::sync::Arc;
 use workspace_model as m;
 
-pub(super) struct HeldClock(pub(super) AtomicI64);
-impl Clock for HeldClock {
-    fn now(&self) -> SyncTime {
-        SyncTime::from_unix_millis(self.0.load(Ordering::SeqCst))
-    }
-}
+pub(super) use router_clock::ManualClock as HeldClock;
 pub(super) fn id<T: std::str::FromStr>(value: u32) -> T
 where
     T::Err: std::fmt::Debug,
@@ -44,8 +35,9 @@ pub(super) fn caller() -> WorkspaceCaller {
     }
 }
 pub(super) async fn seed(host: &TokioWorkspaceHost, caller: &WorkspaceCaller) {
-    let runtime = host.central(&caller.organization_id).await;
+    let runtime = host.central(&caller.organization_id).await.unwrap();
     let statements=[
+        ("INSERT INTO organization_identity(id,organization_statement,created_at,updated_at) VALUES (?,'fixture organization statement',0,0)",vec![text(caller.organization_id.as_str())]),
         ("INSERT INTO machines (machine_id,installation_id,label,state,allowed_workspaces,created_at,updated_at) VALUES (?,?,?,'enrolled',?,?,?)",vec![text(caller.caller.machine_id()),text(id::<m::WorkspaceId>(3)),text("Machine"),text("[]"),text("2026-11-13T00:00:00Z"),text("2026-11-13T00:00:00Z")]),
         ("INSERT INTO machine_credentials (credential_id,machine_id,token_hash,expires_at,created_at,updated_at) VALUES (?,?,?,?,?,?)",vec![text(id::<m::WorkspaceId>(4)),text(caller.caller.machine_id()),text(&caller.credential_hash),text("2030-01-01T00:00:00Z"),text("2026-11-13T00:00:00Z"),text("2026-11-13T00:00:00Z")]),
     ].into_iter().map(|(sql,args)|GuardedStatement {statement:Statement {sql,args},expect:RowExpectation::Exactly(1)}).collect();
@@ -97,7 +89,7 @@ pub(super) async fn create_workspace(
     else {
         panic!("workspace creation refused: {reply:?}");
     };
-    let runtime = host.central(&caller.organization_id).await;
+    let runtime = host.central(&caller.organization_id).await.unwrap();
     let batch = StatementBatch {
         statements: vec![GuardedStatement {
             statement: Statement {
@@ -134,7 +126,12 @@ pub(super) struct Fixture {
 impl Fixture {
     pub async fn new() -> Self {
         let root = tempfile::tempdir().unwrap();
-        let clock = Arc::new(HeldClock(AtomicI64::new(1_794_571_200_000)));
+        let clock = Arc::new(
+            HeldClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(
+                1_794_571_200_000,
+            ))
+            .unwrap(),
+        );
         let host = TokioWorkspaceHost::open(root.path(), clock.clone())
             .await
             .unwrap();
