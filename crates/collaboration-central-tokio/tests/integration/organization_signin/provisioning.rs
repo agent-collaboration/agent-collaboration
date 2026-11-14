@@ -1,6 +1,7 @@
 use super::support::*;
 use serde_json::json;
 use std::time::Duration;
+type PersistentStoreFiles = Vec<(&'static str, Option<Vec<std::path::PathBuf>>)>;
 
 #[expect(
     clippy::panic_in_result_fn,
@@ -230,37 +231,36 @@ async fn cold_tampered_foreign_and_retired_stamps_refuse_without_rewriting_store
         }
         let before = f.snapshot().await?;
         let root = f.root.path().to_owned();
-        let persistent_store_files =
-            || -> Result<Vec<(&'static str, Option<Vec<std::path::PathBuf>>)>> {
-                let mut inventory = Vec::new();
-                for directory in ["central", "workspace-stores"] {
-                    let files = match std::fs::read_dir(root.join(directory)) {
-                        Ok(entries) => {
-                            let mut files = Vec::new();
-                            for entry in entries {
-                                let entry = entry?;
-                                if entry.file_type()?.is_file()
-                                    && entry
-                                        .path()
-                                        .extension()
-                                        .and_then(|extension| extension.to_str())
-                                        == Some("sqlite")
-                                {
-                                    files.push(
-                                        std::path::PathBuf::from(directory).join(entry.file_name()),
-                                    );
-                                }
+        let persistent_store_files = || -> Result<PersistentStoreFiles> {
+            let mut inventory = Vec::new();
+            for directory in ["central", "workspace-stores"] {
+                let files = match std::fs::read_dir(root.join(directory)) {
+                    Ok(entries) => {
+                        let mut files = Vec::new();
+                        for entry in entries {
+                            let entry = entry?;
+                            if entry.file_type()?.is_file()
+                                && entry
+                                    .path()
+                                    .extension()
+                                    .and_then(|extension| extension.to_str())
+                                    == Some("sqlite")
+                            {
+                                files.push(
+                                    std::path::PathBuf::from(directory).join(entry.file_name()),
+                                );
                             }
-                            files.sort();
-                            Some(files)
                         }
-                        Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
-                        Err(error) => return Err(error.into()),
-                    };
-                    inventory.push((directory, files));
-                }
-                Ok(inventory)
-            };
+                        files.sort();
+                        Some(files)
+                    }
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                    Err(error) => return Err(error.into()),
+                };
+                inventory.push((directory, files));
+            }
+            Ok(inventory)
+        };
         let files_before = if damage == "foreign" {
             Some(persistent_store_files()?)
         } else {

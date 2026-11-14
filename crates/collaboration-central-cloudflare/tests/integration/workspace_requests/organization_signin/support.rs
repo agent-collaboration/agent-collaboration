@@ -32,12 +32,14 @@ impl Fixture {
         let keys = SignInKeys::start().await.unwrap();
         let root = tempfile::tempdir().unwrap();
         let plan = root.path().join("signin-plan.json");
+        let access = collaboration_central_conformance::fixture_policy();
+        let access_team = access.issuer.strip_prefix("https://").unwrap();
         std::fs::write(&plan,serde_json::to_vec(&json!({"textBindings":{
             "CENTRAL_SIGN_IN_ISSUER":issuer,"CENTRAL_SIGN_IN_AUDIENCE":fixture::AUDIENCE,
             "CENTRAL_SIGN_IN_JWKS_URL":"https://signin.test/.well-known/jwks.json",
             "CENTRAL_ADMIN_AUDIENCE":fixture::ADMIN_AUDIENCE,"CENTRAL_PUBLIC_ORIGIN":fixture::PUBLIC_ORIGIN,
             "CENTRAL_SIGN_IN_SERVICE_ID":"019f0000-0000-7000-8000-00000000d290",
-            "ACCESS_TEAM_DOMAIN":"fixture.cloudflareaccess.com","ACCESS_SESSION_AUD":"session-fixture","ACCESS_ADMIN_AUD":"admin-fixture","ACCESS_OWNER_IDENTITY":"owner@example.invalid"
+            "ACCESS_TEAM_DOMAIN":access_team,"ACCESS_SESSION_AUD":access.session_audience,"ACCESS_ADMIN_AUD":access.admin_audience,"ACCESS_OWNER_IDENTITY":access.owner_identity
         },"jwksFixtureUrl":keys.url})).unwrap()).unwrap();
         let clock = Arc::new(
             ManualClock::starting_at(runtime_primitives::SyncTime::from_unix_millis(

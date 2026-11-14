@@ -409,7 +409,7 @@ async fn expired_after_cold_reset_and_foreign_stored_stamps_refuse_without_rewri
             f.runtime().await;
         }
         let snapshot = || Statement {
-            sql: "SELECT id,organization_statement,created_at,updated_at FROM organization_identity",
+            sql: "SELECT id,organization_statement,created_at,updated_at FROM organization_identity ORDER BY id",
             args: vec![],
         };
         let before: Result<ReadOutcome, StoreFailure> =

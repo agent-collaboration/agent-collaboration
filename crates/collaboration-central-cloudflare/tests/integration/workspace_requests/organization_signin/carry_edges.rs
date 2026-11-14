@@ -330,6 +330,23 @@ async fn cold_retired_key_refuses_exact_retry_and_new_org_but_preserves_the_rema
 async fn cold_foreign_compact_with_the_correct_row_id_refuses_every_stamped_call() {
     let f = Fixture::new().await;
     assert_eq!(f.provision().await.0, 200);
+    for statement in [
+        Statement {
+            sql: "SELECT 1",
+            args: vec![],
+        },
+        Statement {
+            sql: "SELECT id,organization_statement,created_at,updated_at FROM organization_identity ORDER BY id",
+            args: vec![SqlValue::Text(ORG.into())],
+        },
+    ] {
+        let refused: Result<Result<ReadOutcome, StoreFailure>, StoreFailure> =
+            f.runtime().await.control("raw-read", &statement).await;
+        assert!(
+            refused.is_err(),
+            "raw corruption snapshots must refuse arbitrary SQL or arguments"
+        );
+    }
     let foreign = signed::stamp(B, NOW_SECONDS).unwrap();
     // The routing-bug shape keeps row.id=A and changes ONLY the compact to B.
     f.execute(

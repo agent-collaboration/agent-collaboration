@@ -436,12 +436,15 @@ pub(super) async fn raw_control(object: &CentralObject, mut request: Request) ->
         }
         "/test/raw-read" => {
             let statement: OwnedStatement = request.json().await?;
-            if statement.sql
-                != "SELECT (SELECT COUNT(*) FROM wakes WHERE state='active'), (SELECT COUNT(*) FROM wakes WHERE state='done'), (SELECT COUNT(*) FROM messages WHERE message_kind='wake')"
+            if ![
+                "SELECT (SELECT COUNT(*) FROM wakes WHERE state='active'), (SELECT COUNT(*) FROM wakes WHERE state='done'), (SELECT COUNT(*) FROM messages WHERE message_kind='wake')",
+                "SELECT id,organization_statement,created_at,updated_at FROM organization_identity ORDER BY id",
+                "SELECT * FROM organization_change_records ORDER BY id",
+            ].contains(&statement.sql.as_str())
                 || !statement.args.is_empty()
             {
                 return Err(error(
-                    "raw read only permits the alarm corruption observation",
+                    "raw read only permits named corruption snapshots",
                 ));
             }
             Response::from_json(&statement_store::read(&object.connection, statement).await)

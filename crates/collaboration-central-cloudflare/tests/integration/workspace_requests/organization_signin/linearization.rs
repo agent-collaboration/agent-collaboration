@@ -74,8 +74,8 @@ async fn expiry_crossed_before_sample_refuses_and_post_sample_time_remains_linea
     let origin = f.host.signin_origin();
     let second = tokio::spawn(async move {
         reqwest::Client::new()
-            .post(format!("{origin}{DIGEST}"))
-            .json(&json!({"organizationId":ORG}))
+            .post(format!("{origin}{REVISIONS}"))
+            .json(&org_revision(1, "active"))
             .send()
             .await
             .unwrap()
@@ -92,6 +92,21 @@ async fn expiry_crossed_before_sample_refuses_and_post_sample_time_remains_linea
         .unwrap();
     assert_eq!(first.await.unwrap(), 200);
     assert_eq!(second.await.unwrap(), 503);
+    assert!(
+        f.read("SELECT id FROM organization_authorization_floors")
+            .await
+            .rows
+            .is_empty(),
+        "the queued writer observes expiry and cannot store a floor"
+    );
+    assert_eq!(
+        f.read("SELECT id FROM organization_change_records")
+            .await
+            .rows
+            .len(),
+        1,
+        "only the valid earlier provisioning sample commits its record"
+    );
     let rows = f.read("SELECT created_at FROM organization_identity").await;
     assert_eq!(
         rows.rows,

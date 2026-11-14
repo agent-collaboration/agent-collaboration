@@ -167,9 +167,7 @@ async fn native_factory_preserves_org_binding_refresh_bound_and_current_clock() 
     assert!(inside_bound.is_ok());
     assert!(matches!(
         after_bound,
-        Err(FleetOrganizationStatementRefusal::VerificationUnavailable(
-            _
-        ))
+        Err(FleetOrganizationStatementRefusal::BadSignature)
     ));
     assert_eq!((first_fetches, inside_fetches, boundary_fetches), (1, 1, 2));
 
