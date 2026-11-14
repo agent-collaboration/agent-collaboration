@@ -91,18 +91,22 @@ async fn quota_browse_matches_canonical_responsive_goldens() {
     let cases = [
         (
             "browse-narrow-width-48",
+            7,
             render_quota_capture_model_at(quota_view_model(), 48, 48, ordinary_exit.clone()).await,
         ),
         (
             "browse-stacked-width-159",
+            7,
             render_quota_capture_model_at(quota_view_model(), 159, 24, ordinary_exit.clone()).await,
         ),
         (
             "browse-sidecar-width-160",
+            8,
             render_quota_capture_model_at(quota_view_model(), 160, 24, ordinary_exit.clone()).await,
         ),
         (
             "browse-clipped-height-12",
+            8,
             render_quota_capture_model_at(
                 quota_many_account_view_model(),
                 160,
@@ -113,13 +117,8 @@ async fn quota_browse_matches_canonical_responsive_goldens() {
         ),
     ];
 
-    for (name, actual) in cases {
+    for (name, login_row, actual) in cases {
         let rows = actual.lines().collect::<Vec<_>>();
-        let login_row = match name {
-            "browse-narrow-width-48" | "browse-stacked-width-159" => 7,
-            "browse-sidecar-width-160" | "browse-clipped-height-12" => 8,
-            _ => unreachable!("literal canonical browse case"),
-        };
         let list_cell = |row: usize| rows[row].split('│').nth(2).unwrap();
         assert!(list_cell(login_row).contains("Signed in"), "{name}: {actual}");
         assert!(list_cell(login_row + 1).contains("available"), "separate routing row: {name}: {actual}");

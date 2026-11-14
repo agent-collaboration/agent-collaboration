@@ -224,7 +224,9 @@ pub(super) async fn prepare_terminal_command(
                 Some(String::from(target.session_id.clone())),
             )
         }
-        _ => return Err(rejected(SourceRejection::InvalidRequest)),
+        SourceNativeClaudeAction::Fork { .. } => {
+            return Err(rejected(SourceRejection::InvalidRequest));
+        }
     };
     if !Path::new(directory.as_str()).is_dir() {
         return Err(rejected(SourceRejection::DirectoryUnavailable));
