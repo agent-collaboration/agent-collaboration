@@ -43,10 +43,23 @@ async fn converted_root_resolves_encrypted_credentials_and_lists_accounts()
     let state = AsyncSqliteStateStore::open(&router_root.join("state.sqlite")).await?;
     let mut fixtures = Vec::new();
     let now_unix_seconds = 1_000;
-    for provider in [Provider::Openai, Provider::Claude] {
-        let account_id = AccountId::new(uuid::Uuid::now_v7().to_string())?;
-        let access = SecretString::new(uuid::Uuid::now_v7().to_string());
-        let refresh = SecretString::new(uuid::Uuid::now_v7().to_string());
+    for (provider, account_id, access_token, refresh_token) in [
+        (
+            Provider::Openai,
+            "019f0000-0000-7000-8000-00000000e601",
+            "019f0000-0000-7000-8000-00000000e602",
+            "019f0000-0000-7000-8000-00000000e603",
+        ),
+        (
+            Provider::Claude,
+            "019f0000-0000-7000-8000-00000000e604",
+            "019f0000-0000-7000-8000-00000000e605",
+            "019f0000-0000-7000-8000-00000000e606",
+        ),
+    ] {
+        let account_id = AccountId::new(account_id)?;
+        let access = SecretString::new(access_token.to_owned());
+        let refresh = SecretString::new(refresh_token.to_owned());
         let label = format!("conversion {} fixture", provider.as_str());
         let bundle = match provider {
             Provider::Openai => CredentialBundle::OpenAi(
