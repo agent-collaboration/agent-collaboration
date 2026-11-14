@@ -310,6 +310,38 @@ pub struct EffectiveProviderSettings {
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
+    /// The permission mode the caller asked for; absent means auto (R3).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_mode: Option<String>,
+    /// Why `mode`, the agent's own report, differs from the requested mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode_reason: Option<ProviderModeReason>,
+}
+
+/// Why a session's actual permission mode differs from the requested one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ProviderModeReason {
+    /// The agent does not offer its auto mode; its ask-first mode is used.
+    AutoNotOffered,
+    /// The agent accepted auto but put the session in its ask-first mode.
+    AgentFellBack,
+    /// The Router has no auto realization for this agent; its mode is unchanged.
+    AutoNotRealized,
+    /// The agent's own auto refuses without asking and escalation is not
+    /// proven, so its ask-first mode stands in.
+    EscalationUnproven,
+    /// Setting the auto realization failed; the agent kept its own mode.
+    AutoNotApplied,
+}
+
+/// How an agent's auto mode treats an action outside its granted folders (R7).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ProviderAutoRealization {
+    ClassifierEscalates,
+    AsksFirst,
+    Unknown,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]

@@ -95,6 +95,7 @@ pub(crate) fn production_inspector(context: CliContext) -> DetailsClientInspecto
                             binding_generation,
                             runtime,
                             capabilities,
+                            ..
                         } => Some(ProviderBindingIdentity {
                             endpoint: entry.endpoint.clone(),
                             binding_id: binding_id.clone(),

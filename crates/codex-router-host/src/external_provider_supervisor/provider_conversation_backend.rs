@@ -148,6 +148,9 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                         observed.mode = created.effective_settings.mode;
                                         observed.model = created.effective_settings.model;
                                         observed.effort = created.effective_settings.effort;
+                                        observed.requested_mode = created.permission_mode.requested;
+                                        observed.mode_reason = created.permission_mode.reason.map(crate::provider_operation_settlement::provider_mode_reason);
+                                        completion_inner.record_requested_mode(target.clone(), super::RequestedModeRecord { requested_mode: observed.requested_mode.clone(), mode_reason: observed.mode_reason }).await;
                                         ProviderOperationCompletion::Success {
                                             settlement: ConversationOperationSettlement::Created {
                                                 target: target.clone(),

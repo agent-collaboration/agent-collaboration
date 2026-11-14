@@ -164,6 +164,7 @@ async fn idle_explicit_queue_is_accepted_and_drains_for_both_providers() {
                     binding_generation: generation.generation,
                     runtime: runtime_identity,
                     capabilities,
+                    auto_realization: None,
                 }],
             })
             .expect("endpoint");

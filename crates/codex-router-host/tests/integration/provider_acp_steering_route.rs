@@ -183,6 +183,7 @@ async fn prepared_route(
                 binding_generation: binding.generation.generation,
                 runtime: binding.runtime,
                 capabilities: binding.capabilities,
+                auto_realization: None,
             }],
         })
         .expect("endpoint");

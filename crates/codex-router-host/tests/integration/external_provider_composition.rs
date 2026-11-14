@@ -84,6 +84,19 @@ async fn collaboration_api_reaches_host_owned_provider_and_reuses_target() {
                 provider_endpoint.channels
             )
         });
+    // R7: the endpoint list says how this agent's auto mode treats outside
+    // actions, from the binding's own behaviour (Claude: asks first, D1).
+    assert!(
+        provider_endpoint.channels.iter().any(|channel| matches!(
+            channel,
+            ChannelDescription::ExternalProvider {
+                auto_realization: Some(collaboration_protocol::ProviderAutoRealization::AsksFirst),
+                ..
+            }
+        )),
+        "channels={:?}",
+        provider_endpoint.channels
+    );
     let generation = CodexGeneration {
         service_epoch: inventory.service_epoch,
         generation: generation_number,

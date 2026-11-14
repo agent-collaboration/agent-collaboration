@@ -60,6 +60,13 @@ pub struct ExternalProviderBinding {
     pub runtime: ExternalProviderRuntime,
 }
 
+/// What a session was asked to run in and why its actual mode differs.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct RequestedModeRecord {
+    requested_mode: Option<String>,
+    mode_reason: Option<collaboration_protocol::ProviderModeReason>,
+}
+
 #[derive(Clone)]
 pub struct ExternalProviderSupervisor {
     inner: Arc<SupervisorInner>,
@@ -79,6 +86,10 @@ struct SupervisorInner {
     scratch_root: Option<PathBuf>,
     history_unavailable: Mutex<HashSet<SessionRef>>,
     settings_catalogs: Arc<Mutex<HashMap<SessionRef, acp_client_runtime::ProviderSettingsCatalog>>>,
+    /// The mode each session created here was asked for, and why its actual
+    /// mode differs (R3). In memory: after a Host restart show reports only the
+    /// agent's actual mode.
+    requested_modes: Mutex<HashMap<SessionRef, RequestedModeRecord>>,
     catalog_tasks: Mutex<Vec<tokio::task::JoinHandle<()>>>,
     started_at_ms: i64,
     #[cfg(test)]
@@ -282,6 +293,7 @@ impl ExternalProviderSupervisor {
                 scratch_root,
                 history_unavailable: Mutex::new(HashSet::new()),
                 settings_catalogs,
+                requested_modes: Mutex::new(HashMap::new()),
                 catalog_tasks: Mutex::new(catalog_tasks),
                 started_at_ms: now_ms(),
                 #[cfg(test)]
@@ -550,6 +562,10 @@ impl SupervisorInner {
         catalog: acp_client_runtime::ProviderSettingsCatalog,
     ) {
         self.settings_catalogs.lock().await.insert(target, catalog);
+    }
+
+    async fn record_requested_mode(&self, target: SessionRef, record: RequestedModeRecord) {
+        self.requested_modes.lock().await.insert(target, record);
     }
 
     async fn finish(
