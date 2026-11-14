@@ -86,7 +86,9 @@ sign_with_debug_identity() {
 
   signing_identity="$(
     security find-identity -v -p codesigning |
-      awk -v team="(${DEVELOPER_ID_TEAM})\"" 'index($0, "Developer ID Application") && index($0, team) { print $2; exit }'
+      # Drain the listing under pipefail; selecting an identity must not break
+      # security's later writes or hide a failure after its first match.
+      awk -v team="(${DEVELOPER_ID_TEAM})\"" '!selected && index($0, "Developer ID Application") && index($0, team) { print $2; selected = 1 }'
   )"
   if [[ -z "${signing_identity}" ]]; then
     warn_unsigned "${executable}" "no Developer ID identity for team ${DEVELOPER_ID_TEAM}"
