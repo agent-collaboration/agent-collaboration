@@ -65,6 +65,7 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         };
         let mut statements = plan.statements;
         let mut operation = None;
+        let mut retained = None;
         let result = match &verified.operation {
             AdminOperation::CreateWorkspace(request) => {
                 let created = self
@@ -72,6 +73,7 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
                     .await?;
                 statements.extend(created.statements);
                 operation = Some(created.operation);
+                retained = created.retained;
                 created.result
             }
             AdminOperation::WorkspaceLookup(request) => {
@@ -121,7 +123,10 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
                 }
                 #[cfg(not(feature = "test-support"))]
                 let _retained_operation = operation;
-                Ok(OrganizationAdminAnswer::Answered(result))
+                Ok(match retained {
+                    Some(answer) => OrganizationAdminAnswer::Retained(answer),
+                    None => OrganizationAdminAnswer::Answered(result),
+                })
             }
             _ => Ok(OrganizationAdminAnswer::Answered(
                 OrganizationAdminResult::Refused {

@@ -15,11 +15,25 @@ pub struct WorkspaceView {
 }
 
 /// Verification failures become a bare 401; answered operations have a body.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OrganizationAdminAnswer {
     Answered(OrganizationAdminResult),
+    Retained(RetainedOrganizationAdminAnswer),
     Unauthenticated,
+}
+
+/// Validated retained JSON travels to HTTP without another serialization.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RetainedOrganizationAdminAnswer {
+    text: String,
+}
+impl RetainedOrganizationAdminAnswer {
+    pub(crate) fn validated(text: String) -> Self {
+        Self { text }
+    }
+    pub(crate) fn into_text(self) -> String {
+        self.text
+    }
 }
 
 /// The closed body of a 200 on an admin route.

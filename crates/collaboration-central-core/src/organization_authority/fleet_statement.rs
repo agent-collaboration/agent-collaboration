@@ -79,8 +79,13 @@ impl<Crypto: Ed25519Verification, Keys: IssuerKeySource>
     pub async fn verify_stored_statement_facts(
         &self,
         statement: &str,
-    ) -> Result<VerifiedFleetOrganizationStatement, FleetOrganizationStatementRefusal> {
-        self.verify_signature_and_profile(statement).await
+    ) -> Result<StoredStatementFacts, FleetOrganizationStatementRefusal> {
+        let verified = self.verify_signature_and_profile(statement).await?;
+        Ok(StoredStatementFacts {
+            digest: verified.digest,
+            key_id: verified.key_id,
+            expires_at: verified.expires_at,
+        })
     }
 
     async fn verify_signature_and_profile(
@@ -136,6 +141,53 @@ impl<Crypto: Ed25519Verification, Keys: IssuerKeySource>
             replaces: parsed.claims.replaces,
             digest: OrganizationStatementDigest::of_compact_jws(statement),
         })
+    }
+}
+
+/// Signed stored metadata for a digest read, without current-time authorization.
+/// It exposes neither an authorizing verification nor a conversion into one.
+///
+/// Both types and their intended consumers remain usable:
+///
+/// ```
+/// use collaboration_central_core::organization_authority::{
+///     CurrentStamp, StoredStatementFacts, VerifiedFleetOrganizationStatement,
+/// };
+/// fn authorizing_control(verified: &VerifiedFleetOrganizationStatement) -> CurrentStamp {
+///     CurrentStamp::of_verified(verified)
+/// }
+/// fn read_metadata(facts: &StoredStatementFacts) {
+///     let _ = (facts.digest(), facts.key_id(), facts.expires_at());
+/// }
+/// ```
+///
+/// Facts cannot enter the same authorizing policy boundary:
+///
+/// ```compile_fail,E0308
+/// use collaboration_central_core::organization_authority::{CurrentStamp, StoredStatementFacts};
+/// fn cannot_authorize(facts: &StoredStatementFacts) {
+///     let _ = CurrentStamp::of_verified(facts);
+/// }
+/// ```
+#[derive(Debug)]
+pub struct StoredStatementFacts {
+    digest: OrganizationStatementDigest,
+    key_id: String,
+    expires_at: UnixSeconds,
+}
+
+impl StoredStatementFacts {
+    #[must_use]
+    pub fn digest(&self) -> &OrganizationStatementDigest {
+        &self.digest
+    }
+    #[must_use]
+    pub fn key_id(&self) -> &str {
+        &self.key_id
+    }
+    #[must_use]
+    pub const fn expires_at(&self) -> UnixSeconds {
+        self.expires_at
     }
 }
 

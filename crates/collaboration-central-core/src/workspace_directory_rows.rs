@@ -2,6 +2,7 @@
 use crate::{
     ObjectHost,
     guarded_statements::{exact, text},
+    person_request::MAXIMUM_DESCRIPTION_BYTES,
     workspace_decode_error::corrupt,
     workspace_row_codec::string,
 };
@@ -31,7 +32,11 @@ fn decode(rows: &ReadOutcome) -> Result<Option<DirectoryWorkspace>, StoreFailure
     if name.as_str() != stored_name {
         return Err(corrupt("workspaces.name"));
     }
-    let description = Description::try_from(string(rows, row, "description")?.to_owned())
+    let stored_description = string(rows, row, "description")?;
+    if stored_description.len() > MAXIMUM_DESCRIPTION_BYTES {
+        return Err(corrupt("workspaces.description"));
+    }
+    let description = Description::try_from(stored_description.to_owned())
         .map_err(|_| corrupt("workspaces.description"))?;
     let state = match string(rows, row, "state")? {
         "active" => WorkspaceState::Active,
@@ -99,3 +104,7 @@ pub(crate) fn insert(
         ],
     ))
 }
+
+#[cfg(test)]
+#[path = "workspace_directory_rows_test.rs"]
+mod tests;

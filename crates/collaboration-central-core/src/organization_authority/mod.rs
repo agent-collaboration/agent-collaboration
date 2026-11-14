@@ -14,7 +14,7 @@ pub use provisioning_failure::OrganizationProvisioningFailure;
 mod stored_stamp;
 pub use fleet_statement::{
     FleetOrganizationStatementTrust, FleetOrganizationStatementVerifier,
-    MAXIMUM_STATEMENT_LIFETIME_SECONDS, VerifiedFleetOrganizationStatement,
+    MAXIMUM_STATEMENT_LIFETIME_SECONDS, StoredStatementFacts, VerifiedFleetOrganizationStatement,
 };
 pub use fleet_statement_refusal::FleetOrganizationStatementRefusal;
 pub use fleet_statement_wire::OrganizationStatementDigest;

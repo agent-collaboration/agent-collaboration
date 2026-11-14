@@ -8,7 +8,9 @@ use std::time::Duration;
 const OPERATION: &str = "019f0000-0000-7000-8000-00000000d701";
 mod authorization;
 mod deadlines;
+mod ledger_expiry;
 mod recovery;
+mod retained_wire;
 mod support;
 
 pub(super) async fn owned_rows(fixture: &Fixture) -> Vec<Vec<Vec<SqlValue>>> {

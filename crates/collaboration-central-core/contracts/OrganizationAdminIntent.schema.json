@@ -1,0 +1,183 @@
+{
+  "$defs": {
+    "AdminOperationId": {
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "CreateWorkspaceParams": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "type": "string"
+        },
+        "name": {
+          "$ref": "#/$defs/WorkspaceName"
+        }
+      },
+      "required": [
+        "name",
+        "description"
+      ],
+      "type": "object"
+    },
+    "IntentVersionOne": {
+      "const": 1,
+      "type": "integer"
+    },
+    "OrganizationAdminIntentWire": {
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "CreateWorkspace",
+              "type": "string"
+            },
+            "operationId": {
+              "$ref": "#/$defs/AdminOperationId"
+            },
+            "organization": {
+              "$ref": "#/$defs/OrganizationId"
+            },
+            "params": {
+              "$ref": "#/$defs/CreateWorkspaceParams"
+            },
+            "target": {
+              "$ref": "#/$defs/OrganizationId"
+            },
+            "v": {
+              "$ref": "#/$defs/IntentVersionOne"
+            }
+          },
+          "required": [
+            "operation",
+            "v",
+            "organization",
+            "target",
+            "operationId",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "WorkspaceLookup",
+              "type": "string"
+            },
+            "operationId": {
+              "type": "null"
+            },
+            "organization": {
+              "$ref": "#/$defs/OrganizationId"
+            },
+            "params": {
+              "$ref": "#/$defs/WorkspaceLookupParams"
+            },
+            "target": {
+              "$ref": "#/$defs/WorkspaceId"
+            },
+            "v": {
+              "$ref": "#/$defs/IntentVersionOne"
+            }
+          },
+          "required": [
+            "operation",
+            "v",
+            "organization",
+            "target",
+            "operationId",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "ReadChangeRecords",
+              "type": "string"
+            },
+            "operationId": {
+              "type": "null"
+            },
+            "organization": {
+              "$ref": "#/$defs/OrganizationId"
+            },
+            "params": {
+              "$ref": "#/$defs/ReadChangeRecordsParams"
+            },
+            "target": {
+              "$ref": "#/$defs/OrganizationId"
+            },
+            "v": {
+              "$ref": "#/$defs/IntentVersionOne"
+            }
+          },
+          "required": [
+            "operation",
+            "v",
+            "organization",
+            "target",
+            "operationId",
+            "params"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "OrganizationId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "ReadChangeRecordsParams": {
+      "additionalProperties": false,
+      "properties": {
+        "after": {
+          "format": "uuid",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limit": {
+          "$ref": "#/$defs/RecordPageLimit"
+        }
+      },
+      "required": [
+        "after",
+        "limit"
+      ],
+      "type": "object"
+    },
+    "RecordPageLimit": {
+      "maximum": 100,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "WorkspaceId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "WorkspaceLookupParams": {
+      "additionalProperties": false,
+      "type": "object"
+    },
+    "WorkspaceName": {
+      "maxLength": 256,
+      "minLength": 1,
+      "pattern": "^(?:[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000](?:[\\s\\S]*[^\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000])?)?$(?![\\s\\S])",
+      "type": "string",
+      "x-maxUtf8Bytes": 256
+    }
+  },
+  "$ref": "#/$defs/OrganizationAdminIntentWire",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The version-one T06 object whose canonical bytes a person's proof hashes.",
+  "title": "OrganizationAdminIntent"
+}

@@ -7,7 +7,9 @@ const OPERATION: &str = "019f0000-0000-7000-8000-00000000d701";
 mod authorization;
 mod deadlines;
 mod directory;
+mod ledger_expiry;
 mod recovery;
+mod retained_wire;
 mod support;
 
 async fn admission_rows(fixture: &Fixture) -> Result<Vec<Vec<Vec<central_storage::SqlValue>>>> {

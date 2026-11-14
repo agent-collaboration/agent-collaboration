@@ -129,6 +129,12 @@ async fn forward_admin<Port: OrganizationSignInPort>(
         Ok(OrganizationAdminAnswer::Answered(result)) => {
             (StatusCode::OK, Json(result)).into_response()
         }
+        Ok(OrganizationAdminAnswer::Retained(answer)) => (
+            StatusCode::OK,
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            answer.into_text(),
+        )
+            .into_response(),
         Err(_) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
     }
 }

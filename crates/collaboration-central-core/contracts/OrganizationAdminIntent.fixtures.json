@@ -1,0 +1,5 @@
+[
+{"operation":"CreateWorkspace","operationId":"019a3dce-2000-7000-8000-000000000003","organization":"019a3dce-2000-7000-8000-000000000001","params":{"description":"Fixture description","name":"Fixture workspace"},"target":"019a3dce-2000-7000-8000-000000000001","v":1},
+{"operation":"WorkspaceLookup","operationId":null,"organization":"019a3dce-2000-7000-8000-000000000001","params":{},"target":"019a3dce-2000-7000-8000-000000000002","v":1},
+{"operation":"ReadChangeRecords","operationId":null,"organization":"019a3dce-2000-7000-8000-000000000001","params":{"after":null,"limit":1},"target":"019a3dce-2000-7000-8000-000000000001","v":1}
+]

@@ -4,6 +4,7 @@ use crate::organization_authority::fleet_statement_test_support::{
 };
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::sync::atomic::Ordering;
 
 #[tokio::test]
@@ -244,13 +245,9 @@ async fn stored_facts_keep_expired_bounds_without_changing_normal_verification()
             .unwrap();
 
         // Assert: the factual result grants no current validity to any caller.
-        assert_eq!(facts.organization_id(), &organization(ORGANIZATION));
         assert_eq!(facts.key_id(), "stamp-fixture");
         assert_eq!(facts.expires_at().0, 1_800_000_600);
-        assert_eq!(
-            facts.require_valid_at(runtime_primitives::SyncTime::from_unix_millis(now)),
-            Err(Refusal::Expired)
-        );
+        assert!(facts.digest().as_str() == format!("{:x}", Sha256::digest(statement.as_bytes())));
         assert_eq!(
             verifier.verify(&statement).await.unwrap_err(),
             Refusal::Expired
@@ -271,14 +268,9 @@ async fn stored_facts_keep_future_issuance_without_changing_normal_verification(
         .verify_stored_statement_facts(&statement)
         .await
         .unwrap();
-    assert_eq!(facts.issued_at().0, 1_800_000_001);
+    assert_eq!(facts.key_id(), "stamp-fixture");
     assert_eq!(facts.expires_at().0, 1_800_000_600);
-    assert_eq!(
-        facts.require_valid_at(runtime_primitives::SyncTime::from_unix_millis(
-            1_800_000_000_000
-        )),
-        Err(Refusal::NotYetValid)
-    );
+    assert!(facts.digest().as_str() == format!("{:x}", Sha256::digest(statement.as_bytes())));
     assert_eq!(
         verifier.verify(&statement).await.unwrap_err(),
         Refusal::NotYetValid
