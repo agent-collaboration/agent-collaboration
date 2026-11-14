@@ -4,6 +4,12 @@ use serde_json::{Value, json};
 
 const OPERATION: &str = "019f0000-0000-7000-8000-00000000d701";
 
+mod authorization;
+mod deadlines;
+mod directory;
+mod recovery;
+mod support;
+
 async fn admission_rows(fixture: &Fixture) -> Result<Vec<Vec<Vec<central_storage::SqlValue>>>> {
     let mut snapshots = Vec::new();
     for sql in [
@@ -31,14 +37,9 @@ async fn create_lookup_replay_and_name_uniqueness_are_atomic() -> Result {
     let intent = signed::create_intent(A, OPERATION, "Research");
 
     // Act: the signed setup request must reach the actual mounted create route.
+    let first_proof = signed::fresh_request_id(signed::NOW_SECONDS)?;
     let reply = fixture
-        .person(
-            signed::CREATE,
-            &body,
-            &owner,
-            &intent,
-            &signed::fresh_request_id(signed::NOW_SECONDS)?,
-        )
+        .person(signed::CREATE, &body, &owner, &intent, &first_proof)
         .await?;
 
     // Assert: literal wire contract, with operation identity owning the workspace.
@@ -55,6 +56,87 @@ async fn create_lookup_replay_and_name_uniqueness_are_atomic() -> Result {
     let rows = fixture.rows(A,
         "SELECT (SELECT COUNT(*) FROM workspaces),(SELECT COUNT(*) FROM request_log),(SELECT COUNT(*) FROM organization_change_records WHERE kind='workspaceCreated')", vec![]).await?;
     assert_eq!(rows, vec![vec![number(1)?, number(1)?, number(1)?]]);
+    let member = signed::Person::member(A, signed::NOW_SECONDS)?;
+    let lookup = fixture
+        .person(
+            signed::LOOKUP,
+            &json!({"organizationId":A,"workspaceId":OPERATION}),
+            &member,
+            &signed::lookup_intent(A, OPERATION),
+            &signed::fresh_request_id(signed::NOW_SECONDS)?,
+        )
+        .await?;
+    assert_eq!(lookup.status, 200);
+    assert_eq!(
+        lookup.value()?,
+        json!({"result":"found","workspace":{
+            "workspaceId":OPERATION,"name":"Research","description":"","state":"active"
+        }})
+    );
+    let before = support::durable_effects(&fixture).await?;
+    let retried = support::create(&fixture, &owner, OPERATION, "Research", "").await?;
+    assert_eq!(retried.status, 200);
+    assert_eq!(
+        retried.body, reply.body,
+        "a fresh proof replays the exact first answer bytes"
+    );
+    assert!(
+        support::durable_effects(&fixture).await? == before,
+        "replay rewrote directory, ledger, audit or actor"
+    );
+    let reused = fixture
+        .person(signed::CREATE, &body, &owner, &intent, &first_proof)
+        .await?;
+    assert_eq!(reused.status, 200);
+    assert_eq!(
+        reused.value()?,
+        json!({"result":"refused","reason":"requestReused"})
+    );
+    let changed = support::create(&fixture, &owner, OPERATION, "Different name", "").await?;
+    assert_eq!(changed.status, 200);
+    assert_eq!(
+        changed.value()?,
+        json!({"result":"refused","reason":"conflict"})
+    );
+    assert!(support::durable_effects(&fixture).await? == before);
+    let same_name = support::create(
+        &fixture,
+        &owner,
+        "019f0000-0000-7000-8000-00000000d702",
+        "Research",
+        "",
+    )
+    .await?;
+    assert_eq!(same_name.status, 200);
+    assert_eq!(
+        same_name.value()?,
+        json!({"result":"refused","reason":"nameInUse"})
+    );
+    assert_eq!(fixture.rows(A,"SELECT (SELECT COUNT(*) FROM workspaces),(SELECT COUNT(*) FROM request_log),(SELECT COUNT(*) FROM organization_change_records WHERE kind='workspaceCreated'),(SELECT COUNT(*) FROM organization_used_requests)",vec![]).await?,vec![vec![number(1)?,number(2)?,number(1)?,number(5)?]]);
+    let records = fixture
+        .person(
+            signed::RECORDS,
+            &json!({"organizationId":A,"after":null,"limit":100}),
+            &owner,
+            &signed::records_intent(A, None, 100),
+            &signed::fresh_request_id(signed::NOW_SECONDS)?,
+        )
+        .await?;
+    let records = records.value()?;
+    let created = records
+        .get("records")
+        .and_then(Value::as_array)
+        .ok_or("audit list missing")?
+        .get(1)
+        .ok_or("create record missing")?;
+    assert_eq!(created.get("requestId"), Some(&json!(OPERATION)));
+    assert_eq!(created.get("targetId"), Some(&json!(OPERATION)));
+    assert_eq!(
+        created.get("origin"),
+        Some(
+            &json!({"kind":"person","personId":signed::OWNER,"permissionChecked":"workspace:create"})
+        )
+    );
     fixture.close().await
 }
 
@@ -102,6 +184,7 @@ async fn expired_digest_returns_verified_facts_but_create_stays_refused() -> Res
         refused.status, 503,
         "facts read must not authorize a create"
     );
+    assert!(refused.body.is_empty());
     let read = fixture
         .person(
             signed::RECORDS,
@@ -115,6 +198,7 @@ async fn expired_digest_returns_verified_facts_but_create_stays_refused() -> Res
         read.status, 503,
         "existing admin admission still needs Valid standing"
     );
+    assert!(read.body.is_empty());
     assert!(
         fixture.snapshot().await? == before,
         "facts and refusals changed stored rows"
@@ -167,6 +251,7 @@ async fn not_yet_valid_digest_returns_facts_without_live_authority() -> Result {
         reply.status, 503,
         "facts must not authorize a future organization stamp"
     );
+    assert!(reply.body.is_empty());
     assert!(admission_rows(&fixture).await? == before);
     assert!(fixture.snapshot().await? == identity);
     fixture.close().await

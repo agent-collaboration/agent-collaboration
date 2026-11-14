@@ -96,5 +96,7 @@ produce two consecutive changes, both are drained, and replay preserves the curs
   replay, pre-sample expiry and post-sample org-turn linearization, and the first
   real stamp activating a pending wake through the native alarm owner.
   Shared signers live in `collaboration-central-conformance`'s non-default
-  `signin-test-support` feature. Create-workspace, non-null lookup and machine
-  login remain outside this suite until their held contracts are approved.
+  `signin-test-support` feature. Setup cases exercise signed workspace creation,
+  non-null lookup, byte-identical operation replay, shared canonical name uniqueness,
+  atomic directory/ledger/audit writes, and stored stamp facts outside both time
+  bounds without granting live authority. Machine login remains outside this suite.

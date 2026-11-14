@@ -6,8 +6,12 @@ use serde_json::{Value, json};
 use std::time::Duration;
 
 const OPERATION: &str = "019f0000-0000-7000-8000-00000000d701";
+mod authorization;
+mod deadlines;
+mod recovery;
+mod support;
 
-async fn owned_rows(fixture: &Fixture) -> Vec<Vec<Vec<SqlValue>>> {
+pub(super) async fn owned_rows(fixture: &Fixture) -> Vec<Vec<Vec<SqlValue>>> {
     let mut snapshots = Vec::new();
     for sql in [
         "SELECT * FROM organization_identity ORDER BY id",
@@ -39,7 +43,8 @@ async fn create_lookup_replay_and_name_uniqueness_are_atomic() {
             NOW_SECONDS,
         )
         .unwrap();
-    let (status, reply) = fixture.post_with(signed::CREATE, &body, &headers).await;
+    let (status, first_bytes) = fixture.post_bytes(signed::CREATE, &body, &headers).await;
+    let reply: Value = serde_json::from_slice(&first_bytes).unwrap();
     assert_eq!(status, 200, "the signed setup create route must apply");
     assert_eq!(
         reply,
@@ -55,6 +60,120 @@ async fn create_lookup_replay_and_name_uniqueness_are_atomic() {
             SqlValue::Integer(1.try_into().unwrap()),
             SqlValue::Integer(1.try_into().unwrap())
         ]]
+    );
+    let before_reused_proof = owned_rows(&fixture).await;
+    assert_eq!(
+        fixture.post_with(signed::CREATE, &body, &headers).await,
+        (200, json!({"result":"refused","reason":"requestReused"}))
+    );
+    assert!(
+        owned_rows(&fixture).await == before_reused_proof,
+        "same DPoP proof may not bypass replay admission"
+    );
+    let original_bytes = fixture
+        .post_bytes(
+            signed::CREATE,
+            &body,
+            &support::headers(&owner, &intent, NOW_SECONDS),
+        )
+        .await;
+    assert_eq!(original_bytes.0, 200);
+    assert!(
+        original_bytes.1 == first_bytes,
+        "replay retains the exact first answer bytes"
+    );
+    let lookup = json!({"organizationId":ORG,"workspaceId":OPERATION});
+    assert_eq!(
+        fixture
+            .post_with(
+                LOOKUP,
+                &lookup,
+                &owner
+                    .headers(
+                        LOOKUP,
+                        &signed::lookup_intent(ORG, OPERATION),
+                        &signed::fresh_request_id(NOW_SECONDS).unwrap(),
+                        NOW_SECONDS
+                    )
+                    .unwrap()
+            )
+            .await,
+        (
+            200,
+            json!({"result":"found","workspace":reply["workspace"]})
+        )
+    );
+    let other = "019f0000-0000-7000-8000-00000000d702";
+    let collision = fixture
+        .post_with(
+            signed::CREATE,
+            &signed::create_body(ORG, other, "research"),
+            &support::headers(
+                &owner,
+                &signed::create_intent(ORG, other, "research"),
+                NOW_SECONDS,
+            ),
+        )
+        .await;
+    assert_eq!(
+        collision,
+        (200, json!({"result":"refused","reason":"nameInUse"}))
+    );
+    assert_eq!(fixture.read("SELECT (SELECT COUNT(*) FROM workspaces),(SELECT COUNT(*) FROM request_log),(SELECT COUNT(*) FROM organization_change_records WHERE kind='workspaceCreated')").await.rows,vec![vec![support::number(1),support::number(2),support::number(1)]]);
+    let collision_before = support::stable_effects(&fixture).await;
+    assert_eq!(
+        fixture
+            .post_with(
+                signed::CREATE,
+                &signed::create_body(ORG, other, "research"),
+                &support::headers(
+                    &owner,
+                    &signed::create_intent(ORG, other, "research"),
+                    NOW_SECONDS
+                )
+            )
+            .await,
+        collision,
+        "an admitted duplicate-name refusal is retained for same-operation replay"
+    );
+    assert!(support::stable_effects(&fixture).await == collision_before);
+    let with_description = "019f0000-0000-7000-8000-00000000d703";
+    let (described_body, described_intent) =
+        support::create(with_description, "Described", "A real description");
+    let described = fixture
+        .post_with(
+            signed::CREATE,
+            &described_body,
+            &support::headers(&owner, &described_intent, NOW_SECONDS),
+        )
+        .await;
+    assert_eq!(
+        described,
+        (
+            200,
+            json!({"result":"applied","workspace":{"workspaceId":with_description,"name":"Described","description":"A real description","state":"active"}})
+        )
+    );
+    let description_lookup = json!({"organizationId":ORG,"workspaceId":with_description});
+    assert_eq!(
+        fixture
+            .post_with(
+                LOOKUP,
+                &description_lookup,
+                &owner
+                    .headers(
+                        LOOKUP,
+                        &signed::lookup_intent(ORG, with_description),
+                        &signed::fresh_request_id(NOW_SECONDS).unwrap(),
+                        NOW_SECONDS
+                    )
+                    .unwrap()
+            )
+            .await,
+        (
+            200,
+            json!({"result":"found","workspace":described.1["workspace"]})
+        )
     );
     fixture.close().await;
 }

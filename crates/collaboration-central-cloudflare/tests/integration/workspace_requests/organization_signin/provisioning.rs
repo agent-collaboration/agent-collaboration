@@ -415,10 +415,19 @@ async fn expired_after_cold_reset_and_foreign_stored_stamps_refuse_without_rewri
         let before: Result<ReadOutcome, StoreFailure> =
             runtime.control("raw-read", &snapshot()).await.unwrap();
         let before = before.unwrap();
-        assert_eq!(
-            f.post(DIGEST, &json!({"organizationId":ORG})).await,
-            (503, serde_json::Value::Null)
-        );
+        let digest = f.post(DIGEST, &json!({"organizationId":ORG})).await;
+        if foreign {
+            assert_eq!(digest, (503, serde_json::Value::Null));
+        } else {
+            assert_eq!(
+                digest,
+                (
+                    200,
+                    json!({"digest":stamp::digest(&original),"expiresAt":NOW_SECONDS+1,"signingKeyId":"stamp-a"})
+                ),
+                "expiry supersedes only digest readiness, not signature or admission checks"
+            );
+        }
         assert_eq!(
             f.post(REVISIONS, &org_revision(1, "active")).await,
             (503, serde_json::Value::Null)

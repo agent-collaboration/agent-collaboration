@@ -99,8 +99,9 @@ Cases cover stamp and record atomicity, expiry and predecessor checks, current
 revision floors, signed person reads, fresh proofs, causal races, cold reopen,
 query-derived alarm activation and safe refusal observations. Public-path refusal
 uses the existing `401` edge contract. Unknown private paths return `404`.
-Create-workspace effects, non-null lookup and machine-login approval replay remain
-held; independent read admission does not substitute for those effects.
+Setup cases exercise real signed create, non-null lookup, byte-identical replay,
+canonical name collisions, atomic directory/ledger/audit writes and facts-only
+digest reads outside both time bounds. Machine-login approval replay remains held.
 
 `workspace_requests::workerd_host::tests` also checks the fixture's control HTTP
 connection policy against real workerd. A byte-transparent relay observes upstream

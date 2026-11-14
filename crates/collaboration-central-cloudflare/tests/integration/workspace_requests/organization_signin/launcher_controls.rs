@@ -253,3 +253,97 @@ async fn bridge_controls_share_time_with_live_and_future_orgs_and_fresh_process_
     keys.shutdown().await?;
     Ok(())
 }
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Literal private IPC observations fail without dumping fixture statements or tokens."
+)]
+#[tokio::test]
+async fn setup_private_observe_matches_rows_and_external_fresh_restart() -> ConformanceResult<()> {
+    let keys = signed::SignInKeys::start().await?;
+    let root = tempfile::tempdir()?;
+    let plan = root.path().join("setup-observe-plan.json");
+    std::fs::write(
+        &plan,
+        serde_json::to_vec(&json!({"textBindings":{
+        "CENTRAL_SIGN_IN_ISSUER":signed::ISSUER,"CENTRAL_SIGN_IN_AUDIENCE":signed::AUDIENCE,
+        "CENTRAL_SIGN_IN_JWKS_URL":"https://signin.test/.well-known/jwks.json",
+        "CENTRAL_ADMIN_AUDIENCE":signed::ADMIN_AUDIENCE,"CENTRAL_PUBLIC_ORIGIN":signed::PUBLIC_ORIGIN,
+        "CENTRAL_SIGN_IN_SERVICE_ID":"019f0000-0000-7000-8000-00000000d290"
+    },"jwksFixtureUrl":keys.url}))?,
+    )?;
+    let mut bridge = Bridge::start(&plan).await?;
+    let organization = signed::ORGANIZATION;
+    let operation = "019f0000-0000-7000-8000-00000000d781";
+    assert_empty(&bridge.observe(organization).await?)?;
+    bridge.set_time(signed::NOW_SECONDS * 1000, 0).await?;
+    let statement = signed::stamp(organization, signed::NOW_SECONDS)?;
+    bridge.provision(organization, &statement).await?;
+    let private = format!("{}/private", bridge.origin);
+    for revision in [
+        json!({"kind":"organization","organizationId":organization,"revision":3,"state":"active","permissionPolicyDigest":signed::POLICY}),
+        json!({"kind":"person","organizationId":organization,"personId":signed::OWNER,"subjectId":signed::OWNER_SUBJECT,"revision":4,"state":"active"}),
+    ] {
+        let response = bridge
+            .client
+            .post(format!(
+                "{private}/internal/organization-authorization-revisions"
+            ))
+            .json(&revision)
+            .send()
+            .await?;
+        assert_eq!(response.status().as_u16(), 200);
+        let _: Value = response.json().await?;
+    }
+    let person = signed::Person::owner(organization, signed::NOW_SECONDS)?;
+    let request_id = signed::fresh_request_id(signed::NOW_SECONDS)?;
+    let proof = person.headers(
+        signed::CREATE,
+        &signed::create_intent(organization, operation, "Observed setup"),
+        &request_id,
+        signed::NOW_SECONDS,
+    )?;
+    let mut request = bridge
+        .client
+        .post(format!("{private}{}", signed::CREATE))
+        .json(&signed::create_body(
+            organization,
+            operation,
+            "Observed setup",
+        ));
+    for (name, value) in proof {
+        request = request.header(name, value);
+    }
+    let response = request.send().await?;
+    assert_eq!(response.status().as_u16(), 200);
+    assert_eq!(
+        response.json::<Value>().await?,
+        json!({"result":"applied","workspace":{"workspaceId":operation,"name":"Observed setup","description":"","state":"active"}})
+    );
+    let observed = bridge.observe(organization).await?;
+    let expected = json!({
+        "statement":statement,
+        "stamp":{"digest":signed::digest(&statement),"keyId":"stamp-a","expiresAt":signed::NOW_SECONDS-60+signed::LIFETIME_SECONDS},
+        "records":[
+            {"kind":"organizationProvisioned","requestId":organization,"targetId":organization,"createdAtMillis":signed::NOW_SECONDS*1000},
+            {"kind":"workspaceCreated","requestId":operation,"targetId":operation,"createdAtMillis":signed::NOW_SECONDS*1000}
+        ],
+        "organizationFloor":{"revision":3,"state":"active"},
+        "personFloors":[{"subjectId":signed::OWNER_SUBJECT,"personId":signed::OWNER,"revision":4,"state":"active"}],
+        "usedRequests":[{"id":request_id}],
+        "workspaces":[{"workspaceId":operation,"name":"Observed setup"}],
+        "complete":true
+    });
+    assert!(
+        observed == expected,
+        "setup observation must exactly match the approved minimal owning-store projection"
+    );
+    bridge.close().await?;
+    let mut fresh = Bridge::start(&plan).await?;
+    fresh.set_time(signed::NOW_SECONDS * 1000, 0).await?;
+    assert_empty(&fresh.observe(organization).await?)?;
+    fresh.set_time(signed::NOW_SECONDS * 1000, 0).await?;
+    fresh.close().await?;
+    keys.shutdown().await?;
+    Ok(())
+}

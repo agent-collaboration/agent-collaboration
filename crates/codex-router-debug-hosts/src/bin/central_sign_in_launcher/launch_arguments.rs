@@ -1,6 +1,6 @@
 //! The historical ten flags and their CENTRAL_LAUNCHER_<FLAG> fallbacks.
 use super::launcher_failure::{LauncherFailure, LauncherResult};
-use collaboration_central_core::SignInTrustSettings;
+use collaboration_central_core::{MAX_ALARM_UNIX_MILLIS, SignInTrustSettings};
 use fleet_identity_protocol::OrganizationId;
 use runtime_primitives::SyncTime;
 use std::{collections::BTreeMap, path::PathBuf};
@@ -78,6 +78,9 @@ impl LaunchConfiguration {
             .get("fixed-time-ms")?
             .parse::<i64>()
             .map_err(|_| LauncherFailure::InvalidValue("fixed-time-ms"))?;
+        if !(0..=MAX_ALARM_UNIX_MILLIS).contains(&fixed_time) {
+            return Err(LauncherFailure::InvalidValue("fixed-time-ms"));
+        }
         Ok(Self {
             root: arguments.get("root")?.into(),
             socket: arguments.get("socket")?.into(),

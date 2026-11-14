@@ -9,8 +9,8 @@ mod provisioning;
 mod records;
 mod replay_repair;
 mod rollback;
-mod support;
 mod setup;
+mod support;
 
 mod carry_edges;
 mod metadata;
