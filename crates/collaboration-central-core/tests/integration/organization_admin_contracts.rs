@@ -20,7 +20,10 @@ fn description_boundaries(literal: Value, pointer: &str) -> Vec<Value> {
     .map(|description| {
         assert!(description.is_empty() || description.len() == 2048);
         let mut boundary = literal.clone();
-        *boundary.pointer_mut(pointer).unwrap() = json!(description);
+        let Some(field) = boundary.pointer_mut(pointer) else {
+            panic!("description boundary fixture is missing {pointer}");
+        };
+        *field = json!(description);
         boundary
     })
     .collect()
