@@ -752,7 +752,7 @@ jobs:
           worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --locked --features test-support,conformance
           worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-link-test-support -- --locked --no-default-features --features link,test-support,conformance
           pnpm --dir verification run test:workerd
-          cargo nextest run --locked --profile ci -p collaboration-central-cloudflare --features test-support --test integration
+          cargo nextest run --locked --profile worker-ci -p collaboration-central-cloudflare --features test-support --test integration
           pnpm --dir verification exec oxlint --deny-warnings "$GITHUB_WORKSPACE/crates/collaboration-central-cloudflare/tests/support/workerd-bridge.mts"
           pnpm --dir verification exec oxfmt --check "$GITHUB_WORKSPACE/crates/collaboration-central-cloudflare/tests/support/workerd-bridge.mts"
           pnpm --dir verification exec tsc --ignoreConfig --noEmit --strict --target esnext --module nodenext --allowImportingTsExtensions --skipLibCheck --typeRoots node_modules/@types "$GITHUB_WORKSPACE/crates/collaboration-central-cloudflare/tests/support/workerd-bridge.mts"
