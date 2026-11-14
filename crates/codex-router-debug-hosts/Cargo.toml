@@ -11,6 +11,14 @@ publish = false
 workspace = true
 
 [features]
+signin-test-support = [
+    "dep:collaboration-central-core",
+    "dep:collaboration-central-tokio",
+    "dep:router-clock",
+    "dep:runtime-primitives",
+    "dep:chrono",
+    "dep:fleet-identity-protocol",
+]
 # The feature set the former codex-router-host examples (board-debug-runtime,
 # debug_host_acceptance, imagegen-debug-acceptance, provider-only-debug-host) were
 # built with: Host runtime test hooks, the Keychain test guard and ACP test
@@ -24,6 +32,18 @@ runtime-test-support = [
 ]
 
 # Keep the launchers' colocated unit tests discoverable by nextest.
+[[bin]]
+name = "central_sign_in_launcher"
+path = "src/bin/central_sign_in_launcher.rs"
+required-features = ["signin-test-support"]
+test = true
+bench = false
+
+[[test]]
+name = "e2e"
+path = "tests/e2e/main.rs"
+required-features = ["signin-test-support"]
+
 [[bin]]
 name = "automation-debug-host"
 path = "src/bin/automation-debug-host.rs"
@@ -55,6 +75,12 @@ test = true
 bench = false
 
 [dependencies]
+collaboration-central-core = { path = "../collaboration-central-core", version = "0.1.150", features = ["test-support"], optional = true }
+collaboration-central-tokio = { path = "../collaboration-central-tokio", version = "0.1.150", features = ["test-support"], optional = true }
+router-clock = { workspace = true, features = ["test-support"], optional = true }
+runtime-primitives = { workspace = true, optional = true }
+chrono = { workspace = true, optional = true }
+fleet-identity-protocol = { path = "../fleet-identity-protocol", version = "0.1.150", optional = true }
 acp-client-runtime = { path = "../acp-client-runtime", version = "0.1.40" }
 codex-native-integration.workspace = true
 codex-router-host = { path = "../codex-router-host", version = "0.1.148" }
@@ -68,7 +94,7 @@ futures-util.workspace = true
 interaction-storage = { path = "../interaction-storage", version = "0.1.96" }
 message-board = { path = "../message-board", version = "0.1.20" }
 node-test-fixture = { path = "../node-test-fixture", version = "0.1.105" }
-rustix = { workspace = true, features = ["event"] }
+rustix = { workspace = true, features = ["event", "pipe"] }
 serde.workspace = true
 serde_json.workspace = true
 tempfile = "3.27.0"
@@ -77,3 +103,7 @@ tokio-tungstenite.workspace = true
 toml = "1.1.2"
 tracing.workspace = true
 tracing-subscriber.workspace = true
+
+[dev-dependencies]
+collaboration-central-conformance = { path = "../collaboration-central-conformance", version = "0.1.150", default-features = false, features = ["signin-test-support"] }
+reqwest = { workspace = true, features = ["json"] }
