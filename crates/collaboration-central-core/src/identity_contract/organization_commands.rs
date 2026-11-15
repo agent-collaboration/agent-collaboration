@@ -103,8 +103,8 @@ pub enum AllowanceState {
 #[serde(try_from = "u32", into = "u32")]
 pub struct TokenLifetimeSeconds(u32);
 impl TokenLifetimeSeconds {
-    /// OD2: the composed organization lifetime until its setting has a stored owner.
-    pub const MACHINE_LOGIN_DEFAULT: Self = Self(600);
+    /// Fixed production policy; machine-token lifetime is not configurable.
+    pub const MACHINE_LOGIN_FIXED: Self = Self(600);
 }
 impl TryFrom<u32> for TokenLifetimeSeconds {
     type Error = IdentityValidationError;

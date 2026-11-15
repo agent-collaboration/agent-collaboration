@@ -57,9 +57,9 @@ impl MachineLoginSettings {
     pub const fn new(grant_lifetime: TokenLifetimeSeconds) -> Self {
         Self { grant_lifetime }
     }
-    /// OD2's current composition value; the lifetime source decision remains held.
+    /// Compose central's fixed 600-second machine grant policy.
     pub const fn production() -> Self {
-        Self::new(TokenLifetimeSeconds::MACHINE_LOGIN_DEFAULT)
+        Self::new(TokenLifetimeSeconds::MACHINE_LOGIN_FIXED)
     }
 }
 
