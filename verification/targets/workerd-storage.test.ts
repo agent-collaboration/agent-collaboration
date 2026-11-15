@@ -26,6 +26,11 @@ test("bridge names every absent public or private artifact before readiness", as
     await mkdir(join(fixture, dirname(bridgePath)), { recursive: true });
     await mkdir(join(fixture, "verification/targets"), { recursive: true });
     await mkdir(join(fixture, "verification/test-support"), { recursive: true });
+    await mkdir(join(fixture, "verification/observations/central"), { recursive: true });
+    await copyFile(
+      join(repository, "verification/observations/central/c2-witness.ts"),
+      join(fixture, "verification/observations/central/c2-witness.ts"),
+    );
     await copyFile(
       join(repository, "verification/test-support/miniflare-signal-shutdown.ts"),
       join(fixture, "verification/test-support/miniflare-signal-shutdown.ts"),
@@ -284,6 +289,50 @@ async function assertBridgeControls(props: {
   });
 }
 
+async function assertC2BridgeControls(props: {
+  readonly baseUrl: string;
+  readonly control: BridgeControl;
+  readonly enabled: boolean;
+}): Promise<void> {
+  const organization = "019f0000-0000-7000-8000-00000000d299";
+  const snapshot = { c2Witness: { phase: "evicting" } };
+  if (!props.enabled) {
+    for (const command of [snapshot, { c2Evict: organization }, { setExternalTimeMs: 123 }])
+      assert.equal((await props.control(command)).answer, "refused");
+    return;
+  }
+  const touch = async (): Promise<unknown> => {
+    const response = await fetch(
+      `${props.baseUrl}/test-support/workspace/${organization}/raw-signin-observe`,
+      { method: "POST", body: "{}", headers: { "content-type": "application/json" } },
+    );
+    assert.equal(response.status, 200);
+    return response.json();
+  };
+  await touch();
+  const before = await props.control(snapshot);
+  assert.equal(before.answer, "c2Witness");
+  assert.deepEqual(await props.control({ c2Evict: organization }), {
+    answer: "c2Evicted",
+    organization,
+  });
+  assert.deepEqual(await props.control({ setExternalTimeMs: 1_900_000_030_000 }), {
+    answer: "externalTimeSet",
+    setTimeMs: 1_900_000_030_000,
+  });
+  assert.deepEqual(
+    await props.control(snapshot),
+    before,
+    "eviction, recorder snapshots and external clock control must not reconstruct the target",
+  );
+  assert.deepEqual(await touch(), { complete: true, fixtureMilliseconds: 1_900_000_030_000 });
+  const after = await props.control(snapshot);
+  const records = z.array(z.object({ event: z.object({ kind: z.string() }) })).parse(after.events);
+  const initial = z.array(z.json()).parse(before.events);
+  assert.equal(records.length, initial.length + 1, "actual next touch reconstructs once");
+  assert.equal(records.at(-1)?.event.kind, "constructor");
+}
+
 async function createBridgeControlFixture(): Promise<string> {
   const repository = fileURLToPath(new URL("../../", import.meta.url));
   const fixture = createFixtureDirectory("workerd-bridge-controls");
@@ -291,12 +340,14 @@ async function createBridgeControlFixture(): Promise<string> {
   await mkdir(join(fixture, dirname(emptyObservationPath)), { recursive: true });
   await mkdir(join(fixture, "verification/targets"), { recursive: true });
   await mkdir(join(fixture, "verification/test-support"), { recursive: true });
+  await mkdir(join(fixture, "verification/observations/central"), { recursive: true });
   await writeFile(join(fixture, "package.json"), '{"type":"module"}');
   for (const path of [
     bridgeRelativePath,
     emptyObservationPath,
     "verification/targets/workerd-storage.ts",
     "verification/test-support/miniflare-signal-shutdown.ts",
+    "verification/observations/central/c2-witness.ts",
   ])
     await copyFile(join(repository, path), join(fixture, path));
   await symlink(
@@ -361,6 +412,7 @@ test(
     for (const privateTopology of [false, true]) {
       for (let generation = 0; generation < 3; generation++) {
         const launcher = generation !== 0;
+        const c2 = generation === 2;
         const fixture = await createBridgeControlFixture();
         const plan = join(fixture, "plan.json");
         const child = spawn(
@@ -369,6 +421,7 @@ test(
             join(fixture, bridgeRelativePath),
             ...(privateTopology ? ["--signin-plan", plan] : []),
             ...(launcher ? ["--launcher-time-ms", "1800000000000"] : []),
+            ...(c2 ? ["--c2-witness"] : []),
           ],
           { stdio: "pipe" },
         );
@@ -408,6 +461,7 @@ test(
           const { origin } = z.object({ origin: z.url() }).strict().parse(JSON.parse(ready.value));
           const baseUrl = `${origin}${privateTopology ? "/public" : ""}`;
           await assertBridgeControls({ baseUrl, control, empty, launcher });
+          await assertC2BridgeControls({ baseUrl, control, enabled: c2 });
           assert.deepEqual(readyLines, [ready.value], "only one stdout readiness line");
           completed = true;
         } finally {

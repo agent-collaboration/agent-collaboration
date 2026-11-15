@@ -16,6 +16,11 @@ import {
   type V4WorkerOptions,
 } from "miniflare";
 import { z } from "zod";
+import {
+  C2WitnessRecorder,
+  c2PhaseSchema,
+  c2WitnessWrapperSource,
+} from "../observations/central/c2-witness.ts";
 
 export interface WorkerdBundle {
   /** Directory holding worker-build's `index.js` and `index_bg.wasm`. */
@@ -26,6 +31,7 @@ export interface WorkerdBundle {
   /** Binding name to exported Durable Object class; each is SQLite-backed. */
   readonly durableObjects: Readonly<Record<string, string>>;
   readonly textBindings: Readonly<Record<string, string>>;
+  readonly c2Witness?: C2WitnessRecorder;
 }
 
 const jwksMappingSchema = z
@@ -89,6 +95,9 @@ export const workerdLauncherTimeSchema = z.number().int().safe().min(0).max(9_22
 export const workerdBridgeCommandSchema = z.union([
   z.object({ setTimeMs: workerdLauncherTimeSchema }).strict(),
   z.object({ observe: z.uuidv7() }).strict(),
+  z.object({ c2Evict: z.uuidv7() }).strict(),
+  z.object({ c2Witness: z.object({ phase: c2PhaseSchema }).strict() }).strict(),
+  z.object({ setExternalTimeMs: workerdLauncherTimeSchema }).strict(),
 ]);
 
 // Row contents are owned and validated by Rust; the bridge relays opaque JSON.
@@ -146,6 +155,8 @@ export function centralLinkTestBundle(): WorkerdBundle {
 }
 
 function workerOptions(bundle: WorkerdBundle): V4WorkerOptions {
+  if (bundle.c2Witness !== undefined && bundle.durableObjects.CENTRAL !== "CentralObject")
+    throw new Error("C2 witness requires the real CENTRAL class binding");
   for (const name of ["index.js", "index_bg.wasm"])
     if (!existsSync(join(bundle.bundleDirectory, name)))
       throw new Error(`Worker bundle missing ${name}; build it with: ${bundle.buildCommand}`);
@@ -156,14 +167,45 @@ function workerOptions(bundle: WorkerdBundle): V4WorkerOptions {
     compatibilityDate: bundle.compatibilityDate,
     modulesRoot: bundle.bundleDirectory,
     modules: [
+      ...(bundle.c2Witness === undefined
+        ? []
+        : [
+            {
+              type: "ESModule" as const,
+              path: join(bundle.bundleDirectory, "__c2_witness_entry.js"),
+              contents: c2WitnessWrapperSource,
+            },
+          ]),
       { type: "ESModule", path: join(bundle.bundleDirectory, "index.js") },
       { type: "CompiledWasm", path: join(bundle.bundleDirectory, "index_bg.wasm") },
     ],
     bindings: { ...bundle.textBindings },
     durableObjects,
+    ...(bundle.c2Witness === undefined
+      ? {}
+      : { serviceBindings: { TEST_C2_WITNESS: bundle.c2Witness.observe } }),
     outboundService: (): never => {
       throw new Error("unexpected external workerd fetch");
     },
+  };
+}
+
+function clockedWorkerOptions(
+  bundle: WorkerdBundle,
+  clock: ((organization: string) => number) | undefined,
+): V4WorkerOptions {
+  const options = workerOptions(bundle);
+  return {
+    ...options,
+    name: "verification-central",
+    ...(clock === undefined
+      ? {}
+      : {
+          serviceBindings: {
+            ...options.serviceBindings,
+            TEST_SIGNIN_CLOCK: signInClockService(clock),
+          },
+        }),
   };
 }
 
@@ -188,13 +230,7 @@ export class WorkerdStorage {
     const require = createRequire(import.meta.url);
     z.object({ version: z.literal("5.20261012.0-beta") }).parse(require("miniflare/package.json"));
     z.object({ version: z.literal("1.20261012.1") }).parse(require("workerd"));
-    const central = {
-      ...workerOptions(bundle),
-      name: "verification-central",
-      ...(clock === undefined
-        ? {}
-        : { serviceBindings: { TEST_SIGNIN_CLOCK: signInClockService(clock) } }),
-    };
+    const central = clockedWorkerOptions(bundle, clock);
     let workers: V4WorkerOptions[] = [central];
     if (signIn !== undefined) {
       const mapping = jwksMappingSchema.parse(signIn.jwks);
@@ -305,5 +341,12 @@ export class WorkerdStorage {
     });
     if (!response.ok) throw new Error("Worker fixture control failed");
     return response.json();
+  }
+
+  async evictCentral(organization: string): Promise<void> {
+    await this.runtime.unsafeEvictDurableObject("verification-central", "CentralObject", {
+      name: z.uuidv7().parse(organization),
+      webSockets: "hibernate",
+    });
   }
 }
