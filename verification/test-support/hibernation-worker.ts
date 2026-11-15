@@ -1,4 +1,5 @@
 // A real workerd stand-in, never a product CentralObject or admission oracle.
+export const attachmentWitnessHeader = "x-hibernation-attachment";
 export const hibernationWorkerSource = `
 export class HibernationWitness {
   constructor(state, env) {
@@ -18,7 +19,11 @@ export class HibernationWitness {
   async fetch(request) {
     if (new URL(request.url).pathname !== '/socket') return new Response('unknown', {status: 404});
     const [client, server] = Object.values(new WebSocketPair());
-    const attachment = {witness: this.env.ATTACHMENT_WITNESS};
+    // Only this upgrade sees the per-connection witness; after fetch returns,
+    // a fresh instance can recover it only from the socket attachment.
+    const witness = request.headers.get('${attachmentWitnessHeader}');
+    if (witness === null) return new Response('missing attachment witness', {status: 400});
+    const attachment = {witness};
     if (this.env.HIBERNATING === 'true') {
       this.state.acceptWebSocket(server);
       server.serializeAttachment(attachment);

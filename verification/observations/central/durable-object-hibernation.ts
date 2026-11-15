@@ -15,7 +15,10 @@ import {
   type V4FetchHandler,
 } from "miniflare";
 import { z } from "zod";
-import { hibernationWorkerSource } from "../../test-support/hibernation-worker.ts";
+import {
+  attachmentWitnessHeader,
+  hibernationWorkerSource,
+} from "../../test-support/hibernation-worker.ts";
 import { constructMiniflareWithOwnedSignalShutdown } from "../../test-support/miniflare-signal-shutdown.ts";
 
 const attachmentSchema = z.object({ witness: z.uuidv7() }).strict();
@@ -33,6 +36,18 @@ const observedSchema = z
 const witnessEventSchema = z.object({ kind: z.enum(["constructor", "handler"]) }).strict();
 const fixtureModeSchema = z.enum(["hibernating", "non-hibernating"]);
 type FixtureMode = z.infer<typeof fixtureModeSchema>;
+const witnessPhaseSchema = z.enum([
+  "connecting",
+  "baseline",
+  "evicting",
+  "heartbeat",
+  "deciding",
+  "settling",
+]);
+const constructorWitnessSchema = z
+  .object({ instance: z.uuidv7(), phase: witnessPhaseSchema })
+  .strict();
+export type ConstructorWitness = Readonly<z.infer<typeof constructorWitnessSchema>>;
 
 interface WitnessCounts {
   readonly constructors: number;
@@ -40,7 +55,96 @@ interface WitnessCounts {
 }
 
 export function assertHeartbeatDidNotWake(before: WitnessCounts, after: WitnessCounts): void {
-  assert.deepEqual(after, before, "heartbeat must run neither constructor nor handler");
+  assert.deepEqual(
+    after,
+    before,
+    "heartbeat must add no observed constructor or handler witnesses",
+  );
+}
+
+export function assertEvictionDidNotReconstruct(before: WitnessCounts, after: WitnessCounts): void {
+  assert.deepEqual(after, before, "eviction must run neither constructor nor handler");
+}
+
+export function assertSingleDecidingFrame(before: WitnessCounts, after: WitnessCounts): void {
+  assert.deepEqual(
+    after,
+    { constructors: before.constructors + 1, handlers: before.handlers + 1 },
+    "deciding frame must run exactly one constructor and handler",
+  );
+}
+
+export function assertSingleWelcome(welcomes: number): void {
+  assert.equal(welcomes, 1, "no reconnect or replacement Welcome");
+}
+
+export function assertDecidingConstructor(
+  records: readonly ConstructorWitness[],
+  instance: string,
+): void {
+  const matching = records.filter((record): boolean => record.instance === instance);
+  assert.equal(matching.length, 1, "serving instance must have exactly one constructor witness");
+  assert.equal(
+    matching[0]?.phase,
+    "deciding",
+    "serving constructor witness must arrive after observe dispatch",
+  );
+}
+
+type FixtureDisposition =
+  | { readonly kind: "passed"; readonly exitCode: 0 }
+  | { readonly kind: "expected-red"; readonly exitCode: 1 }
+  | { readonly kind: "failed"; readonly exitCode: 1 }
+  | { readonly kind: "invalid-control"; readonly exitCode: 2 };
+
+export function classifyFixtureOutcome(input: {
+  readonly fixture: FixtureMode;
+  readonly stages: readonly string[];
+  readonly failure: string | null;
+  readonly disposed: boolean;
+}): FixtureDisposition {
+  if (input.fixture === "non-hibernating") {
+    const requiredStages = [
+      "ready",
+      "original-socket-welcome",
+      "owning-store-first-frame",
+      "eviction-requested",
+    ];
+    const intendedRed =
+      input.disposed &&
+      input.failure ===
+        "Timed out waiting to evict Durable Object: it still has active references." &&
+      input.stages.length === requiredStages.length &&
+      input.stages.every((stage, index): boolean => stage === requiredStages[index]);
+    return intendedRed
+      ? { kind: "expected-red", exitCode: 1 }
+      : { kind: "invalid-control", exitCode: 2 };
+  }
+  return input.failure === null &&
+    input.disposed &&
+    input.stages.at(-1) === "same-socket-new-instance-restored-attachment-and-store"
+    ? { kind: "passed", exitCode: 0 }
+    : { kind: "failed", exitCode: 1 };
+}
+
+class WitnessRecorder {
+  phase: z.infer<typeof witnessPhaseSchema> = "connecting";
+  readonly constructors: ConstructorWitness[] = [];
+  private handlers = 0;
+  readonly counts = (): WitnessCounts => ({
+    constructors: this.constructors.length,
+    handlers: this.handlers,
+  });
+  readonly observe: V4FetchHandler = async (request): Promise<Response> => {
+    const event = witnessEventSchema.parse(await request.json());
+    if (event.kind === "constructor") {
+      const instance = randomUUIDv7();
+      this.constructors.push({ instance, phase: this.phase });
+      return new Response(instance);
+    }
+    this.handlers += 1;
+    return new Response("recorded");
+  };
 }
 
 export function assertRestoredFrame(input: {
@@ -71,6 +175,9 @@ export interface HibernationFixtureReceipt {
   readonly before: z.infer<typeof observedSchema> | null;
   readonly after: z.infer<typeof observedSchema> | null;
   readonly heartbeatCounts: readonly WitnessCounts[];
+  readonly constructorWitnesses: readonly ConstructorWitness[];
+  readonly postSettlementCounts: WitnessCounts;
+  readonly disposition: FixtureDisposition;
   readonly disposed: boolean;
   readonly failure: string | null;
   readonly productCoverage: "unobserved-C2-target-absent";
@@ -83,7 +190,6 @@ interface FixtureRunOptions {
 
 function constructFixtureRuntime(input: {
   readonly fixture: FixtureMode;
-  readonly attachmentWitness: string;
   readonly objectName: string;
   readonly observe: V4FetchHandler;
 }): Miniflare {
@@ -101,7 +207,6 @@ function constructFixtureRuntime(input: {
           durableObjects: { TARGET: { className: "HibernationWitness", useSQLite: true } },
           bindings: {
             HIBERNATING: String(input.fixture === "hibernating"),
-            ATTACHMENT_WITNESS: input.attachmentWitness,
             OBJECT_NAME: input.objectName,
           },
           serviceBindings: { WITNESS: input.observe },
@@ -119,14 +224,12 @@ function constructFixtureRuntime(input: {
 export async function runHibernationFixture(
   options: FixtureRunOptions,
 ): Promise<HibernationFixtureReceipt> {
-  const require = createRequire(import.meta.url);
-  z.object({ version: z.literal("5.20261012.0-beta") }).parse(require("miniflare/package.json"));
-  z.object({ version: z.literal("1.20261012.1") }).parse(require("workerd"));
   const attachmentWitness = randomUUIDv7();
   const objectName = randomUUIDv7();
   const stages: string[] = [];
-  let constructors = 0;
-  let handlers = 0;
+  const recorder = new WitnessRecorder();
+  let observationCounts = recorder.counts();
+  let constructorWitnesses: readonly ConstructorWitness[] = [];
   let disposed = false;
   let failure: string | null = null;
   let runtime: Miniflare | undefined;
@@ -135,30 +238,31 @@ export async function runHibernationFixture(
   let first: z.infer<typeof observedSchema> | null = null;
   let after: z.infer<typeof observedSchema> | null = null;
   const heartbeatCounts: WitnessCounts[] = [];
-  const counts = (): WitnessCounts => ({ constructors, handlers });
   try {
-    const construct = (): Miniflare =>
-      constructFixtureRuntime({
+    const require = createRequire(import.meta.url);
+    z.object({ version: z.literal("5.20261012.0-beta") }).parse(require("miniflare/package.json"));
+    z.object({ version: z.literal("1.20261012.1") }).parse(require("workerd"));
+    const construct = (): Miniflare => {
+      const created = constructFixtureRuntime({
         fixture: options.fixture,
-        attachmentWitness,
         objectName,
-        observe: async (request: Parameters<V4FetchHandler>[0]): Promise<Response> => {
-          const event = witnessEventSchema.parse(await request.json());
-          if (event.kind === "constructor") {
-            constructors += 1;
-            return new Response(randomUUIDv7());
-          }
-          handlers += 1;
-          return new Response("recorded");
-        },
+        observe: recorder.observe,
       });
+      runtime = created; // Keep ownership even if the outer signal wrapper rejects.
+      const dispose = created.dispose.bind(created);
+      created.dispose = async (): Promise<void> => {
+        await dispose();
+        disposed = true;
+      };
+      return created;
+    };
     runtime =
       options.createRuntime === undefined ? construct() : await options.createRuntime(construct);
     const ready = await runtime.ready;
     assert.equal(ready.hostname, "127.0.0.1");
     stages.push("ready");
     const response = await runtime.dispatchFetch(`${ready.origin}/socket`, {
-      headers: { upgrade: "websocket" },
+      headers: { upgrade: "websocket", [attachmentWitnessHeader]: attachmentWitness },
     });
     assert.equal(response.status, 101);
     socket = response.webSocket;
@@ -175,6 +279,7 @@ export async function runHibernationFixture(
       if (typeof event.data === "string" && event.data.includes('"kind":"welcome"')) welcomes += 1;
     });
 
+    recorder.phase = "baseline";
     first = observedSchema.parse(JSON.parse(await exchangeFrame(socket, "observe")));
     assert.equal(first.instance, welcome.instance);
     assert.equal(first.count, 1);
@@ -185,18 +290,19 @@ export async function runHibernationFixture(
       objectName,
       attachmentWitness,
       first,
-      counts,
+      recorder,
       stages,
       heartbeatCounts,
     });
-    assert.equal(welcomes, 1, "no reconnect or replacement Welcome");
+    assertSingleWelcome(welcomes);
     stages.push("same-socket-new-instance-restored-attachment-and-store");
   } catch (error: unknown) {
     failure = error instanceof Error ? error.message : String(error);
   } finally {
-    const settlement = await settleFixture({ runtime, socket, failure });
-    failure = settlement.failure;
-    disposed = settlement.disposed;
+    observationCounts = recorder.counts();
+    constructorWitnesses = recorder.constructors.slice();
+    recorder.phase = "settling";
+    failure = await settleFixture({ runtime, socket, failure });
   }
   return {
     fixture: options.fixture,
@@ -204,12 +310,14 @@ export async function runHibernationFixture(
     objectName,
     workerSourceSha256: createHash("sha256").update(hibernationWorkerSource).digest("hex"),
     stages,
-    constructors,
-    handlers,
+    ...observationCounts,
     welcome,
     before: first,
     after,
     heartbeatCounts,
+    constructorWitnesses,
+    postSettlementCounts: recorder.counts(),
+    disposition: classifyFixtureOutcome({ fixture: options.fixture, stages, failure, disposed }),
     disposed,
     failure,
     productCoverage: "unobserved-C2-target-absent",
@@ -222,9 +330,8 @@ async function settleFixture(input: {
   readonly runtime: Miniflare | undefined;
   readonly socket: LocalWebSocket | null | undefined;
   readonly failure: string | null;
-}): Promise<{ readonly failure: string | null; readonly disposed: boolean }> {
+}): Promise<string | null> {
   let failure = input.failure;
-  let disposed = false;
   try {
     input.socket?.close(1000, "journey complete");
   } catch (error: unknown) {
@@ -232,11 +339,10 @@ async function settleFixture(input: {
   }
   try {
     await input.runtime?.dispose();
-    disposed = input.runtime !== undefined;
   } catch (error: unknown) {
     failure = `${failure ?? "journey passed"}; cleanup: ${String(error)}`;
   }
-  return { failure, disposed };
+  return failure;
 }
 
 async function observeSocketAcrossHibernation(input: {
@@ -245,31 +351,32 @@ async function observeSocketAcrossHibernation(input: {
   readonly objectName: string;
   readonly attachmentWitness: string;
   readonly first: z.infer<typeof observedSchema>;
-  readonly counts: () => WitnessCounts;
+  readonly recorder: WitnessRecorder;
   readonly stages: string[];
   readonly heartbeatCounts: WitnessCounts[];
 }): Promise<z.infer<typeof observedSchema>> {
-  const before = input.counts();
+  const before = input.recorder.counts();
+  input.recorder.phase = "evicting";
   input.stages.push("eviction-requested");
   await input.runtime.unsafeEvictDurableObject("hibernation-witness", "HibernationWitness", {
     name: input.objectName,
     webSockets: "hibernate",
   });
   input.stages.push("target-evicted");
-  assert.deepEqual(input.counts(), before, "eviction itself must not reconstruct the object");
+  assertEvictionDidNotReconstruct(before, input.recorder.counts());
   // No target HTTP/inspection call between eviction and these original-socket frames.
+  input.recorder.phase = "heartbeat";
   for (let index = 0; index < 3; index += 1) {
     assert.equal(await exchangeFrame(input.socket, "ping"), "pong");
-    input.heartbeatCounts.push(input.counts());
-    assertHeartbeatDidNotWake(before, input.counts());
+    input.heartbeatCounts.push(input.recorder.counts());
+    assertHeartbeatDidNotWake(before, input.recorder.counts());
   }
-  input.stages.push("heartbeat-zero-wakes");
+  input.stages.push("heartbeat-no-observed-wakes");
+  input.recorder.phase = "deciding";
   const after = observedSchema.parse(JSON.parse(await exchangeFrame(input.socket, "observe")));
   assertRestoredFrame({ before: input.first, after, witness: input.attachmentWitness });
-  assert.deepEqual(input.counts(), {
-    constructors: before.constructors + 1,
-    handlers: before.handlers + 1,
-  });
+  assertSingleDecidingFrame(before, input.recorder.counts());
+  assertDecidingConstructor(input.recorder.constructors, after.instance);
   return after;
 }
 
@@ -309,8 +416,9 @@ async function main(arguments_: readonly string[]): Promise<void> {
   if (arguments_.length === 1 && arguments_[0] === "--help") {
     process.stdout.write(
       "Usage: node verification/observations/central/durable-object-hibernation.ts --fixture <non-hibernating|hibernating> --evidence <fresh-directory>\n" +
-        "Run non-hibernating FIRST (required exit 1), then hibernating (exit 0).\n" +
-        "Real local workerd stand-in; targeted forced eviction, same socket, attachment/new instance, heartbeat zero wakes.\n" +
+        "Run non-hibernating FIRST (expected-red exit 1; invalid control exit 2), then hibernating (exit 0).\n" +
+        "Real local workerd stand-in; forced eviction, original socket, attachment/new instance, heartbeat witness phases.\n" +
+        "Delayed constructor-only wake causality remains unverified.\n" +
         "No product C2, natural idle, deployed billing, authentication or provider proof. No sleeps or SIGKILL.\n",
     );
     return;
@@ -328,6 +436,7 @@ async function main(arguments_: readonly string[]): Promise<void> {
   const execution = {
     cwd: process.cwd(),
     sourceHead: execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim(),
+    dirtyTree: execFileSync("git", ["status", "--porcelain"], { encoding: "utf8" }).trim() !== "",
     node: process.versions.node,
     libuv: process.versions.uv,
     miniflare: "5.20261012.0-beta",
@@ -335,15 +444,23 @@ async function main(arguments_: readonly string[]): Promise<void> {
     driverSha256: createHash("sha256")
       .update(await readFile(new URL(import.meta.url)))
       .digest("hex"),
+    signalShutdownSha256: createHash("sha256")
+      .update(
+        await readFile(new URL("../../test-support/miniflare-signal-shutdown.ts", import.meta.url)),
+      )
+      .digest("hex"),
   };
   const recorded = { ...receipt, execution };
   await writeFile(`${evidence}/receipt.json`, `${JSON.stringify(recorded, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify(recorded)}\n`);
-  if (receipt.failure !== null || !receipt.disposed) process.exitCode = 1;
+  process.exitCode = receipt.disposition.exitCode;
 }
 
 if (
   process.argv[1] !== undefined &&
   import.meta.url === pathToFileURL(resolve(process.argv[1])).href
 )
-  await main(process.argv.slice(2));
+  await main(process.argv.slice(2)).catch((error: unknown): void => {
+    process.stderr.write(`${String(error)}\n`);
+    process.exitCode = 2;
+  });
