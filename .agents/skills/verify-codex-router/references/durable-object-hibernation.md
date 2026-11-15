@@ -32,6 +32,37 @@ Keep raw `receipt.json`, command and exit code, source head, `dirtyTree`, driver
 
 The driver uses explicit frames and I/O completion, with no wall-clock reads or sleeps and no scheduled heartbeat. This checks auto-response behavior, not 20-second client scheduling. That scheduling must use the product's one injected clock in C1/C3. Miniflare's internal bounded eviction failure is a platform diagnostic, not an assertion about elapsed time.
 
+## Compiled CentralObject adapter
+
+The existing `verification/targets/workerd-storage.ts` loader accepts an optional
+`C2WitnessRecorder` on its bundle. It inserts a verification-only module around
+the original compiled `CentralObject`, preserves its namespace and methods, and
+records witnesses in an external Node service. `c2-witness.ts` defines the strict
+event/attachment schemas and `assertC2Restore`; the closed attachment carries
+identity plus the original effective deadline, never a bearer or permissions.
+The product hooks must be built with non-default `test-support`. Missing hooks,
+failed acknowledgements or malformed events invalidate the observation.
+
+The existing Rust-owned bridge opts in with `--c2-witness` alongside its sign-in
+plan and injected `--launcher-time-ms`. Its JSON-lines control interface is:
+
+- `{c2Witness:{phase}}` returns the external event records and sets the next
+  recording phase: `connecting`, `baseline`, `evicting`, `heartbeat`, `deciding`,
+  or `settling`. Each record has sequence, phase, instanceId and the event.
+- `{c2Evict:organizationUuid}` evicts only that organization's `CentralObject`
+  in the original loader using `webSockets:"hibernate"`.
+- `{setExternalTimeMs:milliseconds}` updates only the existing external clock
+  cell. It sends no target HTTP request. Existing `setTimeMs` pushes time into
+  live objects and therefore wakes them; retain its established semantics.
+
+These controls refuse without opt-in. Recorder snapshots never fetch the target.
+Actual live SQL read events must precede the matching restoration result; repeated
+reads during a held admission recheck are allowed. Alarm snapshots contain the
+actual owning `EARLIEST_DUE` result and platform `getAlarm`, and must agree.
+Neither a generic admitted flag nor matching synthetic values supplies those reads.
+The permanent wrapper qualification stand-in proves loader/delegation behavior
+only; it is not a compiled CentralObject or an authentication oracle.
+
 ## C2 integration prerequisite
 
 Before claiming C2 coverage, declare its frozen source, compiled bundle/module hashes and local allocation. Commission apparatus upkeep to connect this oracle to that exact compiled CentralObject through the existing workerd conformance loader. The C2 Implementer owns any product-side test-support seam needed to expose:
@@ -42,6 +73,17 @@ Before claiming C2 coverage, declare its frozen source, compiled bundle/module h
 - the existing EARLIEST_DUE alarm readback, NULL when no due work exists and unchanged by heartbeat traffic.
 
 Do not add a test-only production route, bypass admission with an asserted person, or substitute a synthetic counter for that semantic request. The fixture protocol here is not a selected product wire contract. Maintain strict decoded witnesses and the same original socket. Include revoked/expired/superseded enrollment after wake. Keep a real non-hibernating control against the identical deciding oracle. No target HTTP inspection may run between eviction and the deciding frame, since that would cause constructor re-entry before the frame.
+
+Real admin revoke/supersede calls wake the object: perform them before the final
+eviction in those denial cases, retain their witnesses, then require fresh live
+denial after reconstruction. For while-evicted expiry, use only the external clock
+update. During the protected interval permit only recorder snapshots and the
+original socket's fixed heartbeat; an unrelated alarm invalidates isolated wake
+attribution. The deciding request is a correlated `CreateArea`, followed afterward
+by a real read request and an independent read of the owning workspace SQLite row.
+The permanent Rust socket journey owns provisioning, token signing, semantic
+encoding and row assertions. Its exact declared compiled selector and sanitized
+receipt handoff are still prerequisites; do not replace them with the stand-in.
 
 ## Limits
 
