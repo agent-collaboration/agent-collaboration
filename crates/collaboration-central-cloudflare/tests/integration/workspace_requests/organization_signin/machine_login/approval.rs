@@ -238,6 +238,54 @@ async fn new_approval_refuses_codes_at_or_before_applying_now_without_effects_an
 
 #[expect(
     clippy::panic_in_result_fn,
+    reason = "An overflowing wire deadline must return a no-effect policy refusal and leave the same request usable for a valid approval and Grant."
+)]
+#[tokio::test]
+async fn overflowing_new_approval_deadline_is_not_permitted_without_effects_and_future_retry_grants()
+-> Result<()> {
+    let f = MachineFixture::new().await?;
+    let mut request = approval(
+        0xd701,
+        INSTALLATION,
+        "Overflow deadline",
+        &[WORKSPACE, WORKSPACE_TWO],
+        f.now(),
+    );
+    // Exactly representable by JavaScript and i64, but seconds-to-ms overflows.
+    // This must reach policy as a valid wire integer rather than round or fail 400.
+    request["codeExpiresAt"] = json!(10_000_000_000_000_000_i64);
+    let before = snapshot(&f).await?;
+    assert_eq!(
+        f.post(DEVICE, &request).await?,
+        (
+            200,
+            json!({"result":"refused","reason":{"kind":"notPermitted"}})
+        )
+    );
+    assert!(
+        snapshot(&f).await? == before,
+        "overflow refusal reserved approval, changed machine or emitted audit records"
+    );
+
+    // A refusal leaves request identity reusable with a representable future code.
+    request["codeExpiresAt"] = json!(f.now() + 1);
+    let approved = f.post(DEVICE, &request).await?;
+    assert_eq!(approved.0, 200);
+    let enrollment_id = enrollment(&approved.1);
+    assert_eq!(
+        approved.1,
+        json!({"result":"approved","enrollmentId":enrollment_id,"label":"Overflow deadline","allowedWorkspaces":[WORKSPACE,WORKSPACE_TWO]})
+    );
+    assert_eq!(
+        f.post(TOKEN, &token(&enrollment_id, &enrollment_id))
+            .await?,
+        (200, grant(&enrollment_id, INSTALLATION, f.now(), None))
+    );
+    f.close().await
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
     reason = "First-machine exemption and subsequent factor boundaries are observed through actual approval requests."
 )]
 #[tokio::test]

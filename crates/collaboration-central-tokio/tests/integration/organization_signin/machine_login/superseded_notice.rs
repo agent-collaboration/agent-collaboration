@@ -96,3 +96,95 @@ async fn active_grant_retry_reconstructs_the_same_superseded_client_after_reopen
     assert!(snapshot(&f).await? == before);
     f.close().await
 }
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Two individually valid predecessor records must refuse through the actual route without changing durable rows."
+)]
+#[tokio::test]
+async fn two_valid_supersession_predecessors_refuse_without_effects_then_repair_restores_notice()
+-> Result<()> {
+    // Arrange: A, B and C activate at one injected time. A and B therefore both
+    // have valid superseded state, client, origin and end/record timestamps.
+    let f = MachineFixture::new().await?;
+    let activation_time = f.now();
+    let mut previous: Option<String> = None;
+    let mut activated = Vec::new();
+    for (serial, label) in [
+        (0xe501, "Notice A"),
+        (0xe502, "Notice B"),
+        (0xe503, "Notice C"),
+    ] {
+        let approved = f
+            .post(
+                DEVICE,
+                &approval(serial, INSTALLATION, label, &[WORKSPACE], f.now()),
+            )
+            .await?;
+        assert_eq!(approved.0, 200);
+        let current = enrollment(&approved.1)?;
+        assert_eq!(
+            f.post(TOKEN, &token(&current, &current)).await?,
+            (
+                200,
+                grant(
+                    &current,
+                    INSTALLATION,
+                    activation_time,
+                    previous.as_ref().map(|id| (id.as_str(), id.as_str())),
+                )
+            )
+        );
+        previous = Some(current.clone());
+        activated.push(current);
+    }
+    assert_eq!(f.now(), activation_time);
+    let a = &activated[0];
+    let b = &activated[1];
+    let c = &activated[2];
+    assert_eq!(
+        f.rows("SELECT state,end_reason FROM machine_approvals WHERE label IN ('Notice A','Notice B') ORDER BY label").await?,
+        vec![vec![text("ended"), text("superseded")], vec![text("ended"), text("superseded")]]
+    );
+    assert_eq!(
+        f.rows("SELECT approval_id FROM machine_approvals WHERE state='enrolled'")
+            .await?,
+        vec![vec![text(c)]]
+    );
+    let healthy = snapshot(&f).await?;
+    let seeded_id = id(0xe50f);
+    // Seed only the ambiguous association: clone A's real revocation record
+    // (created by B), preserving every validated scalar and timestamp.
+    f.execute(
+        "INSERT INTO organization_change_records(id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at,updated_at) SELECT ?,?||':machineRevoked:'||target_id,kind,origin,actor_person_id,permission_checked,target_id,created_at,updated_at FROM organization_change_records WHERE kind='machineRevoked' AND request_id=? AND target_id=?",
+        vec![text(&seeded_id), text(id(0xe503)), text(format!("{}:machineRevoked:{a}", id(0xe502))), text(a)],
+    ).await?;
+    assert_eq!(
+        f.rows("SELECT COUNT(*) FROM organization_change_records WHERE kind='machineRevoked' AND request_id='019f0000-0000-7000-8000-00000000e503:machineRevoked:'||target_id").await?,
+        vec![vec![number(2)?]]
+    );
+    let ambiguous = snapshot(&f).await?;
+    assert!(ambiguous != healthy);
+
+    // Act/Assert: selecting either candidate would grant. The cardinality guard
+    // must instead produce 503 and a parsed empty body, with all four stores intact.
+    assert_eq!(f.post(TOKEN, &token(c, c)).await?, (503, Value::Null));
+    assert!(
+        snapshot(&f).await? == ambiguous,
+        "ambiguous predecessor history changed machine, approvals, records or credentials"
+    );
+
+    // Delete exactly the seeded row, restoring the real chain. C's live retry
+    // again names B, proving neither candidate was merely malformed or missing.
+    f.execute(
+        "DELETE FROM organization_change_records WHERE id=?",
+        vec![text(&seeded_id)],
+    )
+    .await?;
+    assert!(snapshot(&f).await? == healthy);
+    assert_eq!(
+        f.post(TOKEN, &token(c, c)).await?,
+        (200, grant(c, INSTALLATION, activation_time, Some((b, b))))
+    );
+    f.close().await
+}

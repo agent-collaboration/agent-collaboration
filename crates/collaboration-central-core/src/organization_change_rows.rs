@@ -235,7 +235,7 @@ pub(crate) async fn read_machine_supersession(
     originating_request: &str,
 ) -> Result<Option<OrganizationChangeRecord>, StoreFailure> {
     let rows = host.read(Statement {
-        sql: "SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at FROM organization_change_records WHERE kind='machineRevoked' AND request_id=?||':machineRevoked:'||target_id LIMIT 2",
+        sql: "SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at FROM organization_change_records WHERE kind='machineRevoked' AND request_id>=?1||':machineRevoked:' AND request_id<?1||':machineRevoked;' AND request_id=?1||':machineRevoked:'||target_id LIMIT 2",
         args: vec![text(originating_request)],
     }).await?;
     match rows.rows.as_slice() {

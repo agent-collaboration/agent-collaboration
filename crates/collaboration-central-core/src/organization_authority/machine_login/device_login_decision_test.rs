@@ -301,6 +301,31 @@ fn new_approval_requires_a_deadline_strictly_after_the_applying_millisecond() {
 }
 
 #[test]
+fn overflowing_new_approval_deadline_is_not_permitted_without_ids_and_future_retry_approves() {
+    let request = DecideDeviceLogin {
+        code_expires_at: UnixSeconds(i64::MAX),
+        ..approval()
+    };
+    let ids = CountingIds::new();
+    assert_eq!(
+        decide_device_login(&request, &empty_facts(), NOW_MS, time(NOW_MS), &ids),
+        Ok(Decided::unchanged(DeviceLoginDecision::Refused {
+            reason: DeviceLoginRefusal::NotPermitted {}
+        }))
+    );
+    assert_eq!(ids.minted(), 0);
+
+    let future = DecideDeviceLogin {
+        code_expires_at: UnixSeconds(NOW_S + 1),
+        ..request
+    };
+    let plan = decide_device_login(&future, &empty_facts(), NOW_MS, time(NOW_MS), &ids).unwrap();
+    assert!(matches!(plan.answer, DeviceLoginDecision::Approved { .. }));
+    assert!(!plan.changes.is_empty());
+    assert!(ids.minted() > 0);
+}
+
+#[test]
 fn first_machine_exemption_and_later_machine_factor_boundaries_are_preserved() {
     let mut facts = empty_facts();
     assert!(matches!(
