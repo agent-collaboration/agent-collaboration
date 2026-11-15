@@ -82,12 +82,14 @@ async fn launcher_command_error_settles_real_bridge_before_returning() {
         .unwrap();
     let pid = bridge.process.with_child(|child| child.id());
     let workerd = super::super::workerd_host::lifecycle_tests::workerd_child(pid);
-    let pid_value = rustix::process::Pid::from_raw(i32::try_from(pid).unwrap()).unwrap();
-    rustix::process::kill_process(pid_value, rustix::process::Signal::TERM).unwrap();
+    drop(bridge.process.with_child(|child| child.stdin.take()));
     let result = bridge
         .command(json!({"observe":signed::ORGANIZATION}))
         .await;
-    assert!(result.is_err(), "terminated bridge cannot answer a command");
+    assert!(
+        result.is_err(),
+        "closed bridge input cannot accept a command"
+    );
     drop(bridge);
     super::super::workerd_host::lifecycle_tests::require_exited(pid, workerd);
     fixture.close().await;
