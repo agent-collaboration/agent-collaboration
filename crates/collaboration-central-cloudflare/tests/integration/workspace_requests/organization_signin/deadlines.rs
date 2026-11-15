@@ -107,9 +107,9 @@ async fn each_signed_deadline_refuses_at_the_bound_and_admits_a_read_one_millise
         ("snapshot deadline", snapshot_bound),
     ];
     for (bound, adjust) in cases {
-        for (released_after, refused) in [(30_000, true), (29_999, false)] {
-            let f = Fixture::new().await;
-            ready(&f).await;
+        let f = Fixture::new().await;
+        ready(&f).await;
+        for (released_after, refused) in [(29_999, false), (30_000, true)] {
             let before = counts(&f).await;
             let answer = held_read(&f, adjust, released_after).await;
             let after = counts(&f).await;
@@ -136,17 +136,17 @@ async fn each_signed_deadline_refuses_at_the_bound_and_admits_a_read_one_millise
                     "the admitted read reserves one proof without a held workspace effect"
                 );
             }
-            f.close().await;
         }
+        f.close().await;
     }
 }
 
 #[tokio::test]
 async fn applying_request_window_refuses_exactly_sixty_five_seconds_old_and_admits_before() {
     // Both the proof iat and UUIDv7 jti predate NOW by exactly one second.
-    for (released_after, refused) in [(64_000, true), (63_999, false)] {
-        let f = Fixture::new().await;
-        ready(&f).await;
+    let f = Fixture::new().await;
+    ready(&f).await;
+    for (released_after, refused) in [(63_999, false), (64_000, true)] {
         let before = counts(&f).await;
         let answer = held_read(&f, |_| {}, released_after).await;
         assert_eq!(answer.0, 200);
@@ -159,69 +159,111 @@ async fn applying_request_window_refuses_exactly_sixty_five_seconds_old_and_admi
             );
         } else {
             assert_eq!(answer.1.get("result"), Some(&json!("records")));
+            assert_eq!(
+                counts(&f).await.rows,
+                vec![vec![number(0), number(1), number(1), number(0)]],
+                "the admitted read reserves exactly one proof"
+            );
         }
-        f.close().await;
     }
+    f.close().await;
+}
+
+async fn assert_read_refused(f: &Fixture, person: &signed::Person, case: &str, expected: &str) {
+    let before = counts(f).await;
+    assert_eq!(
+        f.records(person).await,
+        (200, json!({"result":"refused","reason":expected})),
+        "{case}"
+    );
+    assert_eq!(
+        counts(f).await,
+        before,
+        "{case}: refusal changed no business, proof or decision rows"
+    );
+}
+
+async fn assert_healthy_read(f: &Fixture, label: &str) {
+    let answer = f.records(&f.owner()).await;
+    assert_eq!(answer.0, 200, "{label}: healthy read status");
+    assert_eq!(
+        answer.1.get("result"),
+        Some(&json!("records")),
+        "{label}: healthy read result"
+    );
 }
 
 #[tokio::test]
 async fn missing_floors_wrong_subject_policy_and_stopped_or_deleted_org_refuse_reads() {
-    for (case, expected) in [
-        ("organization missing", "authorizationSyncRequired"),
-        ("person missing", "authorizationSyncRequired"),
-        ("wrong subject", "notPermitted"),
-        ("policy changed", "refreshRequired"),
-        ("stopped", "notPermitted"),
-        ("deleted", "notPermitted"),
-        ("organization below", "refreshRequired"),
-        ("organization ahead", "authorizationSyncRequired"),
-        ("person below", "refreshRequired"),
-        ("person ahead", "authorizationSyncRequired"),
-        ("inactive person", "notPermitted"),
-    ] {
-        let f = Fixture::new().await;
-        assert_eq!(f.provision().await.0, 200);
-        match case {
-            "organization missing" => {}
-            "person missing" => {
-                assert_eq!(f.post(REVISIONS, &org_revision(3, "active")).await.0, 200);
-            }
-            _ => f.floors().await,
-        }
+    let f = Fixture::new().await;
+    assert_eq!(f.provision().await.0, 200);
+    assert_read_refused(
+        &f,
+        &f.owner(),
+        "organization missing",
+        "authorizationSyncRequired",
+    )
+    .await;
+    assert_eq!(f.post(REVISIONS, &org_revision(3, "active")).await.0, 200);
+    assert_read_refused(
+        &f,
+        &f.owner(),
+        "person missing",
+        "authorizationSyncRequired",
+    )
+    .await;
+    assert_eq!(
+        f.post(REVISIONS, &person_revision(4, "active")).await.0,
+        200
+    );
+
+    type AdjustPerson = fn(&mut signed::Person);
+    let claim_cases: [(&str, &str, AdjustPerson); 6] = [
+        ("wrong subject", "notPermitted", |person| {
+            person.subject = signed::MEMBER_SUBJECT.into()
+        }),
+        ("policy changed", "refreshRequired", |person| {
+            person.policy_digest =
+                "0000000000000000000000000000000000000000000000000000000000000000".into()
+        }),
+        ("organization below", "refreshRequired", |person| {
+            person.organization_revision = 2
+        }),
+        (
+            "organization ahead",
+            "authorizationSyncRequired",
+            |person| person.organization_revision = 4,
+        ),
+        ("person below", "refreshRequired", |person| {
+            person.revision = 3
+        }),
+        ("person ahead", "authorizationSyncRequired", |person| {
+            person.revision = 5
+        }),
+    ];
+    for (case, expected, adjust) in claim_cases {
+        assert_healthy_read(&f, &format!("before {case}")).await;
         let mut person = f.owner();
-        match case {
-            "wrong subject" => person.subject = signed::MEMBER_SUBJECT.into(),
-            "policy changed" => {
-                person.policy_digest =
-                    "0000000000000000000000000000000000000000000000000000000000000000".into()
-            }
-            "organization below" => person.organization_revision = 2,
-            "organization ahead" => person.organization_revision = 4,
-            "person below" => person.revision = 3,
-            "person ahead" => person.revision = 5,
-            "inactive person" => {
-                assert_eq!(
-                    f.post(REVISIONS, &person_revision(5, "inactive")).await.0,
-                    200
-                );
-            }
-            "stopped" | "deleted" => {
-                assert_eq!(f.post(REVISIONS, &org_revision(4, case)).await.0, 200);
-                person.organization_revision = 4;
-            }
-            _ => {}
-        }
-        let before = counts(&f).await;
-        assert_eq!(
-            f.records(&person).await,
-            (200, json!({"result":"refused","reason":expected})),
-            "{case}"
-        );
-        assert_eq!(
-            counts(&f).await,
-            before,
-            "{case}: refusal changed no business, proof or decision rows"
-        );
+        adjust(&mut person);
+        assert_read_refused(&f, &person, case, expected).await;
+    }
+
+    assert_healthy_read(&f, "before inactive person").await;
+    assert_eq!(
+        f.post(REVISIONS, &person_revision(5, "inactive")).await.0,
+        200
+    );
+    assert_read_refused(&f, &f.owner(), "inactive person", "notPermitted").await;
+    f.close().await;
+
+    for case in ["stopped", "deleted"] {
+        let f = Fixture::new().await;
+        ready(&f).await;
+        assert_healthy_read(&f, &format!("before {case}")).await;
+        assert_eq!(f.post(REVISIONS, &org_revision(4, case)).await.0, 200);
+        let mut person = f.owner();
+        person.organization_revision = 4;
+        assert_read_refused(&f, &person, case, "notPermitted").await;
         f.close().await;
     }
 }

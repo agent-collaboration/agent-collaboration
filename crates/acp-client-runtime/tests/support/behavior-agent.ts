@@ -1,7 +1,9 @@
-import { appendFileSync, existsSync, unwatchFile, watchFile, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, writeFileSync } from "node:fs";
+import { pbkdf2 } from "node:crypto";
 import { isAbsolute } from "node:path";
 import { AcpExchange } from "../../../../verification/fixtures/acp-exchange.ts";
 import { field, textField } from "../../../../verification/exact-json.ts";
+import { listenForHeldRelease } from "../../../../verification/fixtures/held-release-control.ts";
 import { requireArgument } from "../../../../verification/fixtures/acp-stdio.ts";
 const receipt = requireArgument(2);
 const compactCase = process.argv[3] ?? "manual";
@@ -16,10 +18,10 @@ const authenticationMethod = process.argv[4] === undefined ? undefined : require
 if (authenticationMethod !== undefined && authenticationMethod !== "cursor_login")
   throw new Error("unsupported fixture authentication method");
 const requiresConnectionAuthentication = authenticationMethod !== undefined;
-// Optional owned sentinel: legacy callers retain their existing held/cancel behavior and receipts.
-const releaseFile = process.argv[5] === undefined ? undefined : requireArgument(5);
-if (releaseFile !== undefined && !isAbsolute(releaseFile))
-  throw new Error("release sentinel must be absolute");
+// Optional private release socket: all controllers name the held Session owner.
+const releaseSocket = process.argv[5] === undefined ? undefined : requireArgument(5);
+if (releaseSocket !== undefined && !isAbsolute(releaseSocket))
+  throw new Error("release socket must be absolute");
 writeFileSync(receipt, "");
 const agent = new AcpExchange();
 await agent.initialize("behavior-fixture", {
@@ -41,6 +43,16 @@ if (requiresConnectionAuthentication) {
 }
 let sequence = 0;
 let held: Record<string, unknown> | undefined;
+function recordReleaseDiagnostic(
+  event: string,
+  details: Readonly<Record<string, unknown>> = {},
+): void {
+  if (process.env.BEHAVIOR_PEER_RELEASE_DIAGNOSTICS === "1")
+    appendFileSync(
+      `${receipt}.release-diagnostics.jsonl`,
+      `${JSON.stringify({ event, atMs: Date.now(), ...details })}\n`,
+    );
+}
 interface RecordedMessage {
   readonly sessionUpdate: "user_message_chunk" | "agent_message_chunk";
   readonly content: unknown;
@@ -82,15 +94,12 @@ function publishUpdate(update: Readonly<Record<string, unknown>>, sessionId: str
 function replayRecordedMessages(session: KnownFixtureSession, sessionId: string): void {
   for (const message of session.history) agent.update(message, sessionId);
 }
-function stopReleaseWatch(): void {
-  if (releaseFile !== undefined) unwatchFile(releaseFile, releaseHeldIfSignalled);
-}
 function finishHeld(stopReason: "end_turn" | "cancelled"): void {
   const request = held;
   if (request === undefined) return;
   // Claim the request before emitting anything: release/cancel/close can settle it only once.
   held = undefined;
-  stopReleaseWatch();
+  recordReleaseDiagnostic("held-settled", { stopReason });
   if (stopReason === "end_turn") {
     const sessionId = field(request.params, "sessionId");
     if (typeof sessionId !== "string") throw new Error("held sessionId required");
@@ -101,9 +110,7 @@ function finishHeld(stopReason: "end_turn" | "cancelled"): void {
     );
   }
   agent.endTurn(request, stopReason);
-}
-function releaseHeldIfSignalled(): void {
-  if (releaseFile !== undefined && existsSync(releaseFile)) finishHeld("end_turn");
+  recordReleaseDiagnostic("terminal-sent", { stopReason });
 }
 let currentModel = "old";
 let currentEffort = primaryEnter ? "high" : "low";
@@ -158,6 +165,39 @@ function settingsOptions(): unknown[] {
     },
   ];
 }
+function queueReleasePoolContention(): void {
+  if (process.env.BEHAVIOR_PEER_RELEASE_POOL_CONTENTION !== "1") return;
+  recordReleaseDiagnostic("release-pool-contention-start");
+  pbkdf2("fixture", "fixture", 1_000, 32, "sha256", () => {
+    recordReleaseDiagnostic("release-pool-contention-finished");
+  });
+}
+if (releaseSocket !== undefined && existsSync(releaseSocket))
+  throw new Error("release socket already exists before fixture startup");
+const releaseControl =
+  releaseSocket === undefined
+    ? undefined
+    : await listenForHeldRelease({
+        socketPath: releaseSocket,
+        releaseOwner(ownerId): boolean {
+          const request = held;
+          if (request === undefined || field(request.params, "sessionId") !== ownerId) return false;
+          finishHeld("end_turn");
+          return true;
+        },
+        recordReply(reply): void {
+          appendFileSync(
+            receipt,
+            JSON.stringify({
+              kind: "release-control",
+              outcome: reply.kind,
+              ownerId: reply.ownerId,
+            }) + "\n",
+          );
+          recordReleaseDiagnostic("release-control-reply", reply);
+        },
+      });
+recordReleaseDiagnostic("release-control-ready");
 for (;;) {
   const request = await agent.readRequest();
   if (!request) break;
@@ -364,19 +404,12 @@ for (;;) {
         session.history.push({ sessionUpdate: "user_message_chunk", content });
     }
     if (text === "hold") {
-      if (releaseFile !== undefined && existsSync(releaseFile))
-        throw new Error("release sentinel already exists before held prompt");
       held = request;
+      queueReleasePoolContention();
       publishUpdate(
         { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "HOLDING" } },
         sessionId,
       );
-      if (releaseFile !== undefined) {
-        // Stat polling works under the test runner's descriptor limit; the owner bounds the gate.
-        watchFile(releaseFile, { interval: 20 }, releaseHeldIfSignalled);
-        // Close the exists/watch race without polling or a wall-clock delay.
-        releaseHeldIfSignalled();
-      }
       continue;
     }
     publishUpdate(
@@ -437,7 +470,7 @@ for (;;) {
       text === "/compact" && compactCase === "cancelled" ? "cancelled" : "end_turn",
     );
   } else if (request.method === "session/cancel") {
-    if (releaseFile !== undefined) appendFileSync(receipt, `${JSON.stringify(request)}\n`);
+    if (releaseSocket !== undefined) appendFileSync(receipt, `${JSON.stringify(request)}\n`);
     if (held === undefined) {
       if (request.id !== undefined) agent.respond(request, {});
       continue;
@@ -453,7 +486,7 @@ for (;;) {
     finishHeld("cancelled");
   } else if (request.method === "session/close") {
     if (
-      releaseFile !== undefined &&
+      releaseSocket !== undefined &&
       held !== undefined &&
       field(params, "sessionId") === field(held.params, "sessionId")
     )
@@ -461,4 +494,6 @@ for (;;) {
     agent.respond(request, {});
   } else if (request.id !== undefined) agent.respond(request, {});
 }
-stopReleaseWatch();
+if (releaseControl !== undefined) {
+  releaseControl.close();
+}

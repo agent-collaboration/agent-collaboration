@@ -63,6 +63,7 @@ router-clock = {path="../router-clock",version="0.1.150",features=["test-support
 tempfile = "3.27.0"
 reqwest = {workspace=true,features=["json"]}
 tokio.workspace = true
+rustix.workspace = true
 
 [[test]]
 name = "integration"

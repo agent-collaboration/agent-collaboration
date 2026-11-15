@@ -4,6 +4,8 @@
 mod clock_ids;
 pub mod identity_contract;
 #[cfg(feature = "test-support")]
+pub mod signin_test_observation;
+#[cfg(feature = "test-support")]
 pub mod storage_conformance;
 pub use clock_ids::ClockIds;
 mod workspace_turns;
@@ -51,10 +53,12 @@ mod platform_capabilities;
 pub use object_host::ObjectHost;
 mod workspace_runtime;
 pub use workspace_runtime::{WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls};
+mod organization_workspace_plans;
 mod workspace_actor_identity;
 mod workspace_admission;
 mod workspace_change_records;
 mod workspace_decode_error;
+mod workspace_directory_rows;
 mod workspace_item_reads;
 mod workspace_json_records;
 pub mod workspace_migrations;

@@ -3,6 +3,61 @@ use serde_json::{Value, json};
 pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
     let mut invalid = vec![Value::Null];
     match name {
+        "OrganizationAdminResult" => {
+            let applied = literals.iter().find(|value| value["result"] == "applied").unwrap();
+            let mut legacy = applied.clone();
+            legacy["alreadyExisted"] = json!(false);
+            invalid.push(legacy);
+            let mut missing_description = applied.clone();
+            missing_description["workspace"].as_object_mut().unwrap().remove("description");
+            invalid.push(missing_description);
+            invalid.extend([
+                json!({"result":"alreadyExisted"}),
+                json!({"result":"refused","reason":"unrecognizedVariant"}),
+                json!({"result":"refused","reason":{"kind":"nameInUse"}}),
+            ]);
+        }
+        "CreateWorkspaceRequest" => {
+            let mut missing_description = literals[0].clone();
+            missing_description.as_object_mut().unwrap().remove("description");
+            invalid.push(missing_description);
+            let mut padded_name = literals[0].clone();
+            padded_name["name"] = json!(" Fixture workspace ");
+            invalid.push(padded_name);
+            let mut wrong_operation = literals[0].clone();
+            wrong_operation["operationId"] = json!("00000000-0000-4000-8000-000000000001");
+            invalid.push(wrong_operation);
+        }
+        "ReadChangeRecordsRequest" => {
+            for limit in [json!(0), json!(101), json!(1.5)] {
+                let mut wrong_limit = literals[0].clone();
+                wrong_limit["limit"] = limit;
+                invalid.push(wrong_limit);
+            }
+        }
+        "OrganizationAdminIntent" => {
+            for literal in literals {
+                for version in [0, 2] {
+                    let mut wrong_version = literal.clone();
+                    wrong_version["v"] = json!(version);
+                    invalid.push(wrong_version);
+                }
+                let mut wrong_identity = literal.clone();
+                wrong_identity["operationId"] = if literal["operation"] == "CreateWorkspace" {
+                    Value::Null
+                } else {
+                    json!("019a3dce-2000-7000-8000-000000000003")
+                };
+                invalid.push(wrong_identity);
+                let mut wrong_params = literal.clone();
+                wrong_params["params"] = if literal["operation"] == "WorkspaceLookup" {
+                    json!({"name":"Fixture workspace","description":"Fixture description"})
+                } else {
+                    json!({})
+                };
+                invalid.push(wrong_params);
+            }
+        }
         "DecideDeviceLogin" | "PresentedMachine" | "AdmittedMachine" => {
             if let Some(first) = literals.first() {
                 for peer in ["00000000-0000-4000-8000-000000000001", "019A3DCE-2000-7000-8000-000000000001"] {
@@ -81,7 +136,36 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
         _ => {}
     }
     invalid.extend(composed_byte_overflows(name, literals));
+    invalid.extend(description_byte_overflows(name, literals));
     invalid.extend(scalar_rule_negatives(literals));
+    invalid
+}
+
+fn description_byte_overflows(name: &str, literals: &[Value]) -> Vec<Value> {
+    let pointer = match name {
+        "CreateWorkspaceRequest" => "/description",
+        "OrganizationAdminResult" => "/workspace/description",
+        "OrganizationAdminIntent" => "/params/description",
+        _ => return Vec::new(),
+    };
+    let mut invalid = Vec::new();
+    for literal in literals
+        .iter()
+        .filter(|literal| literal.pointer(pointer).is_some())
+    {
+        // Multibyte values stay below maxLength while crossing the UTF-8 byte bound.
+        for description in [
+            "a".repeat(2049),
+            format!("{}a", "é".repeat(1024)),
+            format!("{}a", "😀".repeat(512)),
+            "😀".repeat(513),
+        ] {
+            assert!(description.len() > 2048);
+            let mut overflow = literal.clone();
+            *overflow.pointer_mut(pointer).unwrap() = json!(description);
+            invalid.push(overflow);
+        }
+    }
     invalid
 }
 

@@ -9,10 +9,13 @@ use runtime_primitives::Clock;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use std::{
     collections::BTreeMap,
-    io::{BufRead, BufReader, Write},
+    io::{BufRead, BufReader},
     path::Path,
-    process::{Child, Command, Stdio},
-    sync::{Arc, Mutex, PoisonError},
+    process::{Command, Stdio},
+    sync::{
+        Arc, Mutex, PoisonError,
+        atomic::{AtomicUsize, Ordering},
+    },
 };
 use workspace_model::{RequestId, WorkspaceId, WorkspaceReply, WorkspaceRequest};
 #[derive(Deserialize)]
@@ -86,54 +89,14 @@ impl AlarmReceipt {
         }
     }
 }
-struct Process {
-    child: Mutex<Option<Child>>,
-    output: Mutex<Option<std::thread::JoinHandle<()>>>,
-    errors: Mutex<Option<std::thread::JoinHandle<()>>>,
-}
-impl Process {
-    fn stop(&self) -> bool {
-        if let Some(mut child) = self
-            .child
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .take()
-        {
-            if let Some(mut stdin) = child.stdin.take() {
-                let _ = stdin.write_all(b"close\n");
-            }
-            let stopped = child.wait().is_ok_and(|status| status.success());
-            if let Some(output) = self
-                .output
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .take()
-                && output.join().is_err()
-            {
-                return false;
-            }
-            if let Some(errors) = self
-                .errors
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .take()
-            {
-                assert!(errors.join().is_ok());
-            }
-            return stopped;
-        }
-        true
-    }
-}
-impl Drop for Process {
-    fn drop(&mut self) {
-        let _ = self.stop();
-    }
-}
+#[path = "workerd_bridge_process.rs"]
+mod bridge_process;
+pub(super) use bridge_process::Process;
 struct Transport {
     origin: String,
     client: reqwest::Client,
     process: Arc<Process>,
+    clock_responses: AtomicUsize,
 }
 fn workerd_control_http_client() -> reqwest::Client {
     // These independent fixture RPCs must not borrow an idle socket while
@@ -179,6 +142,9 @@ impl Transport {
             eprintln!("workerd control {operation}: HTTP {}", response.status());
             return Err(StoreFailure::Unavailable);
         }
+        if operation == "clock" {
+            self.clock_responses.fetch_add(1, Ordering::SeqCst);
+        }
         response.json().await.map_err(|error| {
             eprintln!("workerd control {operation} decode: {error}");
             StoreFailure::Unavailable
@@ -191,6 +157,18 @@ pub(super) struct WorkerdHost {
     orgs: Mutex<BTreeMap<OrganizationId, Arc<RemoteRuntime>>>,
     captured_logs: Arc<Mutex<Vec<String>>>,
     log_changed: tokio::sync::watch::Sender<usize>,
+}
+impl Drop for WorkerdHost {
+    fn drop(&mut self) {
+        // Remote handles borrow this host's runtime; they never extend its
+        // child lifetime past the owning fixture, including panic unwinding.
+        if !self.transport.process.stop() {
+            assert!(
+                std::thread::panicking(),
+                "workerd bridge did not close successfully"
+            );
+        }
+    }
 }
 impl WorkerdHost {
     pub async fn open(clock: Arc<dyn Clock>) -> Result<Self, StoreFailure> {
@@ -216,7 +194,7 @@ impl WorkerdHost {
             if let Some(plan) = plan {
                 command.arg("--signin-plan").arg(plan);
             }
-            let mut child = command
+            let child = command
                 .current_dir(root)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::piped())
@@ -227,7 +205,12 @@ impl WorkerdHost {
                 })
                 .spawn()
                 .unwrap();
-            let error_drain = child.stderr.take().map(|stderr| {
+            // Own the child before pipe setup, readiness parsing or a reader
+            // thread can fail. Every unwind closes stdin and settles the PID.
+            let process = Arc::new(Process::own(child));
+            let (stdout, stderr) =
+                process.with_child(|child| (child.stdout.take().unwrap(), child.stderr.take()));
+            let error_drain = stderr.map(|stderr| {
                 let logs = process_logs.clone();
                 let changed = process_changed.clone();
                 std::thread::spawn(move || {
@@ -242,12 +225,8 @@ impl WorkerdHost {
                     }
                 })
             });
-            let mut output = BufReader::new(child.stdout.take().unwrap());
-            let process = Arc::new(Process {
-                child: Mutex::new(Some(child)),
-                output: Mutex::new(None),
-                errors: Mutex::new(error_drain),
-            });
+            process.set_error_drain(error_drain);
+            let mut output = BufReader::new(stdout);
             let mut line = String::new();
             let read = output.read_line(&mut line).unwrap();
             if read == 0 {
@@ -289,10 +268,7 @@ impl WorkerdHost {
                     line.clear();
                 }
             });
-            *process
-                .output
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner) = Some(drain);
+            process.set_output_drain(drain);
             (ready.origin, process)
         })
         .await
@@ -306,6 +282,7 @@ impl WorkerdHost {
                 },
                 client: workerd_control_http_client(),
                 process,
+                clock_responses: AtomicUsize::new(0),
             }),
             clock,
             orgs: Mutex::new(BTreeMap::new()),
@@ -320,11 +297,15 @@ impl WorkerdHost {
             .clone()
     }
     pub async fn until_log(&self, fragment: &str) {
+        self.until_log_after(0, fragment).await;
+    }
+    pub async fn until_log_after(&self, after: usize, fragment: &str) {
         let mut changed = self.log_changed.subscribe();
         loop {
             if self
                 .captured_logs()
                 .iter()
+                .skip(after)
                 .any(|line| line.contains(fragment))
             {
                 return;
@@ -372,8 +353,7 @@ impl WorkerdHost {
         caller: &WorkspaceCaller,
         request: WorkspaceRequest,
     ) -> Result<WorkspaceReply, StoreFailure> {
-        self.central(&caller.organization_id)
-            .await
+        self.cold_runtime(&caller.organization_id)
             .request(caller, request)
             .await
     }
@@ -382,8 +362,7 @@ impl WorkerdHost {
         caller: &WorkspaceCaller,
         request: CentralMailRequest,
     ) -> Result<CentralMailResult, StoreFailure> {
-        self.central(&caller.organization_id)
-            .await
+        self.cold_runtime(&caller.organization_id)
             .request_central(caller, request)
             .await
     }
@@ -414,10 +393,16 @@ impl WorkerdHost {
             .body("null")
             .send()
             .await;
-        self.central(organization).await.apply_clock().await;
+        self.central(organization).await;
     }
 }
 
+#[cfg(test)]
+#[path = "workerd_clock_dispatch_test.rs"]
+mod clock_dispatch_tests;
+#[cfg(test)]
+#[path = "workerd_lifecycle_test.rs"]
+pub(crate) mod lifecycle_tests;
 #[cfg(test)]
 #[path = "workerd_host_test.rs"]
 mod tests;

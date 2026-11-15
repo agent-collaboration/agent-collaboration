@@ -38,11 +38,7 @@ import {
   requireSettled,
 } from "./journey-steps.ts";
 import type { PeerReceiptCounts } from "../evidence/peer-receipt.ts";
-import {
-  releaseHeldWork,
-  requireNoReleaseMarker,
-  retireReleaseMarker,
-} from "../evidence/release-sentinel.ts";
+import { releaseHeldWork } from "../evidence/release-control.ts";
 
 /** A prompt case's oracle verdict, or a negative case that met exactly its required typed refusal. */
 export type CaseVerdict =
@@ -352,8 +348,7 @@ async function untilHolding(
 export async function callerLossCase(inputs: CaseInputs): Promise<CaseResult> {
   if (inputs.plan.peer.kind !== "controlled")
     throw new Error("callerLoss needs the controlled peer");
-  const { releaseSentinel } = inputs.plan.peer;
-  requireNoReleaseMarker(releaseSentinel);
+  const { releaseSocket } = inputs.plan.peer;
   const target = await createSession(inputs, "caller-loss-create");
   const before = inputs.store.operations(target).map((row) => row.operationId);
   const reads = [await baseline(inputs, "caller-loss-baseline", target)];
@@ -391,7 +386,7 @@ export async function callerLossCase(inputs: CaseInputs): Promise<CaseResult> {
       target,
       verdict: { kind: "failed", reason: "the work had already ended before the waiter dropped" },
     };
-  releaseHeldWork(releaseSentinel, operationId);
+  await releaseHeldWork(releaseSocket, target.sessionId);
   const waited = z
     .looseObject({ operation: z.unknown(), output: z.unknown() })
     .parse(await operationWait(inputs.context, "caller-loss-wait", operationId, 60));
@@ -409,16 +404,12 @@ export async function callerLossCase(inputs: CaseInputs): Promise<CaseResult> {
     expectedPeerReleases: 1,
     requireAgentReply: true,
   });
-  // Only a confirmed release retires the marker; an unconfirmed one stays for diagnosis.
-  if (verdict.kind === "qualified") retireReleaseMarker(releaseSentinel, operationId);
   await closeSession(inputs, target, "caller-loss-close");
   return { name: "callerLoss", target, verdict };
 }
 
 /** Explicit exact cancellation settles the held prompt as cancelled, with one peer cancellation. */
 export async function explicitCancelCase(inputs: CaseInputs): Promise<CaseResult> {
-  if (inputs.plan.peer.kind === "controlled")
-    requireNoReleaseMarker(inputs.plan.peer.releaseSentinel);
   const target = await createSession(inputs, "cancel-create");
   const before = inputs.store.operations(target).map((row) => row.operationId);
   const reads = [await baseline(inputs, "cancel-baseline", target)];

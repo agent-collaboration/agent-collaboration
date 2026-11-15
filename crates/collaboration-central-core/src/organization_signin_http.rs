@@ -21,8 +21,7 @@ use fleet_identity_protocol::OrganizationId;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-/// Mount only on the private link. Create-workspace is intentionally held
-/// until its modern storage representation is approved.
+/// Mount verified organization setup and reads only on the private link.
 pub fn organization_signin_router<Port: OrganizationSignInPort>(port: Arc<Port>) -> Router {
     let mut router = Router::new()
         .route(PROVISION_ORGANIZATION_ROUTE, post(provision::<Port>))
@@ -35,7 +34,11 @@ pub fn organization_signin_router<Port: OrganizationSignInPort>(port: Arc<Port>)
             post(authorization_revision::<Port>),
         )
         .with_state(port.clone());
-    for route in [AdminRoute::WorkspaceLookup, AdminRoute::ReadChangeRecords] {
+    for route in [
+        AdminRoute::CreateWorkspace,
+        AdminRoute::WorkspaceLookup,
+        AdminRoute::ReadChangeRecords,
+    ] {
         let port = port.clone();
         router = router.route(
             route.path(),
@@ -126,6 +129,12 @@ async fn forward_admin<Port: OrganizationSignInPort>(
         Ok(OrganizationAdminAnswer::Answered(result)) => {
             (StatusCode::OK, Json(result)).into_response()
         }
+        Ok(OrganizationAdminAnswer::Retained(answer)) => (
+            StatusCode::OK,
+            [(axum::http::header::CONTENT_TYPE, "application/json")],
+            answer.into_text(),
+        )
+            .into_response(),
         Err(_) => StatusCode::SERVICE_UNAVAILABLE.into_response(),
     }
 }

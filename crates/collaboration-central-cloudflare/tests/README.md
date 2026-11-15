@@ -26,8 +26,18 @@ bundle marker check.
 `integration/main.rs` is the business oracle. Its Rust cases drive typed semantic
 requests, fixture controls and actual owning-store reads through HTTP to the compiled
 Worker's `CentralObject` and `WorkspaceStoreObject`. The TypeScript bridge at
-`support/workerd-bridge.mts` only starts the existing pinned loader, reports its
-loopback origin and closes it; it has no business assertions or fabricated replies.
+`support/workerd-bridge.mts` starts the existing pinned loader, reports its
+loopback origin, forwards fixture clock/observation commands and closes it;
+Rust owns business assertions and signing.
+
+Ordinary bridge mode installs no launcher clock binding, preserving production
+request-entry concurrency for the existing Worker cases. Launcher controls require
+`--launcher-time-ms <milliseconds>` before readiness. Only that mode installs the
+clock binding; each object instance samples it on first touch, then receives live
+time pushes. The first-touch outside await is a named test-only difference; it is
+absent from ordinary mode and production. A cold object samples the current cell.
+Invalid time input is refused before any effect. A mid-push transport failure can
+leave time partly applied, fails the run, and has no retry or rollback machinery.
 
 From the repository root:
 
@@ -49,6 +59,12 @@ races and lost replies after actual apply. Person context is fixture-stamped;
 the verified-person sign-in cases use their separate private-link suite below.
 Machine login and Router Host enforcement retain their later-slice boundaries. The existing generic storage
 and driver cases stay in the verification package.
+
+`organization_signin::launcher_controls` drives the actual bridge child over stdin
+and stderr: unknown-org observation stays read-only, signed provisioning and renewal
+read the shared clock for live and future organizations, and a new bridge process
+starts with empty persistence. Raw fixture statements are compared without dumping
+their bytes into assertion failures. The existing integration command runs it.
 
 `workspace_requests::mail` and `::notices` exercise central queue, window, drain and
 wake/automation state through real platform alarm callbacks. Test-only controls arm
@@ -83,10 +99,41 @@ Cases cover stamp and record atomicity, expiry and predecessor checks, current
 revision floors, signed person reads, fresh proofs, causal races, cold reopen,
 query-derived alarm activation and safe refusal observations. Public-path refusal
 uses the existing `401` edge contract. Unknown private paths return `404`.
-Create-workspace effects, non-null lookup and machine-login approval replay remain
-held; independent read admission does not substitute for those effects.
+Setup cases exercise real signed create, non-null lookup, byte-identical replay,
+canonical name collisions, atomic directory/ledger/audit writes and facts-only
+digest reads outside both time bounds. Machine-login approval replay remains held.
 
 `workspace_requests::workerd_host::tests` also checks the fixture's control HTTP
 connection policy against real workerd. A byte-transparent relay observes upstream
 idle EOF and forces its ordering against one next clock POST. Each call runs once;
 the oracle uses connection events, without sleeps or relaxed deadlines.
+
+`workerd_host::lifecycle_tests` checks real parent SIGKILL and panic, launcher and
+legacy-owner panic, the inherited nextest group and real bridge EOF disposal.
+Build the legacy bundle with `worker-build crates/collaboration-central-cloudflare
+--dev --no-opt -- --locked --features conformance-faults` before these cases;
+the Worker CI job already builds it for its legacy scenarios.
+The bridge observes EOF as disposal; Rust's sole child owner waits and reaps.
+The harness never kills
+only the bridge; nextest bounds the whole test process group if disposal stalls.
+No nested bridge process group escapes nextest's termination.
+
+`support/lifecycle-nextest.toml` belongs only to explicit lifecycle negative
+controls. It does not alter normal CI deadlines. The `WORKERD_LIFECYCLE_CHILD`
+timeout and leak modes require an operator to retain the emitted exact child PIDs,
+check their OS exit and settle the deliberately leaked PID immediately. They are
+ignored in ordinary suites. Run the owned negative-control driver from the root:
+
+```sh
+pnpm --dir verification exec node tooling/workerd-lifecycle-negative-controls.ts
+```
+
+It runs the explicit ignored timeout/leak selectors, fails on missing readiness
+or zero matches, and observes workerd exit after timeout. The bridge may remain
+an init-owned zombie after group termination. The driver requests SIGTERM for
+its deliberate plain Node leak witness and records its PID; an exact OS exit
+readback is required before reporting that witness settled.
+Worker CI records nextest output in the job log and fails on a
+genuine `LEAK` result, including a test that nextest otherwise calls successful.
+An always-run `pgrep -x workerd` gate also rejects workerd-only orphans whose
+output pipes belong to Miniflare and cannot produce nextest's `LEAK` result.
