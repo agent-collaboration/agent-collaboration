@@ -155,7 +155,7 @@ async fn stamped_store(records: usize) -> TursoConnection {
     .execute(&mut connection)
     .await
     .unwrap();
-    query::<Turso>("INSERT INTO workspaces VALUES(?,'alpha','active',?,?)")
+    query::<Turso>("INSERT INTO workspaces(workspace_id,name,state,created_at,updated_at) VALUES(?,'alpha','active',?,?)")
         .bind(fixture_id(0x9000))
         .bind(TIME)
         .bind(TIME)

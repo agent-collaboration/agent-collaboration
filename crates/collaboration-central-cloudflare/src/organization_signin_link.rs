@@ -17,6 +17,7 @@ pub(crate) fn is_signin_path(path: &str) -> bool {
         AUTHORIZATION_REVISIONS_ROUTE,
         "/internal/device-login-decisions",
         "/internal/machine-token-decisions",
+        AdminRoute::CreateWorkspace.path(),
         AdminRoute::WorkspaceLookup.path(),
         AdminRoute::ReadChangeRecords.path(),
     ]

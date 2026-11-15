@@ -62,10 +62,12 @@ mod workspace_runtime;
 #[cfg(feature = "test-support")]
 pub use machine_login_test_control::{MachineLoginControl, machine_login_control};
 pub use workspace_runtime::{WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls};
+mod organization_workspace_plans;
 mod workspace_actor_identity;
 mod workspace_admission;
 mod workspace_change_records;
 mod workspace_decode_error;
+mod workspace_directory_rows;
 mod workspace_item_reads;
 mod workspace_json_records;
 pub mod workspace_migrations;

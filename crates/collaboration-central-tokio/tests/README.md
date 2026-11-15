@@ -96,9 +96,10 @@ produce two consecutive changes, both are drained, and replay preserves the curs
   replay, pre-sample expiry and post-sample org-turn linearization, and the first
   real stamp activating a pending wake through the native alarm owner.
   Shared signers live in `collaboration-central-conformance`'s non-default
-  `signin-test-support` feature. Create-workspace, non-null lookup and machine
-  login were outside the original B4a suite; the approved B4b machine-login
-  contracts now have their own real-route family below. Workspace setup stays held.
+  `signin-test-support` feature. Setup cases exercise signed workspace creation,
+  non-null lookup, byte-identical operation replay, shared canonical name uniqueness,
+  atomic directory/ledger/audit writes, and stored stamp facts outside both time
+  bounds without granting live authority.
 
 - `organization_signin::machine_login`: the real private device/token decision
   routes, exact immutable three-field approval replies across reopen, both BA1
@@ -106,7 +107,7 @@ produce two consecutive changes, both are drained, and replay preserves the curs
   idle renewal/expiry, client/org/installation isolation and late-record rollback.
   Workspace rows are explicitly seeded only as directory preconditions; no
   approval, token, actor or change-record result is fabricated. Grant expectations
-  name OD2's 600-second composed lifetime. Owner revocation/ABA uses only the
+  name the fixed 600-second production policy. Owner revocation/ABA uses only the
   approved closed core test-support dispatcher, with real-store owner-origin
   multi-record rollback. No public revoke API or connection-close proof is implied.
   The invariant case enumerates six bounded three-login operation sequences,
@@ -114,3 +115,5 @@ produce two consecutive changes, both are drained, and replay preserves the curs
   Separate raw-row constraint probes carry the historical second-enrolled and
   duplicate-request/client engine checks, with fresh PKs, rollback snapshots and
   valid control inserts. These planted constraint rows are not login journeys.
+  Stored-corruption cases require an empty 503 with unchanged owning rows, then
+  restore the fixture rows and require a successful Grant.

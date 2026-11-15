@@ -1,5 +1,4 @@
-//! The active private surface refuses unstamped reads/revisions without a body.
-//! The held create route is deliberately outside this matrix.
+//! The active private surface refuses unstamped reads, creates and revisions without a body.
 use super::support::*;
 use serde_json::json;
 
@@ -13,6 +12,11 @@ async fn unstamped_private_reads_and_revisions_reveal_nothing_and_unknown_routes
     let f = Fixture::new().await?;
     let person = signed::Person::owner(A, signed::NOW_SECONDS)?;
     for (path, body, intent) in [
+        (
+            signed::CREATE,
+            signed::create_body(A, "019f0000-0000-7000-8000-00000000d7c1", "Unstamped"),
+            signed::create_intent(A, "019f0000-0000-7000-8000-00000000d7c1", "Unstamped"),
+        ),
         (
             signed::RECORDS,
             json!({"organizationId":A,"after":null,"limit":100}),
