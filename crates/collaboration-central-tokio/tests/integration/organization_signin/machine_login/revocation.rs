@@ -47,6 +47,27 @@ async fn revocation_repeat_and_aba_never_reactivate_old_approvals_and_new_approv
         "mismatched current enrollment cannot revoke another installation"
     );
     assert!(snapshot(&f).await? == before);
+    // Historical BA1's second pending approval is made after B's first Grant.
+    // Its base must equal the current generation immediately before revocation;
+    // only the revoke bump, not B's earlier activation, can fence this approval.
+    let pending_before_revoke = enrollment(
+        &f.post(
+            DEVICE,
+            &approval(
+                0xce05,
+                INSTALLATION,
+                "Pending before revoke",
+                &[WORKSPACE],
+                f.now(),
+            ),
+        )
+        .await?
+        .1,
+    );
+    assert_eq!(
+        f.rows("SELECT a.base_generation,m.enrollment_generation,a.state FROM machine_approvals a JOIN machines m ON m.machine_id=a.machine_id WHERE a.label='Pending before revoke'").await?,
+        vec![vec![number(1), number(1), text("approved")]]
+    );
     let ended = f
         .revoke(0xce11, INSTALLATION, &b)
         .await??
@@ -66,6 +87,16 @@ async fn revocation_repeat_and_aba_never_reactivate_old_approvals_and_new_approv
     );
     let revoked = snapshot(&f).await?;
     assert_eq!(
+        f.post(
+            TOKEN,
+            &token(&pending_before_revoke, &pending_before_revoke)
+        )
+        .await?,
+        (200, refused("superseded")),
+        "an approval made at generation 1 is fenced by revocation's own bump to 2"
+    );
+    assert!(snapshot(&f).await? == revoked);
+    assert_eq!(
         f.post(TOKEN, &token(&a, &a)).await?,
         (200, refused("superseded")),
         "A approved at generation0 cannot activate after B activation+revocation generation2"
@@ -84,6 +115,16 @@ async fn revocation_repeat_and_aba_never_reactivate_old_approvals_and_new_approv
         "refused token/repeat revoke changed rows or emitted duplicate records"
     );
     f.reopen().await?;
+    assert_eq!(
+        f.post(
+            TOKEN,
+            &token(&pending_before_revoke, &pending_before_revoke)
+        )
+        .await?,
+        (200, refused("superseded")),
+        "the generation 1 pending approval remains fenced after owning reopen"
+    );
+    assert!(snapshot(&f).await? == revoked);
     assert_eq!(
         f.post(TOKEN, &token(&a, &a)).await?,
         (200, refused("superseded")),

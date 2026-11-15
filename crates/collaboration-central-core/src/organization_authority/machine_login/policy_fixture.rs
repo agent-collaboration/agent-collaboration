@@ -142,7 +142,7 @@ pub(super) fn decide_token(facts: &EnrollmentFacts, now_ms: i64) -> Decided<Mach
         facts,
         time(now_ms),
         &CountingIds::new(),
-        &settings(),
+        settings(),
     )
     .unwrap()
 }

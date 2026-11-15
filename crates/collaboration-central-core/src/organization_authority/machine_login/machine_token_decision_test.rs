@@ -172,13 +172,13 @@ fn wrong_client_unknown_org_and_inactive_states_never_mint_or_write() {
         request.client_id = id(99).try_into().unwrap();
         let ids = CountingIds::new();
         assert_refused(
-            &decide_machine_token(&request, &facts, time(NOW_MS), &ids, &settings()).unwrap(),
+            &decide_machine_token(&request, &facts, time(NOW_MS), &ids, settings()).unwrap(),
             MachineTokenRefusal::WrongClient {},
         );
         request = token(&current);
         request.organization_id = id(2).try_into().unwrap();
         assert_refused(
-            &decide_machine_token(&request, &facts, time(NOW_MS), &ids, &settings()).unwrap(),
+            &decide_machine_token(&request, &facts, time(NOW_MS), &ids, settings()).unwrap(),
             MachineTokenRefusal::EnrollmentNotActive {},
         );
         assert_eq!(ids.minted(), 0);
@@ -190,7 +190,7 @@ fn wrong_client_unknown_org_and_inactive_states_never_mint_or_write() {
             &empty_facts(),
             time(NOW_MS),
             &CountingIds::new(),
-            &settings(),
+            settings(),
         )
         .unwrap(),
         MachineTokenRefusal::EnrollmentNotActive {},

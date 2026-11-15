@@ -50,7 +50,7 @@ pub(crate) fn nonnegative_integer(
 pub(crate) fn millis(value: &str, field: &str) -> Result<i64, StoreFailure> {
     let parsed: DateTime<Utc> = value.parse().map_err(|_| corrupt(field))?;
     let milliseconds = parsed.timestamp_millis();
-    if milliseconds < 0 || parsed.timestamp_subsec_nanos() % 1_000_000 != 0 {
+    if milliseconds < 0 || !parsed.timestamp_subsec_nanos().is_multiple_of(1_000_000) {
         return Err(corrupt(field));
     }
     SafeInteger::new(milliseconds).map_err(|_| corrupt(field))?;

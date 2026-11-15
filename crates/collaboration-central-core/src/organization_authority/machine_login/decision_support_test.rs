@@ -20,7 +20,7 @@ fn generation_exhaustion_and_invalid_id_sources_fail_without_a_plan() {
             &facts,
             time(NOW_MS),
             &CountingIds::new(),
-            &settings()
+            settings()
         )
         .is_err()
     );
@@ -51,7 +51,7 @@ fn explicit_typed_lifetimes_control_grants_and_od2_production_is_six_hundred_sec
             &facts,
             time(NOW_MS),
             &CountingIds::new(),
-            &MachineLoginSettings::new(seconds.try_into().unwrap()),
+            MachineLoginSettings::new(seconds.try_into().unwrap()),
         )
         .unwrap();
         assert!(

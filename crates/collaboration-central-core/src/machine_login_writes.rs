@@ -28,10 +28,10 @@ pub(crate) fn statements(
         enrollments.insert(enrollment.id.as_str().to_owned(), enrollment.clone());
     }
     let mut statements = Vec::new();
-    if !changes.is_empty() {
-        if let Some(before) = &machine {
-            statements.push(exact("UPDATE machines SET machine_id=machine_id WHERE machine_id=? AND installation_id=? AND enrollment_generation=? AND state=? AND label=? AND json(allowed_workspaces)=json(?)", vec![text(before.id),text(before.installation.as_str()),generation(before.generation.get())?,text(machine_state(before.state)),text(before.label.as_str()),encode(&before.allowed_workspaces,"machines.allowed_workspaces")?]));
-        }
+    if !changes.is_empty()
+        && let Some(before) = &machine
+    {
+        statements.push(exact("UPDATE machines SET machine_id=machine_id WHERE machine_id=? AND installation_id=? AND enrollment_generation=? AND state=? AND label=? AND json(allowed_workspaces)=json(?)", vec![text(before.id),text(before.installation.as_str()),generation(before.generation.get())?,text(machine_state(before.state)),text(before.label.as_str()),encode(&before.allowed_workspaces,"machines.allowed_workspaces")?]));
     }
     for change in changes {
         match change {

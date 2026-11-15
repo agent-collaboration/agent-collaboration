@@ -1,6 +1,9 @@
 //! Approval reserves a snapshot; it never activates a login.
 use super::decision_support::{DecisionIds, DecisionTime};
-use super::enrollment_records::*;
+use super::enrollment_records::{
+    Decided, EnrollmentChange, EnrollmentFacts, EnrollmentGeneration, MachineRow, MachineState,
+    StoredEnrollment, StoredEnrollmentState,
+};
 use crate::identity_contract::{DecideDeviceLogin, DeviceLoginDecision, DeviceLoginRefusal};
 use crate::organization_change_rows::{OrganizationChangeKind, OrganizationChangeOrigin};
 use crate::person_request::SECOND_FACTOR_WINDOW_SECONDS;

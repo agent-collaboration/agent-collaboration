@@ -1,6 +1,9 @@
 //! Activation is generation-fenced; renewal rechecks live client and idle state.
 use super::decision_support::{DecisionIds, DecisionTime, MachineLoginSettings};
-use super::enrollment_records::*;
+use super::enrollment_records::{
+    Decided, EnrollmentChange, EnrollmentFacts, MachineRow, MachineState, StoredEnrollment,
+    StoredEnrollmentState,
+};
 use crate::identity_contract::{
     DecideMachineToken, EndedMachineClient, EnrollmentRevocationReason, MachineTokenDecision,
     MachineTokenRefusal,
@@ -15,7 +18,7 @@ pub(crate) fn decide_machine_token(
     facts: &EnrollmentFacts,
     time: DecisionTime,
     ids: &dyn IdSource,
-    settings: &MachineLoginSettings,
+    settings: MachineLoginSettings,
 ) -> Result<Decided<MachineTokenDecision>, StoreFailure> {
     if request.organization_id != facts.organization_id {
         return Ok(refuse(MachineTokenRefusal::EnrollmentNotActive {}));
@@ -73,7 +76,7 @@ fn first_grant(
     facts: &EnrollmentFacts,
     time: DecisionTime,
     ids: &DecisionIds<'_>,
-    settings: &MachineLoginSettings,
+    settings: MachineLoginSettings,
 ) -> Result<Decided<MachineTokenDecision>, StoreFailure> {
     let deadline = enrollment
         .code_expires_at
@@ -160,7 +163,7 @@ fn first_grant(
 fn grant(
     enrollment: &StoredEnrollment,
     time: DecisionTime,
-    settings: &MachineLoginSettings,
+    settings: MachineLoginSettings,
     superseded: Option<EndedMachineClient>,
 ) -> Result<MachineTokenDecision, StoreFailure> {
     let decided_at = time.seconds();

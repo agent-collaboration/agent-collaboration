@@ -9,4 +9,5 @@ mod liveness;
 mod receipt;
 mod revocation;
 mod rollback;
+mod stored_corruption;
 mod support;

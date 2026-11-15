@@ -1,6 +1,9 @@
 //! Private revocation policy; routing and connection close delivery belong to C.
 use super::decision_support::{DecisionIds, DecisionTime};
-use super::enrollment_records::*;
+use super::enrollment_records::{
+    Decided, EnrollmentChange, EnrollmentFacts, MachineRow, MachineState, StoredEnrollment,
+    StoredEnrollmentState,
+};
 use super::machine_token_decision::append_allowance_records;
 use crate::identity_contract::{EndedMachineClient, EnrollmentRevocationReason, PersonId};
 use crate::organization_change_rows::{OrganizationChangeKind, OrganizationChangeOrigin};
