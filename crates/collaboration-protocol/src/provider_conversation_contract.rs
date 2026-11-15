@@ -335,6 +335,49 @@ pub enum ProviderModeReason {
     AutoNotApplied,
 }
 
+/// A Codex session's permission mode at creation (R3): the mode asked for, the
+/// mode native read back, and why they differ. Carried on the create result's
+/// `_meta.codexRouter.permissionMode` and kept by the Host for show.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CodexPermissionModeReport {
+    /// The Router access the session was created with.
+    pub access: RouterAccess,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_mode: Option<String>,
+    /// The mode native read back; absent when native's report was missing or
+    /// contradicted the requested access.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actual: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<ProviderModeReason>,
+}
+
+impl CodexPermissionModeReport {
+    /// The report as the effective settings start and show return.
+    #[must_use]
+    pub fn effective_settings(&self) -> EffectiveProviderSettings {
+        EffectiveProviderSettings {
+            requested_policy: ProviderRequestedPolicy {
+                access: self.access,
+            },
+            mapping_status: if self.reason.is_none() {
+                ProviderSettingsMappingStatus::Verified
+            } else {
+                ProviderSettingsMappingStatus::Unverified
+            },
+            authentication: ProviderAuthenticationState::Unverified,
+            provider_permission_mode: None,
+            permission_outcome: None,
+            mode: self.actual.clone(),
+            model: None,
+            effort: None,
+            requested_mode: self.requested_mode.clone(),
+            mode_reason: self.reason,
+        }
+    }
+}
+
 /// How an agent's auto mode treats an action outside its granted folders (R7).
 #[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

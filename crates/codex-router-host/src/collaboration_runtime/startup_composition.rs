@@ -494,6 +494,9 @@ impl CollaborationRuntime {
                     Some(native_backend.clone()),
                     Some(approval_broker.clone()),
                     display_names.clone(),
+                    codex_recorder.clone().map(|recorder| {
+                        recorder as std::sync::Arc<dyn collaboration_runtime::CodexPermissionModes>
+                    }),
                 );
             let session_context =
                 collaboration_service::collaboration_application::SessionContextReader::new(

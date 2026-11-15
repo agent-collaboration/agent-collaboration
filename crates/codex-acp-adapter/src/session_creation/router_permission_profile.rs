@@ -14,7 +14,7 @@ use serde_json::{Map, Value, json};
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
-const fn profile_name(access: RouterAccess) -> &'static str {
+pub(super) const fn profile_name(access: RouterAccess) -> &'static str {
     match access {
         RouterAccess::WriteRestricted => "router-write-restricted",
         RouterAccess::WorkspaceWrite => "router-workspace-write",

@@ -2,12 +2,12 @@
 use crate::{ProviderOperationAdmission, ProviderOperationAdmissionResult, ProviderOperationStore};
 use codex_acp_adapter::{ConversationOperationRecorder, ConversationRecordFuture};
 use collaboration_protocol::{
-    CodexGeneration, ConversationBindingIdentity, EndpointRef, NonEmptyText, OperationId,
-    ProviderOperationEffect, ProviderOperationKind, ProviderOperationStage,
-    ProviderReconciliationState, SessionId, SessionRef,
+    CodexGeneration, CodexPermissionModeReport, ConversationBindingIdentity, EndpointRef,
+    NonEmptyText, OperationId, ProviderOperationEffect, ProviderOperationKind,
+    ProviderOperationStage, ProviderReconciliationState, SessionId, SessionRef,
 };
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     io,
     sync::{Arc, Mutex as StdMutex},
 };
@@ -20,6 +20,11 @@ pub struct CodexConversationOperationRecorder {
     listener_path: NonEmptyText,
     changed: Arc<Notify>,
     active: Arc<StdMutex<HashSet<OperationId>>>,
+    /// Each created session's permission-mode report, for show (R3). Process
+    /// memory only, never the operation store: it lasts for the Host's life, so a
+    /// closed session still shows its create-time report, and a Host restart
+    /// leaves show with the effective access only.
+    permission_modes: Arc<StdMutex<HashMap<SessionRef, CodexPermissionModeReport>>>,
 }
 
 impl CodexConversationOperationRecorder {
@@ -34,6 +39,7 @@ impl CodexConversationOperationRecorder {
             listener_path,
             changed: Arc::new(Notify::new()),
             active: Arc::new(StdMutex::new(HashSet::new())),
+            permission_modes: Arc::new(StdMutex::new(HashMap::new())),
         }
     }
 
@@ -74,6 +80,7 @@ impl ConversationOperationRecorder for UnavailableConversationOperationRecorder 
         &'a self,
         _: &'a OperationId,
         _: &'a SessionId,
+        _: &'a CodexPermissionModeReport,
     ) -> ConversationRecordFuture<'a> {
         Box::pin(async {
             Err(io::Error::other(
@@ -152,8 +159,18 @@ impl ConversationOperationRecorder for CodexConversationOperationRecorder {
         &'a self,
         operation_id: &'a OperationId,
         session_id: &'a SessionId,
+        permission_mode: &'a CodexPermissionModeReport,
     ) -> ConversationRecordFuture<'a> {
         Box::pin(async move {
+            if let Ok(mut modes) = self.permission_modes.lock() {
+                modes.insert(
+                    SessionRef {
+                        endpoint: self.endpoint.clone(),
+                        session_id: session_id.clone(),
+                    },
+                    permission_mode.clone(),
+                );
+            }
             let mut store = self.store.lock().await;
             store
                 .record_target(
@@ -232,5 +249,27 @@ impl ConversationOperationRecorder for CodexConversationOperationRecorder {
                 .remove(operation_id);
             Ok(())
         })
+    }
+}
+
+/// Codex sessions' permission-mode reports as show reads them (R3).
+pub trait CodexPermissionModes: Send + Sync {
+    /// The create-time report for `target`, if this Host created it.
+    fn effective_settings(
+        &self,
+        target: &SessionRef,
+    ) -> Option<collaboration_protocol::EffectiveProviderSettings>;
+}
+
+impl CodexPermissionModes for CodexConversationOperationRecorder {
+    fn effective_settings(
+        &self,
+        target: &SessionRef,
+    ) -> Option<collaboration_protocol::EffectiveProviderSettings> {
+        self.permission_modes
+            .lock()
+            .ok()?
+            .get(target)
+            .map(CodexPermissionModeReport::effective_settings)
     }
 }

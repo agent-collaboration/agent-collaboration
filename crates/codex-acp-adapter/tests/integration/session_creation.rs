@@ -199,7 +199,7 @@ async fn new_session_mints_scoped_configuration_receipt_and_checks_effective_cwd
                 // R3: write-restricted is an explicit narrower access, not auto.
                 assert_eq!(
                     session.new_session_result()["_meta"]["codexRouter"]["permissionMode"],
-                    json!({"actual":"write-restricted","reason":"autoNotRealized"})
+                    json!({"access":"write-restricted","actual":"write-restricted","reason":"autoNotRealized"})
                 );
             }
             assert_eq!(
@@ -509,7 +509,7 @@ async fn fork_session_sends_exact_model_choice_to_native_runtime() {
         // rather than auto, and why.
         assert_eq!(
             session.new_session_result()["_meta"]["codexRouter"]["permissionMode"],
-            json!({"actual":"workspace-write","reason":"autoNotApplied"})
+            json!({"access":"workspace-write","actual":"workspace-write","reason":"autoNotApplied"})
         );
         use crate::recording_scratch_scopes::ScratchScopeEvent::{Closed, Opened};
         let scope = std::path::PathBuf::from(TEST_SCRATCH);

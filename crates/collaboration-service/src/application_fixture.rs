@@ -456,6 +456,10 @@ impl ApplicationFixture {
             self.native_backend.clone(),
             self.approval_broker.clone(),
             self.display_names.clone(),
+            // As in the Host, the Codex recorder also keeps create-time mode reports.
+            self.codex_conversation_recorder.clone().map(|recorder| {
+                recorder as std::sync::Arc<dyn collaboration_runtime::CodexPermissionModes>
+            }),
         );
         let session_context = crate::collaboration_application::SessionContextReader::new(
             self.router_identity(),

@@ -755,7 +755,13 @@ async fn codex_create_recorder_preserves_target_and_uncertain_dispatch() -> Test
     recorder.admit_create(&created_id, &generation).await?;
     recorder.before_native_dispatch(&created_id).await?;
     let session_id = SessionId::try_from("new-codex-thread".to_owned())?;
-    recorder.record_created(&created_id, &session_id).await?;
+    recorder
+        .record_created(
+            &created_id,
+            &session_id,
+            &crate::codex_conversation_operation_inspection::permission_mode_report(),
+        )
+        .await?;
     let created = store
         .lock()
         .await

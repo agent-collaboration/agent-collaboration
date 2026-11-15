@@ -160,6 +160,9 @@ impl AcpConversation {
             if let Some(source_thread_id) = &request.fork {
                 router_metadata.insert("forkThreadId".into(), json!(source_thread_id));
             }
+            if let Some(mode) = &request.mode {
+                router_metadata.insert("mode".into(), json!(mode));
+            }
             let params =
                 json!({"cwd":request.cwd,"mcpServers":[],"_meta":{"codexRouter":router_metadata}});
             let stage = if request.fork.is_some() {
@@ -227,7 +230,9 @@ impl AcpConversation {
     }
 }
 
-fn permission_mode(result: &Value) -> Result<Option<super::NativePermissionMode>, ClientError> {
+fn permission_mode(
+    result: &Value,
+) -> Result<Option<collaboration_protocol::CodexPermissionModeReport>, ClientError> {
     result
         .pointer("/_meta/codexRouter/permissionMode")
         .map(|mode| {

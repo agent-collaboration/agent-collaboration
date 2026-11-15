@@ -419,9 +419,8 @@ impl ConversationClient {
                     created_by: Some(created_by),
                     approver,
                     root_message_id: input.root_message_id,
+                    mode: input.mode,
                 };
-                let requested_mode = input.mode.clone();
-                let requested_access = input.access;
                 let mut emit = |_event| Ok(());
                 match tokio::time::timeout(
                     timeout,
@@ -436,9 +435,9 @@ impl ConversationClient {
                     Ok(Ok(target)) => Ok(ConversationCreateOutcome::Created {
                         operation_id,
                         target,
-                        effective_settings: acp.permission_mode.clone().map(|mode| {
-                            codex_effective_settings(requested_access, requested_mode, mode)
-                        }),
+                        effective_settings: acp.permission_mode.as_ref().map(
+                            collaboration_protocol::CodexPermissionModeReport::effective_settings,
+                        ),
                         permission_differences: acp.permission_differences.clone(),
                     }),
                     Ok(Err(error)) => Err(error.into()),
@@ -615,30 +614,6 @@ async fn create_through_api(
     match composite_call(client, "conversation_create", arguments, timeout, None).await? {
         CompositeAnswer::Settled(outcome) => Ok(outcome),
         CompositeAnswer::StillRunning => Ok(ConversationCreateOutcome::Pending { operation_id }),
-    }
-}
-
-/// Codex's start report (R3): the mode asked for, and the mode native read back.
-fn codex_effective_settings(
-    access: RouterAccess,
-    requested_mode: Option<String>,
-    actual: crate::acp_conversation::NativePermissionMode,
-) -> collaboration_protocol::EffectiveProviderSettings {
-    collaboration_protocol::EffectiveProviderSettings {
-        requested_policy: collaboration_protocol::ProviderRequestedPolicy { access },
-        mapping_status: if actual.reason.is_none() {
-            collaboration_protocol::ProviderSettingsMappingStatus::Verified
-        } else {
-            collaboration_protocol::ProviderSettingsMappingStatus::Unverified
-        },
-        authentication: collaboration_protocol::ProviderAuthenticationState::Unverified,
-        provider_permission_mode: None,
-        permission_outcome: None,
-        mode: Some(actual.actual),
-        model: None,
-        effort: None,
-        requested_mode,
-        mode_reason: actual.reason,
     }
 }
 

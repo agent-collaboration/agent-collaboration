@@ -31,7 +31,8 @@ pub use private_socket_listener::{OwnerOnlySocket, SocketCleanup};
 mod codex_conversation_operation_recorder;
 mod provider_operation_store;
 pub use codex_conversation_operation_recorder::{
-    CodexConversationOperationRecorder, UnavailableConversationOperationRecorder,
+    CodexConversationOperationRecorder, CodexPermissionModes,
+    UnavailableConversationOperationRecorder,
 };
 mod provider_session_event_hub;
 mod provider_session_record;

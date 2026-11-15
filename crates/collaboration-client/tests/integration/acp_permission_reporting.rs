@@ -100,11 +100,21 @@ async fn create_and_load_return_permission_differences_from_acp_setup() {
 #[tokio::test]
 async fn codex_create_reports_requested_and_actual_permission_mode() {
     for (requested, reported, expected_mode, expected_reason) in [
-        (None, json!({"actual":"auto"}), "auto", Value::Null),
-        (Some("auto"), json!({"actual":"auto"}), "auto", Value::Null),
+        (
+            None,
+            json!({"access":"workspace-write","actual":"auto"}),
+            "auto",
+            Value::Null,
+        ),
         (
             Some("auto"),
-            json!({"actual":"workspace-write","reason":"autoNotApplied"}),
+            json!({"access":"workspace-write","actual":"auto"}),
+            "auto",
+            Value::Null,
+        ),
+        (
+            Some("auto"),
+            json!({"access":"workspace-write","actual":"workspace-write","reason":"autoNotApplied"}),
             "workspace-write",
             json!("autoNotApplied"),
         ),
@@ -134,6 +144,14 @@ async fn codex_create_reports_requested_and_actual_permission_mode() {
             let request: Value =
                 serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
             assert_eq!(request["method"], "session/new");
+            // The adapter reports back the requested mode it was sent.
+            let mut peer_reported = peer_reported;
+            if let Some(mode) = request["params"]["_meta"]["codexRouter"].get("mode") {
+                peer_reported["requestedMode"] = mode.clone();
+            }
+            let sent_mode = request["params"]["_meta"]["codexRouter"]
+                .get("mode")
+                .cloned();
             let result = json!({"sessionId":"created-thread","_meta":{"codexRouter":{"permissionMode":peer_reported}}});
             write
                 .write_all(
@@ -145,6 +163,7 @@ async fn codex_create_reports_requested_and_actual_permission_mode() {
                 )
                 .await
                 .unwrap();
+            sent_mode
         });
         let acp = AcpConversation::connect(
             &CollaborationAccess::api(&root),
@@ -184,7 +203,8 @@ async fn codex_create_reports_requested_and_actual_permission_mode() {
             "{result}"
         );
         assert_eq!(settings["requestedPolicy"]["access"], "workspace-write");
-        peer.await.unwrap();
+        // Assert: the requested mode is sent to the adapter only when given.
+        assert_eq!(peer.await.unwrap(), requested.map(|mode| json!(mode)));
         api.stop().await.unwrap();
     }
 }

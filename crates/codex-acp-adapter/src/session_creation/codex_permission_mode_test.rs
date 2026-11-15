@@ -1,84 +1,168 @@
-use super::{CodexPermissionMode, codex_permission_mode};
+use super::codex_permission_mode;
 use collaboration_protocol::{
-    PermissionDifference, ProviderModeReason, RouterAccess, SettingsObservation,
-    SettingsObservationSource, SettingsUnavailableReason,
+    CodexPermissionModeReport, PermissionDifference, ProviderModeReason, RouterAccess,
+    SettingsObservation, SettingsObservationSource, SettingsUnavailableReason,
 };
-use serde_json::json;
+use serde_json::{Value, json};
 
-fn observed(reviewer: &str) -> SettingsObservation {
+/// Native's read-back of a started thread, field by field.
+fn observed(
+    profile: &str,
+    sandbox: &str,
+    policy: Option<&str>,
+    reviewer: &str,
+) -> SettingsObservation {
     SettingsObservation::Observed {
         source: SettingsObservationSource::ThreadStart,
         observed_at: "2026-11-14T00:00:00Z".to_owned(),
         router_access: Some(RouterAccess::WorkspaceWrite),
-        native_sandbox: None,
-        permission_profile: None,
-        approval_policy: Box::new(Some(json!("on-request"))),
+        native_sandbox: Some(json!({"type":sandbox,"writableRoots":[]})),
+        permission_profile: Some(json!({"id":profile,"extends":":workspace"})),
+        approval_policy: Box::new(policy.map(Value::from)),
         approvals_reviewer: Box::new(Some(json!(reviewer))),
     }
 }
 
-fn mode(actual: &str, reason: Option<ProviderModeReason>) -> CodexPermissionMode {
-    CodexPermissionMode {
-        actual: actual.to_owned(),
+fn workspace(sandbox: &str, policy: Option<&str>, reviewer: &str) -> SettingsObservation {
+    observed("router-workspace-write", sandbox, policy, reviewer)
+}
+
+fn mode(
+    access: RouterAccess,
+    actual: Option<&str>,
+    reason: Option<ProviderModeReason>,
+) -> CodexPermissionModeReport {
+    CodexPermissionModeReport {
+        access,
+        requested_mode: Some("auto".to_owned()),
+        actual: actual.map(str::to_owned),
         reason,
     }
 }
 
-/// Oracle: R3 for Codex — auto is reported only when native read back the
-/// Router as reviewer and no permission difference; otherwise the access is
-/// reported with why it is not auto.
+/// Oracle: R3 for Codex — the actual mode comes only from native's read-back:
+/// auto only when native reported the Router profile, a workspace-write
+/// sandbox, on-request approvals and the Router as reviewer with no
+/// difference; a missing or contradicting report claims no actual mode.
 #[test]
-fn codex_reports_auto_only_when_native_read_back_its_realization() {
+fn codex_reports_only_the_mode_native_read_back() {
+    use ProviderModeReason::{AutoNotApplied, AutoNotRealized};
+    use RouterAccess::{WorkspaceWrite, WriteRestricted};
     let cases = [
         (
-            RouterAccess::WorkspaceWrite,
-            observed("user"),
+            "realized",
+            WorkspaceWrite,
+            workspace("workspaceWrite", Some("on-request"), "user"),
             vec![],
-            mode("auto", None),
+            mode(WorkspaceWrite, Some("auto"), None),
         ),
         (
-            RouterAccess::WorkspaceWrite,
-            observed("auto_review"),
+            "automatic reviewer",
+            WorkspaceWrite,
+            workspace("workspaceWrite", Some("on-request"), "auto_review"),
             vec![],
-            mode("workspace-write", Some(ProviderModeReason::AutoNotApplied)),
+            mode(
+                WorkspaceWrite,
+                Some("workspace-write"),
+                Some(AutoNotApplied),
+            ),
         ),
         (
-            RouterAccess::WorkspaceWrite,
-            observed("user"),
+            "approval policy missing",
+            WorkspaceWrite,
+            workspace("workspaceWrite", None, "user"),
+            vec![],
+            mode(
+                WorkspaceWrite,
+                Some("workspace-write"),
+                Some(AutoNotApplied),
+            ),
+        ),
+        (
+            "approval policy different",
+            WorkspaceWrite,
+            workspace("workspaceWrite", Some("never"), "user"),
+            vec![],
+            mode(
+                WorkspaceWrite,
+                Some("workspace-write"),
+                Some(AutoNotApplied),
+            ),
+        ),
+        (
+            "a permission difference",
+            WorkspaceWrite,
+            workspace("workspaceWrite", Some("on-request"), "user"),
             vec![PermissionDifference::Sandbox],
-            mode("workspace-write", Some(ProviderModeReason::AutoNotApplied)),
+            mode(
+                WorkspaceWrite,
+                Some("workspace-write"),
+                Some(AutoNotApplied),
+            ),
         ),
         (
-            RouterAccess::WorkspaceWrite,
+            "contradicting sandbox",
+            WorkspaceWrite,
+            workspace("dangerFullAccess", Some("on-request"), "user"),
+            vec![],
+            mode(WorkspaceWrite, None, Some(AutoNotApplied)),
+        ),
+        (
+            "contradicting profile",
+            WorkspaceWrite,
+            observed(
+                "router-write-restricted",
+                "workspaceWrite",
+                Some("on-request"),
+                "user",
+            ),
+            vec![],
+            mode(WorkspaceWrite, None, Some(AutoNotApplied)),
+        ),
+        (
+            "settings missing",
+            WorkspaceWrite,
             SettingsObservation::Unavailable {
                 reason: SettingsUnavailableReason::NativeResponseOmittedSettings,
             },
             vec![],
-            mode("workspace-write", Some(ProviderModeReason::AutoNotApplied)),
+            mode(WorkspaceWrite, None, Some(AutoNotApplied)),
         ),
         (
-            RouterAccess::WriteRestricted,
-            observed("user"),
+            "write-restricted read back",
+            WriteRestricted,
+            observed(
+                "router-write-restricted",
+                "workspaceWrite",
+                Some("on-request"),
+                "user",
+            ),
             vec![],
             mode(
-                "write-restricted",
-                Some(ProviderModeReason::AutoNotRealized),
+                WriteRestricted,
+                Some("write-restricted"),
+                Some(AutoNotRealized),
             ),
         ),
+        (
+            "write-restricted missing",
+            WriteRestricted,
+            SettingsObservation::Unavailable {
+                reason: SettingsUnavailableReason::NativeResponseOmittedSettings,
+            },
+            vec![],
+            mode(WriteRestricted, None, Some(AutoNotRealized)),
+        ),
     ];
-    for (access, observation, differences, expected) in cases {
+    for (name, access, observation, differences, expected) in cases {
         assert_eq!(
-            codex_permission_mode(access, &observation, &differences),
+            codex_permission_mode(access, Some("auto"), &observation, &differences),
             expected,
-            "{access:?} {observation:?} {differences:?}"
+            "{name}"
         );
     }
     assert_eq!(
-        serde_json::to_value(mode(
-            "workspace-write",
-            Some(ProviderModeReason::AutoNotApplied)
-        ))
-        .unwrap(),
-        json!({"actual":"workspace-write","reason":"autoNotApplied"})
+        serde_json::to_value(mode(WorkspaceWrite, None, Some(AutoNotApplied))).unwrap(),
+        json!({"access":"workspace-write","requestedMode":"auto","reason":"autoNotApplied"})
     );
 }
