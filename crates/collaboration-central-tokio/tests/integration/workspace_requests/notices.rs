@@ -420,6 +420,7 @@ async fn session_cadence_sets_nondefault_window_deadline() {
     f.host.close().await;
 }
 
+mod alarm_isolation;
 mod corruption;
 mod identities;
 mod queued_cancel;

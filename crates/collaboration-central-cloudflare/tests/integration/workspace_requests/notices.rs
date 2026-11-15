@@ -353,6 +353,7 @@ async fn session_cadence_sets_nondefault_window_deadline() {
 
 mod roles;
 
+mod alarm_isolation;
 mod concurrency;
 mod corruption;
 mod identities;
