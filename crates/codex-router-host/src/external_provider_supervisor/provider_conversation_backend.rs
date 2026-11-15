@@ -639,3 +639,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "provider_conversation_backend_test.rs"]
+mod tests;

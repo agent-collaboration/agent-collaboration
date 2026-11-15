@@ -1,5 +1,3 @@
-#[path = "tests/permission_mode_report_test.rs"]
-mod permission_mode_report_tests;
 #[path = "tests/uncertainty_admission_test.rs"]
 mod uncertainty_admission_tests;
 use super::*;
