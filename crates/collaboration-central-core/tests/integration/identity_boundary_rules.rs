@@ -3,7 +3,7 @@ use crate::schema_validation;
 
 use collaboration_central_core::identity_contract::{
     ConnectionView, DecideDeviceLogin, MachineEnrollment, MachinePresenceAnswer,
-    PersonAdmissionRequest, TokenLifetimeSeconds,
+    PersonAdmissionRequest,
 };
 use fleet_identity_protocol::ReportSessionActivity;
 use schemars::JsonSchema;
@@ -83,14 +83,6 @@ fn optional_reads_accept_null_but_writes_omit_the_key() {
         json!({"operation":"admitSignIn","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002"}),
         "verifiedEmail",
     );
-    let decisions: Vec<Value> = serde_json::from_str(include_str!(
-        "../../contracts/DecideDeviceLogin.fixtures.json"
-    ))
-    .unwrap();
-    assert_null_read_omitted_write::<DecideDeviceLogin>(
-        decisions[0].clone(),
-        "approverSecondFactorAt",
-    );
     let enrollments: Vec<Value> = serde_json::from_str(include_str!(
         "../../contracts/MachineEnrollment.fixtures.json"
     ))
@@ -98,6 +90,44 @@ fn optional_reads_accept_null_but_writes_omit_the_key() {
     for index in [0, 2, 4] {
         assert_null_read_omitted_write::<MachineEnrollment>(enrollments[index].clone(), "endsAt");
     }
+}
+
+#[test]
+fn device_login_second_factor_is_required_nullable_and_serializes_null() {
+    // PD's nullable field and issuer997 supersede the former omission exception.
+    let mut request = json!({
+        "organizationId":"019a3dce-2000-7000-8000-000000000001",
+        "approver":"019a3dce-2000-7000-8000-000000000001",
+        "permissionChecked":"machine:enroll",
+        "requestId":"019a3dce-2000-7000-8000-000000000002",
+        "installation":"019a3dce-2000-7000-8000-000000000001",
+        "peer":"019a3dce-2000-7000-8000-000000000002",
+        "label":"fixture machine","allowedWorkspaces":[],
+        "approverSecondFactorAt":null,"codeExpiresAt":1793448600_i64
+    });
+    let schema = serde_json::to_value(schemars::schema_for!(DecideDeviceLogin)).unwrap();
+    let validator = schema_validation::contract_validator(&schema).unwrap();
+    for factor in [Value::Null, json!(0), json!(1793448000_i64)] {
+        request["approverSecondFactorAt"] = factor;
+        let parsed: DecideDeviceLogin = serde_json::from_value(request.clone()).unwrap();
+        assert_eq!(serde_json::to_value(parsed).unwrap(), request);
+        assert!(validator.is_valid(&request));
+    }
+    for field in ["codeExpiresAt", "approverSecondFactorAt"] {
+        let mut epoch = request.clone();
+        epoch[field] = json!(0);
+        let parsed: DecideDeviceLogin = serde_json::from_value(epoch.clone()).unwrap();
+        assert_eq!(serde_json::to_value(parsed).unwrap(), epoch);
+        assert!(validator.is_valid(&epoch));
+        let mut negative = request.clone();
+        negative[field] = json!(-1);
+        assert_refused::<DecideDeviceLogin>(negative);
+    }
+    request
+        .as_object_mut()
+        .unwrap()
+        .remove("approverSecondFactorAt");
+    assert_refused::<DecideDeviceLogin>(request);
 }
 
 #[test]
@@ -128,13 +158,6 @@ fn javascript_counters_refuse_two_to_the_fifty_third() {
             .unwrap()
             .is_valid(&invalid)
     );
-}
-
-#[test]
-fn configured_token_lifetime_requires_the_adopted_range() {
-    for invalid in [0, 59, 3601] {
-        assert_refused::<TokenLifetimeSeconds>(json!(invalid));
-    }
 }
 
 #[test]

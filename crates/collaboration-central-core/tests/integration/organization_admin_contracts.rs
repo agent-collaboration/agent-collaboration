@@ -2,6 +2,7 @@
 use crate::contract_artifacts;
 use collaboration_central_core::{
     OrganizationAdminResult,
+    identity_contract::{AuthorizationRevision, AuthorizationRevisionAcknowledgement},
     person_request::{
         AdminOperation, AdminRoute, CreateWorkspaceRequest, OrganizationAdminIntent,
         ReadChangeRecordsRequest, WorkspaceLookupRequest,
@@ -53,7 +54,11 @@ fn organization_admin_result_wire_contract() {
             json!({"result":"records","records":[
                 {"id":"019a3dce-2000-7000-8000-000000000003","requestId":"stamp:digest-fixture","kind":"organizationProvisioned","origin":{"kind":"signInProvisioning"},"targetId":"019a3dce-2000-7000-8000-000000000001","createdAtMillis":1900000000000_i64},
                 {"id":"019a3dce-2000-7000-8000-000000000004","requestId":"renewal:digest-fixture","kind":"stampRenewed","origin":{"kind":"signInProvisioning"},"targetId":"019a3dce-2000-7000-8000-000000000001","createdAtMillis":1900000001000_i64},
-                {"id":"019a3dce-2000-7000-8000-000000000005","requestId":"person:fixture-operation","kind":"workspaceCreated","origin":{"kind":"person","personId":"019a3dce-2000-7000-8000-000000000006","permissionChecked":"workspace:create"},"targetId":"019a3dce-2000-7000-8000-000000000002","createdAtMillis":1900000002000_i64}
+                {"id":"019a3dce-2000-7000-8000-000000000005","requestId":"person:fixture-operation","kind":"workspaceCreated","origin":{"kind":"person","personId":"019a3dce-2000-7000-8000-000000000006","permissionChecked":"workspace:create"},"targetId":"019a3dce-2000-7000-8000-000000000002","createdAtMillis":1900000002000_i64},
+                {"id":"019a3dce-2000-7000-8000-000000000010","requestId":"019a3dce-2000-7000-8000-000000000014:machineEnrolled:019a3dce-2000-7000-8000-000000000007","kind":"machineEnrolled","origin":{"kind":"person","personId":"019a3dce-2000-7000-8000-000000000006","permissionChecked":"machine:enroll"},"targetId":"019a3dce-2000-7000-8000-000000000007","createdAtMillis":1900000003000_i64},
+                {"id":"019a3dce-2000-7000-8000-000000000011","requestId":"019a3dce-2000-7000-8000-000000000015:machineRevoked:019a3dce-2000-7000-8000-000000000007","kind":"machineRevoked","origin":{"kind":"person","personId":"019a3dce-2000-7000-8000-000000000006","permissionChecked":"machine:revoke"},"targetId":"019a3dce-2000-7000-8000-000000000007","createdAtMillis":1900000004000_i64},
+                {"id":"019a3dce-2000-7000-8000-000000000012","requestId":"019a3dce-2000-7000-8000-000000000007:machineExpired:019a3dce-2000-7000-8000-000000000007","kind":"machineExpired","origin":{"kind":"automatic"},"targetId":"019a3dce-2000-7000-8000-000000000007","createdAtMillis":1900000005000_i64},
+                {"id":"019a3dce-2000-7000-8000-000000000013","requestId":"019a3dce-2000-7000-8000-000000000007:allowanceChanged:019a3dce-2000-7000-8000-000000000002","kind":"allowanceChanged","origin":{"kind":"automatic"},"targetId":"019a3dce-2000-7000-8000-000000000002","createdAtMillis":1900000006000_i64}
             ]}),
             json!({"result":"refused","reason":"nameInUse"}),
             json!({"result":"refused","reason":"conflict"}),
@@ -162,6 +167,28 @@ fn organization_admin_intent_wire_contract() {
     contract_artifacts::assert_contract::<OrganizationAdminIntent>(
         "OrganizationAdminIntent",
         literals,
+        false,
+    );
+}
+
+#[test]
+fn authorization_revision_wire_contract() {
+    // Policy digest copied from switchboard b1c9f6f616f5f77fbc87eaec877120ac06f4b1d3.
+    contract_artifacts::assert_contract::<AuthorizationRevision>(
+        "AuthorizationRevision",
+        vec![
+            json!({"kind":"organization","organizationId":"019a3dce-2000-7000-8000-000000000001","permissionPolicyDigest":"af40ec7fb999c4ef7f9611f322bab013e05666b56cd1d3101fac1e9e001d074a","revision":3,"state":"active"}),
+            json!({"kind":"person","organizationId":"019a3dce-2000-7000-8000-000000000001","personId":"019a3dce-2000-7000-8000-000000000002","subjectId":"019a3dce-2000-7000-8000-000000000003","revision":4,"state":"inactive"}),
+        ],
+        false,
+    );
+}
+
+#[test]
+fn authorization_revision_acknowledgement_wire_contract() {
+    contract_artifacts::assert_contract::<AuthorizationRevisionAcknowledgement>(
+        "AuthorizationRevisionAcknowledgement",
+        vec![json!({"acknowledgedRevision":4})],
         false,
     );
 }

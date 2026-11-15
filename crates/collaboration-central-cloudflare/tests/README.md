@@ -57,8 +57,9 @@ workspace rule families, scoped views/search/paging, persistent logs/redaction,
 request replay/expiry, corruption/migration rollback, controlled time, held-turn
 races and lost replies after actual apply. Person context is fixture-stamped;
 the verified-person sign-in cases use their separate private-link suite below.
-Machine login and Router Host enforcement retain their later-slice boundaries. The existing generic storage
-and driver cases stay in the verification package.
+Machine-token verification and Router Host admission retain their later-slice
+boundaries. The existing generic storage and driver cases stay in the verification
+package.
 
 `organization_signin::launcher_controls` drives the actual bridge child over stdin
 and stderr: unknown-org observation stays read-only, signed provisioning and renewal
@@ -111,7 +112,25 @@ query-derived alarm activation and safe refusal observations. Public-path refusa
 uses the existing `401` edge contract. Unknown private paths return `404`.
 Setup cases exercise real signed create, non-null lookup, byte-identical replay,
 canonical name collisions, atomic directory/ledger/audit writes and facts-only
-digest reads outside both time bounds. Machine-login approval replay remains held.
+digest reads outside both time bounds.
+
+`workspace_requests::organization_signin::machine_login` drives the actual private
+Worker decision binding with exact approval snapshots, BA1 grant ordering and
+generation checks, code/receipt deadlines, live renewal and idle expiry, client/
+org/installation isolation, and genuine late-record transaction failures.
+Only workspace presence is seeded as a labelled precondition; approval/token
+effects and audit rows come from the routes. Literal Grant expectations use the
+fixed 600-second production policy. Revocation/ABA uses the granted `machine-login-revoke`
+control at the existing Worker test-support dispatcher, with real owner-origin
+withdrawal records and final-record rollback. It is not fixture SQL revocation,
+a production revoke route, or proof of session/connection-close delivery.
+The invariant case enumerates six bounded three-login operation sequences and
+checks active-row cardinality and its independent generation model after every
+step. Engine-only constraint probes separately reject a second enrolled row and
+duplicate request/client values under fresh PKs, then accept valid full-row
+controls. Planted constraint rows are labelled storage proof, not route effects.
+Stored-corruption cases require an empty 503 with unchanged owning rows, then
+restore the fixture rows and require a successful Grant.
 
 `workspace_requests::workerd_host::tests` also checks the fixture's control HTTP
 connection policy against real workerd. A byte-transparent relay observes upstream
