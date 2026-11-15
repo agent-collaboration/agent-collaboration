@@ -28,7 +28,7 @@ async fn invalid_open_window_is_rejected_before_alarm_changes_queue_or_cursor() 
             "notification_windows.due_at",
         ),
         (
-            "UPDATE notification_windows SET due_at='2020-01-01T00:00:00Z' WHERE recipient_actor=?",
+            "UPDATE notification_windows SET due_at='2026-11-13T12:05:00Z' WHERE recipient_actor=?",
             "notification_windows.due_at",
         ),
         (

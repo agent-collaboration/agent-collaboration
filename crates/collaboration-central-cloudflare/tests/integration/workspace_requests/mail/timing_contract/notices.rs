@@ -3,7 +3,7 @@ use super::*;
 
 pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
     // Pin an explicit epoch fixture; credentials remain valid for this future scenario.
-    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let runtime = f.host.central(&f.caller.organization_id).await;
     use central_storage::{
         AlarmUpdate as ClockAlarm, GuardedStatement as ClockStatement, RowExpectation as ClockRows,
         StatementBatch as ClockBatch,

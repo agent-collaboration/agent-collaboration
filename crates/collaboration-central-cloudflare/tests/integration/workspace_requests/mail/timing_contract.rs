@@ -306,7 +306,10 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     };
     let r = f.host.central(&f.caller.organization_id).await;
     assert!(
-        r.statement_host().alarm().is_none(),
+        r.control::<Option<i64>>("raw-alarm-time", &())
+            .await
+            .unwrap()
+            .is_none(),
         "direct messages never schedule an alarm"
     );
     let immediate = r.queued_for_session(&target).await.unwrap();
@@ -434,6 +437,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     review_corrections::exercise_shorter_cadence(f).await;
     review_corrections::exercise_non_utc_and_terminal_rows(f).await;
     review_corrections::exercise_late_drain(f).await;
+    review_corrections::exercise_cadence_change_after_clock_rollback(f).await;
 }
 
 async fn exercise_expiry(f: &mut Fixture) {

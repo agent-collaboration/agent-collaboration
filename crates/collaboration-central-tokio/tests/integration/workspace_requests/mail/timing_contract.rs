@@ -419,6 +419,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     review_corrections::exercise_shorter_cadence(f).await;
     review_corrections::exercise_non_utc_and_terminal_rows(f).await;
     review_corrections::exercise_late_drain(f).await;
+    review_corrections::exercise_cadence_change_after_clock_rollback(f).await;
 }
 
 async fn exercise_expiry(f: &mut Fixture) {

@@ -95,7 +95,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                         id: self.mint()?,
                         recipient: recipient.clone(),
                         first,
-                        due: self.notice_due(&recipient, first).await?,
+                        due: self.notice_due(&recipient, now).await?,
                     };
                     windows.push(window.clone());
                     window

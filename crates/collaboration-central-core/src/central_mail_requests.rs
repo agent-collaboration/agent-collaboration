@@ -116,7 +116,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     .into_iter()
                     .filter(|window| window.recipient == actor)
                 {
-                    let due = self.notice_due_with_cadence(now, *cadence)?;
+                    let due = Self::notice_due_with_cadence(now, *cadence)?;
                     statements.push(crate::guarded_statements::exact(
                         "UPDATE notification_windows SET due_at=?,updated_at=? WHERE window_id=?",
                         vec![

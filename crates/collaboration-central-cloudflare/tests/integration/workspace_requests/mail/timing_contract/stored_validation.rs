@@ -9,7 +9,7 @@ pub(super) async fn exercise_stored_validation(f: &Fixture) {
     let actor = r
         .statement_host()
         .read(Statement {
-            sql: "SELECT actor_identity_id FROM actor_identities WHERE identity LIKE '%cadence-2%'",
+            sql: "SELECT actor_identity_id FROM actor_identities WHERE json_extract(identity,'$.session.sessionId')='cadence-2'",
             args: vec![],
         })
         .await
@@ -179,7 +179,7 @@ async fn exercise_timing_row_corruption(f: &Fixture) {
         panic!("stored wake setup: {wake:?}")
     };
     let runtime = f.host.central(&f.caller.organization_id).await;
-    let pending = runtime.statement_host().read(Statement {sql:"SELECT w.window_id FROM notification_windows w JOIN actor_identities a ON a.actor_identity_id=w.recipient_actor WHERE a.identity LIKE '%cadence-2%'",args:vec![]}).await.unwrap();
+    let pending = runtime.statement_host().read(Statement {sql:"SELECT w.window_id FROM notification_windows w JOIN actor_identities a ON a.actor_identity_id=w.recipient_actor WHERE json_extract(a.identity,'$.session.sessionId')='cadence-2'",args:vec![]}).await.unwrap();
     assert_eq!(pending.rows.len(), 1);
     for (index, select, update, row_id, invalid_value, column) in [
         (

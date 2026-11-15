@@ -34,9 +34,9 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     pub(crate) async fn notice_due(
         &self,
         recipient: &ActorIdentityId,
-        first: Timestamp,
+        decision_at: Timestamp,
     ) -> Result<Timestamp, StoreFailure> {
-        self.notice_due_with_cadence(first, self.notice_cadence(recipient).await?)
+        Self::notice_due_with_cadence(decision_at, self.notice_cadence(recipient).await?)
     }
     async fn notice_cadence(
         &self,
@@ -60,11 +60,10 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         Ok(cadence)
     }
     pub(crate) fn notice_due_with_cadence(
-        &self,
-        first: Timestamp,
+        decision_at: Timestamp,
         cadence: NoticeCadence,
     ) -> Result<Timestamp, StoreFailure> {
-        crate::central_mail_time::aligned_strictly_after(first.max(self.now()?), cadence.seconds())
+        crate::central_mail_time::aligned_strictly_after(decision_at, cadence.seconds())
             .ok_or_else(|| corrupt("notification_windows.due_at"))
     }
     pub(crate) async fn notification_windows(
@@ -78,7 +77,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 "notification_windows.first_activity_at",
             )?;
             let due = parse_time(string(&rows, row, "due_at")?, "notification_windows.due_at")?;
-            if due <= first || !crate::central_mail_time::on_grid(due) {
+            if !crate::central_mail_time::on_grid(due) {
                 return Err(corrupt("notification_windows.due_at"));
             }
             let recipient = parse(
