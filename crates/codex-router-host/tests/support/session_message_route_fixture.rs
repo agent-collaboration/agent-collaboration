@@ -169,7 +169,10 @@ pub(super) async fn create_provider_target(
     submit_provider_create(
         client,
         ConversationCreateRequest {
-            settings: None,
+            settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                mode: Some("auto".into()),
+                ..collaboration_protocol::ProviderRequestedSettings::default()
+            }),
             operation_id: operation_id.clone(),
             endpoint,
             generation: Some(collaboration_protocol::CodexGeneration {

@@ -22,4 +22,5 @@ mod provider_multiblock_prompt;
 mod provider_settings_contract;
 mod provider_transport_idle;
 mod provider_turn_boundaries;
+mod start_mode_outcomes;
 mod unknown_stop_output;

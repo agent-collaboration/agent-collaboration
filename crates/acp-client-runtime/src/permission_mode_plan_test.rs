@@ -6,7 +6,7 @@ use super::{
 const CLAUDE: AutoPermissionMode = AutoPermissionMode {
     realized_by: Some("auto"),
     fallback: Some("acceptEdits"),
-    realization: AutoRealization::ClassifierEscalates,
+    realization: AutoRealization::Unknown,
     stand_in_reason: None,
 };
 const CURSOR: AutoPermissionMode = AutoPermissionMode {

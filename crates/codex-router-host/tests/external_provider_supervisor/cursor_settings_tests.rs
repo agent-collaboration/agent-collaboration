@@ -41,7 +41,10 @@ async fn cursor_effort_setting_reports_adjusted_catalog_without_public_api_expan
     operation(
         backend
             .create(ConversationCreateRequest {
-                settings: None,
+                settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    ..collaboration_protocol::ProviderRequestedSettings::default()
+                }),
                 operation_id: operation_id.clone(),
                 endpoint: provider_endpoint.clone(),
                 generation: Some(generation()?),

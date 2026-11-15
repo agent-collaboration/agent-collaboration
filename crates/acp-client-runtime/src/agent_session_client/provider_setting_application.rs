@@ -36,18 +36,16 @@ enum SettingResponseFailure {
     Unknown,
 }
 
-/// Whether an absent requested mode means auto (a new Session, R3) or leaves
-/// the agent's mode alone (a later change of model or effort).
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(crate) enum UnspecifiedMode {
-    MeansAuto,
-    Unchanged,
-}
-
+/// The outcome of applying a start's settings in order.
 pub(crate) struct InitialSettingsOutcome {
     pub(crate) applied: Vec<AppliedProviderSetting>,
     pub(crate) failure: Option<SettingSetupFailure>,
+    /// Finished as soon as the mode is known, so a later failure carries it.
     pub(crate) permission_mode: crate::PermissionModeReport,
+    /// True only when `auto` was requested, the plan was `Set`, the mode
+    /// setting succeeded, and the agent confirmed the planned mode or its
+    /// accepted fallback.
+    pub(crate) router_auto_active: bool,
 }
 
 /// The mode value to send, and how its outcome is judged and reported.
@@ -55,47 +53,49 @@ struct PlannedMode {
     value: String,
     accepted_fallback: Option<String>,
     reason: Option<crate::PermissionModeReason>,
-    /// The caller named a mode, so a failure to set it is a setting failure.
-    explicit: bool,
 }
 
+/// Applies the requested settings in order. A request without a mode leaves
+/// the agent's mode alone; a named mode that fails returns its failure under
+/// the explicit-setting rules (D1 spec R1, R2).
 pub(crate) async fn apply_initial_settings(
     session: &ActiveSession<'_, Agent>,
     requested: &RequestedProviderSettings,
     catalog: &mut ProviderSettingsCatalog,
     behavior: &dyn crate::ProviderBehavior,
-    unspecified_mode: UnspecifiedMode,
 ) -> InitialSettingsOutcome {
     let requested_mode = crate::RequestedPermissionMode::from_request(requested.mode.as_deref());
-    let mut permission_mode = crate::PermissionModeReport {
-        requested: requested_mode.requested_name().map(str::to_owned),
-        actual: None,
-        reason: None,
+    let router_auto_requested = requested_mode == crate::RequestedPermissionMode::Auto;
+    let mut outcome = InitialSettingsOutcome {
+        applied: Vec::new(),
+        failure: None,
+        permission_mode: crate::PermissionModeReport {
+            requested: requested_mode.requested_name().map(str::to_owned),
+            actual: None,
+            reason: None,
+        },
+        router_auto_active: false,
     };
-    let planned_mode = if requested_mode == crate::RequestedPermissionMode::Unspecified
-        && unspecified_mode == UnspecifiedMode::Unchanged
-    {
+    let planned_mode = if requested_mode == crate::RequestedPermissionMode::Unspecified {
+        outcome.permission_mode.actual = catalog.effective_settings().mode;
         None
     } else {
-        let explicit = requested_mode != crate::RequestedPermissionMode::Unspecified;
         match crate::plan_permission_mode(
             requested_mode,
             &catalog.advertised_values(ProviderSettingKind::Mode),
             behavior.auto_permission_mode(),
         ) {
             Err(refusal) => {
-                return InitialSettingsOutcome {
-                    applied: Vec::new(),
-                    failure: Some(SettingSetupFailure::Invalid {
-                        kind: ProviderSettingKind::Mode,
-                        value: refusal.value,
-                        advertised: refusal.accepted,
-                    }),
-                    permission_mode,
-                };
+                outcome.failure = Some(SettingSetupFailure::Invalid {
+                    kind: ProviderSettingKind::Mode,
+                    value: refusal.value,
+                    advertised: refusal.accepted,
+                });
+                return outcome;
             }
             Ok(crate::PermissionModePlan::Keep { reason, .. }) => {
-                permission_mode.reason = reason;
+                outcome.permission_mode.actual = catalog.effective_settings().mode;
+                outcome.permission_mode.reason = reason;
                 None
             }
             Ok(crate::PermissionModePlan::Set {
@@ -107,74 +107,65 @@ pub(crate) async fn apply_initial_settings(
                 value: mode,
                 accepted_fallback,
                 reason,
-                explicit,
             }),
         }
     };
-    let mut applied = Vec::new();
     for kind in [
         ProviderSettingKind::Mode,
         ProviderSettingKind::Model,
         ProviderSettingKind::Effort,
     ] {
-        let (value, accepted_fallback, explicit) = match kind {
+        let (value, accepted_fallback) = match kind {
             ProviderSettingKind::Mode => match &planned_mode {
-                Some(planned) => (
-                    &planned.value,
-                    planned.accepted_fallback.as_deref(),
-                    planned.explicit,
-                ),
+                Some(planned) => (&planned.value, planned.accepted_fallback.as_deref()),
                 None => continue,
             },
             ProviderSettingKind::Model => match requested.model.as_ref() {
-                Some(value) => (value, None, true),
+                Some(value) => (value, None),
                 None => continue,
             },
             ProviderSettingKind::Effort => match requested.effort.as_ref() {
-                Some(value) => (value, None, true),
+                Some(value) => (value, None),
                 None => continue,
             },
         };
-        match apply_one_setting(session, catalog, behavior, kind, value, accepted_fallback).await {
-            Ok(()) => {
-                if explicit {
-                    applied.push(AppliedProviderSetting {
-                        kind,
-                        value: value.clone(),
-                    });
-                }
-            }
-            Err(_) if !explicit => {
-                // The implicit auto default never fails a create; the report
-                // says the agent kept its own mode.
-                permission_mode.reason = Some(crate::PermissionModeReason::AutoNotApplied);
-            }
-            Err(failure) => {
-                return InitialSettingsOutcome {
-                    applied,
-                    failure: Some(failure),
-                    permission_mode,
-                };
-            }
+        if let Err(failure) =
+            apply_one_setting(session, catalog, behavior, kind, value, accepted_fallback).await
+        {
+            outcome.failure = Some(failure);
+            return outcome;
+        }
+        outcome.applied.push(AppliedProviderSetting {
+            kind,
+            value: value.clone(),
+        });
+        if kind == ProviderSettingKind::Mode
+            && let Some(planned) = &planned_mode
+        {
+            record_confirmed_mode(&mut outcome, planned, catalog, router_auto_requested);
         }
     }
-    permission_mode.actual = catalog.effective_settings().mode;
-    if let Some(planned) = planned_mode
-        && permission_mode.reason.is_none()
-    {
-        permission_mode.reason = if planned.accepted_fallback.is_some()
-            && permission_mode.actual == planned.accepted_fallback
-        {
-            Some(crate::PermissionModeReason::AgentFellBack)
-        } else {
-            planned.reason
-        };
-    }
-    InitialSettingsOutcome {
-        applied,
-        failure: None,
-        permission_mode,
-    }
+    outcome
+}
+
+/// Finishes the mode report right after the agent confirmed the mode.
+fn record_confirmed_mode(
+    outcome: &mut InitialSettingsOutcome,
+    planned: &PlannedMode,
+    catalog: &ProviderSettingsCatalog,
+    router_auto_requested: bool,
+) {
+    let actual = catalog.effective_settings().mode;
+    let fell_back = planned.accepted_fallback.is_some()
+        && actual.as_deref() == planned.accepted_fallback.as_deref();
+    outcome.permission_mode.reason = if fell_back {
+        Some(crate::PermissionModeReason::AgentFellBack)
+    } else {
+        planned.reason
+    };
+    outcome.router_auto_active =
+        router_auto_requested && (fell_back || actual.as_deref() == Some(planned.value.as_str()));
+    outcome.permission_mode.actual = actual;
 }
 
 async fn apply_one_setting(

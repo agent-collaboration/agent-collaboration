@@ -586,6 +586,9 @@ mod cwd_tests;
 #[path = "router_session_app_server_hooks_test.rs"]
 mod hooks_tests;
 #[cfg(test)]
+#[path = "router_session_app_server_mode_test.rs"]
+mod mode_tests;
+#[cfg(test)]
 #[path = "router_session_app_server_model_test.rs"]
 mod model_tests;
 #[cfg(test)]

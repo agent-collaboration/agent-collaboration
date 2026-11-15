@@ -298,6 +298,16 @@ impl ExternalProviderRuntime {
         self.client.settings_unresolved(provider_session_id).await
     }
 
+    pub async fn setting_outcome_unknown(
+        &self,
+        provider_session_id: &str,
+        kind: acp_client_runtime::ProviderSettingKind,
+    ) -> bool {
+        self.client
+            .setting_outcome_unknown(provider_session_id, kind)
+            .await
+    }
+
     pub async fn set_setting(
         &self,
         provider_session_id: String,

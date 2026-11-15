@@ -635,7 +635,10 @@ async fn concurrent_admission_precedes_reconcile_live_state_check() {
     let create_task = tokio::spawn(async move {
         create_backend
             .create(ConversationCreateRequest {
-                settings: None,
+                settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    ..collaboration_protocol::ProviderRequestedSettings::default()
+                }),
                 operation_id: create_operation_id,
                 endpoint: endpoint(),
                 generation: Some(generation()),

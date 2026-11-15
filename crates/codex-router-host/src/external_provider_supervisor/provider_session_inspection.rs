@@ -33,6 +33,10 @@ pub(super) async fn inspect(
         .await
         .to_session_model();
     let catalog = runtime.settings_catalog(&session_id).await;
+    // A lost mode answer leaves the catalog's old mode; show never claims it.
+    let mode_unconfirmed = runtime
+        .setting_outcome_unknown(&session_id, acp_client_runtime::ProviderSettingKind::Mode)
+        .await;
     if let Some(catalog) = &catalog {
         supervisor
             .inner
@@ -85,7 +89,7 @@ pub(super) async fn inspect(
         state: state_tag(state),
         capabilities,
         history,
-        settings_catalog: catalog.map(catalog_view),
+        settings_catalog: catalog.map(|catalog| catalog_view(catalog, mode_unconfirmed)),
         requested_mode: requested_mode.requested_mode,
         mode_reason: requested_mode.mode_reason,
     })
@@ -93,8 +97,13 @@ pub(super) async fn inspect(
 
 fn catalog_view(
     catalog: acp_client_runtime::ProviderSettingsCatalog,
+    mode_unconfirmed: bool,
 ) -> ProviderSettingsCatalogView {
-    let current_mode = catalog.effective_settings().mode;
+    let current_mode = if mode_unconfirmed {
+        None
+    } else {
+        catalog.effective_settings().mode
+    };
     ProviderSettingsCatalogView {
         current_mode,
         modes: catalog.modes.into_iter().map(choice_view).collect(),

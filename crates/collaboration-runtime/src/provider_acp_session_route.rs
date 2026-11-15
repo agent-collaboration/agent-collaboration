@@ -420,7 +420,12 @@ async fn serve_provider_sessions(
                             .create(CreateSessionCommand {
                                 endpoint: route.endpoint.clone(),
                                 working_directory: PathBuf::from(cwd),
-                                settings: SessionSettingsCommand::default(),
+                                // ACP session/new carries no mode, so this door
+                                // asks for auto by name (D1 spec R1).
+                                settings: SessionSettingsCommand {
+                                    mode: Some(crate::AUTO_SESSION_MODE.into()),
+                                    ..SessionSettingsCommand::default()
+                                },
                                 actor,
                             })
                             .await
@@ -683,3 +688,7 @@ async fn serve_provider_sessions(
     while observers.tasks.join_next().await.is_some() {}
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "provider_acp_session_route_test.rs"]
+mod tests;

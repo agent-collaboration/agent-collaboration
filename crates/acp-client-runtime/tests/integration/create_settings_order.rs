@@ -356,6 +356,7 @@ async fn partial_setup_blocks_prompt_until_settings_are_accepted() {
         applied,
         failed,
         not_applied,
+        ..
     }) = result
     else {
         panic!("partial setup result: {result:?}")

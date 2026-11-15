@@ -87,6 +87,8 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         let task_todo_state = Arc::clone(&todo_state);
         let retirement_todos = Arc::clone(&todo_state);
         let in_folder_grants = super::in_folder_allowance::InFolderGrants::default();
+        #[cfg(test)]
+        let client_in_folder_grants = Arc::clone(&in_folder_grants);
         let task_runtime_handles = ProviderSessionRuntimeHandles {
             connection_model_reasoning: crate::ModelReasoningMetadata::default(),
             behavior: Arc::clone(&behavior),
@@ -796,6 +798,8 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             approval_refusal_warnings,
             #[cfg(any(test, feature = "test-observation"))]
             test_tool_calls,
+            #[cfg(test)]
+            in_folder_grants: client_in_folder_grants,
         })
     }
 }

@@ -9,11 +9,10 @@
 )]
 
 use acp_client_runtime::{
-    AgentSessionClient, ApprovalPortOutcome, AutoPermissionMode, AutoRealization, EventSinkClosed,
-    ExternalProviderLaunch, ExternalProviderRuntimeError, HistoryReplayFuture, InteractionFuture,
-    InteractionPort, PermissionModeReason, PermissionModeReport, ProviderBehavior,
-    ProviderPersistenceTarget, ProviderSettingKind, RefusedApprovalOffer,
-    RequestedProviderSettings, SessionEventSink,
+    AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
+    ExternalProviderRuntimeError, HistoryReplayFuture, InteractionFuture, InteractionPort,
+    PermissionModeReason, PermissionModeReport, ProviderBehavior, ProviderPersistenceTarget,
+    ProviderSettingKind, RefusedApprovalOffer, RequestedProviderSettings, SessionEventSink,
 };
 use acp_provider_adapters::{ClaudeAcpBehavior, ClaudeSkillSource, CursorAcpBehavior};
 use serde_json::{Value, json};
@@ -101,50 +100,6 @@ impl SessionEventSink for NoopEventSink {
     }
 }
 
-/// An agent whose own `auto` may land on its ask-first mode.
-struct FallingBackAuto(CursorAcpBehavior);
-impl ProviderBehavior for FallingBackAuto {
-    fn initialization_authentication(
-        &self,
-    ) -> acp_client_runtime::ProviderInitializationAuthentication {
-        acp_client_runtime::ProviderInitializationAuthentication::NotRequested
-    }
-    fn can_reuse_setting_confirmation(&self, kind: ProviderSettingKind) -> bool {
-        self.0.can_reuse_setting_confirmation(kind)
-    }
-    fn model_metadata_source(&self) -> acp_client_runtime::ModelMetadataSource {
-        acp_client_runtime::ModelMetadataSource::Unavailable
-    }
-    fn decode_model_metadata(&self, value: &Value) -> acp_client_runtime::ModelReasoningMetadata {
-        self.0.decode_model_metadata(value)
-    }
-    fn auto_permission_mode(&self) -> AutoPermissionMode {
-        AutoPermissionMode {
-            realized_by: Some("auto"),
-            fallback: Some("acceptEdits"),
-            realization: AutoRealization::ClassifierEscalates,
-            stand_in_reason: None,
-        }
-    }
-    fn observe(
-        &self,
-        update: acp_client_runtime::ProviderUpdate,
-    ) -> Result<acp_client_runtime::ProviderFacts, acp_client_runtime::ProviderError> {
-        self.0.observe(update)
-    }
-    fn prepare(
-        &self,
-        submission: session_event_model::ProviderSubmission,
-    ) -> Result<Vec<session_event_model::PromptContent>, acp_client_runtime::ProviderError> {
-        self.0.prepare(submission)
-    }
-    fn compact(
-        &self,
-    ) -> Result<acp_client_runtime::PreparedCompact, acp_client_runtime::ProviderError> {
-        self.0.compact()
-    }
-}
-
 struct Fixture {
     _root: tempfile::TempDir,
     project: PathBuf,
@@ -160,7 +115,7 @@ impl Fixture {
         directories: &str,
         behavior: Arc<dyn ProviderBehavior>,
         answer: ApprovalPortOutcome,
-        clamp_auto: bool,
+        behaviours: &[&str],
     ) -> Self {
         let root = tempfile::tempdir().expect("fixture root");
         let base = std::fs::canonicalize(root.path()).expect("canonical root");
@@ -175,9 +130,7 @@ impl Fixture {
             profile.to_owned(),
             directories.to_owned(),
         ];
-        if clamp_auto {
-            arguments.push("clamp-auto".to_owned());
-        }
+        arguments.extend(behaviours.iter().map(|behaviour| (*behaviour).to_owned()));
         let approvals = Arc::new(RecordingApprovals {
             asked: Mutex::new(Vec::new()),
             answer,
@@ -274,69 +227,139 @@ fn report(
     }
 }
 
-/// Oracle: spec R3 (no mode means auto, with the actual mode and why) and the
-/// program-design Claude row as decided 2026-11-14 (auto stands in as
-/// acceptEdits until escalation is proven).
+/// An in-folder edit the fixture asks permission for.
+fn in_folder_edit(folder: &Path) -> Value {
+    json!({"kind":"edit","locations":[{"path":folder.join("note.txt")}]})
+}
+
+/// Oracle: D1 spec R2 row "Confirms auto" — `--mode auto` on Claude asks for
+/// Claude's own `auto`; the agent confirms it, so the start reports actual
+/// auto with no reason and the in-folder allowance is on.
 #[tokio::test]
-async fn claude_without_a_mode_runs_its_stand_in_and_says_why() {
+async fn claude_auto_runs_its_own_auto() {
     let fixture = Fixture::start(
         "claude",
         "grants-directories",
         claude(),
         ApprovalPortOutcome::Cancelled,
-        false,
+        &[],
     )
     .await;
-    let unnamed = fixture.create(None, None).await.expect("created");
-    assert_eq!(
-        unnamed.permission_mode,
-        report(
-            "acceptEdits",
-            None,
-            Some(PermissionModeReason::EscalationUnproven)
-        )
-    );
-    let auto = fixture.create(None, Some("auto")).await.expect("created");
-    assert_eq!(
-        auto.permission_mode,
-        report(
-            "acceptEdits",
-            Some("auto"),
-            Some(PermissionModeReason::EscalationUnproven)
-        )
-    );
+    let own = fixture.scratch("session-a");
+    let auto = fixture
+        .create(Some(&own), Some("auto"))
+        .await
+        .expect("created");
+    fixture
+        .ask("fixture-session-1", &in_folder_edit(&own))
+        .await;
     let plan = fixture.create(None, Some("plan")).await.expect("created");
-    assert_eq!(plan.permission_mode, report("plan", Some("plan"), None));
+    let approvals_asked = fixture.approvals_asked();
     fixture.client.shutdown().await;
+    assert_eq!(auto.permission_mode, report("auto", Some("auto"), None));
+    assert_eq!(approvals_asked, 0, "the in-folder edit ran without asking");
+    assert_eq!(plan.permission_mode, report("plan", Some("plan"), None));
     assert_eq!(
         fixture.receipt()["modeRequests"],
         json!([
-            {"sessionId":"fixture-session-1","value":"acceptEdits"},
-            {"sessionId":"fixture-session-2","value":"acceptEdits"},
-            {"sessionId":"fixture-session-3","value":"plan"},
+            {"sessionId":"fixture-session-1","value":"auto"},
+            {"sessionId":"fixture-session-2","value":"plan"},
         ])
     );
 }
 
-/// Oracle: spec R3 — the actual mode is the agent's own answer, so an agent
-/// that lands its auto on the fallback is reported as having fallen back.
+/// Oracle: D1 spec R2 row "Doesn't offer auto, offers acceptEdits" — actual
+/// acceptEdits, reason autoNotOffered, allowance on.
 #[tokio::test]
-async fn an_agent_that_lands_auto_on_its_fallback_is_reported_from_its_own_answer() {
+async fn claude_offering_only_accept_edits_reports_auto_not_offered() {
     let fixture = Fixture::start(
-        "claude",
+        "claude-without-auto",
         "grants-directories",
-        Arc::new(FallingBackAuto(CursorAcpBehavior)),
+        claude(),
         ApprovalPortOutcome::Cancelled,
-        true,
+        &[],
     )
     .await;
-    let created = fixture.create(None, None).await.expect("created");
+    let own = fixture.scratch("session-a");
+    let created = fixture
+        .create(Some(&own), Some("auto"))
+        .await
+        .expect("created");
+    fixture
+        .ask("fixture-session-1", &in_folder_edit(&own))
+        .await;
+    let approvals_asked = fixture.approvals_asked();
     fixture.client.shutdown().await;
     assert_eq!(
         created.permission_mode,
         report(
             "acceptEdits",
-            None,
+            Some("auto"),
+            Some(PermissionModeReason::AutoNotOffered)
+        )
+    );
+    assert_eq!(approvals_asked, 0, "the in-folder edit ran without asking");
+    assert_eq!(
+        fixture.receipt()["modeRequests"],
+        json!([{"sessionId":"fixture-session-1","value":"acceptEdits"}])
+    );
+}
+
+/// Oracle: D1 spec R2 row "Offers neither" and R4 — the starting mode stays,
+/// reason autoNotOffered, and with no confirmed auto realization the
+/// in-folder allowance is off, so an in-folder edit becomes an approval.
+#[tokio::test]
+async fn claude_offering_neither_keeps_its_mode_with_no_allowance() {
+    let fixture = Fixture::start(
+        "claude-without-auto-or-accept-edits",
+        "grants-directories",
+        claude(),
+        ApprovalPortOutcome::Cancelled,
+        &[],
+    )
+    .await;
+    let own = fixture.scratch("session-a");
+    let created = fixture
+        .create(Some(&own), Some("auto"))
+        .await
+        .expect("created");
+    fixture
+        .ask("fixture-session-1", &in_folder_edit(&own))
+        .await;
+    let approvals_asked = fixture.approvals_asked();
+    fixture.client.shutdown().await;
+    assert_eq!(
+        created.permission_mode,
+        report(
+            "default",
+            Some("auto"),
+            Some(PermissionModeReason::AutoNotOffered)
+        )
+    );
+    assert_eq!(approvals_asked, 1, "the in-folder edit became an approval");
+    assert_eq!(fixture.receipt()["modeRequests"], json!([]));
+}
+
+/// Oracle: D1 spec R2 row "Confirms acceptEdits instead" — the actual mode is
+/// Claude's own answer, so a requested auto that lands on its fallback is
+/// reported as agentFellBack.
+#[tokio::test]
+async fn an_agent_that_lands_auto_on_its_fallback_is_reported_from_its_own_answer() {
+    let fixture = Fixture::start(
+        "claude",
+        "grants-directories",
+        claude(),
+        ApprovalPortOutcome::Cancelled,
+        &["clamp-auto"],
+    )
+    .await;
+    let created = fixture.create(None, Some("auto")).await.expect("created");
+    fixture.client.shutdown().await;
+    assert_eq!(
+        created.permission_mode,
+        report(
+            "acceptEdits",
+            Some("auto"),
             Some(PermissionModeReason::AgentFellBack)
         )
     );
@@ -369,7 +392,7 @@ async fn bogus_and_foreign_mode_names_are_refused_with_the_accepted_list() {
             "grants-directories",
             behavior,
             ApprovalPortOutcome::Cancelled,
-            false,
+            &[],
         )
         .await;
         let refused = fixture.create(None, Some(value)).await;
@@ -400,13 +423,19 @@ async fn each_session_is_granted_only_its_own_scratch_folder() {
         "grants-directories",
         claude(),
         ApprovalPortOutcome::Cancelled,
-        false,
+        &[],
     )
     .await;
     let first = fixture.scratch("session-a");
     let second = fixture.scratch("session-ab");
-    fixture.create(Some(&first), None).await.expect("first");
-    fixture.create(Some(&second), None).await.expect("second");
+    fixture
+        .create(Some(&first), Some("auto"))
+        .await
+        .expect("first");
+    fixture
+        .create(Some(&second), Some("auto"))
+        .await
+        .expect("second");
     fixture.client.shutdown().await;
     let sessions = fixture.receipt()["sessions"].clone();
     assert_eq!(
@@ -423,15 +452,22 @@ async fn each_session_is_granted_only_its_own_scratch_folder() {
         "no-directories",
         Arc::new(CursorAcpBehavior),
         ApprovalPortOutcome::Cancelled,
-        false,
+        &[],
     )
     .await;
     let scratch = cursor.scratch("session-c");
-    let created = cursor.create(Some(&scratch), None).await.expect("cursor");
+    let created = cursor
+        .create(Some(&scratch), Some("auto"))
+        .await
+        .expect("cursor");
     cursor.client.shutdown().await;
     assert_eq!(
         created.permission_mode,
-        report("agent", None, Some(PermissionModeReason::AutoNotOffered))
+        report(
+            "agent",
+            Some("auto"),
+            Some(PermissionModeReason::AutoNotOffered)
+        )
     );
     assert_eq!(
         cursor.receipt()["sessions"][0]["additionalDirectories"],
@@ -452,13 +488,19 @@ async fn in_folder_actions_are_allowed_and_everything_else_becomes_an_approval()
             option_id: "reject".to_owned(),
             note: None,
         },
-        false,
+        &[],
     )
     .await;
     let own = fixture.scratch("session-a");
     let other = fixture.scratch("session-ab");
-    fixture.create(Some(&own), None).await.expect("first");
-    fixture.create(Some(&other), None).await.expect("second");
+    fixture
+        .create(Some(&own), Some("auto"))
+        .await
+        .expect("first");
+    fixture
+        .create(Some(&other), Some("auto"))
+        .await
+        .expect("second");
     let edit = |path: &Path| json!({"kind":"edit","locations":[{"path":path}]});
     let shell = |command: String| json!({"kind":"execute","rawInput":{"command":command}});
     let cases = [
@@ -499,7 +541,7 @@ async fn a_session_in_a_named_mode_has_no_in_folder_allowance() {
         "no-directories",
         Arc::new(CursorAcpBehavior),
         ApprovalPortOutcome::Cancelled,
-        false,
+        &[],
     )
     .await;
     let own = fixture.scratch("session-a");
@@ -534,12 +576,12 @@ async fn the_in_folder_allowance_follows_a_confirmed_mode_change() {
             option_id: "reject".to_owned(),
             note: None,
         },
-        false,
+        &[],
     )
     .await;
     let own = fixture.scratch("session-a");
     fixture
-        .create(Some(&own), None)
+        .create(Some(&own), Some("auto"))
         .await
         .expect("created in auto");
     let edit = json!({"kind":"edit","locations":[{"path":own.join("note.txt")}]});
@@ -590,7 +632,7 @@ async fn a_session_started_in_a_named_mode_gains_the_allowance_on_a_change_to_au
         "no-directories",
         Arc::new(CursorAcpBehavior),
         ApprovalPortOutcome::Cancelled,
-        false,
+        &[],
     )
     .await;
     let own = fixture.scratch("session-a");
@@ -623,8 +665,9 @@ async fn a_session_started_in_a_named_mode_gains_the_allowance_on_a_change_to_au
     );
 }
 
-/// Oracle: R3 — Cursor's auto realization differs from auto, so implicit and
-/// explicit auto carry the reason; a requested native `agent` carries none.
+/// Oracle: D1 spec R3 — Cursor's auto realization differs from auto, so a
+/// requested auto carries the reason; a requested native `agent` carries
+/// none. "No mode" is proven only by the Host refusal (V0).
 #[tokio::test]
 async fn cursor_auto_reports_its_stand_in_reason_and_its_own_agent_mode_none() {
     let fixture = Fixture::start(
@@ -632,10 +675,9 @@ async fn cursor_auto_reports_its_stand_in_reason_and_its_own_agent_mode_none() {
         "no-directories",
         Arc::new(CursorAcpBehavior),
         ApprovalPortOutcome::Cancelled,
-        false,
+        &[],
     )
     .await;
-    let implicit = fixture.create(None, None).await.expect("implicit auto");
     let explicit = fixture
         .create(None, Some("auto"))
         .await
@@ -645,10 +687,6 @@ async fn cursor_auto_reports_its_stand_in_reason_and_its_own_agent_mode_none() {
         .await
         .expect("native agent");
     fixture.client.shutdown().await;
-    assert_eq!(
-        implicit.permission_mode,
-        report("agent", None, Some(PermissionModeReason::AutoNotOffered))
-    );
     assert_eq!(
         explicit.permission_mode,
         report(

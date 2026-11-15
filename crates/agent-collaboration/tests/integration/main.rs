@@ -65,6 +65,7 @@ mod permission_diagnostics;
 mod project_creation_reply_cli;
 mod project_description_cli;
 mod provider_conversation_cli;
+mod provider_create_mode_cli;
 mod provider_inventory_source_reads;
 mod provider_load_error_e2e;
 mod provider_session_list_cli;

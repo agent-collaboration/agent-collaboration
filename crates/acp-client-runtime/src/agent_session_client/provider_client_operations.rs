@@ -82,6 +82,23 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             .contains_key(provider_session_id)
     }
 
+    /// True while this setting's last change has an unknown outcome, so a
+    /// reader never reports the catalog's old value as confirmed (D1 R2).
+    pub async fn setting_outcome_unknown(
+        &self,
+        provider_session_id: &str,
+        kind: crate::ProviderSettingKind,
+    ) -> bool {
+        self.settings_unresolved
+            .read()
+            .await
+            .get(provider_session_id)
+            .and_then(|kinds| kinds.get(&kind))
+            .is_some_and(|cause| {
+                *cause == crate::provider_session_settings::UnresolvedSettingCause::OutcomeUnknown
+            })
+    }
+
     pub async fn accept_session_settings(
         &self,
         provider_session_id: String,

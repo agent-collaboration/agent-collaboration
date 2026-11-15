@@ -1,0 +1,171 @@
+//! Which mode a Claude or Cursor start must name, and what create and show
+//! report about it, through the real Host create and inspect paths (D1 spec
+//! R1, R2).
+use super::*;
+
+const PERMISSION_MODE_AGENT: &str = "permission-mode-agent.ts";
+
+struct ModeFixture {
+    _root: tempfile::TempDir,
+    receipt: PathBuf,
+    endpoint: EndpointRef,
+    creator: SessionRef,
+    backend: ExternalProviderSupervisor,
+}
+
+impl ModeFixture {
+    async fn start(profile: &str, behaviours: &[&str]) -> TestResult<Self> {
+        let root = tempfile::tempdir()?;
+        let receipt = root.path().join("receipt.json");
+        let mut arguments = vec![
+            receipt.display().to_string(),
+            profile.to_owned(),
+            "grants-directories".to_owned(),
+        ];
+        arguments.extend(behaviours.iter().map(|behaviour| (*behaviour).to_owned()));
+        let behavior: Arc<dyn acp_client_runtime::ProviderBehavior> = if profile == "cursor" {
+            Arc::new(acp_provider_adapters::CursorAcpBehavior)
+        } else {
+            Arc::new(acp_provider_adapters::ClaudeAcpBehavior::new(
+                acp_provider_adapters::ClaudeSkillSource::Annotated,
+            ))
+        };
+        let runtime =
+            ExternalProviderRuntime::initialize(launch(PERMISSION_MODE_AGENT, arguments), behavior)
+                .await?;
+        let name = if profile == "cursor" {
+            "cursor"
+        } else {
+            "claude"
+        };
+        let endpoint = endpoint(&format!("{name}-local"))?;
+        let backend = supervisor(&root, vec![(binding(endpoint.clone(), name)?, runtime)]).await?;
+        Ok(Self {
+            creator: actor(endpoint.clone(), "creator")?,
+            _root: root,
+            receipt,
+            endpoint,
+            backend,
+        })
+    }
+
+    fn create_request(
+        &self,
+        operation_id: OperationId,
+        settings: Option<ProviderRequestedSettings>,
+    ) -> TestResult<ConversationCreateRequest> {
+        Ok(ConversationCreateRequest {
+            settings,
+            operation_id,
+            endpoint: self.endpoint.clone(),
+            generation: Some(generation()?),
+            working_directory: working_directory()?,
+            created_by: self.creator.clone().into(),
+            approver: self.creator.clone().into(),
+            requested_policy: policy(),
+        })
+    }
+
+    /// Every ACP request the fixture recorded, or none when it never saw a session.
+    fn sessions_seen(&self) -> TestResult<Value> {
+        if !self.receipt.exists() {
+            return Ok(json!([]));
+        }
+        let receipt: Value = serde_json::from_slice(&std::fs::read(&self.receipt)?)?;
+        Ok(receipt["sessions"].clone())
+    }
+}
+
+/// Oracle: D1 spec R1 — a Claude or Cursor start without a mode is refused
+/// before anything starts: invalid setting, stage validation, a message that
+/// names `--mode auto`; nothing is recorded and nothing reaches the agent.
+#[cfg(unix)]
+#[tokio::test]
+async fn a_provider_create_without_a_mode_is_refused() -> TestResult {
+    for profile in ["claude", "cursor"] {
+        let fixture = ModeFixture::start(profile, &[]).await?;
+        for settings in [None, Some(ProviderRequestedSettings::default())] {
+            let operation_id = OperationId::generate();
+            let refused = fixture
+                .backend
+                .create(fixture.create_request(operation_id.clone(), settings.clone())?)
+                .await;
+            let Err(refusal) = refused else {
+                return Err(
+                    format!("{profile} {settings:?}: a create without a mode started").into(),
+                );
+            };
+            ensure_eq!(
+                refusal.kind,
+                ConversationOperationFailureKind::InvalidSetting
+            );
+            ensure_eq!(
+                refusal.stage,
+                collaboration_protocol::ConversationOperationFailureStage::Validation
+            );
+            ensure!(String::from(refusal.message.clone()).contains("--mode auto"));
+            ensure!(
+                fixture
+                    .backend
+                    .lookup_existing(operation_id)
+                    .await
+                    .map_err(|error| format!("{error:?}"))?
+                    .is_none()
+            );
+        }
+        fixture.backend.shutdown().await.map_err(str::to_owned)?;
+        ensure_eq!(fixture.sessions_seen()?, json!([]));
+    }
+    Ok(())
+}
+
+/// Oracle: D1 spec R2 row "Its answer is lost or unreadable" and V6 steps 1
+/// and 2 — the start is created without settings with the mode's outcome
+/// unknown, and show reports the requested auto but no current mode.
+#[cfg(unix)]
+#[tokio::test]
+async fn lost_auto_is_unconfirmed_on_create_and_show() -> TestResult {
+    let fixture = ModeFixture::start("claude", &["malformed-mode-reply"]).await?;
+    let operation_id = OperationId::generate();
+    operation(
+        fixture
+            .backend
+            .create(fixture.create_request(
+                operation_id.clone(),
+                Some(ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    ..ProviderRequestedSettings::default()
+                }),
+            )?)
+            .await,
+    )?;
+    let settled = operation(wait(&fixture.backend, operation_id).await)?;
+    let ConversationOperationWaitOutput::Available {
+        settlement: ConversationOperationSettlement::CreatedWithoutSettings { target, failed, .. },
+    } = settled.output
+    else {
+        return Err(format!("expected a start created without settings: {settled:?}").into());
+    };
+    let inspected = fixture
+        .backend
+        .inspect_session(ProviderSessionInspectRequest { target })
+        .await
+        .map_err(|error| format!("{error:?}"))?;
+    fixture.backend.shutdown().await.map_err(str::to_owned)?;
+
+    ensure_eq!(failed.len(), 1);
+    ensure_eq!(failed[0].setting, ProviderSettingName::Mode);
+    ensure_eq!(
+        failed[0].reason,
+        session_event_model::ProviderSettingFailureReason::OutcomeUnknown
+    );
+    ensure_eq!(inspected.requested_mode.as_deref(), Some("auto"));
+    ensure_eq!(
+        inspected
+            .settings_catalog
+            .ok_or("show has the settings catalog")?
+            .current_mode,
+        None::<String>
+    );
+    Ok(())
+}

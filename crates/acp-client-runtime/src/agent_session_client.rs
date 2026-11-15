@@ -269,6 +269,21 @@ pub struct AgentSessionClient<P: InteractionPort> {
     approval_refusal_warnings: Arc<std::sync::Mutex<Vec<ExternalProviderApprovalRefusalWarning>>>,
     #[cfg(any(test, feature = "test-observation"))]
     test_tool_calls: Arc<std::sync::Mutex<Vec<ExternalProviderToolCall>>>,
+    /// Crate tests read whether a session's in-folder grant is in Router auto.
+    #[cfg(test)]
+    in_folder_grants: InFolderGrants,
+}
+
+impl<P: InteractionPort> AgentSessionClient<P> {
+    /// `Some(router_auto)` for a session with an in-folder grant, `None` without one.
+    #[cfg(test)]
+    pub(crate) fn in_folder_router_auto_for_test(&self, provider_session_id: &str) -> Option<bool> {
+        self.in_folder_grants
+            .read()
+            .ok()?
+            .get(provider_session_id)
+            .map(|grant| grant.router_auto)
+    }
 }
 
 impl<P: InteractionPort> std::fmt::Debug for AgentSessionClient<P> {

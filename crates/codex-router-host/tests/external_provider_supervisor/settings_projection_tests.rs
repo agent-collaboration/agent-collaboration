@@ -28,7 +28,16 @@ async fn provider_create_projects_effective_partial_and_invalid_settings() -> Te
             backend
                 .create(ConversationCreateRequest {
                     settings: Some(ProviderRequestedSettings {
-                        mode: (!mode.starts_with("invalid")).then(|| "ask".to_owned()),
+                        // No auto realization here, so auto plans no mode change
+                        // and the invalid model stays the first setting.
+                        mode: Some(
+                            if mode.starts_with("invalid") {
+                                "auto"
+                            } else {
+                                "ask"
+                            }
+                            .to_owned(),
+                        ),
                         model: Some(
                             if mode.starts_with("invalid") {
                                 "wrong"

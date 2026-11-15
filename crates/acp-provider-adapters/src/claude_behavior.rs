@@ -49,15 +49,14 @@ impl ProviderBehavior for ClaudeAcpBehavior {
         crate::model_reasoning_metadata::decode_claude_models(value)
     }
     fn auto_permission_mode(&self) -> acp_client_runtime::AutoPermissionMode {
-        // Claude's own `auto` refuses through its classifier with only a failed
-        // tool notification, so nothing can be approved. Until escalation is
-        // proven (E2), its ask-first `acceptEdits` stands in: edits in the
-        // project and granted folders run, everything else asks.
+        // Claude's own `auto` realizes Router auto. claude-agent-acp offers `auto`
+        // only for a model that supports it, and lands a requested `auto` on
+        // `acceptEdits` otherwise; that answer is accepted and reported.
         acp_client_runtime::AutoPermissionMode {
-            realized_by: Some("acceptEdits"),
-            fallback: None,
-            realization: acp_client_runtime::AutoRealization::AsksFirst,
-            stand_in_reason: Some(acp_client_runtime::PermissionModeReason::EscalationUnproven),
+            realized_by: Some("auto"),
+            fallback: Some("acceptEdits"),
+            realization: acp_client_runtime::AutoRealization::Unknown,
+            stand_in_reason: None,
         }
     }
     fn observe(&self, update: ProviderUpdate) -> Result<ProviderFacts, ProviderError> {

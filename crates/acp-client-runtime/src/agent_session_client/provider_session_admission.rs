@@ -3,7 +3,7 @@
 use super::ExternalProviderToolCall;
 
 use super::provider_setting_application::{
-    InitialSettingsOutcome, SettingSetupFailure, UnspecifiedMode, apply_initial_settings,
+    InitialSettingsOutcome, SettingSetupFailure, apply_initial_settings,
 };
 use super::{
     ActiveSession, Agent, Arc, CancellationToken, ConnectionTo, ExternalProviderCreatedSession,
@@ -162,13 +162,13 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
             let response = session.response();
             let mut settings_catalog =
                 crate::provider_settings_catalog_codec::catalog_from_session_response(&response, runtime_handles.behavior.as_ref(), &runtime_handles.connection_model_reasoning);
-            let InitialSettingsOutcome { applied, failure, permission_mode } =
-                apply_initial_settings(&session, &requested_settings, &mut settings_catalog, runtime_handles.behavior.as_ref(), UnspecifiedMode::MeansAuto).await;
+            let InitialSettingsOutcome { applied, failure, permission_mode, router_auto_active } =
+                apply_initial_settings(&session, &requested_settings, &mut settings_catalog, runtime_handles.behavior.as_ref()).await;
             if let Some(grant) = in_folder
                 && let Ok(mut grants) = runtime_handles.in_folder_grants.write()
             {
-                let router_auto = permission_mode.requested.as_deref().is_none_or(|mode| mode == crate::AUTO_PERMISSION_MODE);
-                grants.insert(provider_session_id.clone(), super::in_folder_allowance::SessionInFolderGrant { grant, router_auto });
+                // The allowance follows the mode the agent confirmed (D1 R4).
+                grants.insert(provider_session_id.clone(), super::in_folder_allowance::SessionInFolderGrant { grant, router_auto: router_auto_active });
             }
             let setup_error = match failure {
                 None => None,
@@ -212,9 +212,14 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                                 value,
                                 reason: session_event_model::ProviderSettingFailureReason::InvalidSetting,
                             },
+                            permission_mode: permission_mode.clone(),
                         }
                     };
                     if disposition == crate::InvalidSettingSessionDisposition::Closed {
+                        // No Close admission follows a closed start, so its grant goes here.
+                        if let Ok(mut grants) = runtime_handles.in_folder_grants.write() {
+                            grants.remove(&provider_session_id);
+                        }
                         registration_tx
                             .send(Err(error))
                             .map_err(|_| agent_client_protocol::Error::internal_error())?;
@@ -235,6 +240,7 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                         value,
                         reason: reason.into(),
                     },
+                    permission_mode: permission_mode.clone(),
                 }),
                 Some(SettingSetupFailure::Uncertain { kind, value }) => {
                     Some(ExternalProviderRuntimeError::CreatedWithoutSettings {
@@ -246,6 +252,7 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                             value,
                             reason: session_event_model::ProviderSettingFailureReason::OutcomeUnknown,
                         },
+                        permission_mode: permission_mode.clone(),
                     })
                 }
             };
@@ -337,3 +344,7 @@ pub(super) fn fail_pending_session_admission<P: InteractionPort>(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "provider_session_admission_test.rs"]
+mod tests;

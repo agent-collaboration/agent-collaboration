@@ -248,6 +248,8 @@ pub enum ExternalProviderRuntimeError {
         applied: Vec<crate::AppliedProviderSetting>,
         failed: crate::FailedProviderSetting,
         not_applied: Box<[crate::NotAppliedProviderSetting]>,
+        /// The requested and confirmed mode, finished before the failed setting.
+        permission_mode: crate::PermissionModeReport,
     },
     #[error("session history replay admission failed before provider load")]
     HistoryReplayAdmissionFailed,

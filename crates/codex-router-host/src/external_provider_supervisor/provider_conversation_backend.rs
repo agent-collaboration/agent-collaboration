@@ -87,6 +87,23 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
         retain_operation(operation_id, None, async move {
             let (binding, runtime) =
                 backend.runtime_binding(&request.endpoint, &request.operation_id, None)?;
+            // Owner, 2026-11-15: "default shodu lbe -> error force agent to ask
+            // -- mode auto". A Claude or Cursor start names its mode (D1 R1).
+            if request
+                .settings
+                .as_ref()
+                .and_then(|settings| settings.mode.as_deref())
+                .is_none()
+            {
+                return Err(failure(
+                    ConversationOperationFailureKind::InvalidSetting,
+                    ConversationOperationFailureStage::Validation,
+                    ProviderOperationEffect::None,
+                    "a mode is required: use --mode auto, or a mode this agent offers",
+                    request.operation_id.clone(),
+                    None,
+                ));
+            }
             let prepared = backend
                 .prepare_operation(
                     request.operation_id.clone(),
@@ -183,6 +200,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                 applied,
                                 failed,
                                 not_applied,
+                                permission_mode,
                             }) => {
                                 let catalog = runtime.settings_catalog(&provider_session_id).await;
                                 match SessionId::try_from(provider_session_id) {
@@ -191,6 +209,8 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                     if let Some(catalog) = catalog {
                                         completion_inner.record_settings_catalog(target.clone(), catalog).await;
                                     }
+                                    // Show keeps the requested mode and reason of a partial start too.
+                                    completion_inner.record_requested_mode(target.clone(), super::RequestedModeRecord { requested_mode: permission_mode.requested, mode_reason: permission_mode.reason.map(crate::provider_operation_settlement::provider_mode_reason) }).await;
                                     ProviderOperationCompletion::Success {
                                         settlement: ConversationOperationSettlement::CreatedWithoutSettings {
                                             target: target.clone(),

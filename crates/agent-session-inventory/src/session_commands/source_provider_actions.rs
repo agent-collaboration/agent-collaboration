@@ -114,7 +114,9 @@ pub async fn execute_provider_action(
                     approver: Some(actor),
                     generation: Some(binding.generation.clone()),
                     model: None,
-                    mode: None,
+                    // The source protocol's create carries no mode, so this
+                    // door asks for auto by name (D1 spec R1).
+                    mode: Some("auto".into()),
                     effort: None,
                     fork: None,
                     root_message_id: None,

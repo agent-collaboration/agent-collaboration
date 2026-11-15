@@ -15,7 +15,10 @@ async fn supplied_id_is_admitted_once_and_cancelled_prompt_settles_after_detach(
     let requester = actor(endpoint.clone(), "requester")?;
     let operation_id = OperationId::generate();
     let create_request = ConversationCreateRequest {
-        settings: None,
+        settings: Some(collaboration_protocol::ProviderRequestedSettings {
+            mode: Some("auto".into()),
+            ..collaboration_protocol::ProviderRequestedSettings::default()
+        }),
         operation_id: operation_id.clone(),
         endpoint: endpoint.clone(),
         generation: Some(generation()?),
@@ -138,7 +141,10 @@ async fn supervisor_shutdown_joins_runtime_and_settles_held_work() -> TestResult
     operation(
         backend
             .create(ConversationCreateRequest {
-                settings: None,
+                settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    ..collaboration_protocol::ProviderRequestedSettings::default()
+                }),
                 operation_id: create_id.clone(),
                 endpoint: provider_endpoint,
                 generation: Some(generation()?),
@@ -275,7 +281,10 @@ async fn supervisor_permission_callback_uses_installed_broker_and_exact_selected
     operation(
         backend
             .create(ConversationCreateRequest {
-                settings: None,
+                settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    ..collaboration_protocol::ProviderRequestedSettings::default()
+                }),
                 operation_id: create_operation_id.clone(),
                 endpoint: provider_endpoint,
                 generation: Some(generation()?),
@@ -418,7 +427,10 @@ async fn retired_provider_binding_cancels_pending_approval_before_selection() ->
     operation(
         backend
             .create(ConversationCreateRequest {
-                settings: None,
+                settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    ..collaboration_protocol::ProviderRequestedSettings::default()
+                }),
                 operation_id: create_operation_id.clone(),
                 endpoint: provider_endpoint,
                 generation: Some(generation()?),
@@ -691,7 +703,10 @@ async fn response_loss_is_unknown_and_reconciliation_never_replays() -> TestResu
     operation(
         backend
             .create(ConversationCreateRequest {
-                settings: None,
+                settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    ..collaboration_protocol::ProviderRequestedSettings::default()
+                }),
                 operation_id: operation_id.clone(),
                 endpoint,
                 generation: Some(generation()?),
@@ -759,7 +774,10 @@ async fn authentication_required_is_no_effect_and_does_not_poison_fresh_create()
     operation(
         backend
             .create(ConversationCreateRequest {
-                settings: None,
+                settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    ..collaboration_protocol::ProviderRequestedSettings::default()
+                }),
                 operation_id: first_id.clone(),
                 endpoint: provider_endpoint.clone(),
                 generation: Some(generation()?),
@@ -781,7 +799,10 @@ async fn authentication_required_is_no_effect_and_does_not_poison_fresh_create()
     let duplicate = operation(
         backend
             .create(ConversationCreateRequest {
-                settings: None,
+                settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    ..collaboration_protocol::ProviderRequestedSettings::default()
+                }),
                 operation_id: first_id,
                 endpoint: provider_endpoint.clone(),
                 generation: Some(generation()?),
@@ -797,7 +818,10 @@ async fn authentication_required_is_no_effect_and_does_not_poison_fresh_create()
     operation(
         backend
             .create(ConversationCreateRequest {
-                settings: None,
+                settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    ..collaboration_protocol::ProviderRequestedSettings::default()
+                }),
                 operation_id: second_id.clone(),
                 endpoint: provider_endpoint,
                 generation: Some(generation()?),
@@ -843,7 +867,10 @@ async fn prompt_authentication_required_is_no_effect_and_fresh_prompt_retains_fi
     operation(
         backend
             .create(ConversationCreateRequest {
-                settings: None,
+                settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    ..collaboration_protocol::ProviderRequestedSettings::default()
+                }),
                 operation_id: create_id.clone(),
                 endpoint: provider_endpoint,
                 generation: Some(generation()?),
@@ -926,7 +953,10 @@ async fn provider_prompt_error_text_cannot_become_a_local_no_effect_rejection() 
     operation(
         backend
             .create(ConversationCreateRequest {
-                settings: None,
+                settings: Some(collaboration_protocol::ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    ..collaboration_protocol::ProviderRequestedSettings::default()
+                }),
                 operation_id: create_id.clone(),
                 endpoint: provider_endpoint,
                 generation: Some(generation()?),

@@ -441,3 +441,6 @@ mod initialization_authentication_tests;
 
 #[path = "../external_provider_supervisor/cursor_settings_tests.rs"]
 mod cursor_settings_tests;
+
+#[path = "../external_provider_supervisor/start_mode_tests.rs"]
+mod start_mode_tests;
