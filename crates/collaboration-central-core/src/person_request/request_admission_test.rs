@@ -10,7 +10,8 @@ const ORGANIZATION: &str = "019f0000-0000-7000-8000-00000000c201";
 const PERSON: &str = "019f0000-0000-7000-8000-00000000c202";
 const SUBJECT: &str = "019f0000-0000-7000-8000-00000000c203";
 const SESSION: &str = "019f0000-0000-7000-8000-00000000c204";
-const POLICY: &str = "2d31b5d72716e64e255d8858c231f593155289fb03ed354c4b762890667a3c22";
+// switchboard@b1c9f6f6: src/organizations/fleet-permission-policy-digest.ts
+const POLICY: &str = "af40ec7fb999c4ef7f9611f322bab013e05666b56cd1d3101fac1e9e001d074a";
 const NOW: i64 = 1_900_000_000_000;
 /// A request time is a UUIDv7's millisecond prefix.
 fn request_at(millis: i64) -> Uuid {

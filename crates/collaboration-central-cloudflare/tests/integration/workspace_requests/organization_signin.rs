@@ -6,6 +6,7 @@ mod expiry_holds;
 mod floors;
 mod launcher_controls;
 mod linearization;
+mod machine_login;
 mod observations;
 mod provisioning;
 mod records;

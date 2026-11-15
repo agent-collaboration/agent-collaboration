@@ -23,6 +23,8 @@ pub struct WorkspaceCaller {
     pub credential_hash: String,
 }
 
+/// One organization's request runtime. Machine grant lifetime is fixed by central
+/// policy and has no public configuration API.
 pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     pub(crate) organization: OrganizationId,
     pub(crate) host: Arc<Host>,

@@ -107,4 +107,21 @@ produce two consecutive changes, both are drained, and replay preserves the curs
   `signin-test-support` feature. Setup cases exercise signed workspace creation,
   non-null lookup, byte-identical operation replay, shared canonical name uniqueness,
   atomic directory/ledger/audit writes, and stored stamp facts outside both time
-  bounds without granting live authority. Machine login remains outside this suite.
+  bounds without granting live authority.
+
+- `organization_signin::machine_login`: the real private device/token decision
+  routes, exact immutable three-field approval replies across reopen, both BA1
+  grant orders, generation-stable active repeats, code and receipt boundaries,
+  idle renewal/expiry, client/org/installation isolation and late-record rollback.
+  Workspace rows are explicitly seeded only as directory preconditions; no
+  approval, token, actor or change-record result is fabricated. Grant expectations
+  name the fixed 600-second production policy. Owner revocation/ABA uses only the
+  approved closed core test-support dispatcher, with real-store owner-origin
+  multi-record rollback. No public revoke API or connection-close proof is implied.
+  The invariant case enumerates six bounded three-login operation sequences,
+  checking one-enrolled and the independent generation model after every step.
+  Separate raw-row constraint probes carry the historical second-enrolled and
+  duplicate-request/client engine checks, with fresh PKs, rollback snapshots and
+  valid control inserts. These planted constraint rows are not login journeys.
+  Stored-corruption cases require an empty 503 with unchanged owning rows, then
+  restore the fixture rows and require a successful Grant.

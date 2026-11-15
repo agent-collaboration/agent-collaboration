@@ -40,6 +40,14 @@ pub trait OrganizationSignInPort: Send + Sync + 'static {
         organization: OrganizationId,
         input: PersonRequestInput,
     ) -> impl Future<Output = Result<OrganizationAdminAnswer, StoreFailure>> + Send;
+    fn device_login(
+        &self,
+        request: &crate::identity_contract::DecideDeviceLogin,
+    ) -> impl Future<Output = Result<crate::identity_contract::DeviceLoginDecision, StoreFailure>> + Send;
+    fn machine_token(
+        &self,
+        request: &crate::identity_contract::DecideMachineToken,
+    ) -> impl Future<Output = Result<crate::identity_contract::MachineTokenDecision, StoreFailure>> + Send;
 }
 impl<H: crate::ObjectHost, S: crate::WorkspaceStoreCalls> OrganizationSignInPort
     for crate::WorkspaceRuntime<H, S>
@@ -71,5 +79,17 @@ impl<H: crate::ObjectHost, S: crate::WorkspaceStoreCalls> OrganizationSignInPort
             return Ok(OrganizationAdminAnswer::Unauthenticated);
         }
         self.admin_person_request(&input).await
+    }
+    async fn device_login(
+        &self,
+        request: &crate::identity_contract::DecideDeviceLogin,
+    ) -> Result<crate::identity_contract::DeviceLoginDecision, StoreFailure> {
+        self.decide_device_login(request).await
+    }
+    async fn machine_token(
+        &self,
+        request: &crate::identity_contract::DecideMachineToken,
+    ) -> Result<crate::identity_contract::MachineTokenDecision, StoreFailure> {
+        self.decide_machine_token(request).await
     }
 }

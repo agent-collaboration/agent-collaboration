@@ -4,8 +4,8 @@ use crate::contract_artifacts;
 use collaboration_central_core::identity_contract::{
     AllowMachine, AllowSignIn, AllowanceState, CommandRefusal, CommandStatus, CreateOrganization,
     CreateWorkspace, IdentityLookup, MachineAllowance, MachineLookup, OrganizationCommandResult,
-    RemoveSession, RemoveSignIn, RevokeMachineEnrollment, SetOrganizationOwner, SetTokenLifetime,
-    TokenLifetimeSeconds, WithdrawMachineAllowance, WorkspaceLookup,
+    RemoveSession, RemoveSignIn, RevokeMachineEnrollment, SetOrganizationOwner,
+    WithdrawMachineAllowance, WorkspaceLookup,
 };
 use serde_json::json;
 
@@ -154,18 +154,6 @@ fn remove_session_wire_contract() {
 }
 
 #[test]
-fn set_token_lifetime_wire_contract() {
-    contract_artifacts::assert_contract::<SetTokenLifetime>(
-        "SetTokenLifetime",
-        vec![
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","seconds":60}),
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","seconds":3600}),
-        ],
-        false,
-    );
-}
-
-#[test]
 fn command_refusal_wire_contract() {
     contract_artifacts::assert_contract::<CommandRefusal>(
         "CommandRefusal",
@@ -214,15 +202,6 @@ fn allowance_state_wire_contract() {
     contract_artifacts::assert_contract::<AllowanceState>(
         "AllowanceState",
         vec![json!("active"), json!("withdrawn")],
-        false,
-    );
-}
-
-#[test]
-fn token_lifetime_seconds_wire_contract() {
-    contract_artifacts::assert_contract::<TokenLifetimeSeconds>(
-        "TokenLifetimeSeconds",
-        vec![json!(60_i64), json!(600_i64), json!(3600_i64)],
         false,
     );
 }

@@ -1,17 +1,23 @@
 {
   "$defs": {
+    "AllowedWorkspaces": {
+      "items": {
+        "$ref": "#/$defs/WorkspaceId"
+      },
+      "maxItems": 100,
+      "type": "array"
+    },
     "DeviceLoginRequestId": {
       "maxLength": 36,
       "minLength": 36,
       "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
       "type": "string"
     },
-    "InstallationId": {
-      "maxLength": 36,
-      "minLength": 36,
-      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$(?![\\s\\S])",
-      "type": "string",
-      "x-maxUtf8Bytes": 36
+    "EnrollPermission": {
+      "enum": [
+        "machine:enroll"
+      ],
+      "type": "string"
     },
     "MachineLabel": {
       "allOf": [
@@ -58,10 +64,7 @@
   "additionalProperties": false,
   "properties": {
     "allowedWorkspaces": {
-      "items": {
-        "$ref": "#/$defs/WorkspaceId"
-      },
-      "type": "array"
+      "$ref": "#/$defs/AllowedWorkspaces"
     },
     "approver": {
       "$ref": "#/$defs/PersonId"
@@ -74,10 +77,15 @@
         {
           "type": "null"
         }
-      ]
+      ],
+      "minimum": 0
+    },
+    "codeExpiresAt": {
+      "$ref": "#/$defs/UnixSeconds",
+      "minimum": 0
     },
     "installation": {
-      "$ref": "#/$defs/InstallationId"
+      "$ref": "#/$defs/RecordId"
     },
     "label": {
       "$ref": "#/$defs/MachineLabel"
@@ -88,6 +96,9 @@
     "peer": {
       "$ref": "#/$defs/RecordId"
     },
+    "permissionChecked": {
+      "$ref": "#/$defs/EnrollPermission"
+    },
     "requestId": {
       "$ref": "#/$defs/DeviceLoginRequestId"
     }
@@ -95,11 +106,14 @@
   "required": [
     "organizationId",
     "approver",
+    "permissionChecked",
     "requestId",
     "installation",
     "peer",
     "label",
-    "allowedWorkspaces"
+    "allowedWorkspaces",
+    "approverSecondFactorAt",
+    "codeExpiresAt"
   ],
   "title": "DecideDeviceLogin",
   "type": "object"

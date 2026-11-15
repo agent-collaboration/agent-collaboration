@@ -106,6 +106,13 @@ pub(super) async fn control(
     mut request: Request,
 ) -> Result<Response> {
     let path = request.path();
+    if path == "/test/machine-login-revoke" {
+        let control: collaboration_central_core::MachineLoginControl = request.json().await?;
+        let runtime = object.runtime(organization).await?;
+        return Response::from_json(
+            &collaboration_central_core::machine_login_control(runtime.as_ref(), control).await,
+        );
+    }
     // Holding time before initialization also pins the first minted identity.
     if path == "/test/clock" {
         object.clock.hold(request.json::<i64>().await?);

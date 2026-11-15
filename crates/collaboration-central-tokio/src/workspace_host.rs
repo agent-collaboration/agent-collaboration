@@ -295,4 +295,24 @@ impl OrganizationSignInPort for TokioWorkspaceHost {
             .admin_person_request(&input)
             .await
     }
+    async fn device_login(
+        &self,
+        request: &collaboration_central_core::identity_contract::DecideDeviceLogin,
+    ) -> Result<collaboration_central_core::identity_contract::DeviceLoginDecision, StoreFailure>
+    {
+        self.central(&request.organization_id)
+            .await?
+            .decide_device_login(request)
+            .await
+    }
+    async fn machine_token(
+        &self,
+        request: &collaboration_central_core::identity_contract::DecideMachineToken,
+    ) -> Result<collaboration_central_core::identity_contract::MachineTokenDecision, StoreFailure>
+    {
+        self.central(&request.organization_id)
+            .await?
+            .decide_machine_token(request)
+            .await
+    }
 }

@@ -5,13 +5,15 @@ pub fn accepted_reads(name: &str, literals: &[Value]) -> Vec<Value> {
     for literal in literals {
         let fields: &[&str] = match name {
             "LaunchContext" => &["repository", "commit", "model"],
-            "DecideDeviceLogin" => &["approverSecondFactorAt"],
             "PersonAdmissionRequest" if literal["operation"] == "admitSignIn" => &["verifiedEmail"],
             "MachinePresenceAnswer" if literal["state"] == "notConnected" => &["closedAgoMs"],
             "ConnectionView" if literal["state"] == "notConnected" => &["lastSeenAt"],
             "MachineEnrollment" => &["endsAt"],
             _ => &[],
         };
+        if name == "DecideDeviceLogin" && literal["approverSecondFactorAt"].is_null() {
+            reads.push(json!({"input":literal,"canonical":literal}));
+        }
         for &field in fields {
             if literal.get(field).is_none() {
                 let mut input = literal.clone();

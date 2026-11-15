@@ -32,7 +32,11 @@
       "enum": [
         "organizationProvisioned",
         "stampRenewed",
-        "workspaceCreated"
+        "workspaceCreated",
+        "machineEnrolled",
+        "machineRevoked",
+        "machineExpired",
+        "allowanceChanged"
       ],
       "type": "string"
     },
@@ -45,6 +49,19 @@
           "properties": {
             "kind": {
               "const": "signInProvisioning",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "automatic",
               "type": "string"
             }
           },

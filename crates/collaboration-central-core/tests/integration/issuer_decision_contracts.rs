@@ -2,11 +2,12 @@
 #[cfg(test)]
 use crate::contract_artifacts;
 use collaboration_central_core::identity_contract::{
-    AdmitMachineConnection, AdmittedMachine, DecideDeviceLogin, DecideMachineToken,
-    DeviceLoginDecision, DeviceLoginRefusal, DisableMachineClient, DisabledMachineClient,
-    MachineConnectionAdmission, MachineConnectionRefusal, MachinePrincipal, MachineTokenClaims,
-    MachineTokenDecision, MachineTokenRefusal, OrganizationStanding, PersonAdmissionRequest,
-    PresentedMachine, StandingRole,
+    AdmitMachineConnection, AdmittedMachine, AllowedWorkspaces, DecideDeviceLogin,
+    DecideMachineToken, DeviceLoginDecision, DeviceLoginRefusal, DisableMachineClient,
+    DisabledMachineClient, EndedMachineClient, EnrollPermission, MachineConnectionAdmission,
+    MachineConnectionRefusal, MachinePrincipal, MachineTokenClaims, MachineTokenDecision,
+    MachineTokenRefusal, OrganizationStanding, PersonAdmissionRequest, PresentedMachine,
+    StandingRole,
 };
 use serde_json::json;
 
@@ -15,8 +16,42 @@ fn decide_device_login_wire_contract() {
     contract_artifacts::assert_contract::<DecideDeviceLogin>(
         "DecideDeviceLogin",
         vec![
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","approver":"019a3dce-2000-7000-8000-000000000001","requestId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002","label":"fixture machine","allowedWorkspaces":["019a3dce-2000-7000-8000-000000000001"]}),
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","approver":"019a3dce-2000-7000-8000-000000000001","requestId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002","label":"fixture machine","allowedWorkspaces":[],"approverSecondFactorAt":1793448000_i64}),
+            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","approver":"019a3dce-2000-7000-8000-000000000001","permissionChecked":"machine:enroll","requestId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002","label":"fixture machine","allowedWorkspaces":["019a3dce-2000-7000-8000-000000000001"],"approverSecondFactorAt":null,"codeExpiresAt":1793448600_i64}),
+            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","approver":"019a3dce-2000-7000-8000-000000000001","permissionChecked":"machine:enroll","requestId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002","label":"fixture machine","allowedWorkspaces":[],"approverSecondFactorAt":1793448000_i64,"codeExpiresAt":1793448600_i64}),
+            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","approver":"019a3dce-2000-7000-8000-000000000001","permissionChecked":"machine:enroll","requestId":"019a3dce-2000-7000-8000-000000000002","installation":"019a3dce-2000-7000-8000-000000000001","peer":"019a3dce-2000-7000-8000-000000000002","label":"é".repeat(128),"allowedWorkspaces":vec!["019a3dce-2000-7000-8000-000000000001";100],"approverSecondFactorAt":0,"codeExpiresAt":1793448600_i64}),
+        ],
+        false,
+    );
+}
+
+#[test]
+fn allowed_workspaces_wire_contract() {
+    contract_artifacts::assert_contract::<AllowedWorkspaces>(
+        "AllowedWorkspaces",
+        vec![
+            json!([]),
+            json!(["019a3dce-2000-7000-8000-000000000001"]),
+            json!(vec!["019a3dce-2000-7000-8000-000000000001"; 100]),
+        ],
+        false,
+    );
+}
+
+#[test]
+fn enroll_permission_wire_contract() {
+    contract_artifacts::assert_contract::<EnrollPermission>(
+        "EnrollPermission",
+        vec![json!("machine:enroll")],
+        false,
+    );
+}
+
+#[test]
+fn ended_machine_client_wire_contract() {
+    contract_artifacts::assert_contract::<EndedMachineClient>(
+        "EndedMachineClient",
+        vec![
+            json!({"enrollmentId":"019a3dce-2000-7000-8000-000000000001","clientId":"019a3dce-2000-7000-8000-000000000002"}),
         ],
         false,
     );
@@ -27,8 +62,8 @@ fn device_login_decision_wire_contract() {
     contract_artifacts::assert_contract::<DeviceLoginDecision>(
         "DeviceLoginDecision",
         vec![
-            json!({"result":"approved","enrollmentId":"019a3dce-2000-7000-8000-000000000002"}),
-            json!({"result":"refused","reason":{"kind":"notOwner"}}),
+            json!({"result":"approved","enrollmentId":"019a3dce-2000-7000-8000-000000000002","label":"fixture machine","allowedWorkspaces":["019a3dce-2000-7000-8000-000000000001"]}),
+            json!({"result":"refused","reason":{"kind":"notPermitted"}}),
             json!({"result":"refused","reason":{"kind":"machineInAnotherOrganization"}}),
             json!({"result":"refused","reason":{"kind":"unknownWorkspace"}}),
             json!({"result":"refused","reason":{"kind":"secondFactorRequired","withinSeconds":900}}),
@@ -42,7 +77,7 @@ fn device_login_refusal_wire_contract() {
     contract_artifacts::assert_contract::<DeviceLoginRefusal>(
         "DeviceLoginRefusal",
         vec![
-            json!({"kind":"notOwner"}),
+            json!({"kind":"notPermitted"}),
             json!({"kind":"machineInAnotherOrganization"}),
             json!({"kind":"unknownWorkspace"}),
             json!({"kind":"secondFactorRequired","withinSeconds":900}),
@@ -68,6 +103,7 @@ fn machine_token_decision_wire_contract() {
         "MachineTokenDecision",
         vec![
             json!({"result":"grant","installation":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","decidedAt":1793448000_i64,"grantExpiresAt":1793448600_i64}),
+            json!({"result":"grant","installation":"019a3dce-2000-7000-8000-000000000001","enrollmentId":"019a3dce-2000-7000-8000-000000000002","decidedAt":1793448000_i64,"grantExpiresAt":1793448600_i64,"superseded":{"enrollmentId":"019a3dce-2000-7000-8000-000000000003","clientId":"019a3dce-2000-7000-8000-000000000003"}}),
             json!({"result":"refuse","reason":{"kind":"enrollmentNotActive"}}),
             json!({"result":"refuse","reason":{"kind":"superseded"}}),
             json!({"result":"refuse","reason":{"kind":"wrongClient"}}),

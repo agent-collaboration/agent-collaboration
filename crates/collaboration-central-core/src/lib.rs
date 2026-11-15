@@ -51,7 +51,16 @@ pub use connection_admission::AdmissionOrigin;
 mod object_host;
 mod platform_capabilities;
 pub use object_host::ObjectHost;
+mod machine_login_plans;
+mod machine_login_reads;
+mod machine_login_row_values;
+mod machine_login_rows;
+#[cfg(feature = "test-support")]
+mod machine_login_test_control;
+mod machine_login_writes;
 mod workspace_runtime;
+#[cfg(feature = "test-support")]
+pub use machine_login_test_control::{MachineLoginControl, machine_login_control};
 pub use workspace_runtime::{WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls};
 mod organization_workspace_plans;
 mod workspace_actor_identity;

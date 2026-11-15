@@ -39,7 +39,6 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
             json!("019a3dce-2000-7000-0000-000000000001"),
         ]),
         "SequenceNumber" => invalid.extend([json!(9007199254740992_u64), json!(-1), json!(1.5)]),
-        "TokenLifetimeSeconds" => invalid.extend([json!(0),json!(59),json!(3601)]),
         "IsolationKind" => invalid.extend([json!("Host"),json!("process-sandbox"),json!("unknown")]),
         "MachineEnvironment" => invalid.extend([json!("Physical"),json!("cloud-vm"),json!("unknown")]),
         "Activity" | "SessionEndCause" | "HarnessKind" | "RemoteLaunchAccess" | "StandingRole" | "SessionStateView" | "AllowanceState" => {

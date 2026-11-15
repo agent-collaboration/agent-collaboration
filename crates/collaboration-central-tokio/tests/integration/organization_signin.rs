@@ -4,6 +4,7 @@ mod causal_races;
 mod deadlines;
 mod floors;
 mod linearization;
+mod machine_login;
 mod observations;
 mod provisioning;
 mod records;

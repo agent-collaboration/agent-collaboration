@@ -1,0 +1,22 @@
+{
+  "$defs": {
+    "FenceRevision": {
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "acknowledgedRevision": {
+      "$ref": "#/$defs/FenceRevision",
+      "description": "The floor central retains after the commit; may exceed the sent revision."
+    }
+  },
+  "required": [
+    "acknowledgedRevision"
+  ],
+  "title": "AuthorizationRevisionAcknowledgement",
+  "type": "object"
+}

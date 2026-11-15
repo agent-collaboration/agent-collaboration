@@ -16,6 +16,10 @@ pub enum OrganizationChangeKind {
     OrganizationProvisioned,
     StampRenewed,
     WorkspaceCreated,
+    MachineEnrolled,
+    MachineRevoked,
+    MachineExpired,
+    AllowanceChanged,
 }
 
 impl OrganizationChangeKind {
@@ -24,6 +28,10 @@ impl OrganizationChangeKind {
             Self::OrganizationProvisioned => "organizationProvisioned",
             Self::StampRenewed => "stampRenewed",
             Self::WorkspaceCreated => "workspaceCreated",
+            Self::MachineEnrolled => "machineEnrolled",
+            Self::MachineRevoked => "machineRevoked",
+            Self::MachineExpired => "machineExpired",
+            Self::AllowanceChanged => "allowanceChanged",
         }
     }
     pub(crate) fn parse(value: &str) -> Result<Self, StoreFailure> {
@@ -31,6 +39,10 @@ impl OrganizationChangeKind {
             "organizationProvisioned" => Ok(Self::OrganizationProvisioned),
             "stampRenewed" => Ok(Self::StampRenewed),
             "workspaceCreated" => Ok(Self::WorkspaceCreated),
+            "machineEnrolled" => Ok(Self::MachineEnrolled),
+            "machineRevoked" => Ok(Self::MachineRevoked),
+            "machineExpired" => Ok(Self::MachineExpired),
+            "allowanceChanged" => Ok(Self::AllowanceChanged),
             _ => Err(corrupt("kind", "unknown change kind")),
         }
     }
@@ -47,6 +59,7 @@ impl OrganizationChangeKind {
 pub enum OrganizationChangeOrigin {
     /// An empty struct variant so an unknown field is refused like any other.
     SignInProvisioning {},
+    Automatic {},
     Person {
         person_id: String,
         permission_checked: String,
@@ -128,6 +141,7 @@ pub(crate) fn insert(record: &OrganizationChangeRecord) -> Result<GuardedStateme
         OrganizationChangeOrigin::SignInProvisioning {} => {
             ("signInProvisioning", SqlValue::Null, SqlValue::Null)
         }
+        OrganizationChangeOrigin::Automatic {} => ("automatic", SqlValue::Null, SqlValue::Null),
         OrganizationChangeOrigin::Person {
             person_id,
             permission_checked,
@@ -178,6 +192,7 @@ fn decode(rows: &ReadOutcome, row: &[SqlValue]) -> Result<OrganizationChangeReco
     let permission = optional_text(rows, row, "permission_checked")?;
     let origin = match (string(rows, row, "origin")?, person, permission) {
         ("signInProvisioning", None, None) => OrganizationChangeOrigin::SignInProvisioning {},
+        ("automatic", None, None) => OrganizationChangeOrigin::Automatic {},
         ("person", Some(person_id), Some(permission_checked))
             if !person_id.is_empty() && !permission_checked.is_empty() =>
         {
@@ -212,3 +227,26 @@ pub(crate) async fn read_page(
     let rows=host.read(Statement{sql:"SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at FROM organization_change_records WHERE id>? ORDER BY id LIMIT ?",args:vec![text(after.map(|id|id.to_string()).unwrap_or_default()),integer(i64::from(limit))?]}).await?;
     rows.rows.iter().map(|row| decode(&rows, row)).collect()
 }
+
+/// Find the predecessor ended by this approval's activation, without paging
+/// through unrelated audit history. The operation key already stores this link.
+pub(crate) async fn read_machine_supersession(
+    host: &impl ObjectHost,
+    originating_request: &str,
+) -> Result<Option<OrganizationChangeRecord>, StoreFailure> {
+    let rows = host.read(Statement {
+        sql: "SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at FROM organization_change_records WHERE kind='machineRevoked' AND request_id>=?1||':machineRevoked:' AND request_id<?1||':machineRevoked;' AND request_id=?1||':machineRevoked:'||target_id LIMIT 2",
+        args: vec![text(originating_request)],
+    }).await?;
+    match rows.rows.as_slice() {
+        [] => Ok(None),
+        [row] => decode(&rows, row).map(Some),
+        _ => Err(bad_value(
+            "organization_change_records.machine_supersession",
+        )),
+    }
+}
+
+#[cfg(test)]
+#[path = "organization_change_rows_test.rs"]
+mod tests;
