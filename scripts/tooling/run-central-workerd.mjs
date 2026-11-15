@@ -104,5 +104,9 @@ async function stop() {
 }
 process.once("SIGINT", stop);
 process.once("SIGTERM", stop);
+// Rust owns this pipe. Parent failure and ordinary Drop both close it; keep
+// Miniflare's exit hooks available rather than killing only the bridge.
+process.stdin.resume();
+process.stdin.once("end", stop);
 await runtime.ready;
 process.stdout.write(`Ready on http://127.0.0.1:${portText} (real workerd, local JWKS redirect)\n`);

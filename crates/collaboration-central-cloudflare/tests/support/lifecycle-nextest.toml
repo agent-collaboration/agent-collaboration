@@ -1,0 +1,5 @@
+# Explicit lifecycle negative controls only; normal CI uses .config/nextest.toml.
+[profile.default]
+retries = 0
+slow-timeout = { period = "10s", terminate-after = 1, grace-period = "1s" }
+leak-timeout = "1s"
