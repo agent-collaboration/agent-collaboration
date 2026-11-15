@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CLI and MCP: verification design</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content" src="./navigation.json"></ex-nav>
+<ex-document id="content">
+<h1>Verification Design</h1>
+<p>A plan: nothing here has run. Live proof uses a <strong>debug Router</strong> with real agents (Claude on Haiku, Codex on Luna, Cursor) through the real CLI and endpoints. Pure rules are proven by focused tests.</p>
+
+<section id="path">
+<h2>How proof is gathered</h2>
+<ex-mermaid id="proof-path" label="Three kinds of evidence"><script type="text/plain">
+flowchart LR
+  subgraph F["focused tests (no app)"]
+    F1[delivery table] --- F2[approver rule] --- F3[mode names] --- F4[result mapping: every variant]
+  end
+  subgraph L["live journeys (debug Router + real agents)"]
+    L1[auto + temp] --- L2[approvals to Lead] --- L3[steer] --- L4[doors] --- L5[Codex CLI]
+  end
+  subgraph S["stand-in until Lead A's port"]
+    S1[central result enums]
+  end
+</script></ex-mermaid>
+</section>
+
+<section id="experiments">
+<h2>First: three experiments (Sol)</h2>
+<ex-mermaid id="exp-view" label="Questions settled before the build"><script type="text/plain">
+flowchart TD
+  E1[E1 Cursor: does agent acp honour auto-review?] --> D1[done, source: no · agent mode + Router-allowed in-folder actions]
+  E2[E2 Claude: after approval, does the retry pass?] --> D2{yes: ClassifierEscalates · no: acceptEdits}
+  E3[E3 Codex: reviewer=user + workspace-write: which actions ask?] --> D3[fixes Codex's escalation list]
+</script></ex-mermaid>
+<p>E2 and E3 run on the Sidekick's own isolated debug Router.</p>
+</section>
+
+<section id="how-tests">
+<h2>How the tests are written</h2>
+<ex-mermaid id="tests-view" label="Two kinds of test, one source of types"><script type="text/plain">
+flowchart LR
+  RS[Rust types] --> SRV[served tools/list schemas]
+  SRV --> GEN[TypeScript types generated from the served schemas]
+  GEN --> TS["node --test client journeys<br/>(official MCP client 2.x, pinned 2026-07-28)"]
+  RS --> RU[Rust focused tests: delivery table, approval routing, first wins, retry]
+  TS --> LIVE[real debug Router + real agents]
+</script></ex-mermaid>
+<ul>
+<li><strong>Pure rules</strong> are Rust tests next to the code: fast, no app.</li>
+<li><strong>Journeys</strong> are TypeScript clients in <code>verification/</code>, run with <code>node --test</code> (the repo's runner) and the existing Installation apparatus, which launches signed Router and Host binaries.</li>
+<li><strong>Types</strong> come from the schemas the Router actually serves, regenerated and compared in a check, so a test can't pass against a shape the server no longer sends. Specta would derive from Rust types upstream of the schema shaping the tools apply, so it could drift from what's served; it also isn't used in this repo.</li>
+</ul>
+<aside class="design-item" id="D6" data-design-item="decision" data-authority="author"><p>Journeys as TypeScript clients under node --test with types generated from served tool schemas; pure rules as Rust tests. The official MCP client package (2.x) is added to the verification package only.</p><p>Evidence: tmp/cli-mcp-research/ts-clients-report.md.</p></aside>
+</section>
+
+<section id="proven-by">
+<h2>Proven by</h2>
+
+<h3 id="pb-auto">Auto mode and temp dirs · U3 (R3, R4, R5)</h3>
+<ex-mermaid id="pb-auto-view" label="Auto proof per agent"><script type="text/plain">
+flowchart LR
+  S["start, no mode"] --> M[agent's own mode = actualMode?]
+  S --> T[create, write, delete in the session's scratch folder]
+  T --> N[no approval raised]
+  S2["start, mode = bogus"] --> X[invalidInput with accepted list]
+</script></ex-mermaid>
+<p><strong>Fails when</strong> Claude reports <code>default</code>, any temp action raises an approval, or a bogus mode is accepted.</p>
+
+<h3 id="pb-approvals">Approvals · U4 (R6–R9a, R21), U7</h3>
+<ex-mermaid id="pb-approval-view" label="Approval proofs"><script type="text/plain">
+flowchart LR
+  L[Lead · not a delegate] -->|start delegate| I[Implementer]
+  I -->|write outside project| R[Router]
+  R -->|shown| L
+  R -->|shown| CX[attached Codex CLI]
+  L & CX -->|answer at the same time| W[exactly one wins, other gets alreadyDecided]
+  L -->|forward| Z[central stand-in] --> CLI[CLI decides]
+  LA[Lead's own write outside project] --> Z
+  I -->|start a session| X[delegateCannotStart]
+</script></ex-mermaid>
+<p>Per agent: a delegate's approval shows at its parent and an attached client; two answers at once give exactly one decision; forward then decide from the CLI; a non-delegate's approval goes to central; all four endings; a delegate is refused when starting a session; <code>autoRealization</code> matches what happened.</p>
+
+<h3 id="pb-subagent">Subagents · U5 (R11)</h3>
+<p>A Claude session spawns a Task subagent that writes outside its dirs. <strong>Passes when</strong> the approval arrives as the parent session's, and the subagent never appears in <code>list</code>.</p>
+
+<h3 id="pb-session">One path and steer · U1 (R1), U2 (R2)</h3>
+<ex-mermaid id="pb-session-view" label="Same operations through every door"><script type="text/plain">
+flowchart LR
+  D1[MCP] & D2[CLI] & D3[Codex CLI shim] & D4[incoming ACP] & D5[mail delivery] --> SC[start · send · read · stop]
+  SC --> CMP[same outcome kind per agent and state]
+</script></ex-mermaid>
+<p>Plus: Cursor steer → <code>restarted</code> with the text first; a forced unconfirmed stop → nothing sent; a lost-answer retry of a restart returns the first ending.</p>
+
+<h3 id="pb-delegation">Kind and parent · U5 (R10)</h3>
+<p><code>show</code> gives each session's kind and parent, before and after a debug Router restart. A delegate starting any session gets <code>delegateCannotStart</code>.</p>
+
+<h3 id="pb-central">Coordination and workspace · U9 (R13, R14), U10 (R15, R16)</h3>
+<p>Focused tests feed every <code>OperationResult</code> variant and every data-bearing refusal through each tool and compare field by field. Live: mail <em>and</em> a wake to a busy session land in it. Central integration waits for Lead A's port; until then the stand-in is named as unverified.</p>
+
+<h3 id="pb-endpoints">Endpoints, CLI, caller, Codex CLI · U11–U13 (R17–R20)</h3>
+<p><code>tools/list</code> per endpoint equals its table. Every CLI command's <code>--json</code> equals its tool's result. Two callers at once each get their own recorded actor, parent and approver; a call with no caller meta is refused. The real Codex CLI runs start, steer, status line, <code>/model</code> and resume.</p>
+</section>
+
+<section id="done">
+<h2>Done means: per deliverable</h2>
+<p>Each deliverable is done only when every check below passes on its declared target. "Needed" journeys don't exist yet; the paired Verifier builds them first (through the verify-codex-router skill). Each check names the wrong build it catches.</p>
+
+<h3 id="done-d1">D1 Auto mode</h3>
+<ex-mermaid id="done-d1-view" label="D1 checks"><script type="text/plain">
+flowchart LR
+  B[signed debug Router from the D1 head] --> C1[Claude: start no mode]
+  B --> C2[Codex: start no mode]
+  B --> C3[Cursor: start no mode · your per-use approval]
+  C1 & C2 & C3 --> M[agent's own mode report]
+  C1 & C2 & C3 --> T[create · write · delete in the scratch folder]
+  C1 & C2 & C3 --> O[write outside project]
+  O --> AP[approval record exists before any refusal]
+</script></ex-mermaid>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Check</th><th>Rule</th><th>Evidence</th><th>Catches</th></tr></thead>
+<tbody>
+<tr><td>Start without mode → agent itself reports auto (or the documented fallback with its reason)</td><td>R3</td><td>live, per agent · needed journey</td><td>Claude still starting in <code>default</code></td></tr>
+<tr><td>Scratch-folder create, write, delete raise no approval; a write to system <code>/tmp</code> outside it becomes an approval</td><td>R4</td><td>live, per agent · needed journey</td><td>scratch folder not granted to Claude/Cursor; or system /tmp still granted</td></tr>
+<tr><td>Bogus mode refused with the accepted list</td><td>R5</td><td>focused Rust test</td><td>any string forwarded to the agent</td></tr>
+<tr><td>Outside write → approval record before any refusal; Claude classifier denial becomes an approval</td><td>R6</td><td>live, per agent · needed journey</td><td>silent refusal (the owner's Verifier example)</td></tr>
+<tr><td><code>options</code> autoRealization equals what R6 observed</td><td>R7</td><td>live, same run</td><td>a capability report that lies</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Unverified unless you approve:</strong> Cursor live (it uses your own Cursor login). Without it, Cursor's D1 behavior rests on source evidence (E1) and a fixture test.</p>
+
+<h3 id="done-d2">D2 Session control</h3>
+<ex-mermaid id="done-d2-view" label="D2 checks"><script type="text/plain">
+flowchart LR
+  F[focused Rust tests] --> F1[delivery table every cell]
+  F --> F2[approval routing by kind]
+  F --> F3[first wins under concurrent answers]
+  F --> F4[retry table]
+  L[live journeys · debug Router] --> L1[5 doors × start/send/read/stop]
+  L --> L2[Cursor steer → restarted]
+  L --> L3[delegate approval at parent + attached client]
+  L --> L4[delegate start refused]
+  L --> L5[own-session approval follows Router setting]
+  L --> L6[Codex CLI shown approval · local decides]
+  L --> L7[two callers kept apart]
+  L --> L8[Codex CLI five journeys]
+</script></ex-mermaid>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Check</th><th>Rule</th><th>Evidence</th><th>Catches</th></tr></thead>
+<tbody>
+<tr><td>Same operation through MCP, CLI, Codex CLI, incoming ACP, mail delivery gives the same outcome kind</td><td>R1</td><td>live · needed journey</td><td>a door bypassing SessionControl</td></tr>
+<tr><td>Every delivery-table cell; Cursor steer → <code>restarted</code> with the text first; unconfirmed stop sends nothing</td><td>R2</td><td>focused + live</td><td>steer refused; message lost on restart</td></tr>
+<tr><td>Delegate's approval shows at parent and attached client; plain's goes to central stand-in</td><td>R8</td><td>live · needed journey</td><td>approval sent to one place only, or to the wrong place</td></tr>
+<tr><td>Non-delegates: a Lead started from the tools and a session opened through the Codex socket both route by the Router setting (default, then with an agent target), before and after reopen; neither is treated as a delegate</td><td>R8 R10</td><td>live · needed journey</td><td>setting ignored; socket session misclassified</td></tr>
+<tr><td>Two destinations answer at once → central (stand-in arbiter until central D) records one decision, the other gets <code>alreadyDecided</code>; four endings; Router restart ends waiting requests cancelled and reports it</td><td>R9</td><td>focused (concurrency) + live against stand-in</td><td>double decision; agent proceeding unapproved</td></tr>
+<tr><td>Forward → shows at central stand-in → decide from CLI</td><td>R9a</td><td>live against stand-in</td><td>forward lost</td></tr>
+<tr><td>Delegate start → <code>delegateCannotStart</code>; kind and parent same after restart</td><td>R10</td><td>live</td><td>a second layer allowed</td></tr>
+<tr><td>Claude Task subagent's request arrives as the parent session's</td><td>R11</td><td>live</td><td>subagent approval dropped</td></tr>
+<tr><td>A delegate's turn ends: its parent receives exactly one wake naming the delegate and outcome; a plain session ending wakes nobody</td><td>R22</td><td>live</td><td>no wake, a wake per event, or plain sessions waking someone</td></tr>
+<tr><td>Starting a delegate returns a <code>wakeReminder</code>; starting a plain session does not</td><td>R23</td><td>focused + live</td><td>reminder missing, or on every send</td></tr>
+<tr><td>Protocol: 2026-07-28 and older clients, no MCP session ID, retry table, structured errors</td><td>R12</td><td>focused + official client</td><td>session IDs; replayed effects</td></tr>
+<tr><td><code>tools/list</code> per endpoint equals its table</td><td>R17</td><td>focused</td><td>tools leaking across endpoints</td></tr>
+<tr><td>Each session CLI command's <code>--json</code> equals its tool's result</td><td>R18</td><td>focused, every pair</td><td>CLI drift</td></tr>
+<tr><td>Codex CLI: start, steer, status line, <code>/model</code>, resume at the current version</td><td>R19</td><td>live · existing ignored 0.157.1 journeys repaired</td><td>shim regressions</td></tr>
+<tr><td>Two callers at once each recorded correctly; missing caller refused</td><td>R20</td><td>live</td><td>one caller stamped on everything</td></tr>
+<tr><td>Codex CLI attached locally sees the approval and can decide; remote sees it only</td><td>R21</td><td>live</td><td>shim not forwarding approvals</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Unverified until named pieces land:</strong> central integration (stand-in only), remote deciding (session auth).</p>
+
+<h3 id="done-d3">D3 Central-facing</h3>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Check</th><th>Rule</th><th>Evidence</th><th>Catches</th></tr></thead>
+<tbody>
+<tr><td>Every central answer variant and every data-bearing refusal through every coordination and workspace tool</td><td>R13 R15</td><td>focused</td><td>collapsed or renamed results</td></tr>
+<tr><td>Mail and a wake to a busy session land in it</td><td>R14</td><td>live against central's local conformance build</td><td>delivery bypassing the session path</td></tr>
+<tr><td>Workspace tool list equals central's operations</td><td>R16</td><td>focused</td><td>ADR/fact/task tools left behind</td></tr>
+<tr><td>A non-delegate's approval decided from the CLI through central; forwarded approval likewise</td><td>R8 R9a</td><td>live against central D</td><td>approval stuck at central</td></tr>
+<tr><td>Race: the parent and you answer at the same moment; central records one winner; the agent, both callers and central's list agree; the loser is told who won</td><td>R9</td><td>live against central D</td><td>two winners</td></tr>
+<tr><td>Late: the turn stops or the Router restarts while an approval is pending; central ends it cancelled and later answers are refused naming that ending. And the reverse: central recorded a winner just before the restart; its ending stands and a duplicate delivery changes nothing. And a crash: kill the Router with an approval pending; after it reconnects, central shows that approval cancelled (requester gone)</td><td>R9</td><td>live against central D</td><td>a finished approval revived</td></tr>
+<tr><td>Person CLI caller: <code>signInRequired</code> before sign-in, works after</td><td>R20</td><td>live</td><td>person sent as an agent</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Waits on:</strong> Lead A's link and port, central deliverable D, sign-in. Before those land, D3 can only show the mapping against a stand-in. That is not proof of the integration.</p>
+</section>
+
+<section id="unverified">
+<h2>What stays unverified</h2>
+<ul>
+<li>Central integration, until Lead A's port lands (stand-in only).</li>
+<li>An approver on another machine (session auth deferred).</li>
+<li>Endpoint access enforcement (session auth deferred).</li>
+</ul>
+</section>
+
+<section id="rows">
+<h2>Coverage rows</h2>
+<details><summary>Every need, its rules and evidence</summary>
+<div data-width="canvas">
+<table>
+<thead><tr><th>U</th><th>R</th><th>Evidence</th><th>Lifetime</th><th>Reused</th></tr></thead>
+<tbody>
+<tr><td>U1</td><td>R1</td><td>needed journey: five doors × four operations</td><td>lasting</td><td>none</td></tr>
+<tr><td>U2</td><td>R2</td><td>needed journey: steer per agent, restart failures</td><td>lasting</td><td>#255 fallback tests (fixture, not live)</td></tr>
+<tr><td>U3</td><td>R3, R4, R5</td><td>needed journey: auto + temp per agent; focused test: mode names</td><td>lasting</td><td>none</td></tr>
+<tr><td>U4</td><td>R6, R7, R8, R9, R9a, R21</td><td>needed journey: delegate and plain approvals, fan-out, first wins, forward, four endings, Codex CLI client</td><td>lasting</td><td>none</td></tr>
+<tr><td>U5</td><td>R8, R10, R11, R22, R23</td><td>needed journey: one layer refused, kind and parent after restart, subagent, finish wake, delivered reminder</td><td>lasting</td><td>none</td></tr>
+<tr><td>U6</td><td>R12</td><td>focused protocol tests</td><td>—</td><td>2026-11-07 set's protocol cases</td></tr>
+<tr><td>U7</td><td>R9, R12</td><td>shared: approval endings + retry tests</td><td>lasting</td><td>none</td></tr>
+<tr><td>U8</td><td>R5, R7, R12</td><td>shared: mode names, autoRealization, protocol</td><td>—</td><td>none</td></tr>
+<tr><td>U9</td><td>R13, R14</td><td>focused: every result variant; live: mail and wake</td><td>lasting</td><td>central conformance harness (Lead A)</td></tr>
+<tr><td>U10</td><td>R15, R16</td><td>focused: every result variant; tool list</td><td>—</td><td>central conformance harness</td></tr>
+<tr><td>U11</td><td>R17</td><td>focused: tools/list per endpoint</td><td>—</td><td>none</td></tr>
+<tr><td>U12</td><td>R18, R20</td><td>focused: CLI/tool equality; live: two callers</td><td>lasting</td><td>none</td></tr>
+<tr><td>U13</td><td>R19</td><td>needed: five Codex CLI journeys at the current version</td><td>lasting</td><td>existing ignored 0.157.1 tests need repair</td></tr>
+</tbody>
+</table>
+</div>
+</details>
+</section>
+</ex-document>
+</body>
+</html>

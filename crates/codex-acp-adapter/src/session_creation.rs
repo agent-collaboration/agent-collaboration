@@ -47,6 +47,7 @@ pub enum SessionSetupError {
     #[error("Router host location {location} is unavailable for session grants")]
     HostLocationsUnavailable { location: String },
 }
+mod codex_permission_mode;
 mod recorded_session_resume;
 mod router_permission_profile;
 pub use recorded_session_resume::RecordedSessionResume;
@@ -67,6 +68,8 @@ pub struct AcpSessionBinding {
     pub(crate) settings_observation: SettingsObservation,
     pub(crate) permission_differences: Vec<collaboration_protocol::PermissionDifference>,
     pub(crate) access_route: Option<crate::ApprovalRoute>,
+    /// The permission mode the creator asked for; absent on load and resume.
+    pub(crate) requested_mode: Option<String>,
     pub(crate) approval_broker: std::sync::Arc<dyn crate::ApprovalBroker>,
     /// The reasoning effort the resumed thread already carried, when the native
     /// resume reported one. Absent for a thread this connection created.
@@ -89,6 +92,8 @@ struct RouterModelChoice<'a> {
     approver: collaboration_protocol::SessionRef,
     scratch_path: &'a str,
     root_message_id: Option<&'a str>,
+    /// The permission mode the caller asked for: only `auto` (or none) for Codex.
+    requested_mode: Option<&'a str>,
 }
 
 /// The source thread's own model and reasoning effort, for a fork that named none.
@@ -188,6 +193,11 @@ fn router_model_choice(params: &Value) -> Result<RouterModelChoice<'_>, SessionS
         .and_then(Value::as_str)
         .ok_or(SessionSetupError::InvalidParameters)?;
     let root_message_id = router.get("rootMessageId").and_then(Value::as_str);
+    let requested_mode = match router.get("mode") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(mode)) if mode == "auto" => Some(mode.as_str()),
+        Some(_) => return Err(SessionSetupError::InvalidParameters),
+    };
     // A fresh thread must state both choices; only a fork may inherit them.
     if fork_thread_id.is_none() && (model.is_none() || effort.is_none()) {
         return Err(SessionSetupError::InvalidParameters);
@@ -202,6 +212,7 @@ fn router_model_choice(params: &Value) -> Result<RouterModelChoice<'_>, SessionS
         approver,
         scratch_path,
         root_message_id,
+        requested_mode,
     })
 }
 pub struct SessionSetupInputs {
@@ -299,6 +310,9 @@ impl AcpSessionBinding {
         )
         .await?;
         fields.insert("permissions".into(), json!(profile.name()));
+        // Actions outside the sandbox come to the Router as approvals (R6);
+        // Codex's automatic reviewer would refuse them with no question asked.
+        fields.insert("approvalsReviewer".into(), json!("user"));
         if let Some(config) = configuration.native_overrides() {
             let target = fields
                 .get_mut("config")
@@ -430,6 +444,7 @@ impl AcpSessionBinding {
             settings_observation,
             permission_differences,
             access_route: Some(access_route),
+            requested_mode: choice.requested_mode.map(str::to_owned),
             approval_broker: inputs.approval_broker,
             persisted_effort: None,
             scratch_lease: Some(crate::ScratchScopeLease::open(
@@ -466,13 +481,33 @@ impl AcpSessionBinding {
     pub(crate) fn setup_result(&self) -> Value {
         Value::Object(self.setup_fields())
     }
+    /// The permission mode this created session runs in, from native's read-back.
+    /// `None` for a session this connection did not create with a Router access.
+    pub(crate) fn permission_mode_report(
+        &self,
+    ) -> Option<collaboration_protocol::CodexPermissionModeReport> {
+        let access = self.access_route.as_ref()?.access;
+        Some(codex_permission_mode::codex_permission_mode(
+            access,
+            self.requested_mode.as_deref(),
+            &self.settings_observation,
+            &self.permission_differences,
+        ))
+    }
     fn setup_fields(&self) -> serde_json::Map<String, Value> {
-        let mut fields = serde_json::Map::new();
+        let mut router = serde_json::Map::new();
         if !self.permission_differences.is_empty() {
-            fields.insert(
-                "_meta".into(),
-                json!({"codexRouter":{"permissionDifferences":self.permission_differences}}),
+            router.insert(
+                "permissionDifferences".into(),
+                json!(self.permission_differences),
             );
+        }
+        if let Some(report) = self.permission_mode_report() {
+            router.insert("permissionMode".into(), json!(report));
+        }
+        let mut fields = serde_json::Map::new();
+        if !router.is_empty() {
+            fields.insert("_meta".into(), json!({"codexRouter": router}));
         }
         fields
     }
@@ -551,6 +586,7 @@ impl AcpSessionBinding {
             approval_broker: inputs.approval_broker,
             persisted_effort: None,
             permission_differences: Vec::new(),
+            requested_mode: None,
         };
         let response = session
             .resume_with_receipt(catalog, &inputs.generation, &inputs.params)

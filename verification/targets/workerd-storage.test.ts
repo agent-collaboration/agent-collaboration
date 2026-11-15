@@ -25,6 +25,11 @@ test("bridge names every absent public or private artifact before readiness", as
   try {
     await mkdir(join(fixture, dirname(bridgePath)), { recursive: true });
     await mkdir(join(fixture, "verification/targets"), { recursive: true });
+    await mkdir(join(fixture, "verification/test-support"), { recursive: true });
+    await copyFile(
+      join(repository, "verification/test-support/miniflare-signal-shutdown.ts"),
+      join(fixture, "verification/test-support/miniflare-signal-shutdown.ts"),
+    );
     await writeFile(join(fixture, "package.json"), '{"type":"module"}');
     await copyFile(join(repository, bridgePath), join(fixture, bridgePath));
     await copyFile(
@@ -285,11 +290,13 @@ async function createBridgeControlFixture(): Promise<string> {
   await mkdir(join(fixture, dirname(bridgeRelativePath)), { recursive: true });
   await mkdir(join(fixture, dirname(emptyObservationPath)), { recursive: true });
   await mkdir(join(fixture, "verification/targets"), { recursive: true });
+  await mkdir(join(fixture, "verification/test-support"), { recursive: true });
   await writeFile(join(fixture, "package.json"), '{"type":"module"}');
   for (const path of [
     bridgeRelativePath,
     emptyObservationPath,
     "verification/targets/workerd-storage.ts",
+    "verification/test-support/miniflare-signal-shutdown.ts",
   ])
     await copyFile(join(repository, path), join(fixture, path));
   await symlink(
@@ -550,14 +557,14 @@ test("private link cannot silently create its own central namespace", async (): 
 test("optional clock binding reads one live cell without restarting durable state", async (): Promise<void> => {
   for (const privateTopology of [false, true]) {
     // Arrange: the Node clock and physical-org registry are outside the Worker.
-    let milliseconds: number | null = null;
+    let milliseconds = 0;
     const organizations: string[] = [];
     const first = "019f0000-0000-7000-8000-00000000d201";
     const second = "019f0000-0000-7000-8000-00000000d202";
     const controlled = await WorkerdStorage.start(
       publicBundle,
       privateTopology ? { linkBundle, jwks: { sourceUrl, fixtureUrl } } : undefined,
-      (organization: string): number | null => {
+      (organization: string): number => {
         organizations.push(organization);
         return milliseconds;
       },
@@ -578,7 +585,7 @@ test("optional clock binding reads one live cell without restarting durable stat
         proof: null,
       });
       // Act: use the same Worker, then name an org only after time has moved.
-      assert.deepEqual(await readClock(first), { milliseconds: null });
+      assert.deepEqual(await readClock(first), { milliseconds: 0 });
       milliseconds = 1_900_000_000_000;
       assert.deepEqual(await readClock(first), { milliseconds });
       assert.deepEqual(await readClock(second), { milliseconds });

@@ -125,7 +125,18 @@ async fn real_public_tcp_excludes_all_private_paths_before_and_after_owner_crede
         200,
         "the dedicated Unix link positively mounts provisioning"
     );
+    f.ready().await?;
     let before = f.snapshot().await?;
+    let rows_to_watch = [
+        "SELECT * FROM workspaces ORDER BY workspace_id",
+        "SELECT * FROM request_log ORDER BY request_id",
+        "SELECT * FROM organization_used_requests ORDER BY id",
+        "SELECT * FROM actor_identities ORDER BY actor_identity_id",
+    ];
+    let mut before_admission = Vec::new();
+    for sql in rows_to_watch {
+        before_admission.push(f.rows(A, sql, vec![]).await?);
+    }
     let server = TokioServer::start_with_clock(
         TokioSettings {
             root: f.root.path().join("public"),
@@ -153,14 +164,32 @@ async fn real_public_tcp_excludes_all_private_paths_before_and_after_owner_crede
         PROVISION,
         DIGEST,
         REVISIONS,
+        signed::CREATE,
         signed::LOOKUP,
         signed::RECORDS,
     ] {
         for authorized in [false, true] {
+            let operation = "019f0000-0000-7000-8000-00000000d7e1";
+            let body = if path == signed::CREATE {
+                signed::create_body(A, operation, "Public create must refuse")
+            } else {
+                provision_body(A, &statement)
+            };
             let mut request = client
                 .post(format!("{}{path}", server.base_url()))
                 .header("content-type", "application/json")
-                .body(serde_json::to_string(&provision_body(A, &statement))?);
+                .body(serde_json::to_string(&body)?);
+            if path == signed::CREATE {
+                let person = signed::Person::owner(A, signed::NOW_SECONDS)?;
+                for (name, value) in person.headers(
+                    signed::CREATE,
+                    &signed::create_intent(A, operation, "Public create must refuse"),
+                    &signed::fresh_request_id(signed::NOW_SECONDS)?,
+                    signed::NOW_SECONDS,
+                )? {
+                    request = request.header(name, value);
+                }
+            }
             if authorized {
                 request = request.header("Cf-Access-Jwt-Assertion", &owner);
             }
@@ -181,6 +210,14 @@ async fn real_public_tcp_excludes_all_private_paths_before_and_after_owner_crede
     assert!(
         f.snapshot().await? == before,
         "public requests changed no modern identity or record"
+    );
+    let mut after_admission = Vec::new();
+    for sql in rows_to_watch {
+        after_admission.push(f.rows(A, sql, vec![]).await?);
+    }
+    assert!(
+        after_admission == before_admission,
+        "public refusal changed directory, ledger, proof or actor rows"
     );
     f.close().await
 }

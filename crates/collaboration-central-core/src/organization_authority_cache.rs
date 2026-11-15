@@ -5,7 +5,7 @@
 //! injected clock on every use. A stamp that fails the check refuses every
 //! command except a provisioning call that can replace it.
 use crate::organization_authority::{
-    FleetOrganizationStatementRefusal, SignInVerification, StoredStampRead,
+    FleetOrganizationStatementRefusal, SignInVerification, StoredStampRead, StoredStatementFacts,
     VerifiedFleetOrganizationStatement,
 };
 use durable_steps::BoxFuture;
@@ -125,6 +125,15 @@ impl OrganizationAuthority {
 /// A host that configured no sign-in trust can never accept a stamp.
 struct UnconfiguredStatementCheck;
 impl SignInVerification for UnconfiguredStatementCheck {
+    fn verify_stored_statement_facts<'a>(
+        &'a self,
+        _statement: &'a str,
+    ) -> BoxFuture<'a, Result<StoredStatementFacts, FleetOrganizationStatementRefusal>> {
+        Box::pin(std::future::ready(Err(
+            FleetOrganizationStatementRefusal::InvalidConfiguration,
+        )))
+    }
+
     fn verify_statement<'a>(
         &'a self,
         _statement: &'a str,

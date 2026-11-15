@@ -2,7 +2,9 @@
 #[cfg(any(test, feature = "test-observation"))]
 use super::ExternalProviderToolCall;
 
-use super::provider_setting_application::{SettingSetupFailure, apply_initial_settings};
+use super::provider_setting_application::{
+    InitialSettingsOutcome, SettingSetupFailure, UnspecifiedMode, apply_initial_settings,
+};
 use super::{
     ActiveSession, Agent, Arc, CancellationToken, ConnectionTo, ExternalProviderCreatedSession,
     ExternalProviderRuntimeError, HashMap, InteractionPort, NewSessionRequest,
@@ -56,6 +58,7 @@ pub(super) fn register_provider_session<P: InteractionPort>(
     Ok(ExternalProviderCreatedSession {
         provider_session_id: registration.provider_session_id,
         effective_settings: registration.settings_catalog.effective_settings(),
+        permission_mode: registration.permission_mode,
     })
 }
 
@@ -107,12 +110,16 @@ pub(super) fn register_static_provider_session<P: InteractionPort>(
     Ok(ExternalProviderCreatedSession {
         provider_session_id,
         effective_settings: crate::EffectiveProviderSettings::default(),
+        permission_mode: crate::PermissionModeReport::default(),
     })
 }
 
 pub(super) struct CreateAdmissionInputs<P: InteractionPort> {
     pub(super) connection: ConnectionTo<Agent>,
     pub(super) request: NewSessionRequest,
+    /// The session's in-folder roots, kept for its whole life; active while it
+    /// runs in Router auto.
+    pub(super) in_folder: Option<super::in_folder_allowance::InFolderGrant>,
     pub(super) requested_settings: crate::RequestedProviderSettings,
     pub(super) supports_close: bool,
     pub(super) shutdown: CancellationToken,
@@ -130,6 +137,7 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
     let CreateAdmissionInputs {
         connection,
         request,
+        in_folder,
         requested_settings,
         supports_close,
         shutdown,
@@ -154,8 +162,14 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
             let response = session.response();
             let mut settings_catalog =
                 crate::provider_settings_catalog_codec::catalog_from_session_response(&response, runtime_handles.behavior.as_ref(), &runtime_handles.connection_model_reasoning);
-            let (applied, failure) =
-                apply_initial_settings(&session, &requested_settings, &mut settings_catalog, runtime_handles.behavior.as_ref()).await;
+            let InitialSettingsOutcome { applied, failure, permission_mode } =
+                apply_initial_settings(&session, &requested_settings, &mut settings_catalog, runtime_handles.behavior.as_ref(), UnspecifiedMode::MeansAuto).await;
+            if let Some(grant) = in_folder
+                && let Ok(mut grants) = runtime_handles.in_folder_grants.write()
+            {
+                let router_auto = permission_mode.requested.as_deref().is_none_or(|mode| mode == crate::AUTO_PERMISSION_MODE);
+                grants.insert(provider_session_id.clone(), super::in_folder_allowance::SessionInFolderGrant { grant, router_auto });
+            }
             let setup_error = match failure {
                 None => None,
                 Some(SettingSetupFailure::Invalid {
@@ -242,6 +256,7 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                     commands,
                     response,
                     settings_catalog,
+                    permission_mode,
                     setup_error,
                 }))
                 .map_err(|_| agent_client_protocol::Error::internal_error())?;

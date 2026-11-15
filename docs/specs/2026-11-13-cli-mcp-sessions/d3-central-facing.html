@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>D3 Central-facing tools</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content" src="./navigation.json"></ex-nav>
+<ex-document id="content">
+<h1>D3 · Central-facing tools</h1>
+<p><strong>What you'll see:</strong> workspace and mail tools (and CLI commands) on the new central, and every approval decided at central (owner decision D8): shown in the CLI now, your UI later, and at any attached client. Ships last, because it sits on central's new link.</p>
+
+<section id="scope">
+<h2>What it covers</h2>
+<ex-mermaid id="d3-scope" label="D3 scope"><script type="text/plain">
+flowchart LR
+  W["/mcp/workspace + CLI"] --> P[CentralOperationPort]
+  C["/mcp/coordination + CLI"] --> P
+  APR[non-delegate and forwarded approvals] --> P
+  P --> Z[central]
+  Z -- ApprovalDecision · mail · wakes --> R[Router → session]
+</script></ex-mermaid>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Needs</th><th>Rules</th><th>Design</th></tr></thead>
+<tbody>
+<tr><td><a href="requirements.html#U9">U9</a> Coordination</td><td><a href="specification.html#R13">R13</a> <a href="specification.html#R14">R14</a></td><td><a href="program-design.html#central-tools">Central tools</a></td></tr>
+<tr><td><a href="requirements.html#U10">U10</a> Workspace</td><td><a href="specification.html#R15">R15</a> <a href="specification.html#R16">R16</a></td><td><a href="program-design.html#central-tools">Central tools</a></td></tr>
+<tr><td><a href="requirements.html#U4">U4</a> Approvals via central</td><td><a href="specification.html#R8">R8</a> (non-delegates) <a href="specification.html#R9a">R9a</a> (forward)</td><td><a href="program-design.html#approvals">Plain-session approval</a></td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="depends">
+<h2>Waits on</h2>
+<ex-mermaid id="d3-deps" label="Dependencies"><script type="text/plain">
+flowchart LR
+  A[Lead A: Router–central link + CentralOperationPort] --> D3[D3]
+  B[Lead A: central deliverable D · approvals: RequestApproval, ListApprovals, DecideApproval] --> D3
+  C[Lead A: sign-in, for person callers] --> D3
+  D2[D2 session control] --> D3
+</script></ex-mermaid>
+<p>Until those land, D3's tools build against a stand-in that returns central's real result types. That proves the mapping, not the integration. Central's approval table needs your approval; Lead A brings it to you.</p>
+</section>
+
+<section id="changes">
+<h2>What changes, where</h2>
+<p><code>collaboration-mcp</code>: coordination and workspace routers, one tool per central operation. <code>agent-collaboration</code>: <code>coordination …</code> and <code>workspace …</code> commands; old board commands removed. <code>collaboration-runtime</code>: approvals to central and ApprovalDecision back into the first-wins path. No Mac storage change.</p>
+</section>
+
+<section id="proof">
+<h2>How it's proven</h2>
+<p><strong><a href="verification.html#done-d3">Done means: the full checklist</a>.</strong> Focused tests feed every central answer through every tool. Live against central's local conformance build once Lead A's port lands: mail and a wake to a busy session, a Lead's approval decided from the CLI. <a href="verification.html#pb-central">Details</a>.</p>
+</section>
+
+<section id="seats">
+<h2>Who builds it</h2>
+<p>One Opus Implementer and one Sol Verifier, then Lead acceptance, a Sol Reviewer, and your merge.</p>
+</section>
+</ex-document>
+</body>
+</html>

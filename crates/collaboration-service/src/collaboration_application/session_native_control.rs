@@ -18,6 +18,8 @@ pub struct NativeSessionControl {
     native_backend: Option<collaboration_runtime::NativeControlBackend>,
     approval_broker: Option<std::sync::Arc<collaboration_runtime::ServiceInteractionBroker>>,
     display_names: collaboration_runtime::SessionDisplayNameCache,
+    /// Codex sessions' create-time permission-mode reports, for show.
+    permission_modes: Option<std::sync::Arc<dyn collaboration_runtime::CodexPermissionModes>>,
 }
 
 impl NativeSessionControl {
@@ -27,6 +29,7 @@ impl NativeSessionControl {
         native_backend: Option<collaboration_runtime::NativeControlBackend>,
         approval_broker: Option<std::sync::Arc<collaboration_runtime::ServiceInteractionBroker>>,
         display_names: collaboration_runtime::SessionDisplayNameCache,
+        permission_modes: Option<std::sync::Arc<dyn collaboration_runtime::CodexPermissionModes>>,
     ) -> Self {
         Self {
             identity,
@@ -34,6 +37,7 @@ impl NativeSessionControl {
             native_backend,
             approval_broker,
             display_names,
+            permission_modes,
         }
     }
 
@@ -81,6 +85,10 @@ impl NativeSessionControl {
                 stage,
             ));
         }
+        let effective_settings = self
+            .permission_modes
+            .as_ref()
+            .and_then(|modes| modes.effective_settings(&request.target));
         let inspection = NativeInspectResult {
             target: request.target,
             generation: call.generation,
@@ -88,6 +96,7 @@ impl NativeSessionControl {
             settings_observation: SettingsObservation::Unavailable {
                 reason: SettingsUnavailableReason::ThreadReadOmitsSettings,
             },
+            effective_settings,
             thread: thread.clone(),
         };
         fit_native_result(inspection, budget, stage)

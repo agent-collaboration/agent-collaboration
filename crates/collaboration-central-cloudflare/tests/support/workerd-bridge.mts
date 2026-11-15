@@ -13,6 +13,7 @@ import {
   workerdClockAcknowledgementSchema,
   workerdLauncherTimeSchema,
 } from "../../../../verification/targets/workerd-storage.ts";
+import { constructMiniflareWithOwnedSignalShutdown } from "../../../../verification/test-support/miniflare-signal-shutdown.ts";
 const arguments_ = process.argv.slice(2);
 let milliseconds: number | undefined;
 const launcherIndex = arguments_.indexOf("--launcher-time-ms");
@@ -70,10 +71,11 @@ const host = await WorkerdStorage.start(
       },
   milliseconds === undefined
     ? undefined
-    : (organization: string): number | null => {
+    : (organization: string): number => {
         organizations.add(organization);
-        return milliseconds ?? null;
+        return workerdLauncherTimeSchema.parse(milliseconds);
       },
+  constructMiniflareWithOwnedSignalShutdown,
 );
 
 async function control(

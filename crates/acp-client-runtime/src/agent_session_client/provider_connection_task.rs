@@ -86,6 +86,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         let todo_state = Arc::new(CursorPlanItems::default());
         let task_todo_state = Arc::clone(&todo_state);
         let retirement_todos = Arc::clone(&todo_state);
+        let in_folder_grants = super::in_folder_allowance::InFolderGrants::default();
         let task_runtime_handles = ProviderSessionRuntimeHandles {
             connection_model_reasoning: crate::ModelReasoningMetadata::default(),
             behavior: Arc::clone(&behavior),
@@ -96,6 +97,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             session_settings: Arc::clone(&task_session_settings),
             session_capabilities: Arc::clone(&task_session_capabilities),
             settings_unresolved: Arc::clone(&task_settings_unresolved),
+            in_folder_grants: Arc::clone(&in_folder_grants),
         };
         let task_event_sink = Arc::clone(&event_sink);
         let retirement_event_sink = Arc::clone(&event_sink);
@@ -121,6 +123,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         let callback_elicitation_contexts = Arc::clone(&approval_contexts);
         let callback_elicitation_port = Arc::clone(&interaction_port);
         let task_approval_contexts = Arc::clone(&approval_contexts);
+        let callback_in_folder_grants = Arc::clone(&in_folder_grants);
         let known_sessions = ProviderKnownSessions::default();
         let request_known_sessions = known_sessions.clone();
         let retirement_known_sessions = known_sessions.clone();
@@ -188,6 +191,21 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                         crate::provider_transport_diagnostics::record_callback_entered(crate::provider_transport_diagnostics::ProviderFrameKind::Permission);
                         #[cfg(any(test, feature = "test-observation"))]
                         callback_permission_request_count.fetch_add(1, Ordering::Relaxed);
+                        let in_folder_allowance = super::in_folder_allowance::active_grant(
+                            &callback_in_folder_grants,
+                            request.session_id.0.as_ref(),
+                        )
+                            .and_then(|grant| grant.allow_once(&request.tool_call, &request.options));
+                        if let Some(option_id) = in_folder_allowance {
+                            // Inside the session's own folders auto mode needs no question (R4, Q3).
+                            return responder.respond(
+                                agent_client_protocol::schema::v1::RequestPermissionResponse::new(
+                                    agent_client_protocol::schema::v1::RequestPermissionOutcome::Selected(
+                                        agent_client_protocol::schema::v1::SelectedPermissionOutcome::new(option_id),
+                                    ),
+                                ),
+                            );
+                        }
                         let context = callback_approval_contexts.lock().ok().and_then(|contexts| {
                             contexts.get(request.session_id.0.as_ref()).cloned()
                         });
@@ -456,6 +474,9 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 task_session_capabilities.write().await.remove(&provider_session_id);
                                                 task_session_settings.write().await.remove(&provider_session_id);
                                                 task_settings_unresolved.write().await.remove(&provider_session_id);
+                                                if let Ok(mut grants) = in_folder_grants.write() {
+                                                    grants.remove(&provider_session_id);
+                                                }
                                                 task_tool_registry.turn_ended(&provider_session_id);
                                                 task_todo_state.forget_session(&provider_session_id);
                                             }
@@ -478,9 +499,17 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                 command = command_rx.recv() => {
                                     let Some(command) = command else { break; };
                                     match command {
-                                        ProviderCommand::Create { cwd, settings, reply } => {
-                                            let request = NewSessionRequest::new(&cwd)
+                                        ProviderCommand::Create { cwd, scratch_folder, settings, reply } => {
+                                            let mut request = NewSessionRequest::new(&cwd)
                                                 .mcp_servers(session_mcp_servers.clone());
+                                            if base_capabilities.supports_additional_directories
+                                                && let Some(scratch_folder) = &scratch_folder
+                                            {
+                                                request = request.additional_directories(vec![scratch_folder.clone()]);
+                                            }
+                                            let in_folder = scratch_folder.as_deref().and_then(|scratch_folder| {
+                                                super::in_folder_allowance::InFolderGrant::new(&cwd, scratch_folder)
+                                            });
                                             let pending_connection = connection.clone();
                                             let pending_shutdown = task_shutdown.clone();
                                             let pending_admission_tx = admission_tx.clone();
@@ -493,6 +522,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 run_create_admission(CreateAdmissionInputs {
                                                     connection: pending_connection,
                                                     request,
+                                                    in_folder,
                                                     requested_settings: settings,
                                                     supports_close,
                                                     shutdown: pending_shutdown,

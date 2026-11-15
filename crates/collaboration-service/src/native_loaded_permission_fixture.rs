@@ -172,7 +172,7 @@ pub(super) fn policy_server(
                         } else {
                             scenario.loaded
                         };
-                        let mut response = json!({"thread":{"id":THREAD,"cwd":cwd},"cwd":cwd,"activePermissionProfile":{"id":"router-workspace-write"},"sandbox":{"type":"workspaceWrite","networkAccess":true,"writableRoots":if matches!(policy, ReplyPolicy::Matching) {roots.clone()} else {vec![]}}});
+                        let mut response = json!({"thread":{"id":THREAD,"cwd":cwd},"cwd":cwd,"activePermissionProfile":{"id":"router-workspace-write"},"sandbox":{"type":"workspaceWrite","networkAccess":true,"excludeTmpdirEnvVar":true,"excludeSlashTmp":true,"writableRoots":if matches!(policy, ReplyPolicy::Matching) {roots.clone()} else {vec![]}}});
                         if matches!(policy, ReplyPolicy::MissingDirectory) {
                             response.as_object_mut().unwrap().remove("cwd");
                         }

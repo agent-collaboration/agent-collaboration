@@ -42,6 +42,8 @@ pub struct AcpConversation {
     load_supported: bool,
     failed: bool,
     pub(crate) permission_differences: Vec<collaboration_protocol::PermissionDifference>,
+    /// The actual permission mode a created Codex session reported (R3).
+    pub(crate) permission_mode: Option<collaboration_protocol::CodexPermissionModeReport>,
 }
 impl AcpConversation {
     pub async fn create_and_prompt(
@@ -211,6 +213,7 @@ impl AcpConversation {
             created_by: None,
             approver: None,
             root_message_id: None,
+            mode: None,
         };
         let target = self
             .open_session_with_context(&create, &mut emit, SetupUpdateDelivery::Discard)
@@ -281,6 +284,7 @@ impl AcpConversation {
             load_supported: false,
             failed: false,
             permission_differences: Vec::new(),
+            permission_mode: None,
         };
         let initialize = json!({"protocolVersion":1,"clientCapabilities":{},"clientInfo":{"name":"agent-collaboration","version":env!("CARGO_PKG_VERSION")}});
         client

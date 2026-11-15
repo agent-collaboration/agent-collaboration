@@ -12,22 +12,75 @@ use workspace_model::{
 fn text(value: impl ToString) -> SqlValue {
     SqlValue::Text(value.to_string())
 }
+
+fn identity_fields(identity: &Identity) -> Result<(&'static str, String), StoreFailure> {
+    let kind = match identity {
+        Identity::AgentSession { .. } => "agentSession",
+        Identity::RouterComponent { .. } => "routerComponent",
+        Identity::Person { .. } => "person",
+    };
+    let encoded = serde_json_canonicalizer::to_string(identity).map_err(|_| corrupt("identity"))?;
+    Ok((kind, encoded))
+}
+
+fn identity_lookup(kind: &str, encoded: &str) -> Statement {
+    Statement {
+        sql: "SELECT actor_identity_id FROM actor_identities WHERE identity_kind=? AND identity=?",
+        args: vec![text(kind), text(encoded)],
+    }
+}
+
+fn identity_insert(actor: &ActorIdentityId, kind: &str, encoded: &str, now: &str) -> Statement {
+    Statement {
+        sql: "INSERT INTO actor_identities (actor_identity_id,identity_kind,identity,created_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(identity_kind,identity) DO NOTHING",
+        args: vec![text(actor), text(kind), text(encoded), text(now), text(now)],
+    }
+}
+
+/// A new caller identity joins the same atomic batch as its retained outcome.
+pub(crate) struct ActorIdentityPlan {
+    pub actor: ActorIdentityId,
+    pub statements: Vec<GuardedStatement>,
+}
+
 impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+    /// Caller holds the org turn and supplies its sole applying time sample.
+    pub(crate) async fn prepare_identity(
+        &self,
+        identity: &Identity,
+        now: workspace_model::Timestamp,
+    ) -> Result<ActorIdentityPlan, StoreFailure> {
+        let (kind, encoded) = identity_fields(identity)?;
+        let rows = self.host.read(identity_lookup(kind, &encoded)).await?;
+        if rows.rows.len() > 1 {
+            return Err(corrupt("actor_identities.identity"));
+        }
+        if let Some(row) = rows.rows.first() {
+            let actor = string(&rows, row, "actor_identity_id")?
+                .parse()
+                .map_err(|_| corrupt("actor_identities.actor_identity_id"))?;
+            return Ok(ActorIdentityPlan {
+                actor,
+                statements: vec![],
+            });
+        }
+        let actor: ActorIdentityId = self.mint()?;
+        let statement = identity_insert(&actor, kind, &encoded, &now.to_rfc3339());
+        Ok(ActorIdentityPlan {
+            actor,
+            statements: vec![GuardedStatement {
+                statement,
+                expect: RowExpectation::Exactly(1),
+            }],
+        })
+    }
+
     pub(crate) async fn resolve_identity(
         &self,
         identity: &Identity,
     ) -> Result<ActorIdentityId, StoreFailure> {
-        let kind = match identity {
-            Identity::AgentSession { .. } => "agentSession",
-            Identity::RouterComponent { .. } => "routerComponent",
-            Identity::Person { .. } => "person",
-        };
-        let encoded =
-            serde_json_canonicalizer::to_string(identity).map_err(|_| corrupt("identity"))?;
-        let lookup = || Statement {
-            sql: "SELECT actor_identity_id FROM actor_identities WHERE identity_kind=? AND identity=?",
-            args: vec![text(kind), text(&encoded)],
-        };
+        let (kind, encoded) = identity_fields(identity)?;
+        let lookup = || identity_lookup(kind, &encoded);
         let existing = self.host.read(lookup()).await?;
         if let Some(row) = existing.rows.first() {
             return string(&existing, row, "actor_identity_id")?
@@ -38,16 +91,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         let now = self.now()?.to_rfc3339();
         let batch = StatementBatch {
             statements: vec![GuardedStatement {
-                statement: Statement {
-                    sql: "INSERT INTO actor_identities (actor_identity_id,identity_kind,identity,created_at,updated_at) VALUES (?,?,?,?,?) ON CONFLICT(identity_kind,identity) DO NOTHING",
-                    args: vec![
-                        text(&minted),
-                        text(kind),
-                        text(&encoded),
-                        text(&now),
-                        text(now),
-                    ],
-                },
+                statement: identity_insert(&minted, kind, &encoded, &now),
                 expect: RowExpectation::Any,
             }],
             alarm: AlarmUpdate::Unchanged,

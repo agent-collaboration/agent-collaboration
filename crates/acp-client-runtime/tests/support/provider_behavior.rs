@@ -27,6 +27,9 @@ impl ProviderBehavior for TestProviderBehavior {
             acp_client_runtime::ModelReasoningUnknown::UnsupportedSource,
         )
     }
+    fn auto_permission_mode(&self) -> acp_client_runtime::AutoPermissionMode {
+        acp_client_runtime::AutoPermissionMode::UNREALIZED
+    }
     fn observe(&self, _: ProviderUpdate) -> Result<ProviderFacts, ProviderError> {
         Ok(ProviderFacts::default())
     }

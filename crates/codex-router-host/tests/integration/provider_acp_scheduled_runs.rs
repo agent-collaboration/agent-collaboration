@@ -277,6 +277,7 @@ async fn busy_provider_run_starts_when_idle_and_finishes_without_summary() {
                 binding_generation: generation.generation,
                 runtime: runtime_identity,
                 capabilities,
+                auto_realization: None,
             }],
         })
         .expect("endpoint publication");

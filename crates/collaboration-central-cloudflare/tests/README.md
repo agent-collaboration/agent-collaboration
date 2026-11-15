@@ -99,8 +99,9 @@ Cases cover stamp and record atomicity, expiry and predecessor checks, current
 revision floors, signed person reads, fresh proofs, causal races, cold reopen,
 query-derived alarm activation and safe refusal observations. Public-path refusal
 uses the existing `401` edge contract. Unknown private paths return `404`.
-Create-workspace effects, non-null lookup and machine-login approval replay remain
-held; independent read admission does not substitute for those effects.
+Setup cases exercise real signed create, non-null lookup, byte-identical replay,
+canonical name collisions, atomic directory/ledger/audit writes and facts-only
+digest reads outside both time bounds. Machine-login approval replay remains held.
 
 `workspace_requests::workerd_host::tests` also checks the fixture's control HTTP
 connection policy against real workerd. A byte-transparent relay observes upstream
@@ -116,6 +117,8 @@ The bridge observes EOF as disposal; Rust's sole child owner waits and reaps.
 The harness never kills
 only the bridge; nextest bounds the whole test process group if disposal stalls.
 No nested bridge process group escapes nextest's termination.
+
+Standalone modern and legacy bridges remove Miniflare’s unawaited signal hooks at their one constructor and await disposal before signal exit. In-process TypeScript loaders keep their existing multi-runtime policy. `verification/targets/workerd-bridge-lifecycle.test.ts` permanently holds real SIGTERM disposal at an IPC gate, checks retained listener behavior and child exit, and checks cleanup before a missing-hook refusal. See [the pinned upstream workaround](../../../docs/upstream-workarounds/2026-11-14-miniflare-sigterm-unawaited-dispose.md) for scope and removal evidence.
 
 `support/lifecycle-nextest.toml` belongs only to explicit lifecycle negative
 controls. It does not alter normal CI deadlines. The `WORKERD_LIFECYCLE_CHILD`

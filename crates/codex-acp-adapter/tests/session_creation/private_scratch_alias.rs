@@ -261,7 +261,7 @@ async fn assert_private_scratch_binding(
     assert_eq!(binding.session_id(), "scratch-alias-thread");
     assert_eq!(
         binding.new_session_result(),
-        json!({"sessionId":"scratch-alias-thread"})
+        json!({"sessionId":"scratch-alias-thread","_meta":{"codexRouter":{"permissionMode":{"access":"write-restricted","actual":"write-restricted","reason":"autoNotRealized"}}}})
     );
     assert!(
         reported_granted,
