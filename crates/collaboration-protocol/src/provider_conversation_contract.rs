@@ -701,9 +701,13 @@ pub enum ConversationOutputUnavailableReason {
     rename_all_fields = "camelCase",
     deny_unknown_fields
 )]
-#[expect(
-    clippy::large_enum_variant,
-    reason = "a settled output is the common wait result; the other variants are small markers of this wire shape"
+// The variant size gap clears the lint threshold only on 64-bit targets.
+#[cfg_attr(
+    not(target_arch = "wasm32"),
+    expect(
+        clippy::large_enum_variant,
+        reason = "a settled output is the common wait result; the other variants are small markers of this wire shape"
+    )
 )]
 pub enum ConversationOperationWaitOutput {
     Pending,
