@@ -1,6 +1,4 @@
 //! Central's typed mail and timer contract; delivery belongs to a later boundary.
-use std::num::NonZeroU32;
-
 use agent_automation::TimingRule;
 use serde::{Deserialize, Serialize};
 use workspace_ids::{
@@ -25,12 +23,16 @@ pub struct CentralMailRequest {
     deny_unknown_fields
 )]
 pub enum CentralMailOperation {
+    SetNoticeCadence {
+        cadence: workspace_model::NoticeCadence,
+    },
     SendMessage {
         to: SessionAddress,
         body: PostText,
     },
     SetWake {
         target: SessionAddress,
+        /// Future UTC five-minute mark, with zero fractional seconds, within seven days.
         due_at: Timestamp,
         text: PostText,
     },
@@ -39,6 +41,8 @@ pub enum CentralMailOperation {
     },
     SetAutomation {
         target: SessionAddress,
+        /// At uses UTC five-minute marks; durations are positive multiples of 300
+        /// seconds; cron selects only five-minute values and UTC-aligned occurrences.
         timing: TimingRule,
         text: PostText,
     },
@@ -55,6 +59,9 @@ pub enum CentralMailOperation {
     deny_unknown_fields
 )]
 pub enum CentralMailAnswer {
+    NoticeCadenceSet {
+        cadence: workspace_model::NoticeCadence,
+    },
     Queued {
         message_id: MessageId,
     },
@@ -100,15 +107,42 @@ pub enum CentralMailResult {
     deny_unknown_fields
 )]
 pub enum CentralMailRefusal {
-    TimeOutOfRange { field: String },
+    NotSession,
+    TimeOutOfRange {
+        field: String,
+    },
+    TimingViolation {
+        field: String,
+        requirement: TimingRequirement,
+    },
     Workspace(RefusalReason),
-    UnknownSession { target: SessionAddress },
+    UnknownSession {
+        target: SessionAddress,
+    },
     NoOccurrence,
-    InvalidInput { field: String },
-    WakeNotFound { wake_id: WakeId },
-    WakeAlreadyFired { wake_id: WakeId },
-    AutomationNotFound { automation_id: AutomationId },
-    AutomationAlreadyDone { automation_id: AutomationId },
+    InvalidInput {
+        field: String,
+    },
+    WakeNotFound {
+        wake_id: WakeId,
+    },
+    WakeAlreadyFired {
+        wake_id: WakeId,
+    },
+    AutomationNotFound {
+        automation_id: AutomationId,
+    },
+    AutomationAlreadyDone {
+        automation_id: AutomationId,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TimingRequirement {
+    FiveMinuteGrid,
+    WithinSevenDays,
+    FutureTime,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -138,6 +172,8 @@ pub enum MessageBody {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NoticeItem {
+    pub workspace_id: WorkspaceId,
+    pub thread_id: Option<ThreadId>,
     pub change_id: ChangeId,
     pub position: ChangePosition,
     pub item: ItemRef,
@@ -188,6 +224,14 @@ pub struct MessageRecord {
     pub updated_at: Timestamp,
 }
 
+/// Non-destructive view of one session's queued messages in stable UUIDv7 order.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SessionQueue {
+    pub session: SessionAddress,
+    pub messages: Vec<MessageRecord>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct NoticeSource {
@@ -211,33 +255,6 @@ pub enum AutomationState {
     Active,
     Done,
     Disabled,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MailPolicy {
-    notification_window_seconds: NonZeroU32,
-}
-
-impl MailPolicy {
-    #[must_use]
-    pub const fn new(notification_window_seconds: NonZeroU32) -> Self {
-        Self {
-            notification_window_seconds,
-        }
-    }
-
-    #[must_use]
-    pub const fn window_seconds(self) -> u32 {
-        self.notification_window_seconds.get()
-    }
-}
-
-impl Default for MailPolicy {
-    fn default() -> Self {
-        Self {
-            notification_window_seconds: NonZeroU32::new(900).unwrap_or(NonZeroU32::MIN),
-        }
-    }
 }
 
 #[cfg(test)]

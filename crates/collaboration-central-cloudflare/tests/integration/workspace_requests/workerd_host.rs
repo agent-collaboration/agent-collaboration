@@ -455,6 +455,13 @@ impl RemoteRuntime {
         self.apply_clock().await;
         self.control("drain", workspace).await?
     }
+    pub async fn queued_for_session(
+        &self,
+        session: &workspace_model::SessionAddress,
+    ) -> Result<collaboration_protocol::central_mail::SessionQueue, StoreFailure> {
+        self.apply_clock().await;
+        self.control("queue", session).await?
+    }
     pub async fn on_alarm(&self) -> Result<AlarmResult, StoreFailure> {
         self.apply_clock().await;
         let _: bool = self
@@ -462,6 +469,16 @@ impl RemoteRuntime {
             .await?;
         let receipt: AlarmReceipt = self.control("raw-until-alarm", &()).await?;
         receipt.into_result(&self.organization, false)
+    }
+    pub async fn dispatch_due_alarm(&self) -> Result<Option<AlarmResult>, StoreFailure> {
+        let dispatched: bool = self
+            .control("raw-dispatch-due", &self.clock.now().unix_millis())
+            .await?;
+        if !dispatched {
+            return Ok(None);
+        }
+        let receipt: AlarmReceipt = self.control("raw-until-alarm", &()).await?;
+        receipt.into_result(&self.organization, false).map(Some)
     }
     pub async fn cold_alarm(&self) -> Result<AlarmResult, StoreFailure> {
         let _: bool = self.control("raw-clear-alarm-receipt", &()).await?;

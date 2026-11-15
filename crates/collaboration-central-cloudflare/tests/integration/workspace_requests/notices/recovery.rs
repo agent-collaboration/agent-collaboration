@@ -34,7 +34,7 @@ async fn drain_commit_crash_retries_through_cold_platform_alarm() {
             }
         });
         let _: bool = runtime.control("until-held", &pause).await.unwrap();
-        let rows = runtime.read(Statement { sql: "SELECT COUNT(*) FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice'", args: vec![text(&actor), text(&thread)] }).await.unwrap();
+        let rows = runtime.read(Statement { sql: "SELECT COUNT(*) FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?", args: vec![text(&actor), text(&thread)] }).await.unwrap();
         assert_eq!(
             rows.rows,
             vec![vec![SqlValue::Integer(before.try_into().unwrap())]]
@@ -46,7 +46,7 @@ async fn drain_commit_crash_retries_through_cold_platform_alarm() {
         f.clock.0.fetch_add(5_000, Ordering::SeqCst);
         let cold = f.host.cold_runtime(&f.caller.organization_id);
         cold.cold_alarm().await.unwrap();
-        let rows = cold.read(Statement { sql: "SELECT COUNT(*) FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND state='queued'", args: vec![text(&actor), text(&thread)] }).await.unwrap();
+        let rows = cold.read(Statement { sql: "SELECT COUNT(*) FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?", args: vec![text(&actor), text(&thread)] }).await.unwrap();
         assert_eq!(
             rows.rows,
             vec![vec![SqlValue::Integer(1.try_into().unwrap())]]
@@ -103,7 +103,7 @@ async fn applied_write_recovers_by_cold_alarm_without_another_request() {
     f.clock.0.fetch_add(5_000, Ordering::SeqCst);
     let cold = f.host.cold_runtime(&f.caller.organization_id);
     assert_eq!(cold.cold_alarm().await.unwrap().workspaces_drained, 1);
-    let rows = cold.read(Statement { sql: "SELECT drain_due_at,(SELECT COUNT(*) FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND state='queued') FROM workspace_drains WHERE workspace_id=?", args: vec![text(&actor), text(&thread), text(&f.workspace)] }).await.unwrap();
+    let rows = cold.read(Statement { sql: "SELECT drain_due_at,(SELECT COUNT(*) FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?) FROM workspace_drains WHERE workspace_id=?", args: vec![text(&actor), text(&thread), text(&f.workspace)] }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![
@@ -201,7 +201,7 @@ async fn restart_behind_clock_drains_by_position_and_exposes_change_in_inbox() {
         .await
         .unwrap();
     assert_eq!(cursor.rows[0][0], stored.rows[0][0]);
-    let notice = cold.read(Statement { sql: "SELECT source_change_id FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice'", args: vec![text(&actor), text(&thread)] }).await.unwrap();
+    let notice = cold.read(Statement { sql: "SELECT i.change_id FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE w.recipient_actor=? AND i.thread_id=?", args: vec![text(&actor), text(&thread)] }).await.unwrap();
     assert_eq!(notice.rows, vec![vec![text(&later)]]);
     let posted_position: m::ChangePosition =
         u64::try_from(position.get()).unwrap().try_into().unwrap();
@@ -298,7 +298,7 @@ async fn drain_crash_cuts_keep_three_change_positions_and_notice_identities_atom
         let _: bool = runtime.control("until-held", &pause).await.unwrap();
         let at_cut = runtime.read(cursor_query()).await.unwrap();
         let messages_query = || Statement {
-            sql: "SELECT message_id,source_change_id,recipient_actor FROM messages WHERE source_thread_id=? AND recipient_actor=? AND message_kind='notice' ORDER BY source_change_id",
+            sql: "SELECT i.window_item_id,i.change_id,w.recipient_actor FROM notification_window_items i JOIN notification_windows w ON w.window_id=i.window_id WHERE i.thread_id=? AND w.recipient_actor=? ORDER BY i.change_id",
             args: vec![text(&thread), text(&recipient)],
         };
         let at_cut_messages = runtime.read(messages_query()).await.unwrap();

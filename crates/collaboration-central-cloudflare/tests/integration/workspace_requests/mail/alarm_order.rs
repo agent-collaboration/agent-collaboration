@@ -9,8 +9,8 @@ async fn earlier_wake_queued_behind_timer_commit_owns_next_physical_alarm() {
     let f = Fixture::new().await;
     let runtime = f.host.central(&f.caller.organization_id).await;
     let now = f.clock.0.load(Ordering::SeqCst);
-    let later = chrono::DateTime::from_timestamp_millis(now + 120_000).unwrap();
-    let earlier = chrono::DateTime::from_timestamp_millis(now + 60_000).unwrap();
+    let later = chrono::DateTime::from_timestamp_millis(now + 600_000).unwrap();
+    let earlier = chrono::DateTime::from_timestamp_millis(now + 300_000).unwrap();
     let wake = |due_at| CentralMailOperation::SetWake {
         target: session(&f.caller),
         due_at,

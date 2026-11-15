@@ -67,7 +67,7 @@ pub(crate) fn insert_message(
     ))
 }
 impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
-    pub(crate) fn queued_message(
+    pub(crate) fn prepare_message_record(
         &self,
         sender: mail::MessageSender,
         target: SessionAddress,

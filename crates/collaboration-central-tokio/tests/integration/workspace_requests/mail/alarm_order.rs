@@ -15,8 +15,8 @@ async fn earlier_timer_waits_for_old_publication_and_becomes_the_driver_deadline
         .await
         .unwrap();
     let start = fixture.clock.utc_now();
-    let earlier = start + chrono::Duration::seconds(60);
-    let later = start + chrono::Duration::seconds(120);
+    let earlier = start + chrono::Duration::seconds(300);
+    let later = start + chrono::Duration::seconds(600);
     let make_request = |number, due_at| CentralMailRequest {
         request_id: id(number),
         operation: Operation::SetWake {
@@ -70,9 +70,9 @@ async fn earlier_timer_waits_for_old_publication_and_becomes_the_driver_deadline
         .hold_central(collaboration_central_core::PausePoint::AfterTimerCommit);
     fixture
         .clock
-        .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(60)))
+        .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(300)))
         .await;
-    fixture.clock.advance(Duration::from_secs(60)).unwrap();
+    fixture.clock.advance(Duration::from_secs(300)).unwrap();
     timer_commit.until_held().await;
     let rows = runtime
         .statement_host()

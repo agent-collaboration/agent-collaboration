@@ -15,7 +15,7 @@ async fn set_wake(
     fixture: &Fixture,
     request_id: u32,
 ) -> (workspace_ids::WakeId, workspace_model::Timestamp) {
-    let due = fixture.clock.utc_now() + chrono::Duration::seconds(60);
+    let due = fixture.clock.utc_now() + chrono::Duration::seconds(300);
     let operation = Operation::SetWake {
         target: session(&fixture.caller),
         due_at: due,

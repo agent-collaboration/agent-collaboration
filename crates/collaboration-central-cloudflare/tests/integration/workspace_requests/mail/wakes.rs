@@ -29,7 +29,7 @@ async fn actual_alarm_fires_simultaneous_wakes_once_and_excludes_cancelled() {
     let fixture = Fixture::new().await;
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
     let now = fixture.clock.0.load(Ordering::SeqCst);
-    let due = chrono::DateTime::from_timestamp_millis(now + 60_000).unwrap();
+    let due = chrono::DateTime::from_timestamp_millis(now + 300_000).unwrap();
     let target = session(&fixture.caller);
     let wake = || Operation::SetWake {
         target: target.clone(),

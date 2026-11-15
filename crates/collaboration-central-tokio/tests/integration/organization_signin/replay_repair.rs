@@ -26,7 +26,11 @@ async fn known_provisioning_commit_reconciles_on_same_host_and_failed_repair_is_
         caller: workspace_model::Caller::Session(target.clone()),
         credential_hash: "signin-fixture-hash".to_owned(),
     };
-    let due = f.clock.utc_now() + chrono::Duration::seconds(60);
+    let due = chrono::DateTime::from_timestamp(
+        (f.clock.utc_now().timestamp().div_euclid(300) + 1) * 300,
+        0,
+    )
+    .ok_or("wake grid mark exceeds timestamp range")?;
     let wake = f
         .host
         .request_central(
