@@ -4,23 +4,38 @@ use message_board::{Description, ResourceName, WorkspaceId, WorkspaceState};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-/// The historical wire view; creating it from modern storage remains held
-/// until the workspace description representation is approved.
+/// The verified admin view of the org-owned workspace directory.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WorkspaceView {
     pub workspace_id: WorkspaceId,
     pub name: ResourceName,
+    #[serde(deserialize_with = "crate::person_request::deserialize_description")]
+    #[schemars(schema_with = "crate::person_request::description_schema")]
     pub description: Description,
     pub state: WorkspaceState,
 }
 
 /// Verification failures become a bare 401; answered operations have a body.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum OrganizationAdminAnswer {
     Answered(OrganizationAdminResult),
+    Retained(RetainedOrganizationAdminAnswer),
     Unauthenticated,
+}
+
+/// Validated retained JSON travels to HTTP without another serialization.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct RetainedOrganizationAdminAnswer {
+    text: String,
+}
+impl RetainedOrganizationAdminAnswer {
+    pub(crate) fn validated(text: String) -> Self {
+        Self { text }
+    }
+    pub(crate) fn into_text(self) -> String {
+        self.text
+    }
 }
 
 /// The closed body of a 200 on an admin route.
@@ -32,10 +47,8 @@ pub enum OrganizationAdminAnswer {
     deny_unknown_fields
 )]
 pub enum OrganizationAdminResult {
-    /// Retained as a wire contract; the create-workspace route remains held.
     Applied {
         workspace: WorkspaceView,
-        already_existed: bool,
     },
     Found {
         workspace: Option<WorkspaceView>,
@@ -51,6 +64,7 @@ pub enum OrganizationAdminResult {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum AdminRefusal {
+    NameInUse,
     NotPermitted,
     SecondFactorRequired,
     RefreshRequired,

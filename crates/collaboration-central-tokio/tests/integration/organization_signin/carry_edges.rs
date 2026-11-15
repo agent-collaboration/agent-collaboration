@@ -137,11 +137,23 @@ async fn injected_clock_reaches_a_never_named_org_and_a_live_org_renewal_then_ex
     f.clock.advance(Duration::from_secs(
         (expiry - (signed::NOW_SECONDS + MOVE_SECONDS)).try_into()?,
     ))?;
+    let facts = f.digest(A).await?;
     assert_eq!(
-        f.digest(A).await?.status,
-        503,
-        "the still-live org refuses its stored stamp exactly at exp"
+        facts.status, 200,
+        "R29 facts remain readable exactly at exp"
     );
+    assert_eq!(
+        facts.value()?,
+        json!({"digest":signed::digest(&renewal),"expiresAt":expiry,"signingKeyId":"stamp-a"})
+    );
+    let denied = f
+        .post(REVISIONS, &organization_floor(A, 1, "active"))
+        .await?;
+    assert_eq!(
+        denied.status, 503,
+        "facts read must not authorize a revision push at expiry"
+    );
+    assert!(denied.body.is_empty());
     assert_eq!(
         f.digest(B).await?.status,
         200,
@@ -152,7 +164,7 @@ async fn injected_clock_reaches_a_never_named_org_and_a_live_org_renewal_then_ex
 
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "A valid stored statement is refused at expiry after cold reopen while an unaffected org remains usable."
+    reason = "R29 returns verified stored facts at expiry after cold reopen, while authorization remains refused."
 )]
 #[tokio::test]
 async fn cold_expired_valid_stamp_refuses_and_an_unaffected_organization_stays_readable() -> Result
@@ -175,11 +187,23 @@ async fn cold_expired_valid_stamp_refuses_and_an_unaffected_organization_stays_r
     let before = f.snapshot().await?;
     f.clock.advance(Duration::from_secs(2))?;
     f.reopen().await?;
+    let facts = f.digest(A).await?;
     assert_eq!(
-        f.digest(A).await?.status,
-        503,
-        "a valid stored stamp observed cold at exp is refused"
+        facts.status, 200,
+        "a valid stored stamp's facts remain readable cold at exp"
     );
+    assert_eq!(
+        facts.value()?,
+        json!({"digest":signed::digest(&short),"expiresAt":signed::NOW_SECONDS+2,"signingKeyId":"stamp-a"})
+    );
+    let denied = f
+        .post(REVISIONS, &organization_floor(A, 1, "active"))
+        .await?;
+    assert_eq!(
+        denied.status, 503,
+        "cold facts read grants no Valid standing"
+    );
+    assert!(denied.body.is_empty());
     assert_eq!(
         f.digest(B).await?.status,
         200,
