@@ -2,6 +2,7 @@
 // Redirect exactly the fixture issuer's certs fetch to the owned HTTP server.
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
+import { constructMiniflareWithOwnedSignalShutdown } from "../../verification/test-support/miniflare-signal-shutdown.ts";
 import publicTemplate from "../../crates/collaboration-central-cloudflare/cloudflare.config.ts";
 
 const [miniflareEntrypoint, persistence, portText, jwksUrl, holderTimeout, copyWait, relayPeer] =
@@ -52,60 +53,61 @@ for (const name of Object.keys(replacements)) {
 const { Miniflare, Response, Log, LogLevel, convertV4MiniflareOptions } = await import(
   pathToFileURL(miniflareEntrypoint).href
 );
-const runtime = new Miniflare(
-  convertV4MiniflareOptions({
-    host: "127.0.0.1",
-    port: Number(portText),
-    resourcePersistencePath: resolve(persistence),
-    cf: false,
-    log: new Log(LogLevel.INFO),
-    workers: [
-      {
-        name: "collaboration-central-local-test",
-        compatibilityDate: "2026-08-21",
-        modulesRoot: resolve("crates/collaboration-central-cloudflare/build"),
-        modules: [
+const runtime = await constructMiniflareWithOwnedSignalShutdown(
+  () =>
+    new Miniflare(
+      convertV4MiniflareOptions({
+        host: "127.0.0.1",
+        port: Number(portText),
+        resourcePersistencePath: resolve(persistence),
+        cf: false,
+        log: new Log(LogLevel.INFO),
+        workers: [
           {
-            type: "ESModule",
-            path: resolve("crates/collaboration-central-cloudflare/build/index.js"),
-          },
-          {
-            type: "CompiledWasm",
-            path: resolve("crates/collaboration-central-cloudflare/build/index_bg.wasm"),
+            name: "collaboration-central-local-test",
+            compatibilityDate: "2026-08-21",
+            modulesRoot: resolve("crates/collaboration-central-cloudflare/build"),
+            modules: [
+              {
+                type: "ESModule",
+                path: resolve("crates/collaboration-central-cloudflare/build/index.js"),
+              },
+              {
+                type: "CompiledWasm",
+                path: resolve("crates/collaboration-central-cloudflare/build/index_bg.wasm"),
+              },
+            ],
+            durableObjects: {
+              PROJECT_COPIES: { className: "ProjectCopyObject", useSQLite: true },
+              FLEET: { className: "FleetObject", useSQLite: true },
+              SCHEMA_PROBES: { className: "BootstrapObject", useSQLite: true },
+            },
+            bindings: templateBindings,
+            cacheAPI: true,
+            outboundService: async (request) => {
+              if (
+                request.url !== "https://conformance-test.cloudflareaccess.com/cdn-cgi/access/certs"
+              ) {
+                throw new Error("Unexpected external fetch in isolated central test");
+              }
+              const response = await fetch(fixture);
+              return new Response(await response.arrayBuffer(), {
+                status: response.status,
+                headers: response.headers,
+              });
+            },
           },
         ],
-        durableObjects: {
-          PROJECT_COPIES: { className: "ProjectCopyObject", useSQLite: true },
-          FLEET: { className: "FleetObject", useSQLite: true },
-          SCHEMA_PROBES: { className: "BootstrapObject", useSQLite: true },
-        },
-        bindings: templateBindings,
-        cacheAPI: true,
-        outboundService: async (request) => {
-          if (
-            request.url !== "https://conformance-test.cloudflareaccess.com/cdn-cgi/access/certs"
-          ) {
-            throw new Error("Unexpected external fetch in isolated central test");
-          }
-          const response = await fetch(fixture);
-          return new Response(await response.arrayBuffer(), {
-            status: response.status,
-            headers: response.headers,
-          });
-        },
-      },
-    ],
-  }),
+      }),
+    ),
 );
 
 async function stop() {
   await runtime.dispose();
   process.exitCode = 0;
 }
-process.once("SIGINT", stop);
-process.once("SIGTERM", stop);
 // Rust owns this pipe. Parent failure and ordinary Drop both close it; keep
-// Miniflare's exit hooks available rather than killing only the bridge.
+// the bridge's awaited disposal path rather than killing only the bridge.
 process.stdin.resume();
 process.stdin.once("end", stop);
 await runtime.ready;
