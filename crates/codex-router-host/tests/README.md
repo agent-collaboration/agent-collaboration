@@ -17,7 +17,9 @@ the board cursor key the composition installed.
 `runtime_shutdown_stalled_provider_load` starts an enrolled Host whose Cursor
 provider never answers `session/load`, lets a Wake follow batch reach that load,
 and requires Host shutdown to return anyway. After a provider-less restart, the
-reader's subscription view must show that cut-off delivery as outcome-unknown.
+reader's subscription view must show that cut-off delivery as outcome-unknown,
+written either by shutdown or by durable mail recovery (the test does not tell
+which): neither lost nor recorded delivered, so reconcile has it to settle.
 Runtime replacement cases hold a real status probe across an app-server schema
 change and require one Unavailable terminal for each cancelled operator request.
 Library unit tests remain colocated with their implementations.

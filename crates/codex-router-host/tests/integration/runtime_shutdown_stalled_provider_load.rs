@@ -15,8 +15,9 @@ use message_board::{SubscriptionDeliveryOutcome, WhenIdle};
 use std::os::unix::fs::PermissionsExt as _;
 use tokio::io::AsyncReadExt as _;
 
-/// The provider receives `session/load` and never answers it. Shutdown must still end:
-/// the in-flight follow delivery is cut off and settles outcome-unknown.
+/// The provider receives `session/load` and never answers it. Shutdown must still end.
+/// After a restart the cut-off delivery is recorded outcome-unknown, written either by
+/// shutdown or by durable mail recovery; this test does not tell which.
 #[tokio::test]
 async fn shutdown_completes_while_follow_delivery_waits_on_unanswered_provider_load() {
     // Arrange: an enrolled Host whose Cursor provider never answers `session/load`.
@@ -123,9 +124,10 @@ async fn shutdown_completes_while_follow_delivery_waits_on_unanswered_provider_l
     // Act: shut the Host down while that load is still unanswered.
     let shutdown = runtime.shutdown().await;
 
-    // Assert: shutdown returned rather than waiting on the provider, and the cut-off
-    // delivery is stored outcome-unknown, so reconcile has something to reconcile. The
-    // restarted Host has no providers, so nothing can attempt the load again.
+    // Assert: shutdown returned rather than waiting on the provider. After a provider-less
+    // restart (nothing can attempt the load again) the cut-off delivery is recorded
+    // outcome-unknown, by shutdown or by durable recovery: neither lost nor recorded
+    // delivered, so reconcile has it to settle.
     shutdown.expect("Host shutdown");
     let restarted = CollaborationRuntime::start_with_external_providers(
         host_inputs(root.path(), &central),
