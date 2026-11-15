@@ -6,8 +6,8 @@ use crate::{
     workspace_row_codec::{json, string},
 };
 use central_storage::{BatchOutcome, StatementBatch, StoreFailure};
-use collaboration_protocol::central_mail as mail;
 use workspace_model as m;
+use workspace_model::central_mail as mail;
 impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
     pub async fn request_central(
         &self,

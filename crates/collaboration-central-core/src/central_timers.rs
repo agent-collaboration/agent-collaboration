@@ -7,7 +7,7 @@ use crate::{
     workspace_decode_error::corrupt,
 };
 use central_storage::{SqlValue, Statement, StatementBatch, StoreFailure};
-use collaboration_protocol::central_mail as mail;
+use workspace_model::central_mail as mail;
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]

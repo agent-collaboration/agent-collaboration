@@ -1,10 +1,10 @@
 use super::*;
-use collaboration_protocol::central_mail::{
+use router_clock::ClockInstant;
+use std::time::Duration;
+use workspace_model::central_mail::{
     CentralMailAnswer, CentralMailOperation, CentralMailRequest, CentralMailResult, MessageBody,
     MessageSender,
 };
-use router_clock::ClockInstant;
-use std::time::Duration;
 
 #[tokio::test]
 async fn leaving_cancels_the_fired_collated_notice_and_retains_direct_message() {

@@ -3,7 +3,7 @@ use super::super::{Statement, support::*};
 use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, StatementBatch,
 };
-use collaboration_protocol::central_mail::{
+use workspace_model::central_mail::{
     CentralMailAnswer as Answer, CentralMailOperation as Operation, CentralMailRefusal as Refusal,
     CentralMailRequest, CentralMailResult as Result,
 };
@@ -102,12 +102,12 @@ async fn out_of_range_grid_and_horizon_refusals_write_nothing_and_seven_days_is_
         (
             1602,
             ceiling,
-            collaboration_protocol::central_mail::TimingRequirement::FiveMinuteGrid,
+            workspace_model::central_mail::TimingRequirement::FiveMinuteGrid,
         ),
         (
             1603,
             last_grid,
-            collaboration_protocol::central_mail::TimingRequirement::WithinSevenDays,
+            workspace_model::central_mail::TimingRequirement::WithinSevenDays,
         ),
     ] {
         let refused = fixture

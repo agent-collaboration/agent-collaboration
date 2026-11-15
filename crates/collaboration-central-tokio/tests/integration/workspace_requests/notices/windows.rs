@@ -1,7 +1,7 @@
 use super::*;
-use collaboration_protocol::central_mail::{MessageBody, MessageSender, NoticeItem};
 use router_clock::ClockInstant;
 use std::time::Duration;
+use workspace_model::central_mail::{MessageBody, MessageSender, NoticeItem};
 
 #[tokio::test]
 async fn first_activity_deadline_collates_three_ordered_posts_at_fifteen_minutes() {

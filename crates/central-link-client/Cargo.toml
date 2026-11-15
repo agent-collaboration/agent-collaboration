@@ -1,0 +1,25 @@
+[package]
+name = "central-link-client"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+autotests = false
+
+[dependencies]
+central-link-protocol.workspace = true
+workspace-model.workspace = true
+router-clock.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+router-clock = { workspace = true, features = ["test-support"] }
+serde_json.workspace = true
+
+[lints]
+workspace = true
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"

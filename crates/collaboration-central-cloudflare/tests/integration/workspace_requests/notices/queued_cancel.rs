@@ -1,5 +1,5 @@
 use super::*;
-use collaboration_protocol::central_mail::{
+use workspace_model::central_mail::{
     CentralMailAnswer, CentralMailOperation, CentralMailRequest, CentralMailResult, MessageBody,
     MessageSender,
 };

@@ -1,4 +1,5 @@
 //! Closed workspace vocabulary. Identity, transport and storage have other owners.
+pub mod central_mail;
 mod entity_records;
 mod item_references;
 mod request_contract;

@@ -2,7 +2,7 @@ use super::super::{Statement, support::*};
 use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, StatementBatch,
 };
-use collaboration_protocol::central_mail::{
+use workspace_model::central_mail::{
     AutomationState, CentralMailAnswer as Answer, CentralMailOperation as Operation,
     CentralMailRefusal as Refusal, CentralMailRequest, CentralMailResult as Result,
 };

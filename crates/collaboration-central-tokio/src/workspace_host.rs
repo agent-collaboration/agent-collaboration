@@ -16,7 +16,6 @@ use collaboration_central_core::{
     organization_authority::OrganizationProvisioningFailure,
     person_request::PersonRequestInput,
 };
-use collaboration_protocol::central_mail::{CentralMailRequest, CentralMailResult};
 use fleet_identity_protocol::OrganizationId;
 use router_clock::RuntimeClock;
 use runtime_primitives::{Clock, IdSource, SyncTime};
@@ -27,6 +26,7 @@ use std::{
 };
 use tokio::sync::Mutex;
 use workspace_alarm_owner::WorkspaceAlarmOwner;
+use workspace_model::central_mail::{CentralMailRequest, CentralMailResult};
 use workspace_model::{WorkspaceId, WorkspaceReply, WorkspaceRequest};
 
 impl ObjectHost for ObjectStorage {

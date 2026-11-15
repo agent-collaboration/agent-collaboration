@@ -65,7 +65,7 @@ async fn posted_notice_item(
     thread: &m::ThreadId,
     author: &m::ActorIdentityId,
     addressees: Vec<m::Addressee>,
-) -> collaboration_protocol::central_mail::NoticeItem {
+) -> workspace_model::central_mail::NoticeItem {
     let reply = f.call(request, post(thread, addressees)).await;
     let m::WorkspaceResult::Done(m::WorkspaceAnswer::Created { item, position }) = reply.result
     else {
@@ -87,7 +87,7 @@ async fn posted_notice_item(
     let SqlValue::Text(change_id) = &rows.rows[0][0] else {
         panic!("change id")
     };
-    collaboration_protocol::central_mail::NoticeItem {
+    workspace_model::central_mail::NoticeItem {
         workspace_id: f.workspace.clone(),
         thread_id: Some(thread.clone()),
         change_id: change_id.parse().unwrap(),
@@ -188,13 +188,12 @@ async fn first_activity_fixes_window_and_addressed_posts_join_the_session_batch(
         panic!("notice body")
     };
     assert_eq!(
-        serde_json::from_str::<collaboration_protocol::central_mail::MessageSender>(sender)
-            .unwrap(),
-        collaboration_protocol::central_mail::MessageSender::Central
+        serde_json::from_str::<workspace_model::central_mail::MessageSender>(sender).unwrap(),
+        workspace_model::central_mail::MessageSender::Central
     );
     assert_eq!(
-        serde_json::from_str::<collaboration_protocol::central_mail::MessageBody>(body).unwrap(),
-        collaboration_protocol::central_mail::MessageBody::Notice {
+        serde_json::from_str::<workspace_model::central_mail::MessageBody>(body).unwrap(),
+        workspace_model::central_mail::MessageBody::Notice {
             items: expected.clone()
         }
     );
@@ -204,7 +203,7 @@ async fn first_activity_fixes_window_and_addressed_posts_join_the_session_batch(
 
 #[tokio::test]
 async fn leave_notifications_off_and_resolution_cancel_notices_but_keep_direct_mail() {
-    use collaboration_protocol::central_mail::{
+    use workspace_model::central_mail::{
         CentralMailOperation, CentralMailRequest, CentralMailResult,
     };
     for action in 0..3 {
@@ -292,7 +291,7 @@ async fn leave_notifications_off_and_resolution_cancel_notices_but_keep_direct_m
 
 #[tokio::test]
 async fn session_cadence_sets_nondefault_window_deadline() {
-    use collaboration_protocol::central_mail::{
+    use workspace_model::central_mail::{
         CentralMailAnswer, CentralMailOperation, CentralMailRequest, CentralMailResult,
     };
     let f = Fixture::new().await;

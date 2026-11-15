@@ -2,11 +2,11 @@ use super::super::{Statement, support::*};
 use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, StatementBatch,
 };
-use collaboration_protocol::central_mail::{
+use router_clock::RuntimeClock;
+use workspace_model::central_mail::{
     CentralMailAnswer as Answer, CentralMailOperation as Operation, CentralMailRequest,
     CentralMailResult as Result,
 };
-use router_clock::RuntimeClock;
 
 async fn execute(fixture: &Fixture, sql: &'static str, args: Vec<central_storage::SqlValue>) {
     let runtime = fixture

@@ -1,10 +1,8 @@
 //! Central timing admission and portable timestamp bounds.
 use agent_automation::{TimingError, TimingRule};
 use chrono::Duration;
-use collaboration_protocol::central_mail::{
-    CentralMailOperation, CentralMailRefusal, TimingRequirement,
-};
 use workspace_model::Timestamp;
+use workspace_model::central_mail::{CentralMailOperation, CentralMailRefusal, TimingRequirement};
 
 /// Last integer millisecond accepted by pinned workerd's signed nanosecond clock.
 /// Proven by `platform_alarm_accepts_exact_boundary_and_rejects_later_milliseconds`;

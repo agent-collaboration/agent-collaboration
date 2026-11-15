@@ -1,9 +1,9 @@
 //! Count successful clock responses while real dispatches persist the injected time.
 use super::super::support::{self, Fixture, id, text};
 use super::*;
-use collaboration_protocol::central_mail::{CentralMailAnswer, CentralMailOperation};
 use std::sync::atomic::Ordering;
 use workspace_model as m;
+use workspace_model::central_mail::{CentralMailAnswer, CentralMailOperation};
 
 #[tokio::test]
 async fn dispatch_and_reset_apply_one_clock_update_and_preserve_stored_time() {

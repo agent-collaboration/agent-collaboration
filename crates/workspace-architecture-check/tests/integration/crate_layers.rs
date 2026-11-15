@@ -12,9 +12,17 @@ mod test_support_policy;
 #[path = "workspace_boundaries.rs"]
 mod workspace_boundaries;
 
-const LAYER_POLICY: [(&str, &[&str]); 22] = [
+const LAYER_POLICY: [(&str, &[&str]); 24] = [
     ("workspace-ids", &[]),
-    ("workspace-model", &["workspace-ids"]),
+    ("workspace-model", &["workspace-ids", "agent-automation"]),
+    (
+        "central-link-protocol",
+        &["workspace-ids", "workspace-model"],
+    ),
+    (
+        "central-link-client",
+        &["central-link-protocol", "workspace-model", "router-clock"],
+    ),
     ("central-storage", &[]),
     ("workspace-rules", &["workspace-model", "central-storage"]),
     ("router-clock", &[]),

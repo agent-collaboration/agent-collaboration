@@ -1078,6 +1078,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "central-link-client"
+version = "0.1.152"
+dependencies = [
+ "central-link-protocol",
+ "router-clock",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
+ "workspace-model",
+]
+
+[[package]]
+name = "central-link-protocol"
+version = "0.1.152"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
+ "workspace-ids",
+ "workspace-model",
+]
+
+[[package]]
 name = "central-storage"
 version = "0.1.152"
 dependencies = [
@@ -7949,6 +7973,7 @@ dependencies = [
 name = "workspace-model"
 version = "0.1.152"
 dependencies = [
+ "agent-automation",
  "chrono",
  "serde",
  "serde_json",
