@@ -155,7 +155,9 @@ async fn deferred_human_claim_delivers_a_new_local_coholder_in_the_same_consumer
     fixture.write_as(human("writer"), serde_json::from_value(json!({"kind":"threadPost","postId":post,"threadId":fixture.root,"text":"deferred recipient adds local recipient","references":[],"addressees":[{"kind":"role","recipient":{"kind":"reviewer","subject":stream}}]})).unwrap(), fixture.clock.utc_now()).await;
     fixture.write_as(owner, serde_json::from_value(json!({"kind":"roleGrant","subject":{"kind":"workstream","subject":stream},"role":"reviewer","holder":fixture.reader,"model":null,"lineage":null,"expectedRevision":1,"ownerGrant":null})).unwrap(), fixture.clock.utc_now()).await;
     let runtime = fixture.native_runtime_without_board().await;
-    for _ in 0..2 {
+    // The replacement Post notice and the reader's own role-assignment notice.
+    const EXPECTED_DELIVERIES: usize = 2;
+    for _ in 0..EXPECTED_DELIVERIES {
         runtime
             .completions
             .send(collaboration_protocol::DeliveryOutcome::Started)
@@ -208,6 +210,36 @@ async fn deferred_human_claim_delivers_a_new_local_coholder_in_the_same_consumer
         1,
         "the replacement must be delivered before a later scan"
     );
+    // Each settled delivery prompts a background publisher pass
+    // (`prompt_project_mail_outcome`), which can hand off the role-assignment notice
+    // concurrently and deliver it after this pass returned. Receive it before the
+    // later scan checks that nothing is delivered twice.
+    while first_pass_requests.len() < EXPECTED_DELIVERIES {
+        let request = requests.recv().await.expect("expected native delivery");
+        let push = fixture
+            .interactions
+            .get_push_record(&request.payload.push_id)
+            .await
+            .unwrap()
+            .unwrap();
+        let collaboration_protocol::PushHeaderFacts::BoardNotification { intent, cause, .. } =
+            push.header_facts
+        else {
+            panic!("unexpected late delivery: {:?}", push.header_facts);
+        };
+        assert_ne!(
+            cause,
+            post.clone().into(),
+            "the replacement must be delivered in its own pass"
+        );
+        first_pass_requests.push((
+            request.payload.push_id.clone(),
+            request.attempt.clone(),
+            request.target.clone(),
+            Some(intent),
+            Some(cause),
+        ));
+    }
     drop(requests);
     let store = fixture
         .registry
