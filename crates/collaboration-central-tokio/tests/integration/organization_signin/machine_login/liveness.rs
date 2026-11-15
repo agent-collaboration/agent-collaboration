@@ -146,7 +146,7 @@ async fn renewal_extends_idle_deadline_and_thirty_days_without_grant_expires_onc
     assert_eq!(
         f.rows("SELECT state,enrollment_generation,allowed_workspaces FROM machines")
             .await?,
-        vec![vec![text("revoked"), number(1)?, text("[]")]]
+        vec![vec![text("revoked"), number(2)?, text("[]")]]
     );
     let records=f.rows("SELECT request_id,kind,origin,actor_person_id,permission_checked,target_id FROM organization_change_records WHERE origin='automatic' ORDER BY id").await?;
     assert_eq!(
