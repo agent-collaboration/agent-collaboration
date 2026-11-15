@@ -6,6 +6,10 @@
 //! allowed once only when it runs one of a closed set of file utilities, with no
 //! shell syntax, on operands that all lie in the scratch folder. Anything else,
 //! or anything the rule cannot read for certain, goes to the approval path.
+//!
+//! The rule decides only the requests an agent sends. Claude in acceptEdits runs
+//! its own auto-approved file commands (mkdir, touch, rm, rmdir, mv, cp, sed) in
+//! its working folders, the scratch folder included, without asking.
 
 use agent_client_protocol::schema::v1::{
     PermissionOption, PermissionOptionId, PermissionOptionKind, ToolCallUpdate, ToolKind,
@@ -21,13 +25,14 @@ use std::sync::{Arc, RwLock};
 /// program with no options listed takes none. `cp` is absent: copying into a
 /// directory writes a name it derives, which can be a symlink out of the folder.
 /// `mv` replaces that entry and `ln` refuses an existing one, so they stay.
+/// `diff` is absent: comparing directories reads children by name and follows
+/// a child link out. `chmod` is absent: its mode is a bare word, never allowed.
 const FILE_UTILITIES: &[(&str, &[&str])] = &[
     ("rm", &["-r", "-R", "-f", "-rf", "-fr", "-Rf", "-fR", "-v"]),
     ("rmdir", &["-v"]),
     ("mkdir", &["-p", "-v"]),
     ("mv", &["-v"]),
     ("ls", &["-l", "-a", "-la", "-al", "-lh", "-h"]),
-    ("chmod", &["-R"]),
     ("ln", &["-s"]),
     ("cat", &[]),
     ("head", &[]),
@@ -36,7 +41,6 @@ const FILE_UTILITIES: &[(&str, &[&str])] = &[
     ("stat", &[]),
     ("file", &[]),
     ("du", &[]),
-    ("diff", &[]),
     ("cmp", &[]),
     ("sort", &[]),
     ("uniq", &[]),

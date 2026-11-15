@@ -283,3 +283,25 @@ fn a_dangling_symlink_final_or_ancestor_asks() {
             .is_some()
     );
 }
+
+/// Oracle: R4/Q3 (review N1) — comparing two scratch directories reads their
+/// children by name and follows a child link to an outside file, so it asks.
+#[test]
+fn diff_on_scratch_directories_with_a_child_link_out_asks() {
+    let folders = folders();
+    let grant = InFolderGrant::new(&folders.project, &folders.scratch).unwrap();
+    let left = folders.scratch.join("left");
+    let right = folders.scratch.join("right");
+    std::fs::create_dir_all(&left).unwrap();
+    std::fs::create_dir_all(&right).unwrap();
+    std::fs::write(left.join("note"), "inside").unwrap();
+    std::fs::write(folders.root.join("outside/secret"), "outside").unwrap();
+    std::os::unix::fs::symlink(folders.root.join("outside/secret"), right.join("note")).unwrap();
+    let command = format!("diff {} {}", left.display(), right.display());
+    assert!(
+        grant
+            .allow_once(&shell_call(&command), &options())
+            .is_none(),
+        "{command}"
+    );
+}
