@@ -125,3 +125,6 @@ produce two consecutive changes, both are drained, and replay preserves the curs
   valid control inserts. These planted constraint rows are not login journeys.
   Stored-corruption cases require an empty 503 with unchanged owning rows, then
   restore the fixture rows and require a successful Grant.
+  Observation cases read actual machine/approval projections, refuse corrupt
+  generation or grant-time fields without writes, then repair only setup and
+  require the original complete observation.

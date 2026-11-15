@@ -66,6 +66,10 @@ and stderr: unknown-org observation stays read-only, signed provisioning and ren
 read the shared clock for live and future organizations, and a new bridge process
 starts with empty persistence. Raw fixture statements are compared without dumping
 their bytes into assertion failures. The existing integration command runs it.
+Its machine observation cases drive real approval, supersession, lapse and idle
+expiry, then compare both machines and all creation-ordered approval rows over
+the same IPC. The machine-login observation case rejects damaged generation and
+grant timestamps with unchanged owner snapshots and repaired positive controls.
 
 `workspace_requests::mail` and `::notices` exercise central queue, window, drain and
 wake/automation state through real platform alarm callbacks. Test-only controls arm

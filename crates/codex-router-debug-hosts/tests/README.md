@@ -19,6 +19,10 @@ and an external fresh-root restart. Signed statement and observation comparisons
 their values on failure. Child failure cleanup uses `kill_on_drop`; successful
 shutdown explicitly waits and reaps. Event waits use the existing nextest case
 budget, with no wall-clock sleeps or test timeouts.
+Machine journeys drive the private approval/token routes and compare both
+machines, independent allowance snapshots, creation-ordered approvals and
+canonical UTC timestamps/nulls. A separate first observation after idle expiry
+checks Automatic audit rows and the generation fence.
 
 Run that aggregate with
 `cargo nextest run -p codex-router-debug-hosts --features signin-test-support --test e2e`.

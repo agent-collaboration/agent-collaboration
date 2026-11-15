@@ -299,3 +299,204 @@ async fn malformed_stored_domains_and_foreign_binding_never_become_complete_obse
         "a snapshot must remain bound to its addressed org"
     );
 }
+
+async fn machine_store() -> TursoConnection {
+    let mut connection = stamped_store(1).await;
+    query::<Turso>("INSERT INTO machines VALUES(?,?,'Observed machine','enrolled',?,7,?,?)")
+        .bind(fixture_id(0xe000))
+        .bind(fixture_id(0xe001))
+        .bind(serde_json::to_string(&vec![fixture_id(0x9000)]).unwrap())
+        .bind(TIME)
+        .bind(TIME)
+        .execute(&mut connection)
+        .await
+        .unwrap();
+    query::<Turso>(
+        "INSERT INTO machines VALUES(?,?,'Second observed machine','revoked','[]',0,?,?)",
+    )
+    .bind(fixture_id(0xe040))
+    .bind(fixture_id(0xe041))
+    .bind(TIME)
+    .bind(TIME)
+    .execute(&mut connection)
+    .await
+    .unwrap();
+    // Insert reverse identifiers and creation times so ID order is the wrong oracle.
+    for (index, created, state, reason, client, last, ended) in [
+        (
+            2,
+            "2027-01-15T08:00:02Z",
+            "approved",
+            None,
+            None,
+            None,
+            None,
+        ),
+        (
+            1,
+            "2027-01-15T08:00:01Z",
+            "enrolled",
+            None,
+            Some(fixture_id(0xe031)),
+            Some(TIME),
+            None,
+        ),
+        (
+            3,
+            "2027-01-15T08:00:00Z",
+            "ended",
+            Some("idle"),
+            Some(fixture_id(0xe033)),
+            None,
+            Some(TIME),
+        ),
+    ] {
+        query::<Turso>("INSERT INTO machine_approvals VALUES(?,?,?,'Approval snapshot','[]',?,?,?,?,7,?,?,?,?,?,?)")
+            .bind(fixture_id(0xe010 + index)).bind(fixture_id(0xe020 + index)).bind(fixture_id(0xe000))
+            .bind(state).bind(reason).bind(PERSON).bind("machine:enroll")
+            .bind("2027-01-15T08:10:00+00:00").bind(client).bind(last).bind(ended).bind(created).bind(created)
+            .execute(&mut connection).await.unwrap();
+    }
+    connection
+}
+
+#[tokio::test]
+async fn machine_snapshot_exports_checked_lifecycle_fields_in_creation_order() {
+    // Arrange: real migrated SQLite rows, with different machine/approval allowances.
+    let mut connection = machine_store().await;
+    let before = writes(&mut connection).await;
+    // Act: the actual one-statement observation and its public fixture encoding.
+    let observed =
+        decode_snapshot(&stored_snapshot(&mut connection).await, &organization()).unwrap();
+    let value = serde_json::to_value(&observed).unwrap();
+    // Assert: all fields, exact nulls, canonical times and creation-order semantics.
+    let mut machines = value["machines"].as_array().unwrap().clone();
+    machines.sort_by(|left, right| left["machineId"].as_str().cmp(&right["machineId"].as_str()));
+    assert_eq!(
+        Value::Array(machines),
+        json!([{
+            "machineId":fixture_id(0xe000),"installationId":fixture_id(0xe001),
+            "state":"enrolled","allowedWorkspaces":[fixture_id(0x9000)],"enrollmentGeneration":7
+        },{
+            "machineId":fixture_id(0xe040),"installationId":fixture_id(0xe041),
+            "state":"revoked","allowedWorkspaces":[],"enrollmentGeneration":0
+        }])
+    );
+    assert_eq!(
+        value["machineApprovals"],
+        json!([
+            {"approvalId":fixture_id(0xe013),"requestId":fixture_id(0xe023),"machineId":fixture_id(0xe000),
+             "state":"ended","endReason":"idle","allowedWorkspaces":[],"baseGeneration":7,
+             "codeExpiresAt":"2027-01-15T08:10:00.000Z","machineClientId":fixture_id(0xe033),
+             "lastGrantAt":null,"endedAt":"2027-01-15T08:00:00.000Z","createdAt":"2027-01-15T08:00:00.000Z"},
+            {"approvalId":fixture_id(0xe011),"requestId":fixture_id(0xe021),"machineId":fixture_id(0xe000),
+             "state":"enrolled","endReason":null,"allowedWorkspaces":[],"baseGeneration":7,
+             "codeExpiresAt":"2027-01-15T08:10:00.000Z","machineClientId":fixture_id(0xe031),
+             "lastGrantAt":"2027-01-15T08:00:00.000Z","endedAt":null,"createdAt":"2027-01-15T08:00:01.000Z"},
+            {"approvalId":fixture_id(0xe012),"requestId":fixture_id(0xe022),"machineId":fixture_id(0xe000),
+             "state":"approved","endReason":null,"allowedWorkspaces":[],"baseGeneration":7,
+             "codeExpiresAt":"2027-01-15T08:10:00.000Z","machineClientId":null,
+             "lastGrantAt":null,"endedAt":null,"createdAt":"2027-01-15T08:00:02.000Z"}
+        ])
+    );
+    assert!(value.get("machineCredentials").is_none());
+    assert_eq!(writes(&mut connection).await, before);
+}
+
+#[tokio::test]
+async fn corrupt_machine_columns_refuse_instead_of_becoming_complete_observations() {
+    for sql in [
+        "UPDATE machines SET enrollment_generation=-1",
+        "UPDATE machines SET state='paused'",
+        "UPDATE machines SET label=' Observed machine '",
+        "UPDATE machine_approvals SET allowed_workspaces='invalid-json'",
+        "UPDATE machine_approvals SET code_expires_at='not-a-timestamp'",
+        "UPDATE machine_approvals SET permission_checked='machine:other'",
+        "UPDATE machine_approvals SET last_grant_at=NULL WHERE state='enrolled'",
+        "UPDATE machine_approvals SET ended_at=NULL WHERE state='ended'",
+    ] {
+        // Arrange: a single corrupt persisted field in an otherwise valid store.
+        let mut connection = machine_store().await;
+        connection.execute(sql).await.unwrap();
+        let before = writes(&mut connection).await;
+        // Act / Assert: observation refuses, without repairing or rewriting data.
+        assert!(
+            decode_snapshot(&stored_snapshot(&mut connection).await, &organization()).is_err(),
+            "corrupt machine field was accepted"
+        );
+        assert_eq!(writes(&mut connection).await, before);
+    }
+}
+
+#[tokio::test]
+async fn automatic_idle_records_observe_with_exact_origin_validation() {
+    // Arrange: the same legitimate origin shape emitted by idle expiry.
+    let mut connection = stamped_store(0).await;
+    query::<Turso>("INSERT INTO organization_change_records VALUES(?,?,'machineExpired','automatic',NULL,NULL,?,?,?)")
+        .bind(fixture_id(0xf001)).bind("idle-expiry-record").bind(fixture_id(0xe013)).bind(NOW).bind(NOW)
+        .execute(&mut connection).await.unwrap();
+    let before = writes(&mut connection).await;
+    // Act / Assert: automatic records are readable, but never gain an actor.
+    let observed =
+        decode_snapshot(&stored_snapshot(&mut connection).await, &organization()).unwrap();
+    assert_eq!(observed.records.len(), 1);
+    assert_eq!(
+        serde_json::to_value(observed.records[0].kind).unwrap(),
+        json!("machineExpired")
+    );
+    assert_eq!(writes(&mut connection).await, before);
+    query::<Turso>("UPDATE organization_change_records SET actor_person_id=?")
+        .bind(PERSON)
+        .execute(&mut connection)
+        .await
+        .unwrap();
+    assert!(decode_snapshot(&stored_snapshot(&mut connection).await, &organization()).is_err());
+    connection.execute("UPDATE organization_change_records SET actor_person_id=NULL,permission_checked='machine:enroll'").await.unwrap();
+    let invalid_permission = stored_snapshot(&mut connection).await;
+    assert!(decode_snapshot(&invalid_permission, &organization()).is_err());
+}
+
+#[tokio::test]
+async fn approval_order_uses_checked_instants_across_valid_timestamp_forms_and_id_ties() {
+    // Arrange: raw RFC3339 text sorts the later fractional values before the
+    // whole second. Equal instants also need a deterministic approval-ID tie.
+    let mut connection = machine_store().await;
+    for (id, created) in [
+        (0xe011, "2027-01-15T08:00:00Z"),
+        (0xe012, "2027-01-15T08:00:00.001+00:00"),
+        (0xe013, "2027-01-15T08:00:00.001Z"),
+    ] {
+        query::<Turso>("UPDATE machine_approvals SET created_at=?,updated_at='2027-01-15T08:00:02Z' WHERE approval_id=?")
+            .bind(created).bind(fixture_id(id)).execute(&mut connection).await.unwrap();
+    }
+    connection
+        .execute("UPDATE machine_approvals SET ended_at='2027-01-15T08:00:02Z' WHERE state='ended'")
+        .await
+        .unwrap();
+    let before = writes(&mut connection).await;
+    // Act: all source rows pass the actual owning typed decoder.
+    let observed =
+        decode_snapshot(&stored_snapshot(&mut connection).await, &organization()).unwrap();
+    let encoded = serde_json::to_value(observed).unwrap();
+    let approvals = encoded["machineApprovals"].as_array().unwrap();
+    // Assert: chronological order and ID ties follow checked instants, not text.
+    assert_eq!(
+        approvals
+            .iter()
+            .map(|row| row["approvalId"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        [fixture_id(0xe011), fixture_id(0xe012), fixture_id(0xe013)]
+    );
+    assert_eq!(
+        approvals
+            .iter()
+            .map(|row| row["createdAt"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        [
+            "2027-01-15T08:00:00.000Z",
+            "2027-01-15T08:00:00.001Z",
+            "2027-01-15T08:00:00.001Z"
+        ]
+    );
+    assert_eq!(writes(&mut connection).await, before);
+}

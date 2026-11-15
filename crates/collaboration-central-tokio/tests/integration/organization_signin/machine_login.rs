@@ -7,6 +7,7 @@ mod fencing;
 mod idle_fencing;
 mod invariants;
 mod liveness;
+mod observation;
 mod receipt;
 mod revocation;
 mod rollback;
