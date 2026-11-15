@@ -166,6 +166,7 @@ fn n03_returns_the_first_three_field_snapshot_after_mutable_inputs_and_state_cha
         request.label = label("different");
         request.allowed_workspaces = vec![workspace(99)].try_into().unwrap();
         request.approver_second_factor_at = None;
+        request.code_expires_at = UnixSeconds(NOW_S - 1);
         let ended_at_ms = if matches!(
             state,
             StoredEnrollmentState::Approved | StoredEnrollmentState::Enrolled { .. }
@@ -228,6 +229,74 @@ fn sd8_org_and_peer_checks_precede_even_an_existing_approval() {
             })
         );
     }
+    assert_eq!(ids.minted(), 0);
+}
+
+#[test]
+fn retained_approval_refuses_a_different_installation_without_minting_or_mutation() {
+    let original = approval();
+    let earlier = StoredEnrollment {
+        request_id: original.request_id.clone(),
+        ..approved(40, 0)
+    };
+    let mut facts = empty_facts();
+    facts.prior_approval = Some(earlier.clone());
+    let mut another = original.clone();
+    another.installation = id(99).try_into().unwrap();
+    another.peer = id(99).try_into().unwrap();
+    let ids = CountingIds::new();
+
+    assert_eq!(
+        decide_device_login(&another, &facts, NOW_MS, time(NOW_MS), &ids).unwrap(),
+        Decided::unchanged(DeviceLoginDecision::Refused {
+            reason: DeviceLoginRefusal::NotPermitted {}
+        })
+    );
+    assert_eq!(
+        decide_device_login(&original, &facts, NOW_MS, time(NOW_MS), &ids).unwrap(),
+        Decided::unchanged(DeviceLoginDecision::Approved {
+            enrollment_id: earlier.id,
+            label: earlier.label,
+            allowed_workspaces: earlier.allowed_workspaces,
+        })
+    );
+    assert_eq!(ids.minted(), 0);
+}
+
+#[test]
+fn new_approval_requires_a_deadline_strictly_after_the_applying_millisecond() {
+    let request = DecideDeviceLogin {
+        code_expires_at: UnixSeconds(NOW_S + 1),
+        ..approval()
+    };
+    let deadline_ms = (NOW_S + 1) * 1000;
+    for now_ms in [deadline_ms, deadline_ms + 1] {
+        let ids = CountingIds::new();
+        assert_eq!(
+            decide_device_login(&request, &empty_facts(), now_ms, time(now_ms), &ids).unwrap(),
+            Decided::unchanged(DeviceLoginDecision::Refused {
+                reason: DeviceLoginRefusal::NotPermitted {}
+            })
+        );
+        assert_eq!(ids.minted(), 0);
+    }
+    let ids = CountingIds::new();
+    let before = deadline_ms - 1;
+    let plan = decide_device_login(&request, &empty_facts(), before, time(before), &ids).unwrap();
+    assert!(matches!(plan.answer, DeviceLoginDecision::Approved { .. }));
+    assert!(!plan.changes.is_empty());
+    assert!(ids.minted() > 0);
+
+    // Timestamp overflow is a representation failure, not a guessed code window.
+    let unrepresentable = DecideDeviceLogin {
+        code_expires_at: UnixSeconds(i64::MAX),
+        ..request
+    };
+    let ids = CountingIds::new();
+    assert_eq!(
+        decide_device_login(&unrepresentable, &empty_facts(), NOW_MS, time(NOW_MS), &ids),
+        Err(central_storage::StoreFailure::Unavailable)
+    );
     assert_eq!(ids.minted(), 0);
 }
 

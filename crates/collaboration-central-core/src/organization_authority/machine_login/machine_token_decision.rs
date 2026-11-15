@@ -1,5 +1,7 @@
 //! Activation is generation-fenced; renewal rechecks live client and idle state.
-use super::decision_support::{DecisionIds, DecisionTime, MachineLoginSettings};
+use super::decision_support::{
+    DecisionIds, DecisionTime, IDLE_EXPIRY_SECONDS, MACHINE_GRANT_LIFETIME_SECONDS,
+};
 use super::enrollment_records::{
     Decided, EnrollmentChange, EnrollmentFacts, MachineRow, MachineState, StoredEnrollment,
     StoredEnrollmentState,
@@ -18,7 +20,6 @@ pub(crate) fn decide_machine_token(
     facts: &EnrollmentFacts,
     time: DecisionTime,
     ids: &dyn IdSource,
-    settings: MachineLoginSettings,
 ) -> Result<Decided<MachineTokenDecision>, StoreFailure> {
     if request.organization_id != facts.organization_id {
         return Ok(refuse(MachineTokenRefusal::EnrollmentNotActive {}));
@@ -28,9 +29,7 @@ pub(crate) fn decide_machine_token(
     };
     let ids = DecisionIds(ids);
     match &enrollment.state {
-        StoredEnrollmentState::Approved => {
-            first_grant(request, enrollment, facts, time, &ids, settings)
-        }
+        StoredEnrollmentState::Approved => first_grant(request, enrollment, facts, time, &ids),
         StoredEnrollmentState::Enrolled {
             client_id,
             last_grant_at,
@@ -41,13 +40,11 @@ pub(crate) fn decide_machine_token(
             if client_id != &request.client_id {
                 return Ok(refuse(MachineTokenRefusal::WrongClient {}));
             }
-            if time.seconds().0.saturating_sub(last_grant_at.0)
-                >= MachineLoginSettings::IDLE_EXPIRY_SECONDS
-            {
+            if time.seconds().0.saturating_sub(last_grant_at.0) >= IDLE_EXPIRY_SECONDS {
                 return idle_expiry(enrollment, facts, time, &ids);
             }
             Ok(Decided::writing(
-                grant(enrollment, time, settings, None)?,
+                grant(enrollment, time, facts.superseded_client.clone())?,
                 vec![EnrollmentChange::ReplaceEnrollment(StoredEnrollment {
                     state: StoredEnrollmentState::Enrolled {
                         client_id: client_id.clone(),
@@ -76,7 +73,6 @@ fn first_grant(
     facts: &EnrollmentFacts,
     time: DecisionTime,
     ids: &DecisionIds<'_>,
-    settings: MachineLoginSettings,
 ) -> Result<Decided<MachineTokenDecision>, StoreFailure> {
     let deadline = enrollment
         .code_expires_at
@@ -154,7 +150,7 @@ fn first_grant(
         time,
     )?));
     Ok(Decided::writing(
-        grant(enrollment, time, settings, superseded)?,
+        grant(enrollment, time, superseded)?,
         changes,
         time.now_ms,
     ))
@@ -163,13 +159,12 @@ fn first_grant(
 fn grant(
     enrollment: &StoredEnrollment,
     time: DecisionTime,
-    settings: MachineLoginSettings,
     superseded: Option<EndedMachineClient>,
 ) -> Result<MachineTokenDecision, StoreFailure> {
     let decided_at = time.seconds();
     let expires = decided_at
         .0
-        .checked_add(i64::from(u32::from(settings.grant_lifetime)))
+        .checked_add(MACHINE_GRANT_LIFETIME_SECONDS)
         .ok_or(StoreFailure::Unavailable)?;
     Ok(MachineTokenDecision::Grant {
         installation: enrollment.installation.clone(),
@@ -200,6 +195,7 @@ fn idle_expiry(
             ..enrollment.clone()
         }),
         EnrollmentChange::PutMachine(MachineRow {
+            generation: machine.generation.next()?,
             state: MachineState::Revoked,
             allowed_workspaces: Vec::new(),
             ..machine.clone()

@@ -1,9 +1,9 @@
 use super::super::{
-    EnrollmentChange, EnrollmentFacts, MachineLoginSettings, MachineState, StoredEnrollment,
+    EnrollmentChange, EnrollmentFacts, IDLE_EXPIRY_SECONDS, MachineState, StoredEnrollment,
     StoredEnrollmentState,
     policy_fixture::{
         CountingIds, NOW_MS, NOW_S, approved, assert_refused, decide_token, empty_facts, enrolled,
-        facts, id, person, project, records, settings, time, token,
+        facts, id, person, project, records, time, token,
     },
 };
 use super::decide_machine_token;
@@ -193,27 +193,20 @@ fn wrong_client_unknown_org_and_inactive_states_never_mint_or_write() {
         request.client_id = id(99).try_into().unwrap();
         let ids = CountingIds::new();
         assert_refused(
-            &decide_machine_token(&request, &facts, time(NOW_MS), &ids, settings()).unwrap(),
+            &decide_machine_token(&request, &facts, time(NOW_MS), &ids).unwrap(),
             MachineTokenRefusal::WrongClient {},
         );
         request = token(&current);
         request.organization_id = id(2).try_into().unwrap();
         assert_refused(
-            &decide_machine_token(&request, &facts, time(NOW_MS), &ids, settings()).unwrap(),
+            &decide_machine_token(&request, &facts, time(NOW_MS), &ids).unwrap(),
             MachineTokenRefusal::EnrollmentNotActive {},
         );
         assert_eq!(ids.minted(), 0);
     }
     let request = token(&approved(40, 0));
     assert_refused(
-        &decide_machine_token(
-            &request,
-            &empty_facts(),
-            time(NOW_MS),
-            &CountingIds::new(),
-            settings(),
-        )
-        .unwrap(),
+        &decide_machine_token(&request, &empty_facts(), time(NOW_MS), &CountingIds::new()).unwrap(),
         MachineTokenRefusal::EnrollmentNotActive {},
     );
     for state in [
@@ -246,7 +239,7 @@ fn wrong_client_unknown_org_and_inactive_states_never_mint_or_write() {
 
 #[test]
 fn exact_thirty_day_idle_boundary_withdraws_allowances_with_automatic_compound_records() {
-    let last = NOW_S - MachineLoginSettings::IDLE_EXPIRY_SECONDS;
+    let last = NOW_S - IDLE_EXPIRY_SECONDS;
     let active = enrolled(40, 0, last);
     let facts = facts(active.clone(), Some(active), 1);
     assert!(matches!(
@@ -261,7 +254,7 @@ fn exact_thirty_day_idle_boundary_withdraws_allowances_with_automatic_compound_r
         }
     );
     let next = project(&facts, &plan);
-    assert_eq!(next.machine.as_ref().unwrap().generation.get(), 1);
+    assert_eq!(next.machine.as_ref().unwrap().generation.get(), 2);
     assert_eq!(next.machine.as_ref().unwrap().state, MachineState::Revoked);
     assert!(next.machine.as_ref().unwrap().allowed_workspaces.is_empty());
     assert_eq!(
@@ -301,4 +294,73 @@ fn each_grant_restarts_the_idle_period_using_whole_seconds() {
         decide_token(&next, NOW_MS + 2 * twenty_days).answer,
         MachineTokenDecision::Grant { .. }
     ));
+}
+
+#[test]
+fn replacement_retry_keeps_the_predecessor_and_checks_live_client_before_returning_it() {
+    let before = facts(approved(40, 1), Some(enrolled(39, 0, NOW_S)), 1);
+    let first = decide_token(&before, NOW_MS);
+    let MachineTokenDecision::Grant {
+        superseded: Some(expected),
+        ..
+    } = first.answer.clone()
+    else {
+        panic!("replacement must name its predecessor")
+    };
+    let next = project(&before, &first);
+    let retry = decide_token(&next, NOW_MS + 1000);
+    assert!(
+        matches!(retry.answer, MachineTokenDecision::Grant { superseded: Some(actual), .. } if actual == expected)
+    );
+    assert!(records(&retry).is_empty());
+    assert_eq!(retry.changes.len(), 1);
+    let mut wrong_client = token(next.enrollment.as_ref().unwrap());
+    wrong_client.client_id = id(99).try_into().unwrap();
+    assert_refused(
+        &decide_machine_token(
+            &wrong_client,
+            &next,
+            time(NOW_MS + 1000),
+            &CountingIds::new(),
+        )
+        .unwrap(),
+        MachineTokenRefusal::WrongClient {},
+    );
+    let no_longer_active = EnrollmentFacts {
+        active: None,
+        ..next
+    };
+    assert_refused(
+        &decide_token(&no_longer_active, NOW_MS + 1000),
+        MachineTokenRefusal::Superseded {},
+    );
+}
+
+#[test]
+fn idle_expiry_fences_pending_approvals_and_generation_exhaustion_returns_no_plan() {
+    let active = enrolled(39, 0, NOW_S - IDLE_EXPIRY_SECONDS);
+    let before = facts(active.clone(), Some(active.clone()), 1);
+    let expired = decide_token(&before, NOW_MS);
+    let after = project(&before, &expired);
+    assert_eq!(after.machine.as_ref().unwrap().generation.get(), 2);
+    let pending = EnrollmentFacts {
+        enrollment: Some(approved(40, 1)),
+        ..after
+    };
+    assert_refused(
+        &decide_token(&pending, NOW_MS),
+        MachineTokenRefusal::Superseded {},
+    );
+
+    let max = 9_007_199_254_740_991;
+    let exhausted = facts(active.clone(), Some(active), max);
+    assert!(
+        decide_machine_token(
+            &token(exhausted.enrollment.as_ref().unwrap()),
+            &exhausted,
+            time(NOW_MS),
+            &CountingIds::new()
+        )
+        .is_err()
+    );
 }

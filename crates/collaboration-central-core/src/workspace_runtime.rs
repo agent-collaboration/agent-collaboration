@@ -51,7 +51,6 @@ pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     pub(crate) signin_observer: Arc<dyn Fn(crate::CentralObservation) + Send + Sync>,
     pub(crate) signin_authority: crate::organization_authority_cache::OrganizationAuthority,
     pub(crate) central_turn: tokio::sync::Mutex<()>,
-    pub(crate) machine_login_settings: Option<crate::organization_authority::MachineLoginSettings>,
     #[cfg(feature = "test-support")]
     lost_provisioning_reply: std::sync::atomic::AtomicBool,
     #[cfg(feature = "test-support")]
@@ -79,7 +78,6 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             ids,
             turns: WorkspaceTurns::default(),
             central_turn: tokio::sync::Mutex::new(()),
-            machine_login_settings: None,
             signin_authority: Default::default(),
             signin_observer: Arc::new(|_| {}),
             #[cfg(feature = "test-support")]
@@ -93,13 +91,6 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             #[cfg(feature = "test-support")]
             lost_answers: Default::default(),
         }
-    }
-    pub fn with_machine_login_settings(
-        mut self,
-        settings: crate::organization_authority::MachineLoginSettings,
-    ) -> Self {
-        self.machine_login_settings = Some(settings);
-        self
     }
     #[cfg(feature = "test-support")]
     pub fn lose_next_provisioning_reply(&self) {

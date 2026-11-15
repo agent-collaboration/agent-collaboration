@@ -3,7 +3,7 @@ use crate::schema_validation;
 
 use collaboration_central_core::identity_contract::{
     ConnectionView, DecideDeviceLogin, MachineEnrollment, MachinePresenceAnswer,
-    PersonAdmissionRequest, TokenLifetimeSeconds,
+    PersonAdmissionRequest,
 };
 use fleet_identity_protocol::ReportSessionActivity;
 use schemars::JsonSchema;
@@ -158,13 +158,6 @@ fn javascript_counters_refuse_two_to_the_fifty_third() {
             .unwrap()
             .is_valid(&invalid)
     );
-}
-
-#[test]
-fn configured_token_lifetime_requires_the_adopted_range() {
-    for invalid in [0, 59, 3601] {
-        assert_refused::<TokenLifetimeSeconds>(json!(invalid));
-    }
 }
 
 #[test]

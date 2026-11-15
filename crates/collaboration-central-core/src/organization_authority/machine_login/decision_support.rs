@@ -1,5 +1,4 @@
-//! Caller-sampled decision time, typed policy settings and audit identities.
-use crate::identity_contract::TokenLifetimeSeconds;
+//! Caller-sampled decision time, fixed policy durations and audit identities.
 use crate::organization_change_rows::{
     ChangeRequestId, OrganizationChangeKind, OrganizationChangeOrigin, OrganizationChangeRecord,
 };
@@ -7,6 +6,9 @@ use central_storage::StoreFailure;
 use fleet_identity_protocol::UnixSeconds;
 use runtime_primitives::IdSource;
 use uuid::Uuid;
+
+pub(super) const MACHINE_GRANT_LIFETIME_SECONDS: i64 = 600;
+pub(crate) const IDLE_EXPIRY_SECONDS: i64 = 30 * 24 * 60 * 60;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct DecisionTime {
@@ -45,21 +47,6 @@ impl DecisionIds<'_> {
             target_id: target,
             created_at_millis: time.now_ms,
         })
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MachineLoginSettings {
-    pub grant_lifetime: TokenLifetimeSeconds,
-}
-impl MachineLoginSettings {
-    pub(crate) const IDLE_EXPIRY_SECONDS: i64 = 30 * 24 * 60 * 60;
-    pub const fn new(grant_lifetime: TokenLifetimeSeconds) -> Self {
-        Self { grant_lifetime }
-    }
-    /// Compose central's fixed 600-second machine grant policy.
-    pub const fn production() -> Self {
-        Self::new(TokenLifetimeSeconds::MACHINE_LOGIN_FIXED)
     }
 }
 

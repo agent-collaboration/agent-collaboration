@@ -1,7 +1,7 @@
 //! Pure fact/plan fixtures; these do not emulate or prove a database commit.
 use super::{
-    Decided, DecisionTime, EnrollmentChange, EnrollmentFacts, MachineLoginSettings, MachineRow,
-    MachineState, StoredEnrollment, StoredEnrollmentState, decide_machine_token,
+    Decided, DecisionTime, EnrollmentChange, EnrollmentFacts, MachineRow, MachineState,
+    StoredEnrollment, StoredEnrollmentState, decide_machine_token,
 };
 use crate::identity_contract::{
     DecideDeviceLogin, DecideMachineToken, EnrollPermission, MachineTokenDecision,
@@ -30,9 +30,6 @@ pub(super) fn person() -> PersonId {
 pub(super) fn label(value: &str) -> MachineLabel {
     value.to_owned().try_into().unwrap()
 }
-pub(super) fn settings() -> MachineLoginSettings {
-    MachineLoginSettings::new(900_u32.try_into().unwrap())
-}
 pub(super) fn time(now_ms: i64) -> DecisionTime {
     DecisionTime { now_ms }
 }
@@ -60,6 +57,7 @@ pub(super) fn empty_facts() -> EnrollmentFacts {
         enrollment: None,
         machine: None,
         active: None,
+        superseded_client: None,
         missing_workspaces: Vec::new(),
     }
 }
@@ -142,7 +140,6 @@ pub(super) fn decide_token(facts: &EnrollmentFacts, now_ms: i64) -> Decided<Mach
         facts,
         time(now_ms),
         &CountingIds::new(),
-        settings(),
     )
     .unwrap()
 }
@@ -170,6 +167,15 @@ pub(super) fn project<T>(facts: &EnrollmentFacts, plan: &Decided<T>) -> Enrollme
         match change {
             EnrollmentChange::PutMachine(machine) => next.machine = Some(machine.clone()),
             EnrollmentChange::InsertEnrollment(row) | EnrollmentChange::ReplaceEnrollment(row) => {
+                if matches!(
+                    row.state,
+                    StoredEnrollmentState::Revoked {
+                        reason: crate::identity_contract::EnrollmentRevocationReason::Superseded {},
+                        ..
+                    }
+                ) {
+                    next.superseded_client = row.ended_client();
+                }
                 if next
                     .enrollment
                     .as_ref()

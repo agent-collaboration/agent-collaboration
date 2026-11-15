@@ -11,5 +11,5 @@ mod receipt;
 mod revocation;
 mod rollback;
 mod stored_corruption;
-mod support;
 mod superseded_notice;
+mod support;

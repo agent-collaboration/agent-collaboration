@@ -51,6 +51,7 @@ fn facts() -> EnrollmentFacts {
         enrollment: Some(enrollment()),
         machine: Some(machine()),
         active: None,
+        superseded_client: None,
         missing_workspaces: vec![],
     }
 }

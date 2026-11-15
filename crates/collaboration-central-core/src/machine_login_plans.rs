@@ -64,16 +64,8 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
             &query,
         )
         .await?;
-        let settings = self
-            .machine_login_settings
-            .ok_or(StoreFailure::Unavailable)?;
-        let decided = machine_login::decide_machine_token(
-            request,
-            &facts,
-            time,
-            self.ids.as_ref(),
-            settings,
-        )?;
+        let decided =
+            machine_login::decide_machine_token(request, &facts, time, self.ids.as_ref())?;
         self.apply_machine_login(&facts, decided, time).await
     }
 

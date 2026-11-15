@@ -182,10 +182,7 @@ impl TokioWorkspaceHost {
             clock.clone(),
             ids,
         )
-        .with_mail_policy(self.mail_policy)
-        .with_machine_login_settings(
-            collaboration_central_core::organization_authority::MachineLoginSettings::production(),
-        );
+        .with_mail_policy(self.mail_policy);
         let runtime = match &self.sign_in {
             Some(trust) => match trust.for_organization(organization.clone(), clock) {
                 Ok(check) => runtime.with_sign_in_verification(check),

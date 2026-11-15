@@ -4,7 +4,7 @@ use crate::{
     identity_contract::EnrollmentRevocationReason,
     machine_login_row_values as values,
     organization_authority::machine_login::{
-        EnrollmentChange, EnrollmentFacts, MachineLoginSettings, MachineRow, MachineState,
+        EnrollmentChange, EnrollmentFacts, IDLE_EXPIRY_SECONDS, MachineRow, MachineState,
         StoredEnrollment, StoredEnrollmentState,
     },
     workspace_decode_error::corrupt,
@@ -324,10 +324,7 @@ fn time_guard(
 ) -> Result<Option<GuardedStatement>, StoreFailure> {
     let now = integer(now_ms, "machine_login.applying_time")?;
     let now_seconds = integer(now_ms.div_euclid(1000), "machine_login.applying_time")?;
-    let idle = integer(
-        MachineLoginSettings::IDLE_EXPIRY_SECONDS,
-        "machine_login.idle_expiry",
-    )?;
+    let idle = integer(IDLE_EXPIRY_SECONDS, "machine_login.idle_expiry")?;
     // These no-op guards use the same statement vocabulary as authorization floors.
     // A miss rolls back every earlier effect in this decision's batch.
     let guard = match (&before.state, &next.state) {

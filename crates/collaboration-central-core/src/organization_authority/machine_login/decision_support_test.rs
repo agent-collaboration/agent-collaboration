@@ -1,10 +1,9 @@
 use super::super::{
     EnrollmentGeneration, decide_device_login, decide_machine_token,
     policy_fixture::{
-        CountingIds, NOW_MS, NOW_S, approval, approved, empty_facts, facts, settings, time, token,
+        CountingIds, NOW_MS, NOW_S, approval, approved, empty_facts, facts, time, token,
     },
 };
-use super::MachineLoginSettings;
 use crate::identity_contract::MachineTokenDecision;
 use runtime_primitives::IdSource;
 
@@ -20,7 +19,6 @@ fn generation_exhaustion_and_invalid_id_sources_fail_without_a_plan() {
             &facts,
             time(NOW_MS),
             &CountingIds::new(),
-            settings()
         )
         .is_err()
     );
@@ -43,23 +41,18 @@ fn generation_exhaustion_and_invalid_id_sources_fail_without_a_plan() {
 }
 
 #[test]
-fn explicit_typed_lifetimes_control_grants_and_od2_production_is_six_hundred_seconds() {
+fn fixed_grant_deadline_uses_the_applying_whole_second() {
     let facts = facts(approved(40, 0), None, 0);
-    for seconds in [60_u32, 900, 3600] {
+    for subsecond_ms in [0, 1, 999] {
         let plan = decide_machine_token(
             &token(facts.enrollment.as_ref().unwrap()),
             &facts,
-            time(NOW_MS),
+            time(NOW_S * 1000 + subsecond_ms),
             &CountingIds::new(),
-            MachineLoginSettings::new(seconds.try_into().unwrap()),
         )
         .unwrap();
         assert!(
-            matches!(plan.answer, MachineTokenDecision::Grant { decided_at, grant_expires_at, .. } if decided_at.0 == NOW_S && grant_expires_at.0 == NOW_S+i64::from(seconds))
+            matches!(plan.answer, MachineTokenDecision::Grant { decided_at, grant_expires_at, .. } if decided_at.0 == NOW_S && grant_expires_at.0 == NOW_S+600)
         );
     }
-    assert_eq!(
-        u32::from(MachineLoginSettings::production().grant_lifetime),
-        600
-    );
 }

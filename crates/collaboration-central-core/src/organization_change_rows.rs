@@ -228,6 +228,25 @@ pub(crate) async fn read_page(
     rows.rows.iter().map(|row| decode(&rows, row)).collect()
 }
 
+/// Find the predecessor ended by this approval's activation, without paging
+/// through unrelated audit history. The operation key already stores this link.
+pub(crate) async fn read_machine_supersession(
+    host: &impl ObjectHost,
+    originating_request: &str,
+) -> Result<Option<OrganizationChangeRecord>, StoreFailure> {
+    let rows = host.read(Statement {
+        sql: "SELECT id,request_id,kind,origin,actor_person_id,permission_checked,target_id,created_at FROM organization_change_records WHERE kind='machineRevoked' AND request_id=?||':machineRevoked:'||target_id LIMIT 2",
+        args: vec![text(originating_request)],
+    }).await?;
+    match rows.rows.as_slice() {
+        [] => Ok(None),
+        [row] => decode(&rows, row).map(Some),
+        _ => Err(bad_value(
+            "organization_change_records.machine_supersession",
+        )),
+    }
+}
+
 #[cfg(test)]
 #[path = "organization_change_rows_test.rs"]
 mod tests;

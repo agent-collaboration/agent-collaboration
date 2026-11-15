@@ -2,9 +2,13 @@
 use crate::{
     ObjectHost,
     guarded_statements::text,
+    identity_contract::{EndedMachineClient, EnrollmentRevocationReason},
     machine_login_row_values::{identifier, nonnegative_integer},
     machine_login_rows::{enrollment, machine, only_row},
-    organization_authority::machine_login::{EnrollmentFacts, EnrollmentQuery},
+    organization_authority::machine_login::{
+        EnrollmentFacts, EnrollmentQuery, StoredEnrollment, StoredEnrollmentState,
+    },
+    organization_change_rows::{OrganizationChangeOrigin, read_machine_supersession},
     workspace_decode_error::corrupt,
     workspace_row_codec::string,
 };
@@ -39,6 +43,7 @@ pub(crate) async fn facts(
             enrollment: None,
             machine: None,
             active: None,
+            superseded_client: None,
             missing_workspaces: vec![],
         });
     }
@@ -96,6 +101,12 @@ pub(crate) async fn facts(
     } else {
         None
     };
+    let superseded_client = match &enrollment {
+        Some(current) if matches!(current.state, StoredEnrollmentState::Enrolled { .. }) => {
+            superseded_client(host, current).await?
+        }
+        _ => None,
+    };
     let mut missing_workspaces = Vec::new();
     for workspace in &query.workspaces {
         let rows = host
@@ -125,8 +136,49 @@ pub(crate) async fn facts(
         enrollment,
         machine,
         active,
+        superseded_client,
         missing_workspaces,
     })
+}
+
+async fn superseded_client(
+    host: &impl ObjectHost,
+    current: &StoredEnrollment,
+) -> Result<Option<EndedMachineClient>, StoreFailure> {
+    let Some(record) = read_machine_supersession(host, current.request_id.as_str()).await? else {
+        return Ok(None);
+    };
+    let rows = host
+        .read(Statement {
+            sql: BY_ENROLLMENT,
+            args: vec![text(&record.target_id)],
+        })
+        .await?;
+    let previous = only_row(&rows, enrollment, "machine_approvals.superseded")?
+        .ok_or_else(|| corrupt("machine_approvals.superseded"))?;
+    let expected_origin = OrganizationChangeOrigin::Person {
+        person_id: current.approved_by.as_str().to_owned(),
+        permission_checked: "machine:enroll".to_owned(),
+    };
+    if previous.id == current.id
+        || previous.machine_id != current.machine_id
+        || previous.installation != current.installation
+        || previous.ended_at_ms != Some(record.created_at_millis)
+        || record.origin != expected_origin
+        || !matches!(
+            previous.state,
+            StoredEnrollmentState::Revoked {
+                reason: EnrollmentRevocationReason::Superseded {},
+                ..
+            }
+        )
+    {
+        return Err(corrupt("machine_approvals.superseded"));
+    }
+    previous
+        .ended_client()
+        .map(Some)
+        .ok_or_else(|| corrupt("machine_approvals.superseded"))
 }
 
 #[cfg(test)]

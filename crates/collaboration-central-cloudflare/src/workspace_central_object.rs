@@ -180,9 +180,6 @@ impl CentralObject {
             },
             clock.clone(),
             Arc::new(ClockIds::new(self.clock.clone())),
-        )
-        .with_machine_login_settings(
-            collaboration_central_core::organization_authority::MachineLoginSettings::production(),
         );
         let runtime = match crate::organization_signin_link::trust_settings(&self.env) {
             Ok(Some(settings)) => match CloudflareSignInTrust::new(settings).for_organization(organization, clock) {

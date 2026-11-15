@@ -114,6 +114,7 @@ pub(crate) struct EnrollmentFacts {
     pub enrollment: Option<StoredEnrollment>,
     pub machine: Option<MachineRow>,
     pub active: Option<StoredEnrollment>,
+    pub superseded_client: Option<EndedMachineClient>,
     pub missing_workspaces: Vec<WorkspaceId>,
 }
 

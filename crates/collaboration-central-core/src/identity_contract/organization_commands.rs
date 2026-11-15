@@ -1,7 +1,7 @@
 //! Organization commands share one refusal vocabulary and keep reads separate.
 use super::CommandId;
 use fleet_identity_protocol::{InstallationId, OrganizationId};
-use message_board::{IdentityValidationError, ResourceName, SessionRef, WorkspaceId};
+use message_board::{ResourceName, SessionRef, WorkspaceId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
@@ -98,37 +98,4 @@ pub struct MachineAllowance {
 pub enum AllowanceState {
     Active,
     Withdrawn,
-}
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(try_from = "u32", into = "u32")]
-pub struct TokenLifetimeSeconds(u32);
-impl TokenLifetimeSeconds {
-    /// Fixed production policy; machine-token lifetime is not configurable.
-    pub const MACHINE_LOGIN_FIXED: Self = Self(600);
-}
-impl TryFrom<u32> for TokenLifetimeSeconds {
-    type Error = IdentityValidationError;
-    fn try_from(value: u32) -> Result<Self, Self::Error> {
-        if (60..=3600).contains(&value) {
-            Ok(Self(value))
-        } else {
-            Err(IdentityValidationError {
-                field: "seconds",
-                requirement: "must be between 60 and 3600",
-            })
-        }
-    }
-}
-impl From<TokenLifetimeSeconds> for u32 {
-    fn from(value: TokenLifetimeSeconds) -> Self {
-        value.0
-    }
-}
-impl JsonSchema for TokenLifetimeSeconds {
-    fn schema_name() -> std::borrow::Cow<'static, str> {
-        "TokenLifetimeSeconds".into()
-    }
-    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
-        schemars::json_schema!({"type":"integer","minimum":60,"maximum":3600})
-    }
 }

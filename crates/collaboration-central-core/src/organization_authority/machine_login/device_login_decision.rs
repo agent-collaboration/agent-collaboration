@@ -28,11 +28,23 @@ pub(crate) fn decide_device_login(
     {
         return refuse(DeviceLoginRefusal::NotPermitted {});
     }
-    // N03: after admission and SD8, request identity owns the first snapshot.
+    // N03: after admission and SD8, request identity owns the first snapshot
+    // for its original installation.
     // Mutable labels, workspaces, factor freshness and enrollment state cannot
     // replace that answer or create another effect.
     if let Some(earlier) = &facts.prior_approval {
+        if earlier.installation != request.installation {
+            return refuse(DeviceLoginRefusal::NotPermitted {});
+        }
         return Ok(Decided::unchanged(approved(earlier)));
+    }
+    let deadline_ms = request
+        .code_expires_at
+        .0
+        .checked_mul(1000)
+        .ok_or(StoreFailure::Unavailable)?;
+    if deadline_ms <= time.now_ms {
+        return refuse(DeviceLoginRefusal::NotPermitted {});
     }
     if !facts.missing_workspaces.is_empty() {
         return refuse(DeviceLoginRefusal::UnknownWorkspace {});
