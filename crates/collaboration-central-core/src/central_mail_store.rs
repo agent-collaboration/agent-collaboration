@@ -4,8 +4,8 @@ use crate::{ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls, workspace_decode_
 use central_storage::{
     AlarmUpdate, BatchOutcome, GuardedStatement, SqlValue, Statement, StoreFailure,
 };
-use collaboration_protocol::central_mail as mail;
 use serde::Serialize;
+use workspace_model::central_mail as mail;
 use workspace_model::{ActorIdentityId, SessionAddress, Timestamp};
 pub(crate) fn encode(value: &impl Serialize) -> Result<SqlValue, StoreFailure> {
     serde_json::to_string(value)

@@ -1,12 +1,12 @@
 //! R34 through admitted requests, owning storage and the host's actual alarm driver.
 use super::super::{Statement, support::*};
 use collaboration_central_core::WorkspaceCaller;
-use collaboration_protocol::central_mail::{
+use std::sync::atomic::Ordering;
+use workspace_model as m;
+use workspace_model::central_mail::{
     CentralMailAnswer as Answer, CentralMailOperation as Op, CentralMailRefusal as Refusal,
     CentralMailRequest, CentralMailResult as Result, MessageBody, TimingRequirement,
 };
-use std::sync::atomic::Ordering;
-use workspace_model as m;
 
 fn now(f: &Fixture) -> m::Timestamp {
     chrono::DateTime::from_timestamp_millis(f.clock.0.load(Ordering::SeqCst)).unwrap()
@@ -334,7 +334,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     assert_eq!(second_queue.messages[0].target, second_target);
     assert_eq!(
         second_queue.messages[0].state,
-        collaboration_protocol::central_mail::MessageState::Queued
+        workspace_model::central_mail::MessageState::Queued
     );
     assert_eq!(
         second_queue.messages[0].body,
@@ -368,7 +368,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
         );
     }
     assert_eq!(
-        serde_json::from_str::<collaboration_protocol::central_mail::SessionQueue>(
+        serde_json::from_str::<workspace_model::central_mail::SessionQueue>(
             &serde_json::to_string(&queue).unwrap()
         )
         .unwrap(),

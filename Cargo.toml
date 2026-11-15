@@ -1,6 +1,8 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/central-link-protocol",
+    "crates/central-link-client",
     "crates/workspace-ids",
     "crates/workspace-model",
     "crates/workspace-rules",
@@ -72,6 +74,7 @@ license = "MIT OR Apache-2.0"
 publish = false
 
 [workspace.dependencies]
+central-link-protocol = { path = "crates/central-link-protocol", version = "0.1.152" }
 workspace-ids = { path = "crates/workspace-ids", version = "0.1.149" }
 workspace-model = { path = "crates/workspace-model", version = "0.1.149" }
 central-storage = { path = "crates/central-storage", version = "0.1.149" }

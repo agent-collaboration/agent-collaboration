@@ -2,9 +2,9 @@ use super::*;
 
 #[tokio::test]
 async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
-    use collaboration_protocol::central_mail::MessageBody;
     use router_clock::ClockInstant;
     use std::time::Duration;
+    use workspace_model::central_mail::MessageBody;
     for point in [PausePoint::BeforeDrainCommit, PausePoint::AfterDrainCommit] {
         let mut f = Fixture::new().await;
         let area = f.area(7210).await;
@@ -214,7 +214,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
             .await
             .unwrap();
         let encoded = serde_json::to_vec(&batch).unwrap();
-        let batch: collaboration_protocol::central_mail::SessionQueue =
+        let batch: workspace_model::central_mail::SessionQueue =
             serde_json::from_slice(&encoded).unwrap();
         assert_eq!(batch.messages.len(), 1);
         let MessageBody::Notice { items } = &batch.messages[0].body else {

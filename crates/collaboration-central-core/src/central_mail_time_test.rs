@@ -65,10 +65,10 @@ fn cron_checks_every_selected_minute_and_utc_occurrences() {
 
 #[test]
 fn relative_durations_over_seven_days_report_the_horizon() {
-    use collaboration_protocol::central_mail::{
+    use workspace_model::SessionAddress;
+    use workspace_model::central_mail::{
         CentralMailOperation, CentralMailRefusal, TimingRequirement,
     };
-    use workspace_model::SessionAddress;
 
     let now = timestamp("2026-11-14T12:00:00Z");
     let target = SessionAddress {

@@ -1,8 +1,8 @@
 use super::super::{Statement, support::*};
-use collaboration_protocol::central_mail::{
+use std::sync::atomic::Ordering;
+use workspace_model::central_mail::{
     CentralMailAnswer, CentralMailOperation, CentralMailRequest, CentralMailResult,
 };
-use std::sync::atomic::Ordering;
 
 #[tokio::test]
 async fn earlier_wake_queued_behind_timer_commit_owns_next_physical_alarm() {

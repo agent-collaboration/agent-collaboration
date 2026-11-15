@@ -392,11 +392,11 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
     sustained::exercise_continued_activity(f, &threads).await;
 }
 fn notice_contents(
-    batch: collaboration_protocol::central_mail::SessionQueue,
+    batch: workspace_model::central_mail::SessionQueue,
 ) -> Vec<(
     workspace_ids::MessageId,
     m::Timestamp,
-    Vec<collaboration_protocol::central_mail::NoticeItem>,
+    Vec<workspace_model::central_mail::NoticeItem>,
 )> {
     batch
         .messages
@@ -413,12 +413,12 @@ fn assert_retained_notices(
     before: Vec<(
         workspace_ids::MessageId,
         m::Timestamp,
-        Vec<collaboration_protocol::central_mail::NoticeItem>,
+        Vec<workspace_model::central_mail::NoticeItem>,
     )>,
     after: Vec<(
         workspace_ids::MessageId,
         m::Timestamp,
-        Vec<collaboration_protocol::central_mail::NoticeItem>,
+        Vec<workspace_model::central_mail::NoticeItem>,
     )>,
     workspace: &m::WorkspaceId,
     thread: &m::ThreadId,

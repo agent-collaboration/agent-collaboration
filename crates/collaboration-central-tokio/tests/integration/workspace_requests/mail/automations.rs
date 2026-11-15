@@ -1,9 +1,9 @@
 use super::super::{Statement, support::*};
-use collaboration_protocol::central_mail::{
+use router_clock::RuntimeClock;
+use workspace_model::central_mail::{
     AutomationState, CentralMailAnswer as Answer, CentralMailOperation as Operation,
     CentralMailRefusal as Refusal, CentralMailRequest, CentralMailResult as Result,
 };
-use router_clock::RuntimeClock;
 
 async fn request(fixture: &Fixture, number: u32, operation: Operation) -> Result {
     fixture
@@ -153,15 +153,14 @@ async fn interval_catches_up_once_and_after_finishes() {
             panic!("invalid automation message: {row:?}")
         };
         assert_eq!(
-            serde_json::from_str::<collaboration_protocol::central_mail::MessageSender>(sender)
-                .unwrap(),
-            collaboration_protocol::central_mail::MessageSender::Central
+            serde_json::from_str::<workspace_model::central_mail::MessageSender>(sender).unwrap(),
+            workspace_model::central_mail::MessageSender::Central
         );
         assert_eq!(
             serde_json::from_str::<workspace_model::SessionAddress>(address).unwrap(),
             session(&fixture.caller)
         );
-        let collaboration_protocol::central_mail::MessageBody::Automation {
+        let workspace_model::central_mail::MessageBody::Automation {
             automation_id,
             text: body,
         } = serde_json::from_str(body).unwrap()

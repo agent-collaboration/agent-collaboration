@@ -105,7 +105,7 @@ pub(crate) struct CentralMailRequest {
     pub organization_id: OrganizationId,
     pub caller: workspace_model::Caller,
     pub credential_hash: String,
-    pub request: collaboration_protocol::central_mail::CentralMailRequest,
+    pub request: workspace_model::central_mail::CentralMailRequest,
 }
 type OrgRuntime = WorkspaceRuntime<CentralStatements, WorkspaceTransport>;
 enum AlarmFailure {

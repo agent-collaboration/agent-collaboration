@@ -2,9 +2,13 @@
 use super::{DependencyKind, NonDevDependencyGraph};
 use std::collections::{BTreeMap, BTreeSet};
 
-const PURE_CRATES: [(&str, &[&str]); 4] = [
+const PURE_CRATES: [(&str, &[&str]); 5] = [
     ("workspace-ids", &[]),
-    ("workspace-model", &["workspace-ids"]),
+    ("workspace-model", &["workspace-ids", "agent-automation"]),
+    (
+        "central-link-protocol",
+        &["workspace-ids", "workspace-model"],
+    ),
     ("central-storage", &[]),
     ("workspace-rules", &["workspace-model", "central-storage"]),
 ];
@@ -58,6 +62,27 @@ fn reachable<'a>(graph: &'a NonDevDependencyGraph, source: &'a str) -> BTreeSet<
 pub(super) fn check_boundaries(
     graph: &NonDevDependencyGraph,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    for name in [
+        "collaboration-central-core",
+        "collaboration-central-cloudflare",
+        "collaboration-central-tokio",
+    ] {
+        let Some(source) = graph.workspace_id(name) else {
+            continue;
+        };
+        for (destination, _) in graph.edges.get(source).into_iter().flatten() {
+            if graph
+                .names
+                .get(destination)
+                .is_some_and(|target| target == "collaboration-protocol")
+            {
+                return Err(format!(
+                    "C1: {name} retains a legacy collaboration-protocol dependency"
+                )
+                .into());
+            }
+        }
+    }
     for (name, allowed) in PURE_CRATES {
         let Some(source) = graph.workspace_id(name) else {
             continue;
@@ -77,6 +102,7 @@ pub(super) fn check_boundaries(
                 );
             }
         }
+        check_workspace_driver_edges(graph, source)?;
     }
     for name in PROXY_CRATES {
         let Some(source) = graph.workspace_id(name) else {
@@ -97,35 +123,66 @@ pub(super) fn check_boundaries(
     Ok(())
 }
 
+// Workspace-wide metadata merges unrelated features into external packages.
+// Follow workspace edges here; the package-scoped trees below check full closures.
+fn check_workspace_driver_edges(
+    graph: &NonDevDependencyGraph,
+    source: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut seen = BTreeSet::new();
+    let mut pending = vec![source];
+    while let Some(current) = pending.pop() {
+        if !seen.insert(current) {
+            continue;
+        }
+        for (destination, _) in graph.edges.get(current).into_iter().flatten() {
+            let target = graph
+                .names
+                .get(destination)
+                .ok_or("dependency name absent")?;
+            if is_effectful(target) {
+                return Err(format!("BD2: pure workspace dependency reaches {target}").into());
+            }
+            if graph.workspace_members.contains(destination) {
+                pending.push(destination);
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Workspace metadata merges features from unrelated roots (notably uuid's wasm
 /// support). A package-scoped tree checks the actual pure-rule dependency closure.
 pub(super) fn check_pure_dependency_tree(
     root: &std::path::Path,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let output = std::process::Command::new("cargo")
-        .args([
-            "tree",
-            "--locked",
-            "--offline",
-            "-p",
-            "workspace-rules",
-            "-e",
-            "normal,build",
-            "--prefix",
-            "none",
-            "--format",
-            "{p}",
-        ])
-        .current_dir(root)
-        .output()?;
-    if !output.status.success() {
-        return Err(format!(
-            "pure dependency tree failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        )
-        .into());
+    for (package, _) in PURE_CRATES {
+        let output = std::process::Command::new("cargo")
+            .args([
+                "tree",
+                "--locked",
+                "--offline",
+                "-p",
+                package,
+                "-e",
+                "normal,build",
+                "--prefix",
+                "none",
+                "--format",
+                "{p}",
+            ])
+            .current_dir(root)
+            .output()?;
+        if !output.status.success() {
+            return Err(format!(
+                "pure dependency tree failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            )
+            .into());
+        }
+        check_tree_output(&String::from_utf8(output.stdout)?)?;
     }
-    check_tree_output(&String::from_utf8(output.stdout)?)
+    Ok(())
 }
 fn check_tree_output(tree: &str) -> Result<(), Box<dyn std::error::Error>> {
     for name in tree
@@ -144,6 +201,50 @@ fn pure_package_tree_rejects_effectful_transitive_dependencies() {
     assert!(check_tree_output("workspace-rules v1\nserde v1\ntokio v1").is_err());
     assert!(check_tree_output("workspace-rules v1\nsqlx-sqlite v1").is_err());
     assert!(check_tree_output("workspace-rules v1\nworkspace-model v1\nuuid v1\nserde v1").is_ok());
+}
+
+#[test]
+fn mail_contract_dependency_keeps_model_and_link_transitively_driver_free() {
+    for kind in [DependencyKind::Normal, DependencyKind::Build] {
+        assert!(check_boundaries(&graph(&[("workspace-model", "agent-automation", kind)])).is_ok());
+        assert!(
+            check_boundaries(&graph(&[
+                ("workspace-model", "agent-automation", kind),
+                ("agent-automation", "tokio", kind),
+            ]))
+            .is_err()
+        );
+        assert!(
+            check_boundaries(&graph(&[
+                ("central-link-protocol", "workspace-model", kind),
+                ("workspace-model", "agent-automation", kind),
+                ("agent-automation", "sqlx-sqlite", kind),
+            ]))
+            .is_err()
+        );
+        assert!(check_boundaries(&graph(&[("workspace-model", "unlisted-host", kind)])).is_err());
+    }
+}
+
+#[test]
+fn central_owners_reject_direct_legacy_protocol_edges() {
+    for owner in [
+        "collaboration-central-core",
+        "collaboration-central-cloudflare",
+        "collaboration-central-tokio",
+    ] {
+        for kind in [DependencyKind::Normal, DependencyKind::Build] {
+            assert!(check_boundaries(&graph(&[(owner, "collaboration-protocol", kind)])).is_err());
+        }
+        assert!(
+            check_boundaries(&graph(&[(
+                owner,
+                "collaboration-protocol",
+                DependencyKind::Dev
+            )]))
+            .is_ok()
+        );
+    }
 }
 
 fn graph(edges: &[(&str, &str, DependencyKind)]) -> NonDevDependencyGraph {

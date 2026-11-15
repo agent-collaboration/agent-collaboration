@@ -1,11 +1,11 @@
 //! Central's typed mail and timer contract; delivery belongs to a later boundary.
+use crate::{
+    ChangeEvent, ChangePosition, ItemRef, PostText, RefusalReason, SessionAddress, Timestamp,
+};
 use agent_automation::TimingRule;
 use serde::{Deserialize, Serialize};
 use workspace_ids::{
     ActorIdentityId, AutomationId, ChangeId, MessageId, RequestId, ThreadId, WakeId, WorkspaceId,
-};
-use workspace_model::{
-    ChangeEvent, ChangePosition, ItemRef, PostText, RefusalReason, SessionAddress, Timestamp,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -24,7 +24,7 @@ pub struct CentralMailRequest {
 )]
 pub enum CentralMailOperation {
     SetNoticeCadence {
-        cadence: workspace_model::NoticeCadence,
+        cadence: crate::NoticeCadence,
     },
     SendMessage {
         to: SessionAddress,
@@ -60,7 +60,7 @@ pub enum CentralMailOperation {
 )]
 pub enum CentralMailAnswer {
     NoticeCadenceSet {
-        cadence: workspace_model::NoticeCadence,
+        cadence: crate::NoticeCadence,
     },
     Queued {
         message_id: MessageId,

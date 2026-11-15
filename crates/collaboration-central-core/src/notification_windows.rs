@@ -7,8 +7,8 @@ use crate::{
     workspace_row_codec::{column, json, string},
 };
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
-use collaboration_protocol::central_mail as mail;
 use workspace_ids::{NotificationWindowId, NotificationWindowItemId};
+use workspace_model::central_mail as mail;
 use workspace_model::{
     ActorIdentityId, ChangeId, ChangePosition, NoticeCadence, ThreadId, Timestamp, WorkspaceId,
 };

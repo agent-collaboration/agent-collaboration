@@ -4,7 +4,7 @@ use crate::{
     workspace_row_codec::{column, json, string},
 };
 use central_storage::{ReadOutcome, SqlValue, Statement, StoreFailure};
-use collaboration_protocol::central_mail as mail;
+use workspace_model::central_mail as mail;
 use workspace_model::{ActorIdentityId, ChangeId, MachineId, ThreadId, WorkspaceId};
 fn parse<T: std::str::FromStr>(value: &str, field: &str) -> Result<T, StoreFailure> {
     value.parse().map_err(|_| corrupt(field))

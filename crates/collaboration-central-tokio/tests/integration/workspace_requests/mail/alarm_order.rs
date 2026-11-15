@@ -1,10 +1,10 @@
 use super::super::{Statement, support::*};
-use collaboration_protocol::central_mail::{
+use router_clock::{ClockInstant, RuntimeClock};
+use std::time::Duration;
+use workspace_model::central_mail::{
     CentralMailAnswer as Answer, CentralMailOperation as Operation, CentralMailRequest,
     CentralMailResult as Result,
 };
-use router_clock::{ClockInstant, RuntimeClock};
-use std::time::Duration;
 
 #[tokio::test]
 async fn earlier_timer_waits_for_old_publication_and_becomes_the_driver_deadline() {

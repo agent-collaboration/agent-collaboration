@@ -3,11 +3,11 @@ use super::super::{
     support::*,
     workerd_host::{AlarmReceipt, AlarmReceiptResult},
 };
-use collaboration_protocol::central_mail::{
+use std::sync::atomic::Ordering;
+use workspace_model::central_mail::{
     CentralMailAnswer as Answer, CentralMailOperation as Operation, CentralMailRequest,
     CentralMailResult as Result,
 };
-use std::sync::atomic::Ordering;
 
 async fn set_due_wake(fixture: &Fixture) {
     let now = fixture.clock.0.load(Ordering::SeqCst);

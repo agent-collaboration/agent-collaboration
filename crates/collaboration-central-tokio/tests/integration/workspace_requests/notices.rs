@@ -203,7 +203,7 @@ async fn concurrent_drains_hold_workspace_turn_and_do_not_duplicate_notice() {
 
 #[tokio::test]
 async fn leave_notifications_off_and_resolution_cancel_notices_but_keep_direct_mail() {
-    use collaboration_protocol::central_mail::{
+    use workspace_model::central_mail::{
         CentralMailOperation, CentralMailRequest, CentralMailResult,
     };
     for action in 0..3 {
@@ -361,7 +361,7 @@ async fn restart_driver_drains_applied_workspace_write_without_another_request()
 
 #[tokio::test]
 async fn session_cadence_sets_nondefault_window_deadline() {
-    use collaboration_protocol::central_mail::{
+    use workspace_model::central_mail::{
         CentralMailAnswer, CentralMailOperation, CentralMailRequest, CentralMailResult,
     };
     let f = Fixture::new().await;

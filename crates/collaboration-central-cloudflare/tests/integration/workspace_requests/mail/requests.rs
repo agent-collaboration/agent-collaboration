@@ -1,9 +1,9 @@
 use super::super::{Statement, support::*};
-use collaboration_protocol::central_mail::{
+use workspace_model as m;
+use workspace_model::central_mail::{
     CentralMailAnswer as Answer, CentralMailOperation as Operation, CentralMailRefusal as Refusal,
     CentralMailRequest, CentralMailResult as Result,
 };
-use workspace_model as m;
 
 async fn request(
     fixture: &Fixture,
@@ -71,9 +71,8 @@ async fn direct_mail_replays_expires_and_routes_to_both_machines() {
         panic!("missing direct message or sender identity: {row:?}")
     };
     assert!(matches!(
-        serde_json::from_str::<collaboration_protocol::central_mail::MessageSender>(sender)
-            .unwrap(),
-        collaboration_protocol::central_mail::MessageSender::Actor(_)
+        serde_json::from_str::<workspace_model::central_mail::MessageSender>(sender).unwrap(),
+        workspace_model::central_mail::MessageSender::Actor(_)
     ));
     assert_eq!(
         serde_json::from_str::<m::Identity>(identity).unwrap(),
@@ -86,8 +85,8 @@ async fn direct_mail_replays_expires_and_routes_to_both_machines() {
         first
     );
     assert_eq!(
-        serde_json::from_str::<collaboration_protocol::central_mail::MessageBody>(body).unwrap(),
-        collaboration_protocol::central_mail::MessageBody::Direct {
+        serde_json::from_str::<workspace_model::central_mail::MessageBody>(body).unwrap(),
+        workspace_model::central_mail::MessageBody::Direct {
             body: "one".to_owned().try_into().unwrap()
         }
     );

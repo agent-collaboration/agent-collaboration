@@ -1,9 +1,9 @@
 use super::super::{Statement, support::*};
-use collaboration_protocol::central_mail::{
+use std::sync::atomic::Ordering;
+use workspace_model::central_mail::{
     CentralMailAnswer as Answer, CentralMailOperation as Operation, CentralMailRefusal as Refusal,
     CentralMailRequest, CentralMailResult as Result,
 };
-use std::sync::atomic::Ordering;
 
 async fn request(fixture: &Fixture, number: u32, operation: Operation) -> Result {
     fixture
@@ -144,15 +144,14 @@ async fn actual_alarm_fires_simultaneous_wakes_once_and_excludes_cancelled() {
             panic!("invalid wake message: {row:?}")
         };
         assert_eq!(
-            serde_json::from_str::<collaboration_protocol::central_mail::MessageSender>(sender)
-                .unwrap(),
-            collaboration_protocol::central_mail::MessageSender::Central
+            serde_json::from_str::<workspace_model::central_mail::MessageSender>(sender).unwrap(),
+            workspace_model::central_mail::MessageSender::Central
         );
         assert_eq!(
             serde_json::from_str::<workspace_model::SessionAddress>(address).unwrap(),
             target
         );
-        let collaboration_protocol::central_mail::MessageBody::Wake {
+        let workspace_model::central_mail::MessageBody::Wake {
             wake_id,
             text: body,
         } = serde_json::from_str(body).unwrap()
