@@ -30,12 +30,6 @@
 				"kind": "secondFactorRequired",
 				"withinSeconds": 900
 			}
-		},
-		{
-			"result": "refused",
-			"reason": {
-				"kind": "formerServiceLinkedElsewhere"
-			}
 		}
 	],
 	"machineToken": [

@@ -1,5 +1,5 @@
 {
-	"source": "machine-login-contracts.ts and fleet-admin-client.ts; owner N07/N10/N03 (Approved carries central's stored label and allowedWorkspaces, PD DeviceLoginDecision), producer 0fd8a869af7c0441e2c8acb365f64d5daf99b1b1; literal expected JSON output in producer field order",
+	"source": "machine-login-contracts.ts and fleet-admin-client.ts; owner N07/N10/N03 (Approved carries central's stored label and allowedWorkspaces, PD DeviceLoginDecision), producer 0fd8a869af7c0441e2c8acb365f64d5daf99b1b1; literal expected JSON output in producer field order; WS15 (owner decision D, central 4b): formerServiceId and formerServiceLinkedElsewhere are removed, so their former accept vectors now refuse",
 	"vectors": [
 		{
 			"contract": "DecideDeviceLogin",
@@ -795,7 +795,7 @@
 		},
 		{
 			"contract": "DecideDeviceLogin",
-			"verdict": "accept",
+			"verdict": "refuse",
 			"input": {
 				"organizationId": "019a61bb-0000-7000-8000-000000000001",
 				"approver": "019a61bb-0000-7000-8000-000000000002",
@@ -807,127 +807,6 @@
 				"allowedWorkspaces": [],
 				"approverSecondFactorAt": null,
 				"formerServiceId": "a77d3c10-cc03-4528-a5b3-6b1566cb4b91",
-				"codeExpiresAt": 1793448600
-			},
-			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null,\"formerServiceId\":\"a77d3c10-cc03-4528-a5b3-6b1566cb4b91\",\"codeExpiresAt\":1793448600}"
-		},
-		{
-			"contract": "DecideDeviceLogin",
-			"verdict": "accept",
-			"input": {
-				"organizationId": "019a61bb-0000-7000-8000-000000000001",
-				"approver": "019a61bb-0000-7000-8000-000000000002",
-				"permissionChecked": "machine:enroll",
-				"requestId": "019a61bb-0000-7000-8000-000000000003",
-				"installation": "019a61bb-0000-7000-8000-000000000001",
-				"peer": "019a61bb-0000-7000-8000-000000000001",
-				"label": "Router",
-				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null,
-				"formerServiceId": "019a61bb-0000-7000-8000-000000000001",
-				"codeExpiresAt": 1793448600
-			},
-			"output": "{\"organizationId\":\"019a61bb-0000-7000-8000-000000000001\",\"approver\":\"019a61bb-0000-7000-8000-000000000002\",\"permissionChecked\":\"machine:enroll\",\"requestId\":\"019a61bb-0000-7000-8000-000000000003\",\"installation\":\"019a61bb-0000-7000-8000-000000000001\",\"peer\":\"019a61bb-0000-7000-8000-000000000001\",\"label\":\"Router\",\"allowedWorkspaces\":[],\"approverSecondFactorAt\":null,\"formerServiceId\":\"019a61bb-0000-7000-8000-000000000001\",\"codeExpiresAt\":1793448600}"
-		},
-		{
-			"contract": "DecideDeviceLogin",
-			"verdict": "refuse",
-			"input": {
-				"organizationId": "019a61bb-0000-7000-8000-000000000001",
-				"approver": "019a61bb-0000-7000-8000-000000000002",
-				"permissionChecked": "machine:enroll",
-				"requestId": "019a61bb-0000-7000-8000-000000000003",
-				"installation": "019a61bb-0000-7000-8000-000000000001",
-				"peer": "019a61bb-0000-7000-8000-000000000001",
-				"label": "Router",
-				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null,
-				"formerServiceId": "A77D3C10-CC03-4528-A5B3-6B1566CB4B91",
-				"codeExpiresAt": 1793448600
-			}
-		},
-		{
-			"contract": "DecideDeviceLogin",
-			"verdict": "refuse",
-			"input": {
-				"organizationId": "019a61bb-0000-7000-8000-000000000001",
-				"approver": "019a61bb-0000-7000-8000-000000000002",
-				"permissionChecked": "machine:enroll",
-				"requestId": "019a61bb-0000-7000-8000-000000000003",
-				"installation": "019a61bb-0000-7000-8000-000000000001",
-				"peer": "019a61bb-0000-7000-8000-000000000001",
-				"label": "Router",
-				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null,
-				"formerServiceId": "019A61BB-0000-7000-8000-000000000001",
-				"codeExpiresAt": 1793448600
-			}
-		},
-		{
-			"contract": "DecideDeviceLogin",
-			"verdict": "refuse",
-			"input": {
-				"organizationId": "019a61bb-0000-7000-8000-000000000001",
-				"approver": "019a61bb-0000-7000-8000-000000000002",
-				"permissionChecked": "machine:enroll",
-				"requestId": "019a61bb-0000-7000-8000-000000000003",
-				"installation": "019a61bb-0000-7000-8000-000000000001",
-				"peer": "019a61bb-0000-7000-8000-000000000001",
-				"label": "Router",
-				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null,
-				"formerServiceId": "550e8400-e29b-11d4-a716-446655440000",
-				"codeExpiresAt": 1793448600
-			}
-		},
-		{
-			"contract": "DecideDeviceLogin",
-			"verdict": "refuse",
-			"input": {
-				"organizationId": "019a61bb-0000-7000-8000-000000000001",
-				"approver": "019a61bb-0000-7000-8000-000000000002",
-				"permissionChecked": "machine:enroll",
-				"requestId": "019a61bb-0000-7000-8000-000000000003",
-				"installation": "019a61bb-0000-7000-8000-000000000001",
-				"peer": "019a61bb-0000-7000-8000-000000000001",
-				"label": "Router",
-				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null,
-				"formerServiceId": "550e8400-e29b-51d4-a716-446655440000",
-				"codeExpiresAt": 1793448600
-			}
-		},
-		{
-			"contract": "DecideDeviceLogin",
-			"verdict": "refuse",
-			"input": {
-				"organizationId": "019a61bb-0000-7000-8000-000000000001",
-				"approver": "019a61bb-0000-7000-8000-000000000002",
-				"permissionChecked": "machine:enroll",
-				"requestId": "019a61bb-0000-7000-8000-000000000003",
-				"installation": "019a61bb-0000-7000-8000-000000000001",
-				"peer": "019a61bb-0000-7000-8000-000000000001",
-				"label": "Router",
-				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null,
-				"formerServiceId": "a77d3c10-cc03-4528-75b3-6b1566cb4b91",
-				"codeExpiresAt": 1793448600
-			}
-		},
-		{
-			"contract": "DecideDeviceLogin",
-			"verdict": "refuse",
-			"input": {
-				"organizationId": "019a61bb-0000-7000-8000-000000000001",
-				"approver": "019a61bb-0000-7000-8000-000000000002",
-				"permissionChecked": "machine:enroll",
-				"requestId": "019a61bb-0000-7000-8000-000000000003",
-				"installation": "019a61bb-0000-7000-8000-000000000001",
-				"peer": "019a61bb-0000-7000-8000-000000000001",
-				"label": "Router",
-				"allowedWorkspaces": [],
-				"approverSecondFactorAt": null,
-				"formerServiceId": "019a61bb-0000-7000-c000-000000000001",
 				"codeExpiresAt": 1793448600
 			}
 		},
@@ -1487,97 +1366,19 @@
 		},
 		{
 			"contract": "DeviceLoginDecision",
-			"verdict": "accept",
+			"verdict": "refuse",
 			"input": {
 				"result": "refused",
 				"reason": {
 					"kind": "formerServiceLinkedElsewhere"
 				}
-			},
-			"output": "{\"result\":\"refused\",\"reason\":{\"kind\":\"formerServiceLinkedElsewhere\"}}"
+			}
 		},
 		{
 			"contract": "DeviceLoginRefusal",
-			"verdict": "accept",
+			"verdict": "refuse",
 			"input": {
 				"kind": "formerServiceLinkedElsewhere"
-			},
-			"output": "{\"kind\":\"formerServiceLinkedElsewhere\"}"
-		},
-		{
-			"contract": "DeviceLoginRefusal",
-			"verdict": "refuse",
-			"input": {
-				"kind": "formerServiceLinkedElsewhere",
-				"installation": "019a61bb-0000-7000-8000-000000000001"
-			}
-		},
-		{
-			"contract": "DeviceLoginDecision",
-			"verdict": "refuse",
-			"input": {
-				"result": "refused",
-				"reason": {
-					"kind": "formerServiceLinkedElsewhere",
-					"installation": "019a61bb-0000-7000-8000-000000000001"
-				}
-			}
-		},
-		{
-			"contract": "DeviceLoginRefusal",
-			"verdict": "refuse",
-			"input": {
-				"kind": "formerServiceLinkedElsewhere",
-				"organizationId": "019a61bb-0000-7000-8000-000000000001"
-			}
-		},
-		{
-			"contract": "DeviceLoginDecision",
-			"verdict": "refuse",
-			"input": {
-				"result": "refused",
-				"reason": {
-					"kind": "formerServiceLinkedElsewhere",
-					"organizationId": "019a61bb-0000-7000-8000-000000000001"
-				}
-			}
-		},
-		{
-			"contract": "DeviceLoginRefusal",
-			"verdict": "refuse",
-			"input": {
-				"kind": "formerServiceLinkedElsewhere",
-				"serviceId": "019a61bb-0000-7000-8000-000000000001"
-			}
-		},
-		{
-			"contract": "DeviceLoginDecision",
-			"verdict": "refuse",
-			"input": {
-				"result": "refused",
-				"reason": {
-					"kind": "formerServiceLinkedElsewhere",
-					"serviceId": "019a61bb-0000-7000-8000-000000000001"
-				}
-			}
-		},
-		{
-			"contract": "DeviceLoginRefusal",
-			"verdict": "refuse",
-			"input": {
-				"kind": "formerServiceLinkedElsewhere",
-				"enrollmentId": "019a61bb-0000-7000-8000-000000000001"
-			}
-		},
-		{
-			"contract": "DeviceLoginDecision",
-			"verdict": "refuse",
-			"input": {
-				"result": "refused",
-				"reason": {
-					"kind": "formerServiceLinkedElsewhere",
-					"enrollmentId": "019a61bb-0000-7000-8000-000000000001"
-				}
 			}
 		},
 		{

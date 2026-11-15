@@ -12,7 +12,8 @@ pub const OWNER_SUBJECT: &str = "019f0000-0000-7000-8000-00000000d203";
 pub const MEMBER: &str = "019f0000-0000-7000-8000-00000000d204";
 pub const MEMBER_SUBJECT: &str = "019f0000-0000-7000-8000-00000000d205";
 pub const SESSION: &str = "019f0000-0000-7000-8000-00000000d206";
-pub const POLICY: &str = "2d31b5d72716e64e255d8858c231f593155289fb03ed354c4b762890667a3c22";
+// switchboard@b1c9f6f6: src/organizations/fleet-permission-policy-digest.ts
+pub const POLICY: &str = "af40ec7fb999c4ef7f9611f322bab013e05666b56cd1d3101fac1e9e001d074a";
 pub const CREATE: &str = "/organization-admin/v1/create-workspace";
 pub const LOOKUP: &str = "/organization-admin/v1/workspace-lookup";
 pub const RECORDS: &str = "/organization-admin/v1/change-records";

@@ -18,7 +18,8 @@ const SUBJECT: &str = "019f0000-0000-7000-8000-00000000ab04";
 const SESSION: &str = "019f0000-0000-7000-8000-00000000ab05";
 const NOW: i64 = 1_800_000_000_000;
 const TIME: &str = "2027-01-15T08:00:00Z";
-const POLICY: &str = "2d31b5d72716e64e255d8858c231f593155289fb03ed354c4b762890667a3c22";
+// switchboard@b1c9f6f6: src/organizations/fleet-permission-policy-digest.ts
+const POLICY: &str = "af40ec7fb999c4ef7f9611f322bab013e05666b56cd1d3101fac1e9e001d074a";
 
 #[tokio::test]
 async fn computed_json_text_cast_preserves_the_runtime_text_type_through_a_cte() {

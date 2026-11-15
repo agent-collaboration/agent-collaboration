@@ -9,7 +9,8 @@ use serde_json::json;
 const ORGANIZATION: &str = "019f0000-0000-7000-8000-00000000f201";
 const PERSON: &str = "019f0000-0000-7000-8000-00000000f202";
 const SUBJECT: &str = "019f0000-0000-7000-8000-00000000f203";
-const POLICY: &str = "2d31b5d72716e64e255d8858c231f593155289fb03ed354c4b762890667a3c22";
+// switchboard@b1c9f6f6: src/organizations/fleet-permission-policy-digest.ts
+const POLICY: &str = "af40ec7fb999c4ef7f9611f322bab013e05666b56cd1d3101fac1e9e001d074a";
 
 fn organization(revision: i64, state: &str) -> AuthorizationRevision {
     serde_json::from_value(json!({"kind":"organization","organizationId":ORGANIZATION,"revision":revision,"state":state,"permissionPolicyDigest":POLICY})).unwrap()
