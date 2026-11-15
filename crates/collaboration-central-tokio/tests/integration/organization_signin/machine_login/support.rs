@@ -88,12 +88,16 @@ pub(super) fn token(enrollment: &str, client: &str) -> Value {
     json!({"organizationId":ORG,"enrollmentId":enrollment,"clientId":client})
 }
 pub(super) fn enrollment(answer: &Value) -> Result<String> {
-    assert_eq!(answer.get("result"), Some(&json!("approved")));
+    if answer.get("result") != Some(&json!("approved")) {
+        return Err("fixture reply is not an approved enrollment".into());
+    }
     let value = answer
         .get("enrollmentId")
         .and_then(Value::as_str)
         .ok_or("approved fixture reply lacks a string enrollmentId")?;
-    assert!(uuid::Uuid::parse_str(value).is_ok_and(|id| id.get_version_num() == 7));
+    if !uuid::Uuid::parse_str(value).is_ok_and(|id| id.get_version_num() == 7) {
+        return Err("approved fixture reply has no UUIDv7 enrollmentId".into());
+    }
     Ok(value.to_owned())
 }
 pub(super) fn grant(
@@ -102,11 +106,20 @@ pub(super) fn grant(
     now: i64,
     superseded: Option<(&str, &str)>,
 ) -> Value {
-    let mut answer = json!({"result":"grant","installation":installation,"enrollmentId":enrollment,"decidedAt":now,"grantExpiresAt":now+LIFETIME});
+    let mut answer = serde_json::Map::from_iter([
+        ("result".to_owned(), json!("grant")),
+        ("installation".to_owned(), json!(installation)),
+        ("enrollmentId".to_owned(), json!(enrollment)),
+        ("decidedAt".to_owned(), json!(now)),
+        ("grantExpiresAt".to_owned(), json!(now + LIFETIME)),
+    ]);
     if let Some((enrollment, client)) = superseded {
-        answer["superseded"] = json!({"enrollmentId":enrollment,"clientId":client});
+        answer.insert(
+            "superseded".to_owned(),
+            json!({"enrollmentId":enrollment,"clientId":client}),
+        );
     }
-    answer
+    Value::Object(answer)
 }
 pub(super) fn refused(reason: &str) -> Value {
     json!({"result":"refuse","reason":{"kind":reason}})
