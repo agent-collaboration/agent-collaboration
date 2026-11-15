@@ -2,15 +2,15 @@
 // sanitized receipt; a parser pass alone is never a product execution result.
 import assert from "node:assert/strict";
 import { z } from "zod";
-import { assertC2Restore, c2RecordSchema } from "./c2-witness.ts";
+import { assertC2Restore, c2AttachmentSchema, c2RecordSchema } from "./c2-witness.ts";
 
 const uuid = z.uuidv7();
 const areaRef = z.object({ kind: z.literal("area"), id: uuid }).strict();
-const session = z
+export const c2SessionSchema = z
   .object({ machineId: uuid, endpoint: z.string().min(1), sessionId: uuid })
   .strict();
 const caller = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("session"), value: session }).strict(),
+  z.object({ kind: z.literal("session"), value: c2SessionSchema }).strict(),
   z
     .object({
       kind: z.literal("person"),
@@ -92,19 +92,17 @@ export const c2ProductReceiptSchema = z
   .strict();
 export type C2ProductReceipt = z.infer<typeof c2ProductReceiptSchema>;
 
-function correlate(
-  requestFrame: z.infer<typeof request>,
+export function correlateC2WorkspaceReply(
+  correlationId: string,
   replyFrame: z.infer<typeof reply>,
 ): unknown {
-  assert.equal(
-    replyFrame.correlationId,
-    requestFrame.request.correlationId,
-    "Reply must match actual Request",
-  );
+  assert.equal(replyFrame.correlationId, correlationId, "Reply must match actual Request");
   return done.parse(replyFrame.result.reply.result).answer;
 }
 
-function assertSemanticFrames(receipt: C2ProductReceipt): void {
+export function assertC2BaselineWorkspace(
+  receipt: Pick<C2ProductReceipt, "baselineRequest" | "baselineReply">,
+): string {
   const baselineOperation = z
     .object({ kind: z.literal("createWorkspace"), name: z.string().min(1) })
     .strict()
@@ -130,12 +128,22 @@ function assertSemanticFrames(receipt: C2ProductReceipt): void {
         .strict(),
     })
     .strict()
-    .parse(correlate(receipt.baselineRequest, receipt.baselineReply));
+    .parse(
+      correlateC2WorkspaceReply(
+        receipt.baselineRequest.request.correlationId,
+        receipt.baselineReply,
+      ),
+    );
   assert.equal(
     baselineAnswer.workspace.name,
     baselineOperation.name,
     "baseline name comes from actual request",
   );
+  return baselineAnswer.workspace.workspaceId;
+}
+
+function assertSemanticFrames(receipt: C2ProductReceipt): void {
+  const baselineWorkspace = assertC2BaselineWorkspace(receipt);
   const created = z
     .object({
       kind: z.literal("created"),
@@ -143,7 +151,12 @@ function assertSemanticFrames(receipt: C2ProductReceipt): void {
       position: z.number().int().safe().nonnegative(),
     })
     .strict()
-    .parse(correlate(receipt.decidingRequest, receipt.decidingReply));
+    .parse(
+      correlateC2WorkspaceReply(
+        receipt.decidingRequest.request.correlationId,
+        receipt.decidingReply,
+      ),
+    );
   const operation = z
     .object({ kind: z.literal("createArea"), name: z.string().min(1) })
     .strict()
@@ -158,13 +171,40 @@ function assertSemanticFrames(receipt: C2ProductReceipt): void {
     receipt.decidingRequest.request.payload.request.requestId !== null,
     "write has durable RequestId",
   );
+  const workspace = receipt.decidingRequest.request.payload.request.workspaceId;
+  assert.ok(workspace !== null, "CreateArea names a workspace");
+  assert.equal(workspace, baselineWorkspace, "CreateArea uses the actual baseline workspace");
+  assertC2AreaRead({
+    request: receipt.readRequest,
+    reply: receipt.readReply,
+    workspace,
+    areaId: created.item.id,
+    name: operation.name,
+  });
+  const correlations = [receipt.baselineRequest, receipt.decidingRequest, receipt.readRequest].map(
+    (frame) => frame.request.correlationId,
+  );
+  assert.equal(
+    new Set(correlations).size,
+    3,
+    "distinct requests use distinct transport correlations",
+  );
+}
+
+export function assertC2AreaRead(input: {
+  readonly request: C2ProductReceipt["readRequest"];
+  readonly reply: C2ProductReceipt["readReply"];
+  readonly workspace: string;
+  readonly areaId: string;
+  readonly name: string;
+}): void {
   const shown = z
     .object({ kind: z.literal("show"), item: areaRef })
     .strict()
-    .parse(receipt.readRequest.request.payload.request.operation);
-  assert.equal(shown.item.id, created.item.id, "real read targets created area");
+    .parse(input.request.request.payload.request.operation);
+  assert.equal(shown.item.id, input.areaId, "real read targets created area");
   assert.equal(
-    receipt.readRequest.request.payload.request.requestId,
+    input.request.request.payload.request.requestId,
     null,
     "read has no durable RequestId",
   );
@@ -174,26 +214,11 @@ function assertSemanticFrames(receipt: C2ProductReceipt): void {
       item: z.object({ kind: z.literal("area"), item: area }).strict(),
     })
     .strict()
-    .parse(correlate(receipt.readRequest, receipt.readReply));
-  assert.equal(readAnswer.item.item.areaId, created.item.id);
-  assert.equal(readAnswer.item.item.name, operation.name);
-  const workspace = receipt.decidingRequest.request.payload.request.workspaceId;
-  assert.ok(workspace !== null, "CreateArea names a workspace");
-  assert.equal(
-    workspace,
-    baselineAnswer.workspace.workspaceId,
-    "CreateArea uses the actual baseline workspace",
-  );
-  assert.equal(readAnswer.item.item.workspaceId, workspace);
-  assert.equal(receipt.readRequest.request.payload.request.workspaceId, workspace);
-  const correlations = [receipt.baselineRequest, receipt.decidingRequest, receipt.readRequest].map(
-    (frame) => frame.request.correlationId,
-  );
-  assert.equal(
-    new Set(correlations).size,
-    3,
-    "distinct requests use distinct transport correlations",
-  );
+    .parse(correlateC2WorkspaceReply(input.request.request.correlationId, input.reply));
+  assert.equal(readAnswer.item.item.areaId, input.areaId);
+  assert.equal(readAnswer.item.item.name, input.name);
+  assert.equal(readAnswer.item.item.workspaceId, input.workspace);
+  assert.equal(input.request.request.payload.request.workspaceId, input.workspace);
 }
 
 function assertSessionCaller(receipt: C2ProductReceipt): void {
@@ -218,7 +243,12 @@ function assertSessionCaller(receipt: C2ProductReceipt): void {
   }
 }
 
-function assertSocketWitnesses(receipt: C2ProductReceipt): void {
+export function originalC2Attachment(
+  receipt: Pick<
+    C2ProductReceipt,
+    "beforeEvents" | "organization" | "installationId" | "heartbeatEvents"
+  >,
+): z.infer<typeof c2AttachmentSchema> {
   const upgrades = receipt.beforeEvents.filter((record) => record.event.kind === "upgrade");
   assert.equal(upgrades.length, 1, "one original socket upgrade");
   const upgrade = upgrades[0];
@@ -245,6 +275,11 @@ function assertSocketWitnesses(receipt: C2ProductReceipt): void {
   );
   for (const snapshot of receipt.heartbeatEvents)
     assert.deepEqual(snapshot, receipt.beforeEvents, "each pong adds no observed witnesses");
+  return attachment;
+}
+
+function assertSocketWitnesses(receipt: C2ProductReceipt): void {
+  const attachment = originalC2Attachment(receipt);
   assert.deepEqual(
     receipt.decidingEvents.slice(0, receipt.beforeEvents.length),
     receipt.beforeEvents,

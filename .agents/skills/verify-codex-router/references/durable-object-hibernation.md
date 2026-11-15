@@ -81,9 +81,9 @@ update. During the protected interval permit only recorder snapshots and the
 original socket's fixed heartbeat; an unrelated alarm invalidates isolated wake
 attribution. The deciding request is a correlated `CreateArea`, followed afterward
 by a real read request and an independent read of the owning workspace SQLite row.
-The permanent Rust socket journey owns provisioning, token signing, semantic
-encoding and row assertions. Its exact declared compiled selector and sanitized
-receipt handoff are still prerequisites; do not replace them with the stand-in.
+The permanent Rust socket journeys own provisioning, token signing, semantic
+encoding and row assertions. A frozen source, signed executable and compiled
+bundle hold remain prerequisites; do not replace them with the stand-in.
 
 ### Declared compiled-target entry (draft until driven)
 
@@ -131,6 +131,48 @@ feasibility probe. If workers-rs proxy or ordinary-accept attachment compatibili
 fails, stop that probe: Lead explicitly permits retaining the narrower #285 real
 stand-in negative floor, with the compiled-path negative unproven and its exact
 reason recorded. Do not add another runtime path or a product hook to force it.
+
+### Write batch entry (draft until driven)
+
+Owner-approved C2 `Batch` carries 1–64 write LinkRequests, distinct correlations,
+and their durable write IDs, ToCentral only. Invalid frames refuse whole at
+decoding. Members run in frame order with independent admission and Replies;
+semantic refusal does not abort later members. There is no batch transaction,
+ID or acknowledgement. C3 owns the Mac outbox and minute-flush scheduling.
+
+Use the same declared-target plan schema with the separate source-defined entry:
+
+```sh
+node verification/observations/central/durable-object-hibernation.ts --c2-batch-plan "$C2_PLAN"
+```
+
+It selects exactly
+`workspace_requests::machine_link::batch::one_hibernation_wake_processes_independent_writes_and_replies`
+and sets the fixture's private absolute `CODEX_ROUTER_C2_BATCH_HIBERNATION_RECEIPT`
+destination. The raw `c2BatchHibernation` receipt replaces the single deciding
+exchange with one actual Batch, three ordered correlated Replies, two Show
+exchanges, two area identities and a typed owning-central wake count readback.
+The reader derives shared frame/store schemas from the single journey. Keep both
+journeys; a batch result does not replace immediate single/read coverage.
+
+The deciding frame contains CreateArea, a well-formed SetWake at the selected past
+five-minute timestamp, then another CreateArea. Require Workspace success, the
+exact Mail FutureTime refusal, and the later Workspace success, with the same
+session caller, distinct IDs and exact two owning area rows. Require actual
+`SELECT COUNT(*) AS wake_count FROM wakes` to return one Integer(0), after all
+Replies and the deciding witness snapshot. An empty SELECT alone lacks column
+metadata on the Worker adapter; use this typed count to observe zero wake rows.
+
+One batch must add one constructor and one handler. Every member, including the
+semantic refusal, needs its own admitted restoration and terminal alarm snapshot.
+For each member, all three live-read witnesses must occur after the preceding
+member's terminal snapshot and before this restoration, on the same new instance
+and physical object. Repeating the old single-request assertion for each member
+would wrongly allow earlier initial/held recheck reads to qualify a later one.
+The lasting checker rejects that explicit counterexample and extra/missing
+callbacks, but its unit vectors remain apparatus evidence. Real protocol bounds,
+decoding refusal, mixed effects and one-wake behavior still require the declared
+compiled fixture and its retained target-bound receipt.
 
 ## Limits
 

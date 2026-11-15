@@ -8,9 +8,20 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { basename, isAbsolute, join } from "node:path";
 import { z } from "zod";
 import { assertC2ProductReceipt } from "./c2-product-receipt.ts";
+import { assertC2BatchReceipt } from "./c2-batch-receipt.ts";
 
 export const c2ProductSelector =
   "workspace_requests::machine_link::hibernating_socket_restores_live_authority_and_semantic_store";
+export const c2BatchSelector =
+  "workspace_requests::machine_link::batch::one_hibernation_wake_processes_independent_writes_and_replies";
+const journeys = {
+  single: { selector: c2ProductSelector, receiptVariable: "CODEX_ROUTER_C2_HIBERNATION_RECEIPT" },
+  batch: {
+    selector: c2BatchSelector,
+    receiptVariable: "CODEX_ROUTER_C2_BATCH_HIBERNATION_RECEIPT",
+  },
+} as const;
+type C2Journey = keyof typeof journeys;
 const digest = z.string().regex(/^[0-9a-f]{64}$/);
 const bundle = z.object({ indexJsSha256: digest, wasmSha256: digest }).strict();
 export const c2ProductPlanSchema = z
@@ -105,24 +116,28 @@ function requireSignedBinary(plan: C2ProductPlan): void {
     "test code identity mismatch",
   );
 }
-export function requireSingleC2Selection(listing: string): void {
+export function requireSingleC2Selection(listing: string, journey: C2Journey = "single"): void {
   assert.deepEqual(
     listing.trim().split(/\r?\n/),
-    [`${c2ProductSelector}: test`],
+    [`${journeys[journey].selector}: test`],
     "exact C2 selector must discover one nonempty test",
   );
 }
-async function executeFixture(plan: C2ProductPlan, receipt: string): Promise<number | null> {
+async function executeFixture(
+  plan: C2ProductPlan,
+  receipt: string,
+  journey: C2Journey,
+): Promise<number | null> {
   const output = openSync(join(plan.evidence, "fixture.stdout.log"), "wx", 0o600);
   let errors: number | undefined;
   try {
     errors = openSync(join(plan.evidence, "fixture.stderr.log"), "wx", 0o600);
     const child = spawn(
       plan.binary.path,
-      ["--exact", c2ProductSelector, "--nocapture", "--test-threads=1"],
+      ["--exact", journeys[journey].selector, "--nocapture", "--test-threads=1"],
       {
         cwd: plan.repository,
-        env: { ...process.env, CODEX_ROUTER_C2_HIBERNATION_RECEIPT: receipt },
+        env: { ...process.env, [journeys[journey].receiptVariable]: receipt },
         stdio: ["ignore", output, errors],
       },
     );
@@ -149,7 +164,7 @@ async function executeFixture(plan: C2ProductPlan, receipt: string): Promise<num
       await writeFile(
         join(plan.evidence, "fixture-process.json"),
         JSON.stringify(
-          { pid: child.pid, executable: plan.binary.path, selector: c2ProductSelector },
+          { pid: child.pid, executable: plan.binary.path, selector: journeys[journey].selector },
           null,
           2,
         ) + "\n",
@@ -173,14 +188,14 @@ async function executeFixture(plan: C2ProductPlan, receipt: string): Promise<num
   }
 }
 
-export async function runC2ProductPlan(path: string): Promise<void> {
+export async function runC2ProductPlan(path: string, journey: C2Journey = "single"): Promise<void> {
   const plan = c2ProductPlanSchema.parse(JSON.parse(await readFile(path, "utf8")));
   await mkdir(plan.evidence, { mode: 0o700 }); // Fresh evidence; never overwrite an earlier red.
   await writeFile(join(plan.evidence, "declared-plan.json"), JSON.stringify(plan, null, 2) + "\n", {
     mode: 0o600,
   });
   try {
-    await observeC2Product(plan);
+    await observeC2Product(plan, journey);
   } catch (error: unknown) {
     await writeFile(
       join(plan.evidence, "failure.json"),
@@ -199,23 +214,26 @@ export async function runC2ProductPlan(path: string): Promise<void> {
   }
 }
 
-async function observeC2Product(plan: C2ProductPlan): Promise<void> {
+async function observeC2Product(plan: C2ProductPlan, journey: C2Journey): Promise<void> {
   const before = frozenBinding(plan);
   requireSignedBinary(plan);
   const listing = commandText(
     plan.binary.path,
-    ["--list", "--format", "terse", "--exact", c2ProductSelector],
+    ["--list", "--format", "terse", "--exact", journeys[journey].selector],
     plan.repository,
   );
-  requireSingleC2Selection(listing);
+  requireSingleC2Selection(listing, journey);
   const binding = {
     plan,
+    journey: journeys[journey],
     before,
     node: process.versions.node,
     libuv: process.versions.uv,
     driverSha256: sha256(new URL(import.meta.url).pathname),
     receiptCheckerSha256: sha256(new URL("./c2-product-receipt.ts", import.meta.url).pathname),
     observerSha256: sha256(new URL("./c2-witness.ts", import.meta.url).pathname),
+    batchCheckerSha256: sha256(new URL("./c2-batch-receipt.ts", import.meta.url).pathname),
+    batchWitnessSha256: sha256(new URL("./c2-batch-witness.ts", import.meta.url).pathname),
   };
   await writeFile(
     join(plan.evidence, "binding-before.json"),
@@ -223,7 +241,7 @@ async function observeC2Product(plan: C2ProductPlan): Promise<void> {
     { mode: 0o600 },
   );
   const receiptPath = join(plan.evidence, "product-receipt.json");
-  const exitCode = await executeFixture(plan, receiptPath);
+  const exitCode = await executeFixture(plan, receiptPath, journey);
   const after = frozenBinding(plan);
   assert.deepEqual(after, before, "source/binary/bundle hold changed during observation");
   await writeFile(
@@ -238,14 +256,18 @@ async function observeC2Product(plan: C2ProductPlan): Promise<void> {
     /test result: ok\. 1 passed; 0 failed; 0 ignored;/,
     "one actual test must pass without ignores",
   );
-  const receipt = assertC2ProductReceipt(JSON.parse(await readFile(receiptPath, "utf8")));
+  const raw: unknown = JSON.parse(await readFile(receiptPath, "utf8"));
+  const effects =
+    journey === "batch"
+      ? { areas: assertC2BatchReceipt(raw).areas }
+      : { area: assertC2ProductReceipt(raw).area };
   const result = {
-    kind: "c2PositiveObserved",
-    selector: c2ProductSelector,
+    kind: journey === "batch" ? "c2BatchPositiveObserved" : "c2PositiveObserved",
+    selector: journeys[journey].selector,
     sourceHead: plan.sourceHead,
     exitCode,
-    disposed: receipt.disposed,
-    area: receipt.area,
+    disposed: true,
+    ...effects,
     compiledNegative: "unverified-pending-bounded-probe",
     naturalIdle: "unverified",
     hosted: "unverified",

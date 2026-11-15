@@ -198,24 +198,13 @@ export function assertC2Restore(input: {
   assert.equal(restored.instanceId, constructor.instanceId);
   assert.ok(restored.event.kind === "restoreResult");
   assert.equal(restored.event.outcome, "admitted", "live restoration must admit");
-  const reads = fresh.filter(
-    (record) =>
-      record.sequence > handler.sequence &&
-      record.sequence < restored.sequence &&
-      record.instanceId === constructor.instanceId &&
-      record.event.kind === "enrollmentRead" &&
-      record.event.outcome === "read",
-  );
-  const queries = reads.map((record) =>
-    record.event.kind === "enrollmentRead" ? record.event.query : "",
-  );
-  const enrollmentIndex = queries.indexOf("byEnrollment");
-  const machineIndex = queries.indexOf("machineByInstallation", enrollmentIndex + 1);
-  const activeIndex = queries.indexOf("activeEnrollment", machineIndex + 1);
-  assert.ok(
-    enrollmentIndex >= 0 && machineIndex > enrollmentIndex && activeIndex > machineIndex,
-    "all live enrollment queries must complete",
-  );
+  assertC2LiveReads({
+    records: fresh,
+    instanceId: constructor.instanceId,
+    objectId: constructor.event.objectId,
+    after: handler.sequence,
+    before: restored.sequence,
+  });
   const alarms = fresh.filter(
     (record) =>
       record.event.kind === "alarmSnapshot" && record.event.correlationId === input.correlationId,
@@ -232,5 +221,34 @@ export function assertC2Restore(input: {
     alarm.event.alarmMs,
     alarm.event.earliestDueMs,
     "platform alarm must match EARLIEST_DUE",
+  );
+}
+
+/** Reads must belong to this member's interval, not another request's admission. */
+export function assertC2LiveReads(input: {
+  readonly records: readonly C2WitnessRecord[];
+  readonly instanceId: string;
+  readonly objectId: string;
+  readonly after: number;
+  readonly before: number;
+}): void {
+  const required = ["byEnrollment", "machineByInstallation", "activeEnrollment"];
+  let next = 0;
+  for (const record of input.records) {
+    if (
+      record.sequence > input.after &&
+      record.sequence < input.before &&
+      record.instanceId === input.instanceId &&
+      record.event.objectId === input.objectId &&
+      record.event.kind === "enrollmentRead" &&
+      record.event.outcome === "read" &&
+      required[next] === record.event.query
+    )
+      next += 1;
+  }
+  assert.equal(
+    next,
+    required.length,
+    "all live enrollment queries must complete in this member's interval",
   );
 }

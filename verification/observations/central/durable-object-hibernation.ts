@@ -414,6 +414,10 @@ async function exchangeFrame(socket: LocalWebSocket, message: string): Promise<s
 }
 
 async function main(arguments_: readonly string[]): Promise<void> {
+  if (arguments_.length === 2 && arguments_[0] === "--c2-batch-plan") {
+    await runC2ProductPlan(z.string().min(1).parse(arguments_[1]), "batch");
+    return;
+  }
   if (arguments_.length === 2 && arguments_[0] === "--c2-plan") {
     await runC2ProductPlan(z.string().min(1).parse(arguments_[1]));
     return;
@@ -422,6 +426,7 @@ async function main(arguments_: readonly string[]): Promise<void> {
     process.stdout.write(
       "Usage: node verification/observations/central/durable-object-hibernation.ts --fixture <non-hibernating|hibernating> --evidence <fresh-directory>\n" +
         "Or: --c2-plan <declared-frozen-target.json> (prebuilt signed Rust fixture, exact bundle hashes; no build/signing).\n" +
+        "Or: --c2-batch-plan <declared-frozen-target.json> (same hold, exact batch fixture, one wake/independent Replies).\n" +
         "C2 plan: repository, sourceHead, evidence, binary{path,sha256}, publicBundle/privateBundle{indexJsSha256,wasmSha256}.\n" +
         "Run non-hibernating FIRST (expected-red exit 1; invalid control exit 2), then hibernating (exit 0).\n" +
         "Real local workerd stand-in; forced eviction, original socket, attachment/new instance, heartbeat witness phases.\n" +
