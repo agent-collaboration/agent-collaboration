@@ -1,0 +1,20 @@
+[package]
+name = "central-engine-model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+autotests = false
+
+[dependencies]
+central-storage.workspace = true
+chrono = { workspace = true, features = ["serde"] }
+serde.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

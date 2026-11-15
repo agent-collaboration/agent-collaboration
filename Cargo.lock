@@ -1078,6 +1078,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "central-engine-model"
+version = "0.1.152"
+dependencies = [
+ "central-storage",
+ "chrono",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "uuid",
+]
+
+[[package]]
 name = "central-link-client"
 version = "0.1.152"
 dependencies = [

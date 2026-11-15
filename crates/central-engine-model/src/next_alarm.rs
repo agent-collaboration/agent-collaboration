@@ -1,0 +1,108 @@
+use crate::{DueBatchPolicy, EngineTime};
+
+pub const MAX_ALARM_UNIX_MILLIS: i64 = 9_223_372_036_854;
+const FIVE_MINUTE_MILLIS: i64 = 300_000;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AlarmInputs {
+    pub now: EngineTime,
+    pub last_batch_start: Option<EngineTime>,
+    pub leftovers_beyond_cap: bool,
+    pub earliest_on_grid_due: Option<EngineTime>,
+    pub earliest_legacy_due: Option<EngineTime>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AlarmDecision {
+    Clear,
+    SetAt(EngineTime),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
+pub enum AlarmDecisionError {
+    #[error("no later five-minute mark is within the portable range")]
+    NoLaterGridMark,
+    #[error("the alarm time is outside the portable range")]
+    OutOfRange,
+    #[error("a continuation requires a due batch start")]
+    MissingBatchStart,
+}
+
+pub fn supported_time(time: EngineTime) -> bool {
+    (-MAX_ALARM_UNIX_MILLIS..=MAX_ALARM_UNIX_MILLIS).contains(&time.timestamp_millis())
+}
+
+pub fn next_five_minute_mark(now: EngineTime) -> Result<EngineTime, AlarmDecisionError> {
+    if !supported_time(now) {
+        return Err(AlarmDecisionError::OutOfRange);
+    }
+    now.timestamp_millis()
+        .div_euclid(FIVE_MINUTE_MILLIS)
+        .checked_add(1)
+        .and_then(|mark| mark.checked_mul(FIVE_MINUTE_MILLIS))
+        .and_then(EngineTime::from_timestamp_millis)
+        .filter(|mark| supported_time(*mark))
+        .ok_or(AlarmDecisionError::NoLaterGridMark)
+}
+
+/// Combine pending times after an event; an idle object has no alarm.
+pub fn next_alarm(
+    inputs: &AlarmInputs,
+    policy: &DueBatchPolicy,
+) -> Result<AlarmDecision, AlarmDecisionError> {
+    if inputs.earliest_on_grid_due.is_none() && inputs.earliest_legacy_due.is_none() {
+        return Ok(AlarmDecision::Clear);
+    }
+    if !supported_time(inputs.now) {
+        return Err(AlarmDecisionError::OutOfRange);
+    }
+    let floor = inputs
+        .last_batch_start
+        .map(|start| {
+            start
+                .checked_add_signed(policy.spacing)
+                .filter(|time| supported_time(*time))
+                .ok_or(AlarmDecisionError::OutOfRange)
+        })
+        .transpose()?;
+    let wanted = if inputs.leftovers_beyond_cap {
+        floor.ok_or(AlarmDecisionError::MissingBatchStart)?
+    } else {
+        let grid = inputs
+            .earliest_on_grid_due
+            .map(|due| {
+                if supported_time(due) {
+                    Ok(due)
+                } else {
+                    Err(AlarmDecisionError::OutOfRange)
+                }
+            })
+            .transpose()?;
+        let legacy = inputs
+            .earliest_legacy_due
+            .map(|due| {
+                if supported_time(due) {
+                    Ok(due)
+                } else {
+                    Err(AlarmDecisionError::OutOfRange)
+                }
+            })
+            .transpose()?;
+        // At least one input is present, as established above.
+        match (grid, legacy) {
+            (Some(grid), Some(legacy)) => grid.min(legacy),
+            (Some(due), None) | (None, Some(due)) => due,
+            (None, None) => return Ok(AlarmDecision::Clear),
+        }
+    };
+    let wanted = floor.map_or(wanted, |floor| wanted.max(floor));
+    if wanted <= inputs.now {
+        next_five_minute_mark(inputs.now).map(AlarmDecision::SetAt)
+    } else {
+        Ok(AlarmDecision::SetAt(wanted))
+    }
+}
+
+#[cfg(test)]
+#[path = "next_alarm_test.rs"]
+mod tests;
