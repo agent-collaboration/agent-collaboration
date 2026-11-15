@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>D2 Session control</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content" src="./navigation.json"></ex-nav>
+<ex-document id="content">
+<h1>D2 · Session control</h1>
+<p><strong>What you'll see:</strong> one way to start, steer, read and stop agents, from tools, the CLI or the Codex CLI. Delegates can't start delegates. A delegate's approval shows at whoever started it and at any client watching, and the first answer wins. The biggest deliverable.</p>
+
+<section id="scope">
+<h2>What it covers</h2>
+<ex-mermaid id="d2-scope" label="D2 scope"><script type="text/plain">
+flowchart LR
+  T["/mcp/session tools"] --> SC[SessionControl]
+  CLI[CLI session commands] --> T
+  SHIM[Codex CLI shim] --> SC
+  ACP[incoming ACP] --> SC
+  SC --> DRV[AcpAgentDriver · CodexAgentDriver]
+  SC --> APR[ApprovalRouter: parent · attached clients · Router setting]
+  APR --> SHIM
+</script></ex-mermaid>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Needs</th><th>Rules</th><th>Design</th></tr></thead>
+<tbody>
+<tr><td><a href="requirements.html#U1">U1</a> <a href="requirements.html#U2">U2</a> One path, steer</td><td><a href="specification.html#R1">R1</a> <a href="specification.html#R2">R2</a></td><td><a href="program-design.html#session-layer">Session layer</a>, <a href="program-design.html#restart">restart</a></td></tr>
+<tr><td><a href="requirements.html#U4">U4</a> <a href="requirements.html#U5">U5</a> Approvals, one layer</td><td><a href="specification.html#R8">R8</a> <a href="specification.html#R9">R9</a> <a href="specification.html#R9a">R9a</a>(local part) <a href="specification.html#R10">R10</a> <a href="specification.html#R11">R11</a> <a href="specification.html#R21">R21</a></td><td><a href="program-design.html#cutover">Kind and route</a>, <a href="program-design.html#approvals">fan-out</a>, <a href="program-design.html#shim">shim</a>, <a href="program-design.html#router-setting">Router setting</a></td></tr>
+<tr><td><a href="requirements.html#U6">U6</a>–<a href="requirements.html#U8">U8</a> Tools, honesty</td><td><a href="specification.html#R12">R12</a></td><td><a href="specification.html#retry">Retry table</a></td></tr>
+<tr><td><a href="requirements.html#U11">U11</a>–<a href="requirements.html#U13">U13</a> Endpoints, CLI, Codex CLI</td><td><a href="specification.html#R17">R17</a>–<a href="specification.html#R20">R20</a></td><td><a href="program-design.html#endpoints">Endpoints and caller</a>, <a href="program-design.html#cli">CLI</a></td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="slices">
+<h2>Order inside D2</h2>
+<ex-mermaid id="d2-order" label="Slices"><script type="text/plain">
+flowchart LR
+  S1[1 endpoints split + caller] --> S2[2 SessionControl + ACP driver]
+  S2 --> S3[3 approvals: kind, fan-out, first wins, Router setting]
+  S2 --> S4[4 CLI session commands = tools]
+  P2[Protocol Lead D1 contract crate] --> S5[5 Codex driver + shim approvals]
+  S3 --> S5
+</script></ex-mermaid>
+<p>Approvals in D2 run against a stand-in for central&#39;s arbiter (owner decision D8: central decides); real decisions across machines arrive with central D in D3. Slices 1–4 need nothing else from other Leads. Slice 5 waits for the Protocol Lead's contract crate (no new hand-written Codex protocol code, L4).</p>
+</section>
+
+<section id="changes">
+<h2>What changes, where</h2>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Owner</th><th>Change</th></tr></thead>
+<tbody>
+<tr><td>collaboration-mcp</td><td>three routers; session tools; CallerContext</td></tr>
+<tr><td>collaboration-service</td><td>new <code>session_control</code> module</td></tr>
+<tr><td>collaboration-contracts</td><td><code>AgentDriver</code> trait</td></tr>
+<tr><td>collaboration-runtime</td><td>approval fan-out, first-wins, Router setting read; app-server face approvals</td></tr>
+<tr><td>codex-router-host</td><td>AcpAgentDriver over the provider command port; delivery route steer/restart (ordered with Lead A)</td></tr>
+<tr><td>codex-acp-adapter</td><td>CodexAgentDriver on the contract crate; route approver widened (Q5)</td></tr>
+<tr><td>agent-collaboration</td><td><code>session …</code> commands; caller metadata; structuredContent output</td></tr>
+</tbody>
+</table>
+</div>
+<p>Stored data: no new table. Values chosen at start in the existing approver field; Codex route shape widened (Q5, approved; JSON only, no migration).</p>
+</section>
+
+<section id="proof">
+<h2>How it's proven</h2>
+<p><strong><a href="verification.html#done-d2">Done means: the full checklist</a>.</strong> Focused Rust tests for the delivery table, approval routing and first-wins. Live journeys through the real endpoints and CLI on a debug Router: five doors × four operations, Cursor restart, Lead → delegate approvals with two destinations answering at once, a delegate refused when starting a session, Codex CLI attached and shown the approval. <a href="verification.html#proven-by">Details</a>.</p>
+</section>
+
+<section id="seats">
+<h2>Who builds it</h2>
+<p>One Opus Implementer and one Sol Verifier, then Lead acceptance, a Sol Reviewer, and your merge.</p>
+</section>
+</ex-document>
+</body>
+</html>

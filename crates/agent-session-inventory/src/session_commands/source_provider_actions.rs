@@ -289,6 +289,7 @@ async fn validate_binding(
             binding_generation,
             runtime,
             capabilities,
+            ..
         } => Some(ProviderBindingIdentity {
             endpoint: entry.endpoint.clone(),
             binding_id: binding_id.clone(),

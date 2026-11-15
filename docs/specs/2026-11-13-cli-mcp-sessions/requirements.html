@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CLI and MCP: requirements</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content" src="./navigation.json"></ex-nav>
+<ex-document id="content">
+<h1>Requirements</h1>
+<p><strong>In one sentence:</strong> agents the Router starts should just get on with their work; anything they aren't allowed to do should reach someone who can decide (a delegate's goes to whoever started it, anything else goes where the Router's setting says, by default to you through central); and every agent and script should reach the Router through three clean sets of tools that the CLI mirrors exactly.</p>
+
+<section id="who">
+<h2>Who this is for</h2>
+<ex-mermaid id="who-map" label="The people and agents involved"><script type="text/plain">
+flowchart LR
+  O([You, the owner]) -->|talk to| L[Lead agent]
+  L -->|starts and steers| I[Implementer]
+  L -->|starts| V[Verifier]
+  I -->|own subagents only| H[Subagents]
+  S[Scripts and other agents] -->|use tools| R[(Router)]
+  C[You or an agent in a terminal] -->|agent-collaboration CLI| R
+</script></ex-mermaid>
+<p>You talk to one agent, the <strong>Lead</strong>. You or Sun start the Lead. The Lead starts delegate agents (an Implementer, a Verifier) through the Router; a delegate can't start sessions of its own, only its own subagents. Scripts, other agents and the CLI all reach the Router too.</p>
+</section>
+
+<section id="today">
+<h2>What goes wrong today</h2>
+<div data-width="canvas">
+<ex-grid>
+<ex-card title="Delegates stop for routine things" tone="risk" icon="robot">
+<p>A Claude delegate the Router starts begins in "ask me first" mode, so it stops for ordinary edits. It can't write to a temp folder without asking.</p>
+</ex-card>
+<ex-card title="Approvals get stuck inside the delegate" tone="risk" icon="lock">
+<p>Your example: a Codex Verifier's own safety check refused to send a packet, twice. Nobody was told. The only fix was you opening that delegate's session and approving by hand.</p>
+</ex-card>
+<ex-card title="One big pile of tools" tone="risk" icon="stack">
+<p>About 165 tools in one list, mixing board content, messages and running agents. Session tools behave differently per agent. The CLI sometimes takes a different path than the tools.</p>
+</ex-card>
+</ex-grid>
+</div>
+</section>
+
+<section id="journey">
+<h2>What should happen instead</h2>
+<h3 id="story-auto">A delegate just works</h3>
+<ex-mermaid id="story-auto-view" label="Delegate in auto mode"><script type="text/plain">
+sequenceDiagram
+  participant L as Lead
+  participant R as Router
+  participant H as Delegate (Claude, Codex or Cursor)
+  L->>R: start a delegate (no mode given)
+  R->>H: start in auto permission mode, its own scratch folder writable
+  H->>H: edits files in its project, writes temp files
+  Note over H: no questions asked for routine work
+</script></ex-mermaid>
+
+<h3 id="story-approval">Something it may not do reaches the Lead, then you</h3>
+<ex-mermaid id="approval-journey" label="Delegate needs permission"><script type="text/plain">
+sequenceDiagram
+  participant H as Delegate
+  participant R as Router
+  participant L as Lead
+  participant O as You
+  H->>R: wants to write outside its project
+  R->>L: approval request: who, what, choices
+  L->>O: asks you, if it can't decide
+  O-->>L: yes
+  L-->>R: approve
+  R-->>H: go ahead
+</script></ex-mermaid>
+<p>The delegate's approval shows at its parent (the Lead) and at any client watching it, all at once; the first answer wins. If the Lead can't decide, it forwards to central and you answer from the CLI (later your UI). Nothing is ever refused without someone deciding.</p>
+
+<h3 id="story-tools">Three tool sets, and the CLI matches them</h3>
+<ex-mermaid id="story-tools-view" label="Three tool sets"><script type="text/plain">
+flowchart LR
+  A[An agent or script] --> S[session tools<br/>run, steer, approve agents]
+  A --> C[coordination tools<br/>mail, wakes, schedules]
+  A --> W[workspace tools<br/>projects, threads, posts]
+  T[CLI command] -. same thing .-> S & C & W
+</script></ex-mermaid>
+</section>
+
+<section id="capabilities">
+<h2>The three groups</h2>
+<p>You named these on 2026-11-13. Each need below belongs to one.</p>
+<div data-width="canvas">
+<ex-grid>
+<ex-card title="session_control" tone="planned" icon="path" tag="this Mac's Router">
+<p>Start, steer, read and stop agents; delegate to delegates; route their approvals. Needs U1–U8.</p>
+</ex-card>
+<ex-card title="agent_coordination" tone="planned" icon="envelope" tag="central decides">
+<p>Agents reaching agents: mail, wakes, schedules. Central checks who may do what. Need U9.</p>
+</ex-card>
+<ex-card title="workspace_collaboration" tone="planned" icon="folder" tag="central decides">
+<p>What a workspace holds: areas, projects, threads, posts, roles, deliverables, issues. Need U10.</p>
+</ex-card>
+</ex-grid>
+</div>
+</section>
+
+<section id="needs">
+<h2>The needs, one by one</h2>
+<p>Each need says what you get, in plain words, then where it came from.</p>
+
+<h3 id="session-control">session_control</h3>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Need</th><th>What you get</th><th>Where it came from</th></tr></thead>
+<tbody>
+<tr id="U1"><td><strong>U1 One way to run a session</strong><br/><small>Rules: <a href="specification.html#R1">R1</a></small></td><td>Whatever starts or steers an agent (a tool, the CLI, the Codex CLI, a message), it behaves the same.</td><td>You, 2026-11-13: "we have to refine the session MCP and one session layer".</td></tr>
+<tr id="U2"><td><strong>U2 Steering always works</strong><br/><small>Rules: <a href="specification.html#R2">R2</a></small></td><td>You can always add to what a running agent is doing. If the agent can't take it mid-turn, the Router stops the turn and restarts with your message.</td><td>Your earlier decision: steer for every provider.</td></tr>
+<tr id="U3"><td><strong>U3 Auto by default</strong><br/><small>Rules: <a href="specification.html#R3">R3</a> <a href="specification.html#R4">R4</a> <a href="specification.html#R5">R5</a></small></td><td>Claude, Codex and Cursor start in auto permission mode, with temp folders writable, unless asked otherwise. "Auto" means the same thing for all three.</td><td>You: "ACP Claude should always start with auto, as does Codex, and they should have access to temp directories"; "by auto I mean auto permission mode".</td></tr>
+<tr id="U4"><td><strong>U4 Approvals reach someone who can decide</strong><br/><small>Rules: <a href="specification.html#R6">R6</a>–<a href="specification.html#R9">R9</a></small></td><td>Anything an agent isn't allowed to do on its own becomes an approval: a delegate's goes to whoever started it (who can forward it to central), a Lead's goes to central, your UI and the CLI. It shows at every place at once; the first answer wins. Never a silent refusal.</td><td>You: "i need approval to go to the lead agent automatically so he can ask me"; "if something is a delegate their approvals are set to their parent ... if they cant they should be able to forward to central"; "central, my ui, and cli"; "can we multiplex?"</td></tr>
+<tr id="U5"><td><strong>U5 One layer of delegates</strong><br/><small>Rules: <a href="specification.html#R8">R8</a> <a href="specification.html#R10">R10</a> <a href="specification.html#R11">R11</a> <a href="specification.html#R22">R22</a> <a href="specification.html#R23">R23</a></small></td><td>A Lead (or you) can start delegates; when one finishes, its parent is woken, and the delivered receipt reminds the parent to keep a wake running; a delegate can't start sessions, it uses its own subagents or asks its Lead. You or Sun start Leads; a Lead is not a delegate.</td><td>You: "delegation is not subagent"; "delegate cant start a plain session they should ask a lead"; "sun only communicates to lead ... he doesnt delegate to it".</td></tr>
+<tr id="U6"><td><strong>U6 Well-designed tools</strong><br/><small>Rules: <a href="specification.html#R12">R12</a></small></td><td>Tools built for the job, on the latest MCP standard, with no MCP sessions.</td><td>You, Nov 7: "actually design this again", "use rmcp, use latest mcp standard", "we never use mcp sessions".</td></tr>
+<tr id="U7"><td><strong>U7 Honest answers</strong><br/><small>Rules: <a href="specification.html#R9">R9</a> <a href="specification.html#R12">R12</a></small></td><td>You can tell "accepted", "finished", "stopped" and "don't know" apart, and retrying is safe.</td><td>Existing rule: never say something happened when it didn't.</td></tr>
+<tr id="U8"><td><strong>U8 Same tool for every agent</strong><br/><small>Rules: <a href="specification.html#R5">R5</a> <a href="specification.html#R7">R7</a> <a href="specification.html#R12">R12</a></small></td><td>No picking a different tool per agent. What an agent can't do is shown up front.</td><td>Nov 7 design.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="agent-coordination">agent_coordination</h3>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Need</th><th>What you get</th><th>Where it came from</th></tr></thead>
+<tbody>
+<tr id="U9"><td><strong>U9 Mail, wakes, schedules, checked by central</strong><br/><small>Rules: <a href="specification.html#R13">R13</a> <a href="specification.html#R14">R14</a></small></td><td>Their own tool set. Central decides whether each one is allowed; the Router hands mail and wakes to the agent.</td><td>You: "i just dont want anything outside of workspaces in there other than mail and wakes and schedules ... central is the arbiter".</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="workspace-collaboration">workspace_collaboration</h3>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Need</th><th>What you get</th><th>Where it came from</th></tr></thead>
+<tbody>
+<tr id="U10"><td><strong>U10 Workspace tools match central exactly</strong><br/><small>Rules: <a href="specification.html#R15">R15</a> <a href="specification.html#R16">R16</a></small></td><td>One tool per thing central can do in a workspace, nothing extra. Roles stay; ADRs, facts and tasks are gone.</td><td>You: "sorry roles exist"; "we dont have adrs fact ... anymore". Central Lead's operation list.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="all-groups">All three groups</h3>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Need</th><th>What you get</th><th>Where it came from</th></tr></thead>
+<tbody>
+<tr id="U11"><td><strong>U11 Three endpoints</strong><br/><small>Rules: <a href="specification.html#R17">R17</a></small></td><td>One Router, three MCP addresses. A delegate can be configured with only the ones it needs (enforced once session auth exists). Each is one module in code mode.</td><td>You: "yes lets do 3 end points".</td></tr>
+<tr id="U12"><td><strong>U12 The CLI does exactly what the tool does</strong><br/><small>Rules: <a href="specification.html#R18">R18</a> <a href="specification.html#R20">R20</a></small></td><td>One command per tool, same inputs, same answer, same errors.</td><td>You: "you are doing cli and mcp"; "i agree with your change of cli".</td></tr>
+<tr id="U13"><td><strong>U13 The Codex CLI keeps working</strong><br/><small>Rules: <a href="specification.html#R19">R19</a></small></td><td>Your Codex CLI connected to the Router sees no change.</td><td>Earlier requirement.</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="open">
+<h2>Questions for you</h2>
+<ex-callout title="Answered · Who decides a delegate's approvals" tone="done" icon="chat-circle">
+<p>You decided: a delegate's approvals go to its parent (and any client watching it), and the parent can forward to central. A non-delegate's (like a Lead's) go to central, your UI and the CLI. Delegates can't start sessions; "they should ask a lead".</p>
+</ex-callout>
+<ex-callout title="Answered · Q5 Codex's stored route may name you" tone="done" icon="chat-circle">
+<p>Yes. New Codex routes may name you as well as a session; old routes stay valid as they are. You: "we nto doing a migration we just changing thigns so migraiton required". The route is stored as JSON, so widening it changes code only: there is no table change and no migration.</p>
+</ex-callout>
+<ex-callout title="Answered · Q2 A delegate finishing wakes its parent" tone="done" icon="chat-circle">
+<p>Yes. When a delegate's turn ends, its parent gets one wake. Also, when a parent delegates, the "delivered" receipt reminds it to keep a wake running based on its own prompt cache lifetime. You: "when parent delegates on the receipt we shokuld remind them to keep a wake based on their cache prompt ttl. aka on the receipt of delivered".</p>
+</ex-callout>
+<ex-callout title="Answered · Q3 Shell commands in the session's own temp folder run without asking" tone="done" icon="chat-circle">
+<p>Allow, but only in the session's own folder. You: "in tmp/session-id/* can we constrain it taht way? waht we do for codex now? can you check? shoudl be kuniform no?" Today Codex sessions already get a private folder, <code>&lt;router root&gt;/scratch/session-&lt;id&gt;/</code> (<code>router_permission_profile.rs:165</code>); Claude and Cursor get none. Now every Router session gets that folder, the same way for all three agents, instead of the system <code>$TMPDIR</code> and <code>/tmp</code>.</p>
+</ex-callout>
+<ex-callout title="Answered · Q4 Running sessions keep their approver" tone="done" icon="chat-circle">
+<p>Keep. Only sessions started after the change use the new rules; nothing stored is rewritten. You: "no migrations please! i wnt the easy path what seasier and lesss cruft in cod edue ot transition". This is also the path with the least code, because routing always reads the approver stored at start.</p>
+</ex-callout>
+</section>
+
+<section id="limits">
+<h2>What this doesn't do</h2>
+<ul>
+<li id="L1"><strong>L1</strong> Later: shrinking the Host, session auth, splitting the proxy out. You: "host shrink and session auth and proxy later".</li>
+<li id="L1a"><strong>L1a</strong> Later, with the proxy split: SQL validators and contracts for the proxy store (<code>codex-router-state</code> account schema). You: "dont forget it and lets talk about it alter what valdiationrs are theyere what did ythey do wrong in sqlx for valdaites and contracts". This is a discussion with you before any work.</li>
+<li id="L2"><strong>L2</strong> No new database, table or column.</li>
+<li id="L3"><strong>L3</strong> Nothing added to central's operations; new needs go to the central Lead.</li>
+<li id="L4"><strong>L4</strong> No new hand-written Codex protocol code; the Codex side uses the Protocol Lead's generated types.</li>
+<li id="L5"><strong>L5</strong> Changes to the Host are ordered with Lead A.</li>
+<li id="L6"><strong>L6</strong> Testing only on the debug Router; no production restart, release or merge without you.</li>
+<li id="L7"><strong>L7</strong> No raw ACP in tool contracts, no MCP sessions.</li>
+</ul>
+</section>
+</ex-document>
+</body>
+</html>

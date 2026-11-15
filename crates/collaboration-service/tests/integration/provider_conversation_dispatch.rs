@@ -53,6 +53,8 @@ impl ProviderConversationBackend for RecordingBackend {
                 capabilities: session_event_model::CapabilityReport::default(),
                 history: collaboration_protocol::ProviderHistoryAvailability::HistoryUnavailable,
                 settings_catalog: None,
+                requested_mode: None,
+                mode_reason: None,
             })
         })
     }
@@ -162,6 +164,8 @@ fn settings_result(target: collaboration_protocol::SessionRef) -> ProviderSettin
             mode: Some("ask".into()),
             model: None,
             effort: None,
+            requested_mode: None,
+            mode_reason: None,
         },
     }
 }

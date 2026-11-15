@@ -7,6 +7,9 @@ pub trait ProviderBehavior: Send + Sync {
     fn can_reuse_setting_confirmation(&self, kind: crate::ProviderSettingKind) -> bool;
     fn model_metadata_source(&self) -> crate::ModelMetadataSource;
     fn decode_model_metadata(&self, value: &serde_json::Value) -> crate::ModelReasoningMetadata;
+    /// What `auto` means for this agent: its own mode realizing it, its ask-first
+    /// fallback, and how actions outside its grant are treated (R3, R7).
+    fn auto_permission_mode(&self) -> crate::AutoPermissionMode;
     fn observe(&self, update: ProviderUpdate) -> Result<ProviderFacts, ProviderError>;
     fn prepare(&self, submission: ProviderSubmission) -> Result<Vec<PromptContent>, ProviderError>;
     fn compact(&self) -> Result<PreparedCompact, ProviderError>;

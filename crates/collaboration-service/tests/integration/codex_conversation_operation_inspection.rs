@@ -95,7 +95,9 @@ async fn codex_create_operation_is_inspectable_and_reconcilable_through_the_api(
     check_eq!(pending["result"]["output"]["kind"], "pending");
 
     let session_id = SessionId::try_from("created-thread".to_owned())?;
-    recorder.record_created(&operation_id, &session_id).await?;
+    recorder
+        .record_created(&operation_id, &session_id, &permission_mode_report())
+        .await?;
     let settled = call(
         &served,
         "conversation_operation_wait",
@@ -166,4 +168,14 @@ async fn codex_create_operation_is_inspectable_and_reconcilable_through_the_api(
         let _ = std::fs::remove_file(format!("{}{suffix}", path.display()));
     }
     Ok(())
+}
+
+/// A create-time permission-mode report for recorder tests that only need one.
+pub(crate) fn permission_mode_report() -> collaboration_protocol::CodexPermissionModeReport {
+    collaboration_protocol::CodexPermissionModeReport {
+        access: collaboration_protocol::RouterAccess::WorkspaceWrite,
+        requested_mode: None,
+        actual: Some("auto".to_owned()),
+        reason: None,
+    }
 }

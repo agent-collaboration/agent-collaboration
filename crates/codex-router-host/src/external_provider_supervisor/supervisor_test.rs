@@ -129,7 +129,7 @@ fn generation() -> CodexGeneration {
     }
 }
 
-fn binding() -> ProviderBindingIdentity {
+pub(crate) fn binding() -> ProviderBindingIdentity {
     ProviderBindingIdentity {
         endpoint: endpoint(),
         binding_id: ProviderBindingId::try_from("cursor-binding".to_owned()).expect("binding ID"),
@@ -149,7 +149,7 @@ fn binding() -> ProviderBindingIdentity {
     }
 }
 
-fn requester() -> SessionRef {
+pub(crate) fn requester() -> SessionRef {
     SessionRef {
         endpoint: endpoint(),
         session_id: SessionId::try_from("requester".to_owned()).expect("session ID"),

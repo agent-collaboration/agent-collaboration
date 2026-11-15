@@ -11,10 +11,11 @@ pub fn applied_router_sandbox(request: &Value) -> Value {
     else {
         return Value::Null;
     };
-    let roots = request
+    let filesystem = request
         .pointer("/params/config")
         .and_then(|config| config.get(format!("permissions.{profile}.filesystem")))
-        .and_then(Value::as_object)
+        .and_then(Value::as_object);
+    let roots = filesystem
         .map(|filesystem| {
             // Native reports write grants as roots and omits read-only exceptions.
             filesystem
@@ -24,11 +25,24 @@ pub fn applied_router_sandbox(request: &Value) -> Value {
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
+    // Native excludes a system temporary directory unless the profile can write it:
+    // `:read-only` never can; `:workspace` can unless its special path is read-only.
+    let excluded = |special: &str| {
+        let extends = request
+            .pointer("/params/config")
+            .and_then(|config| config.get(format!("permissions.{profile}.extends")))
+            .and_then(Value::as_str);
+        extends != Some(":workspace")
+            || filesystem
+                .and_then(|filesystem| filesystem.get(special))
+                .and_then(Value::as_str)
+                == Some("read")
+    };
     json!({
         "type":"workspaceWrite",
         "writableRoots":roots,
         "networkAccess":true,
-        "excludeTmpdirEnvVar":false,
-        "excludeSlashTmp":false
+        "excludeTmpdirEnvVar":excluded(":tmpdir"),
+        "excludeSlashTmp":excluded(":slash_tmp")
     })
 }

@@ -354,6 +354,7 @@ async fn route_queue_loaded_only_delivery_refuses_after_close_before_fifo_submis
                 binding_generation: provider_binding.generation.generation,
                 runtime: provider_binding.runtime.clone(),
                 capabilities: provider_binding.capabilities.clone(),
+                auto_realization: None,
             }],
         })
         .expect("endpoint publication");

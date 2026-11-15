@@ -54,6 +54,7 @@ pub(crate) async fn compose_provider_startup(
     service_id: &UuidIdentity,
     service_epoch: &UuidIdentity,
     mcp_url: &str,
+    scratch_root: Option<std::path::PathBuf>,
 ) -> io::Result<ProviderStartupComposition> {
     let hub = store
         .as_ref()
@@ -138,6 +139,10 @@ pub(crate) async fn compose_provider_startup(
                     ))
                     .map_err(io::Error::other)?,
                 };
+                let auto_realization =
+                    crate::provider_operation_settlement::provider_auto_realization(
+                        behavior.auto_permission_mode().realization,
+                    );
                 let runtime = ExternalProviderRuntime::initialize_with_mcp_http_and_hub(
                     launch,
                     provider_model_picker(binding.provider),
@@ -206,6 +211,7 @@ pub(crate) async fn compose_provider_startup(
                                 binding_generation: generation_number,
                                 runtime: runtime_identity,
                                 capabilities,
+                                auto_realization: Some(auto_realization),
                             }],
                         };
                         retirements.push((runtime.retirement(), description.clone()));
@@ -234,7 +240,7 @@ pub(crate) async fn compose_provider_startup(
     }
     let supervisor = match store {
         Some(store) if !endpoints.is_empty() => Some(Arc::new(
-            ExternalProviderSupervisor::new_with_hub(bindings, store, hub.clone())
+            ExternalProviderSupervisor::new_with_hub(bindings, store, hub.clone(), scratch_root)
                 .map_err(io::Error::other)?,
         )),
         _ => None,

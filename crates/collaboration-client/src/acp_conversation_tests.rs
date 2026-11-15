@@ -61,6 +61,7 @@ fn resumed_session_rejects_creation_settings_before_connection() {
         created_by: None,
         approver: None,
         root_message_id: None,
+        mode: None,
     };
     assert!(matches!(
         validate_conversation_create_request(&request),
@@ -102,6 +103,7 @@ fn new_and_forked_conversations_require_local_creator_and_approver_before_setup(
         created_by,
         approver,
         root_message_id: None,
+        mode: None,
     };
     assert!(matches!(
         validate_conversation_create_request(&request(None, Some(local_identity.clone()))),
@@ -161,6 +163,7 @@ fn existing_session_without_creation_identities_remains_valid() {
         created_by: None,
         approver: None,
         root_message_id: None,
+        mode: None,
     };
     assert!(validate_conversation_create_request(&request).is_ok());
 }
@@ -195,6 +198,7 @@ async fn sdk_identity_preflight_fails_before_acp_discovery_or_mutation() {
                 created_by,
                 approver,
                 root_message_id: None,
+                mode: None,
             },
             &mut |_| Ok(()),
         )
@@ -265,6 +269,7 @@ async fn invalid_prompt_deadline_fails_before_discovery_or_creation() {
                 created_by: Some(sender.clone()),
                 approver: Some(sender.clone()),
                 root_message_id: None,
+                mode: None,
             },
             prompt: ConversationPromptRequest {
                 message: PublicPromptContent::Agent {

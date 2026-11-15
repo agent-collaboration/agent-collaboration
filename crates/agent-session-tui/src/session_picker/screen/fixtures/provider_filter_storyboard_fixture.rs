@@ -320,6 +320,7 @@ fn provider_endpoint(
                 runtime_version: None,
             },
             capabilities,
+            auto_realization: None,
         }],
     })
 }

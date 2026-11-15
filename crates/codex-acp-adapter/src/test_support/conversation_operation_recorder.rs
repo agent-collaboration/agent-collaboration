@@ -18,6 +18,7 @@ impl ConversationOperationRecorder for AcceptingConversationRecorder {
         &'a self,
         _: &'a OperationId,
         _: &'a SessionId,
+        _permission_mode: &'a collaboration_protocol::CodexPermissionModeReport,
     ) -> ConversationRecordFuture<'a> {
         Box::pin(async { Ok(()) })
     }
