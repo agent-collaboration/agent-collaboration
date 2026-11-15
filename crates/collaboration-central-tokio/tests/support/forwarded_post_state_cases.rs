@@ -39,11 +39,13 @@ pub(super) async fn overlap(
     sender: &mut WebSocket,
     holder: &mut WebSocket,
     database: DatabaseId,
+    origin: collaboration_central_core::RegistryTime,
 ) -> ConformanceResult<()> {
     late_route(
         sender,
         holder,
         database,
+        origin,
         |command| control(base, command),
         |holder| observe(base, holder),
     )

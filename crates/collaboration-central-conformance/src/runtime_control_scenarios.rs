@@ -22,6 +22,13 @@ use reqwest_websocket::{Message, WebSocket};
 use std::{num::NonZeroU64, time::Duration};
 
 pub async fn run_runtime_control_conformance(client: &ConformanceClient) -> ConformanceResult<()> {
+    let origin = crate::logical_scenario_origin()?;
+    control(
+        client,
+        ObjectAddress::Fleet,
+        RuntimeControl::SetTime { now: origin },
+    )
+    .await?;
     let fixture = ComposedNumericScenario::prepare(client).await?;
     let mut peer = enroll_admitted_peer(
         client,
@@ -124,7 +131,7 @@ pub async fn run_runtime_control_conformance(client: &ConformanceClient) -> Conf
         }
         println!("LOCAL_DISPATCH_CASE exact_local_Session_to_Fleet_hold_and_release passed");
         // Advance the shared Fleet clock after the session admissions it also owns.
-        pin_fleet_clock(client, &mut peer.socket).await?;
+        pin_fleet_clock(client, &mut peer.socket, RegistryTime(origin.0 + chrono::TimeDelta::hours(1))).await?;
         if !matches!(control(client, copy.clone(), RuntimeControl::Observe).await?.clock, crate::ClockObservation::Wall) {
             return Err("Fleet SetTime leaked to a different object's clock".into());
         }
@@ -294,12 +301,8 @@ async fn control(
 async fn pin_fleet_clock(
     client: &ConformanceClient,
     socket: &mut WebSocket,
+    now: RegistryTime,
 ) -> ConformanceResult<()> {
-    let now = RegistryTime(chrono::Utc::now() + chrono::TimeDelta::hours(1));
-    // Both runtimes' clock capability has millisecond precision.
-    let now = RegistryTime(
-        chrono::DateTime::from_timestamp_millis(now.0.timestamp_millis()).ok_or("clock fixture")?,
-    );
     control(
         client,
         ObjectAddress::Fleet,
