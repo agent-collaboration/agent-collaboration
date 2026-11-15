@@ -14,6 +14,8 @@ mod provider_fixture_launch;
 #[cfg(test)]
 #[path = "../support/registered_route_project.rs"]
 mod registered_route_project;
+#[path = "../support/session_follow_fixture.rs"]
+mod session_follow_fixture;
 
 mod acp_client_dependency_structure;
 mod acp_metadata_projection;
@@ -63,6 +65,7 @@ mod router_executable_status;
 mod router_settings;
 mod runtime_lifecycle;
 mod runtime_restart;
+mod runtime_shutdown_stalled_provider_load;
 mod runtime_status_retirement;
 mod session_message_route_composition;
 mod shared_fleet_store;

@@ -8,13 +8,15 @@ use collaboration_protocol::{SessionRef, ThreadSubscribeRequest};
 use message_board::{
     Identity, ParticipantRole, PostId, PostReferences, PostText, ProtocolVersion, RequestId,
     SubscriptionMode, SubscriptionPolicyPatch, SubscriptionScope, SubscriptionTimingPatch,
-    ThreadId, ThreadJoinRequest, ThreadPostRequest,
+    ThreadId, ThreadJoinRequest, ThreadPostRequest, WhenIdle,
 };
 use serde_json::json;
 
-pub(super) async fn post_thread_activity_for_sessions(
+/// `when_idle` is the readers' idle policy; `None` keeps the board default.
+pub(super) async fn post_thread_activity_for_sessions<const READERS: usize>(
     client: &CollaborationClient,
-    readers: [SessionRef; 2],
+    readers: [SessionRef; READERS],
+    when_idle: Option<WhenIdle>,
     inputs: RegisteredRouteProject,
 ) {
     let owner = inputs.project.actor.clone();
@@ -63,7 +65,7 @@ pub(super) async fn post_thread_activity_for_sessions(
                     role: ParticipantRole::Participant,
                     watch: true,
                     mode: None,
-                    when_idle: None,
+                    when_idle,
                     replace: None,
                     note: None,
                 })
@@ -80,6 +82,7 @@ pub(super) async fn post_thread_activity_for_sessions(
                     scope: SubscriptionScope::thread(thread.clone()).into(),
                     policy: SubscriptionPolicyPatch {
                         mode: Some(SubscriptionMode::Deliver),
+                        when_idle,
                         timing: SubscriptionTimingPatch {
                             quiet_seconds: Some(0),
                             cap_seconds: Some(900),
