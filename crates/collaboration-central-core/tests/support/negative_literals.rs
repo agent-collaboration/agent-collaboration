@@ -3,6 +3,32 @@ use serde_json::{Value, json};
 pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
     let mut invalid = vec![Value::Null];
     match name {
+        "AuthorizationRevision" | "AuthorizationRevisionAcknowledgement" => {
+            for literal in literals {
+                for field in literal.as_object().unwrap().keys() {
+                    let mut missing = literal.clone();
+                    missing.as_object_mut().unwrap().remove(field);
+                    invalid.push(missing);
+                }
+                let revision_field = if name == "AuthorizationRevision" {
+                    "revision"
+                } else {
+                    "acknowledgedRevision"
+                };
+                for revision in [json!(0), json!(9_007_199_254_740_992_i64), json!(1.5), json!("4"), Value::Null] {
+                    let mut value = literal.clone();
+                    value[revision_field] = revision;
+                    invalid.push(value);
+                }
+                if literal.get("permissionPolicyDigest").is_some() {
+                    for digest in [json!(""), json!("a".repeat(63)), json!("a".repeat(65)), json!("A".repeat(64)), json!("g".repeat(64)), json!(42), Value::Null] {
+                        let mut value = literal.clone();
+                        value["permissionPolicyDigest"] = digest;
+                        invalid.push(value);
+                    }
+                }
+            }
+        }
         "OrganizationAdminResult" => {
             let applied = literals.iter().find(|value| value["result"] == "applied").unwrap();
             let mut legacy = applied.clone();

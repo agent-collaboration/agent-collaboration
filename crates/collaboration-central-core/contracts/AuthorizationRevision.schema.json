@@ -1,0 +1,106 @@
+{
+  "$defs": {
+    "FenceRevision": {
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "OrganizationFenceState": {
+      "enum": [
+        "active",
+        "stopped",
+        "deleted"
+      ],
+      "type": "string"
+    },
+    "OrganizationId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    },
+    "PermissionPolicyDigest": {
+      "pattern": "^[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "PersonFenceState": {
+      "enum": [
+        "active",
+        "inactive"
+      ],
+      "type": "string"
+    },
+    "RecordId": {
+      "maxLength": 36,
+      "minLength": 36,
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$",
+      "type": "string"
+    }
+  },
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "organization",
+          "type": "string"
+        },
+        "organizationId": {
+          "$ref": "#/$defs/OrganizationId"
+        },
+        "permissionPolicyDigest": {
+          "$ref": "#/$defs/PermissionPolicyDigest"
+        },
+        "revision": {
+          "$ref": "#/$defs/FenceRevision"
+        },
+        "state": {
+          "$ref": "#/$defs/OrganizationFenceState"
+        }
+      },
+      "required": [
+        "kind",
+        "organizationId",
+        "revision",
+        "state",
+        "permissionPolicyDigest"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "person",
+          "type": "string"
+        },
+        "organizationId": {
+          "$ref": "#/$defs/OrganizationId"
+        },
+        "personId": {
+          "$ref": "#/$defs/RecordId"
+        },
+        "revision": {
+          "$ref": "#/$defs/FenceRevision"
+        },
+        "state": {
+          "$ref": "#/$defs/PersonFenceState"
+        },
+        "subjectId": {
+          "$ref": "#/$defs/RecordId"
+        }
+      },
+      "required": [
+        "kind",
+        "organizationId",
+        "personId",
+        "subjectId",
+        "revision",
+        "state"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "AuthorizationRevision"
+}

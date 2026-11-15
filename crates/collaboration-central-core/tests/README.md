@@ -23,6 +23,11 @@ assertions. New floor/admission cases check the static plans and row decoders; h
 integration suites prove the private route, real cryptography and owning SQL batch.
 The standalone unit selection needs `test-support` for its existing turn seams.
 
+`organization_admin_contracts` also exports the existing AuthorizationRevision
+and AuthorizationRevisionAcknowledgement types as schema, positive fixtures and
+negatives. Ordinary runs compare committed artifacts with update mode unset;
+`UPDATE_FLEET_IDENTITY_CONTRACTS=1` is reserved for explicit regeneration.
+
 `src/signin_observation_empty.json` (exported by the non-default test-support
 module) is the canonical empty private launcher
 observation used by Rust and the Node bridge. Colocated `signin_test_observation`
