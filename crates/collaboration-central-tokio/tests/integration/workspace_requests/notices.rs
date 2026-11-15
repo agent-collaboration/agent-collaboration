@@ -81,7 +81,10 @@ async fn first_activity_fixes_window_and_addressed_posts_join_the_session_batch(
     let start = chrono::DateTime::parse_from_rfc3339(start).unwrap();
     let due = chrono::DateTime::parse_from_rfc3339(due).unwrap();
     assert_eq!(start.timestamp_millis(), first_time.timestamp_millis());
-    assert_eq!(due - start, chrono::Duration::minutes(15));
+    assert_eq!(
+        due.timestamp(),
+        (start.timestamp().div_euclid(900) + 1) * 900
+    );
     assert_eq!(first.rows[0][2], SqlValue::Integer(1.try_into().unwrap()));
     f.clock.advance(std::time::Duration::from_secs(60)).unwrap();
     created(f.call(7104, post(&thread, vec![])).await);
@@ -179,7 +182,7 @@ async fn concurrent_drains_hold_workspace_turn_and_do_not_duplicate_notice() {
     let duplicate = runtime.statement_host().run_batch(StatementBatch {
         statements: vec![GuardedStatement {
             statement: Statement {
-                sql: "INSERT INTO messages(message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,deliver_after,created_at,updated_at) SELECT ?,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,deliver_after,created_at,updated_at FROM messages WHERE message_kind='notice' AND source_thread_id=? AND recipient_actor=?",
+                sql: "INSERT INTO messages(message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at) SELECT ?,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at FROM messages WHERE message_kind='notice' AND source_thread_id=? AND recipient_actor=?",
                 args: vec![text(id::<m::WorkspaceId>(7113)), text(&thread), text(&actor)],
             },
             expect: RowExpectation::Exactly(1),
@@ -366,10 +369,15 @@ async fn session_cadence_sets_nondefault_window_deadline() {
     let thread = f.thread(7141, area).await;
     let (observer, actor) = joined_observer(&f, &thread).await;
     let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
-    let defaults = runtime.statement_host().read(Statement {
-        sql: "SELECT notice_cadence,last_notice_delivery_at FROM actor_identities WHERE actor_identity_id=?", args: vec![text(&actor)],
-    }).await.unwrap();
-    assert_eq!(defaults.rows, vec![vec![text("m15"), SqlValue::Null]]);
+    let defaults = runtime
+        .statement_host()
+        .read(Statement {
+            sql: "SELECT notice_cadence FROM actor_identities WHERE actor_identity_id=?",
+            args: vec![text(&actor)],
+        })
+        .await
+        .unwrap();
+    assert_eq!(defaults.rows, vec![vec![text("m15")]]);
     let changed = f
         .host
         .request_central(
@@ -400,8 +408,12 @@ async fn session_cadence_sets_nondefault_window_deadline() {
         vec![
             text(first_time.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
             text(
-                (first_time + chrono::Duration::minutes(25))
-                    .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+                chrono::DateTime::from_timestamp(
+                    (first_time.timestamp().div_euclid(1500) + 1) * 1500,
+                    0
+                )
+                .unwrap()
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
             )
         ]
     );

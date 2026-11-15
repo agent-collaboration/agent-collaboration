@@ -22,7 +22,7 @@ fn optional<T: std::str::FromStr>(
 }
 pub(crate) fn notice_messages() -> Statement {
     Statement {
-        sql: "SELECT message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,deliver_after,created_at,updated_at FROM messages WHERE message_kind='notice' AND state IN ('queued','ready')",
+        sql: "SELECT message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at FROM messages WHERE message_kind='notice' AND state='queued'",
         args: vec![],
     }
 }
@@ -63,7 +63,6 @@ pub(crate) fn decode_messages(
             let failure = column(rows, row, "failure_reason")?;
             let state = match (string(rows, row, "state")?, failure) {
                 ("queued", SqlValue::Null) => mail::MessageState::Queued,
-                ("ready", SqlValue::Null) => mail::MessageState::Ready,
                 ("delivered", SqlValue::Null) => mail::MessageState::Delivered,
                 ("cancelled", SqlValue::Null) => mail::MessageState::Cancelled,
                 ("failed", SqlValue::Text(reason)) if !reason.is_empty() => {
@@ -106,16 +105,6 @@ pub(crate) fn decode_messages(
                 body,
                 state,
                 source,
-                deliver_after: {
-                    let due: workspace_model::Timestamp = parse(
-                        string(rows, row, "deliver_after")?,
-                        "messages.deliver_after",
-                    )?;
-                    if !crate::central_mail_time::supported(due) {
-                        return Err(corrupt("messages.deliver_after"));
-                    }
-                    due
-                },
                 created_at: parse(string(rows, row, "created_at")?, "messages.created_at")?,
                 updated_at: parse(string(rows, row, "updated_at")?, "messages.updated_at")?,
             })
@@ -126,29 +115,20 @@ pub(crate) fn decode_messages(
 impl<Host: crate::ObjectHost, Stores: crate::WorkspaceStoreCalls>
     crate::WorkspaceRuntime<Host, Stores>
 {
-    /// Reads readiness without consuming it, in stable due-mark/message-id order.
-    pub async fn due_for_session(
+    /// Reads queued messages without consuming them, in stable message-UUIDv7 order.
+    pub async fn queued_for_session(
         &self,
         session: &workspace_model::SessionAddress,
-        through: workspace_model::Timestamp,
-    ) -> Result<mail::SessionDueBatch, StoreFailure> {
+    ) -> Result<mail::SessionQueue, StoreFailure> {
         let _turn = self.take_central_turn().await;
-        if !crate::central_mail_time::supported(through) {
-            return Err(corrupt("due_batch.through"));
-        }
         // UUIDv7 normally follows admission within one process. A reopen or clock
         // rollback can change that order; no FIFO promise is made inside a batch.
-        let rows=self.host.read(Statement{sql:"SELECT message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,deliver_after,created_at,updated_at FROM messages WHERE target_machine_id=? AND state='ready' ORDER BY deliver_after,message_id",args:vec![SqlValue::Text(session.machine_id.to_string())]}).await?;
+        let rows=self.host.read(Statement{sql:"SELECT message_id,sender,target_machine_id,target_session,message_kind,body,state,failure_reason,source_change_id,recipient_actor,source_workspace_id,source_thread_id,created_at,updated_at FROM messages WHERE target_machine_id=? AND state='queued' ORDER BY message_id",args:vec![SqlValue::Text(session.machine_id.to_string())]}).await?;
         let mut messages = decode_messages(&rows)?;
-        messages.retain(|message| &message.target == session && message.deliver_after <= through);
-        messages.sort_by(|left, right| {
-            left.deliver_after
-                .cmp(&right.deliver_after)
-                .then_with(|| left.message_id.cmp(&right.message_id))
-        });
-        Ok(mail::SessionDueBatch {
+        messages.retain(|message| &message.target == session);
+        messages.sort_by(|left, right| left.message_id.cmp(&right.message_id));
+        Ok(mail::SessionQueue {
             session: session.clone(),
-            through,
             messages,
         })
     }

@@ -33,6 +33,11 @@ pub(crate) fn aligned_at_or_after(time: Timestamp, seconds: u32) -> Option<Times
     Timestamp::from_timestamp(whole, 0).filter(|value| supported(*value))
 }
 
+pub(crate) fn aligned_strictly_after(time: Timestamp, seconds: u32) -> Option<Timestamp> {
+    let after = time.checked_add_signed(Duration::nanoseconds(1))?;
+    aligned_at_or_after(after, seconds)
+}
+
 pub(crate) fn on_grid(time: Timestamp) -> bool {
     time.timestamp().rem_euclid(i64::from(GRID_SECONDS)) == 0 && time.timestamp_subsec_nanos() == 0
 }

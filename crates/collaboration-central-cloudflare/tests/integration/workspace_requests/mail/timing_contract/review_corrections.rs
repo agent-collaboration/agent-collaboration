@@ -37,7 +37,9 @@ pub(super) async fn exercise_shorter_cadence(f: &Fixture) {
         .unwrap();
     advance_to(f, start);
     created(f.call(46003, post()).await);
-    let first = start + chrono::Duration::minutes(55);
+    let first =
+        chrono::DateTime::from_timestamp((start.timestamp().div_euclid(3300) + 1) * 3300, 0)
+            .unwrap();
     dispatch_to(f, first).await;
     advance_to(f, first + chrono::Duration::minutes(10));
     created(f.call(46004, post()).await);
@@ -57,7 +59,8 @@ pub(super) async fn exercise_shorter_cadence(f: &Fixture) {
         .await,
         Result::Done(_)
     ));
-    let due = first + chrono::Duration::minutes(35);
+    let due = chrono::DateTime::from_timestamp((now(f).timestamp().div_euclid(900) + 1) * 900, 0)
+        .unwrap();
     let r = f.host.central(&f.caller.organization_id).await;
     let row = r
         .statement_host()
@@ -67,9 +70,9 @@ pub(super) async fn exercise_shorter_cadence(f: &Fixture) {
         })
         .await
         .unwrap();
-    let early = r.due_for_session(&address, now(f)).await.unwrap();
+    let early = r.queued_for_session(&address).await.unwrap();
     assert_eq!(early.messages.len(), 1);
-    assert_eq!(early.messages[0].deliver_after, first);
+    assert_eq!(early.messages[0].created_at, first);
     assert_eq!(
         row.rows,
         vec![vec![text(
@@ -97,12 +100,12 @@ pub(super) async fn exercise_shorter_cadence(f: &Fixture) {
     drop(r);
     dispatch_to(f, next).await;
     let r = f.host.central(&f.caller.organization_id).await;
-    let batches = r.due_for_session(&address, next).await.unwrap();
+    let batches = r.queued_for_session(&address).await.unwrap();
     assert_eq!(
         batches
             .messages
             .iter()
-            .map(|message| message.deliver_after)
+            .map(|message| message.created_at)
             .collect::<Vec<_>>(),
         vec![first, due, next]
     );
@@ -122,10 +125,10 @@ pub(super) async fn exercise_non_utc_and_terminal_rows(f: &Fixture) {
     assert_eq!(first.timestamp().rem_euclid(300), 0);
     dispatch_to(f, first).await;
     let r = f.host.central(&f.caller.organization_id).await;
-    let batch = r.due_for_session(&target, first).await.unwrap();
+    let batch = r.queued_for_session(&target).await.unwrap();
     let fired:Vec<_>=batch.messages.iter().filter(|message|matches!(&message.body,MessageBody::Automation{automation_id:id,..}if id==&automation_id)).collect();
     assert_eq!(fired.len(), 1);
-    assert_eq!(fired[0].deliver_after, first);
+    assert_eq!(fired[0].created_at, first);
     let next = first + chrono::Duration::minutes(5);
     let row = r
         .statement_host()
@@ -183,7 +186,7 @@ pub(super) async fn exercise_non_utc_and_terminal_rows(f: &Fixture) {
         .await,
         Result::Done(_)
     ));
-    assert!(matches!(r.statement_host().run_batch(StatementBatch{statements:vec![GuardedStatement{statement:Statement{sql:"UPDATE messages SET state='delivered',body='retired corrupt body' WHERE message_id=(SELECT message_id FROM messages WHERE message_kind='notice' AND state='ready' LIMIT 1)",args:vec![]},expect:RowExpectation::Exactly(1)}],alarm:AlarmUpdate::Unchanged}).await.unwrap(),central_storage::BatchOutcome::Applied{..}));
+    assert!(matches!(r.statement_host().run_batch(StatementBatch{statements:vec![GuardedStatement{statement:Statement{sql:"UPDATE messages SET state='delivered',body='retired corrupt body' WHERE message_id=(SELECT message_id FROM messages WHERE message_kind='notice' AND state='queued' LIMIT 1)",args:vec![]},expect:RowExpectation::Exactly(1)}],alarm:AlarmUpdate::Unchanged}).await.unwrap(),central_storage::BatchOutcome::Applied{..}));
     let area = f.area(46104).await;
     let thread = f.thread(46105, area).await;
     created(
@@ -269,7 +272,7 @@ pub(super) async fn exercise_late_drain(f: &Fixture) {
         central_storage::BatchOutcome::Applied { .. }
     ));
     r.drain_workspace(&f.workspace).await.unwrap();
-    let due = chrono::DateTime::from_timestamp((now(f).timestamp().div_euclid(300) + 1) * 300, 0)
+    let due = chrono::DateTime::from_timestamp((now(f).timestamp().div_euclid(900) + 1) * 900, 0)
         .unwrap();
     assert_eq!(
         r.statement_host().read(read()).await.unwrap().rows,
@@ -280,7 +283,7 @@ pub(super) async fn exercise_late_drain(f: &Fixture) {
     drop(r);
     dispatch_to(f, due).await;
     let r = f.host.central(&f.caller.organization_id).await;
-    let batch = r.due_for_session(&address, due).await.unwrap();
+    let batch = r.queued_for_session(&address).await.unwrap();
     assert_eq!(batch.messages.len(), 1);
-    assert_eq!(batch.messages[0].deliver_after, due);
+    assert_eq!(batch.messages[0].created_at, due);
 }

@@ -56,7 +56,7 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
         .await,
         Result::Refused(Refusal::NotSession)
     );
-    // Arrange a distinct target, so old Ready messages from the reused process cannot mask grouping.
+    // Arrange a distinct target, so old queued messages from the reused process cannot mask grouping.
     let mut target_caller = f.caller.clone();
     let mut target = session(&f.caller);
     target.session_id = "timing-direct-target".to_owned().try_into().unwrap();
@@ -236,9 +236,9 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
         .await,
         Result::Done(_)
     ));
-    // Three distinct messages admitted during one minute become one typed ready batch.
+    // Every direct message is immediately queued; no central delivery alarm is scheduled.
     let r = f.host.central(&f.caller.organization_id).await.unwrap();
-    let before_direct = r.due_for_session(&target, first).await.unwrap();
+    let before_direct = r.queued_for_session(&target).await.unwrap();
     assert_eq!(before_direct.messages.len(), 1);
     assert_eq!(
         before_direct.messages[0].body,
@@ -300,51 +300,40 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     };
     let r = f.host.central(&f.caller.organization_id).await.unwrap();
     assert!(
-        r.due_for_session(&second_target, now(f))
-            .await
-            .unwrap()
-            .messages
-            .is_empty()
+        r.statement_host().alarm().is_none(),
+        "direct messages never schedule an alarm"
     );
-    let early = r.due_for_session(&target, now(f)).await.unwrap();
-    assert!(
-        !early
-            .messages
-            .iter()
-            .any(|message| direct_ids.contains(&message.message_id))
-    );
+    let immediate = r.queued_for_session(&target).await.unwrap();
+    assert_eq!(immediate.messages.len(), 4);
     let direct_mark = first + chrono::Duration::minutes(1);
-    assert_eq!(
-        r.statement_host().alarm().map(|time| time.unix_millis()),
-        Some(direct_mark.timestamp_millis())
-    );
-    dispatch_to(f, direct_mark).await;
-    let ready = r.due_for_session(&target, direct_mark).await.unwrap();
+    advance_to(f, direct_mark);
+    let queue = r.queued_for_session(&target).await.unwrap();
     let mut expected_ids = vec![before_direct.messages[0].message_id.clone()];
     expected_ids.extend(direct_ids.clone());
+    expected_ids.sort();
     assert_eq!(
-        ready
+        queue
             .messages
             .iter()
             .map(|message| message.message_id.clone())
             .collect::<Vec<_>>(),
         expected_ids
     );
-    let second_ready = r
-        .due_for_session(&second_target, direct_mark)
-        .await
-        .unwrap();
-    assert_eq!(second_ready.messages.len(), 1);
-    assert_eq!(second_ready.messages[0].message_id, second_id);
-    assert_eq!(second_ready.messages[0].target, second_target);
-    assert_eq!(second_ready.messages[0].deliver_after, direct_mark);
+    let second_queue = r.queued_for_session(&second_target).await.unwrap();
+    assert_eq!(second_queue.messages.len(), 1);
+    assert_eq!(second_queue.messages[0].message_id, second_id);
+    assert_eq!(second_queue.messages[0].target, second_target);
     assert_eq!(
-        second_ready.messages[0].body,
+        second_queue.messages[0].state,
+        collaboration_protocol::central_mail::MessageState::Queued
+    );
+    assert_eq!(
+        second_queue.messages[0].body,
         MessageBody::Direct {
             body: "second recipient".to_owned().try_into().unwrap()
         }
     );
-    let direct: Vec<_> = ready
+    let direct: Vec<_> = queue
         .messages
         .iter()
         .filter(|message| direct_ids.contains(&message.message_id))
@@ -358,7 +347,10 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
         direct_ids
     );
     for (index, message) in direct.iter().enumerate() {
-        assert_eq!(message.deliver_after, direct_mark);
+        assert_eq!(
+            message.created_at,
+            first + chrono::Duration::seconds(i64::try_from(index).unwrap() * 10 + 1)
+        );
         assert_eq!(
             message.body,
             MessageBody::Direct {
@@ -367,32 +359,24 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
         );
     }
     assert_eq!(
-        serde_json::from_str::<collaboration_protocol::central_mail::SessionDueBatch>(
-            &serde_json::to_string(&ready).unwrap()
+        serde_json::from_str::<collaboration_protocol::central_mail::SessionQueue>(
+            &serde_json::to_string(&queue).unwrap()
         )
         .unwrap(),
-        ready
+        queue
     );
-    assert_eq!(
-        r.due_for_session(&target, direct_mark).await.unwrap(),
-        ready
-    );
+    assert_eq!(r.queued_for_session(&target).await.unwrap(), queue);
     assert!(
         r.statement_host().alarm().is_none(),
-        "Ready rows must not spin the alarm"
+        "Queued rows must not spin the alarm"
     );
     drop(r);
     f.reopen().await;
     let r = f.host.central(&f.caller.organization_id).await.unwrap();
+    assert_eq!(r.queued_for_session(&target).await.unwrap(), queue);
     assert_eq!(
-        r.due_for_session(&target, direct_mark).await.unwrap(),
-        ready
-    );
-    assert_eq!(
-        r.due_for_session(&second_target, direct_mark)
-            .await
-            .unwrap(),
-        second_ready
+        r.queued_for_session(&second_target).await.unwrap(),
+        second_queue
     );
     // Two policy writes then old replay: central ledger keeps the newer cadence.
     let first_policy = Op::SetNoticeCadence {
@@ -426,11 +410,8 @@ pub(super) async fn exercise_timing_contract(f: &mut Fixture) {
     )
     .await;
     assert!(!matches!(refused.result, m::WorkspaceResult::Done(_)));
-    let policy=r.statement_host().read(Statement{sql:"SELECT notice_cadence,last_notice_delivery_at FROM actor_identities WHERE identity LIKE '%timing-direct-target%'",args:vec![]}).await.unwrap();
-    assert_eq!(
-        policy.rows,
-        vec![vec![text("m25"), central_storage::SqlValue::Null]]
-    );
+    let policy=r.statement_host().read(Statement{sql:"SELECT notice_cadence FROM actor_identities WHERE identity LIKE '%timing-direct-target%'",args:vec![]}).await.unwrap();
+    assert_eq!(policy.rows, vec![vec![text("m25")]]);
     drop(r);
     notices::exercise_notice_cadences(f).await;
     stored_validation::exercise_stored_validation(f).await;
@@ -495,22 +476,17 @@ async fn exercise_expiry(f: &mut Fixture) {
             central_storage::SqlValue::Integer(1.try_into().unwrap())
         ]]
     );
-    let batch = r
-        .due_for_session(&session(&f.caller), now(f))
-        .await
-        .unwrap();
+    let batch = r.queued_for_session(&session(&f.caller)).await.unwrap();
     let fired:Vec<_>=batch.messages.iter().filter(|message|matches!(&message.body,MessageBody::Automation{automation_id:id,..} if id==&automation_id)).collect();
     assert_eq!(fired.len(), 1);
-    assert_eq!(fired[0].deliver_after, original_due);
+    assert!(original_due < now(f));
+    assert_eq!(fired[0].created_at, now(f));
     assert_eq!(r.on_alarm().await.unwrap().automations_fired, 0);
     drop(r);
     f.reopen().await;
     let r = f.host.central(&f.caller.organization_id).await.unwrap();
     assert_eq!(r.on_alarm().await.unwrap().automations_fired, 0);
-    let reopened = r
-        .due_for_session(&session(&f.caller), now(f))
-        .await
-        .unwrap();
+    let reopened = r.queued_for_session(&session(&f.caller)).await.unwrap();
     assert_eq!(reopened.messages.iter().filter(|message|matches!(&message.body,MessageBody::Automation{automation_id:id,..}if id==&automation_id)).count(),1);
 }
 

@@ -1,6 +1,4 @@
 //! Central's typed mail and timer contract; delivery belongs to a later boundary.
-use std::num::NonZeroU32;
-
 use agent_automation::TimingRule;
 use serde::{Deserialize, Serialize};
 use workspace_ids::{
@@ -196,7 +194,6 @@ pub enum MessageKind {
 #[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
 pub enum MessageState {
     Queued,
-    Ready,
     Delivered,
     Cancelled,
     Failed { reason: String },
@@ -223,17 +220,15 @@ pub struct MessageRecord {
     pub body: MessageBody,
     pub state: MessageState,
     pub source: Option<NoticeSource>,
-    pub deliver_after: Timestamp,
     pub created_at: Timestamp,
     pub updated_at: Timestamp,
 }
 
-/// Non-destructive view of one session's ready messages at a supplied mark.
+/// Non-destructive view of one session's queued messages in stable UUIDv7 order.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SessionDueBatch {
+pub struct SessionQueue {
     pub session: SessionAddress,
-    pub through: Timestamp,
     pub messages: Vec<MessageRecord>,
 }
 
@@ -260,33 +255,6 @@ pub enum AutomationState {
     Active,
     Done,
     Disabled,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct MailPolicy {
-    direct_message_interval_seconds: NonZeroU32,
-}
-
-impl MailPolicy {
-    #[must_use]
-    pub const fn new(direct_message_interval_seconds: NonZeroU32) -> Self {
-        Self {
-            direct_message_interval_seconds,
-        }
-    }
-
-    #[must_use]
-    pub const fn direct_message_interval_seconds(self) -> u32 {
-        self.direct_message_interval_seconds.get()
-    }
-}
-
-impl Default for MailPolicy {
-    fn default() -> Self {
-        Self {
-            direct_message_interval_seconds: NonZeroU32::new(60).unwrap_or(NonZeroU32::MIN),
-        }
-    }
 }
 
 #[cfg(test)]

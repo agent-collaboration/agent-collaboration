@@ -19,7 +19,7 @@ async fn leave_cancels_the_fired_collated_message_but_not_direct_mail() {
                 request_id: id(7403),
                 operation: CentralMailOperation::SendMessage {
                     to: session(&observer),
-                    body: "direct remains ready".to_owned().try_into().unwrap(),
+                    body: "direct remains queued".to_owned().try_into().unwrap(),
                 },
             },
         )
@@ -54,7 +54,7 @@ async fn leave_cancels_the_fired_collated_message_but_not_direct_mail() {
     assert!(
         matches!(serde_json::from_str::<MessageBody>(body).unwrap(), MessageBody::Notice { items } if items.len() == 1)
     );
-    assert_eq!(before.rows[0][3], text("ready"));
+    assert_eq!(before.rows[0][3], text("queued"));
     let left = call(
         &f.host,
         &observer,
@@ -87,6 +87,6 @@ async fn leave_cancels_the_fired_collated_message_but_not_direct_mail() {
         })
         .await
         .unwrap();
-    assert_eq!(direct.rows, vec![vec![text("ready")]]);
+    assert_eq!(direct.rows, vec![vec![text("queued")]]);
     f.host.close().await;
 }

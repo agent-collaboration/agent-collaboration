@@ -50,7 +50,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 if member.is_some() || matches!(event, m::ChangeEvent::Resolved) {
                     statements.push(any("DELETE FROM notification_window_items WHERE workspace_id=? AND thread_id=? AND (? IS NULL OR window_id IN (SELECT window_id FROM notification_windows WHERE recipient_actor=?))",vec![text(workspace),text(thread),member.map_or(central_storage::SqlValue::Null,text),member.map_or(central_storage::SqlValue::Null,text)]));
                     statements.extend(
-                        self.cancel_ready_notices(workspace, thread, member, now)
+                        self.cancel_queued_notices(workspace, thread, member, now)
                             .await?,
                     );
                     continue;

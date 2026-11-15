@@ -73,7 +73,10 @@ async fn first_activity_deadline_collates_three_ordered_posts_at_fifteen_minutes
         let start = chrono::DateTime::parse_from_rfc3339(start).unwrap();
         let due = chrono::DateTime::parse_from_rfc3339(due).unwrap();
         assert_eq!(start.timestamp_millis(), first_time.timestamp_millis());
-        assert_eq!(due - start, chrono::Duration::minutes(15));
+        assert_eq!(
+            due.timestamp(),
+            (start.timestamp().div_euclid(900) + 1) * 900
+        );
         if let Some(original) = &initial_deadline {
             assert_eq!(&window.rows[0][1], original);
         } else {
@@ -97,7 +100,7 @@ async fn first_activity_deadline_collates_three_ordered_posts_at_fifteen_minutes
         .await;
     f.clock.advance(Duration::from_secs(180)).unwrap();
     fired.until_held().await;
-    let messages = runtime.statement_host().read(Statement { sql: "SELECT sender,body,source_change_id FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND state='ready'", args: vec![text(&recipient), text(&thread)] }).await.unwrap();
+    let messages = runtime.statement_host().read(Statement { sql: "SELECT sender,body,source_change_id FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND state='queued'", args: vec![text(&recipient), text(&thread)] }).await.unwrap();
     assert_eq!(messages.rows.len(), 1);
     let (SqlValue::Text(sender), SqlValue::Text(body)) =
         (&messages.rows[0][0], &messages.rows[0][1])

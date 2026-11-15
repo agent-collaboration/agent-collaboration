@@ -138,7 +138,10 @@ async fn first_activity_fixes_window_and_addressed_posts_join_the_session_batch(
     let start = chrono::DateTime::parse_from_rfc3339(start).unwrap();
     let due = chrono::DateTime::parse_from_rfc3339(due).unwrap();
     assert_eq!(start.timestamp_millis(), first_time.timestamp_millis());
-    assert_eq!(due - start, chrono::Duration::minutes(15));
+    assert_eq!(
+        due.timestamp(),
+        (start.timestamp().div_euclid(900) + 1) * 900
+    );
     assert_eq!(first.rows[0][2], SqlValue::Integer(1.try_into().unwrap()));
     f.clock.0.fetch_add(300_000, Ordering::SeqCst);
     expected.push(posted_notice_item(&f, 7104, &thread, &author, vec![]).await);
@@ -297,10 +300,15 @@ async fn session_cadence_sets_nondefault_window_deadline() {
     let thread = f.thread(7141, area).await;
     let (observer, actor) = joined_observer(&f, &thread).await;
     let runtime = f.host.central(&f.caller.organization_id).await;
-    let defaults = runtime.statement_host().read(Statement {
-        sql: "SELECT notice_cadence,last_notice_delivery_at FROM actor_identities WHERE actor_identity_id=?", args: vec![text(&actor)],
-    }).await.unwrap();
-    assert_eq!(defaults.rows, vec![vec![text("m15"), SqlValue::Null]]);
+    let defaults = runtime
+        .statement_host()
+        .read(Statement {
+            sql: "SELECT notice_cadence FROM actor_identities WHERE actor_identity_id=?",
+            args: vec![text(&actor)],
+        })
+        .await
+        .unwrap();
+    assert_eq!(defaults.rows, vec![vec![text("m15")]]);
     let changed = f
         .host
         .request_central(
@@ -332,8 +340,12 @@ async fn session_cadence_sets_nondefault_window_deadline() {
         vec![
             text(first_time.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
             text(
-                (first_time + chrono::Duration::minutes(25))
-                    .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+                chrono::DateTime::from_timestamp(
+                    (first_time.timestamp().div_euclid(1500) + 1) * 1500,
+                    0
+                )
+                .unwrap()
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
             )
         ]
     );

@@ -39,7 +39,6 @@ pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     lost_provisioning_reply: std::sync::atomic::AtomicBool,
     #[cfg(feature = "test-support")]
     central_waiting: tokio::sync::watch::Sender<usize>,
-    pub(crate) mail_policy: collaboration_protocol::central_mail::MailPolicy,
     pub(crate) drain_retry_seconds: std::sync::Mutex<std::collections::BTreeMap<WorkspaceId, u64>>,
     #[cfg(feature = "test-support")]
     pub(crate) pauses: crate::PausePoints,
@@ -70,7 +69,6 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             central_waiting: tokio::sync::watch::channel(0).0,
             #[cfg(feature = "test-support")]
             lost_provisioning_reply: Default::default(),
-            mail_policy: Default::default(),
             drain_retry_seconds: Default::default(),
             #[cfg(feature = "test-support")]
             pauses: crate::PausePoints::default(),
@@ -100,13 +98,6 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         check: Arc<dyn crate::organization_authority::SignInVerification>,
     ) -> Self {
         self.signin_authority.install_check(check);
-        self
-    }
-    pub fn with_mail_policy(
-        mut self,
-        policy: collaboration_protocol::central_mail::MailPolicy,
-    ) -> Self {
-        self.mail_policy = policy;
         self
     }
     pub fn statement_host(&self) -> &Host {

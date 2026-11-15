@@ -2,6 +2,31 @@
 use super::*;
 
 pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
+    // Pin an explicit epoch fixture; credentials remain valid for this future scenario.
+    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    use central_storage::{
+        AlarmUpdate as ClockAlarm, GuardedStatement as ClockStatement, RowExpectation as ClockRows,
+        StatementBatch as ClockBatch,
+    };
+    assert!(matches!(
+        runtime
+            .statement_host()
+            .run_batch(ClockBatch {
+                statements: vec![ClockStatement {
+                    statement: Statement {
+                        sql: "UPDATE machine_credentials SET expires_at='2033-01-01T00:00:00Z'",
+                        args: vec![]
+                    },
+                    expect: ClockRows::Any
+                }],
+                alarm: ClockAlarm::Unchanged
+            })
+            .await
+            .unwrap(),
+        central_storage::BatchOutcome::Applied { .. }
+    ));
+    drop(runtime);
+    advance_to(f, "2030-01-01T00:01:00Z".parse().unwrap());
     let mut recipients = Vec::new();
     for (index, (cadence, seconds)) in [
         (m::NoticeCadence::M15, 900_i64),
@@ -160,7 +185,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
     );
     for (_, address, _, _) in &recipients {
         assert!(
-            r.due_for_session(address, start)
+            r.queued_for_session(address)
                 .await
                 .unwrap()
                 .messages
@@ -192,15 +217,19 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
     assert_eq!(r.alarm_completion_count(), callbacks);
     drop(r);
     f.reopen().await;
-    for (recipient_index, (_, address, _, seconds)) in recipients.iter().enumerate() {
-        let due = chrono::DateTime::from_timestamp(
-            (start.timestamp() + *seconds + 299).div_euclid(300) * 300,
-            0,
-        )
-        .unwrap();
-        dispatch_to(f, due).await;
+    for (recipient_index, (_, address, _, _)) in recipients.iter().enumerate() {
+        let due: m::Timestamp = [
+            "2030-01-01T00:15:00Z",
+            "2030-01-01T00:25:00Z",
+            "2030-01-01T00:25:00Z",
+        ][recipient_index]
+            .parse()
+            .unwrap();
+        if now(f) < due {
+            dispatch_to(f, due).await;
+        }
         let r = f.host.central(&f.caller.organization_id).await.unwrap();
-        let batch = r.due_for_session(address, due).await.unwrap();
+        let batch = r.queued_for_session(address).await.unwrap();
         assert_eq!(
             batch.messages.len(),
             1,
@@ -224,7 +253,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
                 1
             );
         }
-        assert_eq!(batch.messages[0].deliver_after, due);
+        assert_eq!(batch.messages[0].created_at, due);
     }
     // Change M15 to M55 while a second complete cohort is pending, then reopen.
     advance_to(f, now(f) + chrono::Duration::seconds(1));
@@ -246,10 +275,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         );
         second_posts.push((workspace.clone(), thread.clone(), post));
     }
-    let original_last =
-        chrono::DateTime::from_timestamp((start.timestamp() + 900 + 299).div_euclid(300) * 300, 0)
-            .unwrap();
-    let changed_due = original_last + chrono::Duration::seconds(3300);
+    let changed_due: m::Timestamp = "2030-01-01T01:20:00Z".parse().unwrap();
     assert!(matches!(
         request(
             f,
@@ -264,14 +290,28 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
             cadence: m::NoticeCadence::M55
         })
     ));
+    // Replay the earlier M15 request while the newer M55 window is pending.
+    assert_eq!(
+        request(
+            f,
+            &recipients[0].0,
+            41000,
+            Op::SetNoticeCadence {
+                cadence: m::NoticeCadence::M15
+            }
+        )
+        .await,
+        Result::Done(Answer::NoticeCadenceSet {
+            cadence: m::NoticeCadence::M15
+        })
+    );
     let read_policy = || Statement {
-        sql: "SELECT a.notice_cadence,a.last_notice_delivery_at,w.due_at FROM actor_identities a JOIN notification_windows w ON w.recipient_actor=a.actor_identity_id WHERE a.identity LIKE '%cadence-0%'",
+        sql: "SELECT a.notice_cadence,w.due_at FROM actor_identities a JOIN notification_windows w ON w.recipient_actor=a.actor_identity_id WHERE a.identity LIKE '%cadence-0%'",
         args: vec![],
     };
     let r = f.host.central(&f.caller.organization_id).await.unwrap();
     let expected_policy = vec![vec![
         text("m55"),
-        text(original_last.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
         text(changed_due.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)),
     ]];
     assert_eq!(
@@ -286,7 +326,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         expected_policy
     );
     assert!(
-        r.due_for_session(&recipients[0].1, now(f))
+        r.queued_for_session(&recipients[0].1)
             .await
             .unwrap()
             .messages
@@ -296,7 +336,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
     drop(r);
     dispatch_to(f, changed_due).await;
     let r = f.host.central(&f.caller.organization_id).await.unwrap();
-    let before = notice_contents(r.due_for_session(&recipients[0].1, now(f)).await.unwrap());
+    let before = notice_contents(r.queued_for_session(&recipients[0].1).await.unwrap());
     assert_eq!(before.len(), 2);
     let second_items = &before[1].2;
     assert_eq!(second_items.len(), 10);
@@ -313,7 +353,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
     }
     drop(r);
     // Leave, switch notifications off, and resolve each remove exactly their source
-    // while every other item, message id, due mark and workspace remains intact.
+    // while every other item, message id, creation time and workspace remains intact.
     for action in 0..3_u32 {
         let (workspace, thread) = &threads[usize::try_from(action).unwrap()];
         let operation = match action {
@@ -334,7 +374,7 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
             &recipients[0].0
         };
         let r = f.host.central(&f.caller.organization_id).await.unwrap();
-        let before = notice_contents(r.due_for_session(&recipients[0].1, now(f)).await.unwrap());
+        let before = notice_contents(r.queued_for_session(&recipients[0].1).await.unwrap());
         drop(r);
         let reply = call(
             &f.host,
@@ -346,13 +386,13 @@ pub(super) async fn exercise_notice_cadences(f: &mut Fixture) {
         .await;
         assert!(matches!(reply.result, m::WorkspaceResult::Done(_)));
         let r = f.host.central(&f.caller.organization_id).await.unwrap();
-        let after = notice_contents(r.due_for_session(&recipients[0].1, now(f)).await.unwrap());
+        let after = notice_contents(r.queued_for_session(&recipients[0].1).await.unwrap());
         assert_retained_notices(before, after, workspace, thread);
     }
     sustained::exercise_continued_activity(f, &threads).await;
 }
 fn notice_contents(
-    batch: collaboration_protocol::central_mail::SessionDueBatch,
+    batch: collaboration_protocol::central_mail::SessionQueue,
 ) -> Vec<(
     workspace_ids::MessageId,
     m::Timestamp,
@@ -365,7 +405,7 @@ fn notice_contents(
             let MessageBody::Notice { items } = message.body else {
                 panic!("unexpected non-notice in cadence session")
             };
-            (message.message_id, message.deliver_after, items)
+            (message.message_id, message.created_at, items)
         })
         .collect()
 }

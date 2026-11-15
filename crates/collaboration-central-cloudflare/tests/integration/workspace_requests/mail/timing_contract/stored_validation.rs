@@ -16,21 +16,20 @@ pub(super) async fn exercise_stored_validation(f: &Fixture) {
         .unwrap()
         .rows[0][0]
         .clone();
-    for (number, sql, value, field) in [
-        (
-            42100,
-            "UPDATE actor_identities SET notice_cadence=? WHERE actor_identity_id=?",
-            "m20",
-            "actor_identities.notice_cadence",
-        ),
-        (
-            42101,
-            "UPDATE actor_identities SET last_notice_delivery_at=? WHERE actor_identity_id=?",
-            "2020-01-01T00:01:00Z",
-            "actor_identities.last_notice_delivery_at",
-        ),
-    ] {
-        let before=r.statement_host().read(Statement{sql:"SELECT notice_cadence,last_notice_delivery_at FROM actor_identities WHERE actor_identity_id=?",args:vec![actor.clone()]}).await.unwrap();
+    for (number, sql, value, field) in [(
+        42100,
+        "UPDATE actor_identities SET notice_cadence=? WHERE actor_identity_id=?",
+        "m20",
+        "actor_identities.notice_cadence",
+    )] {
+        let before = r
+            .statement_host()
+            .read(Statement {
+                sql: "SELECT notice_cadence FROM actor_identities WHERE actor_identity_id=?",
+                args: vec![actor.clone()],
+            })
+            .await
+            .unwrap();
         assert!(matches!(
             r.statement_host()
                 .run_batch(StatementBatch {
@@ -63,7 +62,7 @@ pub(super) async fn exercise_stored_validation(f: &Fixture) {
         assert!(
             matches!(result,Err(StoreFailure::Corrupt{reason:CorruptReason::BadValue{column}}) if column==field)
         );
-        assert!(matches!(r.statement_host().run_batch(StatementBatch{statements:vec![GuardedStatement{statement:Statement{sql:"UPDATE actor_identities SET notice_cadence=?,last_notice_delivery_at=? WHERE actor_identity_id=?",args:vec![before.rows[0][0].clone(),before.rows[0][1].clone(),actor.clone()]},expect:RowExpectation::Exactly(1)}],alarm:AlarmUpdate::Unchanged}).await.unwrap(),central_storage::BatchOutcome::Applied{..}));
+        assert!(matches!(r.statement_host().run_batch(StatementBatch{statements:vec![GuardedStatement{statement:Statement{sql:"UPDATE actor_identities SET notice_cadence=? WHERE actor_identity_id=?",args:vec![before.rows[0][0].clone(),actor.clone()]},expect:RowExpectation::Exactly(1)}],alarm:AlarmUpdate::Unchanged}).await.unwrap(),central_storage::BatchOutcome::Applied{..}));
     }
     let due = chrono::DateTime::from_timestamp((now(f).timestamp().div_euclid(300) + 1) * 300, 0)
         .unwrap();
@@ -179,20 +178,9 @@ async fn exercise_timing_row_corruption(f: &Fixture) {
     let Result::Done(Answer::WakeSet { wake_id, .. }) = wake else {
         panic!("stored wake setup: {wake:?}")
     };
-    let message = request(
-        f,
-        &f.caller,
-        42122,
-        Op::SendMessage {
-            to: session(&f.caller),
-            body: body(),
-        },
-    )
-    .await;
-    let Result::Done(Answer::Queued { message_id }) = message else {
-        panic!("stored message setup: {message:?}")
-    };
     let runtime = f.host.central(&f.caller.organization_id).await;
+    let pending = runtime.statement_host().read(Statement {sql:"SELECT w.window_id FROM notification_windows w JOIN actor_identities a ON a.actor_identity_id=w.recipient_actor WHERE a.identity LIKE '%cadence-2%'",args:vec![]}).await.unwrap();
+    assert_eq!(pending.rows.len(), 1);
     for (index, select, update, row_id, invalid_value, column) in [
         (
             0,
@@ -229,11 +217,12 @@ async fn exercise_timing_row_corruption(f: &Fixture) {
         ),
         (
             4,
-            "SELECT deliver_after FROM messages WHERE message_id=?",
-            "UPDATE messages SET deliver_after=? WHERE message_id=?",
-            text(&message_id),
-            text("not-a-timestamp"),
-            "messages.deliver_after",
+            "SELECT due_at FROM notification_windows WHERE window_id=?",
+            "UPDATE notification_windows SET due_at=? WHERE window_id=?",
+            pending.rows[0][0].clone(),
+            // A five-minute mark that is not on this recipient's shared M55 schedule.
+            text("2030-01-01T03:55:00Z"),
+            "notification_windows.due_at",
         ),
     ] {
         let original = runtime

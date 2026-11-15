@@ -36,7 +36,19 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         recipient: &ActorIdentityId,
         first: Timestamp,
     ) -> Result<Timestamp, StoreFailure> {
-        let rows = self.host.read(Statement { sql: "SELECT notice_cadence,last_notice_delivery_at FROM actor_identities WHERE actor_identity_id=?", args: vec![text(recipient)] }).await?;
+        self.notice_due_with_cadence(first, self.notice_cadence(recipient).await?)
+    }
+    async fn notice_cadence(
+        &self,
+        recipient: &ActorIdentityId,
+    ) -> Result<NoticeCadence, StoreFailure> {
+        let rows = self
+            .host
+            .read(Statement {
+                sql: "SELECT notice_cadence FROM actor_identities WHERE actor_identity_id=?",
+                args: vec![text(recipient)],
+            })
+            .await?;
         let row = rows
             .rows
             .first()
@@ -45,37 +57,14 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             string(&rows, row, "notice_cadence")?.to_owned(),
         ))
         .map_err(|_| corrupt("actor_identities.notice_cadence"))?;
-        self.notice_due_with_cadence(recipient, first, cadence)
-            .await
+        Ok(cadence)
     }
-    pub(crate) async fn notice_due_with_cadence(
+    pub(crate) fn notice_due_with_cadence(
         &self,
-        recipient: &ActorIdentityId,
         first: Timestamp,
         cadence: NoticeCadence,
     ) -> Result<Timestamp, StoreFailure> {
-        let rows = self.host.read(Statement { sql: "SELECT last_notice_delivery_at FROM actor_identities WHERE actor_identity_id=?", args: vec![text(recipient)] }).await?;
-        let row = rows
-            .rows
-            .first()
-            .ok_or_else(|| corrupt("notification_windows.recipient_actor"))?;
-        let last = match column(&rows, row, "last_notice_delivery_at")? {
-            SqlValue::Null => first,
-            SqlValue::Text(value) => {
-                let last = parse_time(value, "actor_identities.last_notice_delivery_at")?;
-                if !crate::central_mail_time::on_grid(last) {
-                    return Err(corrupt("actor_identities.last_notice_delivery_at"));
-                }
-                last
-            }
-            _ => return Err(corrupt("actor_identities.last_notice_delivery_at")),
-        };
-        let current_mark = crate::central_mail_time::aligned_at_or_after(self.now()?, 300)
-            .ok_or_else(|| corrupt("notification_windows.due_at"))?;
-        last.checked_add_signed(chrono::Duration::seconds(i64::from(cadence.seconds())))
-            .and_then(|due| crate::central_mail_time::aligned_at_or_after(due.max(first), 300))
-            .map(|due| due.max(current_mark))
-            .filter(|due| crate::central_mail_time::supported(*due))
+        crate::central_mail_time::aligned_strictly_after(first.max(self.now()?), cadence.seconds())
             .ok_or_else(|| corrupt("notification_windows.due_at"))
     }
     pub(crate) async fn notification_windows(
@@ -89,15 +78,17 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 "notification_windows.first_activity_at",
             )?;
             let due = parse_time(string(&rows, row, "due_at")?, "notification_windows.due_at")?;
-            if due < first || !crate::central_mail_time::on_grid(due) {
+            if due <= first || !crate::central_mail_time::on_grid(due) {
                 return Err(corrupt("notification_windows.due_at"));
             }
             let recipient = parse(
                 string(&rows, row, "recipient_actor")?,
                 "notification_windows.recipient_actor",
             )?;
-            // Validate the owning actor's stored policy before using any deadline.
-            self.notice_due(&recipient, first).await?;
+            let cadence = self.notice_cadence(&recipient).await?;
+            if due.timestamp().rem_euclid(i64::from(cadence.seconds())) != 0 {
+                return Err(corrupt("notification_windows.due_at"));
+            }
             windows.push(NotificationWindow {
                 id: parse(
                     string(&rows, row, "window_id")?,
@@ -213,23 +204,21 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     workspace_id: first.workspace_id.clone(),
                     thread_id: first.thread_id.clone(),
                 };
-                let mut message = self.prepare_message_record(
+                let message = self.prepare_message_record(
                     mail::MessageSender::Central,
                     target,
                     mail::MessageBody::Notice { items },
                     Some(source),
                     now,
                 )?;
-                message.deliver_after = window.due;
                 statements.push(central_mail_store::insert_message(&message)?);
-                statements.push(exact("UPDATE actor_identities SET last_notice_delivery_at=?,updated_at=? WHERE actor_identity_id=?",vec![text(timestamp(window.due)),text(timestamp(now)),text(&window.recipient)]));
                 count += 1;
             }
             statements.extend(delete_window(&window.id));
         }
         Ok((statements, count))
     }
-    pub(crate) async fn cancel_ready_notices(
+    pub(crate) async fn cancel_queued_notices(
         &self,
         workspace: &WorkspaceId,
         thread: &ThreadId,
@@ -246,7 +235,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         // cancellations in one drain must never restore each other's removed items.
         Ok(vec![
             any(
-                "UPDATE messages SET body=json_set(body,'$.items',json(COALESCE((SELECT json_group_array(json(value)) FROM json_each(json_extract(messages.body,'$.items')) WHERE json_extract(value,'$.workspaceId')!=? OR json_extract(value,'$.threadId') IS NOT ?),'[]'))),updated_at=? WHERE message_kind='notice' AND state IN ('queued','ready') AND (? IS NULL OR recipient_actor=?)",
+                "UPDATE messages SET body=json_set(body,'$.items',json(COALESCE((SELECT json_group_array(json(value)) FROM json_each(json_extract(messages.body,'$.items')) WHERE json_extract(value,'$.workspaceId')!=? OR json_extract(value,'$.threadId') IS NOT ?),'[]'))),updated_at=? WHERE message_kind='notice' AND state='queued' AND (? IS NULL OR recipient_actor=?)",
                 vec![
                     text(workspace),
                     text(thread),
@@ -256,7 +245,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 ],
             ),
             any(
-                "UPDATE messages SET state=CASE WHEN json_array_length(body,'$.items')=0 THEN 'cancelled' ELSE state END,source_change_id=COALESCE(json_extract(body,'$.items[0].changeId'),source_change_id),source_workspace_id=COALESCE(json_extract(body,'$.items[0].workspaceId'),source_workspace_id),source_thread_id=CASE WHEN json_array_length(body,'$.items')=0 THEN source_thread_id ELSE json_extract(body,'$.items[0].threadId') END WHERE message_kind='notice' AND state IN ('queued','ready')",
+                "UPDATE messages SET state=CASE WHEN json_array_length(body,'$.items')=0 THEN 'cancelled' ELSE state END,source_change_id=COALESCE(json_extract(body,'$.items[0].changeId'),source_change_id),source_workspace_id=COALESCE(json_extract(body,'$.items[0].workspaceId'),source_workspace_id),source_thread_id=CASE WHEN json_array_length(body,'$.items')=0 THEN source_thread_id ELSE json_extract(body,'$.items[0].threadId') END WHERE message_kind='notice' AND state='queued'",
                 vec![],
             ),
         ])

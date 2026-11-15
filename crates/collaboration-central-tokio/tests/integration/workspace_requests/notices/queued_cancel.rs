@@ -26,7 +26,7 @@ async fn leaving_cancels_the_fired_collated_notice_and_retains_direct_message() 
                 request_id: id(7403),
                 operation: CentralMailOperation::SendMessage {
                     to: session(&observer),
-                    body: "Direct stays ready".to_owned().try_into().unwrap(),
+                    body: "Direct stays queued".to_owned().try_into().unwrap(),
                 },
             },
         )
@@ -42,7 +42,7 @@ async fn leaving_cancels_the_fired_collated_notice_and_retains_direct_message() 
         .pause_points()
         .hold_central(PausePoint::AfterTimerCommit);
     f.clock
-        .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(60)))
+        .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(900)))
         .await;
     f.clock.advance(Duration::from_secs(900)).unwrap();
     fired.until_held().await;
@@ -56,7 +56,7 @@ async fn leaving_cancels_the_fired_collated_notice_and_retains_direct_message() 
     else {
         panic!("notice encoding")
     };
-    assert_eq!(rows.rows[0][1], text("ready"));
+    assert_eq!(rows.rows[0][1], text("queued"));
     assert_eq!(
         serde_json::from_str::<MessageSender>(sender).unwrap(),
         MessageSender::Central
@@ -102,7 +102,7 @@ async fn leaving_cancels_the_fired_collated_notice_and_retains_direct_message() 
         .unwrap();
     assert_eq!(
         direct.rows,
-        vec![vec![text(&direct_id), text("ready"), text("direct")]]
+        vec![vec![text(&direct_id), text("queued"), text("direct")]]
     );
     f.host.close().await;
 }

@@ -455,13 +455,12 @@ impl RemoteRuntime {
         self.apply_clock().await;
         self.control("drain", workspace).await?
     }
-    pub async fn due_for_session(
+    pub async fn queued_for_session(
         &self,
         session: &workspace_model::SessionAddress,
-        through: workspace_model::Timestamp,
-    ) -> Result<collaboration_protocol::central_mail::SessionDueBatch, StoreFailure> {
+    ) -> Result<collaboration_protocol::central_mail::SessionQueue, StoreFailure> {
         self.apply_clock().await;
-        self.control("due-batch", &(session, through)).await?
+        self.control("queue", session).await?
     }
     pub async fn on_alarm(&self) -> Result<AlarmResult, StoreFailure> {
         self.apply_clock().await;

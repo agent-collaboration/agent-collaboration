@@ -207,17 +207,14 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
         f.clock.set_utc(due);
         reopened.on_alarm().await.unwrap();
         let batch = reopened
-            .due_for_session(
-                &m::SessionAddress {
-                    session_id: "notice-observer".to_owned().try_into().unwrap(),
-                    ..session(&f.caller)
-                },
-                due,
-            )
+            .queued_for_session(&m::SessionAddress {
+                session_id: "notice-observer".to_owned().try_into().unwrap(),
+                ..session(&f.caller)
+            })
             .await
             .unwrap();
         let encoded = serde_json::to_vec(&batch).unwrap();
-        let batch: collaboration_protocol::central_mail::SessionDueBatch =
+        let batch: collaboration_protocol::central_mail::SessionQueue =
             serde_json::from_slice(&encoded).unwrap();
         assert_eq!(batch.messages.len(), 1);
         let MessageBody::Notice { items } = &batch.messages[0].body else {

@@ -191,8 +191,6 @@ impl CentralObject {
             // returns the closed InvalidConfiguration refusal for core to observe.
             Ok(None) | Err(_) => runtime,
         };
-        #[cfg(feature = "test-support")]
-        let runtime = runtime.with_mail_policy(self.controls.mail_policy.get().unwrap_or_default());
         let runtime = Arc::new(
             runtime.with_sign_in_observer(Arc::new(crate::access_verification::observe_signin)),
         );

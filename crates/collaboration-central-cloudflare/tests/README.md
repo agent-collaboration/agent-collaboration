@@ -75,8 +75,8 @@ Fixture stamps do not establish provisioning or signature verification. Delivery
 link reconnect and acknowledgements remain later slices.
 
 The existing direct-mail case also runs `mail::timing_contract`, covering the
-five-minute grid, seven-day horizon/expiry, exact two-session ready batches,
-15/25/55-minute cadences across ten threads and two workspaces, pending policy
+five-minute grid, seven-day horizon/expiry, immediate two-session queues without delivery alarms,
+shared epoch 15/25/55-minute slots across ten threads and two workspaces, pending policy
 changes/reopen, source-specific cancellation and corruption. Its test control
 dispatches the real platform callback only when the retained alarm is due on the
 injected clock, and records callback count. Empty/later alarms cannot fabricate a

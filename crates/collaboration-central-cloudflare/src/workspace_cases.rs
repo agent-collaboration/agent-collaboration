@@ -5,11 +5,7 @@ use super::{
 use crate::store_wire::{OwnedBatch, OwnedStatement, OwnedStoreCall};
 use collaboration_central_core::{HeldPause, PausePoint};
 use serde::{Deserialize, Serialize};
-use std::{
-    cell::{Cell, RefCell},
-    collections::BTreeMap,
-    num::NonZeroU32,
-};
+use std::{cell::RefCell, collections::BTreeMap};
 use worker::{Env, Request, Response, Result};
 use worker::{Headers, Method, RequestInit, js_sys};
 
@@ -22,7 +18,6 @@ pub(crate) struct Controls {
     holds: RefCell<BTreeMap<(workspace_ids::WorkspaceId, Point), HeldPause>>,
     central_holds: RefCell<BTreeMap<Point, HeldPause>>,
     alarm_waiters: RefCell<Vec<futures_channel::oneshot::Sender<()>>>,
-    pub(super) mail_policy: Cell<Option<collaboration_protocol::central_mail::MailPolicy>>,
 }
 #[derive(Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
 #[serde(rename_all = "camelCase")]
@@ -116,17 +111,6 @@ pub(super) async fn control(
         object.clock.hold(request.json::<i64>().await?);
         return Response::from_json(&true);
     }
-    if path == "/test/policy" {
-        let seconds = NonZeroU32::new(request.json::<u32>().await?)
-            .ok_or_else(|| error("message interval seconds must be nonzero"))?;
-        if object.runtime.lock().await.is_some() {
-            return Err(error("runtime already initialized"));
-        }
-        object.controls.mail_policy.set(Some(
-            collaboration_protocol::central_mail::MailPolicy::new(seconds),
-        ));
-        return Response::from_json(&true);
-    }
     let runtime = object.runtime(organization).await?;
     match path.as_str() {
         "/test/lose-provisioning-reply" => {
@@ -146,10 +130,9 @@ pub(super) async fn control(
             let workspace = request.json().await?;
             Response::from_json(&runtime.drain_workspace(&workspace).await)
         }
-        "/test/due-batch" => {
-            let (session, through): (workspace_model::SessionAddress, workspace_model::Timestamp) =
-                request.json().await?;
-            Response::from_json(&runtime.due_for_session(&session, through).await)
+        "/test/queue" => {
+            let session: workspace_model::SessionAddress = request.json().await?;
+            Response::from_json(&runtime.queued_for_session(&session).await)
         }
         "/test/alarm" => Response::from_json(&object.state.storage().get_alarm().await?),
         "/test/hold-central" => {
