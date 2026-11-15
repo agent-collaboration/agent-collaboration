@@ -24,7 +24,6 @@ mod installation_identity_test;
 mod native_endpoint_resolution;
 mod native_transport_connection;
 mod permission_diagnostic;
-mod provider_wait_timeout;
 mod service_directory_resolution;
 mod session_history_special_files;
 mod stored_repository_scope;

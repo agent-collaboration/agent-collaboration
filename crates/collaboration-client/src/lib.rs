@@ -170,6 +170,8 @@ pub use conversation_operation_result::{
 };
 pub use owner_identity_resolution::{OwnerIdentityError, resolve_owner_human_id};
 mod provider_conversation_operations;
+#[cfg(test)]
+mod provider_conversation_operations_test;
 pub use conversation_contract::{
     ConversationCreatePromptError, ConversationCreatePromptRequest, ConversationCreatePromptResult,
     ConversationCreateRequest, ConversationCreateResult, ConversationEnd, ConversationEvent,
