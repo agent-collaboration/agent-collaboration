@@ -182,6 +182,21 @@ async fn drop_then_push_leaves_both_messages_unread() {
             matches!(event, OwnerObservation::DueRoots(1))
         })
         .await;
+    runtime.owner_barrier(&fixture.reader).await;
+    // The Drop decision reads presence asynchronously, after the owner pass the
+    // test synchronizes on; wait for that decision before the target turns
+    // Running, or "Skipped" is delivered instead and its delivery never ends.
+    let skipped =
+        super::local_mail_proofs::native_follow_mail_proofs::frozen_follow(&fixture).await;
+    let [skipped] = skipped.as_slice() else {
+        panic!("one frozen Skipped follow item");
+    };
+    let skipped_push =
+        collaboration_protocol::PushId::try_from(skipped.id().as_uuid().to_string()).unwrap();
+    assert!(matches!(
+        runtime.await_mail_outcome(&skipped_push).await,
+        fleet_sync_protocol::RecipientOutcome::Dropped
+    ));
     assert!(runtime.requests.lock().await.try_recv().is_err());
     *fixture.presence.0.lock().unwrap() = TargetPresence::Running;
     fixture.post(&fixture.root, "Pushed").await;
