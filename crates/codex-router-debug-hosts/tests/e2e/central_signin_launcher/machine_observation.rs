@@ -52,12 +52,20 @@ async fn token(child: &LauncherChild, enrollment: &str) -> TestResult<Value> {
 }
 
 fn grant(enrollment: &str, now: i64, predecessor: Option<&str>) -> Value {
-    let mut answer = json!({"result":"grant","installation":INSTALLATION,
-        "enrollmentId":enrollment,"decidedAt":now,"grantExpiresAt":now+600});
+    let mut fields = serde_json::Map::from_iter([
+        ("result".to_owned(), json!("grant")),
+        ("installation".to_owned(), json!(INSTALLATION)),
+        ("enrollmentId".to_owned(), json!(enrollment)),
+        ("decidedAt".to_owned(), json!(now)),
+        ("grantExpiresAt".to_owned(), json!(now + 600)),
+    ]);
     if let Some(predecessor) = predecessor {
-        answer["superseded"] = json!({"enrollmentId":predecessor,"clientId":predecessor});
+        fields.insert(
+            "superseded".to_owned(),
+            json!({"enrollmentId":predecessor,"clientId":predecessor}),
+        );
     }
-    answer
+    Value::Object(fields)
 }
 
 fn utc(seconds: i64) -> TestResult<String> {
