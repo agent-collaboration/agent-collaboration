@@ -16,12 +16,12 @@ async fn first_grant_uses_the_codes_exact_deadline_and_lapse_keeps_the_working_l
             )
             .await?
             .1,
-        );
+        )?;
         assert_eq!(f.post(TOKEN, &token(&a, &a)).await?.0, 200);
         let deadline = f.now() + 30;
         let mut pending = approval(0xc602, INSTALLATION, "Pending", &[WORKSPACE_TWO], f.now());
         pending["codeExpiresAt"] = json!(deadline);
-        let b = enrollment(&f.post(DEVICE, &pending).await?.1);
+        let b = enrollment(&f.post(DEVICE, &pending).await?.1)?;
         let machine = f.rows("SELECT * FROM machines ORDER BY machine_id").await?;
         let immutable_pending = f.rows("SELECT approval_id,request_id,machine_id,label,allowed_workspaces,approved_by_person_id,permission_checked,base_generation,code_expires_at,created_at FROM machine_approvals WHERE label='Pending'").await?;
         let working = f
@@ -109,7 +109,7 @@ async fn renewal_extends_idle_deadline_and_thirty_days_without_grant_expires_onc
         )
         .await?
         .1,
-    );
+    )?;
     assert_eq!(
         f.post(TOKEN, &token(&enrollment_id, &enrollment_id))
             .await?,
@@ -126,7 +126,7 @@ async fn renewal_extends_idle_deadline_and_thirty_days_without_grant_expires_onc
     let renewed = f.now();
     assert_eq!(
         f.rows("SELECT enrollment_generation FROM machines").await?,
-        vec![vec![number(1)]]
+        vec![vec![number(1)?]]
     );
     f.advance(30 * 24 * 60 * 60 * 1000 - 1000).await?;
     assert_eq!(
@@ -146,7 +146,7 @@ async fn renewal_extends_idle_deadline_and_thirty_days_without_grant_expires_onc
     assert_eq!(
         f.rows("SELECT state,enrollment_generation,allowed_workspaces FROM machines")
             .await?,
-        vec![vec![text("revoked"), number(1), text("[]")]]
+        vec![vec![text("revoked"), number(1)?, text("[]")]]
     );
     let records=f.rows("SELECT request_id,kind,origin,actor_person_id,permission_checked,target_id FROM organization_change_records WHERE origin='automatic' ORDER BY id").await?;
     assert_eq!(
@@ -205,7 +205,7 @@ async fn clients_organizations_unknown_ids_and_two_machine_logins_remain_isolate
         )
         .await?
         .1,
-    );
+    )?;
     let b = enrollment(
         &f.post(
             DEVICE,
@@ -213,7 +213,7 @@ async fn clients_organizations_unknown_ids_and_two_machine_logins_remain_isolate
         )
         .await?
         .1,
-    );
+    )?;
     for body in [token(&id(0xc899), &id(0xc899)), token(&a, &b)] {
         let before = snapshot(&f).await?;
         let expected = if body.get("enrollmentId") == Some(&json!(a)) {
@@ -252,12 +252,12 @@ async fn clients_organizations_unknown_ids_and_two_machine_logins_remain_isolate
     assert_eq!(
         f.rows("SELECT enrollment_generation FROM machines ORDER BY installation_id")
             .await?,
-        vec![vec![number(1)], vec![number(1)]]
+        vec![vec![number(1)?], vec![number(1)?]]
     );
     assert_eq!(
         f.rows("SELECT COUNT(*) FROM machine_approvals WHERE state='enrolled'")
             .await?,
-        vec![vec![number(2)]]
+        vec![vec![number(2)?]]
     );
     f.close().await
 }

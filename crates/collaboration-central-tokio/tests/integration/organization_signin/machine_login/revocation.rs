@@ -11,7 +11,7 @@ async fn revocation_repeat_and_aba_never_reactivate_old_approvals_and_new_approv
 -> Result<()> {
     let mut f = MachineFixture::new().await?;
     let approval_a = approval(0xce01, INSTALLATION, "A", &[WORKSPACE], f.now());
-    let a = enrollment(&f.post(DEVICE, &approval_a).await?.1);
+    let a = enrollment(&f.post(DEVICE, &approval_a).await?.1)?;
     let b = enrollment(
         &f.post(
             DEVICE,
@@ -19,14 +19,14 @@ async fn revocation_repeat_and_aba_never_reactivate_old_approvals_and_new_approv
         )
         .await?
         .1,
-    );
+    )?;
     assert_eq!(
         f.post(TOKEN, &token(&b, &b)).await?,
         (200, grant(&b, INSTALLATION, f.now(), None))
     );
     assert_eq!(
         f.rows("SELECT enrollment_generation FROM machines").await?,
-        vec![vec![number(1)]]
+        vec![vec![number(1)?]]
     );
     // An unrelated installation/enrollment pair cannot revoke B's active login.
     let other = enrollment(
@@ -36,7 +36,7 @@ async fn revocation_repeat_and_aba_never_reactivate_old_approvals_and_new_approv
         )
         .await?
         .1,
-    );
+    )?;
     assert_eq!(f.post(TOKEN, &token(&other, &other)).await?.0, 200);
     let neighbor = f
         .rows("SELECT * FROM machines WHERE installation_id='019f0000-0000-7000-8000-00000000bc06'")
@@ -63,10 +63,10 @@ async fn revocation_repeat_and_aba_never_reactivate_old_approvals_and_new_approv
         )
         .await?
         .1,
-    );
+    )?;
     assert_eq!(
         f.rows("SELECT a.base_generation,m.enrollment_generation,a.state FROM machine_approvals a JOIN machines m ON m.machine_id=a.machine_id WHERE a.label='Pending before revoke'").await?,
-        vec![vec![number(1), number(1), text("approved")]]
+        vec![vec![number(1)?, number(1)?, text("approved")]]
     );
     let ended = f
         .revoke(0xce11, INSTALLATION, &b)
@@ -76,7 +76,7 @@ async fn revocation_repeat_and_aba_never_reactivate_old_approvals_and_new_approv
         serde_json::to_value(ended)?,
         json!({"enrollmentId":b,"clientId":b})
     );
-    assert_eq!(f.rows("SELECT state,enrollment_generation,allowed_workspaces FROM machines WHERE installation_id='019f0000-0000-7000-8000-00000000bc05'").await?,vec![vec![text("revoked"),number(2),text("[]")]]);
+    assert_eq!(f.rows("SELECT state,enrollment_generation,allowed_workspaces FROM machines WHERE installation_id='019f0000-0000-7000-8000-00000000bc05'").await?,vec![vec![text("revoked"),number(2)?,text("[]")]]);
     assert_eq!(
         f.rows(
             "SELECT * FROM machines WHERE installation_id='019f0000-0000-7000-8000-00000000bc06'"
@@ -152,18 +152,18 @@ async fn revocation_repeat_and_aba_never_reactivate_old_approvals_and_new_approv
         )
         .await?
         .1,
-    );
-    assert_eq!(f.rows("SELECT state,enrollment_generation FROM machines WHERE installation_id='019f0000-0000-7000-8000-00000000bc05'").await?,vec![vec![text("revoked"),number(2)]],"new approval alone does not make a revoked machine enrolled");
+    )?;
+    assert_eq!(f.rows("SELECT state,enrollment_generation FROM machines WHERE installation_id='019f0000-0000-7000-8000-00000000bc05'").await?,vec![vec![text("revoked"),number(2)?]],"new approval alone does not make a revoked machine enrolled");
     assert_eq!(
         f.rows("SELECT base_generation FROM machine_approvals WHERE label='C'")
             .await?,
-        vec![vec![number(2)]]
+        vec![vec![number(2)?]]
     );
     assert_eq!(
         f.post(TOKEN, &token(&c, &c)).await?,
         (200, grant(&c, INSTALLATION, f.now(), None))
     );
-    assert_eq!(f.rows("SELECT state,enrollment_generation FROM machines WHERE installation_id='019f0000-0000-7000-8000-00000000bc05'").await?,vec![vec![text("enrolled"),number(3)]]);
+    assert_eq!(f.rows("SELECT state,enrollment_generation FROM machines WHERE installation_id='019f0000-0000-7000-8000-00000000bc05'").await?,vec![vec![text("enrolled"),number(3)?]]);
     assert_eq!(
         f.post(TOKEN, &token(&other, &other)).await?,
         (200, grant(&other, INSTALLATION_TWO, f.now(), None))
@@ -201,7 +201,7 @@ async fn revocation_repeat_and_aba_never_reactivate_old_approvals_and_new_approv
     assert_eq!(
         f.rows("SELECT COUNT(*) FROM machine_approvals WHERE state='enrolled'")
             .await?,
-        vec![vec![number(2)]]
+        vec![vec![number(2)?]]
     );
     f.close().await
 }
@@ -227,7 +227,7 @@ async fn owner_revocation_final_record_failure_keeps_active_client_generation_an
         )
         .await?
         .1,
-    );
+    )?;
     assert_eq!(
         f.post(TOKEN, &token(&a, &a)).await?,
         (200, grant(&a, INSTALLATION, f.now(), None))
@@ -260,9 +260,9 @@ async fn owner_revocation_final_record_failure_keeps_active_client_generation_an
     assert_eq!(
         f.rows("SELECT state,enrollment_generation,allowed_workspaces FROM machines")
             .await?,
-        vec![vec![text("revoked"), number(2), text("[]")]]
+        vec![vec![text("revoked"), number(2)?, text("[]")]]
     );
-    assert_eq!(f.rows("SELECT kind,COUNT(*) FROM organization_change_records WHERE permission_checked='machine:revoke' GROUP BY kind ORDER BY kind").await?,vec![vec![text("allowanceChanged"),number(2)],vec![text("machineRevoked"),number(1)]]);
+    assert_eq!(f.rows("SELECT kind,COUNT(*) FROM organization_change_records WHERE permission_checked='machine:revoke' GROUP BY kind ORDER BY kind").await?,vec![vec![text("allowanceChanged"),number(2)?],vec![text("machineRevoked"),number(1)?]]);
     let committed = snapshot(&f).await?;
     assert_eq!(
         f.post(TOKEN, &token(&a, &a)).await?,

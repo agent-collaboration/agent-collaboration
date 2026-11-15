@@ -26,11 +26,11 @@ async fn approval_late_record_failure_rolls_back_all_rows_then_same_request_appl
         .await?;
     let approved = f.post(DEVICE, &body).await?;
     assert_eq!(approved.0, 200);
-    enrollment(&approved.1);
+    enrollment(&approved.1)?;
     let committed = snapshot(&f).await?;
     assert_eq!(f.post(DEVICE, &body).await?, approved);
     assert!(snapshot(&f).await? == committed);
-    assert_eq!(f.rows("SELECT (SELECT COUNT(*) FROM machines),(SELECT COUNT(*) FROM machine_approvals),(SELECT COUNT(*) FROM organization_change_records WHERE kind='allowanceChanged')").await?,vec![vec![number(1),number(1),number(2)]]);
+    assert_eq!(f.rows("SELECT (SELECT COUNT(*) FROM machines),(SELECT COUNT(*) FROM machine_approvals),(SELECT COUNT(*) FROM organization_change_records WHERE kind='allowanceChanged')").await?,vec![vec![number(1)?,number(1)?,number(2)?]]);
     f.close().await
 }
 
@@ -49,7 +49,7 @@ async fn superseding_grant_last_record_failure_restores_old_login_generation_and
         )
         .await?
         .1,
-    );
+    )?;
     assert_eq!(f.post(TOKEN, &token(&a, &a)).await?.0, 200);
     let b = enrollment(
         &f.post(
@@ -58,7 +58,7 @@ async fn superseding_grant_last_record_failure_restores_old_login_generation_and
         )
         .await?
         .1,
-    );
+    )?;
     f.execute("CREATE TRIGGER fail_login_activation BEFORE INSERT ON organization_change_records WHEN NEW.kind='machineEnrolled' BEGIN SELECT RAISE(ABORT,'fixture last activation record failure'); END",vec![]).await?;
     let before = snapshot(&f).await?;
     assert_eq!(f.post(TOKEN, &token(&b, &b)).await?, (503, Value::Null));
@@ -79,9 +79,9 @@ async fn superseding_grant_last_record_failure_restores_old_login_generation_and
     );
     assert_eq!(
         f.rows("SELECT enrollment_generation FROM machines").await?,
-        vec![vec![number(2)]]
+        vec![vec![number(2)?]]
     );
-    assert_eq!(f.rows("SELECT kind,COUNT(*) FROM organization_change_records WHERE kind IN ('machineRevoked','machineEnrolled') GROUP BY kind ORDER BY kind").await?,vec![vec![text("machineEnrolled"),number(2)],vec![text("machineRevoked"),number(1)]]);
+    assert_eq!(f.rows("SELECT kind,COUNT(*) FROM organization_change_records WHERE kind IN ('machineRevoked','machineEnrolled') GROUP BY kind ORDER BY kind").await?,vec![vec![text("machineEnrolled"),number(2)?],vec![text("machineRevoked"),number(1)?]]);
     let records = f
         .rows("SELECT * FROM organization_change_records ORDER BY id")
         .await?;

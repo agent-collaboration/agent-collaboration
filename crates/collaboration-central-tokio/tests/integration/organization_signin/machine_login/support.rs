@@ -25,13 +25,13 @@ pub(super) fn revoke_control(
     serial: u16,
     installation: &str,
     enrollment: &str,
-) -> collaboration_central_core::MachineLoginControl {
-    collaboration_central_core::MachineLoginControl::Revoke {
-        person_id: signed::OWNER.to_owned().try_into().unwrap(),
-        operation_id: id(serial).try_into().unwrap(),
-        installation: installation.to_owned().try_into().unwrap(),
-        enrollment_id: enrollment.to_owned().try_into().unwrap(),
-    }
+) -> Result<collaboration_central_core::MachineLoginControl> {
+    Ok(collaboration_central_core::MachineLoginControl::Revoke {
+        person_id: signed::OWNER.to_owned().try_into()?,
+        operation_id: id(serial).try_into()?,
+        installation: installation.to_owned().try_into()?,
+        enrollment_id: enrollment.to_owned().try_into()?,
+    })
 }
 
 impl MachineFixture {
@@ -44,7 +44,7 @@ impl MachineFixture {
         let runtime = self.inner.runtime(ORG).await?;
         Ok(collaboration_central_core::machine_login_control(
             runtime.as_ref(),
-            revoke_control(serial, installation, enrollment),
+            revoke_control(serial, installation, enrollment)?,
         )
         .await)
     }
@@ -67,8 +67,8 @@ pub(super) type DecisionReply = (u16, Value);
 pub(super) fn id(serial: u16) -> String {
     format!("019f0000-0000-7000-8000-00000000{serial:04x}")
 }
-pub(super) fn number(value: i64) -> SqlValue {
-    SqlValue::Integer(value.try_into().unwrap())
+pub(super) fn number(value: i64) -> Result<SqlValue> {
+    Ok(SqlValue::Integer(value.try_into()?))
 }
 pub(super) fn text(value: impl ToString) -> SqlValue {
     SqlValue::Text(value.to_string())
@@ -87,11 +87,14 @@ pub(super) fn approval(
 pub(super) fn token(enrollment: &str, client: &str) -> Value {
     json!({"organizationId":ORG,"enrollmentId":enrollment,"clientId":client})
 }
-pub(super) fn enrollment(answer: &Value) -> String {
+pub(super) fn enrollment(answer: &Value) -> Result<String> {
     assert_eq!(answer.get("result"), Some(&json!("approved")));
-    let value = answer.get("enrollmentId").and_then(Value::as_str).unwrap();
+    let value = answer
+        .get("enrollmentId")
+        .and_then(Value::as_str)
+        .ok_or("approved fixture reply lacks a string enrollmentId")?;
     assert!(uuid::Uuid::parse_str(value).is_ok_and(|id| id.get_version_num() == 7));
-    value.to_owned()
+    Ok(value.to_owned())
 }
 pub(super) fn grant(
     enrollment: &str,
@@ -101,10 +104,7 @@ pub(super) fn grant(
 ) -> Value {
     let mut answer = json!({"result":"grant","installation":installation,"enrollmentId":enrollment,"decidedAt":now,"grantExpiresAt":now+LIFETIME});
     if let Some((enrollment, client)) = superseded {
-        answer.as_object_mut().unwrap().insert(
-            "superseded".into(),
-            json!({"enrollmentId":enrollment,"clientId":client}),
-        );
+        answer["superseded"] = json!({"enrollmentId":enrollment,"clientId":client});
     }
     answer
 }

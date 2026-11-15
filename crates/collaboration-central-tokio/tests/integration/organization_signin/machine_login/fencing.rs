@@ -15,18 +15,18 @@ async fn two_same_generation_approvals_first_grant_wins_in_both_orders_and_activ
                 &approval(0xc401, INSTALLATION, "A", &[WORKSPACE], f.now()),
             )
             .await?;
-        let a = enrollment(&a.1);
+        let a = enrollment(&a.1)?;
         let b = f
             .post(
                 DEVICE,
                 &approval(0xc402, INSTALLATION, "B", &[WORKSPACE_TWO], f.now()),
             )
             .await?;
-        let b = enrollment(&b.1);
+        let b = enrollment(&b.1)?;
         assert_eq!(
             f.rows("SELECT base_generation FROM machine_approvals ORDER BY approval_id")
                 .await?,
-            vec![vec![number(0)], vec![number(0)]]
+            vec![vec![number(0)?], vec![number(0)?]]
         );
         let (winner, loser) = if reverse { (&b, &a) } else { (&a, &b) };
         assert_eq!(
@@ -44,12 +44,12 @@ async fn two_same_generation_approvals_first_grant_wins_in_both_orders_and_activ
         );
         assert_eq!(
             f.rows("SELECT enrollment_generation FROM machines").await?,
-            vec![vec![number(1)]]
+            vec![vec![number(1)?]]
         );
         assert_eq!(
             f.rows("SELECT COUNT(*) FROM machine_approvals WHERE state='enrolled'")
                 .await?,
-            vec![vec![number(1)]]
+            vec![vec![number(1)?]]
         );
         f.advance(1_000).await?;
         assert_eq!(
@@ -58,13 +58,13 @@ async fn two_same_generation_approvals_first_grant_wins_in_both_orders_and_activ
         );
         assert_eq!(
             f.rows("SELECT enrollment_generation FROM machines").await?,
-            vec![vec![number(1)]],
+            vec![vec![number(1)?]],
             "active repeat must not bump generation"
         );
         assert_eq!(
             f.rows("SELECT COUNT(*) FROM organization_change_records WHERE kind='machineEnrolled'")
                 .await?,
-            vec![vec![number(1)]]
+            vec![vec![number(1)?]]
         );
         f.close().await?;
     }
@@ -85,7 +85,7 @@ async fn a_new_approval_leaves_old_login_active_until_grant_then_supersedes_once
         )
         .await?
         .1,
-    );
+    )?;
     assert_eq!(
         f.post(TOKEN, &token(&a, &a)).await?,
         (200, grant(&a, INSTALLATION, f.now(), None))
@@ -97,7 +97,7 @@ async fn a_new_approval_leaves_old_login_active_until_grant_then_supersedes_once
         )
         .await?
         .1,
-    );
+    )?;
     assert_eq!(
         f.post(TOKEN, &token(&a, &a)).await?,
         (200, grant(&a, INSTALLATION, f.now(), None)),
@@ -142,7 +142,7 @@ async fn a_new_approval_leaves_old_login_active_until_grant_then_supersedes_once
             .await?,
         vec![vec![
             text("enrolled"),
-            number(2),
+            number(2)?,
             text(serde_json::to_string(&vec![WORKSPACE, WORKSPACE_TWO])?)
         ]]
     );
@@ -179,7 +179,7 @@ async fn a_new_approval_leaves_old_login_active_until_grant_then_supersedes_once
     assert_eq!(
         f.rows("SELECT COUNT(*) FROM machine_approvals WHERE state='enrolled'")
             .await?,
-        vec![vec![number(1)]]
+        vec![vec![number(1)?]]
     );
     f.close().await
 }

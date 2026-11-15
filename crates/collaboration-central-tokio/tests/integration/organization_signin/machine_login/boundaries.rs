@@ -16,7 +16,7 @@ async fn machine_decision_paths_remain_private_with_exact_public_401_classificat
             &approval(0xcd01, INSTALLATION, "Private", &[WORKSPACE], f.now()),
         )
         .await?;
-    let enrollment_id = enrollment(&first.1);
+    let enrollment_id = enrollment(&first.1)?;
     assert_eq!(
         f.post(TOKEN, &token(&enrollment_id, &enrollment_id))
             .await?

@@ -82,7 +82,7 @@ async fn persisted_invalid_lifecycle_identifiers_times_and_generation_refuse_emp
             )
             .await?
             .1,
-        );
+        )?;
         let request = token(&enrollment_id, &enrollment_id);
         assert_eq!(
             f.post(TOKEN, &request).await?,

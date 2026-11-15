@@ -14,7 +14,7 @@ async fn receipt_window_is_exactly_five_seconds_and_refuses_after_the_pre_sample
         let answer = f.held_approval(&request, millis).await?;
         assert_eq!(answer.0, 200);
         if millis == 5_000 {
-            enrollment(&answer.1);
+            enrollment(&answer.1)?;
         } else {
             assert_eq!(
                 answer.1,

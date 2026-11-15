@@ -17,7 +17,7 @@ async fn approval_replays_immutable_three_field_snapshot_after_changed_input_act
     );
     let first = f.post(DEVICE, &request).await?;
     assert_eq!(first.0, 200);
-    let enrollment_id = enrollment(&first.1);
+    let enrollment_id = enrollment(&first.1)?;
     assert_eq!(
         first.1,
         json!({"result":"approved","enrollmentId":enrollment_id,"label":"Original label","allowedWorkspaces":[WORKSPACE,WORKSPACE_TWO]})
@@ -25,7 +25,7 @@ async fn approval_replays_immutable_three_field_snapshot_after_changed_input_act
     assert_eq!(
         f.rows("SELECT state,enrollment_generation FROM machines")
             .await?,
-        vec![vec![text("revoked"), number(0)]],
+        vec![vec![text("revoked"), number(0)?]],
         "approval admits nothing"
     );
     assert_eq!(
@@ -35,7 +35,7 @@ async fn approval_replays_immutable_three_field_snapshot_after_changed_input_act
         .await?,
         vec![vec![
             text("approved"),
-            number(0),
+            number(0)?,
             central_storage::SqlValue::Null,
             central_storage::SqlValue::Null
         ]]
@@ -116,7 +116,7 @@ async fn first_machine_factor_exemption_and_later_900_second_factor_boundary_are
     first["approverSecondFactorAt"] = Value::Null;
     let first = f.post(DEVICE, &first).await?;
     assert_eq!(first.0, 200);
-    let id = enrollment(&first.1);
+    let id = enrollment(&first.1)?;
     assert_eq!(f.post(TOKEN, &token(&id, &id)).await?.0, 200);
     for factor in [None, Some(f.now() - 901), Some(f.now() + 1)] {
         let mut request = approval(0xc202, INSTALLATION_TWO, "Second", &[WORKSPACE], f.now());

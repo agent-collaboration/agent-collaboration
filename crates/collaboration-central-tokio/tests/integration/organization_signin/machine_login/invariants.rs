@@ -27,7 +27,7 @@ async fn assert_invariant(f: &MachineFixture, state: &SequenceState, step: &str)
     );
     assert_eq!(
         f.rows("SELECT enrollment_generation FROM machines").await?,
-        vec![vec![number(state.generation)]],
+        vec![vec![number(state.generation)?]],
         "{step}: generation drift"
     );
     Ok(())
@@ -44,7 +44,7 @@ async fn stale_grant(f: &MachineFixture, enrollment: &str, state: &SequenceState
         .ok_or("stale approval absent")?;
     assert_ne!(
         row.get(1),
-        Some(&number(state.generation)),
+        Some(&number(state.generation)?),
         "the scenario must actually cross a generation before a pending Grant"
     );
     assert_eq!(
@@ -98,7 +98,7 @@ async fn bounded_three_login_sequences_preserve_one_enrolled_and_fence_every_sta
                         ),
                     )
                     .await?;
-                let enrollment_id = enrollment(&answer.1);
+                let enrollment_id = enrollment(&answer.1)?;
                 approved.push((slot, enrollment_id));
                 assert_invariant(&f, &state, "initial approval").await?;
             }
@@ -140,7 +140,7 @@ async fn bounded_three_login_sequences_preserve_one_enrolled_and_fence_every_sta
                 )
                 .await?
                 .1,
-            );
+            )?;
             assert_invariant(&f, &state, "new approval preserves current login").await?;
             assert_eq!(
                 f.post(TOKEN, &token(&newer, &newer)).await?,

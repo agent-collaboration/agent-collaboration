@@ -13,15 +13,19 @@ fn row(
     state: &str,
     client: Option<String>,
     now: i64,
-) -> GuardedStatement {
+) -> Result<GuardedStatement> {
     let at = chrono::DateTime::from_timestamp(now, 0)
-        .unwrap()
+        .ok_or("constraint fixture time is outside the timestamp range")?
         .to_rfc3339();
-    let deadline = chrono::DateTime::from_timestamp(now + 600, 0)
-        .unwrap()
-        .to_rfc3339();
+    let deadline = chrono::DateTime::from_timestamp(
+        now.checked_add(600)
+            .ok_or("constraint fixture deadline overflows seconds")?,
+        0,
+    )
+    .ok_or("constraint fixture deadline is outside the timestamp range")?
+    .to_rfc3339();
     let ended = state == "ended";
-    GuardedStatement {
+    Ok(GuardedStatement {
         statement: Statement {
             sql: INSERT,
             args: vec![
@@ -34,7 +38,7 @@ fn row(
                 if ended { text("owner") } else { SqlValue::Null },
                 text(signed::OWNER),
                 text("machine:enroll"),
-                number(0),
+                number(0)?,
                 text(deadline),
                 client.map_or(SqlValue::Null, text),
                 if state == "enrolled" {
@@ -48,7 +52,7 @@ fn row(
             ],
         },
         expect: RowExpectation::Exactly(1),
-    }
+    })
 }
 
 #[expect(
@@ -69,7 +73,7 @@ async fn engine_refuses_second_enrolled_and_duplicate_request_or_client_with_fre
             )
             .await?
             .1,
-        );
+        )?;
         assert_eq!(
             f.post(TOKEN, &token(&enrollment_id, &enrollment_id))
                 .await?
@@ -92,8 +96,8 @@ async fn engine_refuses_second_enrolled_and_duplicate_request_or_client_with_fre
                     "enrolled",
                     Some(id(0xd312)),
                     f.now(),
-                ),
-                row(0xd313, id(0xd314), &machine, "approved", None, f.now()),
+                )?,
+                row(0xd313, id(0xd314), &machine, "approved", None, f.now())?,
             ),
             // An approved row has no client and is outside the enrolled index. Only
             // request_id repeats. Changing request_id makes the control admissible.
@@ -105,8 +109,8 @@ async fn engine_refuses_second_enrolled_and_duplicate_request_or_client_with_fre
                     "approved",
                     None,
                     f.now(),
-                ),
-                row(0xd321, id(0xd322), &machine, "approved", None, f.now()),
+                )?,
+                row(0xd321, id(0xd322), &machine, "approved", None, f.now())?,
             ),
             // An otherwise valid ended row is outside the enrolled partial index, has
             // its own request and PK, and repeats only the existing machine client.
@@ -118,7 +122,7 @@ async fn engine_refuses_second_enrolled_and_duplicate_request_or_client_with_fre
                     "ended",
                     Some(enrollment_id.clone()),
                     f.now(),
-                ),
+                )?,
                 row(
                     0xd332,
                     id(0xd333),
@@ -126,7 +130,7 @@ async fn engine_refuses_second_enrolled_and_duplicate_request_or_client_with_fre
                     "ended",
                     Some(id(0xd334)),
                     f.now(),
-                ),
+                )?,
             ),
         };
         let before = snapshot(&f).await?;
@@ -155,7 +159,7 @@ async fn engine_refuses_second_enrolled_and_duplicate_request_or_client_with_fre
         );
         assert_eq!(
             f.rows("SELECT COUNT(*) FROM machine_approvals").await?,
-            vec![vec![number(2)]]
+            vec![vec![number(2)?]]
         );
         f.close().await?;
     }
