@@ -156,21 +156,29 @@ impl TokioWorkspaceHost {
         if let Some(runtime) = orgs.get(organization) {
             return Ok(runtime.clone());
         }
-        let storage = Arc::new(ObjectStorage::new(
-            self.root
-                .join("central")
-                .join(format!("{}.sqlite", organization.as_str())),
-            Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
-        ));
         let clock_handle = ClockHandle(self.clock.clone());
         let ids: Arc<dyn IdSource> = Arc::new(ClockIds::new(clock_handle.clone()));
         let clock: Arc<dyn Clock> = Arc::new(clock_handle);
+        let due_batches = Arc::new(collaboration_central_core::DueBatchState::default());
+        let storage = Arc::new(
+            ObjectStorage::new(
+                self.root
+                    .join("central")
+                    .join(format!("{}.sqlite", organization.as_str())),
+                Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
+            )
+            .with_engine_publication(
+                clock.clone(),
+                collaboration_central_core::engine_alarm_decider(due_batches.clone()),
+            ),
+        );
         let runtime = WorkspaceRuntime::new(
             organization.clone(),
             storage,
             self.stores.clone(),
             clock.clone(),
             ids,
+            due_batches,
         );
         let runtime = match &self.sign_in {
             Some(trust) => match trust.for_organization(organization.clone(), clock) {

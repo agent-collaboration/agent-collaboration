@@ -83,7 +83,10 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 Err(StoreFailure::Unavailable | StoreFailure::AnswerLost) => {
                     return Ok(Result::OutcomeUnknown);
                 }
-                Err(error @ StoreFailure::Corrupt { .. }) => return Err(error),
+                Err(
+                    error
+                    @ (StoreFailure::Corrupt { .. } | StoreFailure::AlarmUnpublishable { .. }),
+                ) => return Err(error),
             }
             return Ok(answer);
         }

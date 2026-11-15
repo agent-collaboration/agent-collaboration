@@ -2,6 +2,8 @@
 #![forbid(unsafe_code)]
 
 mod clock_ids;
+mod engine;
+pub use engine::{DueBatchSnapshot, DueBatchState, engine_alarm_decider};
 pub mod identity_contract;
 #[cfg(feature = "test-support")]
 pub mod signin_test_observation;

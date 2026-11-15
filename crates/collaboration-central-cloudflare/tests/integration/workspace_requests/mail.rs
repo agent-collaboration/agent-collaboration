@@ -2,6 +2,7 @@
 mod automations;
 mod cold_alarm;
 mod corruption;
+mod engine_publication;
 mod requests;
 mod wakes;
 

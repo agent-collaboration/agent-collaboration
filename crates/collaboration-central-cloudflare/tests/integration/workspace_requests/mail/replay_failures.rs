@@ -135,7 +135,9 @@ async fn repair_failure_after_cached_success(failure: StoreFailure) {
         );
         let expected = match &failure {
             StoreFailure::Unavailable | StoreFailure::AnswerLost => Ok(Result::OutcomeUnknown),
-            error @ StoreFailure::Corrupt { .. } => Err(error.clone()),
+            error @ (StoreFailure::Corrupt { .. } | StoreFailure::AlarmUnpublishable { .. }) => {
+                Err(error.clone())
+            }
         };
         assert_eq!(
             fixture

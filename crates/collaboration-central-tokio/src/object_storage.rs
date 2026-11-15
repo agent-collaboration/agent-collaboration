@@ -2,8 +2,11 @@
 //! first use, and the alarm time its last committed batch asked for.
 
 use crate::sqlite_object_store::{AlarmChange, SqliteObjectStore};
-use central_storage::{BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreFailure};
-use runtime_primitives::SyncTime;
+use central_storage::{
+    AlarmPublication, AlarmPublicationFailure, BatchOutcome, EngineAlarmDecider, EngineAlarmTimes,
+    ReadOutcome, Statement, StatementBatch, StoreFailure,
+};
+use runtime_primitives::{Clock, SyncTime};
 use sqlx::migrate::Migrator;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -28,6 +31,11 @@ impl StoreMigrations {
     }
 }
 
+struct EnginePublication {
+    clock: Arc<dyn Clock>,
+    decide: EngineAlarmDecider,
+}
+
 pub struct ObjectStorage {
     path: PathBuf,
     migrator: Arc<Migrator>,
@@ -47,6 +55,9 @@ pub struct ObjectStorage {
     batch_waiting: watch::Sender<usize>,
     #[cfg(feature = "test-support")]
     central_publication_pauses: collaboration_central_core::PausePoints,
+    engine_publication: Option<EnginePublication>,
+    #[cfg(feature = "test-support")]
+    publication_failures: std::sync::Mutex<Vec<AlarmPublicationFailure>>,
 }
 
 impl ObjectStorage {
@@ -66,7 +77,20 @@ impl ObjectStorage {
             batch_waiting: watch::Sender::new(0),
             #[cfg(feature = "test-support")]
             central_publication_pauses: Default::default(),
+            engine_publication: None,
+            #[cfg(feature = "test-support")]
+            publication_failures: Default::default(),
         }
+    }
+
+    /// Modern central shares this clock with its runtime and identifier source.
+    pub fn with_engine_publication(
+        mut self,
+        clock: Arc<dyn Clock>,
+        decide: EngineAlarmDecider,
+    ) -> Self {
+        self.engine_publication = Some(EnginePublication { clock, decide });
+        self
     }
 
     async fn opened(&self) -> Result<&SqliteObjectStore, StoreFailure> {
@@ -84,9 +108,22 @@ impl ObjectStorage {
 
     pub async fn run_batch(&self, batch: StatementBatch) -> Result<BatchOutcome, StoreFailure> {
         let _order = self.lock_batch_order().await;
+        if matches!(
+            &batch.alarm,
+            central_storage::AlarmUpdate::SetEngineFromQuery { .. }
+        ) && self.engine_publication.is_none()
+        {
+            return Err(StoreFailure::AlarmUnpublishable {
+                reason: AlarmPublicationFailure::ClockUnavailable,
+            });
+        }
         #[cfg(feature = "test-support")]
         if batch.statements.is_empty()
-            && matches!(batch.alarm, central_storage::AlarmUpdate::SetFromQuery(_))
+            && matches!(
+                batch.alarm,
+                central_storage::AlarmUpdate::SetFromQuery(_)
+                    | central_storage::AlarmUpdate::SetEngineFromQuery { .. }
+            )
             && let Some(failure) = self
                 .alarm_batch_failure
                 .lock()
@@ -95,7 +132,7 @@ impl ObjectStorage {
         {
             return Err(failure);
         }
-        let (outcome, alarm) = self.opened().await?.run_batch(batch).await?;
+        let (mut outcome, alarm) = self.opened().await?.run_batch(batch).await?;
         #[cfg(feature = "test-support")]
         if matches!(outcome, BatchOutcome::Applied { .. }) {
             self.central_publication_pauses
@@ -113,16 +150,64 @@ impl ObjectStorage {
                 )
                 .await;
         }
-        match alarm {
-            AlarmChange::Unchanged => {}
+        let publication = match alarm {
+            AlarmChange::Unchanged => AlarmPublication::Unchanged,
             AlarmChange::Set(at) => {
                 self.alarm.send_replace(Some(at));
+                AlarmPublication::Set {
+                    unix_millis: at.unix_millis(),
+                }
             }
             AlarmChange::Clear => {
                 self.alarm.send_replace(None);
+                AlarmPublication::Cleared
             }
+            AlarmChange::Engine {
+                earliest_on_grid_due,
+                earliest_legacy_due,
+            } => self.publish_engine_alarm(earliest_on_grid_due, earliest_legacy_due),
+        };
+        if let BatchOutcome::Applied {
+            publication: receipt,
+            ..
+        } = &mut outcome
+        {
+            #[cfg(feature = "test-support")]
+            if let AlarmPublication::Failed { reason } = &publication {
+                self.publication_failures
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .push(*reason);
+            }
+            *receipt = publication;
         }
         Ok(outcome)
+    }
+
+    fn publish_engine_alarm(&self, grid: Option<i64>, legacy: Option<i64>) -> AlarmPublication {
+        let decide = || -> Result<Option<i64>, AlarmPublicationFailure> {
+            let publication = self
+                .engine_publication
+                .as_ref()
+                .ok_or(AlarmPublicationFailure::ClockUnavailable)?;
+            let mut write = |time: Option<i64>| {
+                self.alarm
+                    .send_replace(time.map(SyncTime::from_unix_millis));
+            };
+            (publication.decide)(
+                EngineAlarmTimes {
+                    earliest_on_grid_due_unix_millis: grid,
+                    earliest_legacy_due_unix_millis: legacy,
+                },
+                publication.clock.now().unix_millis(),
+                &mut write,
+            )
+        };
+        match decide() {
+            Ok(None) => AlarmPublication::Cleared,
+            Ok(Some(unix_millis)) => AlarmPublication::Set { unix_millis },
+            Err(reason) => AlarmPublication::Failed { reason },
+        }
     }
 
     async fn lock_batch_order(&self) -> MutexGuard<'_, ()> {
@@ -196,6 +281,16 @@ impl ObjectStorage {
             .alarm_batch_failure
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(failure);
+    }
+
+    #[cfg(feature = "test-support")]
+    pub fn take_alarm_publication_failures(&self) -> Vec<AlarmPublicationFailure> {
+        std::mem::take(
+            &mut *self
+                .publication_failures
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        )
     }
 
     pub async fn close(&self) {

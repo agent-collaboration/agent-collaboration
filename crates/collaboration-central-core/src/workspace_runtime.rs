@@ -31,6 +31,7 @@ pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     pub(crate) stores: Stores,
     pub(crate) clock: Arc<dyn Clock>,
     pub(crate) ids: Arc<dyn IdSource>,
+    pub(crate) due_batches: Arc<crate::DueBatchState>,
     pub(crate) turns: WorkspaceTurns,
     pub(crate) signin_observer: Arc<dyn Fn(crate::CentralObservation) + Send + Sync>,
     pub(crate) signin_authority: crate::organization_authority_cache::OrganizationAuthority,
@@ -54,6 +55,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         stores: Stores,
         clock: Arc<dyn Clock>,
         ids: Arc<dyn IdSource>,
+        due_batches: Arc<crate::DueBatchState>,
     ) -> Self {
         Self {
             organization,
@@ -61,6 +63,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             stores,
             clock,
             ids,
+            due_batches,
             turns: WorkspaceTurns::default(),
             central_turn: tokio::sync::Mutex::new(()),
             #[cfg(feature = "test-support")]

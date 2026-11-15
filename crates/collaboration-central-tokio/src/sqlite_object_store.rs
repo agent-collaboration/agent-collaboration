@@ -5,8 +5,8 @@
 //! or a constraint error rolls the whole batch back. The store knows no business table.
 
 use central_storage::{
-    AlarmUpdate, BatchOutcome, ConstraintKind, CorruptReason, ReadOutcome, SafeInteger, SqlValue,
-    Statement, StatementBatch, StoreFailure,
+    AlarmPublication, AlarmUpdate, BatchOutcome, ConstraintKind, CorruptReason, ReadOutcome,
+    SafeInteger, SqlValue, Statement, StatementBatch, StoreFailure,
 };
 use runtime_primitives::SyncTime;
 use sqlx::error::ErrorKind;
@@ -24,6 +24,10 @@ pub enum AlarmChange {
     Unchanged,
     Set(SyncTime),
     Clear,
+    Engine {
+        earliest_on_grid_due: Option<i64>,
+        earliest_legacy_due: Option<i64>,
+    },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -82,17 +86,18 @@ impl SqliteObjectStore {
             let affected = match execute(&mut transaction, guarded.statement.sql, arguments).await {
                 Ok(affected) => affected,
                 Err(sqlx::Error::Database(error)) => {
-                    let Some(kind) = constraint_kind(error.kind()) else {
-                        return Err(StoreFailure::Unavailable);
+                    let outcome = match constraint_kind(error.kind()) {
+                        Some(kind) => BatchOutcome::ConstraintViolated { index, kind },
+                        None if statement_is_rejected(error.code().as_deref()) => {
+                            BatchOutcome::StatementRejected { index }
+                        }
+                        None => return Err(StoreFailure::Unavailable),
                     };
                     transaction
                         .rollback()
                         .await
                         .map_err(|_| StoreFailure::Unavailable)?;
-                    return Ok((
-                        BatchOutcome::ConstraintViolated { index, kind },
-                        AlarmChange::Unchanged,
-                    ));
+                    return Ok((outcome, AlarmChange::Unchanged));
                 }
                 Err(_) => return Err(StoreFailure::Unavailable),
             };
@@ -114,12 +119,26 @@ impl SqliteObjectStore {
         let alarm = match batch.alarm {
             AlarmUpdate::Unchanged => AlarmChange::Unchanged,
             AlarmUpdate::SetFromQuery(query) => alarm_from_query(&mut transaction, query).await?,
+            AlarmUpdate::SetEngineFromQuery { query } => {
+                let answer = read_rows(&mut transaction, query).await?;
+                let (earliest_on_grid_due, earliest_legacy_due) = engine_alarm_inputs(&answer)?;
+                AlarmChange::Engine {
+                    earliest_on_grid_due,
+                    earliest_legacy_due,
+                }
+            }
         };
         transaction
             .commit()
             .await
             .map_err(|_| StoreFailure::AnswerLost)?;
-        Ok((BatchOutcome::Applied { rows_affected }, alarm))
+        Ok((
+            BatchOutcome::Applied {
+                rows_affected,
+                publication: AlarmPublication::Unchanged,
+            },
+            alarm,
+        ))
     }
 
     pub async fn read(&self, statement: Statement) -> Result<ReadOutcome, StoreFailure> {
@@ -257,3 +276,43 @@ const fn constraint_kind(kind: ErrorKind) -> Option<ConstraintKind> {
         _ => None,
     }
 }
+
+fn statement_is_rejected(code: Option<&str>) -> bool {
+    matches!(
+        code.and_then(|code| code.parse::<i32>().ok()),
+        Some(19 | 20 | 531 | 1043 | 1811 | 2323 | 2579 | 2835 | 3091)
+    )
+}
+
+fn engine_alarm_inputs(answer: &ReadOutcome) -> Result<(Option<i64>, Option<i64>), StoreFailure> {
+    fn time(value: &SqlValue) -> Result<Option<i64>, StoreFailure> {
+        match value {
+            SqlValue::Null => Ok(None),
+            SqlValue::Integer(value) => Ok(Some(value.get())),
+            SqlValue::Text(_) | SqlValue::Blob(_) => Err(StoreFailure::Corrupt {
+                reason: CorruptReason::BadValue {
+                    column: "engine alarm input".into(),
+                },
+            }),
+        }
+    }
+    match answer.rows.as_slice() {
+        [row] => match row.as_slice() {
+            [grid, legacy] => Ok((time(grid)?, time(legacy)?)),
+            _ => Err(StoreFailure::Corrupt {
+                reason: CorruptReason::BadValue {
+                    column: "engine alarm input".into(),
+                },
+            }),
+        },
+        _ => Err(StoreFailure::Corrupt {
+            reason: CorruptReason::BadValue {
+                column: "engine alarm input".into(),
+            },
+        }),
+    }
+}
+
+#[cfg(test)]
+#[path = "sqlite_object_store_test.rs"]
+mod tests;

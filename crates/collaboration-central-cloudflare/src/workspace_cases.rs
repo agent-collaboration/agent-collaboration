@@ -188,14 +188,25 @@ pub(super) async fn control(
             }
             Response::from_json(&true)
         }
-        "/test/central-batch" => Response::from_json(
-            &statement_store::run_batch(
-                &object.connection,
-                request.json::<OwnedBatch>().await?,
-                AlarmPolicy::Ignore,
+        "/test/central-batch" => {
+            let batch = request.json::<OwnedBatch>().await?;
+            let policy = match &batch.alarm {
+                crate::store_wire::OwnedAlarmUpdate::SetEngineFromQuery { .. } => {
+                    AlarmPolicy::Engine(
+                        object.state.storage(),
+                        object.clock.clone(),
+                        collaboration_central_core::engine_alarm_decider(
+                            object.due_batches.clone(),
+                        ),
+                    )
+                }
+                crate::store_wire::OwnedAlarmUpdate::Unchanged
+                | crate::store_wire::OwnedAlarmUpdate::SetFromQuery(_) => AlarmPolicy::Ignore,
+            };
+            Response::from_json(
+                &statement_store::run_batch(&object.connection, batch, policy).await,
             )
-            .await,
-        ),
+        }
         "/test/central-read" => Response::from_json(
             &statement_store::read(&object.connection, request.json::<OwnedStatement>().await?)
                 .await,

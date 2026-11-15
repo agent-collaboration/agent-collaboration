@@ -4,6 +4,7 @@ use central_storage::{SafeInteger, SqlValue, Statement};
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DueRow {
     pub key: crate::InstanceKey,
+    pub occurrence_ms: i64,
     pub effective_due_ms: i64,
 }
 

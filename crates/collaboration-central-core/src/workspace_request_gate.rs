@@ -21,7 +21,12 @@ fn store_result(
         }
         Err(StoreFailure::AnswerLost) => Ok(Some(m::WorkspaceResult::OutcomeUnknown)),
         Err(StoreFailure::Unavailable) => Ok(Some(m::WorkspaceResult::CentralUnavailable)),
-        Err(error @ StoreFailure::Corrupt { .. }) => Err(error),
+        Ok(BatchOutcome::StatementRejected { .. }) => {
+            Ok(Some(m::WorkspaceResult::CentralUnavailable))
+        }
+        Err(error @ (StoreFailure::Corrupt { .. } | StoreFailure::AlarmUnpublishable { .. })) => {
+            Err(error)
+        }
     }
 }
 pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
@@ -277,7 +282,9 @@ fn drain_failure(error: StoreFailure) -> Result<m::WorkspaceReply, StoreFailure>
         StoreFailure::Unavailable | StoreFailure::AnswerLost => {
             Ok(reply(m::WorkspaceResult::OutcomeUnknown))
         }
-        error @ StoreFailure::Corrupt { .. } => Err(error),
+        error @ (StoreFailure::Corrupt { .. } | StoreFailure::AlarmUnpublishable { .. }) => {
+            Err(error)
+        }
     }
 }
 async fn enrich<Host: ObjectHost, Stores: WorkspaceStoreCalls>(

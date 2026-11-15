@@ -25,7 +25,7 @@ async fn execute(fixture: &Fixture, sql: &'static str, args: Vec<SqlValue>) {
 }
 
 #[tokio::test]
-async fn bad_due_window_does_not_suppress_other_window_or_wakes() {
+async fn bad_due_window_does_not_suppress_wakes_or_automations() {
     let fixture = Fixture::new().await;
     let area = fixture.area(8210).await;
     let thread = fixture.thread(8211, area).await;
@@ -64,6 +64,25 @@ async fn bad_due_window_does_not_suppress_other_window_or_wakes() {
     else {
         panic!("wake refused")
     };
+    let CentralMailResult::Done(CentralMailAnswer::AutomationSet { automation_id, .. }) = fixture
+        .host
+        .request_central(
+            &fixture.caller,
+            CentralMailRequest {
+                request_id: id(8216),
+                operation: CentralMailOperation::SetAutomation {
+                    target: session(&fixture.caller),
+                    timing: serde_json::from_value(serde_json::json!({"kind":"at","at":due}))
+                        .unwrap(),
+                    text: "healthy automation".to_owned().try_into().unwrap(),
+                },
+            },
+        )
+        .await
+        .unwrap()
+    else {
+        panic!("automation refused")
+    };
     let items = runtime.statement_host().read(Statement {
         sql: "SELECT window_item_id,window_id,workspace_id,thread_id,change_id,created_at,updated_at FROM notification_window_items WHERE window_id=?", args: vec![text(window_id)],
     }).await.unwrap();
@@ -86,12 +105,13 @@ async fn bad_due_window_does_not_suppress_other_window_or_wakes() {
         "a bad window must not fail timers: {outcome:?}"
     );
     let rows = runtime.statement_host().read(Statement {
-        sql: "SELECT (SELECT COUNT(*) FROM messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?),(SELECT COUNT(*) FROM messages WHERE message_kind='notice')", args: vec![text(&wake_id)],
+        sql: "SELECT (SELECT COUNT(*) FROM messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?),(SELECT COUNT(*) FROM messages WHERE message_kind='automation' AND json_extract(body,'$.automationId')=?),(SELECT COUNT(*) FROM messages WHERE message_kind='notice')", args: vec![text(&wake_id), text(&automation_id)],
     }).await.unwrap();
     // The other-window half of the branch test is deferred: today's whole unit rolls back.
     assert_eq!(
         rows.rows,
         vec![vec![
+            SqlValue::Integer(1.try_into().unwrap()),
             SqlValue::Integer(1.try_into().unwrap()),
             SqlValue::Integer(0.try_into().unwrap())
         ]]

@@ -16,6 +16,7 @@ pub struct AlarmInputs {
 pub enum AlarmDecision {
     Clear,
     SetAt(EngineTime),
+    Unpublishable,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, thiserror::Error)]
@@ -24,8 +25,6 @@ pub enum AlarmDecisionError {
     NoLaterGridMark,
     #[error("the alarm time is outside the portable range")]
     OutOfRange,
-    #[error("a continuation requires a due batch start")]
-    MissingBatchStart,
 }
 
 pub fn supported_time(time: EngineTime) -> bool {
@@ -46,60 +45,46 @@ pub fn next_five_minute_mark(now: EngineTime) -> Result<EngineTime, AlarmDecisio
 }
 
 /// Combine pending times after an event; an idle object has no alarm.
-pub fn next_alarm(
-    inputs: &AlarmInputs,
-    policy: &DueBatchPolicy,
-) -> Result<AlarmDecision, AlarmDecisionError> {
+pub fn next_alarm(inputs: &AlarmInputs, policy: &DueBatchPolicy) -> AlarmDecision {
     if inputs.earliest_on_grid_due.is_none() && inputs.earliest_legacy_due.is_none() {
-        return Ok(AlarmDecision::Clear);
+        return AlarmDecision::Clear;
     }
-    if !supported_time(inputs.now) {
-        return Err(AlarmDecisionError::OutOfRange);
+    if !supported_time(inputs.now)
+        || [inputs.earliest_on_grid_due, inputs.earliest_legacy_due]
+            .into_iter()
+            .flatten()
+            .any(|due| !supported_time(due))
+    {
+        return AlarmDecision::Unpublishable;
     }
-    let floor = inputs
-        .last_batch_start
-        .map(|start| {
-            start
-                .checked_add_signed(policy.spacing)
-                .filter(|time| supported_time(*time))
-                .ok_or(AlarmDecisionError::OutOfRange)
-        })
-        .transpose()?;
+    let floor = match inputs.last_batch_start {
+        Some(start) => match start
+            .checked_add_signed(policy.spacing)
+            .filter(|time| supported_time(*time))
+        {
+            Some(floor) => Some(floor),
+            None => return AlarmDecision::Unpublishable,
+        },
+        None => None,
+    };
     let wanted = if inputs.leftovers_beyond_cap {
-        floor.ok_or(AlarmDecisionError::MissingBatchStart)?
+        match floor {
+            Some(floor) => floor,
+            None => return AlarmDecision::Unpublishable,
+        }
     } else {
-        let grid = inputs
-            .earliest_on_grid_due
-            .map(|due| {
-                if supported_time(due) {
-                    Ok(due)
-                } else {
-                    Err(AlarmDecisionError::OutOfRange)
-                }
-            })
-            .transpose()?;
-        let legacy = inputs
-            .earliest_legacy_due
-            .map(|due| {
-                if supported_time(due) {
-                    Ok(due)
-                } else {
-                    Err(AlarmDecisionError::OutOfRange)
-                }
-            })
-            .transpose()?;
         // At least one input is present, as established above.
-        match (grid, legacy) {
+        match (inputs.earliest_on_grid_due, inputs.earliest_legacy_due) {
             (Some(grid), Some(legacy)) => grid.min(legacy),
             (Some(due), None) | (None, Some(due)) => due,
-            (None, None) => return Ok(AlarmDecision::Clear),
+            (None, None) => return AlarmDecision::Clear,
         }
     };
     let wanted = floor.map_or(wanted, |floor| wanted.max(floor));
     if wanted <= inputs.now {
-        next_five_minute_mark(inputs.now).map(AlarmDecision::SetAt)
+        next_five_minute_mark(inputs.now).map_or(AlarmDecision::Unpublishable, AlarmDecision::SetAt)
     } else {
-        Ok(AlarmDecision::SetAt(wanted))
+        AlarmDecision::SetAt(wanted)
     }
 }
 

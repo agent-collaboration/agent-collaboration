@@ -89,7 +89,8 @@ async fn constraint_errors_map_to_their_kind_and_roll_the_batch_back() {
     assert_eq!(
         seeded,
         BatchOutcome::Applied {
-            rows_affected: vec![1, 1]
+            rows_affected: vec![1, 1],
+            publication: central_storage::AlarmPublication::Unchanged,
         }
     );
 
@@ -142,7 +143,8 @@ async fn constraint_errors_map_to_their_kind_and_roll_the_batch_back() {
     assert_eq!(
         reuse,
         BatchOutcome::Applied {
-            rows_affected: vec![1, 1]
+            rows_affected: vec![1, 1],
+            publication: central_storage::AlarmPublication::Unchanged,
         }
     );
     assert_eq!(
@@ -252,7 +254,8 @@ async fn integers_at_plus_and_minus_two_to_the_53_minus_one_round_trip_as_intege
     assert_eq!(
         applied,
         BatchOutcome::Applied {
-            rows_affected: vec![1, 1, 1, 1]
+            rows_affected: vec![1, 1, 1, 1],
+            publication: central_storage::AlarmPublication::Unchanged,
         }
     );
 

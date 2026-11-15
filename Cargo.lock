@@ -1873,6 +1873,7 @@ dependencies = [
  "axum",
  "base64 0.22.1",
  "board-sync-protocol",
+ "central-engine-model",
  "central-storage",
  "chrono",
  "collaboration-central-admin-protocol",

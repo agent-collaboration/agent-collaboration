@@ -6,8 +6,10 @@
 
 use crate::store_wire::{OwnedAlarmUpdate, OwnedBatch, OwnedStatement};
 use central_storage::{
-    BatchOutcome, ConstraintKind, CorruptReason, ReadOutcome, SafeInteger, SqlValue, StoreFailure,
+    AlarmPublication, AlarmPublicationFailure, BatchOutcome, ConstraintKind, CorruptReason,
+    EngineAlarmDecider, EngineAlarmTimes, ReadOutcome, SafeInteger, SqlValue, StoreFailure,
 };
+use runtime_primitives::Clock;
 use sqlx_core::column::Column;
 use sqlx_core::error::ErrorKind;
 use sqlx_core::migrate::Migrator;
@@ -23,6 +25,11 @@ pub(crate) enum AlarmPolicy {
     /// Central's own object: `SetFromQuery` sets or clears its one alarm, through
     /// this handle on the same object's storage.
     Apply(worker::Storage),
+    Engine(
+        worker::Storage,
+        crate::worker_clock::WorkspaceClock,
+        EngineAlarmDecider,
+    ),
     /// A workspace store owns no alarm; the update is ignored.
     Ignore,
 }
@@ -31,6 +38,7 @@ pub(crate) enum AlarmPolicy {
 enum BatchStop {
     GuardFailed { index: u32, rows_affected: u64 },
     ConstraintViolated { index: u32, kind: ConstraintKind },
+    StatementRejected { index: u32 },
     Failed(StoreFailure),
 }
 
@@ -158,7 +166,7 @@ async fn run_in_transaction(
     transaction: &DoTransaction,
     batch: OwnedBatch,
     policy: AlarmPolicy,
-) -> Result<Vec<u64>, BatchStop> {
+) -> Result<(Vec<u64>, AlarmPublication), BatchStop> {
     let mut rows_affected = Vec::with_capacity(batch.statements.len());
     for (index, guarded) in batch.statements.iter().enumerate() {
         let index =
@@ -168,6 +176,7 @@ async fn run_in_transaction(
             Err(error) => {
                 return Err(match constraint_kind(&error) {
                     Some(kind) => BatchStop::ConstraintViolated { index, kind },
+                    None if statement_is_rejected(&error) => BatchStop::StatementRejected { index },
                     None => BatchStop::Failed(store_failure(&error)),
                 });
             }
@@ -180,17 +189,45 @@ async fn run_in_transaction(
         }
         rows_affected.push(affected);
     }
-    if let (AlarmPolicy::Apply(storage), OwnedAlarmUpdate::SetFromQuery(statement)) =
-        (policy, &batch.alarm)
-    {
-        let rows = bound(statement).fetch_all(transaction).await?;
-        let at = alarm_time(&read_outcome(&rows).map_err(BatchStop::Failed)?)
-            .map_err(BatchStop::Failed)?;
+    let (storage, clock) = match policy {
+        AlarmPolicy::Apply(storage) => (Some(storage), None),
+        AlarmPolicy::Engine(storage, clock, decide) => (Some(storage), Some((clock, decide))),
+        AlarmPolicy::Ignore => (None, None),
+    };
+    let mut publication = AlarmPublication::Unchanged;
+    if let Some(storage) = storage {
+        let at = match &batch.alarm {
+            OwnedAlarmUpdate::Unchanged => return Ok((rows_affected, publication)),
+            OwnedAlarmUpdate::SetFromQuery(statement) => {
+                let rows = bound(statement).fetch_all(transaction).await?;
+                let at = alarm_time(&read_outcome(&rows).map_err(BatchStop::Failed)?)
+                    .map_err(BatchStop::Failed)?;
+                if at.is_some_and(|at| chrono::DateTime::from_timestamp_millis(at).is_none()) {
+                    return Err(BatchStop::Failed(alarm_out_of_range(&rows)));
+                }
+                at
+            }
+            OwnedAlarmUpdate::SetEngineFromQuery { query } => {
+                let rows = bound(query).fetch_all(transaction).await?;
+                let answer = read_outcome(&rows).map_err(BatchStop::Failed)?;
+                let (clock, decide) = clock.ok_or_else(|| {
+                    BatchStop::Failed(StoreFailure::AlarmUnpublishable {
+                        reason: AlarmPublicationFailure::ClockUnavailable,
+                    })
+                })?;
+                decided_engine_alarm(&answer, clock.now().unix_millis(), &decide)
+                    .map_err(BatchStop::Failed)?
+            }
+        };
         // A storage write in the same transaction: it commits with the batch or not at all.
         let written = match at {
             Some(at) => match chrono::DateTime::from_timestamp_millis(at) {
                 Some(at) => storage.set_alarm(at).await,
-                None => return Err(BatchStop::Failed(alarm_out_of_range(&rows))),
+                None => {
+                    return Err(BatchStop::Failed(StoreFailure::AlarmUnpublishable {
+                        reason: AlarmPublicationFailure::EarliestDueOutOfRange,
+                    }));
+                }
             },
             None => storage.delete_alarm().await,
         };
@@ -198,8 +235,11 @@ async fn run_in_transaction(
             worker::console_warn!("statement store alarm write failed: {error}");
             BatchStop::Failed(StoreFailure::Unavailable)
         })?;
+        publication = at.map_or(AlarmPublication::Cleared, |unix_millis| {
+            AlarmPublication::Set { unix_millis }
+        });
     }
-    Ok(rows_affected)
+    Ok((rows_affected, publication))
 }
 
 /// Runs `batch` atomically on `connection`'s storage.
@@ -214,7 +254,10 @@ pub(crate) async fn run_batch(
         })
         .await;
     match outcome {
-        Ok(rows_affected) => Ok(BatchOutcome::Applied { rows_affected }),
+        Ok((rows_affected, publication)) => Ok(BatchOutcome::Applied {
+            rows_affected,
+            publication,
+        }),
         Err(BatchStop::GuardFailed {
             index,
             rows_affected,
@@ -226,6 +269,9 @@ pub(crate) async fn run_batch(
             Ok(BatchOutcome::ConstraintViolated { index, kind })
         }
         Err(BatchStop::Failed(failure)) => Err(failure),
+        Err(BatchStop::StatementRejected { index }) => {
+            Ok(BatchOutcome::StatementRejected { index })
+        }
     }
 }
 
@@ -271,3 +317,58 @@ impl From<sqlx_core::Error> for MigrationFailure {
 #[cfg(test)]
 #[path = "statement_store_test.rs"]
 mod tests;
+
+fn statement_is_rejected(error: &sqlx_core::Error) -> bool {
+    let sqlx_core::Error::Database(database) = error else {
+        return false;
+    };
+    matches!(
+        database.code().as_deref(),
+        Some(
+            "SQLITE_CONSTRAINT"
+                | "SQLITE_MISMATCH"
+                | "SQLITE_CONSTRAINT_COMMITHOOK"
+                | "SQLITE_CONSTRAINT_FUNCTION"
+                | "SQLITE_CONSTRAINT_TRIGGER"
+                | "SQLITE_CONSTRAINT_VTAB"
+                | "SQLITE_CONSTRAINT_ROWID"
+                | "SQLITE_CONSTRAINT_PINNED"
+                | "SQLITE_CONSTRAINT_DATATYPE"
+        )
+    )
+}
+
+fn decided_engine_alarm(
+    answer: &ReadOutcome,
+    now: i64,
+    decide: &EngineAlarmDecider,
+) -> Result<Option<i64>, StoreFailure> {
+    let bad = || StoreFailure::Corrupt {
+        reason: CorruptReason::BadValue {
+            column: "engine alarm input".into(),
+        },
+    };
+    let value = |value: &SqlValue| -> Result<Option<i64>, StoreFailure> {
+        match value {
+            SqlValue::Null => Ok(None),
+            SqlValue::Integer(time) => Ok(Some(time.get())),
+            SqlValue::Text(_) | SqlValue::Blob(_) => Err(bad()),
+        }
+    };
+    let (grid, legacy) = match answer.rows.as_slice() {
+        [row] => match row.as_slice() {
+            [grid, legacy] => (value(grid)?, value(legacy)?),
+            _ => return Err(bad()),
+        },
+        _ => return Err(bad()),
+    };
+    decide(
+        EngineAlarmTimes {
+            earliest_on_grid_due_unix_millis: grid,
+            earliest_legacy_due_unix_millis: legacy,
+        },
+        now,
+        &mut |_| {},
+    )
+    .map_err(|reason| StoreFailure::AlarmUnpublishable { reason })
+}

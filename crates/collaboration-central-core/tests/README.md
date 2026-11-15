@@ -36,3 +36,8 @@ tests run the actual snapshot SQL over migrations, check the exact projection an
 Machine projections reuse the owning row codecs, include every machine and
 creation-ordered approval, and canonically encode UTC timestamps. Cases cover
 independent allowances, malformed lifecycle fields and exact Automatic origins.
+
+The engine's colocated batch-state cases force simultaneous claims and late
+publication interleavings with barriers and protocol signals. They check that
+the native watch update and claim share one synchronous critical section;
+host integration tests own the real transaction and retained-alarm evidence.

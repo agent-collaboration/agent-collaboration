@@ -12,7 +12,7 @@ fn inputs() -> AlarmInputs {
         earliest_legacy_due: None,
     }
 }
-fn decide(inputs: AlarmInputs) -> Result<AlarmDecision, AlarmDecisionError> {
+fn decide(inputs: AlarmInputs) -> AlarmDecision {
     next_alarm(&inputs, &DueBatchPolicy::DEFAULT)
 }
 
@@ -23,7 +23,7 @@ fn nothing_pending_clears_even_with_a_batch_floor() {
             last_batch_start: Some(time(300_000)),
             ..inputs()
         }),
-        Ok(AlarmDecision::Clear)
+        AlarmDecision::Clear
     );
 }
 
@@ -36,7 +36,7 @@ fn leftovers_continue_at_thirty_seconds_before_a_later_pending_mark() {
             earliest_on_grid_due: Some(time(600_000)),
             ..inputs()
         }),
-        Ok(AlarmDecision::SetAt(time(330_000)))
+        AlarmDecision::SetAt(time(330_000))
     );
 }
 
@@ -53,7 +53,7 @@ fn future_grid_time_is_kept_and_due_or_past_time_moves_to_next_mark() {
                 earliest_on_grid_due: Some(time(due)),
                 ..inputs()
             }),
-            Ok(AlarmDecision::SetAt(time(expected)))
+            AlarmDecision::SetAt(time(expected))
         );
     }
 }
@@ -66,7 +66,7 @@ fn legacy_future_offsets_stay_exact_and_legacy_past_moves_to_next_mark() {
                 earliest_legacy_due: Some(time(due)),
                 ..inputs()
             }),
-            Ok(AlarmDecision::SetAt(time(expected)))
+            AlarmDecision::SetAt(time(expected))
         );
     }
 }
@@ -87,7 +87,7 @@ fn the_floor_raises_both_kinds_without_moving_later_deadlines() {
                 earliest_legacy_due: legacy.map(time),
                 ..inputs()
             }),
-            Ok(AlarmDecision::SetAt(time(expected)))
+            AlarmDecision::SetAt(time(expected))
         );
     }
 }
@@ -102,7 +102,7 @@ fn delayed_continuation_moves_to_the_next_mark_instead_of_a_past_floor() {
             earliest_on_grid_due: Some(time(300_000)),
             ..inputs()
         }),
-        Ok(AlarmDecision::SetAt(time(600_000)))
+        AlarmDecision::SetAt(time(600_000))
     );
 }
 
@@ -114,7 +114,7 @@ fn failing_legacy_retry_counts_as_a_grid_time() {
             earliest_legacy_due: None,
             ..inputs()
         }),
-        Ok(AlarmDecision::SetAt(time(600_000)))
+        AlarmDecision::SetAt(time(600_000))
     );
 }
 
@@ -138,7 +138,7 @@ fn next_mark_handles_negative_times_and_refuses_upper_edge() {
             earliest_on_grid_due: Some(time(last_mark)),
             ..inputs()
         }),
-        Err(AlarmDecisionError::NoLaterGridMark)
+        AlarmDecision::Unpublishable
     );
 }
 
@@ -149,7 +149,7 @@ fn unsupported_inputs_and_a_continuation_without_start_are_explicit_errors() {
             earliest_on_grid_due: Some(time(MAX_ALARM_UNIX_MILLIS + 1)),
             ..inputs()
         }),
-        Err(AlarmDecisionError::OutOfRange)
+        AlarmDecision::Unpublishable
     );
     assert_eq!(
         decide(AlarmInputs {
@@ -157,6 +157,6 @@ fn unsupported_inputs_and_a_continuation_without_start_are_explicit_errors() {
             earliest_on_grid_due: Some(time(600_000)),
             ..inputs()
         }),
-        Err(AlarmDecisionError::MissingBatchStart)
+        AlarmDecision::Unpublishable
     );
 }

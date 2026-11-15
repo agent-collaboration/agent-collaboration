@@ -127,7 +127,9 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
                 .await;
                 repair.map_err(|error| match error {
                     StoreFailure::Unavailable | StoreFailure::AnswerLost => Failure::OutcomeUnknown,
-                    StoreFailure::Corrupt { .. } => Failure::Unavailable,
+                    StoreFailure::Corrupt { .. } | StoreFailure::AlarmUnpublishable { .. } => {
+                        Failure::Unavailable
+                    }
                 })?;
                 self.signin_authority.forget();
                 return Ok(ProvisionOrganizationResult::Provisioned {});
