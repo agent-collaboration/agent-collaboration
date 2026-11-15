@@ -15,6 +15,7 @@ import {
   type V4FetchHandler,
 } from "miniflare";
 import { z } from "zod";
+import { runC2ProductPlan } from "./c2-product-run.ts";
 import {
   attachmentWitnessHeader,
   hibernationWorkerSource,
@@ -413,13 +414,20 @@ async function exchangeFrame(socket: LocalWebSocket, message: string): Promise<s
 }
 
 async function main(arguments_: readonly string[]): Promise<void> {
+  if (arguments_.length === 2 && arguments_[0] === "--c2-plan") {
+    await runC2ProductPlan(z.string().min(1).parse(arguments_[1]));
+    return;
+  }
   if (arguments_.length === 1 && arguments_[0] === "--help") {
     process.stdout.write(
       "Usage: node verification/observations/central/durable-object-hibernation.ts --fixture <non-hibernating|hibernating> --evidence <fresh-directory>\n" +
+        "Or: --c2-plan <declared-frozen-target.json> (prebuilt signed Rust fixture, exact bundle hashes; no build/signing).\n" +
+        "C2 plan: repository, sourceHead, evidence, binary{path,sha256}, publicBundle/privateBundle{indexJsSha256,wasmSha256}.\n" +
         "Run non-hibernating FIRST (expected-red exit 1; invalid control exit 2), then hibernating (exit 0).\n" +
         "Real local workerd stand-in; forced eviction, original socket, attachment/new instance, heartbeat witness phases.\n" +
         "Delayed constructor-only wake causality remains unverified.\n" +
-        "No product C2, natural idle, deployed billing, authentication or provider proof. No sleeps or SIGKILL.\n",
+        "Fixture mode gives no product C2/authentication proof. C2 mode remains draft until a real declared target is driven.\n" +
+        "No natural idle, deployed billing or provider proof. No sleeps or SIGKILL.\n",
     );
     return;
   }

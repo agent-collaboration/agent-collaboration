@@ -85,6 +85,53 @@ The permanent Rust socket journey owns provisioning, token signing, semantic
 encoding and row assertions. Its exact declared compiled selector and sanitized
 receipt handoff are still prerequisites; do not replace them with the stand-in.
 
+### Declared compiled-target entry (draft until driven)
+
+The lasting driver also accepts `--c2-plan` and calls the prebuilt signed Rust
+integration executable for exactly
+`workspace_requests::machine_link::hibernating_socket_restores_live_authority_and_semantic_store`.
+The Implementer owns that fixture and its optional absolute
+`CODEX_ROUTER_C2_HIBERNATION_RECEIPT` output. The driver sets that handle inside a
+fresh private evidence directory; it performs no build, signing or provisioning.
+This entry is authored from the pair's receipt contract and remains unqualified
+until driven on a declared real C2 target. The raw producer shape must be reconciled
+with `c2-product-receipt.ts` before the first run.
+
+The plan schema in `c2-product-run.ts` requires canonical absolute `repository`,
+frozen `sourceHead`, fresh absolute `evidence`, `binary` with absolute `path` and
+`sha256`, and `publicBundle` / `privateBundle`, each with `indexJsSha256` and
+`wasmSha256`. Bundle paths are the existing `build-test-support` and
+`build-link-test-support` under `crates/collaboration-central-cloudflare`. The
+binary must be the declared `target/debug/deps/integration-<Cargo hash>` with the
+strict Developer ID test identity. The driver checks tracked-source cleanliness,
+absence of untracked runnable sources, exact one-test discovery and before/after
+hash holds. Have the target owner hold source, executable and both bundles for
+the complete observation; never build or sign them during that hold.
+
+With the declared plan path in `C2_PLAN`, the source-defined entry is:
+
+```sh
+node verification/observations/central/durable-object-hibernation.ts --c2-plan "$C2_PLAN"
+```
+
+The fixture must run one test, pass it with zero ignores, export the sanitized
+actual frames and owning `ReadOutcome`, and finish awaited Host disposal. The
+consumer binds three distinct correlations, public installation identity,
+CreateArea's returned ID and requested name, the subsequent Show request/Reply,
+and exactly one matching owning SQLite area row. Three full witness snapshots
+after the pongs must equal the baseline. The deciding snapshot must preserve its
+prefix and show one fresh constructor/handler, unchanged attachment, completed
+live reads, matching restoration and actual alarm agreement, before later
+read/close events. Private raw logs, process record, binding files, product receipt,
+and the final observation survive cleanup. Failure retains its diagnostic file;
+an interrupted run cannot pass. A receipt parser's unit cases are apparatus proof.
+
+The compiled-path negative awaits the Lead-authorized single State-proxy
+feasibility probe. If workers-rs proxy or ordinary-accept attachment compatibility
+fails, stop that probe: Lead explicitly permits retaining the narrower #285 real
+stand-in negative floor, with the compiled-path negative unproven and its exact
+reason recorded. Do not add another runtime path or a product hook to force it.
+
 ## Limits
 
 The heartbeat result is **no observed constructor witnesses or handlers through each pong**, plus the serving constructor witness arriving only after `observe` dispatch. Handler witnesses are ordered before their reply. Constructor witnesses are external callbacks: an arbitrarily delayed constructor-only wake triggered earlier can arrive during `deciding`. Phase attribution cannot prove when such a constructor began. This journey therefore does not claim absolute zero constructor executions caused by heartbeat traffic; that stronger causal claim remains unverified.
