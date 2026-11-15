@@ -118,6 +118,8 @@ The harness never kills
 only the bridge; nextest bounds the whole test process group if disposal stalls.
 No nested bridge process group escapes nextest's termination.
 
+Standalone modern and legacy bridges remove Miniflare’s unawaited signal hooks at their one constructor and await disposal before signal exit. In-process TypeScript loaders keep their existing multi-runtime policy. `verification/targets/workerd-bridge-lifecycle.test.ts` permanently holds real SIGTERM disposal at an IPC gate, checks retained listener behavior and child exit, and checks cleanup before a missing-hook refusal. See [the pinned upstream workaround](../../../docs/upstream-workarounds/2026-11-14-miniflare-sigterm-unawaited-dispose.md) for scope and removal evidence.
+
 `support/lifecycle-nextest.toml` belongs only to explicit lifecycle negative
 controls. It does not alter normal CI deadlines. The `WORKERD_LIFECYCLE_CHILD`
 timeout and leak modes require an operator to retain the emitted exact child PIDs,

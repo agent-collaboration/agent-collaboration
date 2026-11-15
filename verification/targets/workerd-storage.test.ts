@@ -25,6 +25,11 @@ test("bridge names every absent public or private artifact before readiness", as
   try {
     await mkdir(join(fixture, dirname(bridgePath)), { recursive: true });
     await mkdir(join(fixture, "verification/targets"), { recursive: true });
+    await mkdir(join(fixture, "verification/test-support"), { recursive: true });
+    await copyFile(
+      join(repository, "verification/test-support/miniflare-signal-shutdown.ts"),
+      join(fixture, "verification/test-support/miniflare-signal-shutdown.ts"),
+    );
     await writeFile(join(fixture, "package.json"), '{"type":"module"}');
     await copyFile(join(repository, bridgePath), join(fixture, bridgePath));
     await copyFile(
@@ -285,11 +290,13 @@ async function createBridgeControlFixture(): Promise<string> {
   await mkdir(join(fixture, dirname(bridgeRelativePath)), { recursive: true });
   await mkdir(join(fixture, dirname(emptyObservationPath)), { recursive: true });
   await mkdir(join(fixture, "verification/targets"), { recursive: true });
+  await mkdir(join(fixture, "verification/test-support"), { recursive: true });
   await writeFile(join(fixture, "package.json"), '{"type":"module"}');
   for (const path of [
     bridgeRelativePath,
     emptyObservationPath,
     "verification/targets/workerd-storage.ts",
+    "verification/test-support/miniflare-signal-shutdown.ts",
   ])
     await copyFile(join(repository, path), join(fixture, path));
   await symlink(
