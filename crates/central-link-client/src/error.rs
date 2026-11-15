@@ -16,6 +16,4 @@ pub enum ClientError {
     UnknownCorrelation,
     #[error("reply payload belongs to a different operation family")]
     WrongReplyFamily,
-    #[error("reply arrived before the request entered the transport")]
-    ReplyBeforeSend,
 }

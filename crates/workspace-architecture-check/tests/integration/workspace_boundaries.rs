@@ -62,6 +62,27 @@ fn reachable<'a>(graph: &'a NonDevDependencyGraph, source: &'a str) -> BTreeSet<
 pub(super) fn check_boundaries(
     graph: &NonDevDependencyGraph,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    for name in [
+        "collaboration-central-core",
+        "collaboration-central-cloudflare",
+        "collaboration-central-tokio",
+    ] {
+        let Some(source) = graph.workspace_id(name) else {
+            continue;
+        };
+        for (destination, _) in graph.edges.get(source).into_iter().flatten() {
+            if graph
+                .names
+                .get(destination)
+                .is_some_and(|target| target == "collaboration-protocol")
+            {
+                return Err(format!(
+                    "C1: {name} retains a legacy collaboration-protocol dependency"
+                )
+                .into());
+            }
+        }
+    }
     for (name, allowed) in PURE_CRATES {
         let Some(source) = graph.workspace_id(name) else {
             continue;
@@ -202,6 +223,27 @@ fn mail_contract_dependency_keeps_model_and_link_transitively_driver_free() {
             .is_err()
         );
         assert!(check_boundaries(&graph(&[("workspace-model", "unlisted-host", kind)])).is_err());
+    }
+}
+
+#[test]
+fn central_owners_reject_direct_legacy_protocol_edges() {
+    for owner in [
+        "collaboration-central-core",
+        "collaboration-central-cloudflare",
+        "collaboration-central-tokio",
+    ] {
+        for kind in [DependencyKind::Normal, DependencyKind::Build] {
+            assert!(check_boundaries(&graph(&[(owner, "collaboration-protocol", kind)])).is_err());
+        }
+        assert!(
+            check_boundaries(&graph(&[(
+                owner,
+                "collaboration-protocol",
+                DependencyKind::Dev
+            )]))
+            .is_ok()
+        );
     }
 }
 

@@ -44,9 +44,6 @@ fn protocol_stub_correlates_out_of_order_replies_and_preserves_durable_retry_id(
         else {
             panic!("request")
         };
-        client
-            .request_may_have_been_sent(request.correlation_id())
-            .unwrap();
         requests.push(request);
     }
     let mut replies = Vec::new();

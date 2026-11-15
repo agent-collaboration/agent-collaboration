@@ -1,5 +1,8 @@
 use crate::ClientError;
-use crate::{FailedCall, SendFailure, pending_calls::PendingCalls};
+use crate::{
+    FailedCall, SendFailure,
+    pending_calls::{PendingCalls, ReplyDisposition},
+};
 use central_link_protocol::{
     CorrelationId, DataFrame, LinkFrame, LinkRequest, ReplyPayload, RequestPayload,
 };
@@ -8,6 +11,8 @@ use std::{sync::Arc, time::Duration};
 use workspace_model::{Caller, MachineId, central_mail::MessageRecord};
 
 const PING_INTERVAL: Duration = Duration::from_secs(20);
+const CALL_DEADLINE: Duration = Duration::from_secs(30);
+const WELCOME_DEADLINE: Duration = Duration::from_secs(10);
 const INITIAL_RETRY: Duration = Duration::from_secs(1);
 const MAX_RETRY: Duration = Duration::from_secs(30);
 
@@ -30,9 +35,11 @@ pub struct ConnectionAttempt(CorrelationId);
 enum ConnectionState {
     Waiting {
         reconnect_at: ClockInstant,
+        last_attempt: Option<ConnectionAttempt>,
     },
     AwaitingWelcome {
         attempt: ConnectionAttempt,
+        expires_at: ClockInstant,
     },
     Connected {
         attempt: ConnectionAttempt,
@@ -40,12 +47,14 @@ enum ConnectionState {
         heartbeat: Heartbeat,
     },
     Refused {
+        attempt: ConnectionAttempt,
         reason: RefusalReason,
     },
 }
 enum Heartbeat {
     Idle,
-    AwaitingPong { first_sent_at: ClockInstant },
+    OneUnansweredProbe,
+    TwoUnansweredProbes,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -53,6 +62,7 @@ pub enum ClientAction {
     Connect { attempt: ConnectionAttempt },
     SendPing,
     Reconnect { failed: Vec<FailedCall> },
+    CallsExpired { failed: Vec<FailedCall> },
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -62,6 +72,9 @@ pub enum ClientEvent {
     Reply {
         correlation_id: CorrelationId,
         result: ReplyPayload,
+    },
+    LateReply {
+        correlation_id: CorrelationId,
     },
     Deliver {
         message: MessageRecord,
@@ -82,6 +95,7 @@ impl LinkClient {
         Self {
             state: ConnectionState::Waiting {
                 reconnect_at: clock.monotonic_now(),
+                last_attempt: None,
             },
             clock,
             machine,
@@ -99,47 +113,61 @@ impl LinkClient {
             ConnectionState::Connected { .. } => LinkStatus::Connected {
                 machine_id: self.machine.clone(),
             },
-            ConnectionState::Refused { reason } => LinkStatus::Refused { reason: *reason },
+            ConnectionState::Refused { reason, .. } => LinkStatus::Refused { reason: *reason },
         }
     }
 
-    /// The Host waits on this deadline through the same injected clock; no task is spawned here.
+    /// The Host drives this deadline through the same clock; no task is spawned here.
     pub fn next_deadline(&self) -> Option<ClockInstant> {
-        match self.state {
-            ConnectionState::Waiting { reconnect_at } => Some(reconnect_at),
+        let connection = match self.state {
+            ConnectionState::Waiting { reconnect_at, .. } => Some(reconnect_at),
+            ConnectionState::AwaitingWelcome { expires_at, .. } => Some(expires_at),
             ConnectionState::Connected { next_ping, .. } => Some(next_ping),
-            ConnectionState::AwaitingWelcome { .. } | ConnectionState::Refused { .. } => None,
-        }
+            ConnectionState::Refused { .. } => None,
+        };
+        connection
+            .into_iter()
+            .chain(self.pending.next_deadline())
+            .min()
     }
 
+    /// Drain due actions before processing socket events; call again until None.
     pub fn poll_time(&mut self) -> Option<ClientAction> {
         let now = self.clock.monotonic_now();
+        let failed = self.pending.expire(now);
+        if !failed.is_empty() {
+            return Some(ClientAction::CallsExpired { failed });
+        }
         match &mut self.state {
-            ConnectionState::Waiting { reconnect_at } if now >= *reconnect_at => {
+            ConnectionState::Waiting { reconnect_at, .. } if now >= *reconnect_at => {
                 let attempt = ConnectionAttempt(self.next_correlation());
+                self.pending.begin_connection();
                 self.state = ConnectionState::AwaitingWelcome {
                     attempt: attempt.clone(),
+                    expires_at: now.after(WELCOME_DEADLINE),
                 };
                 Some(ClientAction::Connect { attempt })
+            }
+            ConnectionState::AwaitingWelcome { expires_at, .. } if now >= *expires_at => {
+                let failed = self.disconnect();
+                Some(ClientAction::Reconnect { failed })
             }
             ConnectionState::Connected {
                 next_ping,
                 heartbeat,
                 ..
             } if now >= *next_ping => match heartbeat {
-                Heartbeat::AwaitingPong { first_sent_at }
-                    if now.saturating_duration_since(*first_sent_at)
-                        >= PING_INTERVAL.saturating_mul(2) =>
-                {
+                Heartbeat::TwoUnansweredProbes => {
                     let failed = self.disconnect();
                     Some(ClientAction::Reconnect { failed })
                 }
                 Heartbeat::Idle => {
-                    *heartbeat = Heartbeat::AwaitingPong { first_sent_at: now };
+                    *heartbeat = Heartbeat::OneUnansweredProbe;
                     *next_ping = now.after(PING_INTERVAL);
                     Some(ClientAction::SendPing)
                 }
-                Heartbeat::AwaitingPong { .. } => {
+                Heartbeat::OneUnansweredProbe => {
+                    *heartbeat = Heartbeat::TwoUnansweredProbes;
                     *next_ping = now.after(PING_INTERVAL);
                     Some(ClientAction::SendPing)
                 }
@@ -161,21 +189,16 @@ impl LinkClient {
         }
         let request = LinkRequest::new(self.next_correlation(), caller, payload)
             .map_err(|_| ClientError::InvalidRequest)?;
-        self.pending.insert(request.clone())?;
+        self.pending.insert(
+            request.clone(),
+            self.clock.monotonic_now().after(CALL_DEADLINE),
+        )?;
         Ok(LinkFrame::Data(DataFrame::Request {
             request: Box::new(request),
         }))
     }
 
-    /// Call before handing bytes to a socket write, since a failed write can be ambiguous.
-    pub fn request_may_have_been_sent(
-        &mut self,
-        correlation: &CorrelationId,
-    ) -> Result<(), ClientError> {
-        self.pending.mark_may_have_been_sent(correlation)
-    }
-
-    /// Use NotSent only when the transport explicitly guarantees no request bytes were sent.
+    /// Only DefinitelyNotSent guarantees no request bytes were sent.
     pub fn send_failed(
         &mut self,
         attempt: &ConnectionAttempt,
@@ -186,7 +209,7 @@ impl LinkClient {
         self.pending.send_failed(correlation, receipt)
     }
 
-    /// A protocol error is returned to the socket owner, which closes and calls `closed`.
+    /// Protocol errors require close; a typed LateReply event does not.
     pub fn receive(
         &mut self,
         attempt: &ConnectionAttempt,
@@ -208,12 +231,12 @@ impl LinkClient {
             return Ok(ClientEvent::Welcomed);
         }
         if !matches!(self.state, ConnectionState::Connected { .. }) {
-            return Err(ClientError::CentralUnavailable);
+            return Err(ClientError::UnexpectedFrame);
         }
         match frame {
             LinkFrame::Pong => {
                 let ConnectionState::Connected { heartbeat, .. } = &mut self.state else {
-                    return Err(ClientError::CentralUnavailable);
+                    return Err(ClientError::UnexpectedFrame);
                 };
                 *heartbeat = Heartbeat::Idle;
                 Ok(ClientEvent::Pong)
@@ -221,13 +244,13 @@ impl LinkClient {
             LinkFrame::Data(DataFrame::Reply {
                 correlation_id,
                 result,
-            }) => {
-                self.pending.complete(&correlation_id, &result)?;
-                Ok(ClientEvent::Reply {
+            }) => match self.pending.complete(&correlation_id, &result)? {
+                ReplyDisposition::Completed => Ok(ClientEvent::Reply {
                     correlation_id,
                     result: *result,
-                })
-            }
+                }),
+                ReplyDisposition::AlreadyResolved => Ok(ClientEvent::LateReply { correlation_id }),
+            },
             LinkFrame::Data(DataFrame::Deliver { message }) => {
                 Ok(ClientEvent::Deliver { message: *message })
             }
@@ -239,33 +262,44 @@ impl LinkClient {
     }
 
     pub fn closed(&mut self, attempt: &ConnectionAttempt) -> Result<Vec<FailedCall>, ClientError> {
-        self.check_attempt(attempt)?;
-        Ok(self.disconnect())
+        self.check_most_recent_attempt(attempt)?;
+        match self.state {
+            ConnectionState::AwaitingWelcome { .. } | ConnectionState::Connected { .. } => {
+                Ok(self.disconnect())
+            }
+            ConnectionState::Waiting { .. } | ConnectionState::Refused { .. } => Ok(Vec::new()),
+        }
     }
 
     fn disconnect(&mut self) -> Vec<FailedCall> {
-        if !matches!(self.state, ConnectionState::Refused { .. }) {
-            self.state = ConnectionState::Waiting {
-                reconnect_at: self.clock.monotonic_now().after(self.retry_delay),
-            };
-            self.retry_delay = self.retry_delay.saturating_mul(2).min(MAX_RETRY);
-        }
+        let last_attempt = self.most_recent_attempt().cloned();
+        self.state = ConnectionState::Waiting {
+            reconnect_at: self.clock.monotonic_now().after(self.retry_delay),
+            last_attempt,
+        };
+        self.retry_delay = self.retry_delay.saturating_mul(2).min(MAX_RETRY);
         self.pending.fail_all()
     }
 
+    /// A refusal may precede or follow closed for the latest attempt, but never a newer one.
     pub fn refused(
         &mut self,
         attempt: &ConnectionAttempt,
         reason: RefusalReason,
     ) -> Result<Vec<FailedCall>, ClientError> {
-        self.check_attempt(attempt)?;
-        self.state = ConnectionState::Refused { reason };
+        self.check_most_recent_attempt(attempt)?;
+        self.state = ConnectionState::Refused {
+            attempt: attempt.clone(),
+            reason,
+        };
         Ok(self.pending.fail_all())
     }
 
     fn check_attempt(&self, attempt: &ConnectionAttempt) -> Result<(), ClientError> {
         match &self.state {
-            ConnectionState::AwaitingWelcome { attempt: current }
+            ConnectionState::AwaitingWelcome {
+                attempt: current, ..
+            }
             | ConnectionState::Connected {
                 attempt: current, ..
             } if current == attempt => Ok(()),
@@ -273,6 +307,23 @@ impl LinkClient {
             | ConnectionState::AwaitingWelcome { .. }
             | ConnectionState::Connected { .. }
             | ConnectionState::Refused { .. } => Err(ClientError::StaleConnection),
+        }
+    }
+
+    fn most_recent_attempt(&self) -> Option<&ConnectionAttempt> {
+        match &self.state {
+            ConnectionState::Waiting { last_attempt, .. } => last_attempt.as_ref(),
+            ConnectionState::AwaitingWelcome { attempt, .. }
+            | ConnectionState::Connected { attempt, .. }
+            | ConnectionState::Refused { attempt, .. } => Some(attempt),
+        }
+    }
+
+    fn check_most_recent_attempt(&self, attempt: &ConnectionAttempt) -> Result<(), ClientError> {
+        if self.most_recent_attempt() == Some(attempt) {
+            Ok(())
+        } else {
+            Err(ClientError::StaleConnection)
         }
     }
 
@@ -293,6 +344,7 @@ impl LinkClient {
             self.retry_delay = INITIAL_RETRY;
             self.state = ConnectionState::Waiting {
                 reconnect_at: self.clock.monotonic_now(),
+                last_attempt: None,
             };
         }
     }

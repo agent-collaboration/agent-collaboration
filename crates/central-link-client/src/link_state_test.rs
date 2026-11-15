@@ -4,6 +4,9 @@ use central_link_protocol::{FrameDirection, decode_text, encode_text};
 use router_clock::ManualClock;
 use workspace_model::{WorkspaceOperation, WorkspaceReply, WorkspaceRequest, WorkspaceResult};
 
+#[path = "link_liveness_test.rs"]
+mod liveness;
+
 fn fixture() -> (LinkClient, Arc<ManualClock>) {
     let clock = Arc::new(ManualClock::new("2030-01-01T00:00:00Z".parse().unwrap()));
     (
@@ -99,14 +102,14 @@ fn concurrent_out_of_order_replies_do_not_conflate_write_and_correlation_ids() {
     let first = request(&mut client);
     let second = request(&mut client);
     assert_ne!(first, second);
-    client.request_may_have_been_sent(&first).unwrap();
-    client.request_may_have_been_sent(&second).unwrap();
     assert!(
         matches!(client.receive(&attempt, reply(second.clone())), Ok(ClientEvent::Reply { correlation_id, .. }) if correlation_id == second)
     );
     assert_eq!(
-        client.receive(&attempt, reply(second)),
-        Err(ClientError::UnknownCorrelation)
+        client.receive(&attempt, reply(second.clone())),
+        Ok(ClientEvent::LateReply {
+            correlation_id: second
+        })
     );
     assert!(matches!(
         client.receive(&attempt, reply(first)),
@@ -121,17 +124,17 @@ fn transport_frontier_preserves_unknown_writes_and_old_events_cannot_complete_ne
     let old = connect(&mut client);
     let unsent = request(&mut client);
     let sent = request(&mut client);
-    client.request_may_have_been_sent(&sent).unwrap();
+    let known_unsent = client
+        .send_failed(&old, &unsent, crate::SendFailure::DefinitelyNotSent)
+        .unwrap();
+    assert_eq!(known_unsent.failure, CallFailure::CentralUnavailable);
     let failed = client.closed(&old).unwrap();
-    assert!(failed.iter().any(
-        |call| call.correlation_id == unsent && call.failure == CallFailure::CentralUnavailable
-    ));
+    assert!(!failed.iter().any(|call| call.correlation_id == unsent));
     assert!(failed.iter().any(|call| call.correlation_id == sent && matches!(&call.failure, CallFailure::OutcomeUnknown { request_id } if request_id.as_str() == "01890f2e-7b4c-7cc0-98c4-000000000004")));
     clock.advance(Duration::from_secs(1)).unwrap();
     let current = connect(&mut client);
     let fresh = request(&mut client);
     assert_ne!(sent, fresh);
-    client.request_may_have_been_sent(&fresh).unwrap();
     assert_eq!(
         client.receive(&old, reply(fresh.clone())),
         Err(ClientError::StaleConnection)
@@ -209,11 +212,6 @@ fn duplicate_wrong_welcome_reply_family_and_direction_never_consume_a_pending_ca
         Err(ClientError::InvalidWelcome)
     );
     let id = request(&mut client);
-    assert_eq!(
-        client.receive(&attempt, reply(id.clone())),
-        Err(ClientError::ReplyBeforeSend)
-    );
-    client.request_may_have_been_sent(&id).unwrap();
     let wrong = LinkFrame::Data(DataFrame::Reply {
         correlation_id: id.clone(),
         result: Box::new(ReplyPayload::Mail(
@@ -269,9 +267,6 @@ fn wrong_machine_welcome_is_refused_and_read_disconnect_has_no_durable_retry_id(
         panic!("request")
     };
     assert!(request.payload().write_request_id().is_none());
-    client
-        .request_may_have_been_sent(request.correlation_id())
-        .unwrap();
     let failed = client.closed(&attempt).unwrap();
     assert!(matches!(
         failed.as_slice(),
@@ -283,7 +278,7 @@ fn wrong_machine_welcome_is_refused_and_read_disconnect_has_no_durable_retry_id(
 }
 
 #[test]
-fn late_clock_poll_counts_only_actual_probes_and_ids_follow_the_same_clock() {
+fn late_clock_poll_counts_actual_unanswered_probes_and_ids_follow_the_same_clock() {
     let (mut client, clock) = fixture();
     let attempt = connect(&mut client);
     clock.advance(Duration::from_secs(100)).unwrap();
@@ -293,12 +288,17 @@ fn late_clock_poll_counts_only_actual_probes_and_ids_follow_the_same_clock() {
         Ok(ClientEvent::Pong)
     );
     let correlation = request(&mut client);
+    client
+        .receive(&attempt, reply(correlation.clone()))
+        .unwrap();
     let id: uuid::Uuid = String::from(correlation).parse().unwrap();
     let (seconds, _) = id.get_timestamp().unwrap().to_unix();
     assert_eq!(seconds, 1_893_456_100);
     clock.advance(Duration::from_secs(20)).unwrap();
     assert_eq!(client.poll_time(), Some(ClientAction::SendPing));
     clock.advance(Duration::from_secs(40)).unwrap();
+    assert_eq!(client.poll_time(), Some(ClientAction::SendPing));
+    clock.advance(Duration::from_secs(20)).unwrap();
     assert!(matches!(
         client.poll_time(),
         Some(ClientAction::Reconnect { .. })
@@ -311,10 +311,8 @@ fn transport_failure_receipts_distinguish_unsent_from_ambiguous_write() {
     let attempt = connect(&mut client);
     let known = request(&mut client);
     let ambiguous = request(&mut client);
-    client.request_may_have_been_sent(&known).unwrap();
-    client.request_may_have_been_sent(&ambiguous).unwrap();
     let known = client
-        .send_failed(&attempt, &known, crate::SendFailure::NotSent)
+        .send_failed(&attempt, &known, crate::SendFailure::DefinitelyNotSent)
         .unwrap();
     let ambiguous = client
         .send_failed(&attempt, &ambiguous, crate::SendFailure::MayHaveBeenSent)

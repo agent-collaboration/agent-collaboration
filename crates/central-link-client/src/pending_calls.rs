@@ -1,5 +1,6 @@
 use central_link_protocol::{CorrelationId, LinkRequest, ReplyPayload};
-use std::collections::BTreeMap;
+use router_clock::ClockInstant;
+use std::collections::{BTreeMap, BTreeSet};
 use workspace_model::RequestId;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -17,21 +18,25 @@ pub struct FailedCall {
 /// A transport receipt, rather than an inference from the shape of an I/O error.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SendFailure {
-    NotSent,
+    DefinitelyNotSent,
     MayHaveBeenSent,
 }
 
-enum SendProgress {
-    NotSent,
-    MayHaveBeenSent,
+pub(crate) enum ReplyDisposition {
+    Completed,
+    AlreadyResolved,
 }
+
 struct PendingCall {
     request: LinkRequest,
-    progress: SendProgress,
+    expires_at: ClockInstant,
 }
 
 #[derive(Default)]
-pub(crate) struct PendingCalls(BTreeMap<CorrelationId, PendingCall>);
+pub(crate) struct PendingCalls {
+    active: BTreeMap<CorrelationId, PendingCall>,
+    resolved: BTreeSet<CorrelationId>,
+}
 
 impl PendingCalls {
     pub(crate) fn send_failed(
@@ -39,88 +44,114 @@ impl PendingCalls {
         correlation: &CorrelationId,
         receipt: SendFailure,
     ) -> Result<FailedCall, crate::ClientError> {
-        let call = self
-            .0
-            .remove(correlation)
-            .ok_or(crate::ClientError::UnknownCorrelation)?;
-        let failure = match (receipt, call.request.payload().write_request_id()) {
-            (SendFailure::MayHaveBeenSent, Some(request_id)) => CallFailure::OutcomeUnknown {
-                request_id: request_id.clone(),
-            },
-            (SendFailure::NotSent, _) | (SendFailure::MayHaveBeenSent, None) => {
-                CallFailure::CentralUnavailable
-            }
-        };
-        Ok(FailedCall {
-            correlation_id: correlation.clone(),
-            failure,
-        })
+        let call = self.retire(correlation)?;
+        Ok(failed_call(correlation.clone(), call, receipt))
     }
 
-    pub(crate) fn insert(&mut self, request: LinkRequest) -> Result<(), crate::ClientError> {
+    pub(crate) fn insert(
+        &mut self,
+        request: LinkRequest,
+        expires_at: ClockInstant,
+    ) -> Result<(), crate::ClientError> {
         use std::collections::btree_map::Entry;
-        match self.0.entry(request.correlation_id().clone()) {
+        if self.resolved.contains(request.correlation_id()) {
+            return Err(crate::ClientError::DuplicateCorrelation);
+        }
+        match self.active.entry(request.correlation_id().clone()) {
             Entry::Occupied(_) => Err(crate::ClientError::DuplicateCorrelation),
             Entry::Vacant(entry) => {
                 entry.insert(PendingCall {
                     request,
-                    progress: SendProgress::NotSent,
+                    expires_at,
                 });
                 Ok(())
             }
         }
     }
 
-    pub(crate) fn mark_may_have_been_sent(
-        &mut self,
-        correlation: &CorrelationId,
-    ) -> Result<(), crate::ClientError> {
-        let call = self
-            .0
-            .get_mut(correlation)
-            .ok_or(crate::ClientError::UnknownCorrelation)?;
-        call.progress = SendProgress::MayHaveBeenSent;
-        Ok(())
-    }
-
     pub(crate) fn complete(
         &mut self,
         correlation: &CorrelationId,
         reply: &ReplyPayload,
-    ) -> Result<(), crate::ClientError> {
+    ) -> Result<ReplyDisposition, crate::ClientError> {
+        if self.resolved.contains(correlation) {
+            return Ok(ReplyDisposition::AlreadyResolved);
+        }
         let call = self
-            .0
+            .active
             .get(correlation)
             .ok_or(crate::ClientError::UnknownCorrelation)?;
         if !reply.matches_request(call.request.payload()) {
             return Err(crate::ClientError::WrongReplyFamily);
         }
-        if matches!(call.progress, SendProgress::NotSent) {
-            return Err(crate::ClientError::ReplyBeforeSend);
-        }
-        self.0.remove(correlation);
-        Ok(())
+        self.retire(correlation)?;
+        Ok(ReplyDisposition::Completed)
+    }
+
+    pub(crate) fn next_deadline(&self) -> Option<ClockInstant> {
+        self.active.values().map(|call| call.expires_at).min()
+    }
+
+    pub(crate) fn expire(&mut self, now: ClockInstant) -> Vec<FailedCall> {
+        #[expect(
+            clippy::needless_collect,
+            reason = "finish the immutable traversal before removing entries from the same map"
+        )]
+        let due: Vec<_> = self
+            .active
+            .iter()
+            .filter(|(_, call)| call.expires_at <= now)
+            .map(|(id, _)| id.clone())
+            .collect();
+        due.into_iter()
+            .filter_map(|id| {
+                self.active.remove(&id).map(|call| {
+                    self.resolved.insert(id.clone());
+                    failed_call(id, call, SendFailure::MayHaveBeenSent)
+                })
+            })
+            .collect()
     }
 
     pub(crate) fn fail_all(&mut self) -> Vec<FailedCall> {
-        std::mem::take(&mut self.0)
+        std::mem::take(&mut self.active)
             .into_iter()
-            .map(|(correlation_id, call)| {
-                let failure = match (call.progress, call.request.payload().write_request_id()) {
-                    (SendProgress::MayHaveBeenSent, Some(request_id)) => {
-                        CallFailure::OutcomeUnknown {
-                            request_id: request_id.clone(),
-                        }
-                    }
-                    (SendProgress::NotSent, _) | (SendProgress::MayHaveBeenSent, None) => {
-                        CallFailure::CentralUnavailable
-                    }
-                };
-                FailedCall {
-                    correlation_id,
-                    failure,
-                }
+            .map(|(id, call)| {
+                self.resolved.insert(id.clone());
+                failed_call(id, call, SendFailure::MayHaveBeenSent)
             })
             .collect()
+    }
+
+    pub(crate) fn begin_connection(&mut self) {
+        self.resolved.clear();
+    }
+
+    fn retire(&mut self, correlation: &CorrelationId) -> Result<PendingCall, crate::ClientError> {
+        let call = self
+            .active
+            .remove(correlation)
+            .ok_or(crate::ClientError::UnknownCorrelation)?;
+        self.resolved.insert(correlation.clone());
+        Ok(call)
+    }
+}
+
+fn failed_call(
+    correlation_id: CorrelationId,
+    call: PendingCall,
+    receipt: SendFailure,
+) -> FailedCall {
+    let failure = match (receipt, call.request.payload().write_request_id()) {
+        (SendFailure::MayHaveBeenSent, Some(request_id)) => CallFailure::OutcomeUnknown {
+            request_id: request_id.clone(),
+        },
+        (SendFailure::DefinitelyNotSent, _) | (SendFailure::MayHaveBeenSent, None) => {
+            CallFailure::CentralUnavailable
+        }
+    };
+    FailedCall {
+        correlation_id,
+        failure,
     }
 }
