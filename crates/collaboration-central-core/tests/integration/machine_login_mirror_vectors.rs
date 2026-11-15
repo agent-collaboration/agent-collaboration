@@ -73,7 +73,7 @@ fn judge<T: DeserializeOwned + Serialize>(vector: &Vector, removed: bool) -> Res
         };
     }
     let Vector::Accept { output, .. } = vector else {
-        unreachable!()
+        return Err("refusal vector reached the accepted-output comparison".to_owned());
     };
     let parsed = parsed.map_err(|error| format!("refused an accepted input: {error}"))?;
     let written = serde_json::to_string(&parsed).map_err(|error| error.to_string())?;

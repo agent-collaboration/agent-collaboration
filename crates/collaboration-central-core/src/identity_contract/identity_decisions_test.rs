@@ -144,19 +144,18 @@ fn machine_grant_serializes_superseded_only_when_an_old_client_was_ended() {
             .get("superseded")
             .is_none()
     );
-    let MachineTokenDecision::Grant { superseded, .. } = &mut grant else {
-        unreachable!()
-    };
-    *superseded = Some(EndedMachineClient {
-        enrollment_id: "018f1111-2222-7000-8000-000000000007"
-            .to_owned()
-            .try_into()
-            .unwrap(),
-        client_id: "018f1111-2222-7000-8000-000000000007"
-            .to_owned()
-            .try_into()
-            .unwrap(),
-    });
+    if let MachineTokenDecision::Grant { superseded, .. } = &mut grant {
+        *superseded = Some(EndedMachineClient {
+            enrollment_id: "018f1111-2222-7000-8000-000000000007"
+                .to_owned()
+                .try_into()
+                .unwrap(),
+            client_id: "018f1111-2222-7000-8000-000000000007"
+                .to_owned()
+                .try_into()
+                .unwrap(),
+        });
+    }
     assert_eq!(
         serde_json::to_value(grant).unwrap()["superseded"],
         json!({

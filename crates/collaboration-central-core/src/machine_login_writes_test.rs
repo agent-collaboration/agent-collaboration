@@ -129,7 +129,7 @@ fn new_machine_keys_and_generation_are_never_rewritten_or_wrapped() {
         put_machine(Some(&before), &skipped, "2030-03-17T17:46:41.000Z"),
         Err(corrupt("machines.enrollment_generation"))
     );
-    let mut new = before.clone();
+    let mut new = before;
     new.generation = EnrollmentGeneration::default();
     new.state = MachineState::Revoked;
     assert!(
