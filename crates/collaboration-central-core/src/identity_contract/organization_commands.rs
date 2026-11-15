@@ -61,12 +61,6 @@ pub struct RemoveSession {
     pub session: SessionRef,
 }
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SetTokenLifetime {
-    pub organization_id: OrganizationId,
-    pub seconds: TokenLifetimeSeconds,
-}
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(
     tag = "result",
     rename_all = "camelCase",

@@ -4,7 +4,7 @@ use crate::contract_artifacts;
 use collaboration_central_core::identity_contract::{
     AllowMachine, AllowSignIn, AllowanceState, CommandRefusal, CommandStatus, CreateOrganization,
     CreateWorkspace, IdentityLookup, MachineAllowance, MachineLookup, OrganizationCommandResult,
-    RemoveSession, RemoveSignIn, RevokeMachineEnrollment, SetOrganizationOwner, SetTokenLifetime,
+    RemoveSession, RemoveSignIn, RevokeMachineEnrollment, SetOrganizationOwner,
     TokenLifetimeSeconds, WithdrawMachineAllowance, WorkspaceLookup,
 };
 use serde_json::json;
@@ -148,18 +148,6 @@ fn remove_session_wire_contract() {
         "RemoveSession",
         vec![
             json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","session":{"endpoint":{"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"codex-local"},"sessionId":"native/provider:conversation"}}),
-        ],
-        false,
-    );
-}
-
-#[test]
-fn set_token_lifetime_wire_contract() {
-    contract_artifacts::assert_contract::<SetTokenLifetime>(
-        "SetTokenLifetime",
-        vec![
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","seconds":60}),
-            json!({"organizationId":"019a3dce-2000-7000-8000-000000000001","seconds":3600}),
         ],
         false,
     );

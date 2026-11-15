@@ -57,7 +57,7 @@ impl MachineLoginSettings {
     pub const fn new(grant_lifetime: TokenLifetimeSeconds) -> Self {
         Self { grant_lifetime }
     }
-    /// OD2's fixed composition value; SetTokenLifetime remains unserved in 4b.
+    /// OD2's current composition value; the lifetime source decision remains held.
     pub const fn production() -> Self {
         Self::new(TokenLifetimeSeconds::MACHINE_LOGIN_DEFAULT)
     }
