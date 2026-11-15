@@ -676,7 +676,9 @@ jobs:
           set -euo pipefail
           worker-build crates/collaboration-central-cloudflare --dev --no-opt -- --locked --features conformance-faults
           node verification/tooling/check-central-worker-bundle.ts faults
-          # Keep the same 21 cases, arguments and deadlines. Only independent
+          # Keep the same 21 cases and arguments. The 45-minute job bounds
+          # their lifecycle waits; there are no per-scenario harness timers.
+          # Only independent
           # processes overlap; each owns a distinct port, persistence and log.
           cases=(
             composed_scope_workerd/composed-copy-suite
@@ -754,14 +756,26 @@ jobs:
       - name: Install pinned native integration runner
         uses: ./.github/actions/install-ci-tools
       - name: Run the storage boundary cases in workerd
+        shell: bash
         run: |
           worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --locked --features test-support,conformance
           worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-link-test-support -- --locked --no-default-features --features link,test-support,conformance
           pnpm --dir verification run test:workerd
-          cargo nextest run --locked --profile worker-ci -p collaboration-central-cloudflare --features test-support --test integration
+          cargo nextest run --locked --profile worker-ci -p collaboration-central-cloudflare --features test-support --test integration --color never 2>&1 | tee "$RUNNER_TEMP/central-worker-nextest.log"
+          if grep -Eq '^[[:space:]]*LEAK[[:space:]]' "$RUNNER_TEMP/central-worker-nextest.log"; then
+            echo "Worker child lifecycle leak detected" >&2
+            exit 1
+          fi
           pnpm --dir verification exec oxlint --deny-warnings "$GITHUB_WORKSPACE/crates/collaboration-central-cloudflare/tests/support/workerd-bridge.mts"
           pnpm --dir verification exec oxfmt --check "$GITHUB_WORKSPACE/crates/collaboration-central-cloudflare/tests/support/workerd-bridge.mts"
           pnpm --dir verification exec tsc --ignoreConfig --noEmit --strict --target esnext --module nodenext --allowImportingTsExtensions --skipLibCheck --typeRoots node_modules/@types "$GITHUB_WORKSPACE/crates/collaboration-central-cloudflare/tests/support/workerd-bridge.mts"
+      - name: Reject surviving workerd processes
+        if: always()
+        run: |
+          if pgrep -x workerd; then
+            echo "Worker process survived its owning test" >&2
+            exit 1
+          fi
       - name: Save pinned Worker build tool
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.worker_tools.outputs.cache-hit != 'true'
         uses: actions/cache/save@v4
