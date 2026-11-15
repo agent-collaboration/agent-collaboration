@@ -23,6 +23,24 @@ pub struct WorkspaceCaller {
     pub credential_hash: String,
 }
 
+/// One organization's request runtime. Machine grant lifetime is fixed by central
+/// policy and has no public configuration API.
+///
+/// ```compile_fail
+/// use collaboration_central_core::{
+///     identity_contract::TokenLifetimeSeconds,
+///     organization_authority::MachineLoginSettings,
+/// };
+/// let lifetime = TokenLifetimeSeconds::try_from(3600).unwrap();
+/// let _settings = MachineLoginSettings::new(lifetime);
+/// ```
+///
+/// A configurable lifetime is also absent from the public wire contract.
+///
+/// ```compile_fail
+/// use collaboration_central_core::identity_contract::TokenLifetimeSeconds;
+/// let _lifetime = TokenLifetimeSeconds::try_from(3600).unwrap();
+/// ```
 pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     pub(crate) organization: OrganizationId,
     pub(crate) host: Arc<Host>,

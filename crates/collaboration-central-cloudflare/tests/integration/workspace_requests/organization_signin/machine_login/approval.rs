@@ -106,6 +106,138 @@ async fn approval_replays_immutable_three_field_snapshot_after_changed_input_act
 
 #[expect(
     clippy::panic_in_result_fn,
+    reason = "A retained request belongs to its original installation, while same-installation N03 replay retains the first snapshot after expiry and reopen."
+)]
+#[tokio::test]
+async fn retained_approval_refuses_another_installation_but_preserves_same_installation_replay_after_expiry()
+-> Result<()> {
+    let mut f = MachineFixture::new().await?;
+    let original = approval(
+        0xd501,
+        INSTALLATION,
+        "Original installation",
+        &[WORKSPACE],
+        f.now(),
+    );
+    let first = f.post(DEVICE, &original).await?;
+    assert_eq!(first.0, 200);
+    let enrollment_id = enrollment(&first.1);
+    assert_eq!(
+        first.1,
+        json!({"result":"approved","enrollmentId":enrollment_id,"label":"Original installation","allowedWorkspaces":[WORKSPACE]})
+    );
+    assert_eq!(
+        f.post(TOKEN, &token(&enrollment_id, &enrollment_id))
+            .await?,
+        (200, grant(&enrollment_id, INSTALLATION, f.now(), None)),
+        "the original approval is a working positive control"
+    );
+
+    let mut another_installation = original.clone();
+    another_installation["installation"] = json!(INSTALLATION_TWO);
+    another_installation["peer"] = json!(INSTALLATION_TWO);
+    // The new installation/peer pair is internally consistent. Only ownership
+    // of the already-retained request differs.
+    let before = snapshot(&f).await?;
+    assert_eq!(
+        f.post(DEVICE, &another_installation).await?,
+        (
+            200,
+            json!({"result":"refused","reason":{"kind":"notPermitted"}})
+        )
+    );
+    assert!(
+        snapshot(&f).await? == before,
+        "foreign-installation replay changed owning rows"
+    );
+
+    f.reopen().await?;
+    f.advance(600_001).await?;
+    let mut same_installation = original.clone();
+    same_installation["label"] = json!("Changed submitted label");
+    same_installation["allowedWorkspaces"] = json!([id(0xd599)]);
+    same_installation["approverSecondFactorAt"] = Value::Null;
+    same_installation["codeExpiresAt"] = json!(f.now() - 1);
+    assert_eq!(
+        f.post(DEVICE, &same_installation).await?,
+        first,
+        "same-installation N03 replay precedes new-approval deadline and mutable-input checks"
+    );
+    assert!(snapshot(&f).await? == before);
+    another_installation["codeExpiresAt"] = json!(f.now() + 600);
+    assert_eq!(
+        f.post(DEVICE, &another_installation).await?,
+        (
+            200,
+            json!({"result":"refused","reason":{"kind":"notPermitted"}})
+        ),
+        "retained installation ownership survives owning reopen and original code expiry"
+    );
+    assert!(snapshot(&f).await? == before);
+    f.close().await
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "New expired-code approvals must refuse at the applying sample without reserving facts; the same request with a future deadline must still approve and Grant."
+)]
+#[tokio::test]
+async fn new_approval_refuses_codes_at_or_before_applying_now_without_effects_and_future_code_grants()
+-> Result<()> {
+    // The hold cases start with a future code at receipt, then cross its exact
+    // deadline before the decision samples the one injected clock.
+    for (deadline_offset_seconds, hold_millis) in [(-1, 0), (0, 0), (1, 1_000), (1, 1_001)] {
+        let f = MachineFixture::new().await?;
+        let mut request = approval(
+            0xd601,
+            INSTALLATION,
+            "Deadline approval",
+            &[WORKSPACE, WORKSPACE_TWO],
+            f.now(),
+        );
+        request["codeExpiresAt"] = json!(f.now() + deadline_offset_seconds);
+        let before = snapshot(&f).await?;
+        let answer = if hold_millis == 0 {
+            f.post(DEVICE, &request).await?
+        } else {
+            f.held_approval(&request, hold_millis).await?
+        };
+        assert_eq!(
+            answer,
+            (
+                200,
+                json!({"result":"refused","reason":{"kind":"notPermitted"}})
+            ),
+            "new approval deadline offset {deadline_offset_seconds}s and held {hold_millis}ms"
+        );
+        assert!(
+            snapshot(&f).await? == before,
+            "expired code reserved an approval, changed a machine or emitted allowance records"
+        );
+
+        // Reuse the same request identity: refusal must not reserve it. One
+        // second in the future is enough; no guessed upper bound is introduced.
+        request["codeExpiresAt"] = json!(f.now() + 1);
+        let approved = f.post(DEVICE, &request).await?;
+        assert_eq!(approved.0, 200);
+        let enrollment_id = enrollment(&approved.1);
+        assert_eq!(
+            approved.1,
+            json!({"result":"approved","enrollmentId":enrollment_id,"label":"Deadline approval","allowedWorkspaces":[WORKSPACE,WORKSPACE_TWO]})
+        );
+        assert_eq!(
+            f.post(TOKEN, &token(&enrollment_id, &enrollment_id))
+                .await?,
+            (200, grant(&enrollment_id, INSTALLATION, f.now(), None)),
+            "unexpired approval remains usable after the no-effect refusal"
+        );
+        f.close().await?;
+    }
+    Ok(())
+}
+
+#[expect(
+    clippy::panic_in_result_fn,
     reason = "First-machine exemption and subsequent factor boundaries are observed through actual approval requests."
 )]
 #[tokio::test]

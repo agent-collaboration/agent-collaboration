@@ -82,6 +82,27 @@ fn ba1_first_grant_wins_in_either_order_and_never_activates_the_other_approval()
 }
 
 #[test]
+fn first_and_repeat_grants_use_the_fixed_six_hundred_second_policy() {
+    let active = enrolled(40, 0, NOW_S);
+    for facts in [
+        facts(approved(40, 0), None, 0),
+        facts(active.clone(), Some(active), 1),
+    ] {
+        let plan = decide_token(&facts, NOW_MS);
+        let MachineTokenDecision::Grant {
+            decided_at,
+            grant_expires_at,
+            ..
+        } = plan.answer
+        else {
+            panic!("expected a machine Grant")
+        };
+        assert_eq!(decided_at, UnixSeconds(NOW_S));
+        assert_eq!(grant_expires_at, UnixSeconds(NOW_S + 600));
+    }
+}
+
+#[test]
 fn first_ever_grant_has_no_superseded_client_and_active_repeat_only_renews_last_grant() {
     let facts = facts(approved(40, 0), None, 0);
     let plan = decide_token(&facts, NOW_MS);
