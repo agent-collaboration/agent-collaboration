@@ -133,13 +133,23 @@ test("readiness and command pipe failures dispose the real workerd", async (): P
 });
 
 test("SIGTERM awaits owned disposal before bridge exit and preserves existing listeners", async (): Promise<void> => {
+  await exerciseHeldSignalDisposal(false);
+});
+
+test("EOF close and SIGTERM await the same disposal before bridge and workerd exit", async (): Promise<void> => {
+  await exerciseHeldSignalDisposal(true);
+});
+
+async function exerciseHeldSignalDisposal(startWithEof: boolean): Promise<void> {
   const miniflare = fileURLToPath(
     new URL("../node_modules/miniflare/dist/src/index.js", import.meta.url),
   );
   const injectDisposalGate = `${observeSpawn}
     const { Miniflare } = await import(${JSON.stringify(new URL(`file://${miniflare}`).href)});
     process.on('SIGTERM', () => process.stderr.write('PREEXISTING_SIGNAL_LISTENER\\n'));
-    const release = new Promise(resolve => process.stdin.on('data', resolve));
+    const { Socket } = await import('node:net');
+    const releaseInput = new Socket({fd:3});
+    const release = new Promise(resolve => {releaseInput.once('data', resolve); releaseInput.once('end', resolve);});
     const dispose = Miniflare.prototype.dispose;
     Miniflare.prototype.dispose = async function () {
       process.stderr.write('OWNED_DISPOSE_STARTED\\n');
@@ -151,9 +161,11 @@ test("SIGTERM awaits owned disposal before bridge exit and preserves existing li
   const child = spawn(
     process.execPath,
     ["--import", `data:text/javascript,${encodeURIComponent(injectDisposalGate)}`, bridge],
-    { stdio: "pipe" },
+    { stdio: ["pipe", "pipe", "pipe", "pipe"] },
   );
   const exited = once(child, "close");
+  const releaseInput = child.stdio[3];
+  assert.ok(releaseInput !== null && releaseInput !== undefined && "write" in releaseInput);
   child.stdin.on("error", (error: NodeJS.ErrnoException): void => {
     if (error.code !== "EPIPE") throw error;
   });
@@ -177,6 +189,15 @@ test("SIGTERM awaits owned disposal before bridge exit and preserves existing li
     ]);
     assert.match(String(line), /"origin":"http:\/\/127\.0\.0\.1:/);
     ready.close();
+    if (startWithEof) {
+      child.stdin.end();
+      await Promise.race([
+        started,
+        exited.then((): never => {
+          throw new Error("EOF close exited before disposal release");
+        }),
+      ]);
+    }
     assert.equal(child.kill("SIGTERM"), true);
     await Promise.race([
       started,
@@ -185,17 +206,24 @@ test("SIGTERM awaits owned disposal before bridge exit and preserves existing li
       }),
     ]);
     assert.equal(child.exitCode, null, "signal must wait for the held real disposal");
-    child.stdin.write("release disposal\n");
+    releaseInput.write("release disposal\n");
     const [code, signal] = await exited;
-    assert.equal(code, 143);
+    assert.ok(startWithEof ? code === 143 || code === 0 : code === 143, `unexpected exit ${code}`);
     assert.equal(signal, null);
     assert.match(diagnostics, /PREEXISTING_SIGNAL_LISTENER/);
     assert.match(diagnostics, /OWNED_DISPOSE_FINISHED/);
+    assert.equal(
+      [...diagnostics.matchAll(/OWNED_DISPOSE_STARTED/g)].length,
+      1,
+      "one disposal promise must own EOF and signals",
+    );
+    assert.equal([...diagnostics.matchAll(/OWNED_DISPOSE_FINISHED/g)].length, 1);
     const matches = [...diagnostics.matchAll(/WORKERD_OWNED_PID (\d+)/g)];
     assert.equal(matches.length, 1);
     assert.throws(() => process.kill(Number(matches[0]?.[1]), 0), { code: "ESRCH" });
   } finally {
-    child.stdin.end("release disposal\n");
+    releaseInput.end("release disposal\n");
+    child.stdin.end();
     await exited;
     errorLines.close();
     for (const match of diagnostics.matchAll(/WORKERD_OWNED_PID (\d+)/g))
@@ -203,7 +231,7 @@ test("SIGTERM awaits owned disposal before bridge exit and preserves existing li
     child.stdout.destroy();
     child.stderr.destroy();
   }
-});
+}
 
 test("standalone constructor guard disposes before refusing an absent upstream signal hook", async (): Promise<void> => {
   const factory = new URL("../test-support/miniflare-signal-shutdown.ts", import.meta.url).href;

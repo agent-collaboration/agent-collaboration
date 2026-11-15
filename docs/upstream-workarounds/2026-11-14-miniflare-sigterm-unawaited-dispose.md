@@ -6,7 +6,7 @@ The installed `verification/node_modules/miniflare/dist/src/index.js` contains t
 
 - Lines 89518–89552: signal handlers invoke callbacks and immediately call `process.exit(128 + signal)`.
 - Lines 133472–133479: the constructor registers a callback that calls `void this.#runtime?.dispose()`.
-- Lines 117167–117180: runtime disposal kills workerd and returns its process-exit promise.
+- Lines 117167–117180: runtime disposal sends SIGKILL to workerd synchronously and returns its process-exit promise. The unawaited part is reaping that killed child.
 - Line 135604: ordinary awaited Miniflare disposal removes the exit hook and waits for runtime cleanup.
 
 Node's `EventEmitter.emit` invokes listeners in order without awaiting their returned promises. Registering an async bridge handler before Miniflare's handler cannot prevent the latter from terminating the bridge while disposal remains pending.
@@ -15,11 +15,11 @@ Hosted runs `43656799717` (timing head `3e66ad2d7`) and `43658134393` (B5 head `
 
 ## Owning boundary
 
-`verification/test-support/miniflare-signal-shutdown.ts` brackets synchronous construction inside a standalone bridge. It snapshots `SIGINT`, `SIGTERM`, and `SIGHUP` listeners, removes only listeners that construction added, then installs handlers that await Miniflare disposal before exiting with the signal's conventional code. A missing expected added hook refuses startup after disposing the constructed runtime, so a changed upstream hook cannot silently restore the unsafe path. The ordinary `exit` listener remains for Miniflare to remove during disposal.
+`verification/test-support/miniflare-signal-shutdown.ts` brackets synchronous construction inside a standalone bridge. It snapshots `SIGINT`, `SIGTERM`, and `SIGHUP` listeners, removes only listeners that construction added, then installs handlers that await Miniflare disposal before exiting with the signal's conventional code. The factory memoizes disposal: signal handlers, EOF close, startup cleanup and legacy stop all await the same promise, so a second call cannot skip the first call's child reaping. A missing expected added hook refuses startup after disposing the constructed runtime, so a changed upstream hook cannot silently restore the unsafe path. The ordinary `exit` listener remains for Miniflare to remove during disposal.
 
 The modern bridge supplies this factory through the shared loader's optional constructor dependency. The legacy standalone script uses the same factory directly. The shared `WorkerdStorage.start` carries no signal policy: direct in-process TypeScript callers retain their existing behavior and may own several concurrent Miniflare instances. The listener-difference guard applies only to the standalone bridge's one constructor, not every runtime in a shared process.
 
-Ordinary fixture cleanup closes stdin and awaits process exit. The launcher command-error test closes its existing command input to exercise the error-and-settlement path; it does not use an unawaited upstream signal exit as its fault mechanism.
+Ordinary fixture cleanup closes stdin and awaits process exit. The launcher command-error test sends the existing `close` protocol line to make the bridge exit, then issues a command and checks settlement before dropping its owner; it does not use an unawaited upstream signal exit as its fault mechanism.
 
 ## Reproduce and verify
 
@@ -30,7 +30,9 @@ node --test --test-name-pattern='SIGTERM awaits owned disposal' verification/tar
 cargo nextest run -p collaboration-central-cloudflare --features test-support --test integration -E 'test(launcher_command_error_settles_real_bridge_before_returning)'
 ```
 
-The permanent real-SIGTERM test holds disposal at an explicit stdin gate, checks that the bridge stays alive until release, then waits for bridge exit and requires its recorded workerd PID to return `ESRCH`. It also checks that a pre-existing listener remains available. There are no sleeps, polling loops, retries, or increased deadlines. A separate permanent guard test requires disposal before refusal when the expected upstream listeners are absent.
+The permanent real-SIGTERM and EOF-then-SIGTERM tests hold disposal at an explicit IPC gate, checks that the bridge stays alive until release, then waits for bridge exit and requires its recorded workerd PID to return `ESRCH`. It also checks that a pre-existing listener remains available. There are no sleeps, polling loops, retries, or increased deadlines. If disposal hangs, a second signal is deliberately ignored; nextest's existing whole-group kill provides the outer bound. The bridges have no Node IPC channel, so Miniflare's separate `message: "shutdown"` exit hook is outside this scope. A separate permanent guard test requires disposal before refusal when the expected upstream listeners are absent.
+
+To recreate the upstream defect in an isolated checkout, remove the `constructMiniflareWithOwnedSignalShutdown` factory argument from `crates/collaboration-central-cloudflare/tests/support/workerd-bridge.mts`, then run the named SIGTERM test above. It must fail with `bridge exited before disposal release` or `bridge ended before owned disposal started`; Miniflare's own hook calls its lower-level runtime disposal rather than the awaited, held public disposal. Restore the factory before positive proof. To recreate overlapping disposal, remove only the factory's memoization and run the EOF-then-SIGTERM case; its exact single-disposal assertion must fail.
 
 Only inspect the recorded owned PID. A broad `pgrep -x workerd` can identify residue in an isolated CI job, but is not sufficient attribution on a development machine running unrelated verification.
 

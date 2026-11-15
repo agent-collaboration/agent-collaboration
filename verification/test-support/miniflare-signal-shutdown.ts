@@ -13,6 +13,9 @@ export async function constructMiniflareWithOwnedSignalShutdown(
 ): Promise<Miniflare> {
   const before = signals.map(({ name }) => new Set(process.listeners(name)));
   const runtime = construct();
+  const disposeRuntime = runtime.dispose.bind(runtime);
+  let pendingDisposal: Promise<void> | undefined;
+  runtime.dispose = (): Promise<void> => (pendingDisposal ??= disposeRuntime());
   const added = signals.map(({ name }, index) =>
     process.listeners(name).filter((listener) => !before[index]?.has(listener)),
   );
