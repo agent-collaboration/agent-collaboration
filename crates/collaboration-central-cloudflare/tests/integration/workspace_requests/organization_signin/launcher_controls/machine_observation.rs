@@ -152,6 +152,10 @@ fn expected_machine(machine: &str, state: &str, workspaces: &[&str], generation:
         "allowedWorkspaces":workspaces,"enrollmentGeneration":generation})
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Fixture identity assertions must fail without dumping the enclosing signed observation."
+)]
 fn machine_id(observation: &Value) -> ConformanceResult<String> {
     let rows = observation
         .get("machines")
@@ -199,6 +203,10 @@ fn assert_rows(observation: &Value, machine: Value, approvals: Vec<Value>) {
     assert_no_credentials(observation);
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Actual HTTP and IPC results are checked against independent complete lifecycle row assertions."
+)]
 #[tokio::test]
 async fn bridge_observes_machine_approval_lifecycle_fields_in_created_at_order()
 -> ConformanceResult<()> {
@@ -393,6 +401,10 @@ async fn bridge_observes_machine_approval_lifecycle_fields_in_created_at_order()
     Ok(())
 }
 
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "The first real post-idle observation must assert its automatic records and fenced machine facts."
+)]
 #[tokio::test]
 async fn bridge_first_observation_after_real_idle_expiry_accepts_automatic_records()
 -> ConformanceResult<()> {
