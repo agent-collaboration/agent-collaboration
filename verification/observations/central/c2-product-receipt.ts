@@ -104,14 +104,38 @@ function correlate(
   return done.parse(replyFrame.result.reply.result).answer;
 }
 
-export function assertC2ProductReceipt(raw: unknown): C2ProductReceipt {
-  const receipt = c2ProductReceiptSchema.parse(raw);
+function assertSemanticFrames(receipt: C2ProductReceipt): void {
+  const baselineOperation = z
+    .object({ kind: z.literal("createWorkspace"), name: z.string().min(1) })
+    .strict()
+    .parse(receipt.baselineRequest.request.payload.request.operation);
   assert.equal(
-    receipt.welcome.machineId,
-    receipt.installationId,
-    "Welcome uses public installation",
+    receipt.baselineRequest.request.payload.request.workspaceId,
+    null,
+    "baseline creates its own workspace",
   );
-  correlate(receipt.baselineRequest, receipt.baselineReply);
+  assert.ok(
+    receipt.baselineRequest.request.payload.request.requestId !== null,
+    "baseline write has RequestId",
+  );
+  const baselineAnswer = z
+    .object({
+      kind: z.literal("workspaceCreated"),
+      workspace: z
+        .object({
+          workspaceId: uuid,
+          name: z.string(),
+          state: z.literal("active"),
+        })
+        .strict(),
+    })
+    .strict()
+    .parse(correlate(receipt.baselineRequest, receipt.baselineReply));
+  assert.equal(
+    baselineAnswer.workspace.name,
+    baselineOperation.name,
+    "baseline name comes from actual request",
+  );
   const created = z
     .object({
       kind: z.literal("created"),
@@ -155,6 +179,11 @@ export function assertC2ProductReceipt(raw: unknown): C2ProductReceipt {
   assert.equal(readAnswer.item.item.name, operation.name);
   const workspace = receipt.decidingRequest.request.payload.request.workspaceId;
   assert.ok(workspace !== null, "CreateArea names a workspace");
+  assert.equal(
+    workspace,
+    baselineAnswer.workspace.workspaceId,
+    "CreateArea uses the actual baseline workspace",
+  );
   assert.equal(readAnswer.item.item.workspaceId, workspace);
   assert.equal(receipt.readRequest.request.payload.request.workspaceId, workspace);
   const correlations = [receipt.baselineRequest, receipt.decidingRequest, receipt.readRequest].map(
@@ -165,12 +194,31 @@ export function assertC2ProductReceipt(raw: unknown): C2ProductReceipt {
     3,
     "distinct requests use distinct transport correlations",
   );
-  for (const frame of [receipt.baselineRequest, receipt.decidingRequest, receipt.readRequest])
+}
+
+function assertSessionCaller(receipt: C2ProductReceipt): void {
+  const originalCaller = receipt.baselineRequest.request.caller;
+  assert.equal(originalCaller.kind, "session", "positive journey uses an ordinary session caller");
+  for (const frame of [receipt.baselineRequest, receipt.decidingRequest, receipt.readRequest]) {
+    assert.equal(
+      frame.request.caller.kind,
+      "session",
+      "positive journey uses an ordinary session caller",
+    );
+    assert.deepEqual(
+      frame.request.caller,
+      originalCaller,
+      "same stamped session drives all semantic frames",
+    );
     assert.equal(
       frame.request.caller.value.machineId,
       receipt.installationId,
       "caller uses installation",
     );
+  }
+}
+
+function assertSocketWitnesses(receipt: C2ProductReceipt): void {
   const upgrades = receipt.beforeEvents.filter((record) => record.event.kind === "upgrade");
   assert.equal(upgrades.length, 1, "one original socket upgrade");
   const upgrade = upgrades[0];
@@ -180,6 +228,21 @@ export function assertC2ProductReceipt(raw: unknown): C2ProductReceipt {
   assert.ok(attachment !== undefined);
   assert.equal(attachment.organizationId, receipt.organization);
   assert.equal(attachment.installationId, receipt.installationId);
+  assert.notEqual(
+    attachment.machineId,
+    receipt.installationId,
+    "private row key must differ from public installation",
+  );
+  assert.ok(
+    receipt.beforeEvents.some(
+      (record) =>
+        record.event.kind === "constructor" &&
+        record.instanceId === upgrade.instanceId &&
+        record.sequence < upgrade.sequence &&
+        record.event.objectId === upgrade.event.objectId,
+    ),
+    "initial upgrade has its actual serving constructor",
+  );
   for (const snapshot of receipt.heartbeatEvents)
     assert.deepEqual(snapshot, receipt.beforeEvents, "each pong adds no observed witnesses");
   assert.deepEqual(
@@ -193,11 +256,37 @@ export function assertC2ProductReceipt(raw: unknown): C2ProductReceipt {
     attachment,
     correlationId: receipt.decidingRequest.request.correlationId,
   });
+  for (const correlationId of [
+    receipt.baselineRequest.request.correlationId,
+    receipt.decidingRequest.request.correlationId,
+  ]) {
+    const snapshots = receipt.decidingEvents.filter(
+      (record) =>
+        record.event.kind === "alarmSnapshot" && record.event.correlationId === correlationId,
+    );
+    assert.equal(snapshots.length, 1, "one actual alarm snapshot per semantic request");
+    const snapshot = snapshots[0];
+    assert.ok(snapshot?.event.kind === "alarmSnapshot");
+    assert.equal(snapshot.event.earliestDueMs, null, "no due work in this declared journey");
+    assert.equal(snapshot.event.alarmMs, null, "semantic journey leaves actual alarm clear");
+  }
+}
+
+export function assertC2ProductReceipt(raw: unknown): C2ProductReceipt {
+  const receipt = c2ProductReceiptSchema.parse(raw);
+  assert.equal(
+    receipt.welcome.machineId,
+    receipt.installationId,
+    "Welcome uses public installation",
+  );
+  assertSemanticFrames(receipt);
+  assertSessionCaller(receipt);
+  assertSocketWitnesses(receipt);
   const idIndex = receipt.store.columns.indexOf("area_id");
   const nameIndex = receipt.store.columns.indexOf("name");
   assert.ok(idIndex >= 0 && nameIndex >= 0, "owning SQLite read returns area_id and name");
   assert.equal(receipt.store.rows.length, 1, "exactly one owning SQLite area row");
-  assert.deepEqual(receipt.store.rows[0]?.[idIndex], { kind: "text", value: created.item.id });
-  assert.deepEqual(receipt.store.rows[0]?.[nameIndex], { kind: "text", value: operation.name });
+  assert.deepEqual(receipt.store.rows[0]?.[idIndex], { kind: "text", value: receipt.area.areaId });
+  assert.deepEqual(receipt.store.rows[0]?.[nameIndex], { kind: "text", value: receipt.area.name });
   return receipt;
 }

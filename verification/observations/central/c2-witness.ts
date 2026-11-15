@@ -167,6 +167,20 @@ export function assertC2Restore(input: {
   const handler = handlers[0];
   assert.ok(constructor !== undefined && handler !== undefined);
   assert.equal(constructor.phase, "deciding", "constructor witness must arrive while deciding");
+  assert.equal(handler.phase, "deciding", "handler witness must arrive while deciding");
+  assert.ok(constructor.sequence < handler.sequence, "handler follows fresh constructor");
+  const originalObject = input.before.find((record) => record.event.kind === "constructor")?.event
+    .objectId;
+  assert.equal(
+    constructor.event.objectId,
+    originalObject,
+    "same physical organization object must reconstruct",
+  );
+  assert.equal(
+    handler.event.objectId,
+    originalObject,
+    "handler uses the original organization object",
+  );
   assert.equal(handler.instanceId, constructor.instanceId, "handler must use new instance");
   assert.ok(
     !input.before.some((record) => record.instanceId === constructor.instanceId),
@@ -174,10 +188,12 @@ export function assertC2Restore(input: {
   );
   assert.ok(handler.event.kind === "handler");
   assert.deepEqual(handler.event.attachment, input.attachment, "original attachment must restore");
-  const restored = fresh.find(
+  const restorations = fresh.filter(
     (record) =>
       record.event.kind === "restoreResult" && record.event.correlationId === input.correlationId,
   );
+  assert.equal(restorations.length, 1, "matching restoration witness required exactly once");
+  const restored = restorations[0];
   assert.ok(restored !== undefined, "matching restoration witness required");
   assert.equal(restored.instanceId, constructor.instanceId);
   assert.ok(restored.event.kind === "restoreResult");
@@ -200,10 +216,12 @@ export function assertC2Restore(input: {
     enrollmentIndex >= 0 && machineIndex > enrollmentIndex && activeIndex > machineIndex,
     "all live enrollment queries must complete",
   );
-  const alarm = fresh.find(
+  const alarms = fresh.filter(
     (record) =>
       record.event.kind === "alarmSnapshot" && record.event.correlationId === input.correlationId,
   );
+  assert.equal(alarms.length, 1, "matching alarm snapshot required exactly once");
+  const alarm = alarms[0];
   assert.ok(
     alarm !== undefined && alarm.event.kind === "alarmSnapshot",
     "matching actual alarm readback required",

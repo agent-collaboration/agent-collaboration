@@ -28,7 +28,10 @@ const attachment = {
   clientId: baselineId,
   effectiveExpiresAt: 1_800_000_600,
 };
-const caller = { kind: "person", value: { machineId: installation, personId: privateMachine } };
+const caller = {
+  kind: "session",
+  value: { machineId: installation, endpoint: "codex-local", sessionId: privateMachine },
+};
 
 function events(instanceId: string, correlationId: string, offset: number): C2WitnessRecord[] {
   const raw = [
@@ -50,13 +53,25 @@ function events(instanceId: string, correlationId: string, offset: number): C2Wi
     }),
   );
 }
-function frame(correlationId: string, operation: unknown, requestId: string | null): unknown {
+function frame(props: {
+  readonly correlationId: string;
+  readonly operation: unknown;
+  readonly requestId: string | null;
+  readonly workspaceId: string | null;
+}): unknown {
   return {
     kind: "request",
     request: {
-      correlationId,
+      correlationId: props.correlationId,
       caller,
-      payload: { kind: "workspace", request: { requestId, workspaceId: workspace, operation } },
+      payload: {
+        kind: "workspace",
+        request: {
+          requestId: props.requestId,
+          workspaceId: props.workspaceId,
+          operation: props.operation,
+        },
+      },
     },
   };
 }
@@ -75,15 +90,29 @@ function validReceipt(): C2ProductReceipt {
     organization,
     installationId: installation,
     welcome: { kind: "welcome", machineId: installation, centralTime: "2027-01-15T08:00:00Z" },
-    baselineRequest: frame(
-      baselineId,
-      { kind: "list", query: { kind: "areas" }, after: 0, limit: 100 },
-      null,
-    ),
-    baselineReply: reply(baselineId, { kind: "page", items: [], nextAfterPosition: null }),
-    decidingRequest: frame(decidingId, { kind: "createArea", name }, baselineId),
+    baselineRequest: frame({
+      correlationId: baselineId,
+      operation: { kind: "createWorkspace", name: "Baseline workspace" },
+      requestId: baselineId,
+      workspaceId: null,
+    }),
+    baselineReply: reply(baselineId, {
+      kind: "workspaceCreated",
+      workspace: { workspaceId: workspace, name: "Baseline workspace", state: "active" },
+    }),
+    decidingRequest: frame({
+      correlationId: decidingId,
+      operation: { kind: "createArea", name },
+      requestId: baselineId,
+      workspaceId: workspace,
+    }),
     decidingReply: reply(decidingId, { kind: "created", item: area, position: 1 }),
-    readRequest: frame(readId, { kind: "show", item: area }, null),
+    readRequest: frame({
+      correlationId: readId,
+      operation: { kind: "show", item: area },
+      requestId: null,
+      workspaceId: workspace,
+    }),
     readReply: reply(readId, {
       kind: "item",
       item: { kind: "area", item: { areaId, workspaceId: workspace, name, state: "open" } },
@@ -124,6 +153,15 @@ test("C2 receipt rejects wrong correlation, fake store success and missing actua
   const wrongRead = validReceipt();
   wrongRead.readReply.result.reply.result = { kind: "done", answer: { kind: "page", items: [] } };
   assert.throws(() => assertC2ProductReceipt(wrongRead), /invalid_value/);
+  const wrongWorkspace = validReceipt();
+  wrongWorkspace.baselineReply.result.reply.result = {
+    kind: "done",
+    answer: {
+      kind: "workspaceCreated",
+      workspace: { workspaceId: areaId, name: "Baseline workspace", state: "active" },
+    },
+  };
+  assert.throws(() => assertC2ProductReceipt(wrongWorkspace), /actual baseline workspace/);
 });
 
 test("C2 receipt rejects heartbeat wake, skipped SQL witness, altered attachment and missing disposal", (): void => {
@@ -150,6 +188,34 @@ test("C2 receipt rejects heartbeat wake, skipped SQL witness, altered attachment
   assert.throws(
     () => assertC2ProductReceipt({ ...validReceipt(), disposed: false }),
     /invalid_value/,
+  );
+});
+
+test("C2 receipt rejects other-object reconstruction, duplicate restoration and invented due work", (): void => {
+  const otherObject = validReceipt();
+  const constructor = otherObject.decidingEvents.find(
+    (record) => record.instanceId === newInstance && record.event.kind === "constructor",
+  );
+  assert.ok(constructor !== undefined);
+  constructor.event.objectId = "b".repeat(64);
+  assert.throws(() => assertC2ProductReceipt(otherObject), /same physical organization/);
+  const nonNullAlarm = validReceipt();
+  for (const record of nonNullAlarm.decidingEvents) {
+    if (record.instanceId === newInstance && record.event.kind === "alarmSnapshot") {
+      record.event.alarmMs = 123;
+      record.event.earliestDueMs = 123;
+    }
+  }
+  assert.throws(() => assertC2ProductReceipt(nonNullAlarm), /no due work/);
+  const duplicate = validReceipt();
+  const restoration = duplicate.decidingEvents.find(
+    (record) => record.instanceId === newInstance && record.event.kind === "restoreResult",
+  );
+  assert.ok(restoration !== undefined);
+  duplicate.decidingEvents.push({ ...restoration, sequence: 100 });
+  assert.throws(
+    () => assertC2ProductReceipt(duplicate),
+    /restoration witness required exactly once/,
   );
 });
 

@@ -18,6 +18,12 @@ import { C2WitnessRecorder } from "../../../../verification/observations/central
 const arguments_ = process.argv.slice(2);
 const witnessIndex = arguments_.indexOf("--c2-witness");
 const witness = witnessIndex === -1 ? undefined : new C2WitnessRecorder();
+const ordinaryProbeValue = process.env.CODEX_ROUTER_C2_ORDINARY_ACCEPT_PROBE;
+if (ordinaryProbeValue !== undefined && ordinaryProbeValue !== "1")
+  throw new Error("invalid ordinary accept probe selection");
+const ordinaryProbe = ordinaryProbeValue === "1";
+if (ordinaryProbe && witness === undefined)
+  throw new Error("ordinary probe requires C2 witness opt-in");
 if (witnessIndex !== -1) arguments_.splice(witnessIndex, 1);
 let milliseconds: number | undefined;
 const launcherIndex = arguments_.indexOf("--launcher-time-ms");
@@ -66,6 +72,7 @@ const host = await WorkerdStorage.start(
     textBindings: { ...bundle.textBindings, ...plan?.textBindings },
     durableObjects: { ...bundle.durableObjects, CENTRAL: "CentralObject" },
     ...(witness === undefined ? {} : { c2Witness: witness }),
+    ...(ordinaryProbe ? { c2OrdinaryAcceptProbe: true } : {}),
   },
   plan === undefined || sourceUrl === undefined || linkBundle === undefined
     ? undefined
@@ -107,7 +114,24 @@ async function answer(line: string): Promise<unknown> {
   try {
     if ("c2Evict" in parsed.data) {
       if (witness === undefined) return { answer: "refused", error: "C2 witness not enabled" };
-      await host.evictCentral(parsed.data.c2Evict);
+      try {
+        await host.evictCentral(parsed.data.c2Evict);
+      } catch (error: unknown) {
+        if (ordinaryProbe)
+          process.stderr.write(
+            `C2_ORDINARY_ACCEPT_PROBE ${JSON.stringify({
+              stage: "eviction",
+              disposition:
+                error instanceof Error &&
+                error.message ===
+                  "Timed out waiting to evict Durable Object: it still has active references."
+                  ? "active-references"
+                  : "unclassified-eviction-failure",
+              events: witness.snapshot(),
+            })}\n`,
+          );
+        throw error;
+      }
       return { answer: "c2Evicted", organization: parsed.data.c2Evict };
     }
     if ("c2Witness" in parsed.data) {

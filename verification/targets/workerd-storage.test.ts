@@ -32,6 +32,10 @@ test("bridge names every absent public or private artifact before readiness", as
       join(fixture, "verification/observations/central/c2-witness.ts"),
     );
     await copyFile(
+      join(repository, "verification/observations/central/c2-ordinary-accept-probe.ts"),
+      join(fixture, "verification/observations/central/c2-ordinary-accept-probe.ts"),
+    );
+    await copyFile(
       join(repository, "verification/test-support/miniflare-signal-shutdown.ts"),
       join(fixture, "verification/test-support/miniflare-signal-shutdown.ts"),
     );
@@ -348,6 +352,7 @@ async function createBridgeControlFixture(): Promise<string> {
     "verification/targets/workerd-storage.ts",
     "verification/test-support/miniflare-signal-shutdown.ts",
     "verification/observations/central/c2-witness.ts",
+    "verification/observations/central/c2-ordinary-accept-probe.ts",
   ])
     await copyFile(join(repository, path), join(fixture, path));
   await symlink(

@@ -21,6 +21,7 @@ import {
   c2PhaseSchema,
   c2WitnessWrapperSource,
 } from "../observations/central/c2-witness.ts";
+import { ordinaryAcceptProbeSource } from "../observations/central/c2-ordinary-accept-probe.ts";
 
 export interface WorkerdBundle {
   /** Directory holding worker-build's `index.js` and `index_bg.wasm`. */
@@ -32,6 +33,7 @@ export interface WorkerdBundle {
   readonly durableObjects: Readonly<Record<string, string>>;
   readonly textBindings: Readonly<Record<string, string>>;
   readonly c2Witness?: C2WitnessRecorder;
+  readonly c2OrdinaryAcceptProbe?: boolean;
 }
 
 const jwksMappingSchema = z
@@ -155,6 +157,8 @@ export function centralLinkTestBundle(): WorkerdBundle {
 }
 
 function workerOptions(bundle: WorkerdBundle): V4WorkerOptions {
+  if (bundle.c2OrdinaryAcceptProbe === true && bundle.c2Witness === undefined)
+    throw new Error("ordinary accept probe requires C2 witnesses");
   if (bundle.c2Witness !== undefined && bundle.durableObjects.CENTRAL !== "CentralObject")
     throw new Error("C2 witness requires the real CENTRAL class binding");
   for (const name of ["index.js", "index_bg.wasm"])
@@ -173,7 +177,10 @@ function workerOptions(bundle: WorkerdBundle): V4WorkerOptions {
             {
               type: "ESModule" as const,
               path: join(bundle.bundleDirectory, "__c2_witness_entry.js"),
-              contents: c2WitnessWrapperSource,
+              contents:
+                bundle.c2OrdinaryAcceptProbe === true
+                  ? ordinaryAcceptProbeSource()
+                  : c2WitnessWrapperSource,
             },
           ]),
       { type: "ESModule", path: join(bundle.bundleDirectory, "index.js") },
