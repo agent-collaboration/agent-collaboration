@@ -237,16 +237,17 @@ export class WorkerdStorage {
       ];
     }
     const root = await mkdtemp(join(tmpdir(), "workerd-central-"));
-    const runtime = new Miniflare(
-      convertV4MiniflareOptions({
-        host: "127.0.0.1",
-        port: 0,
-        resourcePersistencePath: root,
-        cf: false,
-        workers,
-      }),
-    );
+    let runtime: Miniflare | undefined;
     try {
+      runtime = new Miniflare(
+        convertV4MiniflareOptions({
+          host: "127.0.0.1",
+          port: 0,
+          resourcePersistencePath: root,
+          cf: false,
+          workers,
+        }),
+      );
       const ready = await runtime.ready;
       if (
         ready.hostname !== "127.0.0.1" ||
@@ -255,15 +256,37 @@ export class WorkerdStorage {
         throw new Error("workerd did not bind a permitted loopback port");
       return new WorkerdStorage(ready.origin, runtime, root);
     } catch (error: unknown) {
-      await runtime.dispose();
-      await rm(root, { recursive: true, force: true });
+      const failures: unknown[] = [error];
+      try {
+        await runtime?.dispose();
+      } catch (cleanup: unknown) {
+        failures.push(cleanup);
+      }
+      try {
+        await rm(root, { recursive: true, force: true });
+      } catch (cleanup: unknown) {
+        failures.push(cleanup);
+      }
+      if (failures.length > 1)
+        throw new AggregateError(failures, "Worker startup and cleanup failed", { cause: error });
       throw error;
     }
   }
 
   async close(): Promise<void> {
-    await this.runtime.dispose();
-    await rm(this.root, { recursive: true, force: true });
+    const failures: unknown[] = [];
+    try {
+      await this.runtime.dispose();
+    } catch (error: unknown) {
+      failures.push(error);
+    }
+    try {
+      await rm(this.root, { recursive: true, force: true });
+    } catch (error: unknown) {
+      failures.push(error);
+    }
+    if (failures.length > 0)
+      throw new AggregateError(failures, "Worker cleanup failed", { cause: failures[0] });
   }
 
   async dispatchJson(path: string, body: unknown): Promise<unknown> {
