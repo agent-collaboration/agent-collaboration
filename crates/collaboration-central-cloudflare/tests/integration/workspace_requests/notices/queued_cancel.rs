@@ -72,7 +72,13 @@ async fn leave_cancels_the_fired_collated_message_but_not_direct_mail() {
     let after = runtime.read(query()).await.unwrap();
     assert_eq!(after.rows.len(), 1);
     assert_eq!(after.rows[0][0], text(&notice_id));
-    assert_eq!(&after.rows[0][1..3], &before.rows[0][1..3]);
+    assert_eq!(after.rows[0][1], before.rows[0][1]);
+    let SqlValue::Text(body) = &after.rows[0][2] else {
+        panic!("cancelled notice body")
+    };
+    assert!(
+        matches!(serde_json::from_str::<MessageBody>(body).unwrap(), MessageBody::Notice { items } if items.is_empty())
+    );
     assert_eq!(after.rows[0][3], text("cancelled"));
     let direct = runtime
         .read(Statement {

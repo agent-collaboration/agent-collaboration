@@ -1,8 +1,6 @@
 //! The Host's real router selects provider and peer clients through the collaboration API.
-#[path = "../support/session_follow_fixture.rs"]
-mod follow_fixture;
 use crate::registered_route_project;
-use follow_fixture::post_thread_activity_for_sessions;
+use crate::session_follow_fixture::post_thread_activity_for_sessions;
 #[path = "../support/session_message_route_fixture.rs"]
 mod route_fixture;
 use codex_router_host::{
@@ -298,7 +296,8 @@ async fn host_router_selects_peer_and_provider_without_cross_loading() {
     .await;
     std::fs::write(&claude_prompts, "").expect("clear Claude prompt log before subscription proof");
     std::fs::write(&cursor_prompts, "").expect("clear Cursor prompt log before subscription proof");
-    post_thread_activity_for_sessions(&client, [held_claude, held_cursor], route_project).await;
+    post_thread_activity_for_sessions(&client, [held_claude, held_cursor], None, route_project)
+        .await;
     wait_for_prompt_text(&claude_prompts, "🧵 Router: new thread activity").await;
     wait_for_prompt_text(&cursor_prompts, "🧵 Router: new thread activity").await;
     wait_for_completed_provider_prompts(&claude_prompts, 1).await;

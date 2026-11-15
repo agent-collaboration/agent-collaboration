@@ -32,8 +32,8 @@ async fn replay_rejects_convertible_stored_due_beyond_portable_ceiling_without_c
         .central(&fixture.caller.organization_id)
         .await
         .unwrap();
-    let due =
-        router_clock::RuntimeClock::utc_now(fixture.clock.as_ref()) + chrono::Duration::seconds(60);
+    let due = router_clock::RuntimeClock::utc_now(fixture.clock.as_ref())
+        + chrono::Duration::seconds(300);
     let request = request(&fixture, due);
     let first = fixture
         .host
@@ -103,8 +103,8 @@ async fn repair_failure_after_cached_success(failure: StoreFailure) {
         .central(&fixture.caller.organization_id)
         .await
         .unwrap();
-    let due =
-        router_clock::RuntimeClock::utc_now(fixture.clock.as_ref()) + chrono::Duration::seconds(60);
+    let due = router_clock::RuntimeClock::utc_now(fixture.clock.as_ref())
+        + chrono::Duration::seconds(300);
     let request = request(&fixture, due);
     let first = fixture
         .host

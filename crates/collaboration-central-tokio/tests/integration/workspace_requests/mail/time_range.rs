@@ -16,7 +16,43 @@ fn wake(target: workspace_model::SessionAddress, due_at: workspace_model::Timest
 }
 
 #[tokio::test]
-async fn out_of_range_request_writes_nothing_and_last_supported_second_is_accepted() {
+async fn timing_contract_refuses_off_grid_wake_and_seven_day_overflow() {
+    use router_clock::RuntimeClock;
+    let fixture = Fixture::new().await;
+    let now = fixture.clock.utc_now();
+    for (index, offset) in [60, 301, 604_800 + 300].into_iter().enumerate() {
+        let result = fixture
+            .host
+            .request_central(
+                &fixture.caller,
+                CentralMailRequest {
+                    request_id: id(1800 + u32::try_from(index).unwrap()),
+                    operation: wake(
+                        session(&fixture.caller),
+                        now + chrono::Duration::seconds(offset),
+                    ),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            result,
+            Result::Refused(Refusal::TimingViolation {
+                field: "dueAt".to_owned(),
+                requirement: if offset > 604_800 {
+                    collaboration_protocol::central_mail::TimingRequirement::WithinSevenDays
+                } else {
+                    collaboration_protocol::central_mail::TimingRequirement::FiveMinuteGrid
+                },
+            }),
+            "invalid offset {offset}"
+        );
+    }
+    fixture.host.close().await;
+}
+
+#[tokio::test]
+async fn out_of_range_grid_and_horizon_refusals_write_nothing_and_seven_days_is_accepted() {
     let fixture = Fixture::new().await;
     let runtime = fixture
         .host
@@ -67,9 +103,53 @@ async fn out_of_range_request_writes_nothing_and_last_supported_second_is_accept
             .rows,
         before
     );
-    let last =
+    let ceiling =
         chrono::DateTime::from_timestamp_millis(collaboration_central_core::MAX_ALARM_UNIX_MILLIS)
             .unwrap();
+    let last_grid =
+        chrono::DateTime::from_timestamp(ceiling.timestamp().div_euclid(300) * 300, 0).unwrap();
+    for (number, due, requirement) in [
+        (
+            1602,
+            ceiling,
+            collaboration_protocol::central_mail::TimingRequirement::FiveMinuteGrid,
+        ),
+        (
+            1603,
+            last_grid,
+            collaboration_protocol::central_mail::TimingRequirement::WithinSevenDays,
+        ),
+    ] {
+        let refused = fixture
+            .host
+            .request_central(
+                &new_caller,
+                CentralMailRequest {
+                    request_id: id(number),
+                    operation: wake(session(&fixture.caller), due),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            refused,
+            Result::Refused(Refusal::TimingViolation {
+                field: "dueAt".to_owned(),
+                requirement
+            })
+        );
+        assert_eq!(
+            runtime
+                .statement_host()
+                .read(counts_query())
+                .await
+                .unwrap()
+                .rows,
+            before
+        );
+    }
+    let last =
+        router_clock::RuntimeClock::utc_now(fixture.clock.as_ref()) + chrono::Duration::days(7);
     let result = fixture
         .host
         .request_central(
@@ -116,9 +196,8 @@ async fn unconvertible_stored_wake_due_fails_closed_on_actual_alarm() {
         .central(&fixture.caller.organization_id)
         .await
         .unwrap();
-    let due =
-        chrono::DateTime::from_timestamp_millis(collaboration_central_core::MAX_ALARM_UNIX_MILLIS)
-            .unwrap();
+    let due = router_clock::RuntimeClock::utc_now(fixture.clock.as_ref())
+        + chrono::Duration::seconds(300);
     let result = fixture
         .host
         .request_central(

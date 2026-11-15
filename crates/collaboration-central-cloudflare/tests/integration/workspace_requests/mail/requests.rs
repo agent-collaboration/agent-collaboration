@@ -33,7 +33,7 @@ fn send(to: m::SessionAddress, body: &str) -> Operation {
 
 #[tokio::test]
 async fn direct_mail_replays_expires_and_routes_to_both_machines() {
-    let fixture = Fixture::new().await;
+    let mut fixture = Fixture::new().await;
     let first = session(&fixture.caller);
     let operation = send(first.clone(), "one");
     let answer = request(&fixture, &fixture.caller, 1000, operation.clone()).await;
@@ -191,6 +191,7 @@ async fn direct_mail_replays_expires_and_routes_to_both_machines() {
             ]
         ]
     );
+    super::timing_contract::exercise_timing_contract(&mut fixture).await;
     fixture.host.close().await;
 }
 

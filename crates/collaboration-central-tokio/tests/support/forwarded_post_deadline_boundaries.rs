@@ -18,17 +18,14 @@ pub(super) async fn exact_boundary<Control, ControlFuture>(
     sender: &mut WebSocket,
     holder: &mut WebSocket,
     database: DatabaseId,
+    origin: RegistryTime,
     mut control: Control,
 ) -> ConformanceResult<()>
 where
     Control: FnMut(RuntimeControl) -> ControlFuture,
     ControlFuture: Future<Output = ConformanceResult<RuntimeFaultObservation>>,
 {
-    let started = SystemTime::now();
-    control(RuntimeControl::SetTime {
-        now: RegistryTime(started.into()),
-    })
-    .await?;
+    let started: SystemTime = origin.0.into();
     let mut outstanding = Vec::new();
     for _ in 0..16 {
         outstanding.push((post(sender, database).await?, holder_frame(holder).await?));

@@ -44,7 +44,7 @@ async fn equal_wakes_fire_once_and_cancelled_or_missing_wakes_do_not_fire() {
         .await
         .unwrap();
     let now = fixture.clock.utc_now();
-    let due = now + chrono::Duration::seconds(60);
+    let due = now + chrono::Duration::seconds(300);
     let target = session(&fixture.caller);
     let mut ids = Vec::new();
     for number in 1100..1103 {
@@ -188,16 +188,16 @@ async fn native_driver_fires_after_manual_clock_advance() {
         .central(&fixture.caller.organization_id)
         .await
         .unwrap();
-    let due = fixture.clock.utc_now() + chrono::Duration::seconds(60);
+    let due = fixture.clock.utc_now() + chrono::Duration::seconds(300);
     let mut held = runtime
         .pause_points()
         .hold_central(collaboration_central_core::PausePoint::AfterTimerCommit);
     let id = wake_id(request(&fixture, 1120, wake(session(&fixture.caller), due)).await);
     fixture
         .clock
-        .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(60)))
+        .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(300)))
         .await;
-    fixture.clock.advance(Duration::from_secs(60)).unwrap();
+    fixture.clock.advance(Duration::from_secs(300)).unwrap();
     held.until_held().await;
     let rows = runtime.statement_host().read(Statement { sql: "SELECT state, (SELECT COUNT(*) FROM messages WHERE message_kind='wake') FROM wakes WHERE wake_id=?", args: vec![text(id)] }).await.unwrap();
     assert_eq!(
@@ -219,7 +219,7 @@ async fn startup_recomputes_a_committed_wake_whose_publication_was_interrupted()
         .central(&fixture.caller.organization_id)
         .await
         .unwrap();
-    let due = fixture.clock.utc_now() + chrono::Duration::seconds(60);
+    let due = fixture.clock.utc_now() + chrono::Duration::seconds(300);
     let mut publication = runtime.statement_host().hold_alarm_publication();
     let caller = fixture.caller.clone();
     let task_runtime = runtime.clone();
@@ -266,9 +266,9 @@ async fn startup_recomputes_a_committed_wake_whose_publication_was_interrupted()
         .hold_central(collaboration_central_core::PausePoint::AfterTimerCommit);
     fixture
         .clock
-        .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(60)))
+        .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(300)))
         .await;
-    fixture.clock.advance(Duration::from_secs(60)).unwrap();
+    fixture.clock.advance(Duration::from_secs(300)).unwrap();
     held.until_held().await;
     let rows = reopened.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM wakes WHERE state='done'), (SELECT COUNT(*) FROM messages WHERE message_kind='wake')", args: vec![] }).await.unwrap();
     assert_eq!(

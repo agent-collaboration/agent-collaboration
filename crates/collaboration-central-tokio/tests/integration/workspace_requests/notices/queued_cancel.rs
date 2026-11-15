@@ -67,7 +67,7 @@ async fn leaving_cancels_the_fired_collated_notice_and_retains_direct_message() 
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].position, position);
     let notice_id = notice_id.clone();
-    let windows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM notification_windows WHERE recipient_actor=? AND thread_id=?), (SELECT COUNT(*) FROM notification_window_items WHERE change_id=?)", args: vec![text(&recipient), text(&thread), text(&items[0].change_id)] }).await.unwrap();
+    let windows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM notification_windows WHERE recipient_actor=? AND window_id IN (SELECT window_id FROM notification_window_items WHERE thread_id=?)), (SELECT COUNT(*) FROM notification_window_items WHERE change_id=?)", args: vec![text(&recipient), text(&thread), text(&items[0].change_id)] }).await.unwrap();
     assert_eq!(
         windows.rows,
         vec![vec![

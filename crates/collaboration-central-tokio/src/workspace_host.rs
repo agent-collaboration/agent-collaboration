@@ -16,7 +16,7 @@ use collaboration_central_core::{
     organization_authority::OrganizationProvisioningFailure,
     person_request::PersonRequestInput,
 };
-use collaboration_protocol::central_mail::{CentralMailRequest, CentralMailResult, MailPolicy};
+use collaboration_protocol::central_mail::{CentralMailRequest, CentralMailResult};
 use fleet_identity_protocol::OrganizationId;
 use router_clock::RuntimeClock;
 use runtime_primitives::{Clock, IdSource, SyncTime};
@@ -86,7 +86,6 @@ impl WorkspaceStoreCalls for TokioWorkspaceStores {
 pub struct TokioWorkspaceHost {
     root: PathBuf,
     clock: Arc<dyn RuntimeClock>,
-    mail_policy: MailPolicy,
     sign_in: Option<Arc<NativeSignInTrust>>,
     stores: TokioWorkspaceStores,
     orgs:
@@ -95,14 +94,7 @@ pub struct TokioWorkspaceHost {
 }
 impl TokioWorkspaceHost {
     pub async fn open(root: &Path, clock: Arc<dyn RuntimeClock>) -> Result<Self, StoreFailure> {
-        Self::open_with_mail_policy(root, clock, MailPolicy::default()).await
-    }
-    pub async fn open_with_mail_policy(
-        root: &Path,
-        clock: Arc<dyn RuntimeClock>,
-        mail_policy: MailPolicy,
-    ) -> Result<Self, StoreFailure> {
-        Self::open_configured(root, clock, mail_policy, None).await
+        Self::open_configured(root, clock, None).await
     }
 
     /// Sign-in trust is supplied before reopening any on-disk organization.
@@ -112,13 +104,12 @@ impl TokioWorkspaceHost {
         settings: SignInTrustSettings,
     ) -> Result<Self, StoreFailure> {
         let trust = NativeSignInTrust::new(settings).map_err(|_| StoreFailure::Unavailable)?;
-        Self::open_configured(root, clock, MailPolicy::default(), Some(Arc::new(trust))).await
+        Self::open_configured(root, clock, Some(Arc::new(trust))).await
     }
 
     async fn open_configured(
         root: &Path,
         clock: Arc<dyn RuntimeClock>,
-        mail_policy: MailPolicy,
         sign_in: Option<Arc<NativeSignInTrust>>,
     ) -> Result<Self, StoreFailure> {
         tokio::fs::create_dir_all(root.join("central"))
@@ -127,7 +118,6 @@ impl TokioWorkspaceHost {
         let host = Self {
             root: root.to_owned(),
             clock,
-            mail_policy,
             sign_in,
             stores: TokioWorkspaceStores {
                 root: root.join("workspace-stores"),
@@ -181,8 +171,7 @@ impl TokioWorkspaceHost {
             self.stores.clone(),
             clock.clone(),
             ids,
-        )
-        .with_mail_policy(self.mail_policy);
+        );
         let runtime = match &self.sign_in {
             Some(trust) => match trust.for_organization(organization.clone(), clock) {
                 Ok(check) => runtime.with_sign_in_verification(check),

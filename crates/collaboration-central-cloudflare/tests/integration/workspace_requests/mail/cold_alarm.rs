@@ -11,7 +11,7 @@ use std::sync::atomic::Ordering;
 
 async fn set_due_wake(fixture: &Fixture) {
     let now = fixture.clock.0.load(Ordering::SeqCst);
-    let due = chrono::DateTime::from_timestamp_millis(now + 60_000).unwrap();
+    let due = chrono::DateTime::from_timestamp_millis(now + 300_000).unwrap();
     let result = fixture
         .host
         .request_central(

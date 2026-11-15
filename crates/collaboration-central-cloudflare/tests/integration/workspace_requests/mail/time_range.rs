@@ -46,7 +46,7 @@ async fn platform_alarm_accepts_exact_boundary_and_rejects_later_milliseconds() 
 }
 
 #[tokio::test]
-async fn out_of_range_request_writes_nothing_and_last_supported_second_is_accepted() {
+async fn out_of_range_grid_and_horizon_refusals_write_nothing_and_seven_days_is_accepted() {
     let fixture = Fixture::new().await;
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
     let counts_query = || Statement {
@@ -93,9 +93,56 @@ async fn out_of_range_request_writes_nothing_and_last_supported_second_is_accept
             .rows,
         before
     );
-    let last =
+    let ceiling =
         chrono::DateTime::from_timestamp_millis(collaboration_central_core::MAX_ALARM_UNIX_MILLIS)
             .unwrap();
+    let last_grid =
+        chrono::DateTime::from_timestamp(ceiling.timestamp().div_euclid(300) * 300, 0).unwrap();
+    for (number, due, requirement) in [
+        (
+            1602,
+            ceiling,
+            collaboration_protocol::central_mail::TimingRequirement::FiveMinuteGrid,
+        ),
+        (
+            1603,
+            last_grid,
+            collaboration_protocol::central_mail::TimingRequirement::WithinSevenDays,
+        ),
+    ] {
+        let refused = fixture
+            .host
+            .request_central(
+                &new_caller,
+                CentralMailRequest {
+                    request_id: id(number),
+                    operation: wake(session(&fixture.caller), due),
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            refused,
+            Result::Refused(Refusal::TimingViolation {
+                field: "dueAt".to_owned(),
+                requirement
+            })
+        );
+        assert_eq!(
+            runtime
+                .statement_host()
+                .read(counts_query())
+                .await
+                .unwrap()
+                .rows,
+            before
+        );
+    }
+    let last = chrono::DateTime::from_timestamp_millis(
+        fixture.clock.0.load(std::sync::atomic::Ordering::SeqCst),
+    )
+    .unwrap()
+        + chrono::Duration::days(7);
     let result = fixture
         .host
         .request_central(
@@ -138,9 +185,11 @@ async fn out_of_range_request_writes_nothing_and_last_supported_second_is_accept
 async fn unconvertible_stored_wake_due_fails_closed_on_actual_alarm() {
     let fixture = Fixture::new().await;
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
-    let due =
-        chrono::DateTime::from_timestamp_millis(collaboration_central_core::MAX_ALARM_UNIX_MILLIS)
-            .unwrap();
+    let due = chrono::DateTime::from_timestamp_millis(
+        fixture.clock.0.load(std::sync::atomic::Ordering::SeqCst),
+    )
+    .unwrap()
+        + chrono::Duration::seconds(300);
     let result = fixture
         .host
         .request_central(

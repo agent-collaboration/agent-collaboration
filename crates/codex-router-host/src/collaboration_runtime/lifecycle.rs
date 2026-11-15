@@ -45,6 +45,10 @@ impl CollaborationRuntime {
         {
             failure.get_or_insert(error);
         }
+        // Cancel before draining the publisher: a delivery cut off here ends outcome-unknown, which reconcile handles.
+        if let Some(service) = &self.subscription_delivery {
+            service.cancel();
+        }
         if let Some(publisher) = self.notification_publisher.take() {
             publisher.shutdown().await;
         }
