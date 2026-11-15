@@ -204,8 +204,11 @@ async fn injected_clock_reaches_a_never_named_org_and_a_live_org_renewal_then_ex
     initialize_clock(&f, B).await;
     assert_eq!(
         f.post(DIGEST, &json!({"organizationId":ORG})).await,
-        (503, Value::Null),
-        "the live org refuses the stored stamp exactly at exp"
+        (
+            200,
+            json!({"digest":signed::digest(&renewal),"expiresAt":expiry,"signingKeyId":"stamp-a"})
+        ),
+        "the live org returns verified stored facts exactly at exp without granting authority"
     );
     assert_eq!(
         f.post(DIGEST, &json!({"organizationId":B})).await.0,
@@ -240,8 +243,11 @@ async fn cold_expired_valid_stamp_refuses_and_an_unaffected_organization_stays_r
     cold_reset(&f, B).await;
     assert_eq!(
         f.post(DIGEST, &json!({"organizationId":ORG})).await,
-        (503, Value::Null),
-        "a valid stored stamp observed cold at exp is refused"
+        (
+            200,
+            json!({"digest":signed::digest(&short),"expiresAt":NOW_SECONDS+2,"signingKeyId":"stamp-a"})
+        ),
+        "a valid stored stamp observed cold at exp still returns facts"
     );
     assert_eq!(
         f.post(DIGEST, &json!({"organizationId":B})).await.0,

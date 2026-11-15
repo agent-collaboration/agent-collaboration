@@ -6,7 +6,7 @@ use super::refusal::PersonRequestRefusal;
 use fleet_identity_protocol::OrganizationId;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 /// The stable operation identity, chosen once by the caller and kept on every
 /// retry. Central's request log retains its committed outcome.
@@ -43,6 +43,29 @@ impl AdminOperationId {
 
 pub const MAXIMUM_DESCRIPTION_BYTES: usize = 2048;
 pub const MAXIMUM_RECORD_PAGE: u16 = 100;
+
+pub(crate) fn description_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+    schemars::json_schema!({
+        "type":"string",
+        "maxLength":MAXIMUM_DESCRIPTION_BYTES,
+        "x-maxUtf8Bytes":MAXIMUM_DESCRIPTION_BYTES
+    })
+}
+
+pub(crate) fn deserialize_description<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: TryFrom<String>,
+    T::Error: std::fmt::Display,
+{
+    let description = String::deserialize(deserializer)?;
+    if description.len() > MAXIMUM_DESCRIPTION_BYTES {
+        return Err(serde::de::Error::custom(
+            "description exceeds 2048 UTF-8 bytes",
+        ));
+    }
+    T::try_from(description).map_err(serde::de::Error::custom)
+}
 
 /// A workspace name exactly as the Fleet stores it: the Fleet's own
 /// `ResourceName` rules, but a name that would be trimmed is refused rather
@@ -125,6 +148,8 @@ pub struct CreateWorkspaceRequest {
     pub organization_id: OrganizationId,
     pub operation_id: AdminOperationId,
     pub name: WorkspaceName,
+    #[serde(deserialize_with = "deserialize_description")]
+    #[schemars(schema_with = "description_schema")]
     pub description: String,
 }
 
@@ -165,13 +190,6 @@ impl AdminRoute {
             Self::ReadChangeRecords => "/organization-admin/v1/change-records",
         }
     }
-    const fn operation(self) -> &'static str {
-        match self {
-            Self::CreateWorkspace => "CreateWorkspace",
-            Self::WorkspaceLookup => "WorkspaceLookup",
-            Self::ReadChangeRecords => "ReadChangeRecords",
-        }
-    }
     /// The permission the sign-in service's policy grants for this route.
     #[must_use]
     pub const fn permission(self) -> &'static str {
@@ -195,6 +213,90 @@ pub enum AdminOperation {
     CreateWorkspace(CreateWorkspaceRequest),
     WorkspaceLookup(WorkspaceLookupRequest),
     ReadChangeRecords(ReadChangeRecordsRequest),
+}
+
+/// The version-one T06 object whose canonical bytes a person's proof hashes.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(transparent)]
+pub struct OrganizationAdminIntent(OrganizationAdminIntentWire);
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(
+    tag = "operation",
+    rename_all_fields = "camelCase",
+    deny_unknown_fields
+)]
+enum OrganizationAdminIntentWire {
+    CreateWorkspace {
+        v: IntentVersionOne,
+        organization: OrganizationId,
+        target: OrganizationId,
+        operation_id: AdminOperationId,
+        params: CreateWorkspaceParams,
+    },
+    WorkspaceLookup {
+        v: IntentVersionOne,
+        organization: OrganizationId,
+        target: message_board::WorkspaceId,
+        operation_id: (),
+        params: WorkspaceLookupParams,
+    },
+    ReadChangeRecords {
+        v: IntentVersionOne,
+        organization: OrganizationId,
+        target: OrganizationId,
+        operation_id: (),
+        params: ReadChangeRecordsParams,
+    },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "u8", into = "u8")]
+struct IntentVersionOne;
+
+impl TryFrom<u8> for IntentVersionOne {
+    type Error = PersonRequestRefusal;
+    fn try_from(version: u8) -> Result<Self, Self::Error> {
+        if version == 1 {
+            Ok(Self)
+        } else {
+            Err(PersonRequestRefusal::OperationBody)
+        }
+    }
+}
+impl From<IntentVersionOne> for u8 {
+    fn from(_: IntentVersionOne) -> Self {
+        1
+    }
+}
+impl JsonSchema for IntentVersionOne {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "IntentVersionOne".into()
+    }
+    fn json_schema(_: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({"type":"integer","const":1})
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CreateWorkspaceParams {
+    name: WorkspaceName,
+    #[serde(deserialize_with = "deserialize_description")]
+    #[schemars(schema_with = "description_schema")]
+    description: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+struct WorkspaceLookupParams {}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ReadChangeRecordsParams {
+    #[schemars(with = "Option<String>", extend("format" = "uuid"))]
+    after: Option<durable_steps::Uuid>,
+    limit: RecordPageLimit,
 }
 
 impl AdminOperation {
@@ -261,32 +363,44 @@ impl AdminOperation {
 
     /// The closed intent object; `params` holds every field that changes the effect.
     #[must_use]
-    pub fn intent(&self) -> Value {
-        let organization = self.organization_id().as_str();
-        let (target, params) = match self {
-            Self::CreateWorkspace(request) => (
-                json!(organization),
-                json!({"name":request.name.as_str(),"description":request.description}),
-            ),
-            Self::WorkspaceLookup(request) => (json!(request.workspace_id.as_str()), json!({})),
-            Self::ReadChangeRecords(request) => (
-                json!(organization),
-                json!({"after":request.after.map(|id| id.to_string()),"limit":request.limit.get()}),
-            ),
-        };
-        json!({
-            "v": 1,
-            "operation": self.route().operation(),
-            "organization": organization,
-            "target": target,
-            "operationId": self.operation_id().map(AdminOperationId::as_str),
-            "params": params,
+    pub fn intent(&self) -> OrganizationAdminIntent {
+        let organization = self.organization_id().clone();
+        OrganizationAdminIntent(match self {
+            Self::CreateWorkspace(request) => OrganizationAdminIntentWire::CreateWorkspace {
+                v: IntentVersionOne,
+                organization: organization.clone(),
+                target: organization,
+                operation_id: request.operation_id.clone(),
+                params: CreateWorkspaceParams {
+                    name: request.name.clone(),
+                    description: request.description.clone(),
+                },
+            },
+            Self::WorkspaceLookup(request) => OrganizationAdminIntentWire::WorkspaceLookup {
+                v: IntentVersionOne,
+                organization,
+                target: request.workspace_id.clone(),
+                operation_id: (),
+                params: WorkspaceLookupParams {},
+            },
+            Self::ReadChangeRecords(request) => OrganizationAdminIntentWire::ReadChangeRecords {
+                v: IntentVersionOne,
+                organization: organization.clone(),
+                target: organization,
+                operation_id: (),
+                params: ReadChangeRecordsParams {
+                    after: request.after,
+                    limit: request.limit,
+                },
+            },
         })
     }
 
     /// JCS(intent): the exact bytes the proof's `intent` claim hashes.
     pub fn canonical_intent(&self) -> Result<String, PersonRequestRefusal> {
-        canonical_json(&self.intent())
+        let intent =
+            serde_json::to_value(self.intent()).map_err(|_| PersonRequestRefusal::OperationBody)?;
+        canonical_json(&intent)
     }
 
     /// base64url(SHA-256(JCS(intent))), the proof's `intent` claim.

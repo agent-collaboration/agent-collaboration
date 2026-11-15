@@ -1,7 +1,7 @@
 //! An organization's injected checks against the sign-in service's keys: its
 //! organization stamp, and a person's DPoP-bound admin request.
 use super::{
-    FleetOrganizationStatementRefusal, FleetOrganizationStatementVerifier,
+    FleetOrganizationStatementRefusal, FleetOrganizationStatementVerifier, StoredStatementFacts,
     VerifiedFleetOrganizationStatement,
 };
 use crate::person_request::{
@@ -18,6 +18,13 @@ pub trait SignInVerification: Send + Sync + 'static {
         &'a self,
         statement: &'a str,
     ) -> BoxFuture<'a, Result<VerifiedFleetOrganizationStatement, FleetOrganizationStatementRefusal>>;
+
+    /// Verify the stored signature and profile for a facts-only digest read.
+    /// This skips both current-time bounds and must never grant Valid standing.
+    fn verify_stored_statement_facts<'a>(
+        &'a self,
+        statement: &'a str,
+    ) -> BoxFuture<'a, Result<StoredStatementFacts, FleetOrganizationStatementRefusal>>;
 
     fn verify_person_request<'a>(
         &'a self,
@@ -51,6 +58,13 @@ where
     ) -> BoxFuture<'a, Result<VerifiedFleetOrganizationStatement, FleetOrganizationStatementRefusal>>
     {
         Box::pin(self.statements.verify(statement))
+    }
+
+    fn verify_stored_statement_facts<'a>(
+        &'a self,
+        statement: &'a str,
+    ) -> BoxFuture<'a, Result<StoredStatementFacts, FleetOrganizationStatementRefusal>> {
+        Box::pin(self.statements.verify_stored_statement_facts(statement))
     }
 
     fn verify_person_request<'a>(

@@ -550,14 +550,14 @@ test("private link cannot silently create its own central namespace", async (): 
 test("optional clock binding reads one live cell without restarting durable state", async (): Promise<void> => {
   for (const privateTopology of [false, true]) {
     // Arrange: the Node clock and physical-org registry are outside the Worker.
-    let milliseconds: number | null = null;
+    let milliseconds = 0;
     const organizations: string[] = [];
     const first = "019f0000-0000-7000-8000-00000000d201";
     const second = "019f0000-0000-7000-8000-00000000d202";
     const controlled = await WorkerdStorage.start(
       publicBundle,
       privateTopology ? { linkBundle, jwks: { sourceUrl, fixtureUrl } } : undefined,
-      (organization: string): number | null => {
+      (organization: string): number => {
         organizations.push(organization);
         return milliseconds;
       },
@@ -578,7 +578,7 @@ test("optional clock binding reads one live cell without restarting durable stat
         proof: null,
       });
       // Act: use the same Worker, then name an org only after time has moved.
-      assert.deepEqual(await readClock(first), { milliseconds: null });
+      assert.deepEqual(await readClock(first), { milliseconds: 0 });
       milliseconds = 1_900_000_000_000;
       assert.deepEqual(await readClock(first), { milliseconds });
       assert.deepEqual(await readClock(second), { milliseconds });

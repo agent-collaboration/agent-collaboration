@@ -259,6 +259,25 @@ async fn idle_expiry_treats_same_content_as_new_for_both_ledgers() {
         name: name("Same central content"),
     };
     let original_central = call(&f.host, &f.caller, None, 361, central.clone()).await;
+    assert_eq!(
+        call(&f.host, &f.caller, None, 361, central.clone()).await,
+        original_central,
+        "unexpired operation replays its original success"
+    );
+    let runtime = f.host.central(&f.caller.organization_id).await;
+    let directory = runtime
+        .statement_host()
+        .read(Statement {
+            sql: "SELECT * FROM workspaces ORDER BY workspace_id",
+            args: vec![],
+        })
+        .await
+        .unwrap();
+    let ledger_query = || Statement {
+        sql: "SELECT answer,created_at FROM request_log WHERE request_id=?",
+        args: vec![text(id::<m::RequestId>(361))],
+    };
+    let first_ledger = runtime.statement_host().read(ledger_query()).await.unwrap();
     f.clock.0.fetch_add(86_400_001, Ordering::SeqCst);
     let next = f.call(360, area).await;
     assert!(matches!(
@@ -266,11 +285,47 @@ async fn idle_expiry_treats_same_content_as_new_for_both_ledgers() {
         m::WorkspaceResult::Done(m::WorkspaceAnswer::Created { .. })
     ));
     assert_ne!(original, next);
-    let next_central = call(&f.host, &f.caller, None, 361, central).await;
-    assert!(matches!(
-        next_central.result,
-        m::WorkspaceResult::Done(m::WorkspaceAnswer::WorkspaceCreated { .. })
-    ));
+    let next_central = call(&f.host, &f.caller, None, 361, central.clone()).await;
+    let expected = m::WorkspaceResult::Refused(m::RefusalReason::WorkspaceNameInUse {
+        name: name("Same central content"),
+    });
+    assert_eq!(
+        next_central.result, expected,
+        "the expired operation is decided afresh against current directory uniqueness"
+    );
     assert_ne!(original_central, next_central);
+    assert_eq!(
+        runtime
+            .statement_host()
+            .read(Statement {
+                sql: "SELECT * FROM workspaces ORDER BY workspace_id",
+                args: vec![]
+            })
+            .await
+            .unwrap(),
+        directory,
+        "fresh name refusal must not create a second directory row"
+    );
+    let decided = runtime.statement_host().read(ledger_query()).await.unwrap();
+    assert_eq!(decided.rows.len(), 1);
+    assert_eq!(
+        decided.rows[0][0],
+        SqlValue::Text(serde_json::to_string(&expected).unwrap()),
+        "the new refusal replaces the expired answer in the same ledger"
+    );
+    assert_ne!(
+        decided.rows[0][1], first_ledger.rows[0][1],
+        "a cached answer would retain its old timestamp"
+    );
+    assert_eq!(
+        call(&f.host, &f.caller, None, 361, central).await,
+        next_central,
+        "the newly retained refusal replays exactly"
+    );
+    assert_eq!(
+        runtime.statement_host().read(ledger_query()).await.unwrap(),
+        decided,
+        "refusal replay must not rewrite its decision timestamp"
+    );
     f.host.close().await;
 }

@@ -1,5 +1,6 @@
 //! Closed fixture commands and answers; observations leave only as returned IPC.
 use super::launcher_failure::{LauncherFailure, LauncherResult};
+use collaboration_central_core::MAX_ALARM_UNIX_MILLIS;
 use collaboration_central_core::signin_test_observation::SignInObservation;
 use collaboration_central_tokio::TokioWorkspaceHost;
 use fleet_identity_protocol::OrganizationId;
@@ -58,6 +59,11 @@ pub(super) async fn answer(
     };
     match command {
         LauncherCommand::SetTime { set_time_ms } => {
+            if !(0..=MAX_ALARM_UNIX_MILLIS).contains(&set_time_ms) {
+                return LauncherAnswer::Refused {
+                    error: "launcher time is outside the supported range",
+                };
+            }
             let moved = if set_time_ms >= clock.now().unix_millis() {
                 clock
                     .advance_to(SyncTime::from_unix_millis(set_time_ms))
