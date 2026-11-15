@@ -42,6 +42,8 @@ pub struct AcpConversation {
     load_supported: bool,
     failed: bool,
     pub(crate) permission_differences: Vec<collaboration_protocol::PermissionDifference>,
+    /// The actual permission mode a created Codex session reported (R3).
+    pub(crate) permission_mode: Option<NativePermissionMode>,
 }
 impl AcpConversation {
     pub async fn create_and_prompt(
@@ -281,6 +283,7 @@ impl AcpConversation {
             load_supported: false,
             failed: false,
             permission_differences: Vec::new(),
+            permission_mode: None,
         };
         let initialize = json!({"protocolVersion":1,"clientCapabilities":{},"clientInfo":{"name":"agent-collaboration","version":env!("CARGO_PKG_VERSION")}});
         client
@@ -698,3 +701,13 @@ mod tests;
 
 #[path = "acp_session_setup.rs"]
 mod acp_session_setup;
+
+/// `_meta.codexRouter.permissionMode` on a Codex create result: the mode the
+/// session actually runs in, read back from native, and why it is not auto.
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct NativePermissionMode {
+    pub(crate) actual: String,
+    #[serde(default)]
+    pub(crate) reason: Option<collaboration_protocol::ProviderModeReason>,
+}

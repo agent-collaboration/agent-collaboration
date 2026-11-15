@@ -94,3 +94,97 @@ async fn create_and_load_return_permission_differences_from_acp_setup() {
         api.stop().await.unwrap();
     }
 }
+
+/// Oracle: R3 for Codex — start reports the requested mode, the mode native
+/// read back and, when they differ, why.
+#[tokio::test]
+async fn codex_create_reports_requested_and_actual_permission_mode() {
+    for (requested, reported, expected_mode, expected_reason) in [
+        (None, json!({"actual":"auto"}), "auto", Value::Null),
+        (Some("auto"), json!({"actual":"auto"}), "auto", Value::Null),
+        (
+            Some("auto"),
+            json!({"actual":"workspace-write","reason":"autoNotApplied"}),
+            "workspace-write",
+            json!("autoNotApplied"),
+        ),
+    ] {
+        // Arrange: discovery and ACP sockets are real; only the upstream peer is scripted.
+        let directory = tempfile::tempdir().unwrap();
+        let root = directory.path().join("service");
+        std::fs::create_dir(&root).unwrap();
+        std::fs::set_permissions(&root, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let service_id = "00000000-0000-4000-8000-000000000001";
+        let endpoint = json!({"serviceId":service_id,"endpointId":"codex-local"});
+        let actor = json!({"endpoint":endpoint,"sessionId":"creator"});
+        let identity = ApplicationFixture::new(service_id, service_id).unwrap().with_endpoints(vec![serde_json::from_value(json!({
+            "endpoint":endpoint,"label":"ACP setup fixture","availability":{"state":"available","observedAt":"2026-09-06T00:00:00Z"},
+            "channels":[{"kind":"acp","transport":"unixJsonLines","path":"acp.sock","schemaDigest":format!("sha256:{}",collaboration_protocol::ACP_SCHEMA_DIGEST)}]
+        })).unwrap()]).unwrap();
+        let api = ServedCollaborationApi::start(&root, (identity).build()).unwrap();
+        let listener = tokio::net::UnixListener::bind(root.join("acp.sock")).unwrap();
+        let peer_reported = reported.clone();
+        let peer = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let (read, mut write) = stream.into_split();
+            let mut lines = BufReader::new(read).lines();
+            let initialized: Value =
+                serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+            write.write_all(format!("{}\n", json!({"jsonrpc":"2.0","id":initialized["id"],"result":{"protocolVersion":1,"agentCapabilities":{"loadSession":true},"authMethods":[]}})).as_bytes()).await.unwrap();
+            let request: Value =
+                serde_json::from_str(&lines.next_line().await.unwrap().unwrap()).unwrap();
+            assert_eq!(request["method"], "session/new");
+            let result = json!({"sessionId":"created-thread","_meta":{"codexRouter":{"permissionMode":peer_reported}}});
+            write
+                .write_all(
+                    format!(
+                        "{}\n",
+                        json!({"jsonrpc":"2.0","id":request["id"],"result":result})
+                    )
+                    .as_bytes(),
+                )
+                .await
+                .unwrap();
+        });
+        let acp = AcpConversation::connect(
+            &CollaborationAccess::api(&root),
+            "codex-local".to_owned().try_into().unwrap(),
+        )
+        .await
+        .unwrap();
+        let client = ConversationClient::CodexAcp(Box::new(acp));
+        let mut input = json!({
+            "operationId":"01900000-0000-7000-8000-000000000001","endpoint":endpoint,"workingDirectory":root,
+            "access":"workspace-write","createdBy":actor,"approver":actor,"model":"gpt-6-luna","effort":"low"
+        });
+        if let Some(requested) = requested {
+            input["mode"] = json!(requested);
+        }
+        let input: ConversationCreateInput = serde_json::from_value(input).unwrap();
+
+        // Act
+        let result =
+            serde_json::to_value(client.create(input, Duration::from_secs(2)).await.unwrap())
+                .unwrap();
+
+        // Assert
+        let settings = &result["effectiveSettings"];
+        assert_eq!(settings["mode"], expected_mode, "{result}");
+        assert_eq!(
+            settings
+                .get("requestedMode")
+                .cloned()
+                .unwrap_or(Value::Null),
+            requested.map_or(Value::Null, |mode| json!(mode)),
+            "{result}"
+        );
+        assert_eq!(
+            settings.get("modeReason").cloned().unwrap_or(Value::Null),
+            expected_reason,
+            "{result}"
+        );
+        assert_eq!(settings["requestedPolicy"]["access"], "workspace-write");
+        peer.await.unwrap();
+        api.stop().await.unwrap();
+    }
+}

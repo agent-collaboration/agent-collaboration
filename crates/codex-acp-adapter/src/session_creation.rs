@@ -47,6 +47,7 @@ pub enum SessionSetupError {
     #[error("Router host location {location} is unavailable for session grants")]
     HostLocationsUnavailable { location: String },
 }
+mod codex_permission_mode;
 mod recorded_session_resume;
 mod router_permission_profile;
 pub use recorded_session_resume::RecordedSessionResume;
@@ -470,12 +471,26 @@ impl AcpSessionBinding {
         Value::Object(self.setup_fields())
     }
     fn setup_fields(&self) -> serde_json::Map<String, Value> {
-        let mut fields = serde_json::Map::new();
+        let mut router = serde_json::Map::new();
         if !self.permission_differences.is_empty() {
-            fields.insert(
-                "_meta".into(),
-                json!({"codexRouter":{"permissionDifferences":self.permission_differences}}),
+            router.insert(
+                "permissionDifferences".into(),
+                json!(self.permission_differences),
             );
+        }
+        if let Some(route) = &self.access_route {
+            router.insert(
+                "permissionMode".into(),
+                json!(codex_permission_mode::codex_permission_mode(
+                    route.access,
+                    &self.settings_observation,
+                    &self.permission_differences,
+                )),
+            );
+        }
+        let mut fields = serde_json::Map::new();
+        if !router.is_empty() {
+            fields.insert("_meta".into(), json!({"codexRouter": router}));
         }
         fields
     }
