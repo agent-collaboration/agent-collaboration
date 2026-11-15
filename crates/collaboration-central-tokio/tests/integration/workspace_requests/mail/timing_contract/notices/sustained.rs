@@ -152,7 +152,7 @@ pub(super) async fn exercise_continued_activity(
                 assert!(ids.insert(message.message_id.clone()));
                 assert_eq!(
                     message.state,
-                    collaboration_protocol::central_mail::MessageState::Queued
+                    workspace_model::central_mail::MessageState::Queued
                 );
                 let MessageBody::Notice { items } = &message.body else {
                     panic!("notice")

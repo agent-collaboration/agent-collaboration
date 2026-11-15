@@ -4,12 +4,12 @@ use central_storage::{
     StoreFailure,
 };
 use collaboration_central_tokio::{ObjectStorage, TokioWorkspaceHost};
-use collaboration_protocol::central_mail::{
+use router_clock::RuntimeClock;
+use std::sync::Arc;
+use workspace_model::central_mail::{
     CentralMailAnswer as Answer, CentralMailOperation as Operation, CentralMailRequest,
     CentralMailResult as Result,
 };
-use router_clock::RuntimeClock;
-use std::sync::Arc;
 
 async fn set_wake(
     fixture: &Fixture,

@@ -3,10 +3,10 @@ use central_storage::StoreFailure;
 use collaboration_central_core::WorkspaceCaller;
 use collaboration_central_core::identity_contract::ProvisionOrganization;
 use collaboration_central_core::organization_authority::OrganizationProvisioningFailure;
-use collaboration_protocol::central_mail::{
+use router_clock::RuntimeClock;
+use workspace_model::central_mail::{
     CentralMailAnswer, CentralMailOperation, CentralMailRequest, CentralMailResult,
 };
-use router_clock::RuntimeClock;
 #[expect(
     clippy::panic_in_result_fn,
     reason = "A cancelled real commit followed by a failed alarm reconciliation must preserve retry classification and exact stored effects."

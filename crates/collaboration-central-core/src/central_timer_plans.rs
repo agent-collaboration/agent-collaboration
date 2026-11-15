@@ -8,8 +8,8 @@ use crate::{
 };
 use agent_automation::TimingRule;
 use central_storage::{GuardedStatement, ReadOutcome, Statement, StoreFailure};
-use collaboration_protocol::central_mail as mail;
 use workspace_ids::{AutomationId, WakeId};
+use workspace_model::central_mail as mail;
 use workspace_model::{PostText, SessionAddress, Timestamp};
 pub(crate) struct WakeRow {
     pub id: WakeId,

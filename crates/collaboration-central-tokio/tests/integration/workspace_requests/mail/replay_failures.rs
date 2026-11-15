@@ -3,7 +3,7 @@ use central_storage::{
     AlarmUpdate, BatchOutcome, CorruptReason, GuardedStatement, RowExpectation, StatementBatch,
     StoreFailure,
 };
-use collaboration_protocol::central_mail::{
+use workspace_model::central_mail::{
     CentralMailAnswer as Answer, CentralMailOperation as Operation, CentralMailRequest,
     CentralMailResult as Result,
 };

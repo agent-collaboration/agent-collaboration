@@ -3,7 +3,6 @@ use central_storage::{
     BatchOutcome, ReadOutcome, Statement, StatementBatch, StoreCall, StoreFailure, StoreReply,
 };
 use collaboration_central_core::{AlarmResult, DrainResult, WorkspaceCaller};
-use collaboration_protocol::central_mail::{CentralMailRequest, CentralMailResult};
 use fleet_identity_protocol::OrganizationId;
 use runtime_primitives::Clock;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -17,6 +16,7 @@ use std::{
         atomic::{AtomicUsize, Ordering},
     },
 };
+use workspace_model::central_mail::{CentralMailRequest, CentralMailResult};
 use workspace_model::{RequestId, WorkspaceId, WorkspaceReply, WorkspaceRequest};
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -458,7 +458,7 @@ impl RemoteRuntime {
     pub async fn queued_for_session(
         &self,
         session: &workspace_model::SessionAddress,
-    ) -> Result<collaboration_protocol::central_mail::SessionQueue, StoreFailure> {
+    ) -> Result<workspace_model::central_mail::SessionQueue, StoreFailure> {
         self.apply_clock().await;
         self.control("queue", session).await?
     }

@@ -1,10 +1,10 @@
 use super::super::{Statement, support::*};
-use collaboration_protocol::central_mail::{
+use router_clock::{ClockInstant, RuntimeClock};
+use std::time::Duration;
+use workspace_model::central_mail::{
     CentralMailAnswer as Answer, CentralMailOperation as Operation, CentralMailRefusal as Refusal,
     CentralMailRequest, CentralMailResult as Result,
 };
-use router_clock::{ClockInstant, RuntimeClock};
-use std::time::Duration;
 
 async fn request(fixture: &Fixture, number: u32, operation: Operation) -> Result {
     fixture
@@ -146,15 +146,14 @@ async fn equal_wakes_fire_once_and_cancelled_or_missing_wakes_do_not_fire() {
             panic!("invalid wake message: {row:?}")
         };
         assert_eq!(
-            serde_json::from_str::<collaboration_protocol::central_mail::MessageSender>(sender)
-                .unwrap(),
-            collaboration_protocol::central_mail::MessageSender::Central
+            serde_json::from_str::<workspace_model::central_mail::MessageSender>(sender).unwrap(),
+            workspace_model::central_mail::MessageSender::Central
         );
         assert_eq!(
             serde_json::from_str::<workspace_model::SessionAddress>(address).unwrap(),
             target
         );
-        let collaboration_protocol::central_mail::MessageBody::Wake {
+        let workspace_model::central_mail::MessageBody::Wake {
             wake_id,
             text: body,
         } = serde_json::from_str(body).unwrap()

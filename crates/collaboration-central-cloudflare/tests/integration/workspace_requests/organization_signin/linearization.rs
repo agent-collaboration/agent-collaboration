@@ -138,9 +138,9 @@ async fn provisioning_first_stamp_arms_pending_wake_and_actual_alarm_fires_once(
         .host
         .request_central(
             &caller,
-            collaboration_protocol::central_mail::CentralMailRequest {
+            workspace_model::central_mail::CentralMailRequest {
                 request_id: "019f0000-0000-7000-8000-00000000d226".parse().unwrap(),
-                operation: collaboration_protocol::central_mail::CentralMailOperation::SetWake {
+                operation: workspace_model::central_mail::CentralMailOperation::SetWake {
                     target,
                     due_at: due,
                     text: "pending".to_owned().try_into().unwrap(),
@@ -151,8 +151,8 @@ async fn provisioning_first_stamp_arms_pending_wake_and_actual_alarm_fires_once(
         .unwrap();
     assert!(matches!(
         queued,
-        collaboration_protocol::central_mail::CentralMailResult::Done(
-            collaboration_protocol::central_mail::CentralMailAnswer::WakeSet { .. }
+        workspace_model::central_mail::CentralMailResult::Done(
+            workspace_model::central_mail::CentralMailAnswer::WakeSet { .. }
         )
     ));
     let before: Option<i64> = runtime.control("raw-alarm-time", &()).await.unwrap();
