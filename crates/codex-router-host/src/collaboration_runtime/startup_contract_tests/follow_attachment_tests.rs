@@ -38,6 +38,7 @@ async fn host_follow_attachment_allocates_a_notice_and_retains_only_weak_owners(
     Box::pin(route_fixture::post_thread_activity_for_sessions(
         &api,
         [reader.clone(), target(&fixture.runtime, "second-reader")],
+        None,
         registered_route_project::route_project_requests(),
     ))
     .await;
