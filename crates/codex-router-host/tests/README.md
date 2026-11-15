@@ -16,7 +16,8 @@ process asking to write it gets the store's lock error, and that a restart keeps
 the board cursor key the composition installed.
 `runtime_shutdown_stalled_provider_load` starts an enrolled Host whose Cursor
 provider never answers `session/load`, lets a Wake follow batch reach that load,
-and requires Host shutdown to return anyway.
+and requires Host shutdown to return anyway. After a provider-less restart, the
+reader's subscription view must show that cut-off delivery as outcome-unknown.
 Runtime replacement cases hold a real status probe across an app-server schema
 change and require one Unavailable terminal for each cancelled operator request.
 Library unit tests remain colocated with their implementations.

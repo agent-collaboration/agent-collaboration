@@ -8,10 +8,10 @@ use codex_router_host::{
 use collaboration_client::CollaborationClient;
 use collaboration_protocol::{
     EndpointId, EndpointRef, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
-    SessionId, SessionRef,
+    SessionId, SessionRef, ThreadSubscriptionsRequest,
 };
 use collaboration_runtime::{ProviderOperationStore, ProviderSessionRecord};
-use message_board::WhenIdle;
+use message_board::{SubscriptionDeliveryOutcome, WhenIdle};
 use std::os::unix::fs::PermissionsExt as _;
 use tokio::io::AsyncReadExt as _;
 
@@ -56,17 +56,7 @@ async fn shutdown_completes_while_follow_delivery_waits_on_unanswered_provider_l
     )
     .expect("stalled-load provider fixture");
     let runtime = CollaborationRuntime::start_with_external_providers(
-        CollaborationRuntimeInputs {
-            board_session: Some(central.session_inputs().expect("enrolled board session")),
-            directory: root.path().to_owned(),
-            codex_home: root.path().to_owned(),
-            backend_socket: root.path().join("backend.sock"),
-            mcp_bind: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
-            native_schema: None,
-            peer_registry_directory: None,
-            remote_control_server_name: None,
-            owner_human_id: None,
-        },
+        host_inputs(root.path(), &central),
         vec![ExternalProviderStartup::Launch(
             ExternalProviderLaunchBinding::cursor(provider, Vec::new()).expect("Cursor binding"),
         )],
@@ -113,7 +103,7 @@ async fn shutdown_completes_while_follow_delivery_waits_on_unanswered_provider_l
         .expect("collaboration API client");
     post_thread_activity_for_sessions(
         &client,
-        [unloaded],
+        [unloaded.clone()],
         Some(WhenIdle::Wake),
         route_project_requests(),
     )
@@ -133,7 +123,59 @@ async fn shutdown_completes_while_follow_delivery_waits_on_unanswered_provider_l
     // Act: shut the Host down while that load is still unanswered.
     let shutdown = runtime.shutdown().await;
 
-    // Assert: shutdown returned rather than waiting on the provider.
+    // Assert: shutdown returned rather than waiting on the provider, and the cut-off
+    // delivery is stored outcome-unknown, so reconcile has something to reconcile. The
+    // restarted Host has no providers, so nothing can attempt the load again.
     shutdown.expect("Host shutdown");
+    let restarted = CollaborationRuntime::start_with_external_providers(
+        host_inputs(root.path(), &central),
+        Vec::new(),
+    )
+    .await
+    .expect("Host restart");
+    let client = CollaborationClient::connect(root.path(), "shutdown-stalled-load-reader", "1")
+        .await
+        .expect("restarted collaboration API client");
+    let reader: message_board::Identity =
+        serde_json::from_value(serde_json::json!({"kind": "session", "session": unloaded}))
+            .expect("session reader");
+    let subscriptions = client
+        .thread_subscriptions(ThreadSubscriptionsRequest { actor: reader })
+        .await
+        .expect("reader subscriptions after restart")
+        .subscriptions;
+    drop(client);
+    restarted.shutdown().await.expect("restarted Host shutdown");
     central.shutdown().await.expect("central shutdown");
+    let [subscription] = subscriptions.as_slice() else {
+        panic!("one reader subscription expected: {subscriptions:?}");
+    };
+    assert!(
+        matches!(
+            subscription.last_outcome,
+            Some(SubscriptionDeliveryOutcome::Unknown { .. })
+        ),
+        "cut-off follow delivery must be stored outcome-unknown: {subscription:?}"
+    );
+}
+
+#[expect(
+    clippy::expect_used,
+    reason = "A refused fixed enrollment must fail its test."
+)]
+fn host_inputs(
+    root: &std::path::Path,
+    central: &board_central_test_support::TestCentral,
+) -> CollaborationRuntimeInputs {
+    CollaborationRuntimeInputs {
+        board_session: Some(central.session_inputs().expect("enrolled board session")),
+        directory: root.to_owned(),
+        codex_home: root.to_owned(),
+        backend_socket: root.join("backend.sock"),
+        mcp_bind: std::net::SocketAddr::from(([127, 0, 0, 1], 0)),
+        native_schema: None,
+        peer_registry_directory: None,
+        remote_control_server_name: None,
+        owner_human_id: None,
+    }
 }
