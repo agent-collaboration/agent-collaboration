@@ -9,7 +9,9 @@ cargo nextest run --locked --profile ci -p collaboration-client
 `integration/main.rs` gathers the 19 former external roots. Cases cover typed
 API requests, refusals and lost responses; ACP conversations and native adapter
 settlement; service and repository discovery; subscriptions, permissions and
-nonregular history files. Library unit tests remain colocated.
+nonregular history files. Library unit tests remain colocated. The provider wait
+deadline cases live in `src/provider_conversation_operations_test.rs`: they
+inject one `ManualClock`, which the public `connect` cannot.
 
 `installation_identity_test` sends schema-valid link records over the real
 service socket and checks installation-peer agreement and endpoint presence.
