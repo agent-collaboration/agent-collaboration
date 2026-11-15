@@ -51,29 +51,8 @@ fn thread_idle_seconds(thread: &Value) -> Result<u64, PromptExecutionError> {
     }
 }
 
-/// The approver's pending answer for one native permission request.
-type ApprovalDecisionWait = std::pin::Pin<
-    Box<
-        dyn std::future::Future<
-                Output = Result<crate::BrokeredApprovalOutcome, crate::ApprovalBrokerError>,
-            > + Send,
-    >,
->;
-
-struct InFlightApproval {
-    permission: crate::PendingPermission,
-    /// The ACP-side permission id the decision is answered under.
-    acp_id: String,
-    decision: ApprovalDecisionWait,
-}
-
 pub struct PendingAcpPrompt {
     next_permission: u64,
-    /// A native permission request waiting on its approver. It is held here,
-    /// not inside one `next_event` call, so the frontend detaching (which
-    /// drops that call) leaves the wait running until its decision or timeout
-    /// reaches the native callback (R6).
-    in_flight_approval: Option<InFlightApproval>,
     detached: bool,
     session: AcpSessionBinding,
     settlement: PromptSettlement,
@@ -111,7 +90,6 @@ impl PendingAcpPrompt {
         }
         let mut pending = Self {
             next_permission: 0,
-            in_flight_approval: None,
             detached: false,
             session,
             settlement: PromptSettlement::new(request_id)
@@ -169,10 +147,6 @@ impl PendingAcpPrompt {
         &mut self,
         catalog: &mut AcpSchemaCatalog,
     ) -> Result<Option<PromptEvent>, PromptExecutionError> {
-        // A wait left by a dropped call (the frontend detached) resumes first.
-        if self.in_flight_approval.is_some() {
-            return self.answer_in_flight_approval(catalog).await;
-        }
         let message = match self.session.connection.next_message().await {
             Ok(message) => message,
             Err(_) => {
@@ -231,18 +205,44 @@ impl PendingAcpPrompt {
                     &message,
                 )
                 .map_err(|_| PromptExecutionError::Projection)?;
-                let request = crate::BrokeredApprovalRequest {
-                    thread_id: self.session.session_id.clone(),
-                    generation: self.session.generation.clone(),
-                    request: permission.request().clone(),
+                let request = permission.request().clone();
+                let outcome = self
+                    .session
+                    .approval_broker
+                    .request(crate::BrokeredApprovalRequest {
+                        thread_id: self.session.session_id.clone(),
+                        generation: self.session.generation.clone(),
+                        request,
+                    })
+                    .await
+                    .map_err(|_| PromptExecutionError::Projection)?;
+                let outcome = match outcome {
+                    crate::BrokeredApprovalOutcome::Selected { option_id } => {
+                        json!({"outcome":"selected","optionId":option_id})
+                    }
+                    crate::BrokeredApprovalOutcome::Cancelled => json!({"outcome":"cancelled"}),
                 };
-                let broker = std::sync::Arc::clone(&self.session.approval_broker);
-                self.in_flight_approval = Some(InFlightApproval {
-                    permission,
-                    acp_id: id,
-                    decision: Box::pin(async move { broker.request(request).await }),
-                });
-                return self.answer_in_flight_approval(catalog).await;
+                let response = json!({"jsonrpc":"2.0","id":id,"result":{"outcome":outcome}});
+                let reply = permission
+                    .resolve(catalog, &self.session.generation, &response)
+                    .map_err(|_| PromptExecutionError::Projection)?;
+                let native_id = reply
+                    .native_response
+                    .get("id")
+                    .ok_or(PromptExecutionError::Projection)?
+                    .clone();
+                let result = reply
+                    .native_response
+                    .get("result")
+                    .ok_or(PromptExecutionError::Projection)?
+                    .clone();
+                self.session
+                    .connection
+                    .submit_callback_response(native_id, result)
+                    .await?;
+                return Ok(Some(PromptEvent::NativeNotification(json!({
+                    "kind":"approvalDecisionSubmitted"
+                }))));
             }
             return Ok(Some(PromptEvent::NativeCallback(message)));
         }
@@ -374,59 +374,7 @@ impl PendingAcpPrompt {
         }
         Ok(Some(PromptEvent::NativeNotification(message)))
     }
-
-    /// Waits for the in-flight approval's decision and answers the native
-    /// callback with it. Dropping this future (the frontend detaching) leaves
-    /// the wait in `self`; the next call resumes it.
-    async fn answer_in_flight_approval(
-        &mut self,
-        catalog: &mut AcpSchemaCatalog,
-    ) -> Result<Option<PromptEvent>, PromptExecutionError> {
-        let Some(in_flight) = self.in_flight_approval.as_mut() else {
-            return Ok(None);
-        };
-        let outcome = in_flight.decision.as_mut().await;
-        let Some(InFlightApproval {
-            permission, acp_id, ..
-        }) = self.in_flight_approval.take()
-        else {
-            return Err(PromptExecutionError::Projection);
-        };
-        let id = acp_id;
-        let outcome = outcome.map_err(|_| PromptExecutionError::Projection)?;
-        let outcome = match outcome {
-            crate::BrokeredApprovalOutcome::Selected { option_id } => {
-                json!({"outcome":"selected","optionId":option_id})
-            }
-            crate::BrokeredApprovalOutcome::Cancelled => json!({"outcome":"cancelled"}),
-        };
-        let response = json!({"jsonrpc":"2.0","id":id,"result":{"outcome":outcome}});
-        let reply = permission
-            .resolve(catalog, &self.session.generation, &response)
-            .map_err(|_| PromptExecutionError::Projection)?;
-        let native_id = reply
-            .native_response
-            .get("id")
-            .ok_or(PromptExecutionError::Projection)?
-            .clone();
-        let result = reply
-            .native_response
-            .get("result")
-            .ok_or(PromptExecutionError::Projection)?
-            .clone();
-        self.session
-            .connection
-            .submit_callback_response(native_id, result)
-            .await?;
-        Ok(Some(PromptEvent::NativeNotification(json!({
-            "kind":"approvalDecisionSubmitted"
-        }))))
-    }
     pub async fn cancel(&mut self) -> Option<Value> {
-        // An approval still waiting on its approver ends with the turn: dropping
-        // the wait records it cancelled, and the interrupt below ends the native
-        // request with the turn.
-        self.in_flight_approval = None;
         if self.settlement.is_settled() {
             return None;
         }
