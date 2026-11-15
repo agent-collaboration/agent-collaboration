@@ -112,6 +112,255 @@ async function serveSharedSettings(peer: {
   }
 }
 
+// The "reactive" scenario answers every request instead of following a
+// script, so a test can drive any order of creates, setting changes and
+// prompts. It starts like Grok 4.6: mode agent, model fixture-a, effort medium
+// and fast on, and turns fast back on whenever the model changes.
+//
+// argv after the receipt, any order:
+//   boolean-fast: fast is a boolean option instead of a false/true select.
+//   refuse-fast-once: the first fast change is answered with an error.
+//   refuse-fast-after-model: fast changes are accepted until a model change is
+//     accepted; the first fast change after it is refused, later ones accepted.
+//   malformed-fast-reply: the first fast change gets a success with no
+//     configOptions; fast stays as it was.
+//   malformed-fast-after-model: as refuse-fast-after-model, but that one fast
+//     change gets a success with no configOptions instead of an error.
+//   fast-stays-on: the first fast change is answered with a valid catalog in
+//     which fast still reads on.
+//   fast-option-vanishes: the first fast change is answered with a valid
+//     catalog that has no fast option.
+const reactiveBehaviourNames = [
+  "boolean-fast",
+  "refuse-fast-once",
+  "refuse-fast-after-model",
+  "malformed-fast-reply",
+  "malformed-fast-after-model",
+  "fast-stays-on",
+  "fast-option-vanishes",
+] as const;
+type ReactiveBehaviour = (typeof reactiveBehaviourNames)[number];
+
+function reactiveBehaviours(names: readonly string[]): ReadonlySet<ReactiveBehaviour> {
+  const behaviours = new Set<ReactiveBehaviour>();
+  for (const name of names) {
+    const known = reactiveBehaviourNames.find((candidate) => candidate === name);
+    if (known === undefined) throw new Error(`unknown reactive behaviour ${name}`);
+    behaviours.add(known);
+  }
+  return behaviours;
+}
+
+interface ReactiveSession {
+  mode: string;
+  model: string;
+  effort: string;
+  fast: boolean;
+}
+
+type FastReply = "apply" | "refuse" | "malformed" | "stays-on" | "vanishes";
+
+function reactiveOptions(
+  session: ReactiveSession,
+  behaviours: ReadonlySet<ReactiveBehaviour>,
+  withFast: boolean,
+): ConfigOption[] {
+  const result = [
+    option("mode", "mode", ["agent", "ask"], session.mode),
+    option("model", "model", ["fixture-a", "fixture-b"], session.model),
+    option("effort", "thought_level", ["medium", "high"], session.effort),
+  ];
+  if (!withFast) return result;
+  if (behaviours.has("boolean-fast"))
+    result.push({
+      id: "fast",
+      name: "fast",
+      category: "model_config",
+      type: "boolean",
+      currentValue: session.fast,
+    });
+  else result.push(option("fast", "model_config", ["false", "true"], String(session.fast)));
+  return result;
+}
+
+interface ReactivePeer {
+  readonly behaviours: ReadonlySet<ReactiveBehaviour>;
+  readonly readRequest: () => Promise<Record<string, unknown> | undefined>;
+  readonly reply: (request: Record<string, unknown>, result: unknown) => void;
+  readonly refuse: (request: Record<string, unknown>, message: string) => void;
+  readonly send: (message: Record<string, unknown>) => void;
+}
+
+/** Decides how each fast change is answered, from the behaviours and history. */
+class ReactiveFastReplies {
+  private fastChanges = 0;
+  private modelChangedSinceFast = false;
+  private afterModelFastFailed = false;
+
+  private readonly behaviours: ReadonlySet<ReactiveBehaviour>;
+
+  constructor(behaviours: ReadonlySet<ReactiveBehaviour>) {
+    this.behaviours = behaviours;
+  }
+
+  modelChanged(): void {
+    this.modelChangedSinceFast = true;
+  }
+
+  next(): FastReply {
+    this.fastChanges += 1;
+    const afterModel = this.modelChangedSinceFast && !this.afterModelFastFailed;
+    this.modelChangedSinceFast = false;
+    if (afterModel && this.behaviours.has("refuse-fast-after-model")) {
+      this.afterModelFastFailed = true;
+      return "refuse";
+    }
+    if (afterModel && this.behaviours.has("malformed-fast-after-model")) {
+      this.afterModelFastFailed = true;
+      return "malformed";
+    }
+    if (this.fastChanges !== 1) return "apply";
+    if (this.behaviours.has("refuse-fast-once")) return "refuse";
+    if (this.behaviours.has("malformed-fast-reply")) return "malformed";
+    if (this.behaviours.has("fast-stays-on")) return "stays-on";
+    if (this.behaviours.has("fast-option-vanishes")) return "vanishes";
+    return "apply";
+  }
+}
+
+function answerReactiveFast(
+  peer: ReactivePeer,
+  session: ReactiveSession,
+  request: Record<string, unknown>,
+  replies: ReactiveFastReplies,
+): void {
+  const parameters = requestParameters(request);
+  const off = peer.behaviours.has("boolean-fast")
+    ? parameters.type === "boolean" && parameters.value === false
+    : parameters.value === "false";
+  if (!off) {
+    peer.refuse(request, "fixture accepts only fast off");
+    return;
+  }
+  const reply = replies.next();
+  if (reply === "refuse") {
+    peer.refuse(request, "fast change refused");
+    return;
+  }
+  if (reply === "malformed") {
+    peer.reply(request, {});
+    return;
+  }
+  if (reply === "apply") session.fast = false;
+  peer.reply(request, {
+    configOptions: reactiveOptions(session, peer.behaviours, reply !== "vanishes"),
+  });
+}
+
+function answerReactiveSetting(
+  peer: ReactivePeer,
+  session: ReactiveSession | undefined,
+  request: Record<string, unknown>,
+  replies: ReactiveFastReplies,
+): void {
+  const parameters = requestParameters(request);
+  if (session === undefined) {
+    peer.refuse(request, "unknown session");
+    return;
+  }
+  if (parameters.configId === "fast") {
+    answerReactiveFast(peer, session, request, replies);
+    return;
+  }
+  const value = String(parameters.value);
+  if (parameters.configId === "mode" && ["agent", "ask"].includes(value)) session.mode = value;
+  else if (parameters.configId === "model" && ["fixture-a", "fixture-b"].includes(value)) {
+    session.model = value;
+    // Cursor turns fast back on whenever the model changes.
+    session.fast = true;
+    replies.modelChanged();
+  } else if (parameters.configId === "effort" && ["medium", "high"].includes(value))
+    session.effort = value;
+  else {
+    peer.refuse(request, "unknown setting");
+    return;
+  }
+  peer.reply(request, { configOptions: reactiveOptions(session, peer.behaviours, true) });
+}
+
+async function serveReactiveSettings(peer: ReactivePeer): Promise<void> {
+  const sessions = new Map<string, ReactiveSession>();
+  const replies = new ReactiveFastReplies(peer.behaviours);
+  for (;;) {
+    const request = await peer.readRequest();
+    if (request === undefined) return;
+    switch (request.method) {
+      case "session/new": {
+        const sessionId = `reactive-session-${sessions.size + 1}`;
+        const session = { mode: "agent", model: "fixture-a", effort: "medium", fast: true };
+        sessions.set(sessionId, session);
+        peer.reply(request, {
+          sessionId,
+          configOptions: reactiveOptions(session, peer.behaviours, true),
+        });
+        break;
+      }
+      case "session/set_config_option":
+        answerReactiveSetting(
+          peer,
+          sessions.get(String(requestParameters(request).sessionId)),
+          request,
+          replies,
+        );
+        break;
+      case "session/prompt":
+        peer.reply(request, { stopReason: "end_turn" });
+        break;
+      case "session/close":
+        sessions.delete(String(requestParameters(request).sessionId));
+        peer.reply(request, {});
+        break;
+      default:
+        peer.send({
+          jsonrpc: "2.0",
+          id: request.id,
+          error: { code: -32601n, message: "method not found" },
+        });
+    }
+  }
+}
+
+function applyScriptedSetting(
+  current: CursorSettings,
+  configId: "mode" | "model" | "effort" | "budget",
+  value: string,
+): void {
+  if (configId === "mode") current.mode = value;
+  else if (configId === "model") {
+    current.model = value;
+    // Cursor turns fast back on whenever the model changes.
+    current.fast = "true";
+  } else current.effort = value;
+}
+
+function reactivePeer(
+  io: AcpStdio,
+  readRequest: () => Promise<Record<string, unknown> | undefined>,
+  reply: (request: Record<string, unknown>, result: unknown) => void,
+): ReactivePeer {
+  return {
+    behaviours: reactiveBehaviours(process.argv.slice(4)),
+    readRequest,
+    reply,
+    refuse: (request: Record<string, unknown>, message: string): void => {
+      io.send({ jsonrpc: "2.0", id: request.id, error: { code: -32000n, message } });
+    },
+    send: (message: Record<string, unknown>): void => {
+      io.send(message);
+    },
+  };
+}
+
 export async function main(): Promise<void> {
   const scenario = requireArgument(2);
   const receiptPath = requireArgument(3);
@@ -152,6 +401,8 @@ export async function main(): Promise<void> {
     }
     if (scenario === "shared-settings")
       return await serveSharedSettings({ current, readRequest, reply });
+    if (scenario === "reactive")
+      return await serveReactiveSettings(reactivePeer(io, readRequest, reply));
     const create = await readRequest();
     assert.ok(create?.method === "session/new" || create?.method === "session/load");
     if (scenario === "fallback" || scenario === "ambiguous") effortId = "budget";
@@ -197,9 +448,7 @@ export async function main(): Promise<void> {
       const expectedValue =
         expectedId === "mode" ? "ask" : expectedId === "model" ? "fixture-b" : "high";
       assert.equal(parameters.value, expectedValue);
-      if (expectedId === "mode") current.mode = expectedValue;
-      else if (expectedId === "model") current.model = expectedValue;
-      else current.effort = expectedValue;
+      applyScriptedSetting(current, expectedId, expectedValue);
       if (scenario === "adjusted") {
         current.context = "1m";
         current.fast = "true";
