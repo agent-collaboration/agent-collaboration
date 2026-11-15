@@ -16,10 +16,13 @@ pub trait ConversationOperationRecorder: Send + Sync {
         &'a self,
         operation_id: &'a OperationId,
     ) -> ConversationRecordFuture<'a>;
+    /// `permission_mode` is the created session's mode report (R3), kept by the
+    /// owner for show; it is not operation evidence.
     fn record_created<'a>(
         &'a self,
         operation_id: &'a OperationId,
         session_id: &'a SessionId,
+        permission_mode: &'a collaboration_protocol::CodexPermissionModeReport,
     ) -> ConversationRecordFuture<'a>;
     fn record_failure<'a>(
         &'a self,

@@ -359,6 +359,7 @@ fn run_prompt(args: PromptArguments) -> i32 {
                     .map(TryInto::try_into)
                     .transpose()
                     .map_err(|_| ClientError::Protocol("invalid root message ID"))?,
+                mode: None,
             };
             let sender = current_session_ref(&client.endpoint().service_id, args.from.as_deref())
                 .map_err(|_| ClientError::Protocol("current sender identity unavailable; run agent-collaboration whoami --json or pass --from SessionRef JSON"))?;

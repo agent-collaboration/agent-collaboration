@@ -17,6 +17,10 @@ pub struct NativeInspectResult {
     pub generation: CodexGeneration,
     pub effective_access: Option<crate::RouterAccess>,
     pub settings_observation: crate::SettingsObservation,
+    /// The session's permission mode as this Host recorded it at create (R3):
+    /// absent after a Host restart or for a session the Router did not create.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effective_settings: Option<crate::EffectiveProviderSettings>,
     /// Validated against the advertised native Thread definition before publication.
     #[schemars(schema_with = "crate::native_schema_references::thread_schema")]
     pub thread: serde_json::Value,

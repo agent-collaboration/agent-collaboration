@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CLI and MCP design</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content" src="./navigation.json"></ex-nav>
+<ex-document id="content">
+<h1>CLI and MCP design</h1>
+<p>One Router process serves three MCP endpoints, <code>session</code>, <code>coordination</code> and <code>workspace</code>, and the <code>agent-collaboration</code> CLI has one command per tool. Sessions start in auto permission mode. A delegate's approvals go to its parent, the session that started it; anything else goes where the Router's setting says, by default to you through central. Coordination and workspace tools are one-to-one faces over central's operations. Open the Map (M) to go from a group to its needs and rules.</p>
+
+<ex-mermaid id="shape" label="The shape"><script type="text/plain">
+flowchart LR
+  callers[Agents · CLI] --> S[session endpoint]
+  callers --> C[coordination endpoint]
+  callers --> W[workspace endpoint]
+  S --> L[one session layer] --> A[Claude · Cursor · Codex]
+  C --> Central[central]
+  W --> Central
+  Central -- mail and wakes --> L
+</script></ex-mermaid>
+
+<section id="needs-you">
+<h2>What needs you</h2>
+<ul>
+<li><strong>Answered tonight:</strong> approvals are decided at central (D8); non-delegate approvals show in the CLI, at central and in clients you set up from central (D7); the debug folder may be converted.</li>
+<li>Answered 14 November: design approved, D1 starts. Q2 yes, plus a wake reminder on the delivered receipt. Q3 allow, but only in each session's own scratch folder, the same for every agent. Q4 keep, no migration. Q5 yes, code-only.</li>
+</ul>
+<p><a href="requirements.html#open">All questions with context</a>. Central's approval table goes to you from Lead A.</p>
+</section>
+
+<section id="deliverables">
+<h2>Three deliverables</h2>
+<ex-mermaid id="deliverables-view" label="Order and dependencies"><script type="text/plain">
+flowchart LR
+  E[experiments E2, E3] --> D1[D1 Auto mode]
+  D1 --> D2[D2 Session control]
+  P[Protocol Lead contract crate] --> D2
+  D2 --> D3[D3 Central-facing]
+  A[Lead A: link, approvals D, sign-in] --> D3
+</script></ex-mermaid>
+<ul>
+<li><a href="d1-auto-mode.html">D1 Auto mode</a>: Router-started sessions just work; smallest, first.</li>
+<li><a href="d2-session-control.html">D2 Session control</a>: one way to run, steer and approve; biggest.</li>
+<li><a href="d3-central-facing.html">D3 Central-facing</a>: workspace and mail tools, approvals through central; last.</li>
+</ul>
+</section>
+
+<h2 id="pages">The documents</h2>
+<ul>
+<li><a href="requirements.html">Requirements</a>: who this is for and what they need, in your words.</li>
+<li><a href="specification.html">Specification</a>: the nouns, the tools and CLI commands, and the rules a build must meet.</li>
+<li><a href="program-design.html">Program Design</a>: how it is built.</li>
+<li><a href="verification.html">Verification Design</a>: how each need will be proven.</li>
+</ul>
+
+<h2 id="choices">Author choices and assumptions (ranked)</h2>
+<ol>
+<li><a href="program-design.html#A1">A1</a> Caller declared by the client, not authenticated · author</li>
+<li><a href="program-design.html#D1">D1</a> One layer; kind and route stored at start · owner-words</li>
+<li><a href="program-design.html#D5">D5</a> Codex route widened to name you (Q5) · owner-words</li>
+<li><a href="verification.html#D6">D6</a> TS client journeys, types from served schemas · author</li>
+<li><a href="program-design.html#A2">A2</a> Claude retry after approval works (E2) · unknown</li>
+<li><a href="program-design.html#A3">A3</a> Cursor in agent mode (E1 result) · author</li>
+<li><a href="specification.html#D2">D2</a> Retry returns status, result only while held · author</li>
+<li><a href="specification.html#D3">D3</a> Central carries approvals; person callers · contract</li>
+<li><a href="specification.html#D4">D4</a> Tool names and removed CLI commands · author</li>
+<li><a href="program-design.html#A4">A4</a> Central port stand-in until Lead A delivers · author</li>
+</ol>
+<p>Owner quotes are excerpts from the conversation; not checked against an export.</p>
+
+<h2 id="boundaries">Who owns what across Leads</h2>
+<ul>
+<li>Central, storage and the operation list: the central Lead (13635880). This set adds no field to central's operations.</li>
+<li>Codex protocol types and schema cleanup: the Protocol Lead (d171455e). The Codex side builds on its contract crate.</li>
+<li>CLI and MCP, the session layer, approvals and auto mode: this set (2352c15e).</li>
+</ul>
+</ex-document>
+</body>
+</html>

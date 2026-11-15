@@ -105,11 +105,26 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                     let created_by = request.created_by;
                     let approver = request.approver;
                     let requested_settings = request.settings.unwrap_or_default();
+                    let scratch_root = backend.inner.scratch_root.clone();
                     let completion_inner = Arc::clone(&backend.inner);
                     backend.spawn_operation(operation_id.clone(), live, async move {
+                        let scratch_folder = match super::provider_session_scratch::prepare_provider_session_scratch(scratch_root.as_deref()).await {
+                            Ok(scratch_folder) => scratch_folder,
+                            Err(message) => {
+                                return ProviderOperationCompletion::Failure(failure(
+                                    ConversationOperationFailureKind::Unavailable,
+                                    ConversationOperationFailureStage::Dispatch,
+                                    ProviderOperationEffect::None,
+                                    message,
+                                    operation_id,
+                                    None,
+                                ));
+                            }
+                        };
                         match runtime
                             .create_session_with_settings(
                                 PathBuf::from(String::from(working_directory.clone())),
+                                scratch_folder,
                                 acp_client_runtime::RequestedProviderSettings {
                                     mode: requested_settings.mode,
                                     model: requested_settings.model,
@@ -133,6 +148,9 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                         observed.mode = created.effective_settings.mode;
                                         observed.model = created.effective_settings.model;
                                         observed.effort = created.effective_settings.effort;
+                                        observed.requested_mode = created.permission_mode.requested;
+                                        observed.mode_reason = created.permission_mode.reason.map(crate::provider_operation_settlement::provider_mode_reason);
+                                        completion_inner.record_requested_mode(target.clone(), super::RequestedModeRecord { requested_mode: observed.requested_mode.clone(), mode_reason: observed.mode_reason }).await;
                                         ProviderOperationCompletion::Success {
                                             settlement: ConversationOperationSettlement::Created {
                                                 target: target.clone(),
@@ -621,3 +639,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "provider_conversation_backend_test.rs"]
+mod tests;

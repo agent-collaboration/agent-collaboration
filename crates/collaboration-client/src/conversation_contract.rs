@@ -39,6 +39,9 @@ pub struct ConversationCreateRequest {
     pub created_by: Option<SessionRef>,
     pub approver: Option<SessionRef>,
     pub root_message_id: Option<UuidIdentity>,
+    /// The permission mode asked for; Codex accepts only `auto` or none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, JsonSchema, Serialize)]

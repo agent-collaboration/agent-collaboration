@@ -148,6 +148,7 @@ pub(super) fn available_directory(
                 binding_generation: binding.generation.generation,
                 runtime: binding.runtime.clone(),
                 capabilities: binding.capabilities.clone(),
+                auto_realization: None,
             }],
         })
         .expect("endpoint");

@@ -127,6 +127,7 @@ mod native_claude_catalogue;
 mod native_control_calls;
 mod native_empty_session_inventory;
 mod native_generation_admission;
+mod native_inspect_permission_mode;
 mod native_listener_recovery;
 mod native_relay_handshake;
 mod operation_context_reads;

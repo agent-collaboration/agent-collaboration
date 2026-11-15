@@ -20,6 +20,9 @@ impl ProviderBehavior for LiteralBehavior {
     fn decode_model_metadata(&self, _value: &serde_json::Value) -> crate::ModelReasoningMetadata {
         crate::ModelReasoningMetadata::Unknown(crate::ModelReasoningUnknown::UnsupportedSource)
     }
+    fn auto_permission_mode(&self) -> acp_client_runtime::AutoPermissionMode {
+        acp_client_runtime::AutoPermissionMode::UNREALIZED
+    }
     fn observe(&self, _: ProviderUpdate) -> Result<ProviderFacts, ProviderError> {
         Ok(ProviderFacts {
             skill_view: Some(self.view.clone()),

@@ -30,6 +30,8 @@ use crate::native_permission_echo;
 use conversation_operation_recorder::AcceptingConversationRecorder;
 use native_permission_echo::applied_router_sandbox;
 
+mod pending_approval;
+
 const TEST_SCRATCH: &str =
     "/tmp/router-acp-tests/scratch/session-00000000-0000-4000-8000-000000000099";
 

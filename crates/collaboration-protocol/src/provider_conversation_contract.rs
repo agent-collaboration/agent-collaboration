@@ -310,6 +310,81 @@ pub struct EffectiveProviderSettings {
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
+    /// The permission mode the caller asked for; absent means auto (R3).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_mode: Option<String>,
+    /// Why `mode`, the agent's own report, differs from the requested mode.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode_reason: Option<ProviderModeReason>,
+}
+
+/// Why a session's actual permission mode differs from the requested one.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ProviderModeReason {
+    /// The agent does not offer its auto mode; its ask-first mode is used.
+    AutoNotOffered,
+    /// The agent accepted auto but put the session in its ask-first mode.
+    AgentFellBack,
+    /// The Router has no auto realization for this agent; its mode is unchanged.
+    AutoNotRealized,
+    /// The agent's own auto refuses without asking and escalation is not
+    /// proven, so its ask-first mode stands in.
+    EscalationUnproven,
+    /// Setting the auto realization failed; the agent kept its own mode.
+    AutoNotApplied,
+}
+
+/// A Codex session's permission mode at creation (R3): the mode asked for, the
+/// mode native read back, and why they differ. Carried on the create result's
+/// `_meta.codexRouter.permissionMode` and kept by the Host for show.
+#[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CodexPermissionModeReport {
+    /// The Router access the session was created with.
+    pub access: RouterAccess,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_mode: Option<String>,
+    /// The mode native read back; absent when native's report was missing or
+    /// contradicted the requested access.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub actual: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reason: Option<ProviderModeReason>,
+}
+
+impl CodexPermissionModeReport {
+    /// The report as the effective settings start and show return.
+    #[must_use]
+    pub fn effective_settings(&self) -> EffectiveProviderSettings {
+        EffectiveProviderSettings {
+            requested_policy: ProviderRequestedPolicy {
+                access: self.access,
+            },
+            mapping_status: if self.reason.is_none() {
+                ProviderSettingsMappingStatus::Verified
+            } else {
+                ProviderSettingsMappingStatus::Unverified
+            },
+            authentication: ProviderAuthenticationState::Unverified,
+            provider_permission_mode: None,
+            permission_outcome: None,
+            mode: self.actual.clone(),
+            model: None,
+            effort: None,
+            requested_mode: self.requested_mode.clone(),
+            mode_reason: self.reason,
+        }
+    }
+}
+
+/// How an agent's auto mode treats an action outside its granted folders (R7).
+#[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ProviderAutoRealization {
+    ClassifierEscalates,
+    AsksFirst,
+    Unknown,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
@@ -625,6 +700,14 @@ pub enum ConversationOutputUnavailableReason {
     rename_all = "camelCase",
     rename_all_fields = "camelCase",
     deny_unknown_fields
+)]
+// The variant size gap clears the lint threshold only on 64-bit targets.
+#[cfg_attr(
+    not(target_arch = "wasm32"),
+    expect(
+        clippy::large_enum_variant,
+        reason = "a settled output is the common wait result; the other variants are small markers of this wire shape"
+    )
 )]
 pub enum ConversationOperationWaitOutput {
     Pending,

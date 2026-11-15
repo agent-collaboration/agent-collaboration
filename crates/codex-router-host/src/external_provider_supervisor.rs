@@ -6,6 +6,7 @@ pub use provider_prompt_contents::ProviderPromptContentsRequest;
 mod provider_conversation_backend;
 mod provider_session_inspection;
 mod provider_session_lifecycle;
+mod provider_session_scratch;
 mod provider_settings_control;
 use provider_operation_failure::{
     admission_failure, invalid_setting_failure, prompt_runtime_failure, runtime_failure,
@@ -59,6 +60,13 @@ pub struct ExternalProviderBinding {
     pub runtime: ExternalProviderRuntime,
 }
 
+/// What a session was asked to run in and why its actual mode differs.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+struct RequestedModeRecord {
+    requested_mode: Option<String>,
+    mode_reason: Option<collaboration_protocol::ProviderModeReason>,
+}
+
 #[derive(Clone)]
 pub struct ExternalProviderSupervisor {
     inner: Arc<SupervisorInner>,
@@ -73,8 +81,15 @@ struct SupervisorInner {
     completions: tokio::sync::watch::Sender<u64>,
     queued_operations: ProviderQueueOperationRegistry,
     hub: Option<Arc<collaboration_runtime::ProviderSessionEventHub>>,
+    /// `<router root>/scratch`: each Claude or Cursor session created here gets
+    /// its own `session-<uuidv7>` folder in it (R4). `None` grants no folder.
+    scratch_root: Option<PathBuf>,
     history_unavailable: Mutex<HashSet<SessionRef>>,
     settings_catalogs: Arc<Mutex<HashMap<SessionRef, acp_client_runtime::ProviderSettingsCatalog>>>,
+    /// The mode each session created here was asked for, and why its actual
+    /// mode differs (R3). In memory: after a Host restart show reports only the
+    /// agent's actual mode.
+    requested_modes: Mutex<HashMap<SessionRef, RequestedModeRecord>>,
     catalog_tasks: Mutex<Vec<tokio::task::JoinHandle<()>>>,
     started_at_ms: i64,
     #[cfg(test)]
@@ -221,13 +236,14 @@ impl ExternalProviderSupervisor {
         bindings: Vec<ExternalProviderBinding>,
         store: Arc<Mutex<ProviderOperationStore>>,
     ) -> Result<Self, &'static str> {
-        Self::new_with_hub(bindings, store, None)
+        Self::new_with_hub(bindings, store, None, None)
     }
 
     pub(crate) fn new_with_hub(
         bindings: Vec<ExternalProviderBinding>,
         store: Arc<Mutex<ProviderOperationStore>>,
         hub: Option<Arc<collaboration_runtime::ProviderSessionEventHub>>,
+        scratch_root: Option<PathBuf>,
     ) -> Result<Self, &'static str> {
         let mut runtimes = HashMap::with_capacity(bindings.len());
         let mut catalog_tasks = Vec::with_capacity(bindings.len());
@@ -274,8 +290,10 @@ impl ExternalProviderSupervisor {
                 completions: tokio::sync::watch::channel(0).0,
                 queued_operations: ProviderQueueOperationRegistry::default(),
                 hub,
+                scratch_root,
                 history_unavailable: Mutex::new(HashSet::new()),
                 settings_catalogs,
+                requested_modes: Mutex::new(HashMap::new()),
                 catalog_tasks: Mutex::new(catalog_tasks),
                 started_at_ms: now_ms(),
                 #[cfg(test)]
@@ -544,6 +562,10 @@ impl SupervisorInner {
         catalog: acp_client_runtime::ProviderSettingsCatalog,
     ) {
         self.settings_catalogs.lock().await.insert(target, catalog);
+    }
+
+    async fn record_requested_mode(&self, target: SessionRef, record: RequestedModeRecord) {
+        self.requested_modes.lock().await.insert(target, record);
     }
 
     async fn finish(

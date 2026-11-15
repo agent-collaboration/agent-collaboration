@@ -259,6 +259,7 @@ impl ExternalProviderRuntime {
     ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
         self.create_session_with_settings(
             cwd,
+            None,
             acp_client_runtime::RequestedProviderSettings::default(),
         )
         .await
@@ -267,11 +268,12 @@ impl ExternalProviderRuntime {
     pub async fn create_session_with_settings(
         &self,
         cwd: PathBuf,
+        scratch_folder: Option<PathBuf>,
         settings: acp_client_runtime::RequestedProviderSettings,
     ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
         let created = self
             .client
-            .create_session_with_settings(cwd, settings)
+            .create_session_with_settings(cwd, scratch_folder, settings)
             .await;
         let active_session = match &created {
             Ok(created) => Some(created.provider_session_id.as_str()),

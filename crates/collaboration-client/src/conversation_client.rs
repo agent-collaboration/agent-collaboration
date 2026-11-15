@@ -391,13 +391,7 @@ impl ConversationClient {
         match &mut self {
             Self::CodexAcp(acp) => {
                 let (created_by, approver) = codex_create_actors(&input)?;
-                if input.mode.is_some() {
-                    return Err(unsupported(
-                        &input.endpoint,
-                        "mode",
-                        "omit mode for this Codex ACP create",
-                    ));
-                }
+                codex_mode_accepted(&input.endpoint, input.mode.as_deref())?;
                 if acp.endpoint() != &input.endpoint {
                     return Err(ConversationClientError::InvalidInput(
                         "Codex ACP endpoint changed",
@@ -425,6 +419,7 @@ impl ConversationClient {
                     created_by: Some(created_by),
                     approver,
                     root_message_id: input.root_message_id,
+                    mode: input.mode,
                 };
                 let mut emit = |_event| Ok(());
                 match tokio::time::timeout(
@@ -440,7 +435,9 @@ impl ConversationClient {
                     Ok(Ok(target)) => Ok(ConversationCreateOutcome::Created {
                         operation_id,
                         target,
-                        effective_settings: None,
+                        effective_settings: acp.permission_mode.as_ref().map(
+                            collaboration_protocol::CodexPermissionModeReport::effective_settings,
+                        ),
                         permission_differences: acp.permission_differences.clone(),
                     }),
                     Ok(Err(error)) => Err(error.into()),
@@ -617,6 +614,22 @@ async fn create_through_api(
     match composite_call(client, "conversation_create", arguments, timeout, None).await? {
         CompositeAnswer::Settled(outcome) => Ok(outcome),
         CompositeAnswer::StillRunning => Ok(ConversationCreateOutcome::Pending { operation_id }),
+    }
+}
+
+/// Codex's auto is its workspace-write sandbox with the Router as reviewer, so
+/// `auto` is the one mode name a Codex create accepts (R5).
+fn codex_mode_accepted(
+    endpoint: &EndpointRef,
+    mode: Option<&str>,
+) -> Result<(), ConversationClientError> {
+    match mode {
+        None | Some("auto") => Ok(()),
+        Some(_) => Err(unsupported(
+            endpoint,
+            "mode",
+            "use mode auto or omit mode for this Codex ACP create",
+        )),
     }
 }
 
