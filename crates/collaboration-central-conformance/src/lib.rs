@@ -66,6 +66,10 @@ mod sender_revocation_scenario;
 pub use sender_revocation_scenario::run_sender_revocation_conformance;
 #[cfg(feature = "client")]
 mod runtime_control_scenarios;
+#[cfg(feature = "client")]
+mod scenario_clock_origin;
+#[cfg(feature = "client")]
+pub use scenario_clock_origin::logical_scenario_origin;
 mod runtime_controls;
 mod runtime_faults;
 #[cfg(feature = "client")]

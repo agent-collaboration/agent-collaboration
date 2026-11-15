@@ -60,17 +60,14 @@ pub(super) async fn terminal_release<Control, ControlFuture>(
     holder: &mut WebSocket,
     database: DatabaseId,
     sender_owned: DatabaseId,
+    origin: RegistryTime,
     mut control: Control,
 ) -> ConformanceResult<()>
 where
     Control: FnMut(RuntimeControl) -> ControlFuture,
     ControlFuture: Future<Output = ConformanceResult<RuntimeFaultObservation>>,
 {
-    let started = SystemTime::now();
-    control(RuntimeControl::SetTime {
-        now: RegistryTime(started.into()),
-    })
-    .await?;
+    let started: SystemTime = origin.0.into();
     let outstanding = reserve(sender, holder, database, 15).await?;
     for (destination, expected) in [
         (sender_owned, ForwardOutcome::SenderHolds),

@@ -25,6 +25,7 @@ pub(super) async fn late_route<Control, ControlFuture, Observe, ObserveFuture>(
     sender: &mut WebSocket,
     holder: &mut WebSocket,
     database: DatabaseId,
+    origin: RegistryTime,
     mut control: Control,
     mut observe: Observe,
 ) -> ConformanceResult<()>
@@ -34,11 +35,7 @@ where
     Observe: FnMut(bool) -> ObserveFuture,
     ObserveFuture: Future<Output = ConformanceResult<Value>>,
 {
-    let started = SystemTime::now();
-    control(RuntimeControl::SetTime {
-        now: RegistryTime(started.into()),
-    })
-    .await?;
+    let started: SystemTime = origin.0.into();
     control(RuntimeControl::HoldNextDispatch {
         key: DispatchKey::new(ObjectAddress::Fleet, DispatchCallSelector::ForwardRoute),
     })

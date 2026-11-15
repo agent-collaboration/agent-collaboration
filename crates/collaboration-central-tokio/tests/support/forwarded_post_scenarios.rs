@@ -113,6 +113,18 @@ async fn register_database(
 }
 
 pub(super) async fn run(base: &str, case: ForwardCase) -> ConformanceResult<()> {
+    let origin = collaboration_central_conformance::logical_scenario_origin()?;
+    if matches!(
+        case,
+        ForwardCase::ExactBoundary | ForwardCase::TerminalRelease | ForwardCase::RouteOverlap
+    ) {
+        // Pin before enrollment and registration create any timed owner state.
+        control(
+            base,
+            collaboration_central_conformance::RuntimeControl::SetTime { now: origin },
+        )
+        .await?;
+    }
     let RegisteredForwardingPeers {
         database,
         sender_socket: mut sender,
@@ -131,17 +143,17 @@ pub(super) async fn run(base: &str, case: ForwardCase) -> ConformanceResult<()> 
                 println!("FORWARD_DEADLINE_CASE original_deadline_unanswered_late_reply_cannot_answer_fresh_identity passed");
             }
             ForwardCase::ExactBoundary => {
-                super::forwarded_post_deadline_boundaries::exact_boundary(&mut sender, socket, database, |command| control(base, command)).await?;
+                super::forwarded_post_deadline_boundaries::exact_boundary(&mut sender, socket, database, origin, |command| control(base, command)).await?;
                 println!("FORWARD_BOUNDARY_CASE pre_boundary_answer_exact_expiry_and_independent_fresh_correlation passed");
             }
             ForwardCase::TerminalRelease => {
                 let sender_owned = register_database(&mut sender, PeerId::try_from(SENDER_PEER.to_owned())?).await?;
-                super::forwarded_post_terminal_slots::terminal_release(&mut sender, socket, database, sender_owned,
+                super::forwarded_post_terminal_slots::terminal_release(&mut sender, socket, database, sender_owned, origin,
                     |command| control(base, command)).await?;
                 println!("FORWARD_TERMINAL_CASE sender_holds_not_held_answer_and_deadline_each_release_only_their_slot passed");
             }
             ForwardCase::RouteOverlap => {
-                super::forwarded_post_state_cases::overlap(base,&mut sender,socket,database).await?;
+                super::forwarded_post_state_cases::overlap(base,&mut sender,socket,database,origin).await?;
                 println!("FORWARD_OVERLAP_CASE completed_late_route_no_resurrection_or_fresh_reply_replacement passed");
             }
             ForwardCase::OwnState => {

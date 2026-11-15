@@ -21,7 +21,8 @@ where
     Fut: Future<Output = ConformanceResult<ConformanceClient>>,
 {
     ordered(&mut client, &mut restart).await?;
-    staging(&mut client, &mut restart).await?;
+    let origin = crate::logical_scenario_origin()?;
+    staging(&mut client, &mut restart, origin).await?;
     fences(&mut client, &mut restart).await?;
     rollback(&mut client, &mut restart).await?;
     extended(&mut client, &mut restart).await?;
@@ -123,7 +124,11 @@ where
     )?;
     Ok(())
 }
-async fn staging<F, Fut>(client: &mut ConformanceClient, restart: &mut F) -> ConformanceResult<()>
+async fn staging<F, Fut>(
+    client: &mut ConformanceClient,
+    restart: &mut F,
+    origin: collaboration_central_core::RegistryTime,
+) -> ConformanceResult<()>
 where
     F: FnMut() -> Fut,
     Fut: Future<Output = ConformanceResult<ConformanceClient>>,
@@ -164,6 +169,12 @@ where
     equal(copy.first_page(client).await?.rows.len(), 2)?;
     for cleanup in [false, true] {
         let copy = CopyFixture::create(client).await?;
+        control(
+            client,
+            copy.address()?,
+            RuntimeControl::SetTime { now: origin },
+        )
+        .await?;
         let fragments = parts(copy.database, 3)?;
         copy.apply(client, fragments.first().ok_or("first")?.clone())
             .await?;
@@ -173,7 +184,7 @@ where
                 copy.address()?,
                 RuntimeControl::SetTime {
                     now: collaboration_central_core::RegistryTime(
-                        chrono::Utc::now() + chrono::TimeDelta::days(2),
+                        origin.0 + chrono::TimeDelta::days(2),
                     ),
                 },
             )
