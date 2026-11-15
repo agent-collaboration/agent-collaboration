@@ -57,6 +57,8 @@ fn assert_setup_observation(
         "personFloors":[{"subjectId":signed::OWNER_SUBJECT,"personId":signed::OWNER,"revision":4,"state":"active"}],
         "usedRequests":expected_ids.into_iter().map(|id|json!({"id":id})).collect::<Vec<_>>(),
         "workspaces":[{"workspaceId":OPERATION,"name":NAME}],
+        "machines":[],
+        "machineApprovals":[],
         "complete":true
     });
     assert!(

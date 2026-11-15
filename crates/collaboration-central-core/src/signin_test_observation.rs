@@ -16,6 +16,12 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 use workspace_model::{PersonId, RequestId, ResourceName, Timestamp, WorkspaceId, WorkspaceState};
 
+mod machines;
+pub use machines::{
+    ObservedApprovalEndReason, ObservedApprovalState, ObservedMachine, ObservedMachineApproval,
+    ObservedMachineState,
+};
+
 /// Canonical empty fixture shared with launcher apparatus under test-support.
 pub const EMPTY_SIGNIN_OBSERVATION_JSON: &str = include_str!("signin_observation_empty.json");
 
@@ -31,6 +37,8 @@ pub struct SignInObservation {
     pub person_floors: Vec<ObservedPersonFloor>,
     pub used_requests: Vec<ObservedUsedRequest>,
     pub workspaces: Vec<ObservedWorkspace>,
+    pub machines: Vec<ObservedMachine>,
+    pub machine_approvals: Vec<ObservedMachineApproval>,
     pub complete: bool,
 }
 
@@ -92,6 +100,8 @@ impl SignInObservation {
             person_floors: vec![],
             used_requests: vec![],
             workspaces: vec![],
+            machines: vec![],
+            machine_approvals: vec![],
             complete: true,
         }
     }
@@ -101,7 +111,7 @@ impl SignInObservation {
 // store here: every row in the already-addressed owning store must be observed.
 // workerd intentionally caps SQLITE_LIMIT_COMPOUND_SELECT at five terms
 // (cloudflare/workerd src/workerd/util/sqlite.c++, setupSecurity). Each CTE stays below it;
-// the outer two-term SELECT preserves per-row results without a large JSON aggregate.
+// the outer three-term SELECT preserves per-row results without a large JSON aggregate.
 // CAST preserves generated JSON's TEXT type through Turso CTE metadata (UW-15).
 const SNAPSHOT: &str = r#"
 WITH identity_records_and_organization_floor AS (
@@ -129,9 +139,24 @@ UNION ALL SELECT 4,id,json_object('kind','usedRequest','row',json_object(
 UNION ALL SELECT 5,workspace_id,json_object('kind','workspace','row',json_object(
  'workspaceId',workspace_id,'name',name,'state',state,'createdAt',created_at,'updatedAt',updated_at))
  FROM workspaces
+), machines_and_approvals AS (
+SELECT 6 AS row_group,machine_id AS row_id,json_object('kind','machine','row',json_object(
+ 'machine_id',machine_id,'installation_id',installation_id,'label',label,'state',state,
+ 'allowed_workspaces',allowed_workspaces,'enrollment_generation',enrollment_generation,
+ 'created_at',created_at,'updated_at',updated_at)) AS payload
+ FROM machines
+UNION ALL SELECT 7,a.approval_id,json_object('kind','machineApproval','row',json_object(
+ 'approval_id',a.approval_id,'request_id',a.request_id,'machine_id',a.machine_id,'label',a.label,
+ 'allowed_workspaces',a.allowed_workspaces,'state',a.state,'end_reason',a.end_reason,
+ 'approved_by_person_id',a.approved_by_person_id,'permission_checked',a.permission_checked,
+ 'base_generation',a.base_generation,'code_expires_at',a.code_expires_at,
+ 'machine_client_id',a.machine_client_id,'last_grant_at',a.last_grant_at,'ended_at',a.ended_at,
+ 'created_at',a.created_at,'updated_at',a.updated_at,'installation_id',m.installation_id))
+ FROM machine_approvals a LEFT JOIN machines m ON m.machine_id=a.machine_id
 )
 SELECT row_group,row_id,CAST(payload AS TEXT) AS payload FROM identity_records_and_organization_floor
 UNION ALL SELECT row_group,row_id,CAST(payload AS TEXT) AS payload FROM person_proofs_and_workspaces
+UNION ALL SELECT row_group,row_id,CAST(payload AS TEXT) AS payload FROM machines_and_approvals
 ORDER BY row_group,row_id
 "#;
 
@@ -149,6 +174,8 @@ enum SnapshotRow {
     PersonFloor(PersonFloorRow),
     UsedRequest(UsedRequestRow),
     Workspace(WorkspaceRow),
+    Machine(machines::StoredMachineRow),
+    MachineApproval(machines::StoredMachineRow),
 }
 
 #[derive(Deserialize)]
@@ -164,6 +191,7 @@ struct IdentityRow {
 enum StoredChangeOrigin {
     SignInProvisioning,
     Person,
+    Automatic,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -267,6 +295,7 @@ fn decode_snapshot(
     organization: &OrganizationId,
 ) -> Result<SignInObservation, StoreFailure> {
     let mut observation = SignInObservation::nothing_stored();
+    let mut machine_approvals = Vec::new();
     for row in &rows.rows {
         let row: SnapshotRow = json(string(rows, row, "payload")?, "signin_observation.snapshot")?;
         match row {
@@ -285,7 +314,11 @@ fn decode_snapshot(
             SnapshotRow::Record(row) => {
                 check_times(row.created_at, row.updated_at)?;
                 match (row.origin, row.actor_person_id, row.permission_checked) {
-                    (StoredChangeOrigin::SignInProvisioning, None, None) => {}
+                    (
+                        StoredChangeOrigin::SignInProvisioning | StoredChangeOrigin::Automatic,
+                        None,
+                        None,
+                    ) => {}
                     (StoredChangeOrigin::Person, Some(person_id), Some(permission_checked)) => {
                         non_empty(&person_id, "organization_change_records.actor_person_id")?;
                         non_empty(
@@ -376,8 +409,23 @@ fn decode_snapshot(
                 });
                 let _validated_directory = (row.state, row.created_at, row.updated_at);
             }
+            SnapshotRow::Machine(row) => observation
+                .machines
+                .push(machines::decode_machine_observation(row)?),
+            SnapshotRow::MachineApproval(row) => {
+                machine_approvals.push(machines::decode_approval_observation(row)?)
+            }
         }
     }
+    machine_approvals.sort_unstable_by(|(left_time, left), (right_time, right)| {
+        left_time
+            .cmp(right_time)
+            .then_with(|| left.approval_id.as_str().cmp(right.approval_id.as_str()))
+    });
+    observation.machine_approvals = machine_approvals
+        .into_iter()
+        .map(|(_, approval)| approval)
+        .collect();
     Ok(observation)
 }
 

@@ -1,6 +1,7 @@
 //! The launcher consumer's real child/Unix-link/stdin/stderr lifecycle.
 mod child_process;
 mod clock_boundaries;
+mod machine_observation;
 mod observation_assertions;
 mod setup_ipc;
 

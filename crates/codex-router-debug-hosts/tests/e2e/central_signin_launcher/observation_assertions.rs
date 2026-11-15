@@ -11,6 +11,8 @@ use collaboration_central_core::{
     reason = "Opaque fixture assertions must not print raw observation material."
 )]
 pub(super) fn assert_empty(observation: &SignInObservation) -> TestResult {
+    let serialized =
+        serde_json::to_value(observation).map_err(|_| "empty observation encoding failed")?;
     assert!(
         observation.complete
             && observation.statement.is_none()
@@ -19,7 +21,9 @@ pub(super) fn assert_empty(observation: &SignInObservation) -> TestResult {
             && observation.organization_floor.is_none()
             && observation.person_floors.is_empty()
             && observation.used_requests.is_empty()
-            && observation.workspaces.is_empty(),
+            && observation.workspaces.is_empty()
+            && serialized.get("machines") == Some(&serde_json::json!([]))
+            && serialized.get("machineApprovals") == Some(&serde_json::json!([])),
         "unknown or fresh-root observation is not the complete empty contract"
     );
     Ok(())

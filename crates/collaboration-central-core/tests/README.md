@@ -33,3 +33,6 @@ module) is the canonical empty private launcher
 observation used by Rust and the Node bridge. Colocated `signin_test_observation`
 tests run the actual snapshot SQL over migrations, check the exact projection and
 250-record completeness, reject corrupt stored domains, and verify no writes.
+Machine projections reuse the owning row codecs, include every machine and
+creation-ordered approval, and canonically encode UTC timestamps. Cases cover
+independent allowances, malformed lifecycle fields and exact Automatic origins.

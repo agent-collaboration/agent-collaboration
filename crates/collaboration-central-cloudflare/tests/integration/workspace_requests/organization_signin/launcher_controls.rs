@@ -1,4 +1,6 @@
 //! Consumer IPC against both compiled Workers, with signing owned by Rust.
+mod machine_observation;
+
 use super::super::workerd_host::Process;
 use collaboration_central_conformance::{ConformanceResult, signin_fixtures as signed};
 use serde::Deserialize;
@@ -436,6 +438,8 @@ async fn setup_private_observe_matches_rows_and_external_fresh_restart() -> Conf
         "personFloors":[{"subjectId":signed::OWNER_SUBJECT,"personId":signed::OWNER,"revision":4,"state":"active"}],
         "usedRequests":[{"id":request_id}],
         "workspaces":[{"workspaceId":operation,"name":"Observed setup"}],
+        "machines":[],
+        "machineApprovals":[],
         "complete":true
     });
     assert!(
