@@ -4,6 +4,7 @@ mod corruption;
 mod requests;
 mod wakes;
 
+mod alarm_isolation;
 mod alarm_order;
 
 mod organization_identity;
