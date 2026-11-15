@@ -181,6 +181,9 @@ export class WorkerdStorage {
     bundle: WorkerdBundle,
     signIn?: WorkerdSignInOptions,
     clock?: (organization: string) => number,
+    // Standalone bridges supply process ownership; in-process callers retain Miniflare’s policy.
+    createRuntime: (construct: () => Miniflare) => Miniflare | Promise<Miniflare> = (construct) =>
+      construct(),
   ): Promise<WorkerdStorage> {
     const require = createRequire(import.meta.url);
     z.object({ version: z.literal("5.20261012.0-beta") }).parse(require("miniflare/package.json"));
@@ -239,14 +242,17 @@ export class WorkerdStorage {
     const root = await mkdtemp(join(tmpdir(), "workerd-central-"));
     let runtime: Miniflare | undefined;
     try {
-      runtime = new Miniflare(
-        convertV4MiniflareOptions({
-          host: "127.0.0.1",
-          port: 0,
-          resourcePersistencePath: root,
-          cf: false,
-          workers,
-        }),
+      runtime = await createRuntime(
+        () =>
+          new Miniflare(
+            convertV4MiniflareOptions({
+              host: "127.0.0.1",
+              port: 0,
+              resourcePersistencePath: root,
+              cf: false,
+              workers,
+            }),
+          ),
       );
       const ready = await runtime.ready;
       if (
