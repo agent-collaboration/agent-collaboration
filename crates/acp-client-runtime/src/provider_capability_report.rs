@@ -11,6 +11,8 @@ pub struct ProviderCapabilityReport {
     pub supports_resume: bool,
     pub supports_close: bool,
     pub supports_list: bool,
+    /// The agent accepts `additionalDirectories` on `session/new`.
+    pub supports_additional_directories: bool,
     pub supports_steering: bool,
     pub router_queue: bool,
     pub supports_cancel_queued: bool,
@@ -35,6 +37,10 @@ impl ProviderCapabilityReport {
             supports_resume: advertised.session_capabilities.resume.is_some(),
             supports_close: advertised.session_capabilities.close.is_some(),
             supports_list: advertised.session_capabilities.list.is_some(),
+            supports_additional_directories: advertised
+                .session_capabilities
+                .additional_directories
+                .is_some(),
             supports_steering: advertises_steering(response.meta.as_ref()),
             router_queue: true,
             supports_cancel_queued: true,

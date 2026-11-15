@@ -135,9 +135,13 @@ pub(crate) async fn run_session_setup(inputs: SetupTaskInputs) -> SetupTaskOutpu
             let session_id = SessionId::try_from(session.session_id().to_owned())
                 .map_err(|_| SessionSetupError::OutcomeUnknown)?;
             if let Some(operation_id) = operation_id.as_ref() {
+                // A created session always carries its Router access route.
+                let permission_mode = session
+                    .permission_mode_report()
+                    .ok_or(SessionSetupError::OutcomeUnknown)?;
                 inputs
                     .recorder
-                    .record_created(operation_id, &session_id)
+                    .record_created(operation_id, &session_id, &permission_mode)
                     .await
                     .map_err(|_| SessionSetupError::OutcomeUnknown)?;
             }
@@ -241,6 +245,7 @@ mod tests {
             &'a self,
             _operation_id: &'a OperationId,
             _session_id: &'a SessionId,
+            _permission_mode: &'a collaboration_protocol::CodexPermissionModeReport,
         ) -> ConversationRecordFuture<'a> {
             Box::pin(async { Ok(()) })
         }

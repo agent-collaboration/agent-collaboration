@@ -109,6 +109,9 @@ pub enum ChannelDescription {
         transport: AcpCarrier,
         path: NonEmptyText,
         schema_digest: SchemaDigest,
+        /// How this agent's auto mode treats actions outside its grant (R7).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        auto_realization: Option<crate::ProviderAutoRealization>,
     },
     #[serde(rename_all = "camelCase")]
     ExternalProvider {
@@ -117,6 +120,9 @@ pub enum ChannelDescription {
         binding_generation: GenerationNumber,
         runtime: ProviderRuntimeIdentity,
         capabilities: ProviderCapabilities,
+        /// How this agent's auto mode treats actions outside its grant (R7).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        auto_realization: Option<crate::ProviderAutoRealization>,
     },
 }
 

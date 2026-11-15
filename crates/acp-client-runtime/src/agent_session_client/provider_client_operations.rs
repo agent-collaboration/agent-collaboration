@@ -220,19 +220,21 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         &self,
         cwd: PathBuf,
     ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
-        self.create_session_with_settings(cwd, crate::RequestedProviderSettings::default())
+        self.create_session_with_settings(cwd, None, crate::RequestedProviderSettings::default())
             .await
     }
 
     pub async fn create_session_with_settings(
         &self,
         cwd: PathBuf,
+        scratch_folder: Option<PathBuf>,
         settings: crate::RequestedProviderSettings,
     ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
         let (reply, result) = tokio::sync::oneshot::channel();
         self.commands
             .send(ProviderCommand::Create {
                 cwd,
+                scratch_folder,
                 settings,
                 reply,
             })

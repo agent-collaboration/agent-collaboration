@@ -39,6 +39,18 @@ impl ProviderBehavior for CursorAcpBehavior {
     ) -> acp_client_runtime::ModelReasoningMetadata {
         crate::model_reasoning_metadata::decode_cursor_models(value)
     }
+    fn auto_permission_mode(&self) -> acp_client_runtime::AutoPermissionMode {
+        // Auto-review is not honoured over ACP (E1), so agent mode asks first and
+        // the Router allows in-folder actions.
+        acp_client_runtime::AutoPermissionMode {
+            realized_by: Some("agent"),
+            fallback: None,
+            realization: acp_client_runtime::AutoRealization::AsksFirst,
+            // Cursor's own auto-review is not offered over ACP (E1), so its
+            // ask-first agent mode stands in, and the report says so (R3).
+            stand_in_reason: Some(acp_client_runtime::PermissionModeReason::AutoNotOffered),
+        }
+    }
     fn observe(&self, update: ProviderUpdate) -> Result<ProviderFacts, ProviderError> {
         Ok(ProviderFacts {
             skill_view: match update {

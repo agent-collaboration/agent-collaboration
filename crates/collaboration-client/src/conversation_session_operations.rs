@@ -73,6 +73,7 @@ impl ConversationClient {
                     created_by: None,
                     approver: None,
                     root_message_id: None,
+                    mode: None,
                 };
                 let mut emit = |_event| Ok(());
                 let loaded = acp

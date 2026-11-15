@@ -189,7 +189,7 @@ async fn public_connection_routes_discovery_and_receipt_guarded_loads_to_native_
                     "medium"
                 );
                 assert!(request["params"].get("approvalPolicy").is_none());
-                assert!(request["params"].get("approvalsReviewer").is_none());
+                assert_eq!(request["params"]["approvalsReviewer"], "user");
                 assert_eq!(
                     request["params"]["config"]["mcp_servers"]["notes"]["command"],
                     "/usr/bin/example"

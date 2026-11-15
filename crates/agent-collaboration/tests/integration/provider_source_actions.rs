@@ -117,6 +117,7 @@ async fn public_source_load_and_resume_use_exact_stored_policy_directory_and_app
                     binding_generation,
                     runtime,
                     capabilities,
+                    ..
                 } => Some(collaboration_protocol::ProviderBindingIdentity {
                     endpoint: endpoint.endpoint.clone(),
                     binding_id: binding_id.clone(),

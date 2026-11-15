@@ -1,0 +1,314 @@
+{
+  "version": 1,
+  "pages": [
+    {
+      "id": "home",
+      "title": "CLI and MCP design",
+      "href": "index.html",
+      "icon": "folder"
+    },
+    {
+      "id": "requirements",
+      "title": "Requirements",
+      "href": "requirements.html",
+      "icon": "user"
+    },
+    {
+      "id": "specification",
+      "title": "Specification",
+      "href": "specification.html",
+      "icon": "book-open"
+    },
+    {
+      "id": "program-design",
+      "title": "Program Design",
+      "href": "program-design.html",
+      "icon": "stack"
+    },
+    {
+      "id": "verification",
+      "title": "Verification Design",
+      "href": "verification.html",
+      "icon": "test-tube"
+    },
+    {
+      "id": "d1",
+      "title": "D1 Auto mode",
+      "href": "d1-auto-mode.html",
+      "icon": "shield-check"
+    },
+    {
+      "id": "d2",
+      "title": "D2 Session control",
+      "href": "d2-session-control.html",
+      "icon": "path"
+    },
+    {
+      "id": "d3",
+      "title": "D3 Central-facing",
+      "href": "d3-central-facing.html",
+      "icon": "cloud"
+    }
+  ],
+  "map": [
+    {
+      "title": "What needs you",
+      "description": "Owner questions Q2–Q5.",
+      "icon": "chat-circle",
+      "target": {
+        "page": "requirements",
+        "fragment": "open"
+      }
+    },
+    {
+      "title": "Data model",
+      "description": "What is stored, where; what each action writes.",
+      "icon": "database",
+      "target": {
+        "page": "program-design",
+        "fragment": "data-model"
+      }
+    },
+    {
+      "title": "Deliverables",
+      "description": "D1 auto, D2 session control, D3 central-facing.",
+      "icon": "rocket",
+      "children": [
+        {
+          "title": "D1 Auto mode",
+          "description": "Smallest, first.",
+          "icon": "shield-check",
+          "target": {
+            "page": "d1"
+          }
+        },
+        {
+          "title": "D2 Session control",
+          "description": "Biggest, second.",
+          "icon": "path",
+          "target": {
+            "page": "d2"
+          }
+        },
+        {
+          "title": "D3 Central-facing",
+          "description": "Last, on central's link.",
+          "icon": "cloud",
+          "target": {
+            "page": "d3"
+          }
+        },
+        {
+          "title": "Done means, per deliverable",
+          "description": "Every check and the wrong build it catches.",
+          "icon": "test-tube",
+          "target": {
+            "page": "verification",
+            "fragment": "done"
+          }
+        }
+      ]
+    },
+    {
+      "title": "session_control",
+      "description": "Run, steer, delegate, approve.",
+      "icon": "path",
+      "target": {
+        "page": "requirements",
+        "fragment": "session-control"
+      },
+      "children": [
+        {
+          "title": "U3 Auto permission mode",
+          "description": "Need → R3–R5 → auto design → proof.",
+          "icon": "shield-check",
+          "target": {
+            "page": "requirements",
+            "fragment": "U3"
+          }
+        },
+        {
+          "title": "U4 Approvals reach the Lead",
+          "description": "Need → R6–R9 → approvals design → proof.",
+          "icon": "user",
+          "target": {
+            "page": "requirements",
+            "fragment": "U4"
+          }
+        },
+        {
+          "title": "U5 Delegation",
+          "description": "Need → R10–R11 → Lead walk → proof.",
+          "icon": "users",
+          "target": {
+            "page": "requirements",
+            "fragment": "U5"
+          }
+        },
+        {
+          "title": "U1–U2 One session layer, steer",
+          "description": "Need → R1–R2 → session layer → proof.",
+          "icon": "path",
+          "target": {
+            "page": "requirements",
+            "fragment": "U1"
+          }
+        }
+      ]
+    },
+    {
+      "title": "agent_coordination",
+      "description": "Mail, wakes, schedules.",
+      "icon": "envelope",
+      "target": {
+        "page": "requirements",
+        "fragment": "U9"
+      }
+    },
+    {
+      "title": "workspace_collaboration",
+      "description": "Workspace content.",
+      "icon": "folder",
+      "target": {
+        "page": "requirements",
+        "fragment": "U10"
+      }
+    },
+    {
+      "title": "Endpoints, CLI, caller",
+      "description": "U11–U13 → R17–R20.",
+      "icon": "stack",
+      "target": {
+        "page": "requirements",
+        "fragment": "U11"
+      }
+    }
+  ],
+  "walkthroughs": [
+    {
+      "id": "approvals",
+      "title": "How does a helper's approval reach the Lead?",
+      "description": "Need, rule, design and proof in order.",
+      "steps": [
+        {
+          "target": {
+            "page": "requirements",
+            "fragment": "U4"
+          },
+          "narration": "The need.",
+          "icon": "user"
+        },
+        {
+          "target": {
+            "page": "specification",
+            "fragment": "kinds"
+          },
+          "narration": "Three kinds of session.",
+          "icon": "users"
+        },
+        {
+          "target": {
+            "page": "specification",
+            "fragment": "approvals"
+          },
+          "narration": "Where an approval goes.",
+          "icon": "path"
+        },
+        {
+          "target": {
+            "page": "program-design",
+            "fragment": "cutover"
+          },
+          "narration": "What start stores.",
+          "icon": "database"
+        },
+        {
+          "target": {
+            "page": "program-design",
+            "fragment": "approvals"
+          },
+          "narration": "One record, many destinations.",
+          "icon": "stack"
+        },
+        {
+          "target": {
+            "page": "verification",
+            "fragment": "pb-approvals"
+          },
+          "narration": "How it's proven.",
+          "icon": "test-tube"
+        }
+      ]
+    },
+    {
+      "id": "auto",
+      "title": "What does auto mean for each agent?",
+      "description": "Need, rule, design and proof in order.",
+      "steps": [
+        {
+          "target": {
+            "page": "requirements",
+            "fragment": "U3"
+          },
+          "narration": "The need.",
+          "icon": "user"
+        },
+        {
+          "target": {
+            "page": "specification",
+            "fragment": "R6"
+          },
+          "narration": "No silent refusal.",
+          "icon": "book-open"
+        },
+        {
+          "target": {
+            "page": "program-design",
+            "fragment": "auto"
+          },
+          "narration": "Per-agent realization and fallback.",
+          "icon": "stack"
+        },
+        {
+          "target": {
+            "page": "verification",
+            "fragment": "experiments"
+          },
+          "narration": "Experiments that settle it.",
+          "icon": "test-tube"
+        }
+      ]
+    },
+    {
+      "id": "data",
+      "title": "What data does this create, and where?",
+      "description": "From entities to tables.",
+      "steps": [
+        {
+          "target": {
+            "page": "specification",
+            "fragment": "entities"
+          },
+          "narration": "The nouns.",
+          "icon": "book-open"
+        },
+        {
+          "target": {
+            "page": "specification",
+            "fragment": "data"
+          },
+          "narration": "What each group creates.",
+          "icon": "folder"
+        },
+        {
+          "target": {
+            "page": "program-design",
+            "fragment": "data-model"
+          },
+          "narration": "The tables and what each action writes.",
+          "icon": "database"
+        }
+      ]
+    }
+  ]
+}

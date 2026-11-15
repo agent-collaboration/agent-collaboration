@@ -95,6 +95,7 @@ async fn create_and_first_prompt_share_one_connection_and_return_correlated_sett
                 created_by: Some(sender.clone()),
                 approver: Some(sender.clone()),
                 root_message_id: None,
+                mode: None,
             },
             prompt: ConversationPromptRequest {
                 message: PublicPromptContent::Agent {
@@ -194,6 +195,7 @@ async fn create_and_first_prompt_backend_rejection_retains_created_target() {
                 created_by: Some(sender.clone()),
                 approver: Some(sender.clone()),
                 root_message_id: None,
+                mode: None,
             },
             prompt: ConversationPromptRequest {
                 message: PublicPromptContent::Agent {
@@ -352,6 +354,7 @@ async fn reusable_acp_client_orders_load_updates_and_detaches_on_caller_cancel()
                 created_by: None,
                 approver: None,
                 root_message_id: None,
+                mode: None,
             },
             &mut emit,
         )

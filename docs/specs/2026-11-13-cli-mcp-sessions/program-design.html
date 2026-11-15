@@ -1,0 +1,483 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CLI and MCP: program design</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content" src="./navigation.json"></ex-nav>
+<ex-document id="content">
+<h1>Program Design</h1>
+<p>One Router process, three MCP endpoints, one session layer. Stored data reuses existing tables. No new database, table or column, and no schema change.</p>
+
+<section id="before-after">
+<h2>Before and after</h2>
+<ex-mermaid id="before" label="Today: one server, four session paths"><script type="text/plain">
+flowchart LR
+  CLI[CLI] --> MCP["/mcp · ~165 tools"]
+  AG[Agents] --> MCP
+  CLI -. Codex: direct ACP .-> CA[Codex ACP adapter]
+  MCP --> P1[ConversationClient]
+  MCP --> P2[ConversationOperations]
+  MCP --> P3[SessionOperations]
+  MCP --> P4[message steer/queue]
+  P1 --> CA
+  P1 --> HP[Host provider port]
+  P2 --> HP
+  P3 --> NC[native Codex control]
+  P4 --> HP
+  P4 --> NC
+</script></ex-mermaid>
+<ex-mermaid id="after" label="After: three endpoints, one session layer"><script type="text/plain">
+flowchart LR
+  CLI[CLI] --> S["/mcp/session"]
+  CLI --> C["/mcp/coordination"]
+  CLI --> W["/mcp/workspace"]
+  AG[Agents] --> S & C & W
+  SHIM[Codex CLI shim] --> SC
+  ACPIN[Incoming ACP] --> SC
+  S --> SC[SessionControl]
+  SC --> AD[AcpAgentDriver<br/>Claude · Cursor]
+  SC --> CD[CodexAgentDriver<br/>on contract crate]
+  C --> CO[CentralOperationPort]
+  W --> CO
+  CO --> CEN[central]
+  CEN -- mail · wakes --> SC
+</script></ex-mermaid>
+</section>
+
+<section id="data-model">
+<h2>Data model</h2>
+<p>Where each thing is stored today, and what changes. Central's data stays in central; central also holds pending approvals of non-delegate sessions and forwarded ones (its deliverable D).</p>
+<ex-mermaid id="stores" label="Where each thing lives"><script type="text/plain">
+flowchart LR
+  subgraph MAC["This Mac"]
+    subgraph PO["provider-operations.sqlite"]
+      PSR["provider_session_records<br/>Claude and Cursor sessions"]
+      POP["provider_operations<br/>requests, all agents"]
+    end
+    subgraph IN["interaction.sqlite"]
+      TIH["typed_interaction_history<br/>approvals and questions"]
+      AR["approval_routes<br/>Codex sessions' parent and approver"]
+    end
+    CX["Codex's own thread store<br/>Codex sessions"]
+    MEM["memory: items, cursors, turn state"]
+  end
+  subgraph CEN["central"]
+    WS[workspace content]
+    MAIL[messages · wakes · automations]
+  end
+</script></ex-mermaid>
+
+<h3 id="tables">The tables, as they are on main</h3>
+<ex-mermaid id="tables-er" label="Existing tables and links"><script type="text/plain">
+erDiagram
+  provider_session_records ||--o{ provider_operations : "target session"
+  provider_session_records ||--o{ typed_interaction_history : "raised by"
+  approval_routes ||--o{ typed_interaction_history : "raised by (Codex)"
+  provider_session_records {
+    text target_service_id PK
+    text target_endpoint_id PK
+    text target_session_id PK
+    text requested_policy_json "E8 requested mode"
+    text created_by_json "E2 parent"
+    text approver_json "kind + route: Session(parent) or Human(owner)"
+  }
+  approval_routes {
+    text thread_id PK "Codex session"
+    text route_json "created_by, approver: SessionRef"
+  }
+  provider_operations {
+    text operation_id PK "E3 requestId"
+    text operation_kind
+    text stage
+  }
+  typed_interaction_history {
+    text request_id PK "E9 approval id"
+    text record_json "state, choices, decider"
+  }
+</script></ex-mermaid>
+
+<h3 id="by-agent">Where each agent's session lives</h3>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Entity</th><th>Claude · Cursor</th><th>Codex</th><th>Change</th></tr></thead>
+<tbody>
+<tr><td>E2 Session, parent</td><td><code>provider_session_records</code> row; parent = <code>created_by_json</code></td><td>Codex thread; parent = <code>approval_routes.route_json.created_by</code></td><td>none</td></tr>
+<tr><td>Kind</td><td><code>approver_json</code>: <code>Session(parent)</code> = delegate; anything else = not a delegate</td><td><code>route_json.approver</code>: a session = delegate; widened form for non-delegates (Q5)</td><td>value chosen at start; old rows unchanged</td></tr>
+<tr><td>E3 Request</td><td><code>provider_operations</code></td><td><code>provider_operations</code> (create today; send, stop, steer added)</td><td>Codex driver records every write, not only create</td></tr>
+<tr><td>E9 Approval</td><td colspan="2">central's approvals record (central D); the Mac holds only the waiting request in memory</td><td>moves from <code>typed_interaction_history</code> to central (D8); removal of <code>interaction.sqlite</code> is the central Lead's proposal to you</td></tr>
+<tr><td>E8 Mode</td><td><code>requested_policy_json</code></td><td>Codex thread settings</td><td><code>auto</code> written when no mode given</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="writes">What each action writes</h3>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Action</th><th>Creates</th><th>Updates</th></tr></thead>
+<tbody>
+<tr><td><code>start</code> Claude/Cursor</td><td>1 session record, 1 request</td><td>—</td></tr>
+<tr><td><code>start</code> Codex</td><td>1 Codex thread, 1 approval route, 1 request</td><td>—</td></tr>
+<tr><td><code>send</code> · <code>stop</code> · <code>close</code> · <code>resume</code> · <code>configure</code> · <code>decide</code></td><td>1 request</td><td>that request's stage</td></tr>
+<tr><td>Agent needs a permission</td><td>a waiting request in memory; 1 approval at central</td><td>—</td></tr>
+<tr><td><code>decide</code></td><td>— on the Mac</td><td>central records the ending and decider</td></tr>
+<tr><td>Reads</td><td>nothing</td><td>nothing</td></tr>
+<tr><td>Coordination / workspace tools</td><td>nothing on the Mac</td><td>—</td></tr>
+<tr><td>Start that fails after the agent created the session</td><td>request ends <code>failed</code>; the session record stays and the session shows <code>closed</code>; a retry with the same requestId returns that failure</td><td>—</td></tr>
+</tbody>
+</table>
+</div>
+
+<h3 id="cutover">Kind and approval route, stored at start</h3>
+<ex-mermaid id="cutover-view" label="What start writes, and what an approval reads"><script type="text/plain">
+flowchart LR
+  ST["start (as = session or delegate)"] --> CK{caller is a delegate?}
+  CK -- yes --> REF[refused: delegateCannotStart]
+  CK -- no --> K{as}
+  K -- delegate --> WD["approver = Session(caller)"]
+  K -- session --> WP["approver = Human(owner)"]
+  SH[session opened through the Codex socket or picker] --> WP
+  WD & WP --> AP[approval raised later: read approver]
+  AP -- "Session(parent)" --> PAR[parent + attached clients]
+  AP -- anything else --> SET[Router setting → default central + attached clients]
+</script></ex-mermaid>
+<p>One stored fact decides everything: an approver that is a session means "delegate of that session"; anything else means "not a delegate". Where each kind is written today and after this change:</p>
+<div data-width="canvas">
+<table>
+<thead><tr><th>How the session starts</th><th>Today (main)</th><th>After</th><th>Kind</th></tr></thead>
+<tbody>
+<tr><td>Session tools, Claude/Cursor</td><td><code>provider_session_records</code>, approver = creator (session or person)</td><td>approver = <code>Session(parent)</code> for a delegate, <code>Human(owner)</code> otherwise</td><td>from approver</td></tr>
+<tr><td>Session tools, Codex</td><td><code>approval_routes</code>, approver: SessionRef only (<code>approval_broker.rs:8-14</code>)</td><td>delegate: <code>Session(parent)</code>; non-delegate: widened form (Q5)</td><td>from approver</td></tr>
+<tr><td>Codex CLI through the Router socket to Claude/Cursor (the shim)</td><td><code>provider_session_records</code> written by the shim</td><td>unchanged; approver is not a parent session</td><td>not a delegate</td></tr>
+<tr><td>Codex CLI through the Router socket to Codex (native passthrough)</td><td>no route row; approvals go natively to the attached client</td><td>no route row means not a delegate; routing to central needs the Router to take native approval requests (D2 slice 5, on the contract crate)</td><td>not a delegate</td></tr>
+</tbody>
+</table>
+</div>
+<p> Whether a caller may start sessions is read from the caller's own record the same way. Reopen reads the same record, so the kind survives restarts. Old rows keep their value (Q4).</p>
+<aside class="design-item" id="D1" data-design-item="decision" data-authority="owner-words" data-source="owner, this session, 2026-11-13"><blockquote>delegate cant start a pain sesion they shoud lask a lead</blockquote><p>One layer of delegates; kind and route stored at start in the existing approver field.</p><p>Depends on it: <a href="specification.html#R8">R8</a>, <a href="specification.html#R10">R10</a>.</p></aside>
+<aside class="design-item" id="D5" data-design-item="decision" data-authority="owner-words"><p>Codex's <code>approval_routes.route_json.approver</code> widens from SessionRef to the same session-or-person form, so a non-delegate Codex session can route to central. Old rows still decode unchanged. No migration: the route is stored as JSON, so only the Rust type changes. Owner, Q5: "yes", and "we nto doing a migration we just changing thigns".</p><p>Depends on it: <a href="specification.html#R8">R8</a>.</p></aside>
+</section>
+
+<section id="endpoints">
+<h2>Three endpoints and the caller</h2>
+<ex-mermaid id="endpoints-view" label="One server, three routers, caller from metadata"><script type="text/plain">
+flowchart TB
+  REQ["tools/call + _meta caller"] --> SOCK[Router API socket · axum]
+  SOCK --> CC{CallerContext}
+  CC -- missing or unknown session --> REF[refused: callerRequired / unknownCaller]
+  CC -- ok --> R1["/mcp/session"]
+  CC -- ok --> R2["/mcp/coordination"]
+  CC -- ok --> R3["/mcp/workspace"]
+</script></ex-mermaid>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Who calls</th><th>How the caller travels</th><th>Attached by</th></tr></thead>
+<tbody>
+<tr><td>CLI</td><td><code>_meta["agent-collaboration/caller"]</code> = SessionRef JSON from harness env (<code>CODEX_THREAD_ID</code>, <code>CLAUDE_CODE_SESSION_ID</code>, <code>CURSOR_CONVERSATION_ID</code>), or <code>{"person":"local-owner"}</code> with <code>--human-user</code></td><td>agent-collaboration</td></tr>
+<tr><td>Router-launched Claude / Cursor</td><td>HTTP header <code>X-Agent-Collaboration-Caller</code> = SessionRef JSON, set per session in <code>NewSessionRequest.mcpServers[].headers</code></td><td>acp-client-runtime at session start</td></tr>
+<tr><td>Router-launched Codex</td><td>same header, in the per-thread MCP server config the adapter writes at thread start</td><td>codex-acp-adapter</td></tr>
+<tr><td>Anything else</td><td>none → <code>callerRequired</code></td><td>—</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>caller_from_meta</code> reads the header first, then <code>_meta</code>; both present and different → <code>malformedCaller</code>. Not authenticated until session auth (L1). A person caller (CLI outside any agent session) works for session tools. For workspace and coordination tools it goes to central as <code>Caller::Person { machine_id, person_id }</code> using the person signed in on this Mac; with nobody signed in (central's sign-in slice not yet landed), the Host refuses locally with <code>signInRequired</code> and sends nothing. Settled with the central Lead 2026-11-13.</p>
+<aside class="design-item" id="A1" data-design-item="assumption" data-authority="author"><p>The caller is declared by the client (CLI metadata or the per-session header) and is not authenticated until session auth exists.</p><p>Depends on it: <a href="specification.html#R20">R20</a>, <a href="specification.html#R17">R17</a>.</p></aside>
+<details><summary>CallerContext shape</summary>
+<pre><code>// collaboration-mcp (new module)
+pub enum CallerContext { Session(SessionRef), Person(PersonIdentity) }
+pub enum CallerRefusal { CallerRequired, UnknownCaller { session: SessionRef }, MalformedCaller }
+fn caller_from_meta(meta: &amp;Meta, sessions: &amp;dyn SessionDirectory) -&gt; Result&lt;CallerContext, CallerRefusal&gt;;</code></pre>
+</details>
+</section>
+
+<section id="session-layer">
+<h2>One session layer</h2>
+<ex-mermaid id="layer" label="Who owns what"><script type="text/plain">
+flowchart TB
+  SC["SessionControl (collaboration-service)<br/>delivery choice · steer restart · request records"]
+  SC --> DRV{{"AgentDriver<br/>start · prompt · steer · queue · stop · read · settings"}}
+  DRV --> AD["AcpAgentDriver (codex-router-host)"]
+  DRV --> CD["CodexAgentDriver (codex-acp-adapter)"]
+  AD --> CL[Claude · Cursor]
+  CD --> APP[Codex app-server]
+</script></ex-mermaid>
+<details open><summary>Interfaces (Rust, existing conventions)</summary>
+<pre><code>// collaboration-service::session_control
+pub struct SessionControl { drivers: DriverSet, requests: ProviderOperationStore, approvers: ApproverDirectory }
+impl SessionControl {
+  pub async fn start(&amp;self, caller: CallerContext, req: StartRequest) -&gt; Result&lt;StartResult, SessionRefusal&gt;;
+  pub async fn send(&amp;self, caller: CallerContext, req: SendRequest) -&gt; Result&lt;SendResult, SessionRefusal&gt;;
+  pub async fn stop(&amp;self, caller: CallerContext, req: StopRequest) -&gt; Result&lt;StopResult, SessionRefusal&gt;;
+  pub async fn read(&amp;self, req: ReadRequest) -&gt; Result&lt;ReadPage, SessionRefusal&gt;;
+}
+pub enum Delivery { Started, Queued, Steered, Restarted }
+pub struct SendResult { pub delivery: Delivery, pub input: InputId, pub request_id: RequestId, pub outcome: Option&lt;Outcome&gt; }
+pub enum SessionRefusal {
+  InvalidInput { field: &amp;'static str, accepted: Vec&lt;String&gt; }, SessionNotFound, NotSupported { fix: String },
+  StopNotConfirmed { turn: TurnId }, DelegateCannotStart, SignInRequired,
+  StaleGeneration, RequestConflict, RequestExpired, Unavailable { reason: String },
+}
+
+// collaboration-contracts::agent_driver
+#[async_trait] pub trait AgentDriver {
+  fn capabilities(&amp;self, session: &amp;SessionRef) -&gt; DriverCapabilities;   // steer, queue, autoRealization
+  async fn start(&amp;self, plan: StartPlan) -&gt; Result&lt;StartedSession, DriverError&gt;;
+  async fn prompt(&amp;self, session: &amp;SessionRef, input: Input) -&gt; Result&lt;TurnId, DriverError&gt;;
+  async fn steer(&amp;self, session: &amp;SessionRef, turn: TurnId, input: Input) -&gt; Result&lt;(), DriverError&gt;;
+  async fn queue(&amp;self, session: &amp;SessionRef, input: Input) -&gt; Result&lt;(), DriverError&gt;;
+  async fn stop(&amp;self, session: &amp;SessionRef, turn: TurnId) -&gt; Result&lt;StopSettled, DriverError&gt;;
+}
+pub enum AutoRealization { ClassifierEscalates, AsksFirst, Unknown }
+pub enum StopSettled { Cancelled { turn: TurnId }, AlreadyEnded { turn: TurnId }, NotConfirmed }
+
+pub struct StartRequest { pub kind: SessionKindRequest /* Session | Delegate */, pub agent: EndpointId, pub working_directory: PathBuf, pub access: RouterAccess, pub mode: Option&lt;ModeRequest&gt;, pub model: Option&lt;String&gt;, pub effort: Option&lt;String&gt;, pub fork: Option&lt;SessionRef&gt;, pub wait: WaitSeconds, pub request_id: RequestId }
+pub enum ModeRequest { Auto, Agent(String) }
+pub struct StartResult { pub status: StartStatus /* Created | Pending */, pub request_id: RequestId, pub session: SessionRef, pub kind: SessionKind /* NotDelegate | Delegate */, pub parent: Option&lt;SessionRef&gt;, pub requested_mode: ModeRequest, pub actual_mode: String, pub mode_reason: Option&lt;String&gt; }
+pub struct SendRequest { pub session: SessionRef, pub message: Vec&lt;PromptContent&gt;, pub delivery: DeliveryRequest /* Auto | Queue | Steer */, pub wait: WaitSeconds, pub generation: Option&lt;Generation&gt;, pub request_id: RequestId }
+pub struct StopRequest { pub session: SessionRef, pub target_turn: Option&lt;TurnId&gt;, pub generation: Option&lt;Generation&gt;, pub request_id: RequestId }
+pub enum StopResult { StopRequested { turn: TurnId }, NoActiveWork }
+pub struct ReadRequest { pub session: SessionRef, pub after: Option&lt;Cursor&gt;, pub limit: u16, pub max_bytes: u32, pub wait: WaitSeconds }
+pub struct ReadPage { pub items: Vec&lt;ReadItem&gt;, pub cursor: Cursor, pub has_more: bool, pub reset: Option&lt;ResetReason&gt; }
+pub enum Outcome { Running, Completed { outcome: TurnOutcome, stop_reason: StopReason, reply: Option&lt;String&gt; }, Cancelled, Failed { error: String }, Lost, Unknown }
+pub struct DriverCapabilities { pub steer: bool, pub queue: bool, pub auto: AutoRealization, pub modes: Vec&lt;String&gt; }
+pub struct StartPlan { pub agent: EndpointId, pub working_directory: PathBuf, pub writable: Vec&lt;PathBuf&gt; /* working + temp */, pub mode: String, pub reviewer: ReviewerRoute /* RouterAsks */, pub caller_header: SessionRef }
+pub struct StartedSession { pub session: SessionRef, pub actual_mode: String, pub mode_reason: Option&lt;String&gt; }
+pub struct Input { pub id: InputId, pub content: Vec&lt;PromptContent&gt; }
+pub enum DriverError { NotSupported, Unavailable(String), Rejected(String), Uncertain }  // Uncertain: dispatch may have happened
+// Existing, unchanged (session-event-model): SessionEvent stream (TurnStarted, InputAccepted, ItemStarted, ItemUpdated,
+//   ItemCompleted, TurnEnded, InteractionRequested…), SessionItem { item_id, kind, text }, PromptContent, TurnOutcome, StopReason.
+// New public read projection, folded from that stream in memory by SessionControl (no storage):
+pub struct ReadItem {
+  pub item: String,                 // SessionItem.item_id
+  pub revision: u32,                // +1 on every visible change: ItemStarted, ItemUpdated, ItemCompleted, interaction opened or resolved
+  pub kind: SessionItemKind,        // from SessionItem
+  pub status: ItemStatus,           // Running until ItemCompleted; ToolCall uses its ToolCallStatus; Pending for an open interaction
+  pub turn: Option&lt;String&gt;,         // the turn open (TurnStarted…TurnEnded) when the item started
+  pub input: Option&lt;InputId&gt;,       // TurnStarted.input_id or InputAccepted.input_id for user messages
+  pub text: Option&lt;String&gt;, pub truncated: bool,
+  pub pending: Option&lt;InteractionRequestId&gt;, // InteractionRequested not yet resolved
+}
+pub enum ItemStatus { Running, Completed, Failed, Pending, Unknown }
+// New (collaboration-service::session_control, in memory only): Cursor { session, host_epoch, replay, position: u64 },
+//   ResetReason { HostRestarted, HistoryReplayed, Lagged, CursorInvalid }.</code></pre>
+</details>
+
+<h3 id="restart">Steer by restart</h3>
+<ex-mermaid id="restart-state" label="Restart steps and races"><script type="text/plain">
+stateDiagram-v2
+  [*] --> recorded: request written (stage running)
+  recorded --> stopping: driver.stop(turn T)
+  stopping --> prompting: Cancelled(T) or AlreadyEnded(T)
+  stopping --> failedStop: NotConfirmed → StopNotConfirmed, nothing sent
+  prompting --> done: driver.prompt → new turn → Restarted
+  prompting --> failedPrompt: prompt error → request failed, old turn already stopped
+  done --> [*]
+  failedStop --> [*]
+  failedPrompt --> [*]
+</script></ex-mermaid>
+<p>Retry storage: <code>provider_operations</code> holds status only. A repeated requestId returns that status and the result while it is still in memory; otherwise <code>outputUnavailable</code>. No answer column is added.</p>
+<p>Sends to one session run one at a time, in arrival order. Turn T is read when a send <em>starts executing</em>, not when it arrives, so a second steer that waited behind a restart sees the new turn T1. A prompt that returns <code>Uncertain</code> ends the request <code>unknown</code> (never retried automatically; <code>reconcile</code> settles it).</p>
+</section>
+
+<section id="auto">
+<h2>Auto permission mode</h2>
+<ex-mermaid id="auto-map" label="What 'auto' becomes for each agent"><script type="text/plain">
+flowchart LR
+  A["mode = auto"] --> C1["Claude<br/>set_mode auto · additionalDirectories = scratch folder<br/>classifier denial → escalation"]
+  A --> C2["Codex<br/>workspace-write sandbox · approvalsReviewer = user<br/>outside sandbox → asks"]
+  A --> C3["Cursor<br/>agent mode · Router allows in-folder file actions<br/>(E1: auto-review not available over ACP)"]
+</script></ex-mermaid>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Agent</th><th><code>autoRealization</code></th><th>If not provable</th><th>Owner</th></tr></thead>
+<tbody>
+<tr><td>Claude</td><td>ClassifierEscalates (experiment E2)</td><td>The Host's external provider supervisor prepares the scratch folder at create and passes it to <code>session/new</code> <code>additionalDirectories</code>. Actual mode <code>acceptEdits</code>: file edits in the working and scratch folders run; shell commands whose paths are all in the scratch folder run; others ask (Q3)</td><td><code>acp-provider-adapters::claude_behavior</code></td></tr>
+<tr><td>Codex</td><td>AsksFirst</td><td>—</td><td><code>codex-acp-adapter::session_creation</code></td></tr>
+<tr><td>Cursor</td><td>AsksFirst (E1: auto-review not honoured over ACP)</td><td>actual mode <code>agent</code>; the Router answers allow-once for file reads and edits whose locations are all inside the working folder or the session's scratch folder, and shell commands whose paths all lie in the scratch folder (Q3); everything else becomes an approval routed by the session's kind</td><td><code>acp-provider-adapters::cursor_behavior</code></td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="approvals">
+<h2>Approvals: one record, many destinations</h2>
+<ex-mermaid id="approval-seq" label="A delegate's approval: central decides"><script type="text/plain">
+sequenceDiagram
+  participant A as Delegate agent
+  participant R as Mac broker (waiting request)
+  participant P as Parent session
+  participant C as Attached Codex CLI
+  participant Z as central (record, arbiter)
+  A->>R: permission request
+  R->>Z: RequestApproval
+  par shown at
+    R->>P: push: approval id, action, choices
+    R->>C: InteractionRequested → shim → Codex prompt
+  end
+  P->>R: decide(approve)
+  R->>Z: DecideApproval(parent, approve)
+  Z->>Z: first answer wins
+  Z-->>R: ApprovalDecision approved by parent
+  R-->>A: approved
+  R-->>C: resolved: decided by parent
+</script></ex-mermaid>
+<ex-mermaid id="plain-seq" label="A non-delegate's approval"><script type="text/plain">
+sequenceDiagram
+  participant A as Lead (not a delegate)
+  participant R as Mac broker
+  participant Z as central
+  participant U as You: CLI now, UI later
+  A->>R: permission request
+  R->>Z: RequestApproval
+  U->>Z: ListApprovals · DecideApproval
+  Z->>Z: first answer wins
+  Z-->>R: ApprovalDecision
+  R-->>A: approved or denied
+</script></ex-mermaid>
+<p><strong>Central is the record of truth and the arbiter</strong> (owner decision D8). The Mac's broker keeps only the agent's waiting request in memory, sends <code>RequestApproval</code> to central, relays answers from attached clients and the parent to central, and applies the <code>ApprovalDecision</code> central delivers. If the Router restarts or the turn stops, the agent's waiting request is gone; the Mac tells central "requester gone". Central ends the approval <code>cancelled</code> if it is still pending, and keeps its ending if it already recorded one (a decision that arrives for a gone request changes nothing on the Mac). Central's recorded ending always wins. After a crash nothing is reported, so the recovery belongs to central (dependency named in <a href="specification.html#A7">A7</a>): on reconnect the Router announces a new lifetime and central cancels whatever was still pending from the previous one. No local persistence is added. While central is unreachable, approvals wait (the agent is told it's pending). Central's side (table, arbitration, late-answer refusal) is the central Lead's deliverable D (<a href="specification.html#A7">A7</a>); until it lands, a stand-in arbiter runs the same rules.</p>
+<aside class="design-item" id="A2" data-design-item="assumption" data-authority="unknown"><p>After an approval, Claude's retry of a classifier-blocked action gets through (or the acceptEdits switch makes it ask). Experiment E2 decides.</p><p>Depends on it: <a href="specification.html#R6">R6</a>.</p></aside>
+<aside class="design-item" id="A3" data-design-item="decision" data-authority="author"><p>Cursor runs in <code>agent</code> mode with the Router answering in-folder file actions: experiment E1 found Cursor's ACP path maps <code>auto-review</code> to <code>allowlist</code> (installed 2026.10.22 bundle, tmp/cli-mcp-experiments/report.md).</p><p>Depends on it: <a href="specification.html#R3">R3</a>, <a href="specification.html#R4">R4</a>.</p></aside>
+<details><summary>Shapes</summary>
+<pre><code>// collaboration-runtime::interaction_broker (existing broker, one notice fan-out)
+pub enum ApprovalDestination { Parent(SessionRef), AttachedClient(ClientId), Central, RouterSetting(SettingTarget) }
+pub struct ApprovalNotice { pub approval_id: InteractionRequestId, pub session: SessionRef, pub summary: String, pub choices: Vec&lt;ApprovalChoice&gt; }
+pub enum ApprovalEnding { Approved { by: Decider }, Denied { by: Decider }, Cancelled { reason: CancelReason }, TimedOut }
+pub enum Decider { Session(SessionRef), Client(ClientId), Person(PersonId), Classifier(String) }
+pub enum DecideRefusal { NotADestination, AlreadyDecided { by: Decider }, UnknownApproval }
+// Central side (Lead A, deliverable D): RequestApproval, ListApprovals, DecideApproval, Deliver ApprovalDecision.</code></pre>
+</details>
+</section>
+
+<section id="shim">
+<h2>Clients anywhere: the Codex socket shows approvals</h2>
+<ex-mermaid id="shim-view" label="Any attached client sees approvals"><script type="text/plain">
+flowchart LR
+  EV[InteractionRequested event] --> SHIM[Router app-server face]
+  SHIM --> L[Codex CLI on this Mac: can decide]
+  SHIM --> RM[Codex CLI via --remote: sees it; decides once session auth exists]
+  L --> DEC[decide → first wins]
+</script></ex-mermaid>
+<p>The Router's Codex app-server face turns a session's approval events into the Codex approval requests the Codex CLI already renders, and turns its answer into <code>decide</code>. Its typed protocol comes from the Protocol Lead's contract crate (L4).</p>
+</section>
+
+<section id="router-setting">
+<h2>Non-delegates: a Router setting</h2>
+<p>Every non-delegate's approvals go where <code>settings.jsonc</code> says: <code>"approvals": { "nonDelegates": { "central": true, "attachedClients": true, "agent": null } }</code> (the default), or with <code>"agent": "&lt;SessionRef&gt;"</code> to also send them to an agent you pick. A new setting key, not a stored-data change.</p>
+</section>
+
+<section id="central-tools">
+<h2>Coordination and workspace tools</h2>
+<ex-mermaid id="central-seq" label="Every coordination or workspace call"><script type="text/plain">
+sequenceDiagram
+  participant C as Caller
+  participant T as Tool
+  participant P as CentralOperationPort (Lead A)
+  participant Z as central
+  C->>T: input + requestId + caller meta
+  T->>P: Operation, caller: Session or Person
+  P->>Z: Request frame
+  Z-->>P: OperationResult
+  P-->>T: unchanged
+  T-->>C: structured result
+</script></ex-mermaid>
+<aside class="design-item" id="A4" data-design-item="assumption" data-authority="author"><p>Until Lead A's port lands, tools run against a stand-in returning central's real result enums; central integration stays unverified.</p><p>Depends on it: <a href="specification.html#R13">R13</a>, <a href="specification.html#R15">R15</a>.</p></aside>
+<details><summary>Port shape (from Lead A's link)</summary>
+<pre><code>#[async_trait] pub trait CentralOperationPort {
+  async fn call(&amp;self, request_id: RequestId, caller: Caller /* Session(SessionAddress) | Person { machine_id, person_id } */, workspace: Option&lt;WorkspaceId&gt;, op: Operation) -&gt; OperationResult;
+}
+// Person caller with nobody signed in on this Mac: refused locally with signInRequired; nothing sent.</code></pre>
+</details>
+</section>
+
+<section id="cli">
+<h2>CLI</h2>
+<ex-mermaid id="cli-flow" label="One command → one tool"><script type="text/plain">
+flowchart LR
+  CMD["agent-collaboration group job"] --> MINT[mint requestId if the tool takes one]
+  MINT --> META[set caller meta from harness]
+  META --> CALL["tools/call on /mcp/group"]
+  CALL --> OUT["--json prints structuredContent as is"]
+</script></ex-mermaid>
+</section>
+
+<section id="failures">
+<h2>When things go wrong</h2>
+<ex-mermaid id="failure-flow" label="Failure handling"><script type="text/plain">
+flowchart TD
+  F1[central unreachable] --> O1[CentralUnavailable · nothing attempted]
+  F2[central answer lost] --> O2[OutcomeUnknown · retry same requestId]
+  F3[restart: stop not confirmed] --> O3[StopNotConfirmed · nothing sent]
+  F4[restart: prompt fails] --> O4[request failed · old turn stopped]
+  F5[approver never answers] --> O5[timedOut to agent and approver]
+  F6[Router restarts mid-approval] --> O6[cancelled · agent told]
+  F7[caller missing] --> O7[callerRequired]
+  F8[delegate tries to start a session] --> O8[delegateCannotStart]
+  F9[central unreachable] --> O9[approvals wait; agent told pending; nothing decided locally]
+</script></ex-mermaid>
+</section>
+
+<section id="host-files">
+<h2>Files shared with Lead A</h2>
+<p><code>codex-router-host</code>: <code>provider_session_command_port.rs</code>, <code>acp_interaction_port.rs</code>, <code>provider_acp_delivery_route.rs</code>, <code>claude_provider_launch_environment.rs</code>, <code>provider_queue_operation_registry.rs</code>. Order agreed with Lead A before edits (L5).</p>
+</section>
+
+<section id="decision">
+<h2>Structure decision</h2>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Choice</th><th>Picked</th><th>Rejected</th><th>Reopen if</th></tr></thead>
+<tbody>
+<tr><td>Session layer</td><td>SessionControl + AgentDriver</td><td>Patch each of four paths</td><td>A driver must decide delivery</td></tr>
+<tr><td>Approval route</td><td>Kind chosen at start, stored in the existing approver field</td><td>A chain of delegates walked at approval time (pruned routes break it); new column (needs owner)</td><td>You allow more than one layer</td></tr>
+<tr><td>Caller</td><td>Client-declared request metadata</td><td>Per-session credentials (session auth, deferred)</td><td>Session auth lands</td></tr>
+<tr><td>Claude escalation</td><td>Classifier denial → approval → retry; else acceptEdits</td><td>Always acceptEdits</td><td>Experiment E2 fails</td></tr>
+<tr><td>Approval authority</td><td>Central decides (owner D8)</td><td>Mac decides with a central copy (two records to reconcile); split by kind</td><td>Central reachability becomes a real problem</td></tr>
+<tr><td>Endpoints</td><td>Three routers, one server</td><td>Three processes</td><td>Endpoints need separate lifetimes</td></tr>
+</tbody>
+</table>
+</div>
+</section>
+
+<section id="trace">
+<h2>From rule to owner</h2>
+<details><summary>Trace table: one row per rule</summary>
+<div data-width="canvas">
+<table>
+<thead><tr><th>U</th><th>R</th><th>E</th><th>Owner</th><th>Interface</th><th>Shape · home</th><th>State</th><th>Failure</th><th>Proof seam</th></tr></thead>
+<tbody>
+<tr><td>U1</td><td>R1</td><td>E2 E3</td><td>SessionControl</td><td>start/send/read/stop</td><td>StartRequest… · collaboration-service</td><td>request stage</td><td>SessionRefusal</td><td>each door → SessionControl</td></tr>
+<tr><td>U2</td><td>R2</td><td>E4 E5</td><td>SessionControl</td><td>send</td><td>Delivery · SendResult</td><td>restart states</td><td>StopNotConfirmed</td><td>Cursor steer</td></tr>
+<tr><td>U3</td><td>R3</td><td>E8</td><td>PermissionModePlan</td><td>start → driver.start</td><td>requested_policy_json</td><td>requested vs actual</td><td>modeReason</td><td>agent-reported mode</td></tr>
+<tr><td>U3</td><td>R4</td><td>E8</td><td>PermissionModePlan</td><td>NewSessionRequest dirs; Codex sandbox</td><td>additionalDirectories</td><td>—</td><td>approval raised = fail</td><td>temp file actions</td></tr>
+<tr><td>U3 U8</td><td>R5</td><td>E8</td><td>SessionControl</td><td>start, configure</td><td>InvalidInput{accepted}</td><td>—</td><td>invalidInput</td><td>focused test</td></tr>
+<tr><td>U4</td><td>R6</td><td>E8 E9</td><td>ApprovalRouter, DenialEscalation</td><td>permission request; denial watch</td><td>typed_interaction_history</td><td>approval states</td><td>fallback to asking mode</td><td>out-of-sandbox action</td></tr>
+<tr><td>U8</td><td>R7</td><td>E1 E8</td><td>drivers</td><td>capabilities()</td><td>AutoRealization</td><td>—</td><td>Unknown</td><td><code>options</code> vs V6</td></tr>
+<tr><td>U4 U5</td><td>R8</td><td>E9 E10</td><td>ApprovalRouter</td><td>fan-out to destinations</td><td>ApprovalNotice</td><td>pending</td><td>NotADestination</td><td>Lead's push</td></tr>
+<tr><td>U4 U7</td><td>R9</td><td>E9</td><td>ApprovalRouter</td><td>decide relayed to central; central arbitrates</td><td>ApprovalEnding, DecideRefusal</td><td>four endings</td><td>AlreadyDecided, Cancelled, TimedOut</td><td>two answers at once</td></tr>
+<tr><td>U4</td><td>R9a</td><td>E9</td><td>ApprovalRouter</td><td>forward (adds central destinations for a delegate)</td><td>central approvals (central D)</td><td>forwarded</td><td>centralUnavailable</td><td>forward then CLI decide</td></tr>
+<tr><td>U4 U13</td><td>R21</td><td>E9 E10</td><td>app-server face</td><td>approval events → Codex approval requests</td><td>contract crate types</td><td>—</td><td>remote decide refused until session auth</td><td>Codex CLI attached</td></tr>
+<tr><td>U5</td><td>R10</td><td>E2</td><td>SessionControl</td><td>start, show</td><td>created_by + approver (kind) in both stores</td><td>kind fixed at start</td><td>DelegateCannotStart</td><td>delegate start refused; show after restart</td></tr>
+<tr><td>U5</td><td>R11</td><td>E2 E9</td><td>ApprovalRouter</td><td>parent session's permission path</td><td>—</td><td>—</td><td>—</td><td>subagent request</td></tr>
+<tr><td>U5</td><td>R22</td><td>E2 E4</td><td>SessionControl</td><td>turn-ended event → coordination send to parent</td><td>SessionEvent turnEnded; parent from stored approver</td><td>once per turn end</td><td>parent gone: dropped and logged</td><td>delegate turn end, parent wake</td></tr>
+<tr><td>U5</td><td>R23</td><td>E2</td><td>SessionControl</td><td>start / send result</td><td><code>wakeReminder</code> on results for delegates</td><td>—</td><td>—</td><td>result field read</td></tr>
+<tr><td>U6 U7 U8</td><td>R12</td><td>E3 E6 E7</td><td>SessionTools</td><td>MCP wire</td><td>tool schemas</td><td>request records</td><td>RequestConflict, RequestExpired</td><td>protocol tests</td></tr>
+<tr><td>U9</td><td>R13</td><td>none: central's</td><td>CoordinationTools</td><td>CentralOperationPort</td><td>Operation / OperationResult</td><td>—</td><td>every result variant</td><td>port stand-in, then central</td></tr>
+<tr><td>U9</td><td>R14</td><td>E4</td><td>SessionControl</td><td>send from delivery</td><td>Delivery</td><td>—</td><td>as R1</td><td>mail and wake to busy session</td></tr>
+<tr><td>U10</td><td>R15</td><td>none: central's</td><td>WorkspaceTools</td><td>CentralOperationPort</td><td>Operation / OperationResult</td><td>—</td><td>every result variant</td><td>port stand-in, then central</td></tr>
+<tr><td>U10</td><td>R16</td><td>E12</td><td>WorkspaceTools</td><td>tools/list</td><td>router</td><td>—</td><td>—</td><td>tool list</td></tr>
+<tr><td>U11</td><td>R17</td><td>E12</td><td>collaboration-mcp</td><td>three routers</td><td>axum routes</td><td>—</td><td>—</td><td>tools/list per endpoint</td></tr>
+<tr><td>U12</td><td>R18</td><td>E13</td><td>agent-collaboration</td><td>command → tools/call</td><td>structuredContent</td><td>—</td><td>same refusal</td><td>pairwise compare</td></tr>
+<tr><td>U13</td><td>R19</td><td>E2</td><td>app-server face → SessionControl</td><td>Codex app-server methods</td><td>contract crate types</td><td>—</td><td>—</td><td>real Codex CLI</td></tr>
+<tr><td>U12</td><td>R20</td><td>E11</td><td>collaboration-mcp</td><td>caller_from_meta</td><td>CallerContext</td><td>—</td><td>CallerRefusal</td><td>recorded actor</td></tr>
+</tbody>
+</table>
+</div>
+</details>
+</section>
+</ex-document>
+</body>
+</html>

@@ -80,6 +80,7 @@ pub fn qualify_capabilities(
                 binding_generation,
                 runtime,
                 capabilities,
+                ..
             } = channel
                 && runtime.provider == ProviderKind::Cursor
                 && capabilities.as_slice().iter().any(|capability| {

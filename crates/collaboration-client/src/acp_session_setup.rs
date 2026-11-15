@@ -58,6 +58,7 @@ impl AcpConversation {
         self.pending_updates.clear();
         self.pending_bytes = 0;
         self.permission_differences.clear();
+        self.permission_mode = None;
         if !request.cwd.is_absolute() {
             return Err(crate::OperationError::before_dispatch(
                 "validation",
@@ -159,6 +160,9 @@ impl AcpConversation {
             if let Some(source_thread_id) = &request.fork {
                 router_metadata.insert("forkThreadId".into(), json!(source_thread_id));
             }
+            if let Some(mode) = &request.mode {
+                router_metadata.insert("mode".into(), json!(mode));
+            }
             let params =
                 json!({"cwd":request.cwd,"mcpServers":[],"_meta":{"codexRouter":router_metadata}});
             let stage = if request.fork.is_some() {
@@ -181,6 +185,9 @@ impl AcpConversation {
                     crate::OperationError::after_dispatch(stage, None, None, source)
                 })?;
             self.permission_differences = permission_differences(&result).map_err(|source| {
+                crate::OperationError::after_dispatch(stage, None, None, source)
+            })?;
+            self.permission_mode = permission_mode(&result).map_err(|source| {
                 crate::OperationError::after_dispatch(stage, None, None, source)
             })?;
             SessionRef {
@@ -221,6 +228,18 @@ impl AcpConversation {
         self.session_ready = true;
         Ok(target)
     }
+}
+
+fn permission_mode(
+    result: &Value,
+) -> Result<Option<collaboration_protocol::CodexPermissionModeReport>, ClientError> {
+    result
+        .pointer("/_meta/codexRouter/permissionMode")
+        .map(|mode| {
+            serde_json::from_value(mode.clone())
+                .map_err(|_| ClientError::Protocol("invalid permission mode"))
+        })
+        .transpose()
 }
 
 fn permission_differences(

@@ -64,6 +64,8 @@ pub(crate) fn effective_settings(
         mode: None,
         model: None,
         effort: None,
+        requested_mode: None,
+        mode_reason: None,
     }
 }
 
@@ -127,5 +129,31 @@ pub(crate) fn provider_session_record(
         created_by,
         approver,
         updated_at_ms: chrono::Utc::now().timestamp_millis(),
+    }
+}
+
+pub(crate) const fn provider_mode_reason(
+    reason: acp_client_runtime::PermissionModeReason,
+) -> collaboration_protocol::ProviderModeReason {
+    use acp_client_runtime::PermissionModeReason as Runtime;
+    use collaboration_protocol::ProviderModeReason as Protocol;
+    match reason {
+        Runtime::AutoNotOffered => Protocol::AutoNotOffered,
+        Runtime::AgentFellBack => Protocol::AgentFellBack,
+        Runtime::AutoNotRealized => Protocol::AutoNotRealized,
+        Runtime::EscalationUnproven => Protocol::EscalationUnproven,
+        Runtime::AutoNotApplied => Protocol::AutoNotApplied,
+    }
+}
+
+pub(crate) const fn provider_auto_realization(
+    realization: acp_client_runtime::AutoRealization,
+) -> collaboration_protocol::ProviderAutoRealization {
+    use acp_client_runtime::AutoRealization as Runtime;
+    use collaboration_protocol::ProviderAutoRealization as Protocol;
+    match realization {
+        Runtime::ClassifierEscalates => Protocol::ClassifierEscalates,
+        Runtime::AsksFirst => Protocol::AsksFirst,
+        Runtime::Unknown => Protocol::Unknown,
     }
 }

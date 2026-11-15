@@ -22,6 +22,7 @@ fn provider_create_settings_have_typed_request_and_result() {
     let created = ExternalProviderCreatedSession {
         provider_session_id: "session-a".to_owned(),
         effective_settings: effective.clone(),
+        permission_mode: acp_client_runtime::PermissionModeReport::default(),
     };
     let applied = AppliedProviderSetting {
         kind: ProviderSettingKind::Mode,

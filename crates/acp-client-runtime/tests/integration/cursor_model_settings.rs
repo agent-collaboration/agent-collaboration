@@ -460,6 +460,7 @@ async fn create_refreshes_mode_dependent_model_and_model_dependent_effort_choice
         .client
         .create_session_with_settings(
             fixture.root.path().into(),
+            None,
             RequestedProviderSettings {
                 mode: Some("ask".into()),
                 model: Some("fixture-b".into()),
