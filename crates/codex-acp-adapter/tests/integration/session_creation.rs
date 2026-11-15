@@ -121,7 +121,7 @@ async fn new_session_mints_scoped_configuration_receipt_and_checks_effective_cwd
                 );
                 assert!(request["params"].get("sandbox").is_none());
                 assert!(request["params"].get("approvalPolicy").is_none());
-                assert!(request["params"].get("approvalsReviewer").is_none());
+                assert_eq!(request["params"]["approvalsReviewer"], "user");
                 assert_eq!(
                     request["params"]["config"]["mcp_servers"]["notes"]["args"],
                     json!(["--stdio"])
@@ -195,6 +195,11 @@ async fn new_session_mints_scoped_configuration_receipt_and_checks_effective_cwd
                 assert_eq!(
                     session.new_session_result()["_meta"]["codexRouter"]["permissionDifferences"],
                     json!(["writableRoots"])
+                );
+                // R3: write-restricted is an explicit narrower access, not auto.
+                assert_eq!(
+                    session.new_session_result()["_meta"]["codexRouter"]["permissionMode"],
+                    json!({"access":"write-restricted","actual":"write-restricted","reason":"autoNotRealized"})
                 );
             }
             assert_eq!(
@@ -419,7 +424,7 @@ async fn fork_session_sends_exact_model_choice_to_native_runtime() {
             assert_eq!(request["params"]["permissions"], "router-workspace-write");
             assert!(request["params"].get("sandbox").is_none());
             assert!(request["params"].get("approvalPolicy").is_none());
-            assert!(request["params"].get("approvalsReviewer").is_none());
+            assert_eq!(request["params"]["approvalsReviewer"], "user");
             let mut sandbox = applied_router_sandbox(&request);
             sandbox["writableRoots"]
                 .as_array_mut()
@@ -499,6 +504,12 @@ async fn fork_session_sends_exact_model_choice_to_native_runtime() {
         assert_eq!(
             session.new_session_result()["_meta"]["codexRouter"]["permissionDifferences"],
             json!(["writableRoots"])
+        );
+        // R3: native read back a difference, so the session reports its access
+        // rather than auto, and why.
+        assert_eq!(
+            session.new_session_result()["_meta"]["codexRouter"]["permissionMode"],
+            json!({"access":"workspace-write","actual":"workspace-write","reason":"autoNotApplied"})
         );
         use crate::recording_scratch_scopes::ScratchScopeEvent::{Closed, Opened};
         let scope = std::path::PathBuf::from(TEST_SCRATCH);

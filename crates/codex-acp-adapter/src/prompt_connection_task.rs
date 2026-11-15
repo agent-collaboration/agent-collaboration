@@ -101,50 +101,101 @@ pub async fn run_prompt_task(mut inputs: PromptTaskInputs) -> PromptTaskCompleti
         }
     };
     loop {
-        tokio::select! {
-            biased;
-            _=inputs.retired.cancelled()=>return PromptTaskCompletion {
-                cancellation_barrier: None,binding:None,terminal:Some(failure(&inputs.request_id,"Native backend connection lost"))},
-            command=inputs.commands.recv(),if commands_open=>match command {
-                Some(PromptCommand::Cancel)=>{
-                    let terminal=pending.cancel().await;
-                    let cancellation_barrier=pending.blocks_next_prompt().then(|| pending.cancellation_barrier());
-                    return PromptTaskCompletion {cancellation_barrier,binding:pending.into_session().ok(),terminal};
-                },
-                None=>{
-                    commands_open=false;
-                    frontend_detached=true;
-                    inputs.commands.close();
-                },
-            },
-            event=pending.next_event(&mut catalog)=>match event {
-                Ok(Some(PromptEvent::Update(frame)))=>{
-                    if !frontend_detached && inputs.output.send(frame).await.is_err() {
-                        frontend_detached=true;
-                        commands_open=false;
-                        inputs.commands.close();
-                    }
-                },
-                Ok(Some(PromptEvent::Terminal(frame)))=>return PromptTaskCompletion {
-                cancellation_barrier: pending.blocks_next_prompt().then(|| pending.cancellation_barrier()),
-                binding:pending.into_session().ok(),terminal:(!frontend_detached).then_some(frame)},
-                Ok(Some(PromptEvent::NativeCallback(_)))=>{
-                    let _cancel=pending.cancel().await;
-                    return PromptTaskCompletion {
-                cancellation_barrier: frontend_detached.then(|| pending.cancellation_barrier()),
-                binding:None,terminal:(!frontend_detached).then(|| failure(&inputs.request_id,"Unsupported native interaction or invalid update"))};
-                },
-                Err(error)=>{
-                    let message=error.to_string();
-                    let _cancel=pending.cancel().await;
-                    return PromptTaskCompletion {
-                cancellation_barrier: frontend_detached.then(|| pending.cancellation_barrier()),
-                binding:None,terminal:(!frontend_detached).then(|| failure(&inputs.request_id,&message))};
-                },
-                Ok(Some(PromptEvent::NativeNotification(_))|None)=>{},
+        // The in-flight native step is held across a frontend detach: an
+        // approval wait, or the write of its decision, must still reach native
+        // (R6). Only Cancel and retirement end it.
+        let step = {
+            let next = pending.next_event(&mut catalog);
+            tokio::pin!(next);
+            loop {
+                tokio::select! {
+                    biased;
+                    _=inputs.retired.cancelled()=>break NextStep::Retired,
+                    command=inputs.commands.recv(),if commands_open=>match command {
+                        Some(PromptCommand::Cancel)=>break NextStep::Cancel,
+                        None=>{
+                            commands_open=false;
+                            frontend_detached=true;
+                            inputs.commands.close();
+                        },
+                    },
+                    event=&mut next=>break NextStep::Event(event),
+                }
             }
+        };
+        let event = match step {
+            NextStep::Retired => {
+                return PromptTaskCompletion {
+                    cancellation_barrier: None,
+                    binding: None,
+                    terminal: Some(failure(
+                        &inputs.request_id,
+                        "Native backend connection lost",
+                    )),
+                };
+            }
+            NextStep::Cancel => {
+                let terminal = pending.cancel().await;
+                let cancellation_barrier = pending
+                    .blocks_next_prompt()
+                    .then(|| pending.cancellation_barrier());
+                return PromptTaskCompletion {
+                    cancellation_barrier,
+                    binding: pending.into_session().ok(),
+                    terminal,
+                };
+            }
+            NextStep::Event(event) => event,
+        };
+        match event {
+            Ok(Some(PromptEvent::Update(frame))) => {
+                if !frontend_detached && inputs.output.send(frame).await.is_err() {
+                    frontend_detached = true;
+                    commands_open = false;
+                    inputs.commands.close();
+                }
+            }
+            Ok(Some(PromptEvent::Terminal(frame))) => {
+                return PromptTaskCompletion {
+                    cancellation_barrier: pending
+                        .blocks_next_prompt()
+                        .then(|| pending.cancellation_barrier()),
+                    binding: pending.into_session().ok(),
+                    terminal: (!frontend_detached).then_some(frame),
+                };
+            }
+            Ok(Some(PromptEvent::NativeCallback(_))) => {
+                let _cancel = pending.cancel().await;
+                return PromptTaskCompletion {
+                    cancellation_barrier: frontend_detached.then(|| pending.cancellation_barrier()),
+                    binding: None,
+                    terminal: (!frontend_detached).then(|| {
+                        failure(
+                            &inputs.request_id,
+                            "Unsupported native interaction or invalid update",
+                        )
+                    }),
+                };
+            }
+            Err(error) => {
+                let message = error.to_string();
+                let _cancel = pending.cancel().await;
+                return PromptTaskCompletion {
+                    cancellation_barrier: frontend_detached.then(|| pending.cancellation_barrier()),
+                    binding: None,
+                    terminal: (!frontend_detached).then(|| failure(&inputs.request_id, &message)),
+                };
+            }
+            Ok(Some(PromptEvent::NativeNotification(_)) | None) => {}
         }
     }
+}
+
+/// What ended one wait on the prompt's next native step.
+enum NextStep<E> {
+    Retired,
+    Cancel,
+    Event(E),
 }
 fn cancelled_response(id: &Value, state: &str) -> Value {
     json!({"jsonrpc":"2.0","id":id,"result":{"stopReason":"cancelled","_meta":{"codex-router/nativeInterruption":{"state":state},"codex-router/finalReply":{"kind":"available","text":null}}}})

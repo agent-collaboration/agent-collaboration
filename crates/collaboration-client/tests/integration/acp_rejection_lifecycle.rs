@@ -157,6 +157,7 @@ mod tests {
                     created_by: None,
                     approver: None,
                     root_message_id: None,
+                    mode: None,
                 },
                 &mut emit,
             )
@@ -178,6 +179,7 @@ mod tests {
                         created_by: None,
                         approver: None,
                         root_message_id: None,
+                        mode: None,
                     },
                     &mut emit,
                 )

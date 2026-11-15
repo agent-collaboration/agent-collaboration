@@ -1,6 +1,6 @@
 use super::{
     ConversationClient, ConversationClientError, ConversationCreateInput, ConversationTransport,
-    advertised_conversation_transport, codex_create_actors,
+    advertised_conversation_transport, codex_create_actors, codex_mode_accepted,
 };
 use collaboration_protocol::EndpointDescription;
 use serde_json::json;
@@ -494,4 +494,26 @@ async fn provider_create_wait_returns_the_target_from_exact_operation()
         );
     }
     Ok(())
+}
+
+/// Oracle: spec R5 — `auto` (or no mode) is accepted for Codex, whose own
+/// auto is workspace-write with the Router as reviewer; any other name is
+/// refused before dispatch with the fix naming `auto`.
+#[test]
+fn codex_create_accepts_auto_or_no_mode_and_refuses_other_names() {
+    let endpoint: collaboration_protocol::EndpointRef = serde_json::from_value(json!({
+        "serviceId":"019f0000-0000-7000-8000-000000000001","endpointId":"codex-local"
+    }))
+    .expect("endpoint");
+    assert!(codex_mode_accepted(&endpoint, None).is_ok());
+    assert!(codex_mode_accepted(&endpoint, Some("auto")).is_ok());
+    for refused in ["plan", "acceptEdits", "Auto", ""] {
+        match codex_mode_accepted(&endpoint, Some(refused)) {
+            Err(ConversationClientError::UnsupportedInput { field, fix, .. }) => {
+                assert_eq!(field, "mode", "{refused}");
+                assert!(fix.contains("mode auto"), "{refused}: {fix}");
+            }
+            other => panic!("{refused}: expected a refusal, got {other:?}"),
+        }
+    }
 }

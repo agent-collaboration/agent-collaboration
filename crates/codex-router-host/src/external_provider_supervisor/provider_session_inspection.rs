@@ -49,6 +49,14 @@ pub(super) async fn inspect(
             .get(&target)
             .cloned(),
     };
+    let requested_mode = supervisor
+        .inner
+        .requested_modes
+        .lock()
+        .await
+        .get(&target)
+        .cloned()
+        .unwrap_or_default();
     let state = if let Some(hub) = supervisor.inner.hub.as_ref() {
         let hub_target = serde_json::to_value(&target)
             .ok()
@@ -78,6 +86,8 @@ pub(super) async fn inspect(
         capabilities,
         history,
         settings_catalog: catalog.map(catalog_view),
+        requested_mode: requested_mode.requested_mode,
+        mode_reason: requested_mode.mode_reason,
     })
 }
 

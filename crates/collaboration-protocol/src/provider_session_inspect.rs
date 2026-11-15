@@ -27,6 +27,14 @@ pub struct ProviderSessionInspectResult {
     pub history: ProviderHistoryAvailability,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub settings_catalog: Option<ProviderSettingsCatalogView>,
+    /// The permission mode asked for at start (absent means auto), kept by
+    /// this Host since the session started; `settingsCatalog.currentMode` is
+    /// the agent's actual mode (R3).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub requested_mode: Option<String>,
+    /// Why the actual mode differs from the requested one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mode_reason: Option<crate::ProviderModeReason>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]

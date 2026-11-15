@@ -23,3 +23,4 @@ tokio.workspace = true
 
 [dev-dependencies]
 tempfile = "3.27.0"
+tokio-util.workspace = true

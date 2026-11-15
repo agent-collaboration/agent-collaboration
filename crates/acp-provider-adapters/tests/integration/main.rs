@@ -2,3 +2,4 @@
 
 mod claude_launch_contract;
 mod claude_producer_decoder;
+mod permission_mode_admission;

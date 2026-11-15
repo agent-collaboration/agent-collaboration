@@ -48,6 +48,18 @@ impl ProviderBehavior for ClaudeAcpBehavior {
     ) -> acp_client_runtime::ModelReasoningMetadata {
         crate::model_reasoning_metadata::decode_claude_models(value)
     }
+    fn auto_permission_mode(&self) -> acp_client_runtime::AutoPermissionMode {
+        // Claude's own `auto` refuses through its classifier with only a failed
+        // tool notification, so nothing can be approved. Until escalation is
+        // proven (E2), its ask-first `acceptEdits` stands in: edits in the
+        // project and granted folders run, everything else asks.
+        acp_client_runtime::AutoPermissionMode {
+            realized_by: Some("acceptEdits"),
+            fallback: None,
+            realization: acp_client_runtime::AutoRealization::AsksFirst,
+            stand_in_reason: Some(acp_client_runtime::PermissionModeReason::EscalationUnproven),
+        }
+    }
     fn observe(&self, update: ProviderUpdate) -> Result<ProviderFacts, ProviderError> {
         if let ClaudeSkillSource::Unavailable(reason) = &self.source {
             return Ok(ProviderFacts {

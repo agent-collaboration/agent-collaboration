@@ -168,7 +168,7 @@ async fn queue_probe(case: QueueProbeCase) -> Result<QueueObservation, TestError
                     if lose_attachment {
                         break;
                     }
-                    json!({"thread":{"id":THREAD,"cwd":cwd},"cwd":cwd,"activePermissionProfile":{"id":"router-workspace-write"},"sandbox":{"type":"workspaceWrite","networkAccess":true,"writableRoots":roots}})
+                    json!({"thread":{"id":THREAD,"cwd":cwd},"cwd":cwd,"activePermissionProfile":{"id":"router-workspace-write"},"sandbox":{"type":"workspaceWrite","networkAccess":true,"excludeTmpdirEnvVar":true,"excludeSlashTmp":true,"writableRoots":roots}})
                 }
                 "thread/queue/add" => {
                     queued = Some(request.clone());

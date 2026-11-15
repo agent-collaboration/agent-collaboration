@@ -142,6 +142,8 @@ impl BackendPublication {
                 transport: collaboration_protocol::AcpCarrier::UnixJsonLines,
                 path: self.acp_path.clone(),
                 schema_digest: schema_digest.clone(),
+                // Codex in workspace-write asks the Router before acting outside it.
+                auto_realization: Some(collaboration_protocol::ProviderAutoRealization::AsksFirst),
             });
         }
         EndpointDescription {

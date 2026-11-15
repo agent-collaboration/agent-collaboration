@@ -163,6 +163,9 @@ impl ProviderBehavior for NonReusableTestBehavior {
     ) -> acp_client_runtime::ModelReasoningMetadata {
         crate::test_behavior::TestProviderBehavior.decode_model_metadata(value)
     }
+    fn auto_permission_mode(&self) -> acp_client_runtime::AutoPermissionMode {
+        acp_client_runtime::AutoPermissionMode::UNREALIZED
+    }
     fn observe(&self, update: ProviderUpdate) -> Result<ProviderFacts, ProviderError> {
         crate::test_behavior::TestProviderBehavior.observe(update)
     }

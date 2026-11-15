@@ -221,6 +221,7 @@ async fn create_applies_requested_settings_before_first_prompt() {
     let created = client
         .create_session_with_settings(
             root.path().to_path_buf(),
+            None,
             RequestedProviderSettings {
                 mode: Some("ask".to_owned()),
                 model: Some("b".to_owned()),
@@ -291,6 +292,7 @@ async fn invalid_first_setting_closes_created_session() {
     let result = client
         .create_session_with_settings(
             root.path().to_path_buf(),
+            None,
             RequestedProviderSettings {
                 mode: Some("impossible".to_owned()),
                 ..Default::default()
@@ -341,6 +343,7 @@ async fn partial_setup_blocks_prompt_until_settings_are_accepted() {
     let result = client
         .create_session_with_settings(
             root.path().to_path_buf(),
+            None,
             RequestedProviderSettings {
                 mode: Some("ask".to_owned()),
                 model: Some("b".to_owned()),
@@ -436,6 +439,7 @@ async fn resolving_failed_kind_keeps_untried_kind_gated_until_accepted() {
     let created = client
         .create_session_with_settings(
             root.path().to_path_buf(),
+            None,
             RequestedProviderSettings {
                 mode: Some("ask".to_owned()),
                 model: Some("b".to_owned()),
@@ -524,6 +528,7 @@ async fn legacy_mode_is_selected_before_prompt_when_no_mode_config_exists() {
     let created = client
         .create_session_with_settings(
             root.path().to_path_buf(),
+            None,
             RequestedProviderSettings {
                 mode: Some("ask".to_owned()),
                 ..Default::default()

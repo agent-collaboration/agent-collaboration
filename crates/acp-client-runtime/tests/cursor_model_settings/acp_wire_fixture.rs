@@ -30,6 +30,9 @@ impl ProviderBehavior for SharedSettingsBehavior {
     ) -> acp_client_runtime::ModelReasoningMetadata {
         crate::test_behavior::TestProviderBehavior.decode_model_metadata(value)
     }
+    fn auto_permission_mode(&self) -> acp_client_runtime::AutoPermissionMode {
+        acp_client_runtime::AutoPermissionMode::UNREALIZED
+    }
     fn observe(
         &self,
         update: acp_client_runtime::ProviderUpdate,

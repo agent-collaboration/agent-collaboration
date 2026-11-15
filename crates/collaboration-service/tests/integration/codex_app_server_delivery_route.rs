@@ -60,6 +60,7 @@ impl codex_acp_adapter::ConversationOperationRecorder for AcceptingConversationR
         &'a self,
         _: &'a collaboration_protocol::OperationId,
         _: &'a collaboration_protocol::SessionId,
+        _permission_mode: &'a collaboration_protocol::CodexPermissionModeReport,
     ) -> codex_acp_adapter::ConversationRecordFuture<'a> {
         Box::pin(async { Ok(()) })
     }

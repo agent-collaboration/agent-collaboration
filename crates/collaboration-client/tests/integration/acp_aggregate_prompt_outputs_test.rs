@@ -253,6 +253,7 @@ pub(super) async fn aggregate_prompt_does_not_retain_more_than_one_thousand_upda
                 created_by: Some(sender.clone()),
                 approver: Some(sender.clone()),
                 root_message_id: None,
+                mode: None,
             },
             prompt: ConversationPromptRequest {
                 message: PublicPromptContent::Agent {

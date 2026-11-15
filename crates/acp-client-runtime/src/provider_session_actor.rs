@@ -73,6 +73,8 @@ pub(crate) struct ProviderSessionRuntimeHandles {
             >,
         >,
     >,
+    /// In-folder grants, so a confirmed mode change can turn auto's grant on or off.
+    pub(crate) in_folder_grants: crate::agent_session_client::InFolderGrants,
 }
 
 pub(crate) enum ProviderSessionCommand<P: InteractionPort> {

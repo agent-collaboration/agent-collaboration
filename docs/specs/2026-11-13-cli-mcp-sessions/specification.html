@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CLI and MCP: specification</title>
+<link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+<script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content" src="./navigation.json"></ex-nav>
+<ex-document id="content">
+<h1>Specification</h1>
+<p>What the finished system does, described from the outside. Each section starts with an example, then the exact rules. Rule numbers (R1…) let other pages point at them.</p>
+
+<section id="surfaces">
+<h2>The pieces you can touch</h2>
+<ex-mermaid id="context" label="What talks to the Router"><script type="text/plain">
+flowchart LR
+  agent[Agents and scripts] --> sess["session tools"]
+  agent --> coord["coordination tools"]
+  agent --> ws["workspace tools"]
+  cli[agent-collaboration CLI] --> sess & coord & ws
+  codexcli[Codex CLI, on any machine] --> face[Router's Codex socket]
+  sess & coord & ws & face --> router[(Router)]
+  router --> agents[Claude · Cursor · Codex]
+  router <--> central[central]
+</script></ex-mermaid>
+</section>
+
+<section id="kinds">
+<h2>Two kinds of Router session</h2>
+<p>Everything about approvals depends on one fact: was the session started as somebody's delegate?</p>
+<ex-mermaid id="kinds-view" label="Who can start what"><script type="text/plain">
+flowchart LR
+  YOU([You or Sun]) -- start --> LEAD[Lead · not a delegate]
+  SOCK([You, through the Codex socket or picker]) --> MINE[your session · not a delegate]
+  LEAD -- start as delegate --> IMP[Implementer · delegate]
+  LEAD -- start as delegate --> VER[Verifier · delegate]
+  IMP -. start anything .-> NO[refused: ask your Lead]
+  IMP --> SUB[its own subagents]
+</script></ex-mermaid>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Kind</th><th>How it starts</th><th>Can it start sessions?</th><th>Its approvals go to</th></tr></thead>
+<tbody>
+<tr><td><strong>Delegate</strong></td><td>A non-delegate session asks the Router to start it as its delegate.</td><td>No. Its own subagents only; otherwise it asks its Lead.</td><td>its parent, plus clients watching it; the parent can forward to central</td></tr>
+<tr><td><strong>Not a delegate</strong></td><td>Everything else the Router starts or hosts: a Lead you or Sun start, a session from a script or automation, a session you open through the Router's Codex socket or picker.</td><td>Yes.</td><td>wherever the Router setting says; default: central (your UI later, the CLI now) plus clients watching it</td></tr>
+</tbody>
+</table>
+</div>
+<p>Sessions the Router never started or hosts (the Codex desktop app, Claude in a plain terminal) keep their approvals in their own app; the Router can't see them.</p>
+<aside class="design-item" id="D7" data-design-item="decision" data-authority="owner-words" data-source="owner, this session, 2026-11-13 ~20:50 ET"><blockquote>yes approvals forms ession in in show ukp in cli and central or whatever otehr cleitn i setup from dcentral</blockquote><blockquote>asl ogn as it is a router sesison</blockquote><blockquote>i mean this only for router sesisonof any harness (acp)</blockquote><p>Non-delegates (a Lead, a script's session, a session you open through the Codex socket) use one Router setting: by default their approvals show in the CLI and at central, and in any other client you set up from central, plus any client watching the session. Only two stored kinds. Applies to Router sessions of every harness (Claude and Cursor over ACP, and Codex); sessions the Router never started or hosts are out of scope.</p><p>Depends on it: <a href="#R8">R8</a>.</p></aside>
+</section>
+
+<section id="approvals">
+<h2>Where an approval goes</h2>
+<p><strong>Example.</strong> Your Lead starts an Implementer. The Implementer tries to write outside its project. The request goes to the Lead and to any client watching the Implementer (a Codex CLI, the CLI). The Lead says yes: the write happens and everyone else is told "decided by the Lead". If the Lead can't decide, it forwards the request to central, and you see it in the CLI (and later in your UI).</p>
+<ex-mermaid id="approval-routing" label="Destinations by kind of session (first decision wins)"><script type="text/plain">
+flowchart TD
+  A[approval raised by session S] --> K{S is}
+  K -- a delegate --> D1[its parent]
+  K -- a delegate --> D2[clients watching S]
+  D1 -- can't decide --> FW[forward to central]
+  K -- not a delegate --> SET[Router setting]
+  SET -- default --> P1[central]
+  SET -- default --> P2[clients watching S]
+  SET -- if you choose --> O1[an agent you pick]
+  FW --> C[central shows it to you: CLI now, your UI later, your auto-classifier later]
+  P1 --> C
+</script></ex-mermaid>
+<p><strong>Central decides.</strong> The approval itself lives at central, and central counts the first answer, wherever it comes from; anyone answering later is told who already decided. The Mac only holds the agent's waiting request and applies central's answer. A client attached to the session answers through the Mac, and the answer goes on to central.</p>
+<aside class="design-item" id="D8" data-design-item="decision" data-authority="owner-words" data-source="owner, this session, 2026-11-13 ~21:40 ET, choosing option B of A (Mac decides) / B (central decides) / C (split)"><blockquote>yeah b or the cli client right? if there is one directly attached</blockquote><p>Central holds the approval record and decides first-answer-wins; the Mac holds only the waiting request; a directly attached client is a destination whose answer goes to central. While central is unreachable, approvals wait.</p><p>Depends on it: <a href="#R8">R8</a>, <a href="#R9">R9</a>, <a href="#R9a">R9a</a>.</p></aside>
+<ex-mermaid id="approval-state" label="An approval's life"><script type="text/plain">
+stateDiagram-v2
+  [*] --> pending
+  pending --> forwarded: parent sends it to central
+  pending --> approved: first yes
+  pending --> denied: first no
+  forwarded --> approved: first yes
+  forwarded --> denied: first no
+  pending --> cancelled: turn stopped or session closed
+  forwarded --> cancelled: turn stopped or session closed
+  pending --> timedOut: waited too long
+  forwarded --> timedOut: waited too long
+</script></ex-mermaid>
+</section>
+
+<section id="auto-explained">
+<h2>What "auto" means</h2>
+<p><strong>Example.</strong> A Claude delegate started with no mode edits files in its project and writes to its own scratch folder (<code>&lt;router root&gt;/scratch/session-&lt;id&gt;/</code>) without asking. When it wants to write in your home folder, that becomes an approval, routed as above. It is never just refused.</p>
+<ex-mermaid id="auto-view" label="Auto, for every agent"><script type="text/plain">
+flowchart LR
+  ACT[agent wants to do something] --> IN{inside its project or its own scratch folder?}
+  IN -- yes --> GO[does it, no question]
+  IN -- no --> ASK[approval, routed as above]
+  ASK --> YES[allowed]
+  ASK --> NOPE[refused only after someone said no]
+</script></ex-mermaid>
+</section>
+
+<section id="send-explained">
+<h2>Sending to a running agent</h2>
+<p><strong>Example.</strong> A Cursor agent is mid-task and you send "also update the README". Cursor can't take a message mid-turn, so the Router stops the turn and starts a new one with your message first; you get back <code>restarted</code>. A Claude agent takes it mid-turn; you get <code>steered</code>.</p>
+<ex-mermaid id="delivery-view" label="What a send returns"><script type="text/plain">
+flowchart TD
+  IN[send] --> R{same requestId in the last 12 h?}
+  R -- yes --> DUP[nothing happens again · returns what happened the first time]
+  R -- no --> ST{agent busy?}
+  ST -- no --> STARTED[started]
+  ST -- yes --> D{asked to queue, and it can?}
+  D -- yes --> QUEUED[queued]
+  D -- no --> S2{can it take it mid-turn?}
+  S2 -- yes --> STEERED[steered]
+  S2 -- no --> RS[restarted]
+</script></ex-mermaid>
+</section>
+
+<section id="entities">
+<h2>The nouns</h2>
+<p>Central's nouns (workspace items, messages, wakes, automations, actor identity) are central's: <a href="http://127.0.0.1:64832/specification.html">central specification</a>, <a href="http://127.0.0.1:64832/program-design.html#shapes">central shapes</a>.</p>
+<ex-mermaid id="entity-map" label="How the nouns relate"><script type="text/plain">
+erDiagram
+  AGENT ||--o{ SESSION : has
+  SESSION ||--o{ SESSION : "parent of (one layer)"
+  SESSION ||--o{ REQUEST : "writes recorded as"
+  SESSION ||--o{ TURN : runs
+  TURN ||--o{ ITEM : produces
+  SESSION ||--o{ APPROVAL : raises
+  APPROVAL ||--o{ DESTINATION : "shown at"
+  SESSION ||--|| PERMISSION_MODE : "runs in"
+  CALL }o--|| CALLER : "made by"
+</script></ex-mermaid>
+<details><summary>Exact definitions E1–E13</summary>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Entity</th><th>Same when</th><th>Relationships</th><th>States and rules</th></tr></thead>
+<tbody>
+<tr id="E1"><td><strong>E1 Agent</strong></td><td>Same endpoint name (<code>claude-local</code>).</td><td>Has many sessions; one provider kind.</td><td>available · unavailable(reason)</td></tr>
+<tr id="E2"><td><strong>E2 Session</strong></td><td>Same session string. A fork is a new session.</td><td>One agent. Kind: delegate or not. A delegate has exactly one parent, which is not a delegate.</td><td>unloaded · idle · running · needsInput · needsAuth · closed · unknown. Kind never changes.</td></tr>
+<tr id="E3"><td><strong>E3 Request</strong></td><td>Same <code>requestId</code> (UUIDv7).</td><td>One tool, one target.</td><td>running · completed · cancelled · failed · lost · unknown. At most one effect per ID.</td></tr>
+<tr id="E4"><td><strong>E4 Input</strong></td><td>Same input ID.</td><td>One message to one session.</td><td>started · queued · steered · restarted</td></tr>
+<tr id="E5"><td><strong>E5 Turn</strong></td><td>Same turn ID.</td><td>One session.</td><td>running → completed · cancelled · failed</td></tr>
+<tr id="E6"><td><strong>E6 Item</strong></td><td>Same item ID; higher revision wins.</td><td>One session, at most one turn.</td><td>running · completed · failed · pending · unknown</td></tr>
+<tr id="E7"><td><strong>E7 Cursor</strong></td><td>Opaque; one session, one Host lifetime.</td><td>One session.</td><td>Invalid after restart or replay → reset.</td></tr>
+<tr id="E8"><td><strong>E8 Permission mode</strong></td><td><code>auto</code> or an agent's own mode name.</td><td>Requested and actual mode per session.</td><td><code>auto</code>: act alone inside the project and the session's scratch folder; everything else becomes an approval before any refusal.</td></tr>
+<tr id="E9"><td><strong>E9 Approval</strong></td><td>Same approval ID (minted by the Router when the agent asks).</td><td>Raised by one session; lives at central; shown at one or more destinations. The Mac holds the agent's waiting request for it.</td><td>pending → (forwarded) → approved · denied · cancelled · timedOut, decided at central. Records who decided.</td></tr>
+<tr id="E10"><td><strong>E10 Destination</strong></td><td>Same approval and same place.</td><td>A parent session, an attached client, central, or the Router-setting target.</td><td>Sees the approval; may answer. Only the first answer counts.</td></tr>
+<tr id="E11"><td><strong>E11 Caller</strong></td><td>Same session or person.</td><td>Every call has one.</td><td>Declared by the client; checked to exist on this Router; not authenticated until session auth (L1).</td></tr>
+<tr id="E12"><td><strong>E12 Tool group</strong></td><td><code>session</code> · <code>coordination</code> · <code>workspace</code></td><td>Holds tools.</td><td>Fixed set.</td></tr>
+<tr id="E13"><td><strong>E13 Job</strong></td><td>Same tool name in its group.</td><td>One MCP tool and one CLI command.</td><td>Same inputs, same result.</td></tr>
+</tbody>
+</table>
+</div>
+</details>
+</section>
+
+<section id="data">
+<h2>What each tool group creates</h2>
+<ex-mermaid id="group-data" label="Where data is created"><script type="text/plain">
+flowchart LR
+  S[session tools] --> L1["on this Mac: session · request · the agent's waiting request (in memory)"]
+  S --> C2["central: every approval and its decision"]
+  C[coordination tools] --> C1["central: message · wake · automation"]
+  W[workspace tools] --> W1["central: areas · projects · threads · posts · roles · deliverables · issues · work log"]
+</script></ex-mermaid>
+<p><a href="program-design.html#data-model">Program Design shows the tables.</a></p>
+</section>
+
+<section id="tools">
+<h2>The tools</h2>
+<p>Inputs are flat. Every write takes an optional <code>requestId</code>; left out, the tool makes one and returns it. The caller is never an input (R20).</p>
+
+<h3 id="tools-session">session tools</h3>
+<details><summary>All session tools, with inputs and outputs</summary>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Tool (CLI: <code>session</code> + name)</th><th>Input</th><th>Output</th></tr></thead>
+<tbody>
+<tr><td><code>options</code></td><td>agent?</td><td>per agent: available, actions, modes, <code>autoRealization</code></td></tr>
+<tr><td><code>start</code></td><td>agent, workingDirectory, access, <code>as</code> (session · delegate), mode? (default <code>auto</code>), model?, effort?, fork?, waitSeconds?, requestId?</td><td>status, requestId, session, kind, parent?, requestedMode, actualMode, modeReason?</td></tr>
+<tr><td><code>send</code></td><td>session, message, delivery? (auto · queue · steer), waitSeconds?, generation?, requestId?</td><td>delivery (started · queued · steered · restarted), input, requestId, outcome?</td></tr>
+<tr><td><code>wait</code></td><td>session, timeoutSeconds, requestId?</td><td>state, timedOut, outcome?</td></tr>
+<tr><td><code>read</code></td><td>session, after?, limit?, maxBytes?, waitSeconds?</td><td>items, cursor, hasMore, reset?</td></tr>
+<tr><td><code>stop</code></td><td>session, targetTurn?, generation?, requestId?</td><td>stopRequested · noActiveWork, requestId</td></tr>
+<tr><td><code>close</code>, <code>resume</code></td><td>session, history? (resume), requestId?</td><td>state, requestId</td></tr>
+<tr><td><code>list</code>, <code>show</code></td><td>agent / session</td><td>sessions / one session: state, kind, parent, modes, pending approvals</td></tr>
+<tr><td><code>configure</code>, <code>accept_settings</code></td><td>session, setting, value, requestId? / session, requestId?</td><td>settings, effect, requestId</td></tr>
+<tr><td><code>request</code>, <code>reconcile</code></td><td>requestId</td><td>status, outcome?, retained</td></tr>
+<tr><td><code>approvals</code></td><td>—</td><td>approvals the caller may decide: its delegates' on this Mac, and for you, those held at central</td></tr>
+<tr><td><code>decide</code></td><td>approvalId, choice, requestId?</td><td>ending, or <code>alreadyDecided { by }</code></td></tr>
+<tr><td><code>forward</code></td><td>approvalId, requestId?</td><td>forwarded (now also at central)</td></tr>
+<tr><td><code>questions</code>, <code>answer</code></td><td>— / questionId, answer, requestId?</td><td>pending questions / ending</td></tr>
+</tbody>
+</table>
+</div>
+</details>
+
+<h3 id="retry">Retries, reads and errors</h3>
+<details><summary>Exact rules</summary>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Case</th><th>Result</th></tr></thead>
+<tbody>
+<tr><td>requestId older than 12 h, or more than 5 min in the future</td><td><code>requestExpired</code>, no effect</td></tr>
+<tr><td>Same requestId, same tool and target (also concurrent, also after a restart)</td><td>No second effect; returns the recorded status, plus the result while the Router still holds it, else <code>outputUnavailable</code></td></tr>
+<tr><td>Same requestId, different tool or target</td><td><code>requestConflict</code></td></tr>
+<tr><td>Outcome unknown</td><td>Reported as unknown, never replayed; <code>reconcile</code> settles it</td></tr>
+<tr><td>read with the same cursor</td><td>Same page. limit 1–1000 (100), maxBytes ≤ 1 MiB (256 KiB), waitSeconds 0–600</td></tr>
+<tr><td>read with a stale cursor</td><td><code>reset</code> (hostRestarted · historyReplayed · lagged · cursorInvalid) plus current items and a fresh cursor</td></tr>
+<tr><td>Long read or wait with a progress token</td><td><code>notifications/progress</code> while open</td></tr>
+<tr><td>Any failure</td><td><code>isError: true</code> with <code>Error { code, message, fix?, effect, requestId?, session? }</code>. Codes: invalidInput · sessionNotFound · notSupported · busy · needsAuth · denied · staleGeneration · settingsUnresolved · requestConflict · requestExpired · unavailable · internal · callerRequired · unknownCaller · signInRequired · stopNotConfirmed · delegateCannotStart · alreadyDecided · centralUnavailable</td></tr>
+</tbody>
+</table>
+</div>
+</details>
+<aside class="design-item" id="D2" data-design-item="decision" data-authority="author"><p>A retry returns status, and the result only while the Router still holds it; no stored answer.</p></aside>
+
+<h3 id="tools-coordination">coordination tools</h3>
+<details><summary>Each tool and the central operation it sends</summary>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Tool (CLI: <code>coordination</code> + name)</th><th>Central operation</th></tr></thead>
+<tbody>
+<tr><td><code>send_message</code></td><td>SendMessage { to, body }</td></tr>
+<tr><td><code>inbox</code>, <code>mark_read</code></td><td>Inbox { afterPosition, limit }, MarkRead { scope, throughPosition }</td></tr>
+<tr><td><code>set_wake</code>, <code>cancel_wake</code></td><td>SetWake { target, dueAt, text }, CancelWake { wakeId }. The wake and automation tool schemas state central's five-minute grid and 7-day limits (central R34), and refuse values off the grid rather than rounding them.</td></tr>
+<tr><td><code>set_notice_cadence</code></td><td>SetNoticeCadence { cadence: M15 | M25 | M55 }, default M15. It sets the calling session's own notice cadence, and only a session caller may use it. A subscribe or join that offers cadence sends this first, then the join; a refused join keeps the cadence. Added by Lead A, 2026-11-14. Answer <code>NoticeCadenceSet { cadence }</code>. Refusals map to tool errors: <code>NotSession</code>; <code>TimingViolation { field, requirement: FiveMinuteGrid | FutureTime | WithinSevenDays }</code>, worded as R34; <code>TimeOutOfRange { field }</code> (collaboration-protocol <code>central_mail.rs</code>, frozen at 8d83f0c21).</td></tr>
+<tr><td><code>set_automation</code>, <code>disable_automation</code></td><td>SetAutomation { target, timing, text }, DisableAutomation { automationId }</td></tr>
+</tbody>
+</table>
+</div>
+</details>
+
+<h3 id="tools-workspace">workspace tools</h3>
+<details><summary>Tools by central group</summary>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Central group</th><th>Tools (CLI: <code>workspace</code> + name with dashes)</th></tr></thead>
+<tbody>
+<tr><td>C1 Organize</td><td><code>create_workspace</code>, <code>create_area</code>, <code>archive_area</code>, <code>create_project</code>, <code>set_project_status</code>, <code>create_initiative</code>, <code>update_initiative</code>, <code>set_initiative_status</code>, <code>add_backlog_item</code>, <code>update_backlog_item</code>, <code>remove_backlog_item</code>, <code>add_reference</code>, <code>remove_reference</code>, <code>add_link</code>, <code>remove_link</code> <code>create_workspace</code> takes an optional description (empty by default) and maps the refusal <code>workspaceNameInUse { name }</code> (an existing name, compared case-insensitively, ignoring surrounding spaces) to a tool error. Lead A, 2026-11-14, not merged yet.</td></tr>
+<tr><td>C2 Roles</td><td><code>grant_project_role</code>, <code>release_project_role</code>, <code>grant_deliverable_role</code>, <code>release_deliverable_role</code></td></tr>
+<tr><td>C3 Threads</td><td><code>create_thread</code>, <code>join_thread</code>, <code>add_thread_member</code>, <code>leave_thread</code>, <code>set_notifications</code>, <code>thread_post</code>, <code>resolve_thread</code></td></tr>
+<tr><td>C4 Delivery</td><td><code>create_deliverable</code>, <code>add_dependency</code>, <code>remove_dependency</code>, <code>create_issue</code>, <code>set_issue_status</code></td></tr>
+<tr><td>C5 Work log</td><td><code>work_log_add</code>, <code>work_log_redact</code></td></tr>
+<tr><td>Reads</td><td><code>show</code>, <code>list</code></td></tr>
+</tbody>
+</table>
+</div>
+</details>
+
+<h3 id="cli-only">Today's CLI commands</h3>
+<details><summary>Where each of today's ~167 commands goes</summary>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Goes to</th><th>Commands</th></tr></thead>
+<tbody>
+<tr><td>A tool above</td><td><code>conversation …</code>, <code>approval …</code>, <code>question …</code>, <code>sessions list</code>, <code>session inspect|rename</code>, <code>turn interrupt</code>, <code>events observe</code>, <code>message send|inbox|reply</code>, <code>wake send|cancel</code>, <code>schedule create|enable|disable</code>, <code>workspace|project|thread|post|role</code></td></tr>
+<tr><td>Local-only CLI</td><td><code>native</code>, <code>acp</code>, <code>events listen</code>, <code>whoami</code>, the sessions picker, <code>central …</code></td></tr>
+<tr><td>Removed</td><td><code>task</code>, <code>subtask</code>, <code>workstream</code>, <code>fact</code>, <code>adr</code>, <code>feed</code>, <code>view</code>, <code>request-effects</code>, <code>board</code>, <code>repository</code>, <code>inbox fetch|acknowledge</code>, <code>instruction</code>, <code>run</code>, <code>delivery</code>, <code>revision</code>, <code>operation</code>, <code>automation</code>, <code>wake pause|resume|list|show</code>, <code>schedule import|export|prepare|update|list|show</code>, <code>endpoints</code>, <code>addresses</code>, <code>journal</code></td></tr>
+</tbody>
+</table>
+</div>
+</details>
+<aside class="design-item" id="D4" data-design-item="decision" data-authority="author"><p>Tool and command names, and the removed command list.</p><p>Depends on it: <a href="#R16">R16</a>, <a href="#R18">R18</a>.</p></aside>
+</section>
+
+<section id="obligations">
+<h2>The rules a build must meet</h2>
+
+<h3 id="obl-session">session_control</h3>
+<details open><summary>R1–R12</summary>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Rule</th><th>Checked against</th><th>Need</th></tr></thead>
+<tbody>
+<tr id="R1"><td><strong>R1 One path.</strong> start, send, read and stop behave the same from the session tools, the CLI, the Codex CLI, incoming ACP and mail delivery.</td><td>agent × state × request → outcome, every door</td><td><a href="requirements.html#U1">U1</a></td></tr>
+<tr id="R2"><td><strong>R2 Steer.</strong> Busy agent: <code>steered</code> or <code>restarted</code>, never refused. Idle: <code>started</code>. If the stop for a restart isn't confirmed, nothing is sent and the stop failure is reported.</td><td>Cursor gives restarted with the text first</td><td><a href="requirements.html#U2">U2</a></td></tr>
+<tr id="R3"><td><strong>R3 Auto by default.</strong> No mode means auto; start and show give the requested and actual mode, and why they differ.</td><td>the agent's own mode report</td><td><a href="requirements.html#U3">U3</a></td></tr>
+<tr id="R4"><td><strong>R4 The session's scratch folder.</strong> Every Router session started in auto under workspace-write access, whichever agent it runs, gets its own private folder <code>&lt;router root&gt;/scratch/session-&lt;id&gt;/</code>, granted to that session only. For Codex, the session shell&#39;s <code>$TMPDIR</code> points at that folder, because Codex sets each thread&#39;s shell environment. For Claude and Cursor, <code>$TMPDIR</code> is left unchanged, because one agent process serves every session on an endpoint. In auto, creating, writing and deleting files in it never asks. On a fallback mode, shell commands whose paths all lie inside it also run without asking (owner, Q3). The system <code>$TMPDIR</code> and <code>/tmp</code> are not granted. Write-restricted access keeps its existing temp grants for git, pnpm and SwiftPM.</td><td>three file actions per agent, plus one shell command, in the scratch folder</td><td><a href="requirements.html#U3">U3</a></td></tr>
+<tr id="R5"><td><strong>R5 Mode names.</strong> <code>auto</code> or one of the agent's own; anything else is refused with the list.</td><td>a bogus name</td><td><a href="requirements.html#U3">U3</a>, <a href="requirements.html#U8">U8</a></td></tr>
+<tr id="R6"><td><strong>R6 Nothing refused silently.</strong> In auto, an action is refused only after its approval ends denied, cancelled or timed out. An agent whose auto can't do that runs in its ask-first mode instead, and says so.</td><td>an action outside the project and the scratch folder</td><td><a href="requirements.html#U4">U4</a></td></tr>
+<tr id="R7"><td><strong>R7 How auto works is visible.</strong> options reports per agent: <code>classifierEscalates</code>, <code>asksFirst</code> or <code>unknown</code>.</td><td>matches what R6 observes</td><td><a href="requirements.html#U8">U8</a></td></tr>
+<tr id="R8"><td><strong>R8 Approvals reach the right places.</strong> A delegate's approval goes to its parent and to clients watching it. Any other Router session's goes where the Router setting says (default: central and clients watching it; optionally an agent you pick). All destinations see the same approval.</td><td>one of each kind</td><td><a href="requirements.html#U4">U4</a>, <a href="requirements.html#U5">U5</a></td></tr>
+<tr id="R9"><td><strong>R9 First answer wins, at central.</strong> Exactly one decision counts, decided by central; later answers get <code>alreadyDecided { by }</code>. Endings: approved · denied · cancelled · timedOut; the agent proceeds only on approved; every destination sees the ending.</td><td>two destinations answering at once</td><td><a href="requirements.html#U4">U4</a>, <a href="requirements.html#U7">U7</a></td></tr>
+<tr id="R9a"><td><strong>R9a Forward.</strong> A parent can forward its delegate's approval to central; it then also shows there, and the parent can still answer.</td><td>forward, then decide from the CLI</td><td><a href="requirements.html#U4">U4</a></td></tr>
+<tr id="R10"><td><strong>R10 One layer.</strong> A delegate asking to start any session gets <code>delegateCannotStart</code> ("ask your Lead"). Every session's kind and parent are fixed at start and shown by show, before and after a restart.</td><td>a delegate tries to start a delegate</td><td><a href="requirements.html#U5">U5</a></td></tr>
+<tr id="R11"><td><strong>R11 Subagents.</strong> An agent's own subagents aren't sessions; their approvals belong to the session that owns them.</td><td>a Claude Task subagent's request</td><td><a href="requirements.html#U5">U5</a></td></tr>
+<tr id="R12"><td><strong>R12 Protocol and retry.</strong> MCP 2026-07-28 plus older clients; no MCP session ID; flat inputs; one meaning per field; accepted isn't finished; stop is a request; <a href="#retry">the retry table</a>; no raw ACP.</td><td>protocol cases</td><td><a href="requirements.html#U6">U6</a>, <a href="requirements.html#U7">U7</a>, <a href="requirements.html#U8">U8</a></td></tr>
+</tbody>
+</table>
+</div>
+</details>
+
+<h3 id="obl-central">agent_coordination and workspace_collaboration</h3>
+<details open><summary>R13–R16</summary>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Rule</th><th>Checked against</th><th>Need</th></tr></thead>
+<tbody>
+<tr id="R13"><td><strong>R13 Coordination = central.</strong> Each tool sends exactly its operation and returns central's answer unchanged: Done, Refused(reason), NotFound, Conflict, OutcomeUnknown, CentralUnavailable.</td><td>every answer per tool</td><td><a href="requirements.html#U9">U9</a></td></tr>
+<tr id="R14"><td><strong>R14 Mail and wakes land in the session</strong> through R1's path.</td><td>mail and a wake to a busy session</td><td><a href="requirements.html#U9">U9</a></td></tr>
+<tr id="R15"><td><strong>R15 Workspace = central</strong>, as R13, with every refusal's details.</td><td>every answer per tool</td><td><a href="requirements.html#U10">U10</a></td></tr>
+<tr id="R16"><td><strong>R16 Nothing else.</strong> No ADR, fact or task tool.</td><td>tool list</td><td><a href="requirements.html#U10">U10</a></td></tr>
+</tbody>
+</table>
+</div>
+</details>
+
+<h3 id="obl-all">All groups</h3>
+<details open><summary>R17–R21</summary>
+<div data-width="canvas">
+<table>
+<thead><tr><th>Rule</th><th>Checked against</th><th>Need</th></tr></thead>
+<tbody>
+<tr id="R17"><td><strong>R17 Three endpoints.</strong> Each lists only its group's tools; no MCP session ID. Which ones a client gets is set by its configuration (enforced once session auth exists).</td><td>tools/list per endpoint</td><td><a href="requirements.html#U11">U11</a></td></tr>
+<tr id="R18"><td><strong>R18 CLI = tool.</strong> Same inputs give the same <code>--json</code> result and the same errors; the CLI makes a requestId for every tool that takes one.</td><td>every pair</td><td><a href="requirements.html#U12">U12</a></td></tr>
+<tr id="R19"><td><strong>R19 Codex CLI keeps working</strong>: start, steer, status line, <code>/model</code>, resume.</td><td>real Codex CLI, current version</td><td><a href="requirements.html#U13">U13</a></td></tr>
+<tr id="R20"><td><strong>R20 Caller.</strong> No tool has a caller argument; the client declares it; missing or unknown is refused; two callers at once are kept apart.</td><td>recorded caller per call</td><td><a href="requirements.html#U12">U12</a></td></tr>
+<tr id="R21"><td><strong>R21 Approvals at any client.</strong> A Codex CLI (or other client) attached to a session, on this or another machine, is shown that session's approvals through the Router's Codex socket. Local clients can decide; remote ones can once session auth exists.</td><td>Codex CLI attached locally and with <code>--remote</code></td><td><a href="requirements.html#U4">U4</a>, <a href="requirements.html#U13">U13</a></td></tr>
+<tr id="R22"><td><strong>R22 A delegate finishing wakes its parent.</strong> When a delegate's turn ends, with any outcome, its parent gets exactly one coordination message naming the delegate and how the turn ended. It lands through R14's path. A plain session finishing wakes nobody.</td><td>a delegate ends a turn; its parent receives one wake</td><td><a href="requirements.html#U5">U5</a></td></tr>
+<tr id="R23"><td><strong>R23 The delivered receipt reminds the parent to keep a wake.</strong> When a parent starts or sends to a delegate and the Router accepts it (started, queued, steered or restarted), the result carries a <code>wakeReminder</code>. The reminder tells the parent to keep a recurring wake shorter than its prompt cache lifetime until the delegate finishes. It names that lifetime when the Router knows it for the parent's harness. A send to a plain session carries no reminder.</td><td>start a delegate; the result's reminder is read</td><td><a href="requirements.html#U5">U5</a></td></tr>
+</tbody>
+</table>
+</div>
+</details>
+</section>
+
+<section id="not">
+<h2>Not decided here</h2>
+<ul>
+<li><aside class="design-item" id="D3" data-design-item="decision" data-authority="contract" data-source="central Lead pushes 01a1d730-782b-7673-94b3-e4c2620fa0e6 and 01a1d778-cd4f-7f80-8eab-851a207e0f67, 2026-11-13"><p>Central carries approvals (central's deliverable D, own design cycle): RequestApproval, ListApprovals, DecideApproval, and an ApprovalDecision message back; first decision wins. Person callers reach central as Caller::Person; signInRequired until sign-in lands.</p></aside>Central's approval wire and storage are the central Lead's design; this set uses those names with a stand-in until it lands. Its new central table needs your approval (the central Lead brings it).</li>
+<li><aside class="design-item" id="A7" data-design-item="assumption" data-authority="contract" data-source="central Lead pushes 01a1d79c-b153-7783-9024-9f7bd59c8f27 and 01a1d804-55b6-7e62-9aab-e89491722774, 2026-11-13"><p>Central D provides: approval record of truth at central; first answer wins there; the Mac reports when a waiting request is cancelled or times out; a late or duplicate answer is refused with the ending named. Because the Mac keeps waiting requests only in memory, a crash can lose them without a report: when a Router reconnects with a new lifetime, central ends every approval still pending from that Router's previous lifetime as <code>cancelled (requester gone)</code>, and keeps any ending it had already recorded. Central's approvals table and removal of interaction.sqlite go to the owner from the central Lead.</p><p>Depends on it: <a href="#R9">R9</a>, <a href="#R9a">R9a</a>.</p></aside>Your future UI and auto-classifier: central's side.</li>
+<li>Q2, Q3, Q4 and Q5 answered by the owner on 14 November; see <a href="requirements.html#open">the answers</a>.</li>
+</ul>
+</section>
+</ex-document>
+</body>
+</html>
