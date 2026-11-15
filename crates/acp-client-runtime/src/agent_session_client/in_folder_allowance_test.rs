@@ -305,3 +305,18 @@ fn diff_on_scratch_directories_with_a_child_link_out_asks() {
         "{command}"
     );
 }
+
+/// Oracle: R4/Q3 (review N3) — sort spills large input to temporary files in
+/// the system temporary folder, outside scratch, so it asks.
+#[test]
+fn sort_on_a_scratch_file_asks() {
+    let folders = folders();
+    let grant = InFolderGrant::new(&folders.project, &folders.scratch).unwrap();
+    let command = format!("sort {}/input", folders.scratch.display());
+    assert!(
+        grant
+            .allow_once(&shell_call(&command), &options())
+            .is_none(),
+        "{command}"
+    );
+}

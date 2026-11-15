@@ -27,6 +27,8 @@ use std::sync::{Arc, RwLock};
 /// `mv` replaces that entry and `ln` refuses an existing one, so they stay.
 /// `diff` is absent: comparing directories reads children by name and follows
 /// a child link out. `chmod` is absent: its mode is a bare word, never allowed.
+/// `sort` is absent: input larger than its memory buffer spills to temporary
+/// files in the system `$TMPDIR` (or `/var/tmp`), outside the folder.
 const FILE_UTILITIES: &[(&str, &[&str])] = &[
     ("rm", &["-r", "-R", "-f", "-rf", "-fr", "-Rf", "-fR", "-v"]),
     ("rmdir", &["-v"]),
@@ -42,7 +44,6 @@ const FILE_UTILITIES: &[(&str, &[&str])] = &[
     ("file", &[]),
     ("du", &[]),
     ("cmp", &[]),
-    ("sort", &[]),
     ("uniq", &[]),
     ("grep", &[]),
     ("touch", &[]),
