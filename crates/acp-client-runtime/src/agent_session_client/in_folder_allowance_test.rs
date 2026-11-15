@@ -27,6 +27,13 @@ fn folders() -> Folders {
     }
     std::os::unix::fs::symlink(base.join("outside"), scratch.join("escape")).unwrap();
     std::os::unix::fs::symlink(&scratch, base.join("scratch-link")).unwrap();
+    // Dangling links: their targets outside do not exist yet.
+    std::os::unix::fs::symlink(base.join("outside/new"), scratch.join("dangling")).unwrap();
+    std::os::unix::fs::symlink(
+        base.join("outside/missing-dir"),
+        scratch.join("dangling-dir"),
+    )
+    .unwrap();
     Folders {
         _root: root,
         root: base,
@@ -159,7 +166,7 @@ fn shell_commands_are_allowed_once_only_when_every_operand_is_in_the_scratch_fol
         (String::new(), false),
         // File utilities that run no code given to them are allowed on scratch.
         (format!("cat {scratch}/a"), true),
-        (format!("cp {scratch}/a {scratch}/b"), true),
+        (format!("cp {scratch}/a {scratch}/b"), false),
         (format!("find {scratch} -delete"), false),
         // A program that runs code from its operands could act anywhere once
         // the agent writes that code into scratch, so it asks (Q3).
@@ -199,7 +206,11 @@ fn shell_commands_are_allowed_once_only_when_every_operand_is_in_the_scratch_fol
         (format!("cp -f {scratch}/a {scratch}/b"), false),
         (format!("cp -r {scratch}/a {scratch}/b"), false),
         (format!("rmdir -p {scratch}/x/y"), false),
-        (format!("cp -R {scratch}/a {scratch}/b"), true),
+        (format!("cp -R {scratch}/a {scratch}/b"), false),
+        // `cp` into a directory writes a derived name that may be a symlink out.
+        (format!("cp {scratch}/note {scratch}/dest"), false),
+        (format!("mv {scratch}/note {scratch}/dest"), true),
+        (format!("ln -s {scratch}/a {scratch}/dest"), true),
         (format!("ln -s {scratch}/a {scratch}/b"), true),
         (format!("rmdir -v {scratch}/x"), true),
     ];
@@ -232,4 +243,43 @@ fn without_one_allow_once_option_the_request_goes_to_approval() {
         PermissionOptionKind::AllowOnce,
     ));
     assert!(grant.allow_once(&call, &two).is_none());
+}
+
+/// Oracle: R4/Q3 — a write through a dangling symlink lands outside the folder
+/// once it is created, so neither a file edit nor a shell command may treat
+/// the link as an ordinary missing name.
+#[test]
+fn a_dangling_symlink_final_or_ancestor_asks() {
+    let folders = folders();
+    let grant = InFolderGrant::new(&folders.project, &folders.scratch).unwrap();
+    let scratch = folders.scratch.display().to_string();
+    let dangling_final = folders.scratch.join("dangling");
+    let dangling_ancestor = folders.scratch.join("dangling-dir/new");
+    for path in [&dangling_final, &dangling_ancestor] {
+        assert!(
+            grant
+                .allow_once(&file_call(ToolKind::Edit, &[path]), &options())
+                .is_none(),
+            "edit {}",
+            path.display()
+        );
+    }
+    for command in [
+        format!("touch {scratch}/dangling"),
+        format!("touch {scratch}/dangling-dir/new"),
+        format!("mkdir -p {scratch}/dangling-dir/new"),
+    ] {
+        assert!(
+            grant
+                .allow_once(&shell_call(&command), &options())
+                .is_none(),
+            "{command}"
+        );
+    }
+    // A genuinely absent name inside scratch is still allowed.
+    assert!(
+        grant
+            .allow_once(&shell_call(&format!("touch {scratch}/fresh")), &options())
+            .is_some()
+    );
 }

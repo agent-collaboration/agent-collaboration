@@ -18,12 +18,13 @@ use std::sync::{Arc, RwLock};
 /// options it may carry. Every program reads or changes only the files it is
 /// given and runs no code taken from them; every option takes no value and
 /// reads nothing indirectly (checked against the BSD and GNU manuals). A
-/// program with no options listed takes none.
+/// program with no options listed takes none. `cp` is absent: copying into a
+/// directory writes a name it derives, which can be a symlink out of the folder.
+/// `mv` replaces that entry and `ln` refuses an existing one, so they stay.
 const FILE_UTILITIES: &[(&str, &[&str])] = &[
     ("rm", &["-r", "-R", "-f", "-rf", "-fr", "-Rf", "-fR", "-v"]),
     ("rmdir", &["-v"]),
     ("mkdir", &["-p", "-v"]),
-    ("cp", &["-R", "-p", "-v"]),
     ("mv", &["-v"]),
     ("ls", &["-l", "-a", "-la", "-al", "-lh", "-h"]),
     ("chmod", &["-R"]),
@@ -51,8 +52,37 @@ pub(crate) struct InFolderGrant {
     scratch_folder: PathBuf,
 }
 
-/// Grants by provider session id, for sessions running in auto mode.
-pub(crate) type InFolderGrants = Arc<RwLock<HashMap<String, InFolderGrant>>>;
+/// A session's in-folder roots, and whether Router auto is its current mode.
+/// The roots outlive a change to a named mode, so a later change back to auto
+/// restores the same bounded grant.
+#[derive(Clone, Debug)]
+pub(crate) struct SessionInFolderGrant {
+    pub(crate) grant: InFolderGrant,
+    pub(crate) router_auto: bool,
+}
+
+/// In-folder grants by provider session id.
+pub(crate) type InFolderGrants = Arc<RwLock<HashMap<String, SessionInFolderGrant>>>;
+
+/// The grant a permission request may use: only while the session runs in
+/// Router auto.
+pub(crate) fn active_grant(grants: &InFolderGrants, session_id: &str) -> Option<InFolderGrant> {
+    grants
+        .read()
+        .ok()
+        .and_then(|grants| grants.get(session_id).cloned())
+        .filter(|session| session.router_auto)
+        .map(|session| session.grant)
+}
+
+/// Records the session's mode after a confirmed mode change (R4, Q3).
+pub(crate) fn set_router_auto(grants: &InFolderGrants, session_id: &str, router_auto: bool) {
+    if let Ok(mut grants) = grants.write()
+        && let Some(session) = grants.get_mut(session_id)
+    {
+        session.router_auto = router_auto;
+    }
+}
 
 impl InFolderGrant {
     /// `None` when either folder cannot be resolved; such a session asks for
@@ -164,8 +194,9 @@ fn within(path: &Path, folder: &Path) -> bool {
     canonical_existing_prefix(path).is_some_and(|resolved| resolved.starts_with(folder))
 }
 
-/// Canonicalizes the longest existing ancestor and appends the rest, so a file
-/// about to be created resolves through any symlinked parent.
+/// Canonicalizes the longest existing ancestor and appends the absent rest, so
+/// a file about to be created resolves through any symlinked parent. `None` when
+/// a present component cannot be resolved, such as a dangling symlink.
 fn canonical_existing_prefix(path: &Path) -> Option<PathBuf> {
     let mut missing = Vec::new();
     let mut existing = path;
@@ -177,6 +208,10 @@ fn canonical_existing_prefix(path: &Path) -> Option<PathBuf> {
                 }
                 return Some(resolved);
             }
+            // Only a name that is genuinely absent may be appended unresolved.
+            // Something present that still cannot be resolved (a dangling or
+            // unreadable symlink) would let a write follow it out of the folder.
+            Err(_) if std::fs::symlink_metadata(existing).is_ok() => return None,
             Err(_) => {
                 missing.push(existing.file_name()?.to_owned());
                 existing = existing.parent()?;
