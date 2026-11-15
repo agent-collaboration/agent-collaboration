@@ -145,10 +145,6 @@ use std::time::Duration;
 pub(super) struct MachineFixture {
     pub inner: Fixture,
 }
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Real fixture setup and transport controls assert their preconditions while propagating IO failures."
-)]
 impl MachineFixture {
     pub async fn racing_grants(
         &self,

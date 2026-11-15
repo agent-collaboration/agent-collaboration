@@ -32,10 +32,6 @@ async fn receipt_window_is_exactly_five_seconds_and_refuses_after_the_pre_sample
 
 #[expect(
     clippy::panic_in_result_fn,
-    reason = "Unknown and unstamped decision paths fail closed without synthetic approvals or token grants."
-)]
-#[expect(
-    clippy::panic_in_result_fn,
     reason = "Actual unknown and unstamped route refusals must preserve owning machine state."
 )]
 #[tokio::test]

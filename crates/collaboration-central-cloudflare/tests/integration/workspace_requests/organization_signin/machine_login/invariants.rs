@@ -6,10 +6,6 @@ struct SequenceState {
     generation: i64,
     active: Option<String>,
 }
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "Each real SQL invariant must fail immediately while fixture errors propagate."
-)]
 async fn assert_invariant(f: &MachineFixture, state: &SequenceState, step: &str) -> Result<()> {
     let active = f
         .rows(
@@ -36,10 +32,6 @@ async fn assert_invariant(f: &MachineFixture, state: &SequenceState, step: &str)
     );
     Ok(())
 }
-#[expect(
-    clippy::panic_in_result_fn,
-    reason = "The stale-generation precondition and refusal are independent assertions at the real route boundary."
-)]
 async fn stale_grant(f: &MachineFixture, enrollment: &str, state: &SequenceState) -> Result<()> {
     let rows = f
         .rows(
