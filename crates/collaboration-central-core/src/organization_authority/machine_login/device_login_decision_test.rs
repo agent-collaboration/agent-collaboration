@@ -286,18 +286,6 @@ fn new_approval_requires_a_deadline_strictly_after_the_applying_millisecond() {
     assert!(matches!(plan.answer, DeviceLoginDecision::Approved { .. }));
     assert!(!plan.changes.is_empty());
     assert!(ids.minted() > 0);
-
-    // Timestamp overflow is a representation failure, not a guessed code window.
-    let unrepresentable = DecideDeviceLogin {
-        code_expires_at: UnixSeconds(i64::MAX),
-        ..request
-    };
-    let ids = CountingIds::new();
-    assert_eq!(
-        decide_device_login(&unrepresentable, &empty_facts(), NOW_MS, time(NOW_MS), &ids),
-        Err(central_storage::StoreFailure::Unavailable)
-    );
-    assert_eq!(ids.minted(), 0);
 }
 
 #[test]

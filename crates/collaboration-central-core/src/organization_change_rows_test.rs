@@ -70,3 +70,50 @@ fn automatic_origin_rejects_person_or_permission_cells_instead_of_dropping_them(
         Err(corrupt("origin", ""))
     );
 }
+
+struct ReadOnlyRows(ReadOutcome);
+impl ObjectHost for ReadOnlyRows {
+    async fn read(&self, statement: Statement) -> Result<ReadOutcome, StoreFailure> {
+        assert_eq!(
+            statement.args,
+            vec![text("018f1111-2222-7000-8000-000000000003")]
+        );
+        Ok(self.0.clone())
+    }
+    async fn run_batch(
+        &self,
+        _: central_storage::StatementBatch,
+    ) -> Result<central_storage::BatchOutcome, StoreFailure> {
+        panic!("the supersession lookup cannot write")
+    }
+}
+
+#[tokio::test]
+async fn two_valid_supersession_records_are_corrupt_instead_of_selecting_one() {
+    // Arrange: either independently valid record could otherwise be decoded.
+    let first = record(OrganizationChangeKind::MachineRevoked);
+    let second = OrganizationChangeRecord {
+        id: Uuid::parse_str("018f1111-2222-7000-8000-000000000004").unwrap(),
+        request_id: "018f1111-2222-7000-8000-000000000003:machineRevoked:018f1111-2222-7000-8000-000000000005"
+            .to_owned().try_into().unwrap(),
+        target_id: "018f1111-2222-7000-8000-000000000005".to_owned(),
+        ..first.clone()
+    };
+    let mut outcome = rows(&first);
+    outcome.rows.extend(rows(&second).rows);
+    for row in &outcome.rows {
+        assert!(decode(&outcome, row).is_ok());
+    }
+
+    // Act/Assert: ambiguity is corruption even when both candidates are valid.
+    assert_eq!(
+        read_machine_supersession(
+            &ReadOnlyRows(outcome),
+            "018f1111-2222-7000-8000-000000000003"
+        )
+        .await,
+        Err(bad_value(
+            "organization_change_records.machine_supersession"
+        ))
+    );
+}

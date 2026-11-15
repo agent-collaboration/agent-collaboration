@@ -167,7 +167,7 @@ async fn two_valid_supersession_predecessors_refuse_without_effects_then_repair_
     assert!(ambiguous != healthy);
 
     // Act/Assert: selecting either candidate would grant. The cardinality guard
-    // must instead produce 503 and a parsed empty body, with all four stores intact.
+    // must instead produce 503 and a parsed null response, with all four stores intact.
     assert_eq!(f.post(TOKEN, &token(c, c)).await?, (503, Value::Null));
     assert!(
         snapshot(&f).await? == ambiguous,

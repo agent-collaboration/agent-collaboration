@@ -38,11 +38,9 @@ pub(crate) fn decide_device_login(
         }
         return Ok(Decided::unchanged(approved(earlier)));
     }
-    let deadline_ms = request
-        .code_expires_at
-        .0
-        .checked_mul(1000)
-        .ok_or(StoreFailure::Unavailable)?;
+    let Some(deadline_ms) = request.code_expires_at.0.checked_mul(1000) else {
+        return refuse(DeviceLoginRefusal::NotPermitted {});
+    };
     if deadline_ms <= time.now_ms {
         return refuse(DeviceLoginRefusal::NotPermitted {});
     }
