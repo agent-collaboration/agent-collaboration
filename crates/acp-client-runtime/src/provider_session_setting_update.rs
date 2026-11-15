@@ -110,6 +110,15 @@ pub(crate) async fn apply_loaded_setting(
         }
         None => {
             let effective = catalog.effective_settings();
+            if kind == ProviderSettingKind::Mode {
+                // The mode the agent confirmed decides whether auto's in-folder
+                // grant applies; uncertain or failed changes never reach here.
+                crate::agent_session_client::set_router_auto(
+                    &handles.in_folder_grants,
+                    &provider_session_id,
+                    value == crate::AUTO_PERMISSION_MODE,
+                );
+            }
             handles
                 .event_sink
                 .publish(

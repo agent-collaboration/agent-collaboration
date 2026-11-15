@@ -46,7 +46,9 @@ impl ProviderBehavior for CursorAcpBehavior {
             realized_by: Some("agent"),
             fallback: None,
             realization: acp_client_runtime::AutoRealization::AsksFirst,
-            stand_in_reason: None,
+            // Cursor's own auto-review is not offered over ACP (E1), so its
+            // ask-first agent mode stands in, and the report says so (R3).
+            stand_in_reason: Some(acp_client_runtime::PermissionModeReason::AutoNotOffered),
         }
     }
     fn observe(&self, update: ProviderUpdate) -> Result<ProviderFacts, ProviderError> {

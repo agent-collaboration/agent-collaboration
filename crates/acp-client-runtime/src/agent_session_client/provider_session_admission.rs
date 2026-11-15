@@ -117,11 +117,9 @@ pub(super) fn register_static_provider_session<P: InteractionPort>(
 pub(super) struct CreateAdmissionInputs<P: InteractionPort> {
     pub(super) connection: ConnectionTo<Agent>,
     pub(super) request: NewSessionRequest,
-    /// Where an auto-mode session's in-folder allowance is kept, and its grant.
-    pub(super) in_folder: Option<(
-        super::in_folder_allowance::InFolderGrants,
-        super::in_folder_allowance::InFolderGrant,
-    )>,
+    /// The session's in-folder roots, kept for its whole life; active while it
+    /// runs in Router auto.
+    pub(super) in_folder: Option<super::in_folder_allowance::InFolderGrant>,
     pub(super) requested_settings: crate::RequestedProviderSettings,
     pub(super) supports_close: bool,
     pub(super) shutdown: CancellationToken,
@@ -166,11 +164,11 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                 crate::provider_settings_catalog_codec::catalog_from_session_response(&response, runtime_handles.behavior.as_ref(), &runtime_handles.connection_model_reasoning);
             let InitialSettingsOutcome { applied, failure, permission_mode } =
                 apply_initial_settings(&session, &requested_settings, &mut settings_catalog, runtime_handles.behavior.as_ref(), UnspecifiedMode::MeansAuto).await;
-            if let Some((grants, grant)) = in_folder
-                && permission_mode.requested.as_deref().is_none_or(|mode| mode == crate::AUTO_PERMISSION_MODE)
-                && let Ok(mut grants) = grants.write()
+            if let Some(grant) = in_folder
+                && let Ok(mut grants) = runtime_handles.in_folder_grants.write()
             {
-                grants.insert(provider_session_id.clone(), grant);
+                let router_auto = permission_mode.requested.as_deref().is_none_or(|mode| mode == crate::AUTO_PERMISSION_MODE);
+                grants.insert(provider_session_id.clone(), super::in_folder_allowance::SessionInFolderGrant { grant, router_auto });
             }
             let setup_error = match failure {
                 None => None,

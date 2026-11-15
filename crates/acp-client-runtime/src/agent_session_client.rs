@@ -3,6 +3,7 @@
 mod approval_turn_cancellation;
 mod external_approval_dispatch;
 mod in_folder_allowance;
+pub(crate) use in_folder_allowance::{InFolderGrants, set_router_auto};
 mod provider_acp_error_mapping;
 mod provider_approval_dispatch;
 mod provider_auth_status_update;

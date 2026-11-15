@@ -429,7 +429,10 @@ async fn each_session_is_granted_only_its_own_scratch_folder() {
     let scratch = cursor.scratch("session-c");
     let created = cursor.create(Some(&scratch), None).await.expect("cursor");
     cursor.client.shutdown().await;
-    assert_eq!(created.permission_mode, report("agent", None, None));
+    assert_eq!(
+        created.permission_mode,
+        report("agent", None, Some(PermissionModeReason::AutoNotOffered))
+    );
     assert_eq!(
         cursor.receipt()["sessions"][0]["additionalDirectories"],
         Value::Null
@@ -516,4 +519,143 @@ async fn a_session_in_a_named_mode_has_no_in_folder_allowance() {
         fixture.receipt()["permissionAnswers"][0]["answer"],
         json!({"outcome":{"outcome":"cancelled"}})
     );
+}
+
+/// Oracle: R4/Q3 — the in-folder allowance follows the session's current mode:
+/// a confirmed change from auto to a named mode makes in-folder actions ask, and
+/// a change back to auto allows them again with the same folders.
+#[tokio::test]
+async fn the_in_folder_allowance_follows_a_confirmed_mode_change() {
+    let fixture = Fixture::start(
+        "cursor",
+        "no-directories",
+        Arc::new(CursorAcpBehavior),
+        ApprovalPortOutcome::Selected {
+            option_id: "reject".to_owned(),
+            note: None,
+        },
+        false,
+    )
+    .await;
+    let own = fixture.scratch("session-a");
+    fixture
+        .create(Some(&own), None)
+        .await
+        .expect("created in auto");
+    let edit = json!({"kind":"edit","locations":[{"path":own.join("note.txt")}]});
+    let change = |value: &str| acp_client_runtime::ProviderSettingRequest {
+        kind: ProviderSettingKind::Mode,
+        value: value.to_owned(),
+        intent: session_event_model::SettingApplicationIntent::ExplicitChange,
+        expected_model: None,
+    };
+
+    // Act: auto allows; after a change to `ask` the same edit asks.
+    fixture.ask("fixture-session-1", &edit).await;
+    assert_eq!(fixture.approvals_asked(), 0);
+    fixture
+        .client
+        .set_setting("fixture-session-1".to_owned(), change("ask"))
+        .await
+        .expect("changed to ask");
+    fixture.ask("fixture-session-1", &edit).await;
+    assert_eq!(fixture.approvals_asked(), 1);
+
+    // Act: back to Router auto, the edit is allowed again.
+    fixture
+        .client
+        .set_setting("fixture-session-1".to_owned(), change("auto"))
+        .await
+        .expect("changed back to auto");
+    fixture.ask("fixture-session-1", &edit).await;
+    assert_eq!(fixture.approvals_asked(), 1);
+    fixture.client.shutdown().await;
+    let answers: Vec<Value> = fixture.receipt()["permissionAnswers"]
+        .as_array()
+        .expect("answers")
+        .iter()
+        .map(|answer| answer["answer"]["outcome"]["optionId"].clone())
+        .collect();
+    assert_eq!(
+        answers,
+        vec![json!("allow"), json!("reject"), json!("allow")]
+    );
+}
+
+/// Oracle: as above, from a named mode at start to Router auto.
+#[tokio::test]
+async fn a_session_started_in_a_named_mode_gains_the_allowance_on_a_change_to_auto() {
+    let fixture = Fixture::start(
+        "cursor",
+        "no-directories",
+        Arc::new(CursorAcpBehavior),
+        ApprovalPortOutcome::Cancelled,
+        false,
+    )
+    .await;
+    let own = fixture.scratch("session-a");
+    fixture
+        .create(Some(&own), Some("ask"))
+        .await
+        .expect("created in ask");
+    let edit = json!({"kind":"edit","locations":[{"path":own.join("note.txt")}]});
+    fixture.ask("fixture-session-1", &edit).await;
+    assert_eq!(fixture.approvals_asked(), 1);
+    fixture
+        .client
+        .set_setting(
+            "fixture-session-1".to_owned(),
+            acp_client_runtime::ProviderSettingRequest {
+                kind: ProviderSettingKind::Mode,
+                value: "auto".to_owned(),
+                intent: session_event_model::SettingApplicationIntent::ExplicitChange,
+                expected_model: None,
+            },
+        )
+        .await
+        .expect("changed to auto");
+    fixture.ask("fixture-session-1", &edit).await;
+    assert_eq!(fixture.approvals_asked(), 1);
+    fixture.client.shutdown().await;
+    assert_eq!(
+        fixture.receipt()["permissionAnswers"][1]["answer"],
+        json!({"outcome":{"outcome":"selected","optionId":"allow"}})
+    );
+}
+
+/// Oracle: R3 — Cursor's auto realization differs from auto, so implicit and
+/// explicit auto carry the reason; a requested native `agent` carries none.
+#[tokio::test]
+async fn cursor_auto_reports_its_stand_in_reason_and_its_own_agent_mode_none() {
+    let fixture = Fixture::start(
+        "cursor",
+        "no-directories",
+        Arc::new(CursorAcpBehavior),
+        ApprovalPortOutcome::Cancelled,
+        false,
+    )
+    .await;
+    let implicit = fixture.create(None, None).await.expect("implicit auto");
+    let explicit = fixture
+        .create(None, Some("auto"))
+        .await
+        .expect("explicit auto");
+    let native = fixture
+        .create(None, Some("agent"))
+        .await
+        .expect("native agent");
+    fixture.client.shutdown().await;
+    assert_eq!(
+        implicit.permission_mode,
+        report("agent", None, Some(PermissionModeReason::AutoNotOffered))
+    );
+    assert_eq!(
+        explicit.permission_mode,
+        report(
+            "agent",
+            Some("auto"),
+            Some(PermissionModeReason::AutoNotOffered)
+        )
+    );
+    assert_eq!(native.permission_mode, report("agent", Some("agent"), None));
 }
