@@ -63,6 +63,31 @@ async fn active_grant_retry_reconstructs_the_same_superseded_client_after_reopen
             "notice recovery must not emit another revocation or activation"
         );
     }
+    // Valid scalar domains can still encode a false predecessor association.
+    // Corruption below is setup; the real route must refuse without effects.
+    for (damage, repair) in [
+        (
+            "UPDATE organization_change_records SET permission_checked='machine:revoke' WHERE kind='machineRevoked'",
+            "UPDATE organization_change_records SET permission_checked='machine:enroll' WHERE kind='machineRevoked'",
+        ),
+        (
+            "UPDATE machine_approvals SET end_reason='owner' WHERE end_reason='superseded'",
+            "UPDATE machine_approvals SET end_reason='superseded' WHERE end_reason='owner'",
+        ),
+    ] {
+        let healthy = snapshot(&f).await?;
+        f.execute(damage, vec![]).await?;
+        let damaged = snapshot(&f).await?;
+        assert!(damaged != healthy);
+        assert_eq!(f.post(TOKEN, &token(&b, &b)).await?, (503, Value::Null));
+        assert!(snapshot(&f).await? == damaged);
+        f.execute(repair, vec![]).await?;
+        assert!(snapshot(&f).await? == healthy);
+        assert_eq!(
+            f.post(TOKEN, &token(&b, &b)).await?,
+            (200, grant(&b, INSTALLATION, f.now(), Some((&a, &a))))
+        );
+    }
     let before = snapshot(&f).await?;
     assert_eq!(
         f.post(TOKEN, &token(&a, &a)).await?,

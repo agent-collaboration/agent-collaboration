@@ -310,7 +310,7 @@ fn replacement_retry_keeps_the_predecessor_and_checks_live_client_before_returni
     let next = project(&before, &first);
     let retry = decide_token(&next, NOW_MS + 1000);
     assert!(
-        matches!(retry.answer, MachineTokenDecision::Grant { superseded: Some(actual), .. } if actual == expected)
+        matches!(&retry.answer, MachineTokenDecision::Grant { superseded: Some(actual), .. } if actual == &expected)
     );
     assert!(records(&retry).is_empty());
     assert_eq!(retry.changes.len(), 1);

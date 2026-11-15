@@ -65,6 +65,17 @@ async fn idle_expiry_fences_a_still_claimable_approval_and_fresh_approval_can_ac
     f.advance(60_000).await?;
     assert_eq!(f.now(), first_granted_at + 30 * 24 * 60 * 60);
     assert!(f.now() < code_expires_at);
+    f.execute("CREATE TRIGGER fail_idle_expiry BEFORE INSERT ON organization_change_records WHEN NEW.kind='allowanceChanged' AND NEW.origin='automatic' BEGIN SELECT RAISE(ABORT,'fixture final idle allowance record failure'); END",vec![]).await?;
+    let before_failed_expiry = snapshot(&f).await?;
+    assert_eq!(
+        f.post(TOKEN, &token(&first, &first)).await?,
+        (503, Value::Null)
+    );
+    assert!(
+        snapshot(&f).await? == before_failed_expiry,
+        "final idle record failure changed machine generation, allowances, approvals, records or credentials"
+    );
+    f.execute("DROP TRIGGER fail_idle_expiry", vec![]).await?;
     assert_eq!(
         f.post(TOKEN, &token(&first, &first)).await?,
         (200, refused("idleExpired"))

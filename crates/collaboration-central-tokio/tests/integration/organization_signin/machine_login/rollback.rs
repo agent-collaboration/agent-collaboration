@@ -87,7 +87,7 @@ async fn superseding_grant_last_record_failure_restores_old_login_generation_and
         .await?;
     assert_eq!(
         f.post(TOKEN, &token(&b, &b)).await?,
-        (200, grant(&b, INSTALLATION, f.now(), None))
+        (200, grant(&b, INSTALLATION, f.now(), Some((&a, &a))))
     );
     assert_eq!(
         f.rows("SELECT * FROM organization_change_records ORDER BY id")
