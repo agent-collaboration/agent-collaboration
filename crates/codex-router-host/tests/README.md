@@ -26,15 +26,22 @@ Library unit tests remain colocated with their implementations.
 
 The D1 send roots drive a real Host through the real client and API with ACP
 fixtures whose receipts record every frame the agent read:
-`provider_send_behaviour` (one send behaviour, and mail and CLI agreeing),
-`provider_send_races` (forced idle-read, steer and recheck races),
+`provider_send_behaviour` (one send behaviour: cannot steer, an explicit queue
+or steer, and mail and the CLI for each session state),
+`provider_send_races` (forced idle-read, steer and recheck races; its
+supervisor-level rig is in `direct_supervisor`),
 `provider_send_approvers` (who approves a steered or queued message, and
 unknown earlier outcomes refusing a send), `provider_queued_api_lifecycle` (the
-line's bound, refusals, close, cancel, provider stop, retention, and in
+line's bound, refusals, close interrupting a turn, cancel (by the queue and,
+in `conversation_cancel_door`, by conversation cancel), provider stop,
+retention, and in
 `restart_stages` the clean-shutdown and hard-stop restart stages, the latter
 through a relaunched child), `provider_acp_busy_prompt` (the Router's ACP socket
-steering, queueing and not-sent answers) and `provider_cache_warm` (Claude's
-idle cache warm on the Host's injected clock). Each is bounded by the runner
+steering, queueing and not-sent answers), `provider_cache_warm` (Claude's
+idle cache warm on the Host's injected clock), `provider_full_access_refusal`
+(full-access modes refused at start and on settings set) and
+`provider_work_roots` (work roots reaching Claude and Cursor sessions started
+in auto). Each is bounded by the runner
 (`.config/nextest.toml`), never by a clock in test code.
 
 The aggregate declares shared helper implementations once. Other directories
