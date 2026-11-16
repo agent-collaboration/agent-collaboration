@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Protocol contracts — D5</title>
+  <link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+  <script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content" src="./navigation.json"></ex-nav>
+<ex-document id="content">
+<h1>D5 · Codex client side</h1>
+
+<ex-callout title="Goal" tone="tldr"><p>The Router's own calls to Codex become typed, the runtime schema pipeline is deleted, and MCP tool schemas come from the types.</p></ex-callout>
+
+<h2 id="scope">Nodes this deliverable fixes</h2>
+<ex-mermaid id="scope-graph" label="Touched nodes highlighted"><script type="text/plain">
+flowchart LR
+  cli[Codex CLI]
+  codex[Managed Codex]
+  agents[Claude / Cursor]
+  callers[MCP callers]
+  N1[N1 CLI face]
+  N2[N2 relay]
+  N3[N3 output mapper]
+  N4[N4 command port]
+  N5[(N5 hub)]
+  N6[N6 ACP client]
+  N7[N7 approvals]
+  N8[N8 Codex ACP adapter]
+  N9[N9 provider ACP route]
+  N10[N10 Codex client]
+  N11[N11 MCP server]
+  N12[N12 Claude metadata]
+  cli --> N1
+  cli --> N2 --> codex
+  N1 --> N4 --> N6 --> agents
+  agents --> N6 --> N5 --> N3 --> N1
+  N6 --> N7 --> N5
+  N5 --> N9
+  callers --> N11 --> N4
+  N11 --> N8 --> N10 --> codex
+  N12 --> N6
+  class N10,N8,N11 slot2
+</script></ex-mermaid>
+<p>Teal nodes change in this deliverable. Node details: <a href="program-design.html#nodes">Program Design</a>.</p>
+
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Part</th><th>Change</th></tr></thead>
+<tbody>
+<tr><td>N10 Codex client</td><td>request&lt;R>; closed CodexCallError keeps OutcomeUnknown/Protocol + retirement; delete runtime export/bundle/validators; digest hashed at build time, same format</td></tr>
+<tr><td>N8 adapter</td><td>Codex calls on the contract; one history mapping</td></tr>
+<tr><td>N11 MCP server</td><td>tool schemas derived from generated types; no runtime splice</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="order">Where it sits</h2>
+<ex-mermaid id="order-graph" label="Dependencies"><script type="text/plain">
+flowchart LR
+  before["D0, D1"] --> this[D5] --> after["D6"]
+  class this slot2
+</script></ex-mermaid>
+
+<h2 id="proof">How it is proven</h2>
+<ex-mermaid id="proof-graph" label="Observations"><script type="text/plain">
+flowchart LR
+  this[D5] --> p0["O1 on request<R>"] & p1["O4 malformed-reply cases  retargeted from validated_native_request tests "] & p2["digest admission checks accept and refuse as before"] & p3["MCP schema equality test"]
+</script></ex-mermaid>
+<div class="ex-table-scroll" data-width="canvas">
+<table>
+<thead><tr><th>Check</th><th>Target</th><th>Passes when</th><th>Fails a wrong build when</th></tr></thead>
+<tbody>
+<tr><td>Typed calls (O1)</td><td>N10 request&lt;R></td><td>wrong params or a wrong response type does not compile</td><td>it compiles</td></tr>
+<tr><td>Malformed replies (O4)</td><td>N10 with a fake Codex</td><td>a malformed reply gives OutcomeUnknown after an effectful request and Protocol after a read, and retires the connection; retargeted from today's validated_native_request tests</td><td>any other outcome</td></tr>
+<tr><td>Digest admission</td><td>native dispatch, scheduled delivery, source launch</td><td>a matching digest is admitted and a mismatched one refused, with no runtime schema export present</td><td>admission changes</td></tr>
+<tr><td>No runtime export</td><td>Router start-up in the O5 run</td><td>no generate-json-schema process is started</td><td>it still starts</td></tr>
+<tr><td>MCP schemas</td><td>N11 tools/list</td><td>each advertised schema that contains a Codex shape equals the schema derived from the type</td><td>they differ</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Streams:</strong> S6, and MCP/CLI paths to Codex sessions. <strong>Rules:</strong> R1 (N10 edge), R9, R16, R17, R19. Details: <a href="verification.html">Verification Design</a>.</p>
+
+<h2 id="boundary">Out of scope and coordination</h2>
+<ul>
+<li><strong>Out of scope:</strong> ACP side of N8 (D6).</li>
+<li><strong>Coordinate:</strong> Lead A, before touching codex-router-host (schema cache, retention).</li>
+<li><strong>Done when:</strong> No runtime schema export remains, admission behaves as before, and tool schemas equal the derived ones.</li>
+</ul>
+
+<p><a href="index.html#deliverables">All deliverables</a></p>
+</ex-document>
+</body>
+</html>

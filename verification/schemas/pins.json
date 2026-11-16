@@ -1,0 +1,38 @@
+{
+  "pins": [
+    {
+      "protocol": "codexAppServer",
+      "file": "codex-app-server-0.166.0.experimental.json",
+      "version": "codex-cli 0.166.0",
+      "source": "codex app-server generate-json-schema --experimental --out <dir>, keeping <dir>/codex_app_server_protocol.schemas.json (the installed codex-cli 0.166.0)",
+      "sha256": "8aabf260bb66e9ca9ae5d20253f443971834644fe4659c85f8b1cc9e1d22dd5c"
+    },
+    {
+      "protocol": "codexAppServerPairing",
+      "file": "codex-app-server-0.166.0.pairing.json",
+      "version": "rust-v0.166.0",
+      "source": "node verification/tooling/schema-audit/codex-pairing-transcription.ts <common.rs> <bundle> <out>, where common.rs is `git show rust-v0.166.0:codex-rs/app-server-protocol/src/protocol/common.rs` from https://github.com/openai/codex and <bundle> is the codex pin above",
+      "sha256": "57f7c893d681f33771c4aa3c2b0b4ba0cb4755713430452bca022144d1fc4e27"
+    },
+    {
+      "protocol": "acp",
+      "file": "acp-schema-1.9.1.json",
+      "version": "agent-client-protocol 2.2.0, agent-client-protocol-schema 1.9.1, default features (no unstable_*)",
+      "source": "cargo run -p codex-router-test-support --example export_acp_schema -- <out>; equal after key sorting to upstream schema/v1/schema.json at 7e87dc205a7325bd07d0249fd20bb7486ee6ba95 (sha256 3c17bd6385d90cf672d8a661fddc359d73422cf8b8ce6865213d25cfd4c0eca7, prettier-formatted)",
+      "sha256": "fed1ec2cff3eb87d7c92889eb2e5fdae833d25093a9e2db45499b0b2bbdf6b78"
+    },
+    {
+      "protocol": "claudeAcpExtra",
+      "file": "claude-agent-acp-0.81.0.extensions.json",
+      "version": "@agentclientprotocol/claude-agent-acp 0.81.0",
+      "source": "written by hand from verification/node_modules/@agentclientprotocol/claude-agent-acp (0.81.0, the verification devDependency) dist/acp-agent.d.ts:49-77, dist/acp-agent.js:191-214, 956-963 (steering), and dist/auth-status.d.ts with dist/acp-agent.js:1096 (_auth/status_update); correction 3 (F): dist/goal-extension.d.ts:3-30 with dist/acp-agent.js:959-969, 1625-1650, 7876 (_session/goal, _meta.goal) and dist/air-extension.js:12-35 (_meta.jetbrains.air); correction 4 (V5): dist/goal-extension.js:20-35 parseGoalRequest constraints (non-empty sessionId, non-blank set objective)",
+      "sha256": "fd51ac1ec04de59e58a79dfbe4ad23aaaa80f82404a0b0c4d31ca83fffda836f"
+    }
+  ],
+  "noTrueDefinition": [
+    {
+      "protocol": "cursorAcpExtra",
+      "reason": "Nothing upstream declares Cursor's ACP extensions (cursor/* methods, _meta.parameterizedModelPicker, the cursor_login auth method, and the extension notifications a Cursor agent sends); on a Cursor connection every extension method has no authoritative definition."
+    }
+  ]
+}

@@ -1,0 +1,2321 @@
+{
+  "source": {
+    "repository": "https://github.com/openai/codex",
+    "tag": "rust-v0.166.0",
+    "path": "codex-rs/app-server-protocol/src/protocol/common.rs"
+  },
+  "clientRequests": [
+    {
+      "method": "initialize",
+      "variant": "Initialize",
+      "experimental": false,
+      "paramsType": "v1::InitializeParams",
+      "responseType": "v1::InitializeResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/InitializeParams",
+        "responseDefinition": "#/definitions/InitializeResponse"
+      }
+    },
+    {
+      "method": "server/diagnostics",
+      "variant": "ServerDiagnostics",
+      "experimental": true,
+      "paramsType": "v2::ServerDiagnosticsParams",
+      "responseType": "v2::ServerDiagnosticsResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ServerDiagnosticsParams",
+        "responseDefinition": "#/definitions/v2/ServerDiagnosticsResponse"
+      }
+    },
+    {
+      "method": "userVerification/status",
+      "variant": "UserVerificationStatus",
+      "experimental": true,
+      "paramsType": "v2::UserVerificationStatusParams",
+      "responseType": "v2::UserVerificationStatusResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/UserVerificationStatusParams",
+        "responseDefinition": "#/definitions/v2/UserVerificationStatusResponse"
+      }
+    },
+    {
+      "method": "userVerification/enroll",
+      "variant": "UserVerificationEnroll",
+      "experimental": true,
+      "paramsType": "v2::UserVerificationEnrollParams",
+      "responseType": "v2::UserVerificationEnrollResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/UserVerificationEnrollParams",
+        "responseDefinition": "#/definitions/v2/UserVerificationEnrollResponse"
+      }
+    },
+    {
+      "method": "userVerification/delete",
+      "variant": "UserVerificationDelete",
+      "experimental": true,
+      "paramsType": "v2::UserVerificationDeleteParams",
+      "responseType": "v2::UserVerificationDeleteResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/UserVerificationDeleteParams",
+        "responseDefinition": "#/definitions/v2/UserVerificationDeleteResponse"
+      }
+    },
+    {
+      "method": "userVerification/verify",
+      "variant": "UserVerificationVerify",
+      "experimental": true,
+      "paramsType": "v2::UserVerificationVerifyParams",
+      "responseType": "v2::UserVerificationVerifyResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/UserVerificationVerifyParams",
+        "responseDefinition": "#/definitions/v2/UserVerificationVerifyResponse"
+      }
+    },
+    {
+      "method": "userVerification/cancel",
+      "variant": "UserVerificationCancel",
+      "experimental": true,
+      "paramsType": "v2::UserVerificationCancelParams",
+      "responseType": "v2::UserVerificationCancelResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/UserVerificationCancelParams",
+        "responseDefinition": "#/definitions/v2/UserVerificationCancelResponse"
+      }
+    },
+    {
+      "method": "thread/start",
+      "variant": "ThreadStart",
+      "experimental": false,
+      "paramsType": "v2::ThreadStartParams",
+      "responseType": "v2::ThreadStartResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadStartParams",
+        "responseDefinition": "#/definitions/v2/ThreadStartResponse"
+      }
+    },
+    {
+      "method": "thread/resume",
+      "variant": "ThreadResume",
+      "experimental": false,
+      "paramsType": "v2::ThreadResumeParams",
+      "responseType": "v2::ThreadResumeResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadResumeParams",
+        "responseDefinition": "#/definitions/v2/ThreadResumeResponse"
+      }
+    },
+    {
+      "method": "thread/fork",
+      "variant": "ThreadFork",
+      "experimental": false,
+      "paramsType": "v2::ThreadForkParams",
+      "responseType": "v2::ThreadForkResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadForkParams",
+        "responseDefinition": "#/definitions/v2/ThreadForkResponse"
+      }
+    },
+    {
+      "method": "thread/sample",
+      "variant": "ThreadSample",
+      "experimental": true,
+      "paramsType": "v2::ThreadSampleParams",
+      "responseType": "v2::ThreadSampleResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadSampleParams",
+        "responseDefinition": "#/definitions/v2/ThreadSampleResponse"
+      }
+    },
+    {
+      "method": "thread/sample/cancel",
+      "variant": "ThreadSampleCancel",
+      "experimental": true,
+      "paramsType": "v2::ThreadSampleCancelParams",
+      "responseType": "v2::ThreadSampleCancelResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadSampleCancelParams",
+        "responseDefinition": "#/definitions/v2/ThreadSampleCancelResponse"
+      }
+    },
+    {
+      "method": "thread/archive",
+      "variant": "ThreadArchive",
+      "experimental": false,
+      "paramsType": "v2::ThreadArchiveParams",
+      "responseType": "v2::ThreadArchiveResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadArchiveParams",
+        "responseDefinition": "#/definitions/v2/ThreadArchiveResponse"
+      }
+    },
+    {
+      "method": "thread/delete",
+      "variant": "ThreadDelete",
+      "experimental": false,
+      "paramsType": "v2::ThreadDeleteParams",
+      "responseType": "v2::ThreadDeleteResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadDeleteParams",
+        "responseDefinition": "#/definitions/v2/ThreadDeleteResponse"
+      }
+    },
+    {
+      "method": "thread/unsubscribe",
+      "variant": "ThreadUnsubscribe",
+      "experimental": false,
+      "paramsType": "v2::ThreadUnsubscribeParams",
+      "responseType": "v2::ThreadUnsubscribeResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadUnsubscribeParams",
+        "responseDefinition": "#/definitions/v2/ThreadUnsubscribeResponse"
+      }
+    },
+    {
+      "method": "thread/increment_elicitation",
+      "variant": "ThreadIncrementElicitation",
+      "experimental": true,
+      "paramsType": "v2::ThreadIncrementElicitationParams",
+      "responseType": "v2::ThreadIncrementElicitationResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadIncrementElicitationParams",
+        "responseDefinition": "#/definitions/v2/ThreadIncrementElicitationResponse"
+      }
+    },
+    {
+      "method": "thread/decrement_elicitation",
+      "variant": "ThreadDecrementElicitation",
+      "experimental": true,
+      "paramsType": "v2::ThreadDecrementElicitationParams",
+      "responseType": "v2::ThreadDecrementElicitationResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadDecrementElicitationParams",
+        "responseDefinition": "#/definitions/v2/ThreadDecrementElicitationResponse"
+      }
+    },
+    {
+      "method": "thread/name/set",
+      "variant": "ThreadSetName",
+      "experimental": false,
+      "paramsType": "v2::ThreadSetNameParams",
+      "responseType": "v2::ThreadSetNameResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadSetNameParams",
+        "responseDefinition": "#/definitions/v2/ThreadSetNameResponse"
+      }
+    },
+    {
+      "method": "thread/prediction/request",
+      "variant": "ThreadPredictionRequest",
+      "experimental": true,
+      "paramsType": "v2::ThreadPredictionRequestParams",
+      "responseType": "v2::ThreadPredictionRequestResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadPredictionRequestParams",
+        "responseDefinition": "#/definitions/v2/ThreadPredictionRequestResponse"
+      }
+    },
+    {
+      "method": "thread/goal/set",
+      "variant": "ThreadGoalSet",
+      "experimental": false,
+      "paramsType": "v2::ThreadGoalSetParams",
+      "responseType": "v2::ThreadGoalSetResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadGoalSetParams",
+        "responseDefinition": "#/definitions/v2/ThreadGoalSetResponse"
+      }
+    },
+    {
+      "method": "thread/goal/get",
+      "variant": "ThreadGoalGet",
+      "experimental": false,
+      "paramsType": "v2::ThreadGoalGetParams",
+      "responseType": "v2::ThreadGoalGetResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadGoalGetParams",
+        "responseDefinition": "#/definitions/v2/ThreadGoalGetResponse"
+      }
+    },
+    {
+      "method": "thread/goal/clear",
+      "variant": "ThreadGoalClear",
+      "experimental": false,
+      "paramsType": "v2::ThreadGoalClearParams",
+      "responseType": "v2::ThreadGoalClearResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadGoalClearParams",
+        "responseDefinition": "#/definitions/v2/ThreadGoalClearResponse"
+      }
+    },
+    {
+      "method": "thread/queue/add",
+      "variant": "ThreadQueueAdd",
+      "experimental": true,
+      "paramsType": "v2::ThreadQueueAddParams",
+      "responseType": "v2::ThreadQueueAddResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadQueueAddParams",
+        "responseDefinition": "#/definitions/v2/ThreadQueueAddResponse"
+      }
+    },
+    {
+      "method": "thread/queue/list",
+      "variant": "ThreadQueueList",
+      "experimental": true,
+      "paramsType": "v2::ThreadQueueListParams",
+      "responseType": "v2::ThreadQueueListResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadQueueListParams",
+        "responseDefinition": "#/definitions/v2/ThreadQueueListResponse"
+      }
+    },
+    {
+      "method": "thread/queue/update",
+      "variant": "ThreadQueueUpdate",
+      "experimental": true,
+      "paramsType": "v2::ThreadQueueUpdateParams",
+      "responseType": "v2::ThreadQueueUpdateResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadQueueUpdateParams",
+        "responseDefinition": "#/definitions/v2/ThreadQueueUpdateResponse"
+      }
+    },
+    {
+      "method": "thread/queue/delete",
+      "variant": "ThreadQueueDelete",
+      "experimental": true,
+      "paramsType": "v2::ThreadQueueDeleteParams",
+      "responseType": "v2::ThreadQueueDeleteResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadQueueDeleteParams",
+        "responseDefinition": "#/definitions/v2/ThreadQueueDeleteResponse"
+      }
+    },
+    {
+      "method": "thread/queue/reorder",
+      "variant": "ThreadQueueReorder",
+      "experimental": true,
+      "paramsType": "v2::ThreadQueueReorderParams",
+      "responseType": "v2::ThreadQueueReorderResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadQueueReorderParams",
+        "responseDefinition": "#/definitions/v2/ThreadQueueReorderResponse"
+      }
+    },
+    {
+      "method": "thread/queue/start",
+      "variant": "ThreadQueueStart",
+      "experimental": true,
+      "paramsType": "v2::ThreadQueueStartParams",
+      "responseType": "v2::ThreadQueueStartResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadQueueStartParams",
+        "responseDefinition": "#/definitions/v2/ThreadQueueStartResponse"
+      }
+    },
+    {
+      "method": "thread/metadata/update",
+      "variant": "ThreadMetadataUpdate",
+      "experimental": false,
+      "paramsType": "v2::ThreadMetadataUpdateParams",
+      "responseType": "v2::ThreadMetadataUpdateResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadMetadataUpdateParams",
+        "responseDefinition": "#/definitions/v2/ThreadMetadataUpdateResponse"
+      }
+    },
+    {
+      "method": "thread/attachment/add",
+      "variant": "ThreadAttachmentAdd",
+      "experimental": false,
+      "paramsType": "v2::ThreadAttachmentAddParams",
+      "responseType": "v2::ThreadAttachmentAddResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadAttachmentAddParams",
+        "responseDefinition": "#/definitions/v2/ThreadAttachmentAddResponse"
+      }
+    },
+    {
+      "method": "thread/attachment/list",
+      "variant": "ThreadAttachmentList",
+      "experimental": false,
+      "paramsType": "v2::ThreadAttachmentListParams",
+      "responseType": "v2::ThreadAttachmentListResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadAttachmentListParams",
+        "responseDefinition": "#/definitions/v2/ThreadAttachmentListResponse"
+      }
+    },
+    {
+      "method": "thread/attachmentOwner/list",
+      "variant": "ThreadAttachmentOwnerList",
+      "experimental": false,
+      "paramsType": "v2::ThreadAttachmentOwnerListParams",
+      "responseType": "v2::ThreadAttachmentOwnerListResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadAttachmentOwnerListParams",
+        "responseDefinition": "#/definitions/v2/ThreadAttachmentOwnerListResponse"
+      }
+    },
+    {
+      "method": "thread/attachment/remove",
+      "variant": "ThreadAttachmentRemove",
+      "experimental": false,
+      "paramsType": "v2::ThreadAttachmentRemoveParams",
+      "responseType": "v2::ThreadAttachmentRemoveResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadAttachmentRemoveParams",
+        "responseDefinition": "#/definitions/v2/ThreadAttachmentRemoveResponse"
+      }
+    },
+    {
+      "method": "thread/section/move",
+      "variant": "ThreadSectionMove",
+      "experimental": false,
+      "paramsType": "v2::ThreadSectionMoveParams",
+      "responseType": "v2::ThreadSectionMoveResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadSectionMoveParams",
+        "responseDefinition": "#/definitions/v2/ThreadSectionMoveResponse"
+      }
+    },
+    {
+      "method": "thread/settings/update",
+      "variant": "ThreadSettingsUpdate",
+      "experimental": true,
+      "paramsType": "v2::ThreadSettingsUpdateParams",
+      "responseType": "v2::ThreadSettingsUpdateResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadSettingsUpdateParams",
+        "responseDefinition": "#/definitions/v2/ThreadSettingsUpdateResponse"
+      }
+    },
+    {
+      "method": "thread/memoryMode/set",
+      "variant": "ThreadMemoryModeSet",
+      "experimental": true,
+      "paramsType": "v2::ThreadMemoryModeSetParams",
+      "responseType": "v2::ThreadMemoryModeSetResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadMemoryModeSetParams",
+        "responseDefinition": "#/definitions/v2/ThreadMemoryModeSetResponse"
+      }
+    },
+    {
+      "method": "thread/memory/read",
+      "variant": "ThreadMemoryRead",
+      "experimental": true,
+      "paramsType": "v2::ThreadMemoryReadParams",
+      "responseType": "v2::ThreadMemoryReadResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadMemoryReadParams",
+        "responseDefinition": "#/definitions/v2/ThreadMemoryReadResponse"
+      }
+    },
+    {
+      "method": "memory/status",
+      "variant": "MemoryStatus",
+      "experimental": true,
+      "paramsType": "v2::MemoryStatusParams",
+      "responseType": "v2::MemoryStatusResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/MemoryStatusParams",
+        "responseDefinition": "#/definitions/v2/MemoryStatusResponse"
+      }
+    },
+    {
+      "method": "memory/reset",
+      "variant": "MemoryReset",
+      "experimental": true,
+      "paramsType": "Option<()>",
+      "responseType": "v2::MemoryResetResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": null,
+        "responseDefinition": "#/definitions/v2/MemoryResetResponse"
+      }
+    },
+    {
+      "method": "rollout/compress",
+      "variant": "RolloutCompress",
+      "experimental": true,
+      "paramsType": "Option<()>",
+      "responseType": "v2::RolloutCompressResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": null,
+        "responseDefinition": "#/definitions/v2/RolloutCompressResponse"
+      }
+    },
+    {
+      "method": "thread/unarchive",
+      "variant": "ThreadUnarchive",
+      "experimental": false,
+      "paramsType": "v2::ThreadUnarchiveParams",
+      "responseType": "v2::ThreadUnarchiveResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadUnarchiveParams",
+        "responseDefinition": "#/definitions/v2/ThreadUnarchiveResponse"
+      }
+    },
+    {
+      "method": "thread/compact/start",
+      "variant": "ThreadCompactStart",
+      "experimental": false,
+      "paramsType": "v2::ThreadCompactStartParams",
+      "responseType": "v2::ThreadCompactStartResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadCompactStartParams",
+        "responseDefinition": "#/definitions/v2/ThreadCompactStartResponse"
+      }
+    },
+    {
+      "method": "thread/shellCommand",
+      "variant": "ThreadShellCommand",
+      "experimental": false,
+      "paramsType": "v2::ThreadShellCommandParams",
+      "responseType": "v2::ThreadShellCommandResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadShellCommandParams",
+        "responseDefinition": "#/definitions/v2/ThreadShellCommandResponse"
+      }
+    },
+    {
+      "method": "thread/approveGuardianDeniedAction",
+      "variant": "ThreadApproveGuardianDeniedAction",
+      "experimental": false,
+      "paramsType": "v2::ThreadApproveGuardianDeniedActionParams",
+      "responseType": "v2::ThreadApproveGuardianDeniedActionResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadApproveGuardianDeniedActionParams",
+        "responseDefinition": "#/definitions/v2/ThreadApproveGuardianDeniedActionResponse"
+      }
+    },
+    {
+      "method": "thread/backgroundTerminals/clean",
+      "variant": "ThreadBackgroundTerminalsClean",
+      "experimental": true,
+      "paramsType": "v2::ThreadBackgroundTerminalsCleanParams",
+      "responseType": "v2::ThreadBackgroundTerminalsCleanResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadBackgroundTerminalsCleanParams",
+        "responseDefinition": "#/definitions/v2/ThreadBackgroundTerminalsCleanResponse"
+      }
+    },
+    {
+      "method": "thread/backgroundTerminals/list",
+      "variant": "ThreadBackgroundTerminalsList",
+      "experimental": true,
+      "paramsType": "v2::ThreadBackgroundTerminalsListParams",
+      "responseType": "v2::ThreadBackgroundTerminalsListResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadBackgroundTerminalsListParams",
+        "responseDefinition": "#/definitions/v2/ThreadBackgroundTerminalsListResponse"
+      }
+    },
+    {
+      "method": "thread/backgroundTerminals/terminate",
+      "variant": "ThreadBackgroundTerminalsTerminate",
+      "experimental": true,
+      "paramsType": "v2::ThreadBackgroundTerminalsTerminateParams",
+      "responseType": "v2::ThreadBackgroundTerminalsTerminateResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadBackgroundTerminalsTerminateParams",
+        "responseDefinition": "#/definitions/v2/ThreadBackgroundTerminalsTerminateResponse"
+      }
+    },
+    {
+      "method": "thread/revert",
+      "variant": "ThreadRevert",
+      "experimental": false,
+      "paramsType": "v2::ThreadRevertParams",
+      "responseType": "v2::ThreadRevertResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadRevertParams",
+        "responseDefinition": "#/definitions/v2/ThreadRevertResponse"
+      }
+    },
+    {
+      "method": "thread/list",
+      "variant": "ThreadList",
+      "experimental": false,
+      "paramsType": "v2::ThreadListParams",
+      "responseType": "v2::ThreadListResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadListParams",
+        "responseDefinition": "#/definitions/v2/ThreadListResponse"
+      }
+    },
+    {
+      "method": "project/list",
+      "variant": "ProjectList",
+      "experimental": true,
+      "paramsType": "v2::ProjectListParams",
+      "responseType": "v2::ProjectListResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ProjectListParams",
+        "responseDefinition": "#/definitions/v2/ProjectListResponse"
+      }
+    },
+    {
+      "method": "project/read",
+      "variant": "ProjectRead",
+      "experimental": true,
+      "paramsType": "v2::ProjectReadParams",
+      "responseType": "v2::ProjectReadResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ProjectReadParams",
+        "responseDefinition": "#/definitions/v2/ProjectReadResponse"
+      }
+    },
+    {
+      "method": "project/create",
+      "variant": "ProjectCreate",
+      "experimental": true,
+      "paramsType": "v2::ProjectCreateParams",
+      "responseType": "v2::ProjectCreateResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ProjectCreateParams",
+        "responseDefinition": "#/definitions/v2/ProjectCreateResponse"
+      }
+    },
+    {
+      "method": "project/import",
+      "variant": "ProjectImport",
+      "experimental": true,
+      "paramsType": "v2::ProjectImportParams",
+      "responseType": "v2::ProjectImportResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ProjectImportParams",
+        "responseDefinition": "#/definitions/v2/ProjectImportResponse"
+      }
+    },
+    {
+      "method": "project/update",
+      "variant": "ProjectUpdate",
+      "experimental": true,
+      "paramsType": "v2::ProjectUpdateParams",
+      "responseType": "v2::ProjectUpdateResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ProjectUpdateParams",
+        "responseDefinition": "#/definitions/v2/ProjectUpdateResponse"
+      }
+    },
+    {
+      "method": "project/move",
+      "variant": "ProjectMove",
+      "experimental": true,
+      "paramsType": "v2::ProjectMoveParams",
+      "responseType": "v2::ProjectMoveResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ProjectMoveParams",
+        "responseDefinition": "#/definitions/v2/ProjectMoveResponse"
+      }
+    },
+    {
+      "method": "project/delete",
+      "variant": "ProjectDelete",
+      "experimental": true,
+      "paramsType": "v2::ProjectDeleteParams",
+      "responseType": "v2::ProjectDeleteResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ProjectDeleteParams",
+        "responseDefinition": "#/definitions/v2/ProjectDeleteResponse"
+      }
+    },
+    {
+      "method": "threadSection/list",
+      "variant": "ThreadSectionList",
+      "experimental": false,
+      "paramsType": "v2::ThreadSectionListParams",
+      "responseType": "v2::ThreadSectionListResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadSectionListParams",
+        "responseDefinition": "#/definitions/v2/ThreadSectionListResponse"
+      }
+    },
+    {
+      "method": "threadSection/create",
+      "variant": "ThreadSectionCreate",
+      "experimental": false,
+      "paramsType": "v2::ThreadSectionCreateParams",
+      "responseType": "v2::ThreadSectionCreateResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadSectionCreateParams",
+        "responseDefinition": "#/definitions/v2/ThreadSectionCreateResponse"
+      }
+    },
+    {
+      "method": "threadSection/update",
+      "variant": "ThreadSectionUpdate",
+      "experimental": false,
+      "paramsType": "v2::ThreadSectionUpdateParams",
+      "responseType": "v2::ThreadSectionUpdateResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadSectionUpdateParams",
+        "responseDefinition": "#/definitions/v2/ThreadSectionUpdateResponse"
+      }
+    },
+    {
+      "method": "threadSection/delete",
+      "variant": "ThreadSectionDelete",
+      "experimental": false,
+      "paramsType": "v2::ThreadSectionDeleteParams",
+      "responseType": "v2::ThreadSectionDeleteResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadSectionDeleteParams",
+        "responseDefinition": "#/definitions/v2/ThreadSectionDeleteResponse"
+      }
+    },
+    {
+      "method": "thread/search",
+      "variant": "ThreadSearch",
+      "experimental": true,
+      "paramsType": "v2::ThreadSearchParams",
+      "responseType": "v2::ThreadSearchResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadSearchParams",
+        "responseDefinition": "#/definitions/v2/ThreadSearchResponse"
+      }
+    },
+    {
+      "method": "thread/searchOccurrences",
+      "variant": "ThreadSearchOccurrences",
+      "experimental": true,
+      "paramsType": "v2::ThreadSearchOccurrencesParams",
+      "responseType": "v2::ThreadSearchOccurrencesResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadSearchOccurrencesParams",
+        "responseDefinition": "#/definitions/v2/ThreadSearchOccurrencesResponse"
+      }
+    },
+    {
+      "method": "thread/loaded/list",
+      "variant": "ThreadLoadedList",
+      "experimental": false,
+      "paramsType": "v2::ThreadLoadedListParams",
+      "responseType": "v2::ThreadLoadedListResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadLoadedListParams",
+        "responseDefinition": "#/definitions/v2/ThreadLoadedListResponse"
+      }
+    },
+    {
+      "method": "thread/read",
+      "variant": "ThreadRead",
+      "experimental": false,
+      "paramsType": "v2::ThreadReadParams",
+      "responseType": "v2::ThreadReadResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadReadParams",
+        "responseDefinition": "#/definitions/v2/ThreadReadResponse"
+      }
+    },
+    {
+      "method": "thread/readState/update",
+      "variant": "ThreadReadStateUpdate",
+      "experimental": true,
+      "paramsType": "v2::ThreadReadStateUpdateParams",
+      "responseType": "v2::ThreadReadStateUpdateResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadReadStateUpdateParams",
+        "responseDefinition": "#/definitions/v2/ThreadReadStateUpdateResponse"
+      }
+    },
+    {
+      "method": "thread/turns/list",
+      "variant": "ThreadTurnsList",
+      "experimental": false,
+      "paramsType": "v2::ThreadTurnsListParams",
+      "responseType": "v2::ThreadTurnsListResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadTurnsListParams",
+        "responseDefinition": "#/definitions/v2/ThreadTurnsListResponse"
+      }
+    },
+    {
+      "method": "thread/items/list",
+      "variant": "ThreadItemsList",
+      "experimental": false,
+      "paramsType": "v2::ThreadItemsListParams",
+      "responseType": "v2::ThreadItemsListResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadItemsListParams",
+        "responseDefinition": "#/definitions/v2/ThreadItemsListResponse"
+      }
+    },
+    {
+      "method": "thread/items/read",
+      "variant": "ThreadItemsRead",
+      "experimental": true,
+      "paramsType": "v2::ThreadItemsReadParams",
+      "responseType": "v2::ThreadItemsReadResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadItemsReadParams",
+        "responseDefinition": "#/definitions/v2/ThreadItemsReadResponse"
+      }
+    },
+    {
+      "method": "thread/inject_items",
+      "variant": "ThreadInjectItems",
+      "experimental": false,
+      "paramsType": "v2::ThreadInjectItemsParams",
+      "responseType": "v2::ThreadInjectItemsResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadInjectItemsParams",
+        "responseDefinition": "#/definitions/v2/ThreadInjectItemsResponse"
+      }
+    },
+    {
+      "method": "skills/list",
+      "variant": "SkillsList",
+      "experimental": false,
+      "paramsType": "v2::SkillsListParams",
+      "responseType": "v2::SkillsListResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/SkillsListParams",
+        "responseDefinition": "#/definitions/v2/SkillsListResponse"
+      }
+    },
+    {
+      "method": "skills/extraRoots/set",
+      "variant": "SkillsExtraRootsSet",
+      "experimental": false,
+      "paramsType": "v2::SkillsExtraRootsSetParams",
+      "responseType": "v2::SkillsExtraRootsSetResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/SkillsExtraRootsSetParams",
+        "responseDefinition": "#/definitions/v2/SkillsExtraRootsSetResponse"
+      }
+    },
+    {
+      "method": "hooks/list",
+      "variant": "HooksList",
+      "experimental": false,
+      "paramsType": "v2::HooksListParams",
+      "responseType": "v2::HooksListResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/HooksListParams",
+        "responseDefinition": "#/definitions/v2/HooksListResponse"
+      }
+    },
+    {
+      "method": "marketplace/add",
+      "variant": "MarketplaceAdd",
+      "experimental": false,
+      "paramsType": "v2::MarketplaceAddParams",
+      "responseType": "v2::MarketplaceAddResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/MarketplaceAddParams",
+        "responseDefinition": "#/definitions/v2/MarketplaceAddResponse"
+      }
+    },
+    {
+      "method": "marketplace/remove",
+      "variant": "MarketplaceRemove",
+      "experimental": false,
+      "paramsType": "v2::MarketplaceRemoveParams",
+      "responseType": "v2::MarketplaceRemoveResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/MarketplaceRemoveParams",
+        "responseDefinition": "#/definitions/v2/MarketplaceRemoveResponse"
+      }
+    },
+    {
+      "method": "marketplace/upgrade",
+      "variant": "MarketplaceUpgrade",
+      "experimental": false,
+      "paramsType": "v2::MarketplaceUpgradeParams",
+      "responseType": "v2::MarketplaceUpgradeResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/MarketplaceUpgradeParams",
+        "responseDefinition": "#/definitions/v2/MarketplaceUpgradeResponse"
+      }
+    },
+    {
+      "method": "plugin/list",
+      "variant": "PluginList",
+      "experimental": false,
+      "paramsType": "v2::PluginListParams",
+      "responseType": "v2::PluginListResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/PluginListParams",
+        "responseDefinition": "#/definitions/v2/PluginListResponse"
+      }
+    },
+    {
+      "method": "plugin/search",
+      "variant": "PluginSearch",
+      "experimental": true,
+      "paramsType": "v2::PluginSearchParams",
+      "responseType": "v2::PluginSearchResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/PluginSearchParams",
+        "responseDefinition": "#/definitions/v2/PluginSearchResponse"
+      }
+    },
+    {
+      "method": "plugin/installed",
+      "variant": "PluginInstalled",
+      "experimental": false,
+      "paramsType": "v2::PluginInstalledParams",
+      "responseType": "v2::PluginInstalledResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/PluginInstalledParams",
+        "responseDefinition": "#/definitions/v2/PluginInstalledResponse"
+      }
+    },
+    {
+      "method": "plugin/reconcile",
+      "variant": "PluginReconcile",
+      "experimental": false,
+      "paramsType": "v2::PluginReconcileParams",
+      "responseType": "v2::PluginReconcileResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/PluginReconcileParams",
+        "responseDefinition": "#/definitions/v2/PluginReconcileResponse"
+      }
+    },
+    {
+      "method": "plugin/read",
+      "variant": "PluginRead",
+      "experimental": false,
+      "paramsType": "v2::PluginReadParams",
+      "responseType": "v2::PluginReadResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/PluginReadParams",
+        "responseDefinition": "#/definitions/v2/PluginReadResponse"
+      }
+    },
+    {
+      "method": "plugin/skill/read",
+      "variant": "PluginSkillRead",
+      "experimental": false,
+      "paramsType": "v2::PluginSkillReadParams",
+      "responseType": "v2::PluginSkillReadResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/PluginSkillReadParams",
+        "responseDefinition": "#/definitions/v2/PluginSkillReadResponse"
+      }
+    },
+    {
+      "method": "plugin/share/save",
+      "variant": "PluginShareSave",
+      "experimental": false,
+      "paramsType": "v2::PluginShareSaveParams",
+      "responseType": "v2::PluginShareSaveResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/PluginShareSaveParams",
+        "responseDefinition": "#/definitions/v2/PluginShareSaveResponse"
+      }
+    },
+    {
+      "method": "plugin/share/updateTargets",
+      "variant": "PluginShareUpdateTargets",
+      "experimental": false,
+      "paramsType": "v2::PluginShareUpdateTargetsParams",
+      "responseType": "v2::PluginShareUpdateTargetsResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/PluginShareUpdateTargetsParams",
+        "responseDefinition": "#/definitions/v2/PluginShareUpdateTargetsResponse"
+      }
+    },
+    {
+      "method": "plugin/share/list",
+      "variant": "PluginShareList",
+      "experimental": false,
+      "paramsType": "v2::PluginShareListParams",
+      "responseType": "v2::PluginShareListResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/PluginShareListParams",
+        "responseDefinition": "#/definitions/v2/PluginShareListResponse"
+      }
+    },
+    {
+      "method": "plugin/share/checkout",
+      "variant": "PluginShareCheckout",
+      "experimental": false,
+      "paramsType": "v2::PluginShareCheckoutParams",
+      "responseType": "v2::PluginShareCheckoutResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/PluginShareCheckoutParams",
+        "responseDefinition": "#/definitions/v2/PluginShareCheckoutResponse"
+      }
+    },
+    {
+      "method": "plugin/share/delete",
+      "variant": "PluginShareDelete",
+      "experimental": false,
+      "paramsType": "v2::PluginShareDeleteParams",
+      "responseType": "v2::PluginShareDeleteResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/PluginShareDeleteParams",
+        "responseDefinition": "#/definitions/v2/PluginShareDeleteResponse"
+      }
+    },
+    {
+      "method": "app/read",
+      "variant": "AppsRead",
+      "experimental": false,
+      "paramsType": "v2::AppsReadParams",
+      "responseType": "v2::AppsReadResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/AppsReadParams",
+        "responseDefinition": "#/definitions/v2/AppsReadResponse"
+      }
+    },
+    {
+      "method": "app/list",
+      "variant": "AppsList",
+      "experimental": false,
+      "paramsType": "v2::AppsListParams",
+      "responseType": "v2::AppsListResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/AppsListParams",
+        "responseDefinition": "#/definitions/v2/AppsListResponse"
+      }
+    },
+    {
+      "method": "app/installed",
+      "variant": "AppsInstalled",
+      "experimental": false,
+      "paramsType": "v2::AppsInstalledParams",
+      "responseType": "v2::AppsInstalledResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/AppsInstalledParams",
+        "responseDefinition": "#/definitions/v2/AppsInstalledResponse"
+      }
+    },
+    {
+      "method": "fs/readFile",
+      "variant": "FsReadFile",
+      "experimental": false,
+      "paramsType": "v2::FsReadFileParams",
+      "responseType": "v2::FsReadFileResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/FsReadFileParams",
+        "responseDefinition": "#/definitions/v2/FsReadFileResponse"
+      }
+    },
+    {
+      "method": "fs/writeFile",
+      "variant": "FsWriteFile",
+      "experimental": false,
+      "paramsType": "v2::FsWriteFileParams",
+      "responseType": "v2::FsWriteFileResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/FsWriteFileParams",
+        "responseDefinition": "#/definitions/v2/FsWriteFileResponse"
+      }
+    },
+    {
+      "method": "fs/createDirectory",
+      "variant": "FsCreateDirectory",
+      "experimental": false,
+      "paramsType": "v2::FsCreateDirectoryParams",
+      "responseType": "v2::FsCreateDirectoryResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/FsCreateDirectoryParams",
+        "responseDefinition": "#/definitions/v2/FsCreateDirectoryResponse"
+      }
+    },
+    {
+      "method": "fs/getMetadata",
+      "variant": "FsGetMetadata",
+      "experimental": false,
+      "paramsType": "v2::FsGetMetadataParams",
+      "responseType": "v2::FsGetMetadataResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/FsGetMetadataParams",
+        "responseDefinition": "#/definitions/v2/FsGetMetadataResponse"
+      }
+    },
+    {
+      "method": "fs/readDirectory",
+      "variant": "FsReadDirectory",
+      "experimental": false,
+      "paramsType": "v2::FsReadDirectoryParams",
+      "responseType": "v2::FsReadDirectoryResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/FsReadDirectoryParams",
+        "responseDefinition": "#/definitions/v2/FsReadDirectoryResponse"
+      }
+    },
+    {
+      "method": "fs/remove",
+      "variant": "FsRemove",
+      "experimental": false,
+      "paramsType": "v2::FsRemoveParams",
+      "responseType": "v2::FsRemoveResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/FsRemoveParams",
+        "responseDefinition": "#/definitions/v2/FsRemoveResponse"
+      }
+    },
+    {
+      "method": "fs/copy",
+      "variant": "FsCopy",
+      "experimental": false,
+      "paramsType": "v2::FsCopyParams",
+      "responseType": "v2::FsCopyResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/FsCopyParams",
+        "responseDefinition": "#/definitions/v2/FsCopyResponse"
+      }
+    },
+    {
+      "method": "fs/watch",
+      "variant": "FsWatch",
+      "experimental": false,
+      "paramsType": "v2::FsWatchParams",
+      "responseType": "v2::FsWatchResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/FsWatchParams",
+        "responseDefinition": "#/definitions/v2/FsWatchResponse"
+      }
+    },
+    {
+      "method": "fs/unwatch",
+      "variant": "FsUnwatch",
+      "experimental": false,
+      "paramsType": "v2::FsUnwatchParams",
+      "responseType": "v2::FsUnwatchResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/FsUnwatchParams",
+        "responseDefinition": "#/definitions/v2/FsUnwatchResponse"
+      }
+    },
+    {
+      "method": "skills/config/write",
+      "variant": "SkillsConfigWrite",
+      "experimental": false,
+      "paramsType": "v2::SkillsConfigWriteParams",
+      "responseType": "v2::SkillsConfigWriteResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/SkillsConfigWriteParams",
+        "responseDefinition": "#/definitions/v2/SkillsConfigWriteResponse"
+      }
+    },
+    {
+      "method": "plugin/install",
+      "variant": "PluginInstall",
+      "experimental": false,
+      "paramsType": "v2::PluginInstallParams",
+      "responseType": "v2::PluginInstallResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/PluginInstallParams",
+        "responseDefinition": "#/definitions/v2/PluginInstallResponse"
+      }
+    },
+    {
+      "method": "plugin/uninstall",
+      "variant": "PluginUninstall",
+      "experimental": false,
+      "paramsType": "v2::PluginUninstallParams",
+      "responseType": "v2::PluginUninstallResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/PluginUninstallParams",
+        "responseDefinition": "#/definitions/v2/PluginUninstallResponse"
+      }
+    },
+    {
+      "method": "turn/start",
+      "variant": "TurnStart",
+      "experimental": false,
+      "paramsType": "v2::TurnStartParams",
+      "responseType": "v2::TurnStartResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/TurnStartParams",
+        "responseDefinition": "#/definitions/v2/TurnStartResponse"
+      }
+    },
+    {
+      "method": "turn/settings/update",
+      "variant": "TurnSettingsUpdate",
+      "experimental": true,
+      "paramsType": "v2::TurnSettingsUpdateParams",
+      "responseType": "v2::TurnSettingsUpdateResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/TurnSettingsUpdateParams",
+        "responseDefinition": "#/definitions/v2/TurnSettingsUpdateResponse"
+      }
+    },
+    {
+      "method": "turn/steer",
+      "variant": "TurnSteer",
+      "experimental": false,
+      "paramsType": "v2::TurnSteerParams",
+      "responseType": "v2::TurnSteerResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/TurnSteerParams",
+        "responseDefinition": "#/definitions/v2/TurnSteerResponse"
+      }
+    },
+    {
+      "method": "turn/interrupt",
+      "variant": "TurnInterrupt",
+      "experimental": false,
+      "paramsType": "v2::TurnInterruptParams",
+      "responseType": "v2::TurnInterruptResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/TurnInterruptParams",
+        "responseDefinition": "#/definitions/v2/TurnInterruptResponse"
+      }
+    },
+    {
+      "method": "thread/realtime/start",
+      "variant": "ThreadRealtimeStart",
+      "experimental": true,
+      "paramsType": "v2::ThreadRealtimeStartParams",
+      "responseType": "v2::ThreadRealtimeStartResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadRealtimeStartParams",
+        "responseDefinition": "#/definitions/v2/ThreadRealtimeStartResponse"
+      }
+    },
+    {
+      "method": "thread/realtime/appendAudio",
+      "variant": "ThreadRealtimeAppendAudio",
+      "experimental": true,
+      "paramsType": "v2::ThreadRealtimeAppendAudioParams",
+      "responseType": "v2::ThreadRealtimeAppendAudioResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadRealtimeAppendAudioParams",
+        "responseDefinition": "#/definitions/v2/ThreadRealtimeAppendAudioResponse"
+      }
+    },
+    {
+      "method": "thread/realtime/appendText",
+      "variant": "ThreadRealtimeAppendText",
+      "experimental": true,
+      "paramsType": "v2::ThreadRealtimeAppendTextParams",
+      "responseType": "v2::ThreadRealtimeAppendTextResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadRealtimeAppendTextParams",
+        "responseDefinition": "#/definitions/v2/ThreadRealtimeAppendTextResponse"
+      }
+    },
+    {
+      "method": "thread/realtime/appendSpeech",
+      "variant": "ThreadRealtimeAppendSpeech",
+      "experimental": true,
+      "paramsType": "v2::ThreadRealtimeAppendSpeechParams",
+      "responseType": "v2::ThreadRealtimeAppendSpeechResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadRealtimeAppendSpeechParams",
+        "responseDefinition": "#/definitions/v2/ThreadRealtimeAppendSpeechResponse"
+      }
+    },
+    {
+      "method": "thread/realtime/stop",
+      "variant": "ThreadRealtimeStop",
+      "experimental": true,
+      "paramsType": "v2::ThreadRealtimeStopParams",
+      "responseType": "v2::ThreadRealtimeStopResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadRealtimeStopParams",
+        "responseDefinition": "#/definitions/v2/ThreadRealtimeStopResponse"
+      }
+    },
+    {
+      "method": "thread/timeline/list",
+      "variant": "ThreadTimelineList",
+      "experimental": true,
+      "paramsType": "v2::ThreadTimelineListParams",
+      "responseType": "v2::ThreadTimelineListResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadTimelineListParams",
+        "responseDefinition": "#/definitions/v2/ThreadTimelineListResponse"
+      }
+    },
+    {
+      "method": "thread/realtime/listVoices",
+      "variant": "ThreadRealtimeListVoices",
+      "experimental": true,
+      "paramsType": "v2::ThreadRealtimeListVoicesParams",
+      "responseType": "v2::ThreadRealtimeListVoicesResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ThreadRealtimeListVoicesParams",
+        "responseDefinition": "#/definitions/v2/ThreadRealtimeListVoicesResponse"
+      }
+    },
+    {
+      "method": "review/start",
+      "variant": "ReviewStart",
+      "experimental": false,
+      "paramsType": "v2::ReviewStartParams",
+      "responseType": "v2::ReviewStartResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ReviewStartParams",
+        "responseDefinition": "#/definitions/v2/ReviewStartResponse"
+      }
+    },
+    {
+      "method": "model/list",
+      "variant": "ModelList",
+      "experimental": false,
+      "paramsType": "v2::ModelListParams",
+      "responseType": "v2::ModelListResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ModelListParams",
+        "responseDefinition": "#/definitions/v2/ModelListResponse"
+      }
+    },
+    {
+      "method": "account/gatewayOAuth/read",
+      "variant": "GatewayOAuthRead",
+      "experimental": false,
+      "paramsType": "Option<()>",
+      "responseType": "v2::GatewayOAuthReadResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": null,
+        "responseDefinition": "#/definitions/v2/GatewayOAuthReadResponse"
+      }
+    },
+    {
+      "method": "account/gatewayOAuth/login",
+      "variant": "GatewayOAuthLogin",
+      "experimental": false,
+      "paramsType": "Option<()>",
+      "responseType": "v2::GatewayOAuthLoginResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": null,
+        "responseDefinition": "#/definitions/v2/GatewayOAuthLoginResponse"
+      }
+    },
+    {
+      "method": "account/gatewayOAuth/cancel",
+      "variant": "GatewayOAuthCancel",
+      "experimental": false,
+      "paramsType": "Option<()>",
+      "responseType": "v2::GatewayOAuthCancelResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": null,
+        "responseDefinition": "#/definitions/v2/GatewayOAuthCancelResponse"
+      }
+    },
+    {
+      "method": "modelProvider/capabilities/read",
+      "variant": "ModelProviderCapabilitiesRead",
+      "experimental": false,
+      "paramsType": "v2::ModelProviderCapabilitiesReadParams",
+      "responseType": "v2::ModelProviderCapabilitiesReadResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ModelProviderCapabilitiesReadParams",
+        "responseDefinition": "#/definitions/v2/ModelProviderCapabilitiesReadResponse"
+      }
+    },
+    {
+      "method": "experimentalFeature/list",
+      "variant": "ExperimentalFeatureList",
+      "experimental": false,
+      "paramsType": "v2::ExperimentalFeatureListParams",
+      "responseType": "v2::ExperimentalFeatureListResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ExperimentalFeatureListParams",
+        "responseDefinition": "#/definitions/v2/ExperimentalFeatureListResponse"
+      }
+    },
+    {
+      "method": "permissionProfile/list",
+      "variant": "PermissionProfileList",
+      "experimental": false,
+      "paramsType": "v2::PermissionProfileListParams",
+      "responseType": "v2::PermissionProfileListResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/PermissionProfileListParams",
+        "responseDefinition": "#/definitions/v2/PermissionProfileListResponse"
+      }
+    },
+    {
+      "method": "experimentalFeature/enablement/set",
+      "variant": "ExperimentalFeatureEnablementSet",
+      "experimental": false,
+      "paramsType": "v2::ExperimentalFeatureEnablementSetParams",
+      "responseType": "v2::ExperimentalFeatureEnablementSetResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ExperimentalFeatureEnablementSetParams",
+        "responseDefinition": "#/definitions/v2/ExperimentalFeatureEnablementSetResponse"
+      }
+    },
+    {
+      "method": "remoteControl/enable",
+      "variant": "RemoteControlEnable",
+      "experimental": true,
+      "paramsType": "v2::NullableRemoteControlEnableParams",
+      "responseType": "v2::RemoteControlEnableResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/NullableRemoteControlEnableParams",
+        "responseDefinition": "#/definitions/v2/RemoteControlEnableResponse"
+      }
+    },
+    {
+      "method": "remoteControl/disable",
+      "variant": "RemoteControlDisable",
+      "experimental": true,
+      "paramsType": "v2::NullableRemoteControlDisableParams",
+      "responseType": "v2::RemoteControlDisableResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/NullableRemoteControlDisableParams",
+        "responseDefinition": "#/definitions/v2/RemoteControlDisableResponse"
+      }
+    },
+    {
+      "method": "remoteControl/status/read",
+      "variant": "RemoteControlStatusRead",
+      "experimental": true,
+      "paramsType": "Option<()>",
+      "responseType": "v2::RemoteControlStatusReadResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": null,
+        "responseDefinition": "#/definitions/v2/RemoteControlStatusReadResponse"
+      }
+    },
+    {
+      "method": "remoteControl/pairing/start",
+      "variant": "RemoteControlPairingStart",
+      "experimental": true,
+      "paramsType": "v2::RemoteControlPairingStartParams",
+      "responseType": "v2::RemoteControlPairingStartResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/RemoteControlPairingStartParams",
+        "responseDefinition": "#/definitions/v2/RemoteControlPairingStartResponse"
+      }
+    },
+    {
+      "method": "remoteControl/pairing/status",
+      "variant": "RemoteControlPairingStatus",
+      "experimental": true,
+      "paramsType": "v2::RemoteControlPairingStatusParams",
+      "responseType": "v2::RemoteControlPairingStatusResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/RemoteControlPairingStatusParams",
+        "responseDefinition": "#/definitions/v2/RemoteControlPairingStatusResponse"
+      }
+    },
+    {
+      "method": "remoteControl/client/list",
+      "variant": "RemoteControlClientsList",
+      "experimental": true,
+      "paramsType": "v2::RemoteControlClientsListParams",
+      "responseType": "v2::RemoteControlClientsListResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/RemoteControlClientsListParams",
+        "responseDefinition": "#/definitions/v2/RemoteControlClientsListResponse"
+      }
+    },
+    {
+      "method": "remoteControl/client/revoke",
+      "variant": "RemoteControlClientsRevoke",
+      "experimental": true,
+      "paramsType": "v2::RemoteControlClientsRevokeParams",
+      "responseType": "v2::RemoteControlClientsRevokeResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/RemoteControlClientsRevokeParams",
+        "responseDefinition": "#/definitions/v2/RemoteControlClientsRevokeResponse"
+      }
+    },
+    {
+      "method": "collaborationMode/list",
+      "variant": "CollaborationModeList",
+      "experimental": true,
+      "paramsType": "v2::CollaborationModeListParams",
+      "responseType": "v2::CollaborationModeListResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/CollaborationModeListParams",
+        "responseDefinition": "#/definitions/v2/CollaborationModeListResponse"
+      }
+    },
+    {
+      "method": "mock/experimentalMethod",
+      "variant": "MockExperimentalMethod",
+      "experimental": true,
+      "paramsType": "v2::MockExperimentalMethodParams",
+      "responseType": "v2::MockExperimentalMethodResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/MockExperimentalMethodParams",
+        "responseDefinition": "#/definitions/v2/MockExperimentalMethodResponse"
+      }
+    },
+    {
+      "method": "environment/add",
+      "variant": "EnvironmentAdd",
+      "experimental": true,
+      "paramsType": "v2::EnvironmentAddParams",
+      "responseType": "v2::EnvironmentAddResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/EnvironmentAddParams",
+        "responseDefinition": "#/definitions/v2/EnvironmentAddResponse"
+      }
+    },
+    {
+      "method": "environment/info",
+      "variant": "EnvironmentInfo",
+      "experimental": true,
+      "paramsType": "v2::EnvironmentInfoParams",
+      "responseType": "v2::EnvironmentInfoResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/EnvironmentInfoParams",
+        "responseDefinition": "#/definitions/v2/EnvironmentInfoResponse"
+      }
+    },
+    {
+      "method": "environment/status",
+      "variant": "EnvironmentStatus",
+      "experimental": true,
+      "paramsType": "v2::EnvironmentStatusParams",
+      "responseType": "v2::EnvironmentStatusResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/EnvironmentStatusParams",
+        "responseDefinition": "#/definitions/v2/EnvironmentStatusResponse"
+      }
+    },
+    {
+      "method": "mcpServer/oauth/login",
+      "variant": "McpServerOauthLogin",
+      "experimental": false,
+      "paramsType": "v2::McpServerOauthLoginParams",
+      "responseType": "v2::McpServerOauthLoginResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/McpServerOauthLoginParams",
+        "responseDefinition": "#/definitions/v2/McpServerOauthLoginResponse"
+      }
+    },
+    {
+      "method": "config/mcpServer/reload",
+      "variant": "McpServerRefresh",
+      "experimental": false,
+      "paramsType": "Option<()>",
+      "responseType": "v2::McpServerRefreshResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": null,
+        "responseDefinition": "#/definitions/v2/McpServerRefreshResponse"
+      }
+    },
+    {
+      "method": "mcpServerStatus/list",
+      "variant": "McpServerStatusList",
+      "experimental": false,
+      "paramsType": "v2::ListMcpServerStatusParams",
+      "responseType": "v2::ListMcpServerStatusResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ListMcpServerStatusParams",
+        "responseDefinition": "#/definitions/v2/ListMcpServerStatusResponse"
+      }
+    },
+    {
+      "method": "mcpServer/resource/read",
+      "variant": "McpResourceRead",
+      "experimental": false,
+      "paramsType": "v2::McpResourceReadParams",
+      "responseType": "v2::McpResourceReadResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/McpResourceReadParams",
+        "responseDefinition": "#/definitions/v2/McpResourceReadResponse"
+      }
+    },
+    {
+      "method": "mcpServer/event/stream/start",
+      "variant": "McpServerEventStreamStart",
+      "experimental": true,
+      "paramsType": "v2::McpServerEventStreamStartParams",
+      "responseType": "v2::McpServerEventStreamStartResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/McpServerEventStreamStartParams",
+        "responseDefinition": "#/definitions/v2/McpServerEventStreamStartResponse"
+      }
+    },
+    {
+      "method": "mcpServer/event/stream/stop",
+      "variant": "McpServerEventStreamStop",
+      "experimental": true,
+      "paramsType": "v2::McpServerEventStreamStopParams",
+      "responseType": "v2::McpServerEventStreamStopResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/McpServerEventStreamStopParams",
+        "responseDefinition": "#/definitions/v2/McpServerEventStreamStopResponse"
+      }
+    },
+    {
+      "method": "mcpServer/tool/call",
+      "variant": "McpServerToolCall",
+      "experimental": false,
+      "paramsType": "v2::McpServerToolCallParams",
+      "responseType": "v2::McpServerToolCallResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/McpServerToolCallParams",
+        "responseDefinition": "#/definitions/v2/McpServerToolCallResponse"
+      }
+    },
+    {
+      "method": "windowsSandbox/setupStart",
+      "variant": "WindowsSandboxSetupStart",
+      "experimental": false,
+      "paramsType": "v2::WindowsSandboxSetupStartParams",
+      "responseType": "v2::WindowsSandboxSetupStartResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/WindowsSandboxSetupStartParams",
+        "responseDefinition": "#/definitions/v2/WindowsSandboxSetupStartResponse"
+      }
+    },
+    {
+      "method": "windowsSandbox/readiness",
+      "variant": "WindowsSandboxReadiness",
+      "experimental": false,
+      "paramsType": "Option<()>",
+      "responseType": "v2::WindowsSandboxReadinessResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": null,
+        "responseDefinition": "#/definitions/v2/WindowsSandboxReadinessResponse"
+      }
+    },
+    {
+      "method": "account/login/start",
+      "variant": "LoginAccount",
+      "experimental": false,
+      "paramsType": "v2::LoginAccountParams",
+      "responseType": "v2::LoginAccountResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/LoginAccountParams",
+        "responseDefinition": "#/definitions/v2/LoginAccountResponse"
+      }
+    },
+    {
+      "method": "account/bedrock/discover",
+      "variant": "BedrockDiscover",
+      "experimental": true,
+      "paramsType": "v2::BedrockDiscoverParams",
+      "responseType": "v2::BedrockDiscoverResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/BedrockDiscoverParams",
+        "responseDefinition": "#/definitions/v2/BedrockDiscoverResponse"
+      }
+    },
+    {
+      "method": "account/bedrock/setup",
+      "variant": "BedrockSetup",
+      "experimental": true,
+      "paramsType": "v2::BedrockSetupParams",
+      "responseType": "v2::BedrockSetupResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/BedrockSetupParams",
+        "responseDefinition": "#/definitions/v2/BedrockSetupResponse"
+      }
+    },
+    {
+      "method": "account/gcp/setup",
+      "variant": "GcpSetup",
+      "experimental": true,
+      "paramsType": "v2::GcpSetupParams",
+      "responseType": "v2::GcpSetupResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/GcpSetupParams",
+        "responseDefinition": "#/definitions/v2/GcpSetupResponse"
+      }
+    },
+    {
+      "method": "account/bedrock/checkGovCloudRequirements",
+      "variant": "BedrockCheckGovCloudRequirements",
+      "experimental": true,
+      "paramsType": "v2::BedrockCheckGovCloudRequirementsParams",
+      "responseType": "v2::BedrockCheckGovCloudRequirementsResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/BedrockCheckGovCloudRequirementsParams",
+        "responseDefinition": "#/definitions/v2/BedrockCheckGovCloudRequirementsResponse"
+      }
+    },
+    {
+      "method": "account/login/cancel",
+      "variant": "CancelLoginAccount",
+      "experimental": false,
+      "paramsType": "v2::CancelLoginAccountParams",
+      "responseType": "v2::CancelLoginAccountResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/CancelLoginAccountParams",
+        "responseDefinition": "#/definitions/v2/CancelLoginAccountResponse"
+      }
+    },
+    {
+      "method": "accountSession/list",
+      "variant": "AccountSessionsList",
+      "experimental": true,
+      "paramsType": "v2::AccountSessionsListParams",
+      "responseType": "v2::AccountSessionsResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/AccountSessionsListParams",
+        "responseDefinition": "#/definitions/v2/AccountSessionsResponse"
+      }
+    },
+    {
+      "method": "accountSession/switch",
+      "variant": "AccountSessionsSwitch",
+      "experimental": true,
+      "paramsType": "v2::AccountSessionsSwitchParams",
+      "responseType": "v2::AccountSessionsSwitchResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/AccountSessionsSwitchParams",
+        "responseDefinition": "#/definitions/v2/AccountSessionsSwitchResponse"
+      }
+    },
+    {
+      "method": "account/logout",
+      "variant": "LogoutAccount",
+      "experimental": false,
+      "paramsType": "Option<()>",
+      "responseType": "v2::LogoutAccountResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": null,
+        "responseDefinition": "#/definitions/v2/LogoutAccountResponse"
+      }
+    },
+    {
+      "method": "account/rateLimits/read",
+      "variant": "GetAccountRateLimits",
+      "experimental": false,
+      "paramsType": "v2::NullableGetAccountRateLimitsParams",
+      "responseType": "v2::GetAccountRateLimitsResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/NullableGetAccountRateLimitsParams",
+        "responseDefinition": "#/definitions/v2/GetAccountRateLimitsResponse"
+      }
+    },
+    {
+      "method": "account/rateLimitResetCredit/consume",
+      "variant": "ConsumeAccountRateLimitResetCredit",
+      "experimental": false,
+      "paramsType": "v2::ConsumeAccountRateLimitResetCreditParams",
+      "responseType": "v2::ConsumeAccountRateLimitResetCreditResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ConsumeAccountRateLimitResetCreditParams",
+        "responseDefinition": "#/definitions/v2/ConsumeAccountRateLimitResetCreditResponse"
+      }
+    },
+    {
+      "method": "account/usage/read",
+      "variant": "GetAccountTokenUsage",
+      "experimental": false,
+      "paramsType": "v2::NullableGetAccountTokenUsageParams",
+      "responseType": "v2::GetAccountTokenUsageResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/NullableGetAccountTokenUsageParams",
+        "responseDefinition": "#/definitions/v2/GetAccountTokenUsageResponse"
+      }
+    },
+    {
+      "method": "account/workspaceMessages/read",
+      "variant": "GetWorkspaceMessages",
+      "experimental": false,
+      "paramsType": "Option<()>",
+      "responseType": "v2::GetWorkspaceMessagesResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": null,
+        "responseDefinition": "#/definitions/v2/GetWorkspaceMessagesResponse"
+      }
+    },
+    {
+      "method": "account/sendAddCreditsNudgeEmail",
+      "variant": "SendAddCreditsNudgeEmail",
+      "experimental": false,
+      "paramsType": "v2::SendAddCreditsNudgeEmailParams",
+      "responseType": "v2::SendAddCreditsNudgeEmailResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/SendAddCreditsNudgeEmailParams",
+        "responseDefinition": "#/definitions/v2/SendAddCreditsNudgeEmailResponse"
+      }
+    },
+    {
+      "method": "feedback/upload",
+      "variant": "FeedbackUpload",
+      "experimental": false,
+      "paramsType": "v2::FeedbackUploadParams",
+      "responseType": "v2::FeedbackUploadResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/FeedbackUploadParams",
+        "responseDefinition": "#/definitions/v2/FeedbackUploadResponse"
+      }
+    },
+    {
+      "method": "feedback/save",
+      "variant": "FeedbackSave",
+      "experimental": false,
+      "paramsType": "v2::FeedbackSaveParams",
+      "responseType": "v2::FeedbackSaveResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/FeedbackSaveParams",
+        "responseDefinition": "#/definitions/v2/FeedbackSaveResponse"
+      }
+    },
+    {
+      "method": "command/exec",
+      "variant": "OneOffCommandExec",
+      "experimental": false,
+      "paramsType": "v2::CommandExecParams",
+      "responseType": "v2::CommandExecResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/CommandExecParams",
+        "responseDefinition": "#/definitions/v2/CommandExecResponse"
+      }
+    },
+    {
+      "method": "command/exec/write",
+      "variant": "CommandExecWrite",
+      "experimental": false,
+      "paramsType": "v2::CommandExecWriteParams",
+      "responseType": "v2::CommandExecWriteResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/CommandExecWriteParams",
+        "responseDefinition": "#/definitions/v2/CommandExecWriteResponse"
+      }
+    },
+    {
+      "method": "command/exec/terminate",
+      "variant": "CommandExecTerminate",
+      "experimental": false,
+      "paramsType": "v2::CommandExecTerminateParams",
+      "responseType": "v2::CommandExecTerminateResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/CommandExecTerminateParams",
+        "responseDefinition": "#/definitions/v2/CommandExecTerminateResponse"
+      }
+    },
+    {
+      "method": "command/exec/resize",
+      "variant": "CommandExecResize",
+      "experimental": false,
+      "paramsType": "v2::CommandExecResizeParams",
+      "responseType": "v2::CommandExecResizeResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/CommandExecResizeParams",
+        "responseDefinition": "#/definitions/v2/CommandExecResizeResponse"
+      }
+    },
+    {
+      "method": "process/spawn",
+      "variant": "ProcessSpawn",
+      "experimental": true,
+      "paramsType": "v2::ProcessSpawnParams",
+      "responseType": "v2::ProcessSpawnResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ProcessSpawnParams",
+        "responseDefinition": "#/definitions/v2/ProcessSpawnResponse"
+      }
+    },
+    {
+      "method": "process/writeStdin",
+      "variant": "ProcessWriteStdin",
+      "experimental": true,
+      "paramsType": "v2::ProcessWriteStdinParams",
+      "responseType": "v2::ProcessWriteStdinResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ProcessWriteStdinParams",
+        "responseDefinition": "#/definitions/v2/ProcessWriteStdinResponse"
+      }
+    },
+    {
+      "method": "process/kill",
+      "variant": "ProcessKill",
+      "experimental": true,
+      "paramsType": "v2::ProcessKillParams",
+      "responseType": "v2::ProcessKillResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ProcessKillParams",
+        "responseDefinition": "#/definitions/v2/ProcessKillResponse"
+      }
+    },
+    {
+      "method": "process/resizePty",
+      "variant": "ProcessResizePty",
+      "experimental": true,
+      "paramsType": "v2::ProcessResizePtyParams",
+      "responseType": "v2::ProcessResizePtyResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ProcessResizePtyParams",
+        "responseDefinition": "#/definitions/v2/ProcessResizePtyResponse"
+      }
+    },
+    {
+      "method": "config/read",
+      "variant": "ConfigRead",
+      "experimental": false,
+      "paramsType": "v2::ConfigReadParams",
+      "responseType": "v2::ConfigReadResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ConfigReadParams",
+        "responseDefinition": "#/definitions/v2/ConfigReadResponse"
+      }
+    },
+    {
+      "method": "externalAgentConfig/detect",
+      "variant": "ExternalAgentConfigDetect",
+      "experimental": false,
+      "paramsType": "v2::ExternalAgentConfigDetectParams",
+      "responseType": "v2::ExternalAgentConfigDetectResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ExternalAgentConfigDetectParams",
+        "responseDefinition": "#/definitions/v2/ExternalAgentConfigDetectResponse"
+      }
+    },
+    {
+      "method": "externalAgentConfig/import",
+      "variant": "ExternalAgentConfigImport",
+      "experimental": false,
+      "paramsType": "v2::ExternalAgentConfigImportParams",
+      "responseType": "v2::ExternalAgentConfigImportResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ExternalAgentConfigImportParams",
+        "responseDefinition": "#/definitions/v2/ExternalAgentConfigImportResponse"
+      }
+    },
+    {
+      "method": "externalAgentConfig/import/recordHistory",
+      "variant": "ExternalAgentConfigImportHistoryRecord",
+      "experimental": false,
+      "paramsType": "v2::ExternalAgentConfigImportHistoryRecordParams",
+      "responseType": "v2::ExternalAgentConfigImportHistoryRecordResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ExternalAgentConfigImportHistoryRecordParams",
+        "responseDefinition": "#/definitions/v2/ExternalAgentConfigImportHistoryRecordResponse"
+      }
+    },
+    {
+      "method": "externalAgentConfig/import/readHistories",
+      "variant": "ExternalAgentConfigImportHistoriesRead",
+      "experimental": false,
+      "paramsType": "Option<()>",
+      "responseType": "v2::ExternalAgentConfigImportHistoriesReadResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": null,
+        "responseDefinition": "#/definitions/v2/ExternalAgentConfigImportHistoriesReadResponse"
+      }
+    },
+    {
+      "method": "config/value/write",
+      "variant": "ConfigValueWrite",
+      "experimental": false,
+      "paramsType": "v2::ConfigValueWriteParams",
+      "responseType": "v2::ConfigWriteResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ConfigValueWriteParams",
+        "responseDefinition": "#/definitions/v2/ConfigWriteResponse"
+      }
+    },
+    {
+      "method": "config/batchWrite",
+      "variant": "ConfigBatchWrite",
+      "experimental": false,
+      "paramsType": "v2::ConfigBatchWriteParams",
+      "responseType": "v2::ConfigWriteResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/ConfigBatchWriteParams",
+        "responseDefinition": "#/definitions/v2/ConfigWriteResponse"
+      }
+    },
+    {
+      "method": "configRequirements/read",
+      "variant": "ConfigRequirementsRead",
+      "experimental": false,
+      "paramsType": "Option<()>",
+      "responseType": "v2::ConfigRequirementsReadResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": null,
+        "responseDefinition": "#/definitions/v2/ConfigRequirementsReadResponse"
+      }
+    },
+    {
+      "method": "account/read",
+      "variant": "GetAccount",
+      "experimental": false,
+      "paramsType": "v2::GetAccountParams",
+      "responseType": "v2::GetAccountResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/v2/GetAccountParams",
+        "responseDefinition": "#/definitions/v2/GetAccountResponse"
+      }
+    },
+    {
+      "method": "getConversationSummary",
+      "variant": "GetConversationSummary",
+      "experimental": false,
+      "paramsType": "v1::GetConversationSummaryParams",
+      "responseType": "v1::GetConversationSummaryResponse",
+      "bundle": {
+        "kind": "notExported"
+      }
+    },
+    {
+      "method": "gitDiffToRemote",
+      "variant": "GitDiffToRemote",
+      "experimental": false,
+      "paramsType": "v1::GitDiffToRemoteParams",
+      "responseType": "v1::GitDiffToRemoteResponse",
+      "bundle": {
+        "kind": "notExported"
+      }
+    },
+    {
+      "method": "getAuthStatus",
+      "variant": "GetAuthStatus",
+      "experimental": false,
+      "paramsType": "v1::GetAuthStatusParams",
+      "responseType": "v1::GetAuthStatusResponse",
+      "bundle": {
+        "kind": "notExported"
+      }
+    },
+    {
+      "method": "fuzzyFileSearch",
+      "variant": "FuzzyFileSearch",
+      "experimental": false,
+      "paramsType": "FuzzyFileSearchParams",
+      "responseType": "FuzzyFileSearchResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/FuzzyFileSearchParams",
+        "responseDefinition": "#/definitions/FuzzyFileSearchResponse"
+      }
+    },
+    {
+      "method": "fuzzyFileSearch/sessionStart",
+      "variant": "FuzzyFileSearchSessionStart",
+      "experimental": true,
+      "paramsType": "FuzzyFileSearchSessionStartParams",
+      "responseType": "FuzzyFileSearchSessionStartResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/FuzzyFileSearchSessionStartParams",
+        "responseDefinition": "#/definitions/FuzzyFileSearchSessionStartResponse"
+      }
+    },
+    {
+      "method": "fuzzyFileSearch/sessionUpdate",
+      "variant": "FuzzyFileSearchSessionUpdate",
+      "experimental": true,
+      "paramsType": "FuzzyFileSearchSessionUpdateParams",
+      "responseType": "FuzzyFileSearchSessionUpdateResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/FuzzyFileSearchSessionUpdateParams",
+        "responseDefinition": "#/definitions/FuzzyFileSearchSessionUpdateResponse"
+      }
+    },
+    {
+      "method": "fuzzyFileSearch/sessionStop",
+      "variant": "FuzzyFileSearchSessionStop",
+      "experimental": true,
+      "paramsType": "FuzzyFileSearchSessionStopParams",
+      "responseType": "FuzzyFileSearchSessionStopResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/FuzzyFileSearchSessionStopParams",
+        "responseDefinition": "#/definitions/FuzzyFileSearchSessionStopResponse"
+      }
+    }
+  ],
+  "serverRequests": [
+    {
+      "method": "item/commandExecution/requestApproval",
+      "variant": "CommandExecutionRequestApproval",
+      "experimental": false,
+      "paramsType": "v2::CommandExecutionRequestApprovalParams",
+      "responseType": "v2::CommandExecutionRequestApprovalResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/CommandExecutionRequestApprovalParams",
+        "responseDefinition": "#/definitions/CommandExecutionRequestApprovalResponse"
+      }
+    },
+    {
+      "method": "item/fileChange/requestApproval",
+      "variant": "FileChangeRequestApproval",
+      "experimental": false,
+      "paramsType": "v2::FileChangeRequestApprovalParams",
+      "responseType": "v2::FileChangeRequestApprovalResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/FileChangeRequestApprovalParams",
+        "responseDefinition": "#/definitions/FileChangeRequestApprovalResponse"
+      }
+    },
+    {
+      "method": "item/tool/requestUserInput",
+      "variant": "ToolRequestUserInput",
+      "experimental": false,
+      "paramsType": "v2::ToolRequestUserInputParams",
+      "responseType": "v2::ToolRequestUserInputResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/ToolRequestUserInputParams",
+        "responseDefinition": "#/definitions/ToolRequestUserInputResponse"
+      }
+    },
+    {
+      "method": "mcpServer/elicitation/request",
+      "variant": "McpServerElicitationRequest",
+      "experimental": false,
+      "paramsType": "v2::McpServerElicitationRequestParams",
+      "responseType": "v2::McpServerElicitationRequestResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/McpServerElicitationRequestParams",
+        "responseDefinition": "#/definitions/McpServerElicitationRequestResponse"
+      }
+    },
+    {
+      "method": "item/permissions/requestApproval",
+      "variant": "PermissionsRequestApproval",
+      "experimental": false,
+      "paramsType": "v2::PermissionsRequestApprovalParams",
+      "responseType": "v2::PermissionsRequestApprovalResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/PermissionsRequestApprovalParams",
+        "responseDefinition": "#/definitions/PermissionsRequestApprovalResponse"
+      }
+    },
+    {
+      "method": "item/tool/call",
+      "variant": "DynamicToolCall",
+      "experimental": false,
+      "paramsType": "v2::DynamicToolCallParams",
+      "responseType": "v2::DynamicToolCallResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/DynamicToolCallParams",
+        "responseDefinition": "#/definitions/DynamicToolCallResponse"
+      }
+    },
+    {
+      "method": "account/chatgptAuthTokens/refresh",
+      "variant": "ChatgptAuthTokensRefresh",
+      "experimental": false,
+      "paramsType": "v2::ChatgptAuthTokensRefreshParams",
+      "responseType": "v2::ChatgptAuthTokensRefreshResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/ChatgptAuthTokensRefreshParams",
+        "responseDefinition": "#/definitions/ChatgptAuthTokensRefreshResponse"
+      }
+    },
+    {
+      "method": "attestation/generate",
+      "variant": "AttestationGenerate",
+      "experimental": false,
+      "paramsType": "v2::AttestationGenerateParams",
+      "responseType": "v2::AttestationGenerateResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/AttestationGenerateParams",
+        "responseDefinition": "#/definitions/AttestationGenerateResponse"
+      }
+    },
+    {
+      "method": "currentTime/read",
+      "variant": "CurrentTimeRead",
+      "experimental": true,
+      "paramsType": "v2::CurrentTimeReadParams",
+      "responseType": "v2::CurrentTimeReadResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/CurrentTimeReadParams",
+        "responseDefinition": "#/definitions/CurrentTimeReadResponse"
+      }
+    },
+    {
+      "method": "applyPatchApproval",
+      "variant": "ApplyPatchApproval",
+      "experimental": false,
+      "paramsType": "v1::ApplyPatchApprovalParams",
+      "responseType": "v1::ApplyPatchApprovalResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/ApplyPatchApprovalParams",
+        "responseDefinition": "#/definitions/ApplyPatchApprovalResponse"
+      }
+    },
+    {
+      "method": "execCommandApproval",
+      "variant": "ExecCommandApproval",
+      "experimental": false,
+      "paramsType": "v1::ExecCommandApprovalParams",
+      "responseType": "v1::ExecCommandApprovalResponse",
+      "bundle": {
+        "kind": "exported",
+        "paramsDefinition": "#/definitions/ExecCommandApprovalParams",
+        "responseDefinition": "#/definitions/ExecCommandApprovalResponse"
+      }
+    }
+  ]
+}

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Protocol contracts — D1</title>
+  <link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+  <script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content" src="./navigation.json"></ex-nav>
+<ex-document id="content">
+<h1>D1 · Codex contract</h1>
+
+<ex-callout title="Goal" tone="tldr"><p>Generate the Codex contract crate from Codex's own export, with pairing from common.rs, the override registry and drift checks. No consumers yet.</p></ex-callout>
+
+<h2 id="scope">Nodes this deliverable fixes</h2>
+<ex-mermaid id="scope-graph" label="Touched nodes highlighted"><script type="text/plain">
+flowchart LR
+  cli[Codex CLI]
+  codex[Managed Codex]
+  agents[Claude / Cursor]
+  callers[MCP callers]
+  N1[N1 CLI face]
+  N2[N2 relay]
+  N3[N3 output mapper]
+  N4[N4 command port]
+  N5[(N5 hub)]
+  N6[N6 ACP client]
+  N7[N7 approvals]
+  N8[N8 Codex ACP adapter]
+  N9[N9 provider ACP route]
+  N10[N10 Codex client]
+  N11[N11 MCP server]
+  N12[N12 Claude metadata]
+  cli --> N1
+  cli --> N2 --> codex
+  N1 --> N4 --> N6 --> agents
+  agents --> N6 --> N5 --> N3 --> N1
+  N6 --> N7 --> N5
+  N5 --> N9
+  callers --> N11 --> N4
+  N11 --> N8 --> N10 --> codex
+  N12 --> N6
+
+</script></ex-mermaid>
+<p>No product node changes in this deliverable. Node details: <a href="program-design.html#nodes">Program Design</a>.</p>
+
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Part</th><th>Change</th></tr></thead>
+<tbody>
+<tr><td>new: codex-app-server-contract</td><td>generated Rust types, CodexRequest pairing, open enums</td></tr>
+<tr><td>new: generator (TS)</td><td>refresh, offline and online check, release report, override registry</td></tr>
+<tr><td>new: pinned export folder</td><td>0.166.0 export + common.rs at 6ff1e1ca + release.json</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="order">Where it sits</h2>
+<ex-mermaid id="order-graph" label="Dependencies"><script type="text/plain">
+flowchart LR
+  before["D0"] --> this[D1] --> after["D2, D3, D4, D5, Session/MCP Lead's Codex-side work"]
+  class this slot2
+</script></ex-mermaid>
+
+<h2 id="proof">How it is proven</h2>
+<ex-mermaid id="proof-graph" label="Observations"><script type="text/plain">
+flowchart LR
+  this[D1] --> p0["O1 compile-fail on the crate's API"] & p1["O2 edge conformance from the export"] & p2["O3 refresh and drift  report 0.157.1 to 0.166.0"]
+</script></ex-mermaid>
+<div class="ex-table-scroll" data-width="canvas">
+<table>
+<thead><tr><th>Check</th><th>Target</th><th>Passes when</th><th>Fails a wrong build when</th></tr></thead>
+<tbody>
+<tr><td>Compile-fail (O1)</td><td>the contract crate's API</td><td>each snippet (wrong field, wrong type, wrong method, wrong reply type) fails with an error naming the shape</td><td>a loose or Value-based type lets a snippet compile</td></tr>
+<tr><td>Conformance (O2)</td><td>samples from the 0.166.0 export</td><td>valid samples decode and re-encode to the same JSON; invalid samples are rejected; unknown values of open fields are kept</td><td>the generator drops a required field or closes an open enum</td></tr>
+<tr><td>Pairing</td><td>common.rs at 6ff1e1ca</td><td>all 179 client and 11 server requests are paired; swapping one response type fails the check</td><td>a swap passes</td></tr>
+<tr><td>Refresh and drift (O3)</td><td>exports 0.157.1 and 0.166.0</td><td>refresh is reproducible; the report equals an independent diff of the two exports; a one-field edit fails the offline check</td><td>the report misses a change, or the edit passes</td></tr>
+<tr><td>No behavior change</td><td>workspace</td><td>no product crate depends on the new crate, and the required checks are unchanged</td><td>any product code changes</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Streams:</strong> none yet (types only). <strong>Rules:</strong> R1 (types), R2, R3, R4, R5, R6, R7, R22. Details: <a href="verification.html">Verification Design</a>.</p>
+
+<h2 id="boundary">Out of scope and coordination</h2>
+<ul>
+<li><strong>Out of scope:</strong> Using the types in any node.</li>
+<li><strong>Coordinate:</strong> Post the crate name and module path to Lead A and the Session/MCP Lead.</li>
+<li><strong>Done when:</strong> The crate builds, O1–O3 pass, and no product code changed.</li>
+</ul>
+
+<p><a href="index.html#deliverables">All deliverables</a></p>
+</ex-document>
+</body>
+</html>

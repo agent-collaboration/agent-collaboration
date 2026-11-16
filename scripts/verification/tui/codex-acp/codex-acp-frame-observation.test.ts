@@ -11,6 +11,7 @@ import { gridLines } from '../terminal/terminal-grid.ts';
 import {
 	observeCompletedFrames,
 	requireNoWholeRunError,
+	requireOnlyExpectedErrors,
 	requireReplayMatchesLiveGrid,
 	settleWholeRunFrames,
 } from './codex-acp-frame-observation.ts';
@@ -90,6 +91,27 @@ test('an error pushed into scrollback inside one frame, or drawn outside any fra
 	expect(unbracketed.errors).toEqual([
 		{ frame: 0, byteOffset: Buffer.byteLength(outside), line: SAVE_ERROR },
 	]);
+});
+
+test('a 2,000-line reply keeps every scrolled row, so an error pushed away before it is still seen', async () => {
+	// The shape of the D0 r3-c21 steer reply: an error cell, then a count to 2,000 in one frame.
+	const reply = Array.from({ length: 2000 }, (_, index) => `  ${index + 1}`);
+	const run = frame(SAVE_ERROR, ...reply) + frame(SUCCESS);
+	const observed = await observeCompletedFrames(bytes(run), []);
+	expect(observed.scrollbackDiscarded).toBe(0);
+	expect(observed.errors.map((error) => error.line)).toEqual([SAVE_ERROR]);
+	expect(() => requireNoWholeRunError(observed)).toThrow(SAVE_ERROR);
+});
+
+test('rows the replay still discards are refused, never skipped', async () => {
+	const observed = await observeCompletedFrames(bytes(frame(SUCCESS)), []);
+	const discarded = { ...observed, scrollbackDiscarded: 1 };
+	expect(() => requireNoWholeRunError(discarded)).toThrow(
+		'scrollback rows were discarded before they could be inspected',
+	);
+	expect(() => requireOnlyExpectedErrors(discarded, [])).toThrow(
+		'scrollback rows were discarded before they could be inspected',
+	);
 });
 
 test('resize boundaries replay at their byte offsets', async () => {
@@ -221,3 +243,59 @@ test.each(EARLY_ERRORS)(
 		}
 	},
 );
+
+const REFUSED = 'The /fork command is not supported here';
+const REFUSED_CELL = `■ ${REFUSED}`;
+
+test('a scoped run allows exactly its declared error cells and no others', async () => {
+	const declared = await observeCompletedFrames(bytes(frame('› /fork') + frame(REFUSED_CELL)), []);
+	expect(() => requireOnlyExpectedErrors(declared, [REFUSED])).not.toThrow();
+	// An error the steps never declared still fails, even next to the declared one.
+	const extra = await observeCompletedFrames(
+		bytes(frame(REFUSED_CELL) + frame(SETTINGS_ERROR) + frame(SUCCESS)),
+		[],
+	);
+	expect(() => requireOnlyExpectedErrors(extra, [REFUSED])).toThrow(
+		`undeclared error cell in the whole run (frame 2, after byte ${Buffer.byteLength(frame(REFUSED_CELL) + frame(SETTINGS_ERROR))}): ${SETTINGS_ERROR}`,
+	);
+});
+
+test('a scoped run fails when a declared error never appears, and on a longer cell with the same start', async () => {
+	const quiet = await observeCompletedFrames(bytes(frame(SUCCESS)), []);
+	expect(() => requireOnlyExpectedErrors(quiet, [REFUSED])).toThrow(
+		`declared error cell never appeared: ${REFUSED_CELL}`,
+	);
+	const longer = await observeCompletedFrames(
+		bytes(frame(`${REFUSED_CELL} and the CLI exited`)),
+		[],
+	);
+	expect(() => requireOnlyExpectedErrors(longer, [REFUSED])).toThrow('undeclared error cell');
+});
+
+test('a partial scoped observation is never a pass', async () => {
+	const unfinished = await observeCompletedFrames(bytes(frame(REFUSED_CELL) + BEGIN + 'half'), []);
+	expect(() => requireOnlyExpectedErrors(unfinished, [REFUSED])).toThrow('unfinished frame');
+	const none = await observeCompletedFrames(bytes(REFUSED_CELL), []);
+	expect(() => requireOnlyExpectedErrors(none, [REFUSED])).toThrow('no completed frame');
+});
+
+test('settling a scoped journey keeps the evidence and refuses an undeclared cell', async () => {
+	const run = bytes(frame(REFUSED_CELL) + frame(SAVE_ERROR));
+	const live = (await observeCompletedFrames(run, [])).finalLines;
+	const output = temporaryRoot();
+	roots.push(output);
+	await expect(
+		settleWholeRunFrames({
+			bytes: run,
+			resizes: [],
+			liveLines: live,
+			policy: 'scoped',
+			expectedErrors: [REFUSED],
+			output,
+		}),
+	).rejects.toThrow(SAVE_ERROR);
+	const kept = z
+		.looseObject({ whole_run_errors: z.string(), expected_errors: z.array(z.string()) })
+		.parse(JSON.parse(readFileSync(join(output, 'frame-observation.json'), 'utf8')));
+	expect(kept).toMatchObject({ whole_run_errors: 'scoped', expected_errors: [REFUSED] });
+});

@@ -1,0 +1,147 @@
+{
+  "caseId": "N11/acp_carrier_tool_to_n8",
+  "node": "N11",
+  "case": "acp_carrier_tool_to_n8",
+  "catalogRow": "N11 section: N11 --ACP--> N8",
+  "stateBefore": {},
+  "records": [
+    {
+      "direction": "consumed",
+      "family": "mcpToolCall",
+      "counterpart": {
+        "kind": "McpCaller"
+      },
+      "reply": false,
+      "kind": "tools/call:conversation_prompt",
+      "payload": {
+        "target": {
+          "endpoint": {
+            "serviceId": "00000000-0000-4000-8000-000000000001",
+            "endpointId": "codex-local"
+          },
+          "sessionId": "resumed-thread"
+        },
+        "workingDirectory": "/var/folders/4f/697ggy6x26q8kh9qb2js4xnc0000gn/T/.tmpZ8FgCm",
+        "requestedBy": {
+          "endpoint": {
+            "serviceId": "00000000-0000-4000-8000-000000000001",
+            "endpointId": "codex-local"
+          },
+          "sessionId": "resumed-thread"
+        },
+        "message": {
+          "kind": "humanUser",
+          "text": "carrier proof"
+        },
+        "timeoutSeconds": 3
+      }
+    },
+    {
+      "direction": "produced",
+      "family": "acpRequestToCodexAdapter",
+      "counterpart": {
+        "kind": "Node",
+        "node": "N8"
+      },
+      "reply": false,
+      "kind": "initialize",
+      "payload": {
+        "jsonrpc": "2.0",
+        "id": "<volatile:id>",
+        "method": "initialize",
+        "params": {
+          "protocolVersion": 1,
+          "clientCapabilities": {},
+          "clientInfo": {
+            "name": "agent-collaboration",
+            "version": "<volatile:version>"
+          }
+        }
+      }
+    },
+    {
+      "direction": "produced",
+      "family": "acpRequestToCodexAdapter",
+      "counterpart": {
+        "kind": "Node",
+        "node": "N8"
+      },
+      "reply": false,
+      "kind": "session/load",
+      "payload": {
+        "jsonrpc": "2.0",
+        "id": "<volatile:id>",
+        "method": "session/load",
+        "params": {
+          "sessionId": "resumed-thread",
+          "cwd": "/var/folders/4f/697ggy6x26q8kh9qb2js4xnc0000gn/T/.tmpZ8FgCm",
+          "mcpServers": [],
+          "_meta": {
+            "codexRouter": {},
+            "router": {
+              "sessionRef": {
+                "endpoint": {
+                  "serviceId": "00000000-0000-4000-8000-000000000001",
+                  "endpointId": "codex-local"
+                },
+                "sessionId": "resumed-thread"
+              }
+            },
+            "codex-router/replayHistory": false
+          }
+        }
+      }
+    },
+    {
+      "direction": "produced",
+      "family": "mcpToolCall",
+      "counterpart": {
+        "kind": "McpCaller"
+      },
+      "reply": true,
+      "kind": "tools/call:conversation_prompt",
+      "payload": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"mcpResult\":\"error\",\"kind\":\"rejected\",\"message\":\"collaboration API request rejected with code -32050\",\"stage\":\"load\",\"effect\":\"unknown\",\"target\":{\"endpoint\":{\"serviceId\":\"00000000-0000-4000-8000-000000000001\",\"endpointId\":\"codex-local\"},\"sessionId\":\"resumed-thread\"},\"turnId\":null,\"serviceKind\":\"nativeRejected\",\"data\":{\"kind\":\"nativeRejected\",\"stage\":\"load\",\"reason\":\"fixture-policy\"},\"code\":-32050}"
+            }
+          ],
+          "structuredContent": {
+            "mcpResult": "error",
+            "kind": "rejected",
+            "message": "collaboration API request rejected with code -32050",
+            "stage": "load",
+            "effect": "unknown",
+            "target": {
+              "endpoint": {
+                "serviceId": "00000000-0000-4000-8000-000000000001",
+                "endpointId": "codex-local"
+              },
+              "sessionId": "resumed-thread"
+            },
+            "turnId": null,
+            "serviceKind": "nativeRejected",
+            "data": {
+              "kind": "nativeRejected",
+              "stage": "load",
+              "reason": "fixture-policy"
+            },
+            "code": -32050
+          },
+          "isError": true
+        }
+      }
+    }
+  ],
+  "stateAfter": {},
+  "comparison": {
+    "verdict": "matchesCatalog"
+  },
+  "outcome": {
+    "outcome": "passed"
+  }
+}

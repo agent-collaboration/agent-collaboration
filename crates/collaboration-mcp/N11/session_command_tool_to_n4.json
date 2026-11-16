@@ -1,0 +1,155 @@
+{
+  "caseId": "N11/session_command_tool_to_n4",
+  "node": "N11",
+  "case": "session_command_tool_to_n4",
+  "catalogRow": "N11 section: N11 --> N4; table: session command N1, N11 -> N4",
+  "stateBefore": {},
+  "records": [
+    {
+      "direction": "consumed",
+      "family": "mcpToolCall",
+      "counterpart": {
+        "kind": "McpCaller"
+      },
+      "reply": false,
+      "kind": "tools/call:conversation_cancel",
+      "payload": {
+        "operationId": "019f0000-0000-7000-8000-000000000006",
+        "targetOperationId": "019f0000-0000-7000-8000-000000000002",
+        "target": {
+          "endpoint": {
+            "serviceId": "00000000-0000-4000-8000-000000000001",
+            "endpointId": "claude-code"
+          },
+          "sessionId": "provider-thread"
+        },
+        "requestedBy": {
+          "endpoint": {
+            "serviceId": "00000000-0000-4000-8000-000000000001",
+            "endpointId": "claude-code"
+          },
+          "sessionId": "caller-session"
+        },
+        "approver": {
+          "endpoint": {
+            "serviceId": "00000000-0000-4000-8000-000000000001",
+            "endpointId": "claude-code"
+          },
+          "sessionId": "caller-session"
+        }
+      }
+    },
+    {
+      "direction": "produced",
+      "family": "sessionCommand",
+      "counterpart": {
+        "kind": "ProviderSupervisor"
+      },
+      "reply": false,
+      "kind": "cancel",
+      "payload": {
+        "operationId": "019f0000-0000-7000-8000-000000000006",
+        "targetOperationId": "019f0000-0000-7000-8000-000000000002",
+        "target": {
+          "endpoint": {
+            "serviceId": "00000000-0000-4000-8000-000000000001",
+            "endpointId": "claude-code"
+          },
+          "sessionId": "provider-thread"
+        },
+        "generation": {
+          "serviceEpoch": "00000000-0000-4000-8000-000000000002",
+          "generation": 3
+        },
+        "requestedBy": {
+          "endpoint": {
+            "serviceId": "00000000-0000-4000-8000-000000000001",
+            "endpointId": "claude-code"
+          },
+          "sessionId": "caller-session"
+        },
+        "approver": {
+          "endpoint": {
+            "serviceId": "00000000-0000-4000-8000-000000000001",
+            "endpointId": "claude-code"
+          },
+          "sessionId": "caller-session"
+        }
+      }
+    },
+    {
+      "direction": "produced",
+      "family": "mcpToolCall",
+      "counterpart": {
+        "kind": "McpCaller"
+      },
+      "reply": true,
+      "kind": "tools/call:conversation_cancel",
+      "payload": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"admission\":\"admitted\",\"operation\":{\"operationId\":\"019f0000-0000-7000-8000-000000000006\",\"operation\":\"conversationCancel\",\"binding\":{\"kind\":\"externalProvider\",\"binding\":{\"endpoint\":{\"serviceId\":\"00000000-0000-4000-8000-000000000001\",\"endpointId\":\"claude-code\"},\"bindingId\":\"binding-1\",\"runtime\":{\"provider\":\"claudeCode\",\"runtimeName\":\"claude-agent-acp\",\"runtimeVersion\":\"1.0.0\"},\"transport\":\"stdioAcp\",\"generation\":{\"serviceEpoch\":\"00000000-0000-4000-8000-000000000002\",\"generation\":3},\"capabilities\":[{\"name\":\"prompt\",\"status\":\"supported\",\"evidence\":\"advertised\"}]}},\"target\":{\"endpoint\":{\"serviceId\":\"00000000-0000-4000-8000-000000000001\",\"endpointId\":\"claude-code\"},\"sessionId\":\"provider-thread\"},\"stage\":\"mayHaveDispatched\",\"effect\":\"unknown\",\"reconciliation\":\"unresolved\",\"admittedAt\":\"2026-09-20T12:00:00Z\"}}"
+            }
+          ],
+          "structuredContent": {
+            "admission": "admitted",
+            "operation": {
+              "operationId": "019f0000-0000-7000-8000-000000000006",
+              "operation": "conversationCancel",
+              "binding": {
+                "kind": "externalProvider",
+                "binding": {
+                  "endpoint": {
+                    "serviceId": "00000000-0000-4000-8000-000000000001",
+                    "endpointId": "claude-code"
+                  },
+                  "bindingId": "binding-1",
+                  "runtime": {
+                    "provider": "claudeCode",
+                    "runtimeName": "claude-agent-acp",
+                    "runtimeVersion": "1.0.0"
+                  },
+                  "transport": "stdioAcp",
+                  "generation": {
+                    "serviceEpoch": "00000000-0000-4000-8000-000000000002",
+                    "generation": 3
+                  },
+                  "capabilities": [
+                    {
+                      "name": "prompt",
+                      "status": "supported",
+                      "evidence": "advertised"
+                    }
+                  ]
+                }
+              },
+              "target": {
+                "endpoint": {
+                  "serviceId": "00000000-0000-4000-8000-000000000001",
+                  "endpointId": "claude-code"
+                },
+                "sessionId": "provider-thread"
+              },
+              "stage": "mayHaveDispatched",
+              "effect": "unknown",
+              "reconciliation": "unresolved",
+              "admittedAt": "2026-09-20T12:00:00Z"
+            }
+          },
+          "isError": false
+        }
+      }
+    }
+  ],
+  "stateAfter": {},
+  "comparison": {
+    "verdict": "matchesCatalog"
+  },
+  "outcome": {
+    "outcome": "passed"
+  }
+}

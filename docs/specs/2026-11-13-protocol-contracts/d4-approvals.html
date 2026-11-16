@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Protocol contracts — D4</title>
+  <link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+  <script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content" src="./navigation.json"></ex-nav>
+<ex-document id="content">
+<h1>D4 · Approvals</h1>
+
+<ex-callout title="Goal" tone="tldr"><p>One local approvals broker and one option mapping, typed both ways, so the chosen option provably reaches the agent. The broker holds only the agent's waiting request; central owns the approval record (D28).</p></ex-callout>
+
+<h2 id="scope">Nodes this deliverable fixes</h2>
+<ex-mermaid id="scope-graph" label="Touched nodes highlighted"><script type="text/plain">
+flowchart LR
+  cli[Codex CLI]
+  codex[Managed Codex]
+  agents[Claude / Cursor]
+  callers[MCP callers]
+  N1[N1 CLI face]
+  N2[N2 relay]
+  N3[N3 output mapper]
+  N4[N4 command port]
+  N5[(N5 hub)]
+  N6[N6 ACP client]
+  N7[N7 approvals]
+  N8[N8 Codex ACP adapter]
+  N9[N9 provider ACP route]
+  N10[N10 Codex client]
+  N11[N11 MCP server]
+  N12[N12 Claude metadata]
+  cli --> N1
+  cli --> N2 --> codex
+  N1 --> N4 --> N6 --> agents
+  agents --> N6 --> N5 --> N3 --> N1
+  N6 --> N7 --> N5
+  N5 --> N9
+  callers --> N11 --> N4
+  N11 --> N8 --> N10 --> codex
+  N12 --> N6
+  class N7,N6,N8,N3,N1 slot2
+</script></ex-mermaid>
+<p>Teal nodes change in this deliverable. Node details: <a href="program-design.html#nodes">Program Design</a>.</p>
+
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Part</th><th>Change</th></tr></thead>
+<tbody>
+<tr><td>N7 broker</td><td>merge the typed and legacy native brokers; one option mapping (today 5)</td></tr>
+<tr><td>N6 / N8</td><td>permission requests in, selected option out, typed</td></tr>
+<tr><td>N3 / N1</td><td>approval server request out, reply in, typed</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="order">Where it sits</h2>
+<ex-mermaid id="order-graph" label="Dependencies"><script type="text/plain">
+flowchart LR
+  before["D0, D1, central's approvals design (D)"] --> this[D4] --> after["none required"]
+  class this slot2
+</script></ex-mermaid>
+
+<h2 id="proof">How it is proven</h2>
+<ex-mermaid id="proof-graph" label="Observations"><script type="text/plain">
+flowchart LR
+  this[D4] --> p0["O4 taps on N7 with both directions"] & p1["O5 approval journeys: the agent receives the chosen option"]
+</script></ex-mermaid>
+<div class="ex-table-scroll" data-width="canvas">
+<table>
+<thead><tr><th>Check</th><th>Target</th><th>Passes when</th><th>Fails a wrong build when</th></tr></thead>
+<tbody>
+<tr><td>Journey first (O5)</td><td>real CLI on a Claude Haiku session, debug Router, before any D4 fix</td><td>D0's approval journey runs on the pre-fix head and its result is recorded</td><td>the journey runs only after the fix</td></tr>
+<tr><td>Approval like Codex (O5 a1–a3)</td><td>real CLI 0.166.0: real Codex vs debug Router with Claude Haiku, same action</td><td>the CLI gets the same server request method and native prompt choices as real Codex; each choice reaches the agent as its mapped ACP outcome; only the approving window is prompted</td><td>a different method or choice set, the wrong outcome at the agent, or both windows prompted</td></tr>
+<tr><td>One mapping (O4)</td><td>N7</td><td>every ACP option kind and every Codex decision maps both ways from one table; ACP and Codex native approvals go through one broker</td><td>two tables disagree, or the legacy broker is still used</td></tr>
+<tr><td>Pending state</td><td>N7</td><td>a cancelled turn settles its pending approvals before the provider is cancelled, as today</td><td>an approval is left dangling</td></tr>
+<tr><td>Settles once</td><td>N7 with two decision sources</td><td>the first decision settles the request; a second decision gets the not-pending refusal and changes nothing</td><td>two decisions both reach the agent</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Streams:</strong> S3. <strong>Rules:</strong> R9, R12, R13, R14 (option tables), R19. Details: <a href="verification.html">Verification Design</a>.</p>
+
+<h2 id="boundary">Out of scope and coordination</h2>
+<ul>
+<li><strong>Out of scope:</strong> Who receives approvals. That routing belongs to the Session/MCP Lead: a delegate's approvals go to its parent plus attached clients, the decision is multiplexed, and the first answer wins.</li>
+<li><strong>Coordinate:</strong> Session/MCP Lead routing design: codex-router.feat-acp-cli-actions/docs/specs/2026-11-13-cli-mcp-sessions/specification.html#approvals. Their fan-out sits on this broker. The broker must settle each request exactly once (first decision wins) and answer later decisions with the existing not-pending refusal.</li>
+<li><strong>Done when:</strong> An approval on a Claude, Cursor or Codex session round-trips, and O5 shows the agent got the choice.</li>
+</ul>
+
+<p><a href="index.html#deliverables">All deliverables</a></p>
+</ex-document>
+</body>
+</html>

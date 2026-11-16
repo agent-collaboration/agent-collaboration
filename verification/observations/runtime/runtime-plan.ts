@@ -129,4 +129,13 @@ export const runtimeClock = {
     new Promise((resolve): void => {
       setTimeout(resolve, milliseconds);
     }),
+  /** A deadline that aborts its signal after `milliseconds`, released early once no longer needed. */
+  deadline: (
+    milliseconds: number,
+    reason: string,
+  ): { signal: AbortSignal; release: () => void } => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(new Error(reason)), milliseconds);
+    return { signal: controller.signal, release: (): void => clearTimeout(timer) };
+  },
 };

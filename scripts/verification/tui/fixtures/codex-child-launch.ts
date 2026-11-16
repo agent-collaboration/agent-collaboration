@@ -29,7 +29,8 @@ export function codexChildLaunch(configuration: FixtureCommand): ChildLaunch {
 		configuration['binary_sha256'] !== target.codex.sha256
 	)
 		throw new Error('codex-acp binary binding differs from its target');
-	const launch = qualifyCodexAcpTarget(target);
+	// The run started the wire tee, if declared, before the wrapper spawned this child.
+	const launch = qualifyCodexAcpTarget(target, 'listening');
 	const environment: Record<string, string> = {};
 	for (const [name, value] of Object.entries(process.env))
 		if (value !== undefined) environment[name] = value;

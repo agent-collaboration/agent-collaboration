@@ -132,3 +132,34 @@ test('the streamed driver accepts the original Codex startup with repeated synch
 		await driver.stop();
 	}
 });
+
+test('wakeWaiters has a pending wait judge the current grid again with no new output (review F9)', async () => {
+	const { driver } = await standInDriver();
+	try {
+		await driver.send(Buffer.from('marker'));
+		await driver.waitForGrid('marker drawn', showsMarker);
+		// The predicate also reads a source outside the terminal (here a flag; in a run, the tee).
+		const outside = { ready: false };
+		vi.useFakeTimers();
+		const judged: string[] = [];
+		const waiting = driver.waitForGrid(
+			'outside source',
+			(grid) => {
+				judged.push(outside.ready ? 'ready' : 'pending');
+				return outside.ready && showsMarker(grid);
+			},
+			-1,
+			60_000,
+		);
+		await vi.advanceTimersByTimeAsync(0);
+		outside.ready = true;
+		driver.wakeWaiters();
+		await expect(waiting).resolves.toBeDefined();
+		// Never ready before the wake; ready on it, with no new frame and no timer passed.
+		expect(judged.at(-1)).toBe('ready');
+		expect(judged.slice(0, -1).every((state) => state === 'pending')).toBe(true);
+	} finally {
+		vi.useRealTimers();
+		await driver.stop();
+	}
+});

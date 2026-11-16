@@ -8,7 +8,9 @@ export function lookupProcessIdentity(pid: number): ProcessIdentity | null {
 	const result = spawnSync(
 		'/bin/ps',
 		['-p', String(pid), '-o', 'pid=,ruid=,uid=,pgid=,lstart=,comm='],
-		{ encoding: 'utf8', timeout: 5000 },
+		// ps prints lstart in the caller's locale and identity compares birth exactly; pin C as
+		// verification/observations/runtime/runtime-processes.ts does, so both read the same birth.
+		{ encoding: 'utf8', timeout: 5000, env: { ...process.env, LC_ALL: 'C' } },
 	);
 	if (result.status === 1 && !result.stdout.trim() && !result.stderr.trim()) return null;
 	if (result.error || result.status !== 0)

@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Protocol contracts — D0</title>
+  <link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+  <script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content" src="./navigation.json"></ex-nav>
+<ex-document id="content">
+<h1>D0 · Verification first</h1>
+
+<ex-callout title="Goal" tone="tldr"><p>Build the harness that judges every later deliverable, and record today's failures as the baseline. No product behavior changes.</p></ex-callout>
+
+<h2 id="scope">Nodes this deliverable fixes</h2>
+<ex-mermaid id="scope-graph" label="Touched nodes highlighted"><script type="text/plain">
+flowchart LR
+  cli[Codex CLI]
+  codex[Managed Codex]
+  agents[Claude / Cursor]
+  callers[MCP callers]
+  N1[N1 CLI face]
+  N2[N2 relay]
+  N3[N3 output mapper]
+  N4[N4 command port]
+  N5[(N5 hub)]
+  N6[N6 ACP client]
+  N7[N7 approvals]
+  N8[N8 Codex ACP adapter]
+  N9[N9 provider ACP route]
+  N10[N10 Codex client]
+  N11[N11 MCP server]
+  N12[N12 Claude metadata]
+  cli --> N1
+  cli --> N2 --> codex
+  N1 --> N4 --> N6 --> agents
+  agents --> N6 --> N5 --> N3 --> N1
+  N6 --> N7 --> N5
+  N5 --> N9
+  callers --> N11 --> N4
+  N11 --> N8 --> N10 --> codex
+  N12 --> N6
+
+</script></ex-mermaid>
+<p>No product node changes in this deliverable. Node details: <a href="program-design.html#nodes">Program Design</a>.</p>
+
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Part</th><th>Change</th></tr></thead>
+<tbody>
+<tr><td>all nodes</td><td>taps attached at their edges for test use only; nothing in the product changes</td></tr>
+<tr><td>Host</td><td>delete 7 uncompiled files (provider_capability_report.rs, provider_prompt_content.rs, provider_update_kind.rs, external_provider_runtime/{provider_prompt_dispatch, provider_request_fallback, provider_acp_error_mapping, provider_initialize_request}.rs)</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="order">Where it sits</h2>
+<ex-mermaid id="order-graph" label="Dependencies"><script type="text/plain">
+flowchart LR
+  before["none"] --> this[D0] --> after["every later deliverable"]
+  class this slot2
+</script></ex-mermaid>
+
+<h2 id="proof">How it is proven</h2>
+<ex-mermaid id="proof-graph" label="Observations"><script type="text/plain">
+flowchart LR
+  this[D0] --> p0["O4 harness"] & p1["O5 journeys: Codex vs Router with Claude Haiku and Cursor"] & p2["O6 historical regressions at 95ab03b56"] & p3["O6 current defects at head"] & p4["Specta experiment  A20 "]
+</script></ex-mermaid>
+<div class="ex-table-scroll" data-width="canvas">
+<table>
+<thead><tr><th>Check</th><th>Target</th><th>Passes when</th><th>Fails a wrong build when</th></tr></thead>
+<tbody>
+<tr><td>Moved journeys built (unit)</td><td>driver tests with recorded or synthetic runs; texts grounded by one gpt-6-luna discovery run</td><td>two windows, /resume, refused commands, the tier pick and approval each have a driver step and negative controls that reject a wrong run (wrong window, lost resume, CLI exit, tier not cleared, wrong agent-side outcome)</td><td>a wrong run passes a control, or a journey has no control</td></tr>
+<tr><td>Historical regressions (O5 + O4)</td><td>debug Router built at 95ab03b56 (before PR #242) and at the current head; real Codex CLI 0.166.0</td><td>the steer receipt, 770K window and /model checks fail at 95ab03b56, each with a named reason, and pass at the head</td><td>the checks pass at 95ab03b56, which means they cannot see those bugs</td></tr>
+<tr><td>Current defects (O4 + O5)</td><td>node taps and the debug Router at the current head</td><td>method-not-found answers (N1 tap on unhandled CLI request methods) and JSON strings inside typed events each show up as a named failing case (untyped steering is type-level: O1 + O7 in D3)</td><td>a known current defect goes undetected</td></tr>
+<tr><td>Producer/consumer comparison (O4)</td><td>tap harness on every node except N2, plus a review of every send site on each edge</td><td>for every catalog input variant, the messages produced and consumed are recorded per message and compared with the catalog row and the table; any send site outside the twelve nodes is listed</td><td>a node emits a message its catalog row doesn't declare, or a send site outside the nodes goes unlisted</td></tr>
+<tr><td>Orphan deletion</td><td>parent commit and head</td><td>the 7 Host files are gone; at the parent commit nothing makes the compiler read them (no mod, #[path], include! or include_str! names any of them: a one-time check); the Host's discovered test list is identical before and after; the full required checks pass at the head (S6)</td><td>one of the files was compiled in at the parent, a Host test disappears, or the head's required checks fail</td></tr>
+<tr><td>Specta experiment (A20)</td><td>scratch crate</td><td>the result is recorded explicitly: yes, or no with the reason</td><td>left unrecorded</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Streams:</strong> All, observed only. <strong>Rules:</strong> R18 (orphans), R21, R23, R24, R25. Details: <a href="verification.html">Verification Design</a>.</p>
+
+<h2 id="boundary">Out of scope and coordination</h2>
+<ul>
+<li><strong>Out of scope:</strong> Any product fix.</li>
+<li><strong>Coordinate:</strong> none</li>
+<li><strong>Done when:</strong> The harness runs. Historical regressions fail before PR #242 and pass at the head. Current defects show up as named failing cases. The producer/consumer table is compared with the taps.</li>
+</ul>
+
+<p><a href="plans/2026-11-14-d0-verification-build-journeys.html">Implementation plan</a> · <a href="index.html#deliverables">All deliverables</a></p>
+</ex-document>
+</body>
+</html>

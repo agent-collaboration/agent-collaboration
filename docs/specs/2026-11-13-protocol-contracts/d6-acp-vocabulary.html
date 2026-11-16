@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Protocol contracts — D6</title>
+  <link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+  <script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content" src="./navigation.json"></ex-nav>
+<ex-document id="content">
+<h1>D6 · ACP authority and vocabulary</h1>
+
+<ex-callout title="Goal" tone="tldr"><p>One ACP authority for sent and served ACP, one Router vocabulary, and Claude metadata from one Rust type via Specta.</p></ex-callout>
+
+<h2 id="scope">Nodes this deliverable fixes</h2>
+<ex-mermaid id="scope-graph" label="Touched nodes highlighted"><script type="text/plain">
+flowchart LR
+  cli[Codex CLI]
+  codex[Managed Codex]
+  agents[Claude / Cursor]
+  callers[MCP callers]
+  N1[N1 CLI face]
+  N2[N2 relay]
+  N3[N3 output mapper]
+  N4[N4 command port]
+  N5[(N5 hub)]
+  N6[N6 ACP client]
+  N7[N7 approvals]
+  N8[N8 Codex ACP adapter]
+  N9[N9 provider ACP route]
+  N10[N10 Codex client]
+  N11[N11 MCP server]
+  N12[N12 Claude metadata]
+  cli --> N1
+  cli --> N2 --> codex
+  N1 --> N4 --> N6 --> agents
+  agents --> N6 --> N5 --> N3 --> N1
+  N6 --> N7 --> N5
+  N5 --> N9
+  callers --> N11 --> N4
+  N11 --> N8 --> N10 --> codex
+  N12 --> N6
+  class N8,N9,N12,N4,N7 slot2
+</script></ex-mermaid>
+<p>Teal nodes change in this deliverable. Node details: <a href="program-design.html#nodes">Program Design</a>.</p>
+
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Part</th><th>Change</th></tr></thead>
+<tbody>
+<tr><td>N8 adapter</td><td>serve ACP via the SDK's agent role; delete the vendored ACP schema</td></tr>
+<tr><td>N9 provider ACP route</td><td>keep; its own ACP renderer on the SDK, sharing N3's event interpretation (D24)</td></tr>
+<tr><td>N12 Claude metadata</td><td>Rust type + Specta TS; hand Zod only for SDK input, tied with satisfies</td></tr>
+<tr><td>vocabulary</td><td>one SessionRef, one stop reason + mapping, one digest type; crate merges</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="order">Where it sits</h2>
+<ex-mermaid id="order-graph" label="Dependencies"><script type="text/plain">
+flowchart LR
+  before["D5 and central's D"] --> this[D6] --> after["none"]
+  class this slot2
+</script></ex-mermaid>
+
+<h2 id="proof">How it is proven</h2>
+<ex-mermaid id="proof-graph" label="Observations"><script type="text/plain">
+flowchart LR
+  this[D6] --> p0["O7: no ACP schema file  one definition per inventory item  encodings unchanged"] & p1["O4 on N8 ACP side"] & p2["Specta output type-checks the Claude wrapper"]
+</script></ex-mermaid>
+<div class="ex-table-scroll" data-width="canvas">
+<table>
+<thead><tr><th>Check</th><th>Target</th><th>Passes when</th><th>Fails a wrong build when</th></tr></thead>
+<tbody>
+<tr><td>One ACP authority (O7, O4)</td><td>N8 ACP side</td><td>no vendored ACP schema file remains; N8 serves ACP through the SDK's agent role; the existing Codex ACP journeys still pass</td><td>the schema file remains, or a journey regresses</td></tr>
+<tr><td>ACP variant coverage (D25)</td><td>pinned SDK =2.2.0 schema</td><td>every SDK enum variant has an explicit disposition entry; the check fails on a bump that adds one</td><td>a new variant passes unlisted</td></tr>
+<tr><td>Vocabulary (O7, O4)</td><td>inventory items</td><td>each item is one definition or one named mapping; the wire JSON for each term is unchanged</td><td>an encoding changes or a copy remains</td></tr>
+<tr><td>Specta (D22)</td><td>Claude TS wrapper</td><td>the wrapper type-checks against the generated types; Claude models appear in /model on a Claude session (O5)</td><td>a type mismatch passes, or models are missing</td></tr>
+<tr><td>N9 typed (D24)</td><td>N9 provider ACP route</td><td>N9 renders ACP through the SDK, shares N3's event interpretation, and its existing tests still pass</td><td>N9 is deleted with no owner decision, or still builds JSON by hand</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Streams:</strong> S7, and the ACP side of every stream. <strong>Rules:</strong> R14, R15, R18, R19. Details: <a href="verification.html">Verification Design</a>.</p>
+
+<h2 id="boundary">Out of scope and coordination</h2>
+<ul>
+<li><strong>Out of scope:</strong> Central's contracts.</li>
+<li><strong>Coordinate:</strong> Lead A: waits for central's rewrite of message-board and collaboration-protocol.</li>
+<li><strong>Done when:</strong> Each inventory item is resolved, and no hand-written duplicate shape remains in scope.</li>
+</ul>
+
+<p><a href="index.html#deliverables">All deliverables</a></p>
+</ex-document>
+</body>
+</html>

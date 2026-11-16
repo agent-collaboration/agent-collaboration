@@ -459,3 +459,7 @@ impl SessionEventSink for NoopSessionEventSink {
 #[cfg(test)]
 #[path = "acp_interaction_port_test.rs"]
 mod provider_actor_tests;
+
+#[cfg(test)]
+#[path = "acp_interaction_port_node_tap_test.rs"]
+mod node_tap_tests;

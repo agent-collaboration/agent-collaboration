@@ -1,6 +1,7 @@
 import { createInterface, type Interface } from "node:readline";
 import { once } from "node:events";
 import { createConnection } from "node:net";
+import { appendFileSync, writeFileSync } from "node:fs";
 import { z } from "zod";
 import { decode, objectSchema } from "../exact-json.ts";
 
@@ -9,16 +10,36 @@ import { evidenceJson as wireJson } from "../evidence-json.ts";
 
 export { containsJsonSubset as containsExpected } from "../json-comparison.ts";
 
+/** Which way a captured line crossed, from the fixture agent's side. */
+export type WireCaptureDirection = "received" | "sent";
+
+export interface AcpStdioOptions {
+  /**
+   * When set, every stdio line the fixture receives or sends, in both directions and from the
+   * first one (initialize and extras included), is appended to this file as one JSON line
+   * `{"direction", "line"}`, with `line` the exact text that crossed. The capture is complete:
+   * nothing the agent script does decides what is kept.
+   */
+  readonly wireCapture?: string;
+}
+
 export class AcpStdio {
   private readonly lines: Interface;
+  private readonly wireCapture: string | undefined;
   private readonly queue: string[] = [];
   private ended = false;
   private waiter: ((line: string | undefined) => void) | undefined;
   private readonly inputObservers = new Set<(line: string | undefined) => void>();
 
-  constructor(onRequest?: (request: Record<string, unknown>) => void) {
+  constructor(
+    onRequest?: (request: Record<string, unknown>) => void,
+    options: AcpStdioOptions = {},
+  ) {
+    this.wireCapture = options.wireCapture;
+    if (this.wireCapture !== undefined) writeFileSync(this.wireCapture, "");
     this.lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
     this.lines.on("line", (line: string): void => {
+      this.capture("received", line);
       if (onRequest !== undefined) onRequest(objectSchema.parse(decode(line)));
       const waiter = this.waiter;
       this.waiter = undefined;
@@ -49,7 +70,14 @@ export class AcpStdio {
   }
 
   send(message: unknown): void {
-    process.stdout.write(`${wireJson(message)}\n`);
+    const line = wireJson(message);
+    this.capture("sent", line);
+    process.stdout.write(`${line}\n`);
+  }
+
+  private capture(direction: WireCaptureDirection, line: string): void {
+    if (this.wireCapture === undefined) return;
+    appendFileSync(this.wireCapture, `${JSON.stringify({ direction, line })}\n`);
   }
 
   async drain(): Promise<void> {

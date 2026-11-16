@@ -1,5 +1,6 @@
 /** Real streaming frame/driver boundary; the child is a controlled terminal, never Codex. */
 import { readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { afterEach, expect, test, vi } from 'vitest';
@@ -10,6 +11,7 @@ import { temporaryRoot } from '../fixtures/receipt-fixtures.ts';
 import { PtyGridDriver } from '../terminal/pty-grid-driver.ts';
 import { gridLines } from '../terminal/terminal-grid.ts';
 import type { TerminalGrid } from '../terminal/terminal-grid.ts';
+import { launchCwdLine } from './codex-acp-composer-ready.ts';
 import { promptJourney } from './codex-acp-prompt-scenes.ts';
 import { driveCodexJourney } from './codex-acp-run.ts';
 import { skillJourney } from './codex-acp-scenes.ts';
@@ -35,8 +37,10 @@ const MEMORY_DIALOG = [
 
 const COMPOSER = ['› Ask Codex to do anything', '  haiku low'];
 // Literal mcf49 launch modal, as reported by the Lead. Digits/Enter can invoke an installer.
+// Literal 0.166.0 title and notes line from the D0 r3 run (runs/r3-base-claude/out).
 const UPDATE = [
-	'Update available · 0.165.0 → 0.167.0',
+	'Update available · 0.166.0 → 0.169.0',
+	'Release notes: https://github.com/openai/codex/releases/latest',
 	'› 1. Update now (runs the installer)',
 	'  2. Skip',
 	'  3. Skip until next version',
@@ -62,6 +66,9 @@ async function launchFrameCase(inputs: {
 	readonly transitions?: readonly (readonly string[])[];
 	readonly expireOnResume?: boolean;
 	readonly expireOnReady?: boolean;
+	readonly launchCwd?: string;
+	/** The frame the controlled terminal draws after an Enter (the folder-trust answer). */
+	readonly afterEnter?: readonly string[];
 }): Promise<{
 	readonly drive: () => Promise<string[]>;
 	readonly sent: () => string[];
@@ -102,6 +109,7 @@ const {appendFileSync} = require('node:fs');
 const log = ${JSON.stringify(log)};
 const typed = ${JSON.stringify(typed)};
 const transitions = ${JSON.stringify(inputs.transitions?.map(frame) ?? [])};
+const afterEnter = ${JSON.stringify(inputs.afterEnter === undefined ? null : frame(inputs.afterEnter))};
 process.on('SIGUSR2', () => { const next = transitions.shift(); if (next) process.stdout.write('TUI_GRID BYTES ' + next + '\\n'); });
 process.stdout.write('TUI_GRID READY 120 36 STREAM\\n');
 process.stdout.write('TUI_GRID BYTES ' + ${JSON.stringify(frame(inputs.initial))} + '\\n');
@@ -116,6 +124,7 @@ process.stdin.on('data', (chunk) => {
       const key = Buffer.from(payload, 'hex').toString();
       appendFileSync(log, JSON.stringify(key) + '\\n');
       if (key === '\\x1b') process.stdout.write('TUI_GRID BYTES ' + ${JSON.stringify(frame(inputs.afterEscape))} + '\\n');
+      if (key === '\\r' && afterEnter !== null) process.stdout.write('TUI_GRID BYTES ' + afterEnter + '\\n');
       if (key === typed) process.stdout.write('TUI_GRID BYTES ' + ${JSON.stringify(frame(composed))} + '\\n');
     }
     if (command === 'stop' || command === 'finish') {
@@ -179,6 +188,11 @@ process.stdin.on('data', (chunk) => {
 					captured.push({ scene: step.checkpoint.scene, lines: gridLines(grid) });
 				},
 				null,
+				null,
+				null,
+				inputs.launchCwd ?? join(homedir(), 'code', 'projects', 'codex-router'),
+				null,
+				null,
 			),
 		sent: (): string[] =>
 			readFileSync(log, 'utf8')
@@ -193,7 +207,24 @@ process.stdin.on('data', (chunk) => {
 	};
 }
 
+const OTHER_RELEASE_UPDATE = UPDATE.map((line) =>
+	line.replace('Update available · 0.166.0', 'Update available · 0.165.0'),
+);
+
 for (const kind of ['prompt', 'skill'] as const) {
+	test(`${kind}: the update modal of another CLI release is not dismissed and nothing is sent`, async () => {
+		const fixture = await launchFrameCase({
+			kind,
+			initial: OTHER_RELEASE_UPDATE,
+			afterEscape: COMPOSER,
+		});
+		try {
+			await expect(fixture.drive()).rejects.toThrow('composer is not ready');
+			expect(fixture.sent()).toEqual([]);
+		} finally {
+			await fixture.close();
+		}
+	});
 	test(`${kind}: update modal then composer sends exactly one Escape before typing and retains frames`, async () => {
 		const fixture = await launchFrameCase({ kind, initial: UPDATE, afterEscape: COMPOSER });
 		try {
@@ -398,3 +429,141 @@ for (const kind of ['prompt', 'skill'] as const) {
 		}
 	});
 }
+
+test('the startup header shows the launch cwd with the home directory as ~', () => {
+	expect(launchCwdLine('/Users/me/code/projects/codex-router.d0-runs', '/Users/me')).toBe(
+		'~/code/projects/codex-router.d0-runs',
+	);
+	expect(launchCwdLine('/Users/me', '/Users/me')).toBe('~');
+	expect(launchCwdLine('/Users/meadow/x', '/Users/me')).toBe('/Users/meadow/x');
+	expect(launchCwdLine('/private/tmp/x', '/Users/me')).toBe('/private/tmp/x');
+});
+
+test('a Resuming view naming another cwd than the declared launch cwd is blocked, with no key', async () => {
+	const fixture = await launchFrameCase({
+		kind: 'prompt',
+		initial: RESUMING,
+		afterEscape: COMPOSER,
+		transitions: [COMPOSER],
+		launchCwd: join(homedir(), 'code', 'projects', 'codex-router.d0-runs'),
+	});
+	try {
+		await expect(fixture.drive()).rejects.toThrow('composer is not ready');
+		expect(fixture.sent()).toEqual([]);
+	} finally {
+		await fixture.close();
+	}
+});
+
+// Literal real-Codex 0.166.0 startup from the D0 r1 run: the header's directory line reads
+// "loading" while the session resumes.
+const RESUMING_LOADING = [
+	'',
+	'  >_ OpenAI Codex (v0.166.0)',
+	'     loading',
+	'  Resuming session…',
+	'',
+	'› Ask Codex to do anything',
+];
+
+test('the real-Codex Resuming view with its loading placeholder waits for focus then types once', async () => {
+	const fixture = await launchFrameCase({
+		kind: 'prompt',
+		initial: RESUMING_LOADING,
+		afterEscape: COMPOSER,
+		transitions: [COMPOSER],
+	});
+	try {
+		await fixture.drive();
+		expect(fixture.sent()).toHaveLength(1);
+		expect(fixture.sent()).not.toContain('\x1b');
+	} finally {
+		await fixture.close();
+	}
+});
+
+test('a Resuming view with an unknown header line is still blocked with no key', async () => {
+	const fixture = await launchFrameCase({
+		kind: 'prompt',
+		initial: RESUMING_LOADING.map((line) => line.replace('loading', 'something else')),
+		afterEscape: COMPOSER,
+		transitions: [COMPOSER],
+	});
+	try {
+		await expect(fixture.drive()).rejects.toThrow('composer is not ready');
+		expect(fixture.sent()).toEqual([]);
+	} finally {
+		await fixture.close();
+	}
+});
+
+test('the startup bound is the declared one: a slow startup inside it proceeds, past it stops with no key', async () => {
+	const { requireLaunchComposer } = await import('./codex-acp-composer-ready.ts');
+	const grids: string[][] = [];
+	let generation = 0;
+	const driver = {
+		frameGeneration: (): number => generation,
+		send: async (): Promise<void> => {
+			generation += 1;
+		},
+		waitForGrid: async (
+			_scene: string,
+			_predicate: unknown,
+			_after: number,
+			timeoutMs: number,
+		): Promise<never> => {
+			grids.push([String(timeoutMs)]);
+			throw new Error('PTY output deadline');
+		},
+	};
+	await expect(
+		requireLaunchComposer({
+			driver: driver,
+			keys: 'legacy',
+			record: async (): Promise<void> => {},
+			launchCwd: '/launch/cwd',
+			boundMs: 60_000,
+		}),
+	).rejects.toThrow('startup composer readiness did not reach a ready frame within its bound');
+	// The driver was given (about) the declared bound, not the 8-second default.
+	expect(Number(grids[0]?.[0])).toBeGreaterThan(50_000);
+	expect(Number(grids[0]?.[0])).toBeLessThanOrEqual(60_000);
+});
+
+// Literal real-Codex 0.166.0 folder-trust prompt from the D0 r1 run (attempt 4).
+const FOLDER_TRUST = (folder: string): string[] => [
+	'  Folder access',
+	`  ${folder}`,
+	'',
+	'  Trust this folder? Codex can read, edit, and run files here, subject to your permission settings. Folder settings',
+	'  can run code automatically, even without a model request. Continue only if you trust these files. Your trust',
+	'  decision will be saved.',
+	'',
+	'› 1. Trust and continue',
+	'  2. Back to Agent Command Center',
+	'',
+	'  enter continue · esc back',
+];
+
+// The driver never answers a trust prompt (assignment Correction 27, review F1). The controlled
+// terminal would draw the composer after an Enter, so an answered prompt would go on to type.
+for (const [label, folder] of [
+	['the run launch folder', '/Users/me/code/projects/codex-router.d0-runs'],
+	['another folder', '/Users/me/code/projects/other'],
+] as const)
+	test(`a folder-trust prompt for ${label} stops the run with no key`, async () => {
+		const fixture = await launchFrameCase({
+			kind: 'prompt',
+			initial: FOLDER_TRUST(folder),
+			afterEscape: COMPOSER,
+			afterEnter: COMPOSER,
+			launchCwd: '/Users/me/code/projects/codex-router.d0-runs',
+		});
+		try {
+			await expect(fixture.drive()).rejects.toThrow('composer is not ready; no keys sent');
+			expect(fixture.sent()).toEqual([]);
+			expect(fixture.captured.map((entry) => entry.scene)).toEqual(['startup-composer-refused']);
+		} finally {
+			await fixture.close();
+		}
+	});

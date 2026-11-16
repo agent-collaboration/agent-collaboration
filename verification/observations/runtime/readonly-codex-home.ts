@@ -43,6 +43,28 @@ export const codexHomeSnapshotSchema = z.strictObject({
   config_sections: z.array(sectionFingerprintSchema),
 });
 export type CodexHomeSnapshot = z.infer<typeof codexHomeSnapshotSchema>;
+
+/**
+ * Reads back a saved Codex-home snapshot. The exact JSON decoder keeps every integer a BigInt,
+ * which is right for the file fingerprints (size, modified_ns) but not for section occurrence
+ * counters, which the schema and the comparison hold as safe numbers. Only those counters are
+ * normalized; an unsafe, negative or fractional counter is refused, so it cannot weaken the guard.
+ */
+export function decodeSavedCodexHomeSnapshot(text: string): CodexHomeSnapshot {
+  const raw = objectSchema.parse(decode(text));
+  const sections = z
+    .array(objectSchema)
+    .parse(raw["config_sections"])
+    .map((section): Record<string, unknown> => {
+      const occurrence = z
+        .bigint()
+        .nonnegative()
+        .max(BigInt(Number.MAX_SAFE_INTEGER))
+        .parse(section["occurrence"]);
+      return { ...section, occurrence: Number(occurrence) };
+    });
+  return codexHomeSnapshotSchema.parse({ ...raw, config_sections: sections });
+}
 export const configurationObservedSchema = z.strictObject({
   kind: z.literal("observed").default("observed"),
   before: codexHomeSnapshotSchema,

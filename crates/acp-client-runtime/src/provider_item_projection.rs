@@ -532,3 +532,7 @@ const fn tool_status(status: AcpToolCallStatus) -> ToolCallStatus {
         _ => ToolCallStatus::Pending,
     }
 }
+
+#[cfg(test)]
+#[path = "provider_item_projection_node_tap_test.rs"]
+mod node_tap_tests;

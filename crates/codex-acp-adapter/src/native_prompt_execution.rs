@@ -528,3 +528,7 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+#[path = "native_prompt_execution_node_tap_test.rs"]
+mod node_tap_tests;

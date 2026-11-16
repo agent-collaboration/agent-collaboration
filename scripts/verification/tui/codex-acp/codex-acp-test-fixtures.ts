@@ -29,7 +29,64 @@ export interface TargetFixture {
 	readonly server: Server;
 }
 
-export async function targetFixture(alternateScreen = false): Promise<TargetFixture> {
+/** The thread a recorded real-Codex reference start reports. */
+export const LAUNCHED_THREAD = '019a0000-0000-7000-8000-00000000a1a1';
+
+/**
+ * A tee recording of the reference CLI's own thread/start and its reply, as Codex shapes it
+ * (ThreadStartResponse: thread.id, model, modelProvider, reasoningEffort). Fixture data only.
+ */
+export function referenceStartRecording(
+	threadId: string,
+	reply: { model?: string; effort?: string | null; provider?: string } = {},
+): string {
+	const frames = [
+		{
+			seq: 0,
+			connection: 0,
+			direction: 'cliToServer',
+			message: { ['id']: 1, method: 'initialize', params: {} },
+		},
+		{ seq: 1, connection: 0, direction: 'serverToCli', message: { ['id']: 1, result: {} } },
+		{
+			seq: 2,
+			connection: 0,
+			direction: 'cliToServer',
+			message: { ['id']: 7, method: 'thread/start', params: { model: 'gpt-6-luna' } },
+		},
+		{
+			seq: 3,
+			connection: 0,
+			direction: 'serverToCli',
+			message: {
+				['id']: 7,
+				result: {
+					thread: { ['id']: threadId },
+					model: reply.model ?? 'gpt-6-luna',
+					modelProvider: reply.provider ?? 'codex-router-debug',
+					reasoningEffort: reply.effort === undefined ? 'low' : reply.effort,
+				},
+			},
+		},
+	];
+	return frames.map((frame) => JSON.stringify(frame)).join('\n') + '\n';
+}
+
+/** The model the real-Codex reference fixture declares. */
+export const REFERENCE_MODEL = {
+	model: 'gpt-6-luna',
+	effort: 'low',
+	model_provider: 'codex-router-debug',
+} as const;
+
+/**
+ * `codex-local` is the real-Codex reference endpoint: it starts its own thread with a declared
+ * model (assignment Correction 29), so it has no Router Session, alias or ACP observer plan.
+ */
+export async function targetFixture(
+	alternateScreen = false,
+	endpoint: 'cursor-local' | 'codex-local' = 'cursor-local',
+): Promise<TargetFixture> {
 	// A short real root keeps the endpoint socket under the macOS Unix-socket path limit.
 	const root = realpathSync(mkdtempSync('/tmp/cxt-'));
 	cleanups.push(() => rmSync(root, { recursive: true, force: true }));
@@ -37,7 +94,7 @@ export async function targetFixture(alternateScreen = false): Promise<TargetFixt
 	const codex = controlledExecutable(
 		root,
 		'codex',
-		"if (process.argv[2] === '--version') process.stdout.write('codex-cli 0.165.0\\n');",
+		"if (process.argv[2] === '--version') process.stdout.write('codex-cli 0.166.0\\n');",
 	);
 	const service = join(root, 'service');
 	mkdirSync(join(service, 'router-sessions'), { recursive: true });
@@ -47,36 +104,43 @@ export async function targetFixture(alternateScreen = false): Promise<TargetFixt
 	);
 	const server = createServer();
 	await new Promise<void>((resolve) => {
-		server.listen(join(service, 'router-sessions/cursor-local.sock'), resolve);
+		server.listen(
+			endpoint === 'codex-local'
+				? join(service, 'codex-native.sock')
+				: join(service, `router-sessions/${endpoint}.sock`),
+			resolve,
+		);
 	});
 	cleanups.unshift(() => server.close());
 	const cwd = join(root, 'trusted worktree');
 	mkdirSync(cwd);
 	const binding = captureArtifact(codex);
+	const sessionId = endpoint === 'cursor-local' ? RAW_SESSION : ALIAS;
 	const observerPlan = {
 		codex_cli: binding.path,
 		codex_sha256: binding.sha256,
 		service_directory: service,
-		endpoint_id: 'cursor-local',
-		session_id: RAW_SESSION,
+		endpoint_id: endpoint,
+		session_id: sessionId,
 		native_thread_id: ALIAS,
 		cwd,
 	};
 	const observer = join(root, 'observer-plan.json');
-	writeFileSync(observer, JSON.stringify(observerPlan));
+	if (endpoint === 'cursor-local') writeFileSync(observer, JSON.stringify(observerPlan));
 	const target = codexAcpTargetSchema.parse({
 		codex: binding,
-		codex_version: '0.165.0',
+		codex_version: '0.166.0',
 		service_directory: service,
 		expected_service_id: SERVICE,
 		expected_service_epoch: EPOCH,
-		endpoint_id: 'cursor-local',
-		provider_session_id: RAW_SESSION,
-		native_thread_id: ALIAS,
+		endpoint_id: endpoint,
+		provider_session_id: endpoint === 'codex-local' ? null : sessionId,
+		native_thread_id: endpoint === 'codex-local' ? null : ALIAS,
+		reference_model: endpoint === 'codex-local' ? REFERENCE_MODEL : null,
 		cwd,
 		alternate_screen: alternateScreen,
 		viewport: { columns: 120, rows: 36 },
-		observer_plan: observer,
+		observer_plan: endpoint === 'cursor-local' ? observer : null,
 	});
 	return { root, target, observerPlan, server };
 }

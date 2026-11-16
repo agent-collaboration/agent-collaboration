@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Protocol contracts — D2</title>
+  <link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+  <script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content" src="./navigation.json"></ex-nav>
+<ex-document id="content">
+<h1>D2 · Output stream</h1>
+
+<ex-callout title="Goal" tone="tldr"><p>Make the output stream typed from end to end, so the class of bugs fixed by hand in PR #242 cannot come back. Provider updates travel typed all the way to the CLI, with no JSON strings inside events, one mapping per event, and state with one owner.</p></ex-callout>
+
+<h2 id="scope">Nodes this deliverable fixes</h2>
+<ex-mermaid id="scope-graph" label="Touched nodes highlighted"><script type="text/plain">
+flowchart LR
+  cli[Codex CLI]
+  codex[Managed Codex]
+  agents[Claude / Cursor]
+  callers[MCP callers]
+  N1[N1 CLI face]
+  N2[N2 relay]
+  N3[N3 output mapper]
+  N4[N4 command port]
+  N5[(N5 hub)]
+  N6[N6 ACP client]
+  N7[N7 approvals]
+  N8[N8 Codex ACP adapter]
+  N9[N9 provider ACP route]
+  N10[N10 Codex client]
+  N11[N11 MCP server]
+  N12[N12 Claude metadata]
+  cli --> N1
+  cli --> N2 --> codex
+  N1 --> N4 --> N6 --> agents
+  agents --> N6 --> N5 --> N3 --> N1
+  N6 --> N7 --> N5
+  N5 --> N9
+  callers --> N11 --> N4
+  N11 --> N8 --> N10 --> codex
+  N12 --> N6
+  class N6,N5,N3,N1 slot2
+</script></ex-mermaid>
+<p>Teal nodes change in this deliverable. Node details: <a href="program-design.html#nodes">Program Design</a>.</p>
+
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Part</th><th>Change</th></tr></thead>
+<tbody>
+<tr><td>N6 ACP client</td><td>project usage, config, session info and commands into typed events (today they are JSON strings, provider_item_projection.rs:273-288)</td></tr>
+<tr><td>N5 hub</td><td>typed variants for those events</td></tr>
+<tr><td>N3 output mapper</td><td>one exhaustive mapping, 0/1/many outputs, delta and summary state declared; tool kind, turn outcome and deltas each once</td></tr>
+<tr><td>N1 CLI face</td><td>emit typed notifications; receipts state declared</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="order">Where it sits</h2>
+<ex-mermaid id="order-graph" label="Dependencies"><script type="text/plain">
+flowchart LR
+  before["D0, D1"] --> this[D2] --> after["none required"]
+  class this slot2
+</script></ex-mermaid>
+
+<h2 id="proof">How it is proven</h2>
+<ex-mermaid id="proof-graph" label="Observations"><script type="text/plain">
+flowchart LR
+  this[D2] --> p0["O4 taps on N6, N5, N3"] & p1["O5 output cases: steer receipt, 1M window, items, turn completion"] & p2["O6 baseline cases for these turn green"]
+</script></ex-mermaid>
+<div class="ex-table-scroll" data-width="canvas">
+<table>
+<thead><tr><th>Check</th><th>Target</th><th>Passes when</th><th>Fails a wrong build when</th></tr></thead>
+<tbody>
+<tr><td>Status line and usage (O5)</td><td>real CLI vs real Codex, and vs debug Router with Claude Haiku and Cursor</td><td>the context window shown equals the window the provider reports (1M shows as 1M)</td><td>770K, or no update</td></tr>
+<tr><td>Steer receipt (O5)</td><td>same</td><td>a steered message gets its receipt, in the same order as against real Codex</td><td>it stays pending</td></tr>
+<tr><td>Items and turn completion (O5)</td><td>same</td><td>both runs satisfy the turn-skeleton rules k1–k5 (verification #O5), and the skeleton fields match the reference</td><td>a missing or duplicated item, or no completion</td></tr>
+<tr><td>Node taps (O4)</td><td>N6, N5, N3</td><td>each ACP update variant gives its declared typed events; each event gives its declared 0, 1 or many Codex messages; delta state is per connection</td><td>a JSON string inside an event, or an undeclared output</td></tr>
+<tr><td>Current defects turn green (O6)</td><td>D0's current-defect cases for S2</td><td>JSON-in-strings cases pass, and the historical regression checks still pass</td><td>any baseline case regresses</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Streams:</strong> S2. <strong>Rules:</strong> R1 (N3 edge), R9, R12, R13, R14 (N3 duplicates), R19. Details: <a href="verification.html">Verification Design</a>.</p>
+
+<h2 id="boundary">Out of scope and coordination</h2>
+<ul>
+<li><strong>Out of scope:</strong> Input decoding (D3), approvals (D4).</li>
+<li><strong>Coordinate:</strong> Session/MCP Lead: event type changes in session-event-model (the session layer is theirs).</li>
+<li><strong>Done when:</strong> The steer receipt and 1M window keep passing in O5, no event carries a JSON string, and every S2 conversion matches the catalog.</li>
+</ul>
+
+<p><a href="index.html#deliverables">All deliverables</a></p>
+</ex-document>
+</body>
+</html>

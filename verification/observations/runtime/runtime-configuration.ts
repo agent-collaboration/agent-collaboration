@@ -8,11 +8,11 @@ import {
 } from "../shared/evidence-models.ts";
 import { sameIdentity } from "./process-ownership.ts";
 import {
-  codexHomeSnapshotSchema,
   configurationErrorCategory,
   configurationGuardPassed,
   configurationReferences,
   configurationUnchanged,
+  decodeSavedCodexHomeSnapshot,
   observeConfiguration,
   requireReadOnlyConfiguration,
   type CodexHomeSnapshot,
@@ -92,9 +92,7 @@ export async function verifyReady(plan: RuntimePlan): Promise<JsonObject> {
   const started = readObservedJson(readFileSync(join(plan.evidence, "router-started.json")));
   if (sha256(recorded.executable) !== started.binarySHA256)
     throw new Error("live Router binary changed");
-  const before = codexHomeSnapshotSchema.parse(
-    decode(readFileSync(join(plan.evidence, "codex-home-before.json"), "utf8")),
-  );
+  const before = readSavedCodexHome(plan.evidence);
   const configuration = observeRunConfiguration(plan, before);
   requireReadOnlyConfiguration(configuration);
   const manifest = readObservedJson(
@@ -113,4 +111,11 @@ export async function verifyReady(plan: RuntimePlan): Promise<JsonObject> {
     configurationGuardPassed: configurationGuardPassed(configuration),
     credentialUsability: "not established by health; genuine provider journey is required",
   };
+}
+
+/** The Codex-home snapshot the run saved before it started (owned-runtime.ts), read back exactly. */
+export function readSavedCodexHome(evidence: string): CodexHomeSnapshot {
+  return decodeSavedCodexHomeSnapshot(
+    readFileSync(join(evidence, "codex-home-before.json"), "utf8"),
+  );
 }

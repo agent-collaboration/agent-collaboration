@@ -11,7 +11,10 @@ lifecycle and transport, prompt boundaries and output, settings and history
 ordering, permissions, questions, cancellation, input and idle events. Library
 unit tests remain colocated.
 
-Case expansions and fixture data retain their existing directories. The aggregate declares the shared provider-behavior helper once. CI selects no separate e2e category,
+Case expansions and fixture data retain their existing directories. The aggregate declares the shared provider-behavior helper once, and
+`acp_wire_capture.rs`, which records a fixture agent's complete stdio capture (written by
+`verification/fixtures/acp-stdio.ts` when given `wireCapture`) as raw wire frames on N6 tap cases;
+`integration/typed_extension_node_tap/` holds that tap's fixture rig. CI selects no separate e2e category,
 so only the integration target is declared.
 
 A former binary `<root>` and test `<case>` becomes binary `integration` and
