@@ -134,6 +134,18 @@ async function serveSharedSettings(peer: {
 //     catalog that has no fast option.
 //   hold-first-prompt: the first prompt's turn stays running until the file
 //     <receipt>.release exists, so a test can send to a busy session.
+//   hold-first-prompt-open: as hold-first-prompt, but the agent keeps
+//     answering other requests while the turn runs, and a session/cancel
+//     ends the held turn with stopReason cancelled.
+//   advertise-close: initialize advertises session/close.
+//   advertise-steering: initialize advertises steering; _session/steering is
+//     answered injected while a held-open turn runs, promptRequired otherwise.
+//   prompt-directives: a prompt whose text is "ask-permission" asks a
+//     permission for a fetch before ending its turn; one whose text is
+//     "unknown-stop" ends with the stop reason "future_reason"; one whose
+//     text is "hold-open" stays running, as hold-first-prompt-open, until a
+//     session/cancel ends it.
+//   exit-on-stop-file: the agent exits once the file <receipt>.stop exists.
 const reactiveBehaviourNames = [
   "boolean-fast",
   "refuse-fast-once",
@@ -143,6 +155,11 @@ const reactiveBehaviourNames = [
   "fast-stays-on",
   "fast-option-vanishes",
   "hold-first-prompt",
+  "hold-first-prompt-open",
+  "advertise-close",
+  "advertise-steering",
+  "prompt-directives",
+  "exit-on-stop-file",
 ] as const;
 type ReactiveBehaviour = (typeof reactiveBehaviourNames)[number];
 
@@ -192,6 +209,8 @@ interface ReactivePeer {
   readonly behaviours: ReadonlySet<ReactiveBehaviour>;
   /** The file whose appearance ends a held first prompt's turn. */
   readonly releasePath: string;
+  /** The file whose appearance ends the agent (exit-on-stop-file). */
+  readonly stopPath: string;
   readonly readRequest: () => Promise<Record<string, unknown> | undefined>;
   readonly reply: (request: Record<string, unknown>, result: unknown) => void;
   readonly refuse: (request: Record<string, unknown>, message: string) => void;
@@ -302,8 +321,64 @@ async function waitForRelease(releasePath: string): Promise<void> {
   while (!existsSync(releasePath)) await delay(10);
 }
 
+/** The prompt's first text block, when it has one. */
+function promptText(request: Record<string, unknown>): string | undefined {
+  const blocks = requestParameters(request).prompt;
+  if (!Array.isArray(blocks)) return undefined;
+  const first: unknown = blocks[0];
+  if (typeof first !== "object" || first === null || !("text" in first)) return undefined;
+  return typeof first.text === "string" ? first.text : undefined;
+}
+
+let permissionRequests = 0;
+
+/** Answers a prompt as its text directs (prompt-directives). */
+async function answerDirectedPrompt(
+  peer: ReactivePeer,
+  request: Record<string, unknown>,
+): Promise<void> {
+  const text = promptText(request);
+  if (text === "ask-permission") {
+    permissionRequests += 1;
+    peer.send({
+      jsonrpc: "2.0",
+      id: `permission-${permissionRequests}`,
+      method: "session/request_permission",
+      params: {
+        sessionId: requestParameters(request).sessionId,
+        toolCall: {
+          toolCallId: `fetch-${permissionRequests}`,
+          title: "Fetch a page",
+          kind: "fetch",
+        },
+        options: [
+          { optionId: "allow", name: "Allow", kind: "allow_once" },
+          { optionId: "reject", name: "Reject", kind: "reject_once" },
+        ],
+      },
+    });
+    // The client's answer is the next frame; the receipt records it.
+    await peer.readRequest();
+  }
+  peer.reply(request, { stopReason: text === "unknown-stop" ? "future_reason" : "end_turn" });
+}
+
+function methodNotFound(peer: ReactivePeer, request: Record<string, unknown>): void {
+  peer.send({
+    jsonrpc: "2.0",
+    id: request.id,
+    error: { code: -32601n, message: "method not found" },
+  });
+}
+
 async function serveReactiveSettings(peer: ReactivePeer): Promise<void> {
   let promptsSeen = 0;
+  /** The held-open prompt, while its turn runs. */
+  let heldOpen: Record<string, unknown> | undefined;
+  if (peer.behaviours.has("exit-on-stop-file"))
+    setInterval((): void => {
+      if (existsSync(peer.stopPath)) process.exit(0);
+    }, 10).unref();
   const sessions = new Map<string, ReactiveSession>();
   const replies = new ReactiveFastReplies(peer.behaviours);
   for (;;) {
@@ -343,9 +418,36 @@ async function serveReactiveSettings(peer: ReactivePeer): Promise<void> {
         break;
       case "session/prompt":
         promptsSeen += 1;
+        if (promptsSeen === 1 && peer.behaviours.has("hold-first-prompt-open")) {
+          const held = request;
+          heldOpen = held;
+          void waitForRelease(peer.releasePath).then((): void => {
+            if (heldOpen !== held) return;
+            heldOpen = undefined;
+            peer.reply(held, { stopReason: "end_turn" });
+          });
+          break;
+        }
         if (promptsSeen === 1 && peer.behaviours.has("hold-first-prompt"))
           await waitForRelease(peer.releasePath);
-        peer.reply(request, { stopReason: "end_turn" });
+        if (peer.behaviours.has("prompt-directives") && promptText(request) === "hold-open") {
+          heldOpen = request;
+          break;
+        }
+        if (peer.behaviours.has("prompt-directives")) await answerDirectedPrompt(peer, request);
+        else peer.reply(request, { stopReason: "end_turn" });
+        break;
+      case "session/cancel":
+        if (heldOpen !== undefined) {
+          const held = heldOpen;
+          heldOpen = undefined;
+          peer.reply(held, { stopReason: "cancelled" });
+        } else methodNotFound(peer, request);
+        break;
+      case "_session/steering":
+        if (!peer.behaviours.has("advertise-steering")) methodNotFound(peer, request);
+        else
+          peer.reply(request, { outcome: heldOpen === undefined ? "promptRequired" : "injected" });
         break;
       case "authenticate":
         peer.reply(request, {});
@@ -355,11 +457,7 @@ async function serveReactiveSettings(peer: ReactivePeer): Promise<void> {
         peer.reply(request, {});
         break;
       default:
-        peer.send({
-          jsonrpc: "2.0",
-          id: request.id,
-          error: { code: -32601n, message: "method not found" },
-        });
+        methodNotFound(peer, request);
     }
   }
 }
@@ -379,15 +477,28 @@ function applyScriptedSetting(
 
 /** The initialize answer; the reactive scenario also serves the Host's real
  * Cursor binding, which needs Cursor's login method. */
-function initializeResult(scenario: string): Record<string, unknown> {
+function initializeResult(
+  scenario: string,
+  behaviours: ReadonlySet<ReactiveBehaviour>,
+): Record<string, unknown> {
   return {
     protocolVersion: 1n,
-    agentCapabilities: { loadSession: true, mcpCapabilities: { http: true } },
+    agentCapabilities: {
+      loadSession: true,
+      mcpCapabilities: { http: true },
+      ...(behaviours.has("advertise-close") ? { sessionCapabilities: { close: {} } } : {}),
+    },
     agentInfo: { name: "cursor-settings-wire-peer", version: "1" },
     ...(scenario === "reactive"
       ? { authMethods: [{ id: "cursor_login", name: "Cursor login" }] }
       : {}),
+    ...(behaviours.has("advertise-steering") ? { _meta: { steering: { supported: true } } } : {}),
   };
+}
+
+/** The behaviours argv names; only the reactive scenario takes any. */
+function scenarioBehaviours(scenario: string): ReadonlySet<ReactiveBehaviour> {
+  return scenario === "reactive" ? reactiveBehaviours(process.argv.slice(4)) : new Set();
 }
 
 function reactivePeer(
@@ -398,6 +509,7 @@ function reactivePeer(
   return {
     behaviours: reactiveBehaviours(process.argv.slice(4)),
     releasePath: `${requireArgument(3)}.release`,
+    stopPath: `${requireArgument(3)}.stop`,
     readRequest,
     reply,
     refuse: (request: Record<string, unknown>, message: string): void => {
@@ -438,7 +550,7 @@ export async function main(): Promise<void> {
     const initialize = await readRequest();
     assert.equal(initialize?.method, "initialize");
     if (initialize === undefined) throw new Error("initialize request required");
-    reply(initialize, initializeResult(scenario));
+    reply(initialize, initializeResult(scenario, scenarioBehaviours(scenario)));
     if (scenario === "negotiation") {
       await io.drain();
       return;

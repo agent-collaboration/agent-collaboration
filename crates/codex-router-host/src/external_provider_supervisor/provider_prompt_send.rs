@@ -230,6 +230,8 @@ impl ExternalProviderSupervisor {
                 }
             }
             Ok(crate::ProviderSteeringOutcome::PromptRequired) => {
+                // Nothing was injected: the row waits again rather than stay Unknown.
+                self.undo_dispatch_mark(&operation_id, &target).await?;
                 return Ok(SteerResult::NoRunningTurn);
             }
             Ok(crate::ProviderSteeringOutcome::StartedNewTurn) => {

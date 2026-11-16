@@ -29,7 +29,7 @@ const REUSED_ID_MESSAGE: &str = "request ID already used for a different request
 
 /// Whether a stored operation is the same request: its kind, and its target
 /// when both sides know one (a create has no target yet).
-fn same_request(
+pub(super) fn same_request(
     record: &ProviderOperationRecord,
     operation_kind: ProviderOperationKind,
     known_target: Option<&SessionRef>,
@@ -39,6 +39,21 @@ fn same_request(
             (Some(stored), Some(requested)) => stored == requested,
             _ => true,
         }
+}
+
+/// The refusal for a request ID already used by a different request (D1 R15).
+pub(super) fn reused_id_failure(
+    operation_id: OperationId,
+    target: Option<SessionRef>,
+) -> ConversationOperationFailure {
+    failure(
+        ConversationOperationFailureKind::InvalidRequest,
+        ConversationOperationFailureStage::Validation,
+        ProviderOperationEffect::None,
+        REUSED_ID_MESSAGE,
+        operation_id,
+        target,
+    )
 }
 
 impl ExternalProviderSupervisor {
@@ -53,14 +68,7 @@ impl ExternalProviderSupervisor {
         known_target: Option<&SessionRef>,
     ) -> Result<PreparedOperation, ConversationOperationFailure> {
         if !same_request(&record, operation_kind, known_target) {
-            return Err(failure(
-                ConversationOperationFailureKind::InvalidRequest,
-                ConversationOperationFailureStage::Validation,
-                ProviderOperationEffect::None,
-                REUSED_ID_MESSAGE,
-                operation_id,
-                known_target.cloned(),
-            ));
+            return Err(reused_id_failure(operation_id, known_target.cloned()));
         }
         Ok(PreparedOperation::Existing(
             snapshot_from_record(record)
@@ -258,6 +266,36 @@ impl ExternalProviderSupervisor {
             })?;
         snapshot_from_record(record)
             .map_err(|message| snapshot_failure(operation_id.clone(), message))
+    }
+}
+
+impl ExternalProviderSupervisor {
+    /// Undoes `begin_dispatch` when nothing was sent: the row is waiting
+    /// again, so `show` reports its line state and a restart finds it
+    /// admitted, never sent (D1 R14).
+    #[expect(
+        clippy::result_large_err,
+        reason = "The typed failure retains the full published operation payload."
+    )]
+    pub(super) async fn undo_dispatch_mark(
+        &self,
+        operation_id: &OperationId,
+        target: &SessionRef,
+    ) -> Result<(), ConversationOperationFailure> {
+        self.inner
+            .store
+            .lock()
+            .await
+            .unmark_undispatched(operation_id, now_ms())
+            .await
+            .map(|_| ())
+            .map_err(|_| {
+                admission_failure(
+                    operation_id.clone(),
+                    "provider dispatch marker could not be undone",
+                    Some(target.clone()),
+                )
+            })
     }
 }
 

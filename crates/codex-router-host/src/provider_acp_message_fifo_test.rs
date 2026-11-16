@@ -659,3 +659,187 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
         .await
         .expect("owned provider shutdown");
 }
+
+/// How many requests with `method` the Cursor fixture recorded in `receipt`.
+fn recorded_requests(receipt: &std::path::Path, method: &str) -> usize {
+    std::fs::read(receipt)
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Vec<serde_json::Value>>(&bytes).ok())
+        .map_or(0, |requests| {
+            requests
+                .iter()
+                .filter(|request| request["method"] == method)
+                .count()
+        })
+}
+
+/// Oracle: D1 spec R14 and V27 — "close while queued: every undispatched ID
+/// becomes not sent with the reason, and no later load or prompt reaches the
+/// agent", with the worker holding a head and more buffered. The turn is held
+/// with no operation row, so the line's own close is reached directly.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn close_while_queued_marks_head_and_buffer_not_sent() {
+    // Arrange: a turn held on the runtime, then three API prompts queued
+    // behind it; the worker holds the first at its idle wait.
+    let root = tempfile::tempdir().expect("fixture root");
+    let receipt = root.path().join("wire.json");
+    let mut target = target();
+    target.session_id = SessionId::try_from("reactive-session-1".to_owned()).expect("session ID");
+    let binding = binding(&target);
+    let runtime = ExternalProviderRuntime::initialize(
+        crate::external_provider_runtime::acp_scripted_fixture::launch_fixture_agent(
+            "cursor-settings-agent.ts",
+            vec![
+                "reactive".to_owned(),
+                receipt.display().to_string(),
+                "hold-first-prompt-open".to_owned(),
+            ],
+        ),
+        Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
+    runtime
+        .create_session(root.path().to_owned())
+        .await
+        .expect("session/new");
+    let store = Arc::new(Mutex::new(
+        ProviderOperationStore::open(&root.path().join("operations.sqlite"))
+            .await
+            .expect("store"),
+    ));
+    store
+        .lock()
+        .await
+        .record_session(&ProviderSessionRecord {
+            target: target.clone(),
+            working_directory: ProviderWorkingDirectory::try_from(
+                root.path().display().to_string(),
+            )
+            .expect("working directory"),
+            requested_policy: ProviderRequestedPolicy {
+                access: RouterAccess::WriteRestricted,
+            },
+            created_by: target.clone().into(),
+            approver: target.clone().into(),
+            updated_at_ms: 1,
+        })
+        .await
+        .expect("session record");
+    let supervisor = Arc::new(
+        ExternalProviderSupervisor::new(
+            vec![ExternalProviderBinding {
+                identity: binding.clone(),
+                runtime,
+            }],
+            Arc::clone(&store),
+        )
+        .expect("supervisor"),
+    );
+    let queue = Arc::new(ProviderAcpMessageFifo::new(
+        Arc::clone(&supervisor),
+        Arc::clone(&store),
+        Arc::new(NoLivePeer),
+    ));
+    supervisor.attach_message_fifo(&queue);
+    let runtime = supervisor.runtime_for(&target.endpoint).expect("runtime");
+    let held_context = crate::ExternalProviderApprovalContext {
+        requester: target.clone().into(),
+        approver: target.clone().into(),
+        target: target.clone(),
+        operation_id: OperationId::generate(),
+        binding_generation: binding.generation.clone(),
+        binding_retirement: runtime.retirement(),
+    };
+    let held = tokio::spawn(async move {
+        runtime
+            .prompt_with_approval_context(
+                "reactive-session-1".to_owned(),
+                "first".to_owned(),
+                held_context,
+            )
+            .await
+    });
+    while recorded_requests(&receipt, "session/prompt") < 1 {
+        tokio::task::yield_now().await;
+    }
+    let mut queued = Vec::new();
+    for text in ["queued-0", "queued-1", "queued-2"] {
+        let operation_id = OperationId::generate();
+        supervisor
+            .prompt(collaboration_protocol::ConversationPromptRequest {
+                operation_id: operation_id.clone(),
+                input_id: None,
+                target: target.clone(),
+                generation: None,
+                requested_by: target.clone().into(),
+                approver: target.clone().into(),
+                prompt: collaboration_protocol::MessageContent::HumanUser {
+                    text: MessageText::try_from(text.to_owned()).expect("prompt"),
+                },
+            })
+            .await
+            .expect("queued behind the held turn");
+        queued.push(operation_id);
+    }
+    queue.wait_started.notified().await;
+    let mut shown_before = Vec::new();
+    for operation_id in &queued {
+        shown_before.push(
+            supervisor
+                .show(ConversationOperationShowRequest {
+                    operation_id: operation_id.clone(),
+                })
+                .await
+                .expect("queued on record")
+                .queue_state,
+        );
+    }
+
+    // Act: the session's line closes; then the held turn ends.
+    queue.close_session(&target, "session closed");
+    let mut settled = Vec::new();
+    for operation_id in &queued {
+        settled.push(
+            supervisor
+                .wait(ConversationOperationWaitRequest {
+                    operation_id: operation_id.clone(),
+                    timeout_seconds: PositiveSeconds::try_from(5).expect("bound"),
+                })
+                .await,
+        );
+    }
+    std::fs::write(format!("{}.release", receipt.display()), b"").expect("release the turn");
+    let held = held.await.expect("held turn task");
+    queue.shutdown().await;
+    let prompts = recorded_requests(&receipt, "session/prompt");
+    let loads = recorded_requests(&receipt, "session/load");
+    let stopped = supervisor.shutdown().await;
+
+    // Assert: every undispatched ID, the held head included, is not sent
+    // with the reason, and nothing more reached the agent.
+    assert!(
+        shown_before
+            .iter()
+            .all(|state| state == &Some(ConversationOperationQueueState::RouterQueued)),
+        "{shown_before:?}"
+    );
+    for waited in &settled {
+        let failure = waited
+            .as_ref()
+            .err()
+            .unwrap_or_else(|| panic!("a waiting ID ends not sent: {waited:?}"));
+        assert_eq!(
+            String::from(failure.message.clone()),
+            "not sent: session closed"
+        );
+        assert_eq!(
+            failure.effect,
+            collaboration_protocol::ProviderOperationEffect::None
+        );
+    }
+    assert!(held.is_ok(), "the held turn ran to its end: {held:?}");
+    assert_eq!(prompts, 1, "no queued prompt reached the agent");
+    assert_eq!(loads, 0, "no later load reached the agent");
+    stopped.expect("supervisor shutdown without an operation-drain timeout");
+}

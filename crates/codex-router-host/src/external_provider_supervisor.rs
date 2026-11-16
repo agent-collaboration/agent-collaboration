@@ -321,7 +321,7 @@ impl ExternalProviderSupervisor {
     pub(crate) fn install_live_event_observer(
         &self,
         endpoint: &EndpointRef,
-        observer: Arc<dyn crate::provider_cache_warm::LiveSessionEventObserver>,
+        observer: Arc<dyn crate::provider_session_event_sink::LiveSessionEventObserver>,
     ) -> bool {
         self.inner.bindings.get(endpoint).is_some_and(|binding| {
             binding.runtime.install_live_event_observer(observer);

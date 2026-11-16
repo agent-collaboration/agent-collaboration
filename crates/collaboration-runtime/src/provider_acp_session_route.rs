@@ -536,18 +536,44 @@ async fn serve_provider_sessions(
                                     .await?;
                                 continue;
                             };
-                            prompts.spawn(crate::provider_acp_busy_prompt::answer_busy_prompt(
-                                crate::provider_acp_busy_prompt::BusyPrompt {
-                                    commands: Arc::clone(&route.commands),
-                                    output: router.output.clone(),
-                                    id,
+                            let commands = Arc::clone(&route.commands);
+                            let output = router.output.clone();
+                            prompts.spawn(async move {
+                                use crate::provider_acp_busy_prompt::{
+                                    BusyPrompt, BusyPromptPlacement, place_busy_prompt,
+                                };
+                                let placement = place_busy_prompt(BusyPrompt {
+                                    commands: commands.as_ref(),
                                     session,
                                     content,
                                     actor,
-                                    attachment,
-                                    observed_turn,
-                                },
-                            ));
+                                    attachment: &attachment,
+                                })
+                                .await;
+                                let frame = match placement {
+                                    BusyPromptPlacement::InTurn { turn_id } => {
+                                        stream_prompt(
+                                            output,
+                                            id,
+                                            turn_id,
+                                            attachment,
+                                            observed_turn,
+                                        )
+                                        .await;
+                                        return;
+                                    }
+                                    BusyPromptPlacement::Refused(error) => {
+                                        command_failure(id, error)
+                                    }
+                                    BusyPromptPlacement::SteerFailed { reason } => {
+                                        failure(id, -32000, &reason)
+                                    }
+                                    BusyPromptPlacement::NotSent { reason } => {
+                                        failure(id, -32000, &format!("not sent: {reason}"))
+                                    }
+                                };
+                                let _sent = output.send(frame).await;
+                            });
                             continue;
                         }
                         let attachment = route.events.attach(session.clone()).await;

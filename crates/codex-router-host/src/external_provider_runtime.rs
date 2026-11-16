@@ -238,7 +238,7 @@ impl ExternalProviderRuntime {
 
     pub(crate) fn install_live_event_observer(
         &self,
-        observer: Arc<dyn crate::provider_cache_warm::LiveSessionEventObserver>,
+        observer: Arc<dyn crate::provider_session_event_sink::LiveSessionEventObserver>,
     ) {
         if let Some(event_sink) = &self.event_sink {
             event_sink.install_live_event_observer(observer);

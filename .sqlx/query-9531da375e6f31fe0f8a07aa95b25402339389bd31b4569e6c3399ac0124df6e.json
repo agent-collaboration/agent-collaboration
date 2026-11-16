@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "UPDATE provider_operations\n             SET stage=?,effect=?,dispatched_at_ms=NULL,updated_at_ms=MAX(updated_at_ms,admitted_at_ms,?)\n             WHERE operation_id=? AND stage=?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 5
+    },
+    "nullable": []
+  },
+  "hash": "9531da375e6f31fe0f8a07aa95b25402339389bd31b4569e6c3399ac0124df6e"
+}

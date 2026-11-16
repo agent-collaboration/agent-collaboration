@@ -70,9 +70,7 @@ impl ProviderAcpDeliveryRoute {
         session: &SessionRef,
         input_id: &session_event_model::InputId,
     ) -> Result<(), crate::ProviderQueueCancellationError> {
-        self.supervisor
-            .queued_operation_registry()
-            .cancel(session, input_id)
+        self.queue.cancel_queued(session, input_id)
     }
 
     #[must_use]

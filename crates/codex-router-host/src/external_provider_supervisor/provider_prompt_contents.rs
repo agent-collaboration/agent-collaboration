@@ -212,6 +212,14 @@ impl ExternalProviderSupervisor {
                 acp_client_runtime::ProviderDispatchRefusal::Busy,
             ))) if request.busy == PromptBusyPolicy::SteerOrQueue => {
                 self.forget_turn_approver(&request.operation_id);
+                // Nothing was sent: the row waits again rather than stay Unknown.
+                if let Err(undo) = self
+                    .undo_dispatch_mark(&request.operation_id, &target)
+                    .await
+                {
+                    self.spawn_operation(request.operation_id, live, complete(submitted));
+                    return AdmittedPromptDispatch::Done(Box::new(Err(undo)));
+                }
                 return AdmittedPromptDispatch::TurnRunning { live };
             }
             Ok(Ok(acp_client_runtime::ProviderPromptDispatchObservation::Refused(reason))) => Err(

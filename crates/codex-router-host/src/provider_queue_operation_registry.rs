@@ -136,18 +136,20 @@ impl ProviderQueueOperationRegistry {
             .collect()
     }
 
+    /// Cancels a waiting entry; returns its operation ID. An entry already
+    /// started can't be cancelled, so a cancel and a dispatch never both win.
     pub(crate) fn cancel(
         &self,
         target: &SessionRef,
         input_id: &session_event_model::InputId,
-    ) -> Result<(), ProviderQueueCancellationError> {
+    ) -> Result<OperationId, ProviderQueueCancellationError> {
         let mut operations = self
             .operations
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        let operation = operations
-            .values_mut()
-            .find(|operation| &operation.target == target && &operation.input_id == input_id)
+        let (operation_id, operation) = operations
+            .iter_mut()
+            .find(|(_, operation)| &operation.target == target && &operation.input_id == input_id)
             .ok_or(ProviderQueueCancellationError::NotQueued)?;
         if operation.started || operation.state != ConversationOperationQueueState::RouterQueued {
             return Err(ProviderQueueCancellationError::NotQueued);
@@ -156,7 +158,7 @@ impl ProviderQueueOperationRegistry {
             reason: "queueCancelled".into(),
         };
         operation.terminal_at_ms = Some(now_ms());
-        Ok(())
+        Ok(operation_id.clone())
     }
 
     pub(crate) fn try_start(&self, operation_id: &OperationId) -> bool {

@@ -8,7 +8,6 @@ use std::{
     },
 };
 
-use crate::provider_cache_warm::LiveSessionEventObserver;
 use acp_client_runtime::{
     EventSinkClosed, HistoryReplayFuture, HistoryReplayUnavailable, SessionEventSink,
 };
@@ -19,6 +18,12 @@ use tokio::{
     sync::{Mutex, mpsc, oneshot},
     task::JoinHandle,
 };
+
+/// Called once for every live event published for a session, in order.
+/// Replayed history is not passed on.
+pub(crate) trait LiveSessionEventObserver: Send + Sync + 'static {
+    fn observe_live_event(&self, session_id: &str, event: &SessionEvent);
+}
 
 enum HubCommand {
     SkillView {

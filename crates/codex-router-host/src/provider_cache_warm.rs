@@ -11,6 +11,7 @@ mod supervisor_submitter;
 
 pub(crate) use supervisor_submitter::SupervisorWarmPromptSubmitter;
 
+use crate::provider_session_event_sink::LiveSessionEventObserver;
 use crate::provider_settings_section::CacheWarmSetting;
 use collaboration_protocol::{EndpointRef, ProviderKind, SessionId, SessionRef};
 use router_clock::{ClockInstant, RuntimeClock};
@@ -27,12 +28,6 @@ use tokio_util::sync::CancellationToken;
 
 /// The text of every warm prompt.
 pub(crate) const WARM_PROMPT_TEXT: &str = "Cache warm: reply ok";
-
-/// Called once for every live event published for a session, in order.
-/// Replayed history is not passed on.
-pub(crate) trait LiveSessionEventObserver: Send + Sync + 'static {
-    fn observe_live_event(&self, session_id: &str, event: &SessionEvent);
-}
 
 /// The warm prompt was not sent: the session is busy, held, uncertain or gone.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

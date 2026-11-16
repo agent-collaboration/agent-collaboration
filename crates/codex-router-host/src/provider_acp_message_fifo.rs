@@ -133,6 +133,14 @@ pub(crate) struct ProviderAcpMessageFifo {
     store: Arc<Mutex<ProviderOperationStore>>,
     ownership: Arc<dyn LiveSessionOwnershipCheck>,
     senders: StdMutex<HashMap<SessionRef, SessionLine>>,
+    /// The admitted API entries in a line, so a queue cancel settles its
+    /// waiter at once (D1 R14). Dropped once dispatched or settled.
+    admitted_waiting: StdMutex<
+        HashMap<
+            collaboration_protocol::OperationId,
+            crate::external_provider_supervisor::AdmittedApiPrompt,
+        >,
+    >,
     workers: StdMutex<Vec<JoinHandle<()>>>,
     shutdown: CancellationToken,
 }
@@ -150,6 +158,7 @@ impl ProviderAcpMessageFifo {
             store,
             ownership,
             senders: StdMutex::new(HashMap::new()),
+            admitted_waiting: StdMutex::new(HashMap::new()),
             workers: StdMutex::new(Vec::new()),
             shutdown: CancellationToken::new(),
         }
@@ -228,12 +237,48 @@ impl ProviderAcpMessageFifo {
                 request.input_id.clone(),
                 &contents,
             );
+        {
+            let mut waiting = self
+                .admitted_waiting
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            waiting.retain(|_, entry| !entry.is_settled());
+            waiting.insert(request.operation_id.clone(), admitted.clone());
+        }
         permit.send(ProviderQueuedPrompt::Contents {
             request,
             load_policy: LoadPolicy::MayLoad,
             admitted: Some(admitted),
         });
         Ok(queued)
+    }
+
+    /// Cancels a waiting entry. An admitted API prompt ends not sent at once,
+    /// through its one completion owner, so its waiter wakes now rather than
+    /// when the worker reaches it.
+    pub(crate) fn cancel_queued(
+        &self,
+        target: &SessionRef,
+        input_id: &session_event_model::InputId,
+    ) -> Result<(), crate::ProviderQueueCancellationError> {
+        let operation_id = self
+            .supervisor
+            .queued_operation_registry()
+            .cancel(target, input_id)?;
+        let admitted = self
+            .admitted_waiting
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&operation_id);
+        if let Some(admitted) = admitted {
+            self.supervisor.complete_unsent_api_entry(
+                &admitted,
+                &operation_id,
+                target,
+                "cancelled from the queue",
+            );
+        }
+        Ok(())
     }
 
     /// The session closed: every entry not yet dispatched, the held head

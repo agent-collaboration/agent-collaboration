@@ -28,6 +28,11 @@ impl AdmittedApiPrompt {
         }
     }
 
+    /// Whether this operation was already dispatched or settled.
+    pub(crate) fn is_settled(&self) -> bool {
+        self.settled.load(Ordering::SeqCst)
+    }
+
     /// Claims the right to settle this operation; false if it was claimed.
     fn claim(&self) -> bool {
         !self.settled.swap(true, Ordering::SeqCst)

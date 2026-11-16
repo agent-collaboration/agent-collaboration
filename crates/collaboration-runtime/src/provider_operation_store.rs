@@ -368,6 +368,33 @@ impl ProviderOperationStore {
         .await
     }
 
+    /// Returns a row marked for dispatch to Admitted with no effect when the
+    /// send was refused before anything reached the agent: a steer the agent
+    /// answered promptRequired, or a prompt the runtime refused because a
+    /// turn was running (D1 R12, R14). Never for a send that may have left.
+    pub async fn unmark_undispatched(
+        &mut self,
+        operation_id: &OperationId,
+        updated_at_ms: i64,
+    ) -> Result<ProviderOperationRecord, ProviderOperationStoreError> {
+        let result = sqlx::query!(
+            "UPDATE provider_operations
+             SET stage=?,effect=?,dispatched_at_ms=NULL,updated_at_ms=MAX(updated_at_ms,admitted_at_ms,?)
+             WHERE operation_id=? AND stage=?",
+             encode_enum(ProviderOperationStage::Admitted)?,
+             encode_enum(ProviderOperationEffect::None)?, updated_at_ms,
+             operation_id.as_str(), encode_enum(ProviderOperationStage::MayHaveDispatched)?,
+        )
+        .execute_as_transaction(self)
+        .await?;
+        self.transition_result(operation_id, result.rows_affected(), |record| {
+            record.stage == ProviderOperationStage::Admitted
+                && record.effect == ProviderOperationEffect::None
+                && record.dispatched_at_ms.is_none()
+        })
+        .await
+    }
+
     pub async fn record_target(
         &mut self,
         operation_id: &OperationId,

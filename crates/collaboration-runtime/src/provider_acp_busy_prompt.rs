@@ -3,29 +3,38 @@
 //! steered into the running turn, or queued when the agent can't steer, and
 //! never refused as busy. Races are bounded to one retry each; a second
 //! contention queues, and an unknown steer outcome is never re-sent.
+//!
+//! This module only decides where the message went; the session route owns
+//! the ACP frames and streams the turn.
 
-use crate::provider_acp_event_projection::stream_prompt;
-use crate::provider_acp_session_route::{command_failure, failure};
 use collaboration_contracts::{
     CommandFailure, PromptSessionCommand, QueueInputCommand, QueuedInputOutcome,
     SessionCommandPort, SessionEventAttachment, SessionSteerOutcome, SteerSessionCommand,
 };
 use message_board::{Identity, SessionRef};
-use serde_json::Value;
 use session_event_model::{InputId, PromptContent, ProviderSubmission, SessionEvent};
-use std::sync::Arc;
-use tokio::sync::watch;
 
 /// A prompt that found its session in a turn.
-pub(crate) struct BusyPrompt {
-    pub(crate) commands: Arc<dyn SessionCommandPort>,
-    pub(crate) output: codex_acp_adapter::AcpOutputSender,
-    pub(crate) id: Value,
+pub(crate) struct BusyPrompt<'a> {
+    pub(crate) commands: &'a dyn SessionCommandPort,
     pub(crate) session: SessionRef,
     pub(crate) content: Vec<PromptContent>,
     pub(crate) actor: Identity,
-    pub(crate) attachment: SessionEventAttachment,
-    pub(crate) observed_turn: watch::Receiver<Option<String>>,
+    pub(crate) attachment: &'a SessionEventAttachment,
+}
+
+/// Where a busy prompt's message went.
+#[derive(Debug)]
+pub(crate) enum BusyPromptPlacement {
+    /// The message is part of this turn: steered into it, started by it, or
+    /// taken from the session's line by it. Its answer is that turn's.
+    InTurn { turn_id: String },
+    /// The command was refused.
+    Refused(CommandFailure),
+    /// The agent took the steer but reported it failed.
+    SteerFailed { reason: String },
+    /// It waited in the line and never ran.
+    NotSent { reason: String },
 }
 
 /// The turn running in a session, from its event snapshot.
@@ -47,20 +56,18 @@ enum Next {
     Queue,
 }
 
-/// Answers the prompt when the turn that takes its message ends.
-pub(crate) async fn answer_busy_prompt(prompt: BusyPrompt) {
+/// Steers, prompts or queues the message, and says where it went once the
+/// turn that takes it has started.
+pub(crate) async fn place_busy_prompt(prompt: BusyPrompt<'_>) -> BusyPromptPlacement {
     let BusyPrompt {
         commands,
-        output,
-        id,
         session,
         content,
         actor,
         attachment,
-        observed_turn,
     } = prompt;
     let submission = ProviderSubmission::plain(content);
-    let mut next = match running_turn(&attachment) {
+    let mut next = match running_turn(attachment) {
         Some(turn_id) => Next::Steer(turn_id),
         None => Next::Prompt,
     };
@@ -81,29 +88,22 @@ pub(crate) async fn answer_busy_prompt(prompt: BusyPrompt) {
                 Ok(
                     SessionSteerOutcome::Injected { turn_id }
                     | SessionSteerOutcome::StartedNewTurn { turn_id },
-                ) => {
-                    stream_prompt(output, id, turn_id, attachment, observed_turn).await;
-                    return;
-                }
+                ) => return BusyPromptPlacement::InTurn { turn_id },
                 // The turn ended before the steer; nothing was injected.
                 Ok(SessionSteerOutcome::PromptRequired) => Next::Prompt,
                 Ok(SessionSteerOutcome::Failed { reason }) => {
-                    let _sent = output.send(failure(id, -32000, &reason)).await;
-                    return;
+                    return BusyPromptPlacement::SteerFailed { reason };
                 }
                 Err(CommandFailure::Unsupported | CommandFailure::UnsupportedOperation { .. }) => {
                     Next::Queue
                 }
                 // The expected turn changed: look once more.
-                Err(CommandFailure::Busy) if !last => match running_turn(&attachment) {
+                Err(CommandFailure::Busy) if !last => match running_turn(attachment) {
                     Some(turn_id) => Next::Steer(turn_id),
                     None => Next::Prompt,
                 },
                 Err(CommandFailure::Busy) => Next::Queue,
-                Err(error) => {
-                    let _sent = output.send(command_failure(id, error)).await;
-                    return;
-                }
+                Err(error) => return BusyPromptPlacement::Refused(error),
             },
             Next::Prompt => match commands
                 .prompt(PromptSessionCommand {
@@ -115,50 +115,30 @@ pub(crate) async fn answer_busy_prompt(prompt: BusyPrompt) {
                 .await
             {
                 Ok(turn) => {
-                    stream_prompt(output, id, turn.turn_id, attachment, observed_turn).await;
-                    return;
+                    return BusyPromptPlacement::InTurn {
+                        turn_id: turn.turn_id,
+                    };
                 }
                 // A turn started first: steer or queue it once.
-                Err(CommandFailure::Busy) if !last => match running_turn(&attachment) {
+                Err(CommandFailure::Busy) if !last => match running_turn(attachment) {
                     Some(turn_id) => Next::Steer(turn_id),
                     None => Next::Queue,
                 },
                 Err(CommandFailure::Busy) => Next::Queue,
-                Err(error) => {
-                    let _sent = output.send(command_failure(id, error)).await;
-                    return;
-                }
+                Err(error) => return BusyPromptPlacement::Refused(error),
             },
             Next::Queue => break,
         };
     }
-    queue_and_answer(
-        commands,
-        output,
-        id,
-        session,
-        submission,
-        actor,
-        attachment,
-        observed_turn,
-    )
-    .await;
+    queue(commands, session, submission, actor).await
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "The queued prompt keeps every piece of its ACP request until it answers."
-)]
-async fn queue_and_answer(
-    commands: Arc<dyn SessionCommandPort>,
-    output: codex_acp_adapter::AcpOutputSender,
-    id: Value,
+async fn queue(
+    commands: &dyn SessionCommandPort,
     session: SessionRef,
     submission: ProviderSubmission,
     actor: Identity,
-    attachment: SessionEventAttachment,
-    observed_turn: watch::Receiver<Option<String>>,
-) {
+) -> BusyPromptPlacement {
     let queued = match commands
         .queue_add(QueueInputCommand {
             target: session.clone(),
@@ -168,29 +148,17 @@ async fn queue_and_answer(
         .await
     {
         Ok(queued) => queued,
-        Err(error) => {
-            let _sent = output.send(command_failure(id, error)).await;
-            return;
-        }
+        Err(error) => return BusyPromptPlacement::Refused(error),
     };
-    // queue_contents assigns the input ID; stream by the one it returned.
+    // queue_contents assigns the input ID; follow the one it returned.
     let Ok(input_id) = InputId::try_from(queued.input_id) else {
-        let _sent = output
-            .send(failure(id, -32000, "queued input has an invalid ID"))
-            .await;
-        return;
+        return BusyPromptPlacement::NotSent {
+            reason: "queued input has an invalid ID".to_owned(),
+        };
     };
     match commands.queue_outcome(session, input_id).await {
-        Ok(QueuedInputOutcome::Started { turn_id }) => {
-            stream_prompt(output, id, turn_id, attachment, observed_turn).await;
-        }
-        Ok(QueuedInputOutcome::NotSent { reason }) => {
-            let _sent = output
-                .send(failure(id, -32000, &format!("not sent: {reason}")))
-                .await;
-        }
-        Err(error) => {
-            let _sent = output.send(command_failure(id, error)).await;
-        }
+        Ok(QueuedInputOutcome::Started { turn_id }) => BusyPromptPlacement::InTurn { turn_id },
+        Ok(QueuedInputOutcome::NotSent { reason }) => BusyPromptPlacement::NotSent { reason },
+        Err(error) => BusyPromptPlacement::Refused(error),
     }
 }

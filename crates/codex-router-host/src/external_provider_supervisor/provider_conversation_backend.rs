@@ -430,6 +430,17 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                     unavailable_failure(request.operation_id.clone(), Some(target.clone()))
                 })?
             {
+                // A reused ID must name the same kind and session (D1 R15).
+                if !super::provider_operation_admission::same_request(
+                    &record,
+                    ProviderOperationKind::ConversationCancel,
+                    Some(&target),
+                ) {
+                    return Err(super::provider_operation_admission::reused_id_failure(
+                        request.operation_id,
+                        Some(target),
+                    ));
+                }
                 return Ok(existing_submission(snapshot_from_record(record).map_err(
                     |message| snapshot_failure(request.operation_id, message),
                 )?));
