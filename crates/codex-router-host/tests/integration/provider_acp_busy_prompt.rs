@@ -1,12 +1,18 @@
 //! The Router's ACP socket through the real Host (D1 R12, V22): a
 //! `session/prompt` for a session that is in a turn is never refused as busy.
 //! With an agent that cannot steer it waits in the session's line, and its
-//! response arrives when the turn it started ends.
+//! response arrives when the turn it started ends. `steering_placements` and
+//! `queued_placements` cover the steering and non-steering agents' other
+//! placements and not-sent endings through the same Host path.
 
 #![expect(
     clippy::expect_used,
     reason = "A Host or fixture that cannot start or answer must fail its test."
 )]
+
+mod acp_busy_host;
+mod queued_placements;
+mod steering_placements;
 
 use codex_router_host::{
     CollaborationRuntime, CollaborationRuntimeInputs, ExternalProviderLaunchBinding,

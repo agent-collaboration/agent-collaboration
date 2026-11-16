@@ -1,3 +1,5 @@
+#[path = "tests/deferred_uncertainty_admission_test.rs"]
+mod deferred_uncertainty_admission_tests;
 #[path = "tests/uncertainty_admission_test.rs"]
 mod uncertainty_admission_tests;
 use super::*;

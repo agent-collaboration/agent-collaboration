@@ -15,6 +15,8 @@ use tokio_util::sync::CancellationToken;
 struct BusyScript {
     steer: Option<Result<SessionSteerOutcome, CommandFailure>>,
     prompt: Option<Result<SessionTurnHandle, CommandFailure>>,
+    /// The answer to a second prompt, once the first answer is taken.
+    second_prompt: Option<Result<SessionTurnHandle, CommandFailure>>,
     queue_add: Option<Result<QueuedSessionInput, CommandFailure>>,
     queue_outcome: Option<Result<QueuedInputOutcome, CommandFailure>>,
 }
@@ -99,7 +101,10 @@ impl SessionCommandPort for RecordingSessionBackend {
     }
     fn prompt(&self, _: PromptSessionCommand) -> CommandFuture<'_, SessionTurnHandle> {
         self.calls.lock().expect("test lock").prompts += 1;
-        let answer = self.script.lock().expect("test lock").prompt.take();
+        let answer = {
+            let mut script = self.script.lock().expect("test lock");
+            script.prompt.take().or_else(|| script.second_prompt.take())
+        };
         Box::pin(async { answer.unwrap_or(Err(CommandFailure::Unsupported)) })
     }
     fn compact(&self, _: SessionTargetCommand) -> CommandFuture<'_, SessionTurnHandle> {
@@ -278,13 +283,24 @@ impl BusyRouteHarness {
         running_turn: &str,
         script: BusyScript,
     ) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::start_in_state(Some(running_turn), script).await
+    }
+
+    /// The same harness on a session the hub reports idle.
+    async fn start_idle(script: BusyScript) -> Result<Self, Box<dyn std::error::Error>> {
+        Self::start_in_state(None, script).await
+    }
+
+    async fn start_in_state(
+        running_turn: Option<&str>,
+        script: BusyScript,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let directory = tempfile::tempdir()?;
         let endpoint: SessionEndpointRef = serde_json::from_value(json!({
             "serviceId":"0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89",
             "endpointId":"claude-local"
         }))?;
-        let backend =
-            RecordingSessionBackend::with_script(endpoint.clone(), Some(running_turn), script)?;
+        let backend = RecordingSessionBackend::with_script(endpoint.clone(), running_turn, script)?;
         let closed = CancellationToken::new();
         let (frames, frame_receiver) = bounded_acp_output(closed.clone());
         let (output_sender, replies) = bounded_acp_output(closed.clone());
@@ -541,5 +557,50 @@ async fn queued_prompt_not_sent_answers_with_the_reason() -> Result<(), Box<dyn 
     assert!(message.contains("not sent: session closed"), "{reply}");
     let cancels = harness.backend.calls.lock().expect("test lock").cancels;
     assert_eq!(cancels, 0);
+    harness.stop().await
+}
+
+/// Oracle: D1 R12, "no Busy" — the hub read the session idle, but a turn
+/// started before the prompt landed, so the agent answered busy. The prompt is
+/// placed as a busy one (here: its one retry meets the turn again, so it
+/// queues) and answers when the turn its queued input started ends; it is never
+/// refused as busy.
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
+async fn idle_prompt_that_meets_a_new_turn_is_placed_never_busy()
+-> Result<(), Box<dyn std::error::Error>> {
+    // Arrange: an idle session whose prompts meet a running turn twice.
+    let mut harness = BusyRouteHarness::start_idle(BusyScript {
+        prompt: Some(Err(CommandFailure::Busy)),
+        second_prompt: Some(Err(CommandFailure::Busy)),
+        queue_add: Some(Ok(queued_input())),
+        queue_outcome: Some(Ok(QueuedInputOutcome::Started {
+            turn_id: "t2".into(),
+        })),
+        ..BusyScript::default()
+    })
+    .await?;
+
+    // Act
+    harness.send_prompt(2).await?;
+    harness
+        .until_recorded(|calls| calls.queue_outcomes > 0)
+        .await?;
+    harness.backend.publish_turn_ended("t2");
+    let reply = harness.reply_for(&json!(2)).await?;
+
+    // Assert: never busy; queued once after the race, answered at t2's end.
+    assert!(
+        reply.get("error").is_none(),
+        "never refused as busy: {reply}"
+    );
+    assert_eq!(reply["result"]["stopReason"], "end_turn", "{reply}");
+    {
+        let calls = harness.backend.calls.lock().expect("test lock");
+        assert_eq!((calls.prompts, calls.queue_adds, calls.cancels), (2, 1, 0));
+    }
     harness.stop().await
 }

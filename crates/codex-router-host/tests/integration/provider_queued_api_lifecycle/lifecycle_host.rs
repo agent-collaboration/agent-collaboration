@@ -48,8 +48,24 @@ pub(super) const CURSOR_ENDPOINT: &str = "cursor-local";
 pub(super) type PromptCall =
     JoinHandle<Result<ConversationOperationResult, ConversationClientError>>;
 
+/// Where a Host keeps its state: a root this test owns, or one a parent test
+/// owns and hands to a relaunched child.
+pub(super) enum HostRoot {
+    Owned(tempfile::TempDir),
+    Borrowed(PathBuf),
+}
+
+impl HostRoot {
+    pub(super) fn path(&self) -> &Path {
+        match self {
+            Self::Owned(root) => root.path(),
+            Self::Borrowed(root) => root,
+        }
+    }
+}
+
 pub(super) struct LifecycleHost {
-    pub(super) root: tempfile::TempDir,
+    pub(super) root: HostRoot,
     pub(super) runtime: CollaborationRuntime,
     pub(super) client: CollaborationClient,
     pub(super) endpoint: EndpointRef,
@@ -97,7 +113,16 @@ impl LifecycleHost {
     /// Starts a Host on `root`, which may hold an earlier Host's state.
     pub(super) async fn start_in(
         root: tempfile::TempDir,
+        binding: ExternalProviderLaunchBinding,
+    ) -> Self {
+        Self::start_on(HostRoot::Owned(root), binding, CURSOR_ENDPOINT).await
+    }
+
+    /// Starts a Host on `root` serving the provider endpoint `endpoint_id`.
+    pub(super) async fn start_on(
+        root: HostRoot,
         mut binding: ExternalProviderLaunchBinding,
+        endpoint_id: &str,
     ) -> Self {
         if let Err(error) =
             codex_router_test_support::global_claude_fixture::declare_global_claude_fixture(
@@ -132,8 +157,8 @@ impl LifecycleHost {
             .unwrap_or_else(|error| panic!("endpoint inventory: {error}"))
             .endpoints
             .into_iter()
-            .find(|endpoint| String::from(endpoint.endpoint.endpoint_id.clone()) == CURSOR_ENDPOINT)
-            .unwrap_or_else(|| panic!("the Cursor endpoint is listed"))
+            .find(|endpoint| String::from(endpoint.endpoint.endpoint_id.clone()) == endpoint_id)
+            .unwrap_or_else(|| panic!("the {endpoint_id} endpoint is listed"))
             .endpoint;
         Self {
             root,
@@ -146,7 +171,13 @@ impl LifecycleHost {
     /// Stops the Host gracefully and hands back its root for a restart.
     pub(super) async fn stop(self) -> (tempfile::TempDir, std::io::Result<()>) {
         let stopped = self.runtime.shutdown().await;
-        (self.root, stopped)
+        match self.root {
+            HostRoot::Owned(root) => (root, stopped),
+            HostRoot::Borrowed(root) => panic!(
+                "a borrowed root {} is not this test's to stop and return",
+                root.display()
+            ),
+        }
     }
 
     pub(super) async fn create(&self, approver: &ProviderIdentity) -> SessionRef {

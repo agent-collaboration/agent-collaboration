@@ -5,6 +5,7 @@
 //! records every request the agent received.
 
 mod lifecycle_host;
+mod restart_stages;
 
 use collaboration_client::{
     ConversationOperationResult, ConversationSettlementDetail, ProviderPromptOutput,
@@ -311,76 +312,6 @@ async fn close_during_a_running_turn_is_refused() {
         "once the line has drained a close succeeds: {closed:?}"
     );
     stopped.expect("Host shutdown");
-}
-
-/// Oracle: D1 spec R14 and V27 — "after a Host restart on the same root, the
-/// queued API prompt shows admitted, never dispatched, and a same-ID retry
-/// returns it without sending"; the graceful shutdown before dispatch
-/// completes without an operation-drain timeout.
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn queued_api_prompt_after_restart_shows_admitted_never_sent() {
-    // Arrange: a held turn and one queued prompt, then a graceful restart.
-    let staging = tempfile::tempdir().expect("receipt folder");
-    let receipt = staging.path().join("wire.json");
-    let host = LifecycleHost::start(cursor_reactive(&receipt, &["hold-first-prompt"])).await;
-    let owner = human("restart-owner");
-    let target = host.create(&owner).await;
-    let _held = host.spawn_prompt(
-        &target,
-        &owner,
-        OperationId::generate(),
-        "first",
-        SHORT_WAIT,
-    );
-    until_recorded(&receipt, "session/prompt", 1).await;
-    let queued = host
-        .queue_in_order(&target, &owner, &["queued".to_owned()])
-        .await;
-    let queued = queued.first().expect("one queued prompt").clone();
-    let (root, stopped) = host.stop().await;
-    let prompts_before_restart = prompt_texts(&receipt);
-    let restarted_receipt = staging.path().join("restarted.json");
-    let host = LifecycleHost::start_in(root, cursor_reactive(&restarted_receipt, &[])).await;
-
-    // Act: show it, load the session so a send would reach the agent, retry it.
-    let shown = host.show(&queued).await;
-    let loaded = host.load(&target, &owner).await;
-    let retry = host
-        .prompt(&target, &owner, queued.clone(), "queued", SHORT_WAIT)
-        .await;
-    let prompts_after_restart = recorded(&restarted_receipt, "session/prompt");
-    let loads_after_restart = recorded(&restarted_receipt, "session/load");
-    let (_root, restarted_stopped) = host.stop().await;
-
-    // Assert
-    stopped.expect("the shutdown before dispatch has no operation-drain timeout");
-    assert!(
-        loaded.is_ok(),
-        "the cold Host loads the session: {loaded:?}"
-    );
-    assert_eq!(loads_after_restart, 1, "the agent has the session loaded");
-    let shown = shown.expect("the queued prompt is on record after restart");
-    assert_eq!(
-        shown.effect,
-        ProviderOperationEffect::None,
-        "never dispatched: {shown:?}"
-    );
-    assert_ne!(
-        shown.stage,
-        ProviderOperationStage::MayHaveDispatched,
-        "{shown:?}"
-    );
-    assert_eq!(prompts_before_restart, vec!["first".to_owned()]);
-    let retry_failure = match &retry {
-        Err(collaboration_client::ConversationClientError::Client(error)) => {
-            conversation_failure(error)
-        }
-        other => panic!("a same-ID retry returns the unsent operation: {other:?}"),
-    };
-    assert_eq!(retry_failure.operation_id, Some(queued));
-    assert_eq!(retry_failure.effect, ProviderOperationEffect::None);
-    assert_eq!(prompts_after_restart, 0, "a same-ID retry sends nothing");
-    restarted_stopped.expect("restarted Host shutdown");
 }
 
 /// Oracle: D1 spec R14 and V27 — "the steered input is found as applied after

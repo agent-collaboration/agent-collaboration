@@ -136,6 +136,53 @@ pub(crate) fn command_failure(id: Value, error: CommandFailure) -> Value {
     failure(id, code, &error.to_string())
 }
 
+/// A `session/prompt` to place in a session that is, or just became, busy.
+struct PlacedPrompt {
+    commands: Arc<dyn SessionCommandPort>,
+    output: codex_acp_adapter::AcpOutputSender,
+    id: Value,
+    session: SessionRef,
+    content: Vec<session_event_model::PromptContent>,
+    actor: Identity,
+    attachment: collaboration_contracts::SessionEventAttachment,
+    observed_turn: tokio::sync::watch::Receiver<Option<String>>,
+}
+
+/// Steers or queues the prompt, then answers when the turn that took it ends.
+async fn answer_by_placement(prompt: PlacedPrompt) {
+    use crate::provider_acp_busy_prompt::{BusyPrompt, BusyPromptPlacement, place_busy_prompt};
+    let PlacedPrompt {
+        commands,
+        output,
+        id,
+        session,
+        content,
+        actor,
+        attachment,
+        observed_turn,
+    } = prompt;
+    let placement = place_busy_prompt(BusyPrompt {
+        commands: commands.as_ref(),
+        session,
+        content,
+        actor,
+        attachment: &attachment,
+    })
+    .await;
+    let frame = match placement {
+        BusyPromptPlacement::InTurn { turn_id } => {
+            stream_prompt(output, id, turn_id, attachment, observed_turn).await;
+            return;
+        }
+        BusyPromptPlacement::Refused(error) => command_failure(id, error),
+        BusyPromptPlacement::SteerFailed { reason } => failure(id, -32000, &reason),
+        BusyPromptPlacement::NotSent { reason } => {
+            failure(id, -32000, &format!("not sent: {reason}"))
+        }
+    };
+    let _sent = output.send(frame).await;
+}
+
 fn named_session(params: &Value, endpoint: &SessionEndpointRef) -> Result<SessionRef, ()> {
     if let Some(reference) = params.pointer("/_meta/router/sessionRef") {
         let session: SessionRef = serde_json::from_value(reference.clone()).map_err(|_| ())?;
@@ -536,44 +583,16 @@ async fn serve_provider_sessions(
                                     .await?;
                                 continue;
                             };
-                            let commands = Arc::clone(&route.commands);
-                            let output = router.output.clone();
-                            prompts.spawn(async move {
-                                use crate::provider_acp_busy_prompt::{
-                                    BusyPrompt, BusyPromptPlacement, place_busy_prompt,
-                                };
-                                let placement = place_busy_prompt(BusyPrompt {
-                                    commands: commands.as_ref(),
-                                    session,
-                                    content,
-                                    actor,
-                                    attachment: &attachment,
-                                })
-                                .await;
-                                let frame = match placement {
-                                    BusyPromptPlacement::InTurn { turn_id } => {
-                                        stream_prompt(
-                                            output,
-                                            id,
-                                            turn_id,
-                                            attachment,
-                                            observed_turn,
-                                        )
-                                        .await;
-                                        return;
-                                    }
-                                    BusyPromptPlacement::Refused(error) => {
-                                        command_failure(id, error)
-                                    }
-                                    BusyPromptPlacement::SteerFailed { reason } => {
-                                        failure(id, -32000, &reason)
-                                    }
-                                    BusyPromptPlacement::NotSent { reason } => {
-                                        failure(id, -32000, &format!("not sent: {reason}"))
-                                    }
-                                };
-                                let _sent = output.send(frame).await;
-                            });
+                            prompts.spawn(answer_by_placement(PlacedPrompt {
+                                commands: Arc::clone(&route.commands),
+                                output: router.output.clone(),
+                                id,
+                                session,
+                                content,
+                                actor,
+                                attachment,
+                                observed_turn,
+                            }));
                             continue;
                         }
                         let attachment = route.events.attach(session.clone()).await;
@@ -593,11 +612,35 @@ async fn serve_provider_sessions(
                                     target: session.clone(),
                                     input_id: session_event_model::InputId::generate(),
                                     submission: session_event_model::ProviderSubmission::plain(
-                                        content,
+                                        content.clone(),
                                     ),
-                                    actor,
+                                    actor: actor.clone(),
                                 };
                                 match route.commands.prompt(command).await {
+                                    // A turn started after the idle read: place it as a
+                                    // busy prompt, never refuse it as busy (D1 R12).
+                                    Err(CommandFailure::Busy) => {
+                                        let Ok(attachment) =
+                                            route.events.attach(session.clone()).await
+                                        else {
+                                            router
+                                                .output
+                                                .send(failure(id, -32002, "Session not found"))
+                                                .await?;
+                                            continue;
+                                        };
+                                        prompts.spawn(answer_by_placement(PlacedPrompt {
+                                            commands: Arc::clone(&route.commands),
+                                            output: router.output.clone(),
+                                            id,
+                                            session,
+                                            content,
+                                            actor,
+                                            attachment,
+                                            observed_turn,
+                                        }));
+                                        continue;
+                                    }
                                     Err(error) => command_failure(id, error),
                                     Ok(turn) => {
                                         let output = router.output.clone();

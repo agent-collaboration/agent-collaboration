@@ -24,6 +24,19 @@ Runtime replacement cases hold a real status probe across an app-server schema
 change and require one Unavailable terminal for each cancelled operator request.
 Library unit tests remain colocated with their implementations.
 
+The D1 send roots drive a real Host through the real client and API with ACP
+fixtures whose receipts record every frame the agent read:
+`provider_send_behaviour` (one send behaviour, and mail and CLI agreeing),
+`provider_send_races` (forced idle-read, steer and recheck races),
+`provider_send_approvers` (who approves a steered or queued message, and
+unknown earlier outcomes refusing a send), `provider_queued_api_lifecycle` (the
+line's bound, refusals, close, cancel, provider stop, retention, and in
+`restart_stages` the clean-shutdown and hard-stop restart stages, the latter
+through a relaunched child), `provider_acp_busy_prompt` (the Router's ACP socket
+steering, queueing and not-sent answers) and `provider_cache_warm` (Claude's
+idle cache warm on the Host's injected clock). Each is bounded by the runner
+(`.config/nextest.toml`), never by a clock in test code.
+
 The aggregate declares shared helper implementations once. Other directories
 retain case expansions and fixture data. Externally consumed service helpers
 keep their existing source owner; Host cases import the shared nested modules.

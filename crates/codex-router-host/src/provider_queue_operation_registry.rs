@@ -158,6 +158,8 @@ impl ProviderQueueOperationRegistry {
             reason: "queueCancelled".into(),
         };
         operation.terminal_at_ms = Some(now_ms());
+        // A caller waiting on this input's outcome learns it was not sent now.
+        self.changed.notify_waiters();
         Ok(operation_id.clone())
     }
 

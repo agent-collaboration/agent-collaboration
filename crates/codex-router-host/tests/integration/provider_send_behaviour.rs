@@ -32,17 +32,17 @@ use tokio_util::sync::CancellationToken;
 use crate::provider_conversation_submission::submit_provider_create;
 
 /// How long a prompt call waits before answering with what it knows.
-const SHORT_WAIT: Duration = Duration::from_secs(1);
+pub(crate) const SHORT_WAIT: Duration = Duration::from_secs(1);
 
-struct ComposedHost {
-    root: tempfile::TempDir,
-    runtime: CollaborationRuntime,
-    client: CollaborationClient,
-    endpoint: EndpointRef,
+pub(crate) struct ComposedHost {
+    pub(crate) root: tempfile::TempDir,
+    pub(crate) runtime: CollaborationRuntime,
+    pub(crate) client: CollaborationClient,
+    pub(crate) endpoint: EndpointRef,
 }
 
 impl ComposedHost {
-    async fn start(binding: ExternalProviderLaunchBinding, endpoint_id: &str) -> Self {
+    pub(crate) async fn start(binding: ExternalProviderLaunchBinding, endpoint_id: &str) -> Self {
         let root = tempfile::tempdir().expect("runtime root");
         std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
             .expect("private runtime root");
@@ -95,11 +95,11 @@ impl ComposedHost {
         }
     }
 
-    fn human(id: &str) -> ProviderIdentity {
+    pub(crate) fn human(id: &str) -> ProviderIdentity {
         serde_json::from_value(serde_json::json!({"kind":"human","humanId":id})).expect("human")
     }
 
-    async fn create(&self, approver: &ProviderIdentity) -> SessionRef {
+    pub(crate) async fn create(&self, approver: &ProviderIdentity) -> SessionRef {
         let operation_id = OperationId::generate();
         submit_provider_create(
             &self.client,
@@ -196,7 +196,7 @@ impl ComposedHost {
 }
 
 /// Every ACP request the fixture recorded with `method`.
-fn recorded(receipt: &Path, method: &str) -> usize {
+pub(crate) fn recorded(receipt: &Path, method: &str) -> usize {
     std::fs::read(receipt)
         .ok()
         .and_then(|bytes| serde_json::from_slice::<Vec<Value>>(&bytes).ok())
@@ -210,13 +210,16 @@ fn recorded(receipt: &Path, method: &str) -> usize {
 
 /// Waits until the fixture recorded `count`; the test runner bounds the case
 /// (`.config/nextest.toml`), so test code never waits on Tokio's clock.
-async fn until_recorded(receipt: &Path, method: &str, count: usize) {
+pub(crate) async fn until_recorded(receipt: &Path, method: &str, count: usize) {
     while recorded(receipt, method) < count {
         tokio::task::yield_now().await;
     }
 }
 
-fn cursor_reactive(receipt: &Path, behaviours: &[&str]) -> ExternalProviderLaunchBinding {
+pub(crate) fn cursor_reactive(
+    receipt: &Path,
+    behaviours: &[&str],
+) -> ExternalProviderLaunchBinding {
     let mut arguments = vec![
         node_test_fixture::fixture_program("cursor-settings-agent.ts")
             .to_string_lossy()

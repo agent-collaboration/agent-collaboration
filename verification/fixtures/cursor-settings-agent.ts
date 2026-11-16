@@ -146,6 +146,12 @@ async function serveSharedSettings(peer: {
 //     text is "hold-open" stays running, as hold-first-prompt-open, until a
 //     session/cancel ends it.
 //   exit-on-stop-file: the agent exits once the file <receipt>.stop exists.
+//   permission-after-steer: with advertise-steering, a steer answered injected
+//     is followed by a permission request for a fetch in the running turn;
+//     the client's answer is recorded and the turn keeps running.
+//   held-turn-ends-max-tokens: with hold-first-prompt-open, the released
+//     held turn ends with the stop reason max_tokens instead of end_turn, so
+//     a test can tell that turn's end from any later turn's.
 const reactiveBehaviourNames = [
   "boolean-fast",
   "refuse-fast-once",
@@ -160,6 +166,8 @@ const reactiveBehaviourNames = [
   "advertise-steering",
   "prompt-directives",
   "exit-on-stop-file",
+  "permission-after-steer",
+  "held-turn-ends-max-tokens",
 ] as const;
 type ReactiveBehaviour = (typeof reactiveBehaviourNames)[number];
 
@@ -363,6 +371,31 @@ async function answerDirectedPrompt(
   peer.reply(request, { stopReason: text === "unknown-stop" ? "future_reason" : "end_turn" });
 }
 
+let steerPermissionRequests = 0;
+
+/** Asks a permission in the running turn without waiting for the answer
+ * (permission-after-steer); the answer arrives as a later frame. */
+function askPermissionAfterSteer(peer: ReactivePeer, running: Record<string, unknown>): void {
+  steerPermissionRequests += 1;
+  peer.send({
+    jsonrpc: "2.0",
+    id: `steer-permission-${steerPermissionRequests}`,
+    method: "session/request_permission",
+    params: {
+      sessionId: requestParameters(running).sessionId,
+      toolCall: {
+        toolCallId: `steer-fetch-${steerPermissionRequests}`,
+        title: "Fetch a page",
+        kind: "fetch",
+      },
+      options: [
+        { optionId: "allow", name: "Allow", kind: "allow_once" },
+        { optionId: "reject", name: "Reject", kind: "reject_once" },
+      ],
+    },
+  });
+}
+
 function methodNotFound(peer: ReactivePeer, request: Record<string, unknown>): void {
   peer.send({
     jsonrpc: "2.0",
@@ -384,6 +417,8 @@ async function serveReactiveSettings(peer: ReactivePeer): Promise<void> {
   for (;;) {
     const request = await peer.readRequest();
     if (request === undefined) return;
+    // A permission answer is a response, recorded by readRequest; nothing to answer.
+    if (request.method === undefined && peer.behaviours.has("permission-after-steer")) continue;
     switch (request.method) {
       case "session/new": {
         const sessionId = `reactive-session-${sessions.size + 1}`;
@@ -424,7 +459,11 @@ async function serveReactiveSettings(peer: ReactivePeer): Promise<void> {
           void waitForRelease(peer.releasePath).then((): void => {
             if (heldOpen !== held) return;
             heldOpen = undefined;
-            peer.reply(held, { stopReason: "end_turn" });
+            peer.reply(held, {
+              stopReason: peer.behaviours.has("held-turn-ends-max-tokens")
+                ? "max_tokens"
+                : "end_turn",
+            });
           });
           break;
         }
@@ -448,6 +487,12 @@ async function serveReactiveSettings(peer: ReactivePeer): Promise<void> {
         if (!peer.behaviours.has("advertise-steering")) methodNotFound(peer, request);
         else
           peer.reply(request, { outcome: heldOpen === undefined ? "promptRequired" : "injected" });
+        if (
+          heldOpen !== undefined &&
+          peer.behaviours.has("advertise-steering") &&
+          peer.behaviours.has("permission-after-steer")
+        )
+          askPermissionAfterSteer(peer, heldOpen);
         break;
       case "authenticate":
         peer.reply(request, {});

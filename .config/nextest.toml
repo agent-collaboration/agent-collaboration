@@ -358,11 +358,11 @@ slow-timeout = { period = "30s", terminate-after = 2 }
 # each wait to 10 seconds in test code. The runner bounds each case instead, so
 # the test never waits on Tokio's clock (AGENTS.md "Time").
 [[profile.default.overrides]]
-filter = "package(=codex-router-host) & binary(=integration) & test(/^(provider_send_behaviour|provider_acp_busy_prompt|provider_cache_warm|provider_session_command_port|provider_send_races|provider_queued_api_lifecycle)::/)"
+filter = "package(=codex-router-host) & binary(=integration) & test(/^(provider_send_behaviour|provider_acp_busy_prompt|provider_cache_warm|provider_session_command_port|provider_send_races|provider_queued_api_lifecycle|provider_send_approvers)::/)"
 slow-timeout = { period = "30s", terminate-after = 2 }
 
 [[profile.ci.overrides]]
-filter = "package(=codex-router-host) & binary(=integration) & test(/^(provider_send_behaviour|provider_acp_busy_prompt|provider_cache_warm|provider_session_command_port|provider_send_races|provider_queued_api_lifecycle)::/)"
+filter = "package(=codex-router-host) & binary(=integration) & test(/^(provider_send_behaviour|provider_acp_busy_prompt|provider_cache_warm|provider_session_command_port|provider_send_races|provider_queued_api_lifecycle|provider_send_approvers)::/)"
 slow-timeout = { period = "30s", terminate-after = 2 }
 
 # Only the Worker CI step relaxes the broad Worker serial reservation, using

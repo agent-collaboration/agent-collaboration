@@ -64,6 +64,7 @@ mod provider_native_models;
 mod provider_native_skills;
 mod provider_pending_hub_races;
 mod provider_queued_api_lifecycle;
+mod provider_send_approvers;
 mod provider_send_behaviour;
 mod provider_send_races;
 mod provider_session_command_port;
