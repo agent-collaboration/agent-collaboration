@@ -159,14 +159,13 @@ fn tool_schemas_match_known_runtime_defaults_and_conditional_requirements() {
 
     let create_schema = schema_for("conversation_create");
     assert!(!required_for(&create_schema).contains(&serde_json::json!("approver")));
-    assert!(
-        create_schema["allOf"].is_array(),
-        "Codex create requirements must be conditional"
-    );
+    // D1 V20: no top-level combinator, which would hide the tool from Claude;
+    // the endpoint-specific rules are enforced server-side instead.
+    assert!(create_schema.get("allOf").is_none(), "{create_schema}");
     let create_and_prompt_schema = schema_for("conversation_create_and_prompt");
     assert!(
-        create_and_prompt_schema["allOf"].is_array(),
-        "Codex create-and-prompt requirements must be conditional"
+        create_and_prompt_schema.get("allOf").is_none(),
+        "{create_and_prompt_schema}"
     );
     let service_id = "00000000-0000-4000-8000-000000000001";
     let caller = serde_json::json!({
@@ -201,14 +200,16 @@ fn tool_schemas_match_known_runtime_defaults_and_conditional_requirements() {
     ] {
         let mut provider_with_codex_only_field = provider_create.clone();
         provider_with_codex_only_field[field] = value;
+        // The schema leaves this to the server refuses it (collaboration-client provider_create_rejects_codex_only_inputs_before_mutation, new_codex_conversation_without_model_or_effort_is_refused).
         assert!(
-            !create_validator.is_valid(&provider_with_codex_only_field),
-            "provider create schema must reject {field}"
+            create_validator.is_valid(&provider_with_codex_only_field),
+            "provider create schema leaves {field} to the server"
         );
     }
     let mut empty_codex_create = provider_create.clone();
     empty_codex_create["endpoint"]["endpointId"] = serde_json::json!("codex-local");
-    assert!(!create_validator.is_valid(&empty_codex_create));
+    // The schema leaves model and effort to the server refuses it (collaboration-client provider_create_rejects_codex_only_inputs_before_mutation, new_codex_conversation_without_model_or_effort_is_refused).
+    assert!(create_validator.is_valid(&empty_codex_create));
     empty_codex_create["model"] = serde_json::json!("gpt-5.6-sol");
     empty_codex_create["effort"] = serde_json::json!("medium");
     assert!(create_validator.is_valid(&empty_codex_create));
@@ -235,9 +236,10 @@ fn tool_schemas_match_known_runtime_defaults_and_conditional_requirements() {
             "message":{"kind":"humanUser","text":"hello"}
         });
         provider_create_and_prompt["create"][field] = value;
+        // The schema leaves this to the server refuses it (collaboration-client provider_create_rejects_codex_only_inputs_before_mutation, new_codex_conversation_without_model_or_effort_is_refused).
         assert!(
-            !create_and_prompt_validator.is_valid(&provider_create_and_prompt),
-            "provider create-and-prompt schema must reject {field}"
+            create_and_prompt_validator.is_valid(&provider_create_and_prompt),
+            "provider create-and-prompt schema leaves {field} to the server"
         );
     }
 
@@ -358,9 +360,10 @@ fn provider_create_schemas_accept_settings_and_keep_endpoint_specific_refusals()
             ] {
                 let mut refused = create.clone();
                 refused[field] = value;
+                // The schema leaves this to the server refuses it (collaboration-client provider_create_rejects_codex_only_inputs_before_mutation, new_codex_conversation_without_model_or_effort_is_refused).
                 assert!(
-                    !validator.is_valid(&request(refused)),
-                    "{tool_name}: {endpoint} must reject {field}"
+                    validator.is_valid(&request(refused)),
+                    "{tool_name}: {endpoint} leaves {field} to the server"
                 );
             }
         }
@@ -381,9 +384,10 @@ fn provider_create_schemas_accept_settings_and_keep_endpoint_specific_refusals()
                 .as_object_mut()
                 .expect("create object")
                 .remove(omitted);
+            // The schema leaves this to the server refuses it (collaboration-client provider_create_rejects_codex_only_inputs_before_mutation, new_codex_conversation_without_model_or_effort_is_refused).
             assert!(
-                !validator.is_valid(&request(missing)),
-                "{tool_name}: Codex must require {omitted}"
+                validator.is_valid(&request(missing)),
+                "{tool_name}: Codex leaves {omitted} to the server"
             );
         }
     }

@@ -368,3 +368,47 @@ async fn a_creator_holding_its_scope_lock_keeps_the_sweep_out() {
             .is_file()
     );
 }
+
+/// Oracle: the rule the MCP schema's allOf used to express, now held only
+/// server-side (D1 V20): a new Codex conversation needs model and effort; a
+/// fork inherits them.
+#[test]
+fn new_codex_conversation_without_model_or_effort_is_refused() {
+    let local_endpoint = endpoint("018f47d2-24d5-7a68-b9ec-6f759c39458f");
+    let caller = SessionRef {
+        endpoint: local_endpoint.clone(),
+        session_id: SessionId::try_from("caller".to_owned()).expect("session ID"),
+    };
+    let request = |model: Option<&str>, effort: Option<&str>| ConversationCreateRequest {
+        operation_id: collaboration_protocol::OperationId::generate(),
+        endpoint: local_endpoint.clone(),
+        cwd: std::path::PathBuf::from("/tmp/project"),
+        session: None,
+        fork: None,
+        model: model.map(str::to_owned),
+        effort: effort.map(str::to_owned),
+        access: Some("workspace-write".to_owned()),
+        created_by: Some(caller.clone()),
+        approver: Some(caller.clone()),
+        root_message_id: None,
+        mode: None,
+    };
+    for (model, effort) in [
+        (None, Some("low")),
+        (Some("gpt-5.6-luna"), None),
+        (None, None),
+    ] {
+        assert!(
+            matches!(
+                validate_conversation_create_request(&request(model, effort)),
+                Err(ClientError::InvalidRequest(
+                    "new conversation requires model, effort, and access"
+                ))
+            ),
+            "{model:?} {effort:?}"
+        );
+    }
+    assert!(
+        validate_conversation_create_request(&request(Some("gpt-5.6-luna"), Some("low"))).is_ok()
+    );
+}

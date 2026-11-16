@@ -601,3 +601,20 @@ fn advertised_create_and_settings_inputs_carry_fast_and_the_mode_rule() {
         "unknown settings are refused"
     );
 }
+
+/// Oracle: D1 V20 — no advertised tool's input schema has a top-level allOf,
+/// anyOf or oneOf; such schemas hide tools from Claude.
+#[test]
+fn no_advertised_tool_input_schema_has_a_top_level_combinator() {
+    let surface = super::super::ToolSurface::new(None);
+    for tool in surface.tools() {
+        let schema = serde_json::to_value(&tool.input_schema).expect("input schema");
+        for combinator in ["allOf", "anyOf", "oneOf"] {
+            assert!(
+                schema.get(combinator).is_none(),
+                "{} has a top-level {combinator}",
+                tool.name
+            );
+        }
+    }
+}
