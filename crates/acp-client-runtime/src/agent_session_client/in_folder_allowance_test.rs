@@ -1,8 +1,12 @@
 use super::InFolderGrant;
+use crate::{PermissionRequestAction, StatedPermissionTarget};
 use agent_client_protocol::schema::v1::{
-    PermissionOption, PermissionOptionKind, ToolCallLocation, ToolCallUpdate, ToolCallUpdateFields,
-    ToolKind,
+    Diff, PermissionOption, PermissionOptionKind, ToolCallContent, ToolCallLocation,
+    ToolCallUpdate, ToolCallUpdateFields, ToolKind,
 };
+
+/// A provider behaviour that reads no titles (every agent but Cursor).
+const NO_TITLES: fn(PermissionRequestAction, &str) -> Option<StatedPermissionTarget> = |_, _| None;
 use std::path::{Path, PathBuf};
 
 struct Folders {
@@ -126,7 +130,7 @@ fn file_actions_inside_the_project_or_scratch_folder_are_allowed_once_and_nothin
         ("no locations", ToolKind::Edit, vec![], false),
     ];
     for (name, kind, paths, allowed) in cases {
-        let decision = grant.allow_once(&file_call(kind, &paths), &options());
+        let decision = grant.allow_once(&file_call(kind, &paths), &options(), &NO_TITLES);
         assert_eq!(decision.is_some(), allowed, "{name}");
         if allowed {
             assert_eq!(decision.unwrap().0.as_ref(), "allow", "{name}");
@@ -136,7 +140,8 @@ fn file_actions_inside_the_project_or_scratch_folder_are_allowed_once_and_nothin
         grant
             .allow_once(
                 &file_call(ToolKind::Fetch, &[&new_scratch_file]),
-                &options()
+                &options(),
+                &NO_TITLES,
             )
             .is_none(),
         "only file kinds take the file rule"
@@ -217,7 +222,7 @@ fn shell_commands_are_allowed_once_only_when_every_operand_is_in_the_scratch_fol
     for (command, allowed) in cases {
         assert_eq!(
             grant
-                .allow_once(&shell_call(&command), &options())
+                .allow_once(&shell_call(&command), &options(), &NO_TITLES)
                 .is_some(),
             allowed,
             "{command}"
@@ -235,14 +240,18 @@ fn without_one_allow_once_option_the_request_goes_to_approval() {
         "Always",
         PermissionOptionKind::AllowAlways,
     )];
-    assert!(grant.allow_once(&call, &no_allow_once).is_none());
+    assert!(
+        grant
+            .allow_once(&call, &no_allow_once, &NO_TITLES)
+            .is_none()
+    );
     let mut two = options();
     two.push(PermissionOption::new(
         "allow-2",
         "Allow",
         PermissionOptionKind::AllowOnce,
     ));
-    assert!(grant.allow_once(&call, &two).is_none());
+    assert!(grant.allow_once(&call, &two, &NO_TITLES).is_none());
 }
 
 /// Oracle: R4/Q3 — a write through a dangling symlink lands outside the folder
@@ -258,7 +267,7 @@ fn a_dangling_symlink_final_or_ancestor_asks() {
     for path in [&dangling_final, &dangling_ancestor] {
         assert!(
             grant
-                .allow_once(&file_call(ToolKind::Edit, &[path]), &options())
+                .allow_once(&file_call(ToolKind::Edit, &[path]), &options(), &NO_TITLES)
                 .is_none(),
             "edit {}",
             path.display()
@@ -271,7 +280,7 @@ fn a_dangling_symlink_final_or_ancestor_asks() {
     ] {
         assert!(
             grant
-                .allow_once(&shell_call(&command), &options())
+                .allow_once(&shell_call(&command), &options(), &NO_TITLES)
                 .is_none(),
             "{command}"
         );
@@ -279,7 +288,11 @@ fn a_dangling_symlink_final_or_ancestor_asks() {
     // A genuinely absent name inside scratch is still allowed.
     assert!(
         grant
-            .allow_once(&shell_call(&format!("touch {scratch}/fresh")), &options())
+            .allow_once(
+                &shell_call(&format!("touch {scratch}/fresh")),
+                &options(),
+                &NO_TITLES
+            )
             .is_some()
     );
 }
@@ -300,7 +313,7 @@ fn diff_on_scratch_directories_with_a_child_link_out_asks() {
     let command = format!("diff {} {}", left.display(), right.display());
     assert!(
         grant
-            .allow_once(&shell_call(&command), &options())
+            .allow_once(&shell_call(&command), &options(), &NO_TITLES)
             .is_none(),
         "{command}"
     );
@@ -315,8 +328,163 @@ fn sort_on_a_scratch_file_asks() {
     let command = format!("sort {}/input", folders.scratch.display());
     assert!(
         grant
-            .allow_once(&shell_call(&command), &options())
+            .allow_once(&shell_call(&command), &options(), &NO_TITLES)
             .is_none(),
         "{command}"
+    );
+}
+
+/// A request whose only named path is a diff's, with an optional title.
+fn diff_call(kind: ToolKind, diff_path: &Path, title: &str) -> ToolCallUpdate {
+    ToolCallUpdate::new(
+        "call",
+        ToolCallUpdateFields::new()
+            .kind(kind)
+            .title(title)
+            .content(vec![ToolCallContent::Diff(Diff::new(diff_path, "D1\n"))]),
+    )
+}
+
+/// Oracle: R4/R6 — a file write names its path in ACP `diff` content when it
+/// sends no `locations` (Cursor's writes); that path takes the same rule, and
+/// every named path must be inside.
+#[test]
+fn a_diff_path_is_a_named_path() {
+    let folders = folders();
+    let grant = InFolderGrant::new(&folders.project, &folders.scratch).unwrap();
+    let inside = folders.scratch.join("note.txt");
+    let outside = folders.root.join("outside/note.txt");
+    assert!(
+        grant
+            .allow_once(
+                &diff_call(ToolKind::Edit, &inside, "Write"),
+                &options(),
+                &NO_TITLES
+            )
+            .is_some(),
+        "an in-scratch diff is allowed"
+    );
+    assert!(
+        grant
+            .allow_once(
+                &diff_call(ToolKind::Edit, &outside, "Write"),
+                &options(),
+                &NO_TITLES
+            )
+            .is_none(),
+        "a diff outside asks"
+    );
+    let mixed = ToolCallUpdate::new(
+        "call",
+        ToolCallUpdateFields::new()
+            .kind(ToolKind::Edit)
+            .locations(vec![ToolCallLocation::new(inside)])
+            .content(vec![ToolCallContent::Diff(Diff::new(&outside, "D1\n"))]),
+    );
+    assert!(
+        grant.allow_once(&mixed, &options(), &NO_TITLES).is_none(),
+        "an inside location does not cover a diff outside"
+    );
+}
+
+/// Oracle: R4/R6 — the target an agent states only in its title counts as a
+/// named path or command, under the same rule; one of the wrong class asks.
+#[test]
+fn a_stated_target_takes_the_same_rule() {
+    let folders = folders();
+    let grant = InFolderGrant::new(&folders.project, &folders.scratch).unwrap();
+    let inside = folders.scratch.join("note.txt");
+    let outside = folders.root.join("outside/note.txt");
+    let titled = |kind: ToolKind| {
+        ToolCallUpdate::new(
+            "call",
+            ToolCallUpdateFields::new().kind(kind).title("titled"),
+        )
+    };
+    let file = |path: PathBuf| {
+        move |action: PermissionRequestAction, _: &str| {
+            (action == PermissionRequestAction::FileAccess)
+                .then(|| StatedPermissionTarget::File(path.clone()))
+        }
+    };
+    let command = |line: String| {
+        move |action: PermissionRequestAction, _: &str| {
+            (action == PermissionRequestAction::ShellCommand)
+                .then(|| StatedPermissionTarget::Command(line.clone()))
+        }
+    };
+    let as_command =
+        |_: PermissionRequestAction, _: &str| Some(StatedPermissionTarget::Command("ls".into()));
+    let as_file = |_: PermissionRequestAction, _: &str| {
+        Some(StatedPermissionTarget::File(PathBuf::from("/tmp")))
+    };
+    let scratch = folders.scratch.display();
+    let cases: [(&str, ToolCallUpdate, &super::StatedTargetReader<'_>, bool); 7] = [
+        (
+            "stated file inside",
+            titled(ToolKind::Edit),
+            &file(inside.clone()),
+            true,
+        ),
+        (
+            "stated file outside",
+            titled(ToolKind::Edit),
+            &file(outside.clone()),
+            false,
+        ),
+        (
+            "stated read inside",
+            titled(ToolKind::Read),
+            &file(inside.clone()),
+            true,
+        ),
+        (
+            "diff inside, stated outside",
+            diff_call(ToolKind::Edit, &inside, "titled"),
+            &file(outside),
+            false,
+        ),
+        (
+            "a command for a file",
+            titled(ToolKind::Edit),
+            &as_command,
+            false,
+        ),
+        (
+            "stated command in scratch",
+            titled(ToolKind::Execute),
+            &command(format!("rm {scratch}/note.txt")),
+            true,
+        ),
+        (
+            "a file for a command",
+            titled(ToolKind::Execute),
+            &as_file,
+            false,
+        ),
+    ];
+    for (case, call, read_title, allowed) in cases {
+        assert_eq!(
+            grant.allow_once(&call, &options(), read_title).is_some(),
+            allowed,
+            "{case}"
+        );
+    }
+    let raw_inside_stated_outside = ToolCallUpdate::new(
+        "call",
+        ToolCallUpdateFields::new()
+            .kind(ToolKind::Execute)
+            .title("titled")
+            .raw_input(serde_json::json!({ "command": format!("rm {scratch}/note.txt") })),
+    );
+    assert!(
+        grant
+            .allow_once(
+                &raw_inside_stated_outside,
+                &options(),
+                &command("rm /tmp/d1-outside".to_owned())
+            )
+            .is_none(),
+        "every named command must stay in scratch"
     );
 }

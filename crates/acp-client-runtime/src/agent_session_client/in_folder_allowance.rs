@@ -1,8 +1,10 @@
 //! The Router's answer to an auto-mode permission request that stays inside
 //! the session's own folders (R4, owner Q3).
 //!
-//! File reads, edits, deletes and moves whose locations all lie in the working
-//! folder or the session's scratch folder are allowed once. A shell command is
+//! File reads, edits, deletes and moves whose named paths all lie in the working
+//! folder or the session's scratch folder are allowed once. A request names its
+//! paths in ACP `locations`, in `diff` content, or, for an agent that states
+//! them only in the title (Cursor), as its provider behaviour reads that title. A shell command is
 //! allowed once only when it runs one of a closed set of file utilities, with no
 //! shell syntax, on operands that all lie in the scratch folder. Anything else,
 //! or anything the rule cannot read for certain, goes to the approval path.
@@ -11,8 +13,10 @@
 //! its own auto-approved file commands (mkdir, touch, rm, rmdir, mv, cp, sed) in
 //! its working folders, the scratch folder included, without asking.
 
+use crate::{PermissionRequestAction, StatedPermissionTarget};
 use agent_client_protocol::schema::v1::{
-    PermissionOption, PermissionOptionId, PermissionOptionKind, ToolCallUpdate, ToolKind,
+    PermissionOption, PermissionOptionId, PermissionOptionKind, ToolCallContent, ToolCallUpdate,
+    ToolKind,
 };
 use std::collections::HashMap;
 use std::path::{Component, Path, PathBuf};
@@ -49,6 +53,11 @@ const FILE_UTILITIES: &[(&str, &[&str])] = &[
     ("touch", &[]),
     ("find", &[]),
 ];
+
+/// Reads the target an agent states in a request's title: the provider
+/// behaviour's `stated_permission_target`.
+pub(crate) type StatedTargetReader<'a> =
+    dyn Fn(PermissionRequestAction, &str) -> Option<StatedPermissionTarget> + 'a;
 
 /// The folders an auto-mode session acts in without asking, canonical at grant.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -104,8 +113,9 @@ impl InFolderGrant {
         &self,
         tool_call: &ToolCallUpdate,
         options: &[PermissionOption],
+        read_title: &StatedTargetReader<'_>,
     ) -> Option<PermissionOptionId> {
-        if !self.covers(tool_call) {
+        if !self.covers(tool_call, read_title) {
             return None;
         }
         let mut allow_once = options
@@ -118,24 +128,65 @@ impl InFolderGrant {
             .then(|| option.option_id.clone())
     }
 
-    fn covers(&self, tool_call: &ToolCallUpdate) -> bool {
+    /// Every path or command the request names, from any of its fields, must
+    /// stay inside, and it must name at least one.
+    fn covers(&self, tool_call: &ToolCallUpdate, read_title: &StatedTargetReader<'_>) -> bool {
         let fields = &tool_call.fields;
+        let stated = |action| {
+            fields
+                .title
+                .as_deref()
+                .and_then(|title| read_title(action, title))
+        };
         match fields.kind {
             Some(ToolKind::Read | ToolKind::Edit | ToolKind::Delete | ToolKind::Move) => {
-                match fields.locations.as_deref() {
-                    Some(locations) if !locations.is_empty() => locations.iter().all(|location| {
-                        within(&location.path, &self.working_folder)
-                            || within(&location.path, &self.scratch_folder)
-                    }),
-                    _ => false,
-                }
+                let stated_file = match stated(PermissionRequestAction::FileAccess) {
+                    Some(StatedPermissionTarget::File(path)) => Some(path),
+                    Some(StatedPermissionTarget::Command(_)) => return false,
+                    None => None,
+                };
+                let located = fields
+                    .locations
+                    .iter()
+                    .flatten()
+                    .map(|location| location.path.as_path());
+                let diffed = fields
+                    .content
+                    .iter()
+                    .flatten()
+                    .filter_map(|content| match content {
+                        ToolCallContent::Diff(diff) => Some(diff.path.as_path()),
+                        _ => None,
+                    });
+                let paths: Vec<&Path> = located
+                    .chain(diffed)
+                    .chain(stated_file.as_deref())
+                    .collect();
+                !paths.is_empty()
+                    && paths.iter().all(|path| {
+                        within(path, &self.working_folder) || within(path, &self.scratch_folder)
+                    })
             }
-            Some(ToolKind::Execute) => fields
-                .raw_input
-                .as_ref()
-                .and_then(|input| input.get("command"))
-                .and_then(serde_json::Value::as_str)
-                .is_some_and(|command| self.command_stays_in_scratch(command)),
+            Some(ToolKind::Execute) => {
+                let stated_command = match stated(PermissionRequestAction::ShellCommand) {
+                    Some(StatedPermissionTarget::Command(command)) => Some(command),
+                    Some(StatedPermissionTarget::File(_)) => return false,
+                    None => None,
+                };
+                let raw_command = fields
+                    .raw_input
+                    .as_ref()
+                    .and_then(|input| input.get("command"))
+                    .and_then(serde_json::Value::as_str);
+                let commands: Vec<&str> = raw_command
+                    .into_iter()
+                    .chain(stated_command.as_deref())
+                    .collect();
+                !commands.is_empty()
+                    && commands
+                        .iter()
+                        .all(|command| self.command_stays_in_scratch(command))
+            }
             _ => false,
         }
     }

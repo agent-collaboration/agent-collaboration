@@ -21,6 +21,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tokio_util::sync::CancellationToken;
 
+mod cursor_request_shapes;
+
 const PERMISSION_MODE_AGENT: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../verification/fixtures/permission-mode-agent.ts"

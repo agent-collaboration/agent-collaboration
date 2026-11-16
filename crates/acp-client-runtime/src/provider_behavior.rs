@@ -13,6 +13,36 @@ pub trait ProviderBehavior: Send + Sync {
     fn observe(&self, update: ProviderUpdate) -> Result<ProviderFacts, ProviderError>;
     fn prepare(&self, submission: ProviderSubmission) -> Result<Vec<PromptContent>, ProviderError>;
     fn compact(&self) -> Result<PreparedCompact, ProviderError>;
+    /// What a permission request touches when the agent states it only in the
+    /// request's title, not in ACP `locations`, `diff` content or
+    /// `rawInput` (D1 R4, R6). `None` when the title cannot be read for
+    /// certain, so the request asks; the default reads no titles.
+    fn stated_permission_target(
+        &self,
+        _action: PermissionRequestAction,
+        _title: &str,
+    ) -> Option<StatedPermissionTarget> {
+        None
+    }
+}
+
+/// The class of action a permission request asks for, as the in-folder
+/// allowance tells them apart.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PermissionRequestAction {
+    /// A file read, edit, delete or move.
+    FileAccess,
+    /// One shell command line.
+    ShellCommand,
+}
+
+/// The target an agent's title states for a permission request.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum StatedPermissionTarget {
+    /// The file the action touches.
+    File(std::path::PathBuf),
+    /// The exact command line the action runs.
+    Command(String),
 }
 
 /// Connection startup policy; the runtime owns advertised-method validation and ACP I/O.

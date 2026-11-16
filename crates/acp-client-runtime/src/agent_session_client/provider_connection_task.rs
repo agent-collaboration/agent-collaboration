@@ -129,6 +129,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         let callback_elicitation_port = Arc::clone(&interaction_port);
         let task_approval_contexts = Arc::clone(&approval_contexts);
         let callback_in_folder_grants = Arc::clone(&in_folder_grants);
+        let callback_behavior = Arc::clone(&behavior);
         let known_sessions = ProviderKnownSessions::default();
         let request_known_sessions = known_sessions.clone();
         let retirement_known_sessions = known_sessions.clone();
@@ -200,7 +201,9 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                             &callback_in_folder_grants,
                             request.session_id.0.as_ref(),
                         )
-                            .and_then(|grant| grant.allow_once(&request.tool_call, &request.options));
+                            .and_then(|grant| grant.allow_once(&request.tool_call, &request.options, &|action, title| {
+                                callback_behavior.stated_permission_target(action, title)
+                            }));
                         if let Some(option_id) = in_folder_allowance {
                             // Inside the session's own folders auto mode needs no question (R4, Q3).
                             return responder.respond(
