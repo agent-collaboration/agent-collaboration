@@ -26,7 +26,7 @@ tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.4" }
+codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.4", default-features = false }
 tempfile = "3.27.0"
 tracing-subscriber.workspace = true
 

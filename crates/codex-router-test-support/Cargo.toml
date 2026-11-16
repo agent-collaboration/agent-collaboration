@@ -9,15 +9,31 @@ publish.workspace = true
 [lints]
 workspace = true
 
+[features]
+default = ["router-fixtures"]
+# Fixtures that run or stand in for Router parts (installed Codex, routed native, peer and health
+# fixtures), and the Router crates they need. node_taps needs none of them: a consumer that only
+# checks node taps turns this off (default-features = false) and does not compile the Router.
+router-fixtures = [
+    "dep:node-test-fixture",
+    "dep:collaboration-client",
+    "dep:codex-router-cli",
+    "dep:codex-native-integration",
+    "dep:codex-router-core",
+    "dep:codex-router-proxy",
+    "dep:codex-router-secret-store",
+    "dep:codex-router-state",
+]
+
 [dependencies]
-node-test-fixture = { version = "0.1.105", path = "../node-test-fixture" }
-collaboration-client = { path = "../collaboration-client", version = "0.1.14" }
-codex-router-cli = { path = "../codex-router-cli", version = "0.1.4", features = ["keychain-test-support"] }
-codex-native-integration.workspace = true
-codex-router-core.workspace = true
-codex-router-proxy = { path = "../codex-router-proxy", version = "0.1.4" }
-codex-router-secret-store = { path = "../codex-router-secret-store", version = "0.1.4", features = ["test-support"] }
-codex-router-state = { path = "../codex-router-state", version = "0.1.4", features = ["sync-rusqlite-fixtures"] }
+node-test-fixture = { version = "0.1.105", path = "../node-test-fixture", optional = true }
+collaboration-client = { path = "../collaboration-client", version = "0.1.14", optional = true }
+codex-router-cli = { path = "../codex-router-cli", version = "0.1.4", features = ["keychain-test-support"], optional = true }
+codex-native-integration = { workspace = true, optional = true }
+codex-router-core = { workspace = true, optional = true }
+codex-router-proxy = { path = "../codex-router-proxy", version = "0.1.4", optional = true }
+codex-router-secret-store = { path = "../codex-router-secret-store", version = "0.1.4", features = ["test-support"], optional = true }
+codex-router-state = { path = "../codex-router-state", version = "0.1.4", features = ["sync-rusqlite-fixtures"], optional = true }
 futures-util.workspace = true
 jsonschema.workspace = true
 rmcp.workspace = true
@@ -39,3 +55,5 @@ codex-router-secret-store = { path = "../codex-router-secret-store", version = "
 [[test]]
 name = "integration"
 path = "tests/integration/main.rs"
+# Its one root, codex_retry, drives installed Codex through the Router.
+required-features = ["router-fixtures"]
