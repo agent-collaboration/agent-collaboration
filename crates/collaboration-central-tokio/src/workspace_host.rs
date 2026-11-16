@@ -147,7 +147,10 @@ impl TokioWorkspaceHost {
                 .ok_or(StoreFailure::Unavailable)?;
             let organization =
                 OrganizationId::try_from(name.to_owned()).map_err(|_| StoreFailure::Unavailable)?;
-            host.central(&organization).await?;
+            // Organizations open independently: one bad store never blocks the rest.
+            if let Err(error) = host.central(&organization).await {
+                tracing::warn!(?error, organization = %organization.as_str(), "central organization open failed; continuing other organizations");
+            }
         }
         Ok(host)
     }

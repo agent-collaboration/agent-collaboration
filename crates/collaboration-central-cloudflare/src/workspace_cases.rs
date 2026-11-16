@@ -549,6 +549,10 @@ pub(super) async fn raw_control(object: &CentralObject, mut request: Request) ->
             Response::from_json(&receipt)
         }
         "/test/raw-alarm-time" => Response::from_json(&storage.get_alarm().await?),
+        "/test/raw-drop-alarm" => {
+            storage.delete_alarm().await?;
+            Response::from_json(&true)
+        }
         "/test/raw-probe-alarm" => {
             let milliseconds: i64 = request.json().await?;
             let prior = storage.get_alarm().await?;
