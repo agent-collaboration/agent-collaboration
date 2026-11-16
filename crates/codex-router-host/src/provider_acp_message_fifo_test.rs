@@ -179,10 +179,13 @@ async fn queued_loaded_only_item_not_submitted_if_close_happens_before_fifo_drai
         );
     let (sender, receiver) = mpsc::channel(1);
     sender
-        .send(ProviderQueuedPrompt::Contents {
-            request: contents,
-            load_policy: LoadPolicy::LoadedOnly,
-            admitted: None,
+        .send(super::QueuedEntry {
+            sequence: 0,
+            prompt: ProviderQueuedPrompt::Contents {
+                request: contents,
+                load_policy: LoadPolicy::LoadedOnly,
+                admitted: None,
+            },
         })
         .await
         .expect("accepted queue item");
@@ -210,7 +213,7 @@ async fn queued_loaded_only_item_not_submitted_if_close_happens_before_fifo_drai
         Arc::clone(&supervisor),
         Arc::clone(&store),
         Arc::new(NoLivePeer),
-        CancellationToken::new(),
+        Arc::new(super::SessionLineState::new(CancellationToken::new())),
         Arc::new(tokio::sync::Notify::new()),
     ));
     tokio::time::timeout(std::time::Duration::from_secs(2), worker)

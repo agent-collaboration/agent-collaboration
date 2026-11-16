@@ -158,15 +158,22 @@ pub(super) fn close(
             PreparedOperation::Admitted { snapshot, live } => {
                 let operation_id = request.operation_id.clone();
                 let completion_target = target.clone();
+                let fifo = backend.message_fifo();
                 backend.spawn_operation(operation_id.clone(), live, async move {
                     match runtime.close_session(provider_session_id).await {
-                        Ok(()) => ProviderOperationCompletion::Success {
-                            settlement: ConversationOperationSettlement::Closed {
-                                target: completion_target.clone(),
-                            },
-                            target: Some(completion_target),
-                            session_record: None,
-                        },
+                        Ok(()) => {
+                            // Nothing still waiting is sent to a closed session (D1 R14).
+                            if let Some(fifo) = fifo {
+                                fifo.close_session(&completion_target, "session closed");
+                            }
+                            ProviderOperationCompletion::Success {
+                                settlement: ConversationOperationSettlement::Closed {
+                                    target: completion_target.clone(),
+                                },
+                                target: Some(completion_target),
+                                session_record: None,
+                            }
+                        }
                         Err(error) => ProviderOperationCompletion::Failure(runtime_failure(
                             operation_id,
                             Some(completion_target),

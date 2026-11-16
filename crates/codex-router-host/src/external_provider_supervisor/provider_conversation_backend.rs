@@ -511,8 +511,23 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                 .await
                 .map_err(|_| unavailable_failure(request.operation_id.clone(), None))?;
             if let Some(record) = stored_record {
-                return snapshot_from_record(record)
-                    .map_err(|message| snapshot_failure(request.operation_id, message));
+                let mut snapshot = snapshot_from_record(record)
+                    .map_err(|message| snapshot_failure(request.operation_id.clone(), message))?;
+                // A waiting API prompt's row is Admitted; the session's line
+                // knows it is queued, or why it wasn't sent (D1 R14).
+                if snapshot.stage == collaboration_protocol::ProviderOperationStage::Admitted
+                    && let Some(queued) = self
+                        .inner
+                        .queued_operations
+                        .snapshot(&request.operation_id)
+                        .map_err(|message| {
+                            snapshot_failure(request.operation_id.clone(), message)
+                        })?
+                {
+                    snapshot.queue_state = queued.queue_state;
+                    snapshot.input_id = queued.input_id;
+                }
+                return Ok(snapshot);
             }
             if let Some(snapshot) = self
                 .inner
@@ -526,7 +541,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                 ConversationOperationFailureKind::NotFound,
                 ConversationOperationFailureStage::Settlement,
                 ProviderOperationEffect::None,
-                "provider operation was not found",
+                "the Router has no record of this operation ID",
                 request.operation_id,
                 None,
             ))
@@ -565,11 +580,12 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                         });
                     }
                     if tokio::time::timeout_at(deadline, changed).await.is_err() {
-                        let operation =
-                            snapshot_from_record(self.inspect_record(&operation_id).await?)
-                                .map_err(|message| {
-                                    snapshot_failure(operation_id.clone(), message)
-                                })?;
+                        // Through show, so a queued prompt says so (D1 R12).
+                        let operation = self
+                            .show(ConversationOperationShowRequest {
+                                operation_id: operation_id.clone(),
+                            })
+                            .await?;
                         return Ok(ConversationOperationWaitResult {
                             operation,
                             output: ConversationOperationWaitOutput::Pending,
@@ -627,7 +643,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                             ConversationOperationFailureKind::NotFound,
                             ConversationOperationFailureStage::Settlement,
                             ProviderOperationEffect::None,
-                            "provider operation was not found",
+                            "the Router has no record of this operation ID",
                             request.operation_id.clone(),
                             None,
                         )
@@ -644,7 +660,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                         ConversationOperationFailureKind::NotFound,
                         ConversationOperationFailureStage::Settlement,
                         ProviderOperationEffect::None,
-                        "provider operation was not found",
+                        "the Router has no record of this operation ID",
                         request.operation_id.clone(),
                         None,
                     )

@@ -55,13 +55,84 @@ impl ProviderQueuedPrompt {
     }
 }
 
+/// One session's line: its channel and the state its worker shares.
+struct SessionLine {
+    sender: mpsc::Sender<QueuedEntry>,
+    state: Arc<SessionLineState>,
+}
+
+/// An entry in a session's line, numbered when it was sent into the line.
+struct QueuedEntry {
+    sequence: u64,
+    prompt: ProviderQueuedPrompt,
+}
+
+/// Room for one entry in a session's line; sending numbers the entry.
+pub(crate) struct QueuePermit {
+    permit: mpsc::OwnedPermit<QueuedEntry>,
+    line: Arc<SessionLineState>,
+}
+
+impl QueuePermit {
+    pub(crate) fn send(self, prompt: ProviderQueuedPrompt) {
+        let sequence = self
+            .line
+            .sent
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        self.permit.send(QueuedEntry { sequence, prompt });
+    }
+}
+
+/// What a session's worker and its line share.
+struct SessionLineState {
+    /// The worker holds an entry it took from the channel (D1 R12: the 128
+    /// waiting entries count the held head).
+    holding: std::sync::atomic::AtomicBool,
+    /// Stops this session's worker at Router shutdown.
+    stop: CancellationToken,
+    /// Entries sent into the line so far.
+    sent: std::sync::atomic::AtomicU64,
+    /// Entries numbered below this were in the line when the session
+    /// closed: none of them is loaded or prompted (D1 R14).
+    closed_before: std::sync::atomic::AtomicU64,
+    /// Why the session closed, when it did.
+    close_reason: StdMutex<Option<String>>,
+    /// Wakes a worker waiting with its held head when the session closes.
+    closed: tokio::sync::Notify,
+}
+
+impl SessionLineState {
+    fn new(stop: CancellationToken) -> Self {
+        Self {
+            holding: std::sync::atomic::AtomicBool::new(false),
+            stop,
+            sent: std::sync::atomic::AtomicU64::new(0),
+            closed_before: std::sync::atomic::AtomicU64::new(0),
+            close_reason: StdMutex::new(None),
+            closed: tokio::sync::Notify::new(),
+        }
+    }
+
+    /// The close reason, when this entry was in the line as its session closed.
+    fn closed_reason_for(&self, sequence: u64) -> Option<String> {
+        if sequence < self.closed_before.load(std::sync::atomic::Ordering::SeqCst) {
+            self.close_reason
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone()
+        } else {
+            None
+        }
+    }
+}
+
 pub(crate) struct ProviderAcpMessageFifo {
     #[cfg(test)]
     wait_started: Arc<tokio::sync::Notify>,
     supervisor: Arc<ExternalProviderSupervisor>,
     store: Arc<Mutex<ProviderOperationStore>>,
     ownership: Arc<dyn LiveSessionOwnershipCheck>,
-    senders: StdMutex<HashMap<SessionRef, mpsc::Sender<ProviderQueuedPrompt>>>,
+    senders: StdMutex<HashMap<SessionRef, SessionLine>>,
     workers: StdMutex<Vec<JoinHandle<()>>>,
     shutdown: CancellationToken,
 }
@@ -84,10 +155,7 @@ impl ProviderAcpMessageFifo {
         }
     }
 
-    pub(crate) fn reserve(
-        &self,
-        target: &SessionRef,
-    ) -> Result<mpsc::OwnedPermit<ProviderQueuedPrompt>, &'static str> {
+    pub(crate) fn reserve(&self, target: &SessionRef) -> Result<QueuePermit, &'static str> {
         if self.shutdown.is_cancelled() {
             return Err("provider queue is shutting down");
         }
@@ -95,34 +163,47 @@ impl ProviderAcpMessageFifo {
             .senders
             .lock()
             .map_err(|_| "provider queue unavailable")?;
-        let sender = if let Some(sender) = senders.get(target).filter(|sender| !sender.is_closed())
-        {
-            sender.clone()
-        } else {
-            if senders.len() >= MAX_SESSION_QUEUES {
-                return Err("provider session queue capacity exceeded");
-            }
-            let (sender, receiver) = mpsc::channel(QUEUE_CAPACITY);
-            let worker = tokio::spawn(run_provider_message_fifo(
-                target.clone(),
-                receiver,
-                Arc::clone(&self.supervisor),
-                Arc::clone(&self.store),
-                Arc::clone(&self.ownership),
-                self.shutdown.clone(),
-                #[cfg(test)]
-                Arc::clone(&self.wait_started),
-            ));
-            self.workers
-                .lock()
-                .map_err(|_| "provider queue workers unavailable")?
-                .push(worker);
-            senders.insert(target.clone(), sender.clone());
-            sender
-        };
-        sender
+        let (sender, line) =
+            if let Some(line) = senders.get(target).filter(|line| !line.sender.is_closed()) {
+                let waiting = QUEUE_CAPACITY.saturating_sub(line.sender.capacity())
+                    + usize::from(line.state.holding.load(std::sync::atomic::Ordering::SeqCst));
+                if waiting >= QUEUE_CAPACITY {
+                    return Err("provider session queue is full");
+                }
+                (line.sender.clone(), Arc::clone(&line.state))
+            } else {
+                if senders.len() >= MAX_SESSION_QUEUES {
+                    return Err("provider session queue capacity exceeded");
+                }
+                let (sender, receiver) = mpsc::channel(QUEUE_CAPACITY);
+                let state = Arc::new(SessionLineState::new(self.shutdown.child_token()));
+                let worker = tokio::spawn(run_provider_message_fifo(
+                    target.clone(),
+                    receiver,
+                    Arc::clone(&self.supervisor),
+                    Arc::clone(&self.store),
+                    Arc::clone(&self.ownership),
+                    Arc::clone(&state),
+                    #[cfg(test)]
+                    Arc::clone(&self.wait_started),
+                ));
+                self.workers
+                    .lock()
+                    .map_err(|_| "provider queue workers unavailable")?
+                    .push(worker);
+                senders.insert(
+                    target.clone(),
+                    SessionLine {
+                        sender: sender.clone(),
+                        state: Arc::clone(&state),
+                    },
+                );
+                (sender, state)
+            };
+        let permit = sender
             .try_reserve_owned()
-            .map_err(|_| "provider session queue is full")
+            .map_err(|_| "provider session queue is full")?;
+        Ok(QueuePermit { permit, line })
     }
 
     /// Queues an admitted API prompt; refused when the session's line is full.
@@ -153,6 +234,29 @@ impl ProviderAcpMessageFifo {
             admitted: Some(admitted),
         });
         Ok(queued)
+    }
+
+    /// The session closed: every entry not yet dispatched, the held head
+    /// included, ends not sent with the reason, and its worker stops (D1 R14).
+    /// An entry already dispatched keeps its real outcome.
+    pub(crate) fn close_session(&self, target: &SessionRef, reason: &str) {
+        let line = self
+            .senders
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(target)
+            .map(|line| Arc::clone(&line.state));
+        if let Some(line) = line {
+            *line
+                .close_reason
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(reason.to_owned());
+            line.closed_before.store(
+                line.sent.load(std::sync::atomic::Ordering::SeqCst),
+                std::sync::atomic::Ordering::SeqCst,
+            );
+            line.closed.notify_waiters();
+        }
     }
 
     pub(crate) async fn shutdown(&self) {
@@ -191,24 +295,37 @@ impl Drop for ProviderAcpMessageFifo {
 
 async fn run_provider_message_fifo(
     target: SessionRef,
-    mut receiver: mpsc::Receiver<ProviderQueuedPrompt>,
+    mut receiver: mpsc::Receiver<QueuedEntry>,
     supervisor: Arc<ExternalProviderSupervisor>,
     store: Arc<Mutex<ProviderOperationStore>>,
     ownership: Arc<dyn LiveSessionOwnershipCheck>,
-    shutdown: CancellationToken,
+    line: Arc<SessionLineState>,
     #[cfg(test)] wait_started: Arc<tokio::sync::Notify>,
 ) {
+    let shutdown = line.stop.clone();
     loop {
+        line.holding
+            .store(false, std::sync::atomic::Ordering::SeqCst);
         let request = tokio::select! {
             () = shutdown.cancelled() => {
                 mark_remaining_not_submitted(&supervisor, &mut receiver, "Router shutdown before provider submission");
                 return;
             },
-            request = receiver.recv() => match request {
-                Some(request) => request,
+            entry = receiver.recv() => match entry {
+                Some(entry) => entry,
                 None => return,
             },
         };
+        line.holding
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let QueuedEntry {
+            sequence,
+            prompt: request,
+        } = request;
+        if let Some(reason) = line.closed_reason_for(sequence) {
+            mark_entry_not_sent(&supervisor, &request, reason);
+            continue;
+        }
         let operation_id = request.operation_id().clone();
         let load_policy = request.load_policy();
         let Some(runtime) = supervisor.runtime_for(&target.endpoint) else {
@@ -226,6 +343,10 @@ async fn run_provider_message_fifo(
         let mut operation_admitted = false;
         let mut dispatch_started = false;
         loop {
+            if let Some(reason) = line.closed_reason_for(sequence) {
+                mark_entry_not_sent(&supervisor, &request, reason);
+                break;
+            }
             if shutdown.is_cancelled() {
                 drop_current_and_remaining(
                     &supervisor,
@@ -302,6 +423,7 @@ async fn run_provider_message_fifo(
                     drop_current_and_remaining(&supervisor, &request, &mut receiver, PROVIDER_RETIRED_REASON);
                     return;
                 },
+                () = line.closed.notified() => continue,
                 idle = runtime.wait_session_idle(String::from(target.session_id.clone())) => idle,
             };
             if idle.is_err() {
@@ -457,7 +579,7 @@ fn next_retry_delay(current: std::time::Duration) -> std::time::Duration {
 fn drop_current_and_remaining(
     supervisor: &ExternalProviderSupervisor,
     current: &ProviderQueuedPrompt,
-    receiver: &mut mpsc::Receiver<ProviderQueuedPrompt>,
+    receiver: &mut mpsc::Receiver<QueuedEntry>,
     reason: &str,
 ) {
     mark_entry_not_sent(supervisor, current, reason);
@@ -466,11 +588,11 @@ fn drop_current_and_remaining(
 
 fn mark_remaining_not_submitted(
     supervisor: &ExternalProviderSupervisor,
-    receiver: &mut mpsc::Receiver<ProviderQueuedPrompt>,
+    receiver: &mut mpsc::Receiver<QueuedEntry>,
     reason: &str,
 ) {
-    while let Ok(request) = receiver.try_recv() {
-        mark_entry_not_sent(supervisor, &request, reason);
+    while let Ok(entry) = receiver.try_recv() {
+        mark_entry_not_sent(supervisor, &entry.prompt, reason);
     }
 }
 

@@ -457,6 +457,20 @@ pub(crate) fn provider_operation_result(
                 },
             })
         }
+        (
+            ProviderSettlementKind::Prompt,
+            ConversationOperationWaitOutput::Available {
+                settlement:
+                    ConversationOperationSettlement::Steered {
+                        target: settled_target,
+                        turn_approver,
+                    },
+            },
+        ) if settled_target == target => Some(ConversationSettlement {
+            target: settled_target,
+            stop_reason: None,
+            detail: ConversationSettlementDetail::ProviderSteered { turn_approver },
+        }),
         (_, ConversationOperationWaitOutput::Pending) => None,
         _ => {
             return Err(operation_settlement_failure(
@@ -479,6 +493,16 @@ pub(crate) fn provider_operation_result(
             target,
             waited.operation.effect,
         ));
+    }
+    // Still waiting in the session's line, not running: say queued (D1 R12).
+    if matches!(
+        waited.operation.queue_state,
+        Some(collaboration_protocol::ConversationOperationQueueState::RouterQueued)
+    ) {
+        return Ok(ConversationOperationResult::Queued {
+            operation_id,
+            target,
+        });
     }
     Ok(ConversationOperationResult::Pending {
         operation_id,

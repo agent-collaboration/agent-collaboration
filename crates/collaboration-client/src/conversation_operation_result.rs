@@ -27,6 +27,12 @@ pub enum ConversationOperationResult {
         operation_id: OperationId,
         target: SessionRef,
     },
+    /// Waiting in the session's line for its running turn to end (D1 R12);
+    /// waiting on the operation again gives its completion.
+    Queued {
+        operation_id: OperationId,
+        target: SessionRef,
+    },
     /// The caller detached from a Codex turn that remains active.
     Running {
         target: SessionRef,
@@ -120,6 +126,12 @@ pub enum ConversationSettlementDetail {
     },
     ProviderLoad {
         output: ProviderLoadOutput,
+    },
+    /// Accepted into the running turn (D1 R12); the reply belongs to that
+    /// turn. Names the turn's approver when it differs from the one asked.
+    ProviderSteered {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        turn_approver: Option<collaboration_protocol::ProviderIdentity>,
     },
 }
 

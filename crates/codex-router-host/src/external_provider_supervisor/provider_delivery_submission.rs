@@ -1,12 +1,9 @@
 //! Delivery prompt admission waits for the ACP request to enter the session actor.
 use super::{
-    ConversationOperationFailure, ConversationOperationFailureKind,
-    ConversationOperationFailureStage, ConversationOperationSettlement, Duration,
-    ExternalProviderSupervisor, PreparedOperation, ProviderOperationEffect, ProviderOperationKind,
-    ProviderPromptContentsRequest, failure, prompt_runtime_failure,
+    ConversationOperationFailure, Duration, ExternalProviderSupervisor, PreparedOperation,
+    ProviderOperationKind, ProviderPromptContentsRequest,
 };
 use crate::external_provider_runtime::ProviderPromptDispatchObservation;
-use crate::provider_operation_settlement::{ProviderOperationCompletion, optional_message_text};
 
 const DELIVERY_DISPATCH_TIMEOUT: Duration = Duration::from_secs(10);
 
@@ -66,30 +63,13 @@ impl ExternalProviderSupervisor {
                 )
                 .await
             {
-                Ok(outcome) => match optional_message_text(outcome.output) {
-                    Ok(response) => ProviderOperationCompletion::Success {
-                        settlement: ConversationOperationSettlement::PromptCompleted {
-                            target: completion_target.clone(),
-                            stop_reason: outcome.stop_reason,
-                            response,
-                        },
-                        target: Some(completion_target),
-                        session_record: None,
-                    },
-                    Err(_) => ProviderOperationCompletion::Failure(failure(
-                        ConversationOperationFailureKind::ProtocolViolation,
-                        ConversationOperationFailureStage::Settlement,
-                        ProviderOperationEffect::Applied,
-                        "provider returned invalid prompt output",
-                        completion_operation_id,
-                        Some(completion_target),
-                    )),
-                },
-                Err(error) => ProviderOperationCompletion::Failure(prompt_runtime_failure(
+                // Same settlement as an unqueued prompt, permission refusal
+                // included (D1 C5): mail's refusals were recorded as completed.
+                result => super::provider_prompt_contents::prompt_completion(
+                    result,
                     completion_operation_id,
-                    Some(completion_target),
-                    error,
-                )),
+                    completion_target,
+                ),
             }
         });
         Ok(

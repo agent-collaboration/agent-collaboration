@@ -415,7 +415,7 @@ impl ExternalProviderSupervisor {
                     ConversationOperationFailureKind::NotFound,
                     ConversationOperationFailureStage::Settlement,
                     ProviderOperationEffect::None,
-                    "provider operation was not found",
+                    "the Router has no record of this operation ID",
                     operation_id.clone(),
                     None,
                 )

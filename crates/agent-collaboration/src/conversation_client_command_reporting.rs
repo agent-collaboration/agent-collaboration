@@ -411,7 +411,8 @@ pub(super) fn operation_result_exit(outcome: &ConversationOperationResult) -> i3
             Some(ConversationStopReason::Cancelled) => 130,
             _ => 0,
         },
-        ConversationOperationResult::Pending { .. } => 0,
+        ConversationOperationResult::Pending { .. }
+        | ConversationOperationResult::Queued { .. } => 0,
         ConversationOperationResult::Running { .. } => 0,
     }
 }

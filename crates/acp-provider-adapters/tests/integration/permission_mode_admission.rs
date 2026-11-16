@@ -354,7 +354,17 @@ async fn an_agent_that_lands_auto_on_its_fallback_is_reported_from_its_own_answe
         &["clamp-auto"],
     )
     .await;
-    let created = fixture.create(None, Some("auto")).await.expect("created");
+    let own = fixture.scratch("session-a");
+    let created = fixture
+        .create(Some(&own), Some("auto"))
+        .await
+        .expect("created");
+    // R2 "Confirms acceptEdits instead": the accepted fallback turns the
+    // in-folder allowance on, so this edit runs without an approval.
+    fixture
+        .ask("fixture-session-1", &in_folder_edit(&own))
+        .await;
+    let approvals_asked = fixture.approvals_asked();
     fixture.client.shutdown().await;
     assert_eq!(
         created.permission_mode,
@@ -364,6 +374,7 @@ async fn an_agent_that_lands_auto_on_its_fallback_is_reported_from_its_own_answe
             Some(PermissionModeReason::AgentFellBack)
         )
     );
+    assert_eq!(approvals_asked, 0, "the in-folder edit ran without asking");
     assert_eq!(
         fixture.receipt()["modeRequests"],
         json!([{"sessionId":"fixture-session-1","value":"auto"}])
