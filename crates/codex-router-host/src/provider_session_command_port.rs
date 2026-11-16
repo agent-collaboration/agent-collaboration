@@ -269,6 +269,30 @@ impl SessionCommandPort for HostSessionCommandPort {
         })
     }
 
+    fn queue_outcome(
+        &self,
+        target: message_board::SessionRef,
+        input_id: session_event_model::InputId,
+    ) -> CommandFuture<'_, collaboration_contracts::QueuedInputOutcome> {
+        Box::pin(async move {
+            let attachment = self
+                .hub
+                .attach(target.clone())
+                .await
+                .map_err(|_| CommandFailure::SessionNotFound)?;
+            let protocol_target = protocol_session(&target)?;
+            let registry = self.supervisor.queued_operation_registry();
+            tokio::select! {
+                started = wait_for_turn_start(self.hub.as_ref(), target, attachment, input_id.clone()) => {
+                    Ok(collaboration_contracts::QueuedInputOutcome::Started { turn_id: started? })
+                }
+                reason = registry.wait_not_sent(&protocol_target, &input_id) => {
+                    Ok(collaboration_contracts::QueuedInputOutcome::NotSent { reason })
+                }
+            }
+        })
+    }
+
     fn queue_list(
         &self,
         command: SessionTargetCommand,

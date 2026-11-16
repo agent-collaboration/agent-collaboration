@@ -40,7 +40,7 @@ pub use scheduled_run_contract::{
 };
 pub use session_command_port::{
     CommandContent, CommandFailure, CommandFuture, CreateSessionCommand, PromptSessionCommand,
-    QueueInputCommand, QueuedSessionInput, SessionCommandPort, SessionSettingsCommand,
+    QueueInputCommand, QueuedInputOutcome, QueuedSessionInput, SessionCommandPort, SessionSettingsCommand,
     SessionSteerOutcome, SessionTargetCommand, SessionTurnHandle, SetSessionSettingCommand,
     SteerSessionCommand,
 };

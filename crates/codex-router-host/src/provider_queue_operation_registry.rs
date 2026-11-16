@@ -12,14 +12,13 @@ use std::{
         atomic::{AtomicU64, Ordering},
     },
 };
-#[cfg(test)]
 use tokio::sync::Notify;
 
 #[derive(Default)]
 pub(crate) struct ProviderQueueOperationRegistry {
     operations: Mutex<HashMap<OperationId, QueuedProviderOperation>>,
     next_sequence: AtomicU64,
-    #[cfg(test)]
+    /// Wakes whoever waits on a queued input's outcome (D1 R14).
     changed: Notify,
 }
 
@@ -186,8 +185,7 @@ impl ProviderQueueOperationRegistry {
                 reason: reason.into(),
             };
             operation.terminal_at_ms = Some(now_ms());
-            #[cfg(test)]
-            self.changed.notify_one();
+            self.changed.notify_waiters();
         }
     }
 
@@ -215,8 +213,32 @@ impl ProviderQueueOperationRegistry {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .remove(operation_id);
-        #[cfg(test)]
-        self.changed.notify_one();
+        self.changed.notify_waiters();
+    }
+
+    /// The reason a session's queued input was not sent, once it wasn't.
+    pub(crate) async fn wait_not_sent(
+        &self,
+        target: &SessionRef,
+        input_id: &session_event_model::InputId,
+    ) -> String {
+        loop {
+            let changed = self.changed.notified();
+            let reason = self
+                .operations
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .values()
+                .find(|operation| &operation.target == target && &operation.input_id == input_id)
+                .and_then(|operation| match &operation.state {
+                    ConversationOperationQueueState::NotSubmitted { reason } => Some(reason.clone()),
+                    ConversationOperationQueueState::RouterQueued => None,
+                });
+            if let Some(reason) = reason {
+                return reason;
+            }
+            changed.await;
+        }
     }
 
     #[cfg(test)]

@@ -72,6 +72,7 @@ mod provider_acp_interaction;
 /// The Router-level mode every agent accepts for "work on your own"; doors
 /// whose protocol carries no mode ask for it by name (D1 spec R1).
 pub(crate) const AUTO_SESSION_MODE: &str = "auto";
+mod provider_acp_busy_prompt;
 mod provider_acp_session_route;
 mod router_session_app_server;
 pub mod schedule_preparation_evidence_sink;

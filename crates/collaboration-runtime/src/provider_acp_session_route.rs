@@ -124,7 +124,7 @@ pub(crate) fn failure(id: Value, code: i32, message: &str) -> Value {
     json!({"jsonrpc":"2.0","id":id,"error":{"code":code,"message":message}})
 }
 
-fn command_failure(id: Value, error: CommandFailure) -> Value {
+pub(crate) fn command_failure(id: Value, error: CommandFailure) -> Value {
     let code = match error {
         CommandFailure::SessionNotFound => -32002,
         CommandFailure::Unsupported | CommandFailure::UnsupportedOperation { .. } => -32601,
@@ -525,10 +525,29 @@ async fn serve_provider_sessions(
                             route.events.state(session.clone()).await,
                             Ok(SessionState::Running | SessionState::RequiresAction { .. })
                         ) {
-                            router
-                                .output
-                                .send(command_failure(id, CommandFailure::Busy))
-                                .await?;
+                            // A busy session steers or queues; it is never refused (D1 R12).
+                            let (Ok(attachment), Some(observed_turn)) = (
+                                route.events.attach(session.clone()).await,
+                                observers.observed_turns.get(&session).cloned(),
+                            ) else {
+                                router
+                                    .output
+                                    .send(failure(id, -32000, "Session observer unavailable"))
+                                    .await?;
+                                continue;
+                            };
+                            prompts.spawn(crate::provider_acp_busy_prompt::answer_busy_prompt(
+                                crate::provider_acp_busy_prompt::BusyPrompt {
+                                    commands: Arc::clone(&route.commands),
+                                    output: router.output.clone(),
+                                    id,
+                                    session,
+                                    content,
+                                    actor,
+                                    attachment,
+                                    observed_turn,
+                                },
+                            ));
                             continue;
                         }
                         let attachment = route.events.attach(session.clone()).await;
