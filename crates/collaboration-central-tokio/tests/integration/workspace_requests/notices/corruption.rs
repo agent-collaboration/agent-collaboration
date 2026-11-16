@@ -52,15 +52,36 @@ async fn invalid_open_window_is_rejected_before_alarm_changes_queue_or_cursor() 
         assert_eq!(before.rows[0][3], SqlValue::Integer(0.try_into().unwrap()));
         let prior_alarm = runtime.statement_host().alarm();
         execute(&f, sql, vec![text(&actor)]).await;
-        let error = runtime.after_event().await.unwrap_err();
-        assert!(
-            matches!(error.failure, StoreFailure::Corrupt { reason: CorruptReason::BadValue { column } } if column == expected_column)
-        );
+        // Embedded setup allowance: the fixture's setup claimed the due batch at T0.
+        let start = f.clock.utc_now();
+        f.clock.set_utc(start + chrono::Duration::seconds(30));
+        // Isolation: the window unit fails as a whole with no window, queue or
+        // cursor change; the alarm still re-arms and the failure is the unit's record.
+        runtime.after_event().await.unwrap();
         assert_eq!(
             runtime.statement_host().read(read()).await.unwrap().rows,
             before.rows
         );
-        assert_eq!(runtime.statement_host().alarm(), prior_alarm);
+        let _ = prior_alarm;
+        assert_eq!(
+            runtime
+                .statement_host()
+                .alarm()
+                .map(|time| time.unix_millis()),
+            Some((start + chrono::Duration::minutes(5)).timestamp_millis())
+        );
+        let record = runtime.statement_host().read(Statement { sql: "SELECT state,failure_count,last_failure,last_failure_detail FROM central_work_attempts WHERE machine_kind='legacy_notice_windows' AND subject_key='all'", args: vec![] }).await.unwrap();
+        assert_eq!(
+            &record.rows[0][..3],
+            &[
+                text("failing"),
+                SqlValue::Integer(1.try_into().unwrap()),
+                text("corrupt_row")
+            ]
+        );
+        assert!(
+            matches!(&record.rows[0][3], SqlValue::Text(detail) if detail.contains(expected_column))
+        );
         let recipient = runtime.statement_host().read(Statement { sql: "SELECT COUNT(*) FROM messages WHERE recipient_actor=? AND message_kind='notice'", args: vec![text(actor)] }).await.unwrap();
         assert_eq!(
             recipient.rows,

@@ -335,9 +335,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         caller: &WorkspaceCaller,
         request: m::WorkspaceRequest,
     ) -> Result<m::WorkspaceReply, StoreFailure> {
-        if !self.alarm_organization_is_provisioned().await? {
-            return Err(corrupt("organization_identity.id"));
-        }
+        // Admission answers for the organization as on main; the due batch that
+        // follows checks the stamp once for this event before any unit (P3).
         let result = execute(self, caller, request).await;
         let _ = self.after_event().await;
         match result {

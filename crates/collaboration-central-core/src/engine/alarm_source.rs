@@ -488,6 +488,14 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         let _turn = self.take_central_turn().await;
         let (mut statements, count) = self.plan_due_windows(now).await?;
         statements.push(super::attempt_statements::delete_attempt(subject));
+        // The kept notice tests hold the commit that delivers windows at the
+        // existing timer-commit points; an empty window unit passes them by.
+        #[cfg(feature = "test-support")]
+        if count > 0 {
+            self.pauses
+                .reached_central(crate::PausePoint::BeforeTimerCommit)
+                .await;
+        }
         LegacyUnitOutcome::batch(
             self.host
                 .run_batch(StatementBatch {
@@ -496,6 +504,12 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 })
                 .await,
         )?;
+        #[cfg(feature = "test-support")]
+        if count > 0 {
+            self.pauses
+                .reached_central(crate::PausePoint::AfterTimerCommit)
+                .await;
+        }
         Ok(count)
     }
 }

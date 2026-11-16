@@ -80,9 +80,26 @@ async fn corrupt_timer_target_and_timing_fail_alarm_without_effects() {
         assert_eq!(prior_alarm, Some(due.timestamp_millis()));
         execute(&fixture, corrupt_sql, vec![]).await;
         fixture.clock.set_utc(due);
-        let error = runtime.after_event().await.unwrap_err();
+        // Isolation (moved-tests table): the corrupt timer is recorded Failing, the
+        // alarm still re-arms, and it lands on the next mark.
+        runtime.after_event().await.unwrap();
+        let kind = if number == 1300 {
+            "wake_timer"
+        } else {
+            "automation_timer"
+        };
+        let record = runtime.statement_host().read(Statement { sql: "SELECT state,failure_count,last_failure,last_failure_detail FROM central_work_attempts WHERE machine_kind=?", args: vec![text(kind)] }).await.unwrap();
+        assert_eq!(record.rows.len(), 1);
+        assert_eq!(
+            &record.rows[0][..3],
+            &[
+                text("failing"),
+                central_storage::SqlValue::Integer(1.try_into().unwrap()),
+                text("corrupt_row")
+            ]
+        );
         assert!(
-            matches!(error.failure, central_storage::StoreFailure::Corrupt { reason: central_storage::CorruptReason::BadValue { column } } if column == expected_column)
+            matches!(&record.rows[0][3], central_storage::SqlValue::Text(detail) if detail.contains(expected_column))
         );
 
         let rows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM wakes WHERE state='active'),(SELECT COUNT(*) FROM automations WHERE state='active'),(SELECT COUNT(*) FROM messages)", args: vec![] }).await.unwrap();
@@ -100,7 +117,7 @@ async fn corrupt_timer_target_and_timing_fail_alarm_without_effects() {
                 .statement_host()
                 .alarm()
                 .map(|value| value.unix_millis()),
-            prior_alarm
+            Some((due + chrono::Duration::minutes(5)).timestamp_millis())
         );
         fixture.host.close().await;
     }
@@ -141,7 +158,8 @@ async fn later_timer_statement_failure_rolls_back_queue_lifecycle_and_alarm() {
     assert_eq!(prior_alarm, Some(due.timestamp_millis()));
     execute(&fixture, "CREATE TRIGGER reject_wake_finish BEFORE UPDATE ON wakes BEGIN SELECT RAISE(ABORT,'reject wake finish'); END", vec![]).await;
     fixture.clock.set_utc(due);
-    assert!(runtime.after_event().await.is_err());
+    // Isolation: only the failing timer's batch rolls back; the event succeeds.
+    runtime.after_event().await.unwrap();
     let rows = runtime.statement_host().read(Statement { sql: "SELECT state,(SELECT COUNT(*) FROM messages WHERE message_kind='wake') FROM wakes WHERE wake_id=?", args: vec![text(&wake_id)] }).await.unwrap();
     assert_eq!(
         rows.rows,
@@ -155,9 +173,11 @@ async fn later_timer_statement_failure_rolls_back_queue_lifecycle_and_alarm() {
             .statement_host()
             .alarm()
             .map(|value| value.unix_millis()),
-        prior_alarm
+        Some((due + chrono::Duration::minutes(5)).timestamp_millis()),
+        "the rejected wake retries at the next mark through its record"
     );
     execute(&fixture, "DROP TRIGGER reject_wake_finish", vec![]).await;
+    fixture.clock.set_utc(due + chrono::Duration::minutes(5));
     runtime.after_event().await.unwrap();
     assert_eq!(runtime.after_event().await.unwrap().work.wakes_fired, 0);
     let rows = runtime.statement_host().read(Statement { sql: "SELECT state,(SELECT COUNT(*) FROM messages WHERE message_kind='wake') FROM wakes WHERE wake_id=?", args: vec![text(wake_id)] }).await.unwrap();

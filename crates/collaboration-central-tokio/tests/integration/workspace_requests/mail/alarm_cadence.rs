@@ -134,6 +134,14 @@ async fn a_pending_due_at_now_recomputes_to_the_next_mark() {
         .central(&fixture.caller.organization_id)
         .await
         .unwrap();
+    // Let the real driver settle on its current deadline first, so moving UTC to
+    // the due time cannot wake a stale loop iteration that runs the batch.
+    fixture
+        .clock
+        .not_due_check_now(
+            router_clock::ClockInstant::ZERO.after(std::time::Duration::from_secs(300)),
+        )
+        .await;
     fixture.clock.set_utc(due);
 
     runtime.recompute_alarm().await.unwrap();

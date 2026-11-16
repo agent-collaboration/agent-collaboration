@@ -345,13 +345,19 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
             .timestamp_millis(),
         f.clock.utc_now().timestamp_millis() + 5_000
     );
+    // Kept, with the table's allowance: the clock sits inside the 30 s floor
+    // after the setup's due batch at this same held time, so the expected
+    // physical alarm is the backstop raised to that floor.
     assert_eq!(
         original_alarm.unix_millis(),
-        f.clock.utc_now().timestamp_millis() + 5_000
+        (f.clock.utc_now().timestamp_millis() + 5_000)
+            .max(f.clock.utc_now().timestamp_millis() + 30_000)
     );
     for second in 1..=60 {
         f.clock.advance(Duration::from_secs(1)).unwrap();
-        if second == 5 {
+        // The backstop alarm is raised to the 30 s floor (allowance above), so the
+        // driver's drain queues behind the held workspace turn at second 30.
+        if second == 30 {
             runtime
                 .workspace_turns()
                 .until_waiting(&f.workspace, 1)

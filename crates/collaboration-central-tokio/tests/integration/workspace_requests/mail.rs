@@ -16,8 +16,10 @@ mod replay;
 
 mod replay_failures;
 
+mod engine_alarm;
 mod engine_outcomes;
 mod engine_owed_reply;
 mod engine_probe_support;
+mod engine_timing;
 mod probe_requests;
 mod timing_contract;
