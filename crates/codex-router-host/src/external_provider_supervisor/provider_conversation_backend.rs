@@ -146,6 +146,13 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                     mode: requested_settings.mode,
                                     model: requested_settings.model,
                                     effort: requested_settings.effort,
+                                    // Owner, 2026-11-15: "--fast off is default in ckursor ...
+                                    // unless user provices --fast auto" (D1 R7).
+                                    fast: if requested_settings.fast == Some(collaboration_protocol::FastSetting::Auto) {
+                                        acp_client_runtime::FastRequest::Leave
+                                    } else {
+                                        acp_client_runtime::FastRequest::OffIfOffered
+                                    },
                                 },
                             )
                             .await
@@ -165,6 +172,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                         observed.mode = created.effective_settings.mode;
                                         observed.model = created.effective_settings.model;
                                         observed.effort = created.effective_settings.effort;
+                                        observed.fast = created.effective_settings.fast.map(crate::provider_operation_settlement::provider_fast_state);
                                         observed.requested_mode = created.permission_mode.requested;
                                         observed.mode_reason = created.permission_mode.reason.map(crate::provider_operation_settlement::provider_mode_reason);
                                         completion_inner.record_requested_mode(target.clone(), super::RequestedModeRecord { requested_mode: observed.requested_mode.clone(), mode_reason: observed.mode_reason }).await;
@@ -345,6 +353,9 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                     observed.mode = effective.mode;
                                     observed.model = effective.model;
                                     observed.effort = effective.effort;
+                                    observed.fast = effective.fast.map(
+                                        crate::provider_operation_settlement::provider_fast_state,
+                                    );
                                     completion_inner
                                         .record_settings_catalog(completion_target.clone(), catalog)
                                         .await;

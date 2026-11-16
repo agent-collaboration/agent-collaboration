@@ -118,6 +118,7 @@ pub async fn execute_provider_action(
                     // door asks for auto by name (D1 spec R1).
                     mode: Some("auto".into()),
                     effort: None,
+                    fast: None,
                     fork: None,
                     root_message_id: None,
                 };

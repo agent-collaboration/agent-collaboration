@@ -316,6 +316,10 @@ pub struct EffectiveProviderSettings {
     /// Why `mode`, the agent's own report, differs from the requested mode.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mode_reason: Option<ProviderModeReason>,
+    /// What the agent last reported for its fast option; absent when the
+    /// Router hasn't observed this session's settings since it started.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fast: Option<FastState>,
 }
 
 /// Why a session's actual permission mode differs from the requested one.
@@ -374,6 +378,8 @@ impl CodexPermissionModeReport {
             effort: None,
             requested_mode: self.requested_mode.clone(),
             mode_reason: self.reason,
+            // Codex has no fast option and the Router reports none for it (R10).
+            fast: None,
         }
     }
 }
@@ -396,6 +402,9 @@ pub struct ProviderRequestedSettings {
     pub model: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
+    /// Absent means the default, off.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fast: Option<FastSetting>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
@@ -404,6 +413,30 @@ pub enum ProviderSettingName {
     Mode,
     Model,
     Effort,
+    Fast,
+}
+
+/// What the caller asks of the agent's fast option. Owner, 2026-11-15:
+/// "--fast off is default in ckursor ... unless user provices --fast auto".
+/// The Router never turns fast on.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FastSetting {
+    /// Turn the agent's fast option off and keep it off.
+    #[default]
+    Off,
+    /// Leave the agent's fast option to the agent.
+    Auto,
+}
+
+/// What the agent last reported for its fast option.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum FastState {
+    Off,
+    On,
+    /// The agent offers no fast option.
+    None,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]

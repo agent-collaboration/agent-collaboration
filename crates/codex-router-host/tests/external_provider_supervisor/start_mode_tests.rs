@@ -169,3 +169,90 @@ async fn lost_auto_is_unconfirmed_on_create_and_show() -> TestResult {
     );
     Ok(())
 }
+
+/// Oracle: D1 V5b, spec R2 "When the mode is confirmed but a later setting
+/// fails" — the start is created without settings naming fast, with the mode
+/// applied; show keeps requested auto, the confirmed fallback and its reason,
+/// and prompts are held.
+#[cfg(unix)]
+#[tokio::test]
+async fn confirmed_fallback_then_later_failure_keeps_the_mode_report() -> TestResult {
+    let fixture =
+        ModeFixture::start("claude", &["clamp-auto", "offer-fast", "refuse-fast-once"]).await?;
+    let operation_id = OperationId::generate();
+    operation(
+        fixture
+            .backend
+            .create(fixture.create_request(
+                operation_id.clone(),
+                Some(ProviderRequestedSettings {
+                    mode: Some("auto".into()),
+                    ..ProviderRequestedSettings::default()
+                }),
+            )?)
+            .await,
+    )?;
+    let settled = operation(wait(&fixture.backend, operation_id).await)?;
+    let ConversationOperationWaitOutput::Available {
+        settlement:
+            ConversationOperationSettlement::CreatedWithoutSettings {
+                target,
+                applied,
+                failed,
+                ..
+            },
+    } = settled.output
+    else {
+        return Err(format!("expected a start created without settings: {settled:?}").into());
+    };
+    let inspected = fixture
+        .backend
+        .inspect_session(ProviderSessionInspectRequest {
+            target: target.clone(),
+        })
+        .await
+        .map_err(|error| format!("{error:?}"))?;
+    let prompt_operation = OperationId::generate();
+    let prompted = fixture
+        .backend
+        .prompt(ConversationPromptRequest {
+            input_id: None,
+            operation_id: prompt_operation.clone(),
+            target: target.clone(),
+            generation: Some(generation()?),
+            requested_by: fixture.creator.clone().into(),
+            approver: fixture.creator.clone().into(),
+            prompt: MessageContent::HumanUser {
+                text: MessageText::try_from("hello".to_owned())?,
+            },
+        })
+        .await;
+    let held = match prompted {
+        Err(refusal) => refusal.kind,
+        Ok(_) => match wait(&fixture.backend, prompt_operation).await {
+            Err(refusal) => refusal.kind,
+            Ok(result) => return Err(format!("a held prompt ran: {result:?}").into()),
+        },
+    };
+    fixture.backend.shutdown().await.map_err(str::to_owned)?;
+
+    ensure_eq!(failed.len(), 1);
+    ensure_eq!(failed[0].setting, ProviderSettingName::Fast);
+    ensure!(
+        applied
+            .iter()
+            .any(|setting| setting.setting == ProviderSettingName::Mode)
+    );
+    ensure_eq!(inspected.requested_mode.as_deref(), Some("auto"));
+    ensure_eq!(
+        inspected.mode_reason,
+        Some(collaboration_protocol::ProviderModeReason::AgentFellBack)
+    );
+    let current_mode = inspected
+        .settings_catalog
+        .ok_or("show has the settings catalog")?
+        .current_mode;
+    ensure_eq!(current_mode.as_deref(), Some("acceptEdits"));
+    ensure_eq!(held, ConversationOperationFailureKind::SettingsUnresolved);
+    Ok(())
+}

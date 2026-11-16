@@ -47,6 +47,7 @@ async fn provider_create_projects_effective_partial_and_invalid_settings() -> Te
                             .to_owned(),
                         ),
                         effort: None,
+                        ..Default::default()
                     }),
                     operation_id: operation_id.clone(),
                     endpoint: provider_endpoint.clone(),

@@ -87,6 +87,8 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         let task_todo_state = Arc::clone(&todo_state);
         let retirement_todos = Arc::clone(&todo_state);
         let in_folder_grants = super::in_folder_allowance::InFolderGrants::default();
+        let keep_fast_off = crate::provider_session_actor::KeepFastOff::default();
+        let task_keep_fast_off = Arc::clone(&keep_fast_off);
         #[cfg(test)]
         let client_in_folder_grants = Arc::clone(&in_folder_grants);
         let task_runtime_handles = ProviderSessionRuntimeHandles {
@@ -100,6 +102,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             session_capabilities: Arc::clone(&task_session_capabilities),
             settings_unresolved: Arc::clone(&task_settings_unresolved),
             in_folder_grants: Arc::clone(&in_folder_grants),
+            keep_fast_off: Arc::clone(&keep_fast_off),
         };
         let task_event_sink = Arc::clone(&event_sink);
         let retirement_event_sink = Arc::clone(&event_sink);
@@ -479,6 +482,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 if let Ok(mut grants) = in_folder_grants.write() {
                                                     grants.remove(&provider_session_id);
                                                 }
+                                                task_keep_fast_off.write().await.remove(&provider_session_id);
                                                 task_tool_registry.turn_ended(&provider_session_id);
                                                 task_todo_state.forget_session(&provider_session_id);
                                             }
@@ -800,6 +804,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             test_tool_calls,
             #[cfg(test)]
             in_folder_grants: client_in_folder_grants,
+            keep_fast_off,
         })
     }
 }

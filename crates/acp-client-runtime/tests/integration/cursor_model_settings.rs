@@ -2,6 +2,8 @@
 
 #[path = "../cursor_model_settings/acp_wire_fixture.rs"]
 mod acp_wire_fixture;
+#[path = "../cursor_model_settings/cursor_fast_settings.rs"]
+mod cursor_fast_settings;
 
 use acp_client_runtime::{
     ExternalProviderRuntimeError, ProviderConfigValue, ProviderSettingKind,
@@ -59,6 +61,7 @@ async fn assert_shared_setting_is_reasserted(
         ProviderSettingKind::Model => settings.model,
         ProviderSettingKind::Effort => settings.effort,
         ProviderSettingKind::Mode => settings.mode,
+        ProviderSettingKind::Fast => None,
     };
     assert_eq!(value(confirmed).as_deref(), Some(initial));
     assert_eq!(value(other).as_deref(), Some(changed));
@@ -67,6 +70,7 @@ async fn assert_shared_setting_is_reasserted(
         ProviderSettingKind::Model => "model",
         ProviderSettingKind::Effort => "effort",
         ProviderSettingKind::Mode => "mode",
+        ProviderSettingKind::Fast => "fast",
     };
     let setters = fixture
         .requests()
@@ -465,6 +469,7 @@ async fn create_refreshes_mode_dependent_model_and_model_dependent_effort_choice
                 mode: Some("ask".into()),
                 model: Some("fixture-b".into()),
                 effort: Some("high".into()),
+                ..Default::default()
             },
         )
         .await;

@@ -96,10 +96,8 @@ fn conversation_create_help_explains_codex_and_provider_setting_rules() {
     assert!(output.status.success());
     let help = String::from_utf8_lossy(&output.stdout);
     assert!(help.contains("required for Codex endpoints"), "{help}");
-    assert!(
-        help.contains("provider endpoints accept advertised"),
-        "{help}"
-    );
+    assert!(help.contains("Claude and Cursor require --mode"), "{help}");
+    assert!(help.contains("--fast <FAST>"), "{help}");
     assert!(help.contains("--mode <MODE>"), "{help}");
     assert!(help.contains("--model <MODEL>"), "{help}");
     assert!(help.contains("--effort <EFFORT>"), "{help}");

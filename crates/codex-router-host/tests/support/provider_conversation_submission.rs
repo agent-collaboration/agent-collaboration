@@ -60,6 +60,7 @@ pub(crate) async fn submit_provider_create(
         model,
         mode,
         effort,
+        fast: None,
         fork: None,
         root_message_id: None,
     };

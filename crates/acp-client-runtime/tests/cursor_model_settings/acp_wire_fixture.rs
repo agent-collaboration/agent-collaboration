@@ -145,6 +145,7 @@ impl AcpWireFixture {
     pub async fn start(scenario: &str, cursor_picker: bool) -> Self {
         Self::initialize(
             scenario,
+            &[],
             if cursor_picker {
                 ClientInitialization::CursorWithMcp
             } else {
@@ -156,14 +157,23 @@ impl AcpWireFixture {
 
     #[cfg(feature = "test-observation")]
     pub async fn start_without_mcp(scenario: &str) -> Self {
-        Self::initialize(scenario, ClientInitialization::CursorWithoutMcp).await
+        Self::initialize(scenario, &[], ClientInitialization::CursorWithoutMcp).await
+    }
+
+    /// The reactive Cursor scenario with the named fast behaviours.
+    pub async fn start_reactive(behaviours: &[&str]) -> Self {
+        Self::initialize("reactive", behaviours, ClientInitialization::Standard).await
     }
 
     #[expect(
         clippy::expect_used,
         reason = "Invalid test fixtures must fail immediately instead of masking the failed setup."
     )]
-    async fn initialize(scenario: &str, initialization: ClientInitialization) -> Self {
+    async fn initialize(
+        scenario: &str,
+        behaviours: &[&str],
+        initialization: ClientInitialization,
+    ) -> Self {
         let root = tempfile::tempdir().expect("fixture root");
         let receipt = root.path().join("wire.json");
         let launch = ExternalProviderLaunch {
@@ -176,7 +186,10 @@ impl AcpWireFixture {
                 .into(),
                 scenario.into(),
                 receipt.to_string_lossy().into_owned(),
-            ],
+            ]
+            .into_iter()
+            .chain(behaviours.iter().map(|behaviour| (*behaviour).to_owned()))
+            .collect(),
             environment: Vec::new(),
             persistence_target: ProviderPersistenceTarget::Unspecified,
         };

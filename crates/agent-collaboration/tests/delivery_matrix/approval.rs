@@ -50,6 +50,7 @@ pub(super) async fn deliver_approval_notice(
                 model: None,
                 mode: None,
                 effort: None,
+                fast: None,
                 fork: None,
                 root_message_id: None,
             },

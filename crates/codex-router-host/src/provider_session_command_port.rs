@@ -95,6 +95,8 @@ impl SessionCommandPort for HostSessionCommandPort {
                     mode: command.settings.mode,
                     model: command.settings.model,
                     effort: command.settings.effort,
+                    // These doors carry no fast, so the default (off) applies.
+                    fast: None,
                 }),
             };
             self.supervisor

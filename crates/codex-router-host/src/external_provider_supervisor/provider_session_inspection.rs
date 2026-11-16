@@ -61,6 +61,10 @@ pub(super) async fn inspect(
         .get(&target)
         .cloned()
         .unwrap_or_default();
+    // Fast from the catalog this Host holds; absent when it holds none (D1 R11).
+    let fast = catalog.as_ref().map(|catalog| {
+        crate::provider_operation_settlement::provider_fast_state(catalog.fast_observed())
+    });
     let state = if let Some(hub) = supervisor.inner.hub.as_ref() {
         let hub_target = serde_json::to_value(&target)
             .ok()
@@ -92,6 +96,7 @@ pub(super) async fn inspect(
         settings_catalog: catalog.map(|catalog| catalog_view(catalog, mode_unconfirmed)),
         requested_mode: requested_mode.requested_mode,
         mode_reason: requested_mode.mode_reason,
+        fast,
     })
 }
 

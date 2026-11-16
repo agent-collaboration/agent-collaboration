@@ -172,6 +172,8 @@ fn setting_category(
         "mode" => Some(ProviderSettingKind::Mode),
         "model" => Some(ProviderSettingKind::Model),
         "effort" | "thought_level" => Some(ProviderSettingKind::Effort),
+        // Cursor tags its fast option model_config (D1 Change 3).
+        "fast" => Some(ProviderSettingKind::Fast),
         _ => None,
     }
 }

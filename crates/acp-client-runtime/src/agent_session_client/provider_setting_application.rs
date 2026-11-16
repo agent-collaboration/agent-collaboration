@@ -114,7 +114,22 @@ pub(crate) async fn apply_initial_settings(
         ProviderSettingKind::Mode,
         ProviderSettingKind::Model,
         ProviderSettingKind::Effort,
+        ProviderSettingKind::Fast,
     ] {
+        if kind == ProviderSettingKind::Fast {
+            if !fast_off_requested(requested.fast, catalog) {
+                continue;
+            }
+            if let Err(failure) = apply_fast_off(session, catalog, behavior).await {
+                outcome.failure = Some(failure);
+                return outcome;
+            }
+            outcome.applied.push(AppliedProviderSetting {
+                kind,
+                value: FAST_OFF.to_owned(),
+            });
+            continue;
+        }
         let (value, accepted_fallback) = match kind {
             ProviderSettingKind::Mode => match &planned_mode {
                 Some(planned) => (&planned.value, planned.accepted_fallback.as_deref()),
@@ -128,6 +143,7 @@ pub(crate) async fn apply_initial_settings(
                 Some(value) => (value, None),
                 None => continue,
             },
+            ProviderSettingKind::Fast => continue,
         };
         if let Err(failure) =
             apply_one_setting(session, catalog, behavior, kind, value, accepted_fallback).await
@@ -146,6 +162,98 @@ pub(crate) async fn apply_initial_settings(
         }
     }
     outcome
+}
+
+/// The value a fast change reports: the Router only ever turns fast off.
+pub(crate) const FAST_OFF: &str = "off";
+
+/// Whether this request turns fast off: an explicit off always runs (and is
+/// invalid without a fast option); the create default runs only when the
+/// agent offers fast, so it never becomes a pending hold (D1 R7, R10).
+pub(crate) fn fast_off_requested(
+    fast: crate::FastRequest,
+    catalog: &ProviderSettingsCatalog,
+) -> bool {
+    match fast {
+        crate::FastRequest::Leave => false,
+        crate::FastRequest::OffIfOffered => catalog.offers_fast(),
+        crate::FastRequest::Off => true,
+    }
+}
+
+/// Turns the agent's fast option off. A select gets "false", a boolean gets
+/// false; only an answer that reads off confirms it (D1 R8).
+async fn apply_fast_off(
+    session: &ActiveSession<'_, Agent>,
+    catalog: &mut ProviderSettingsCatalog,
+    behavior: &dyn crate::ProviderBehavior,
+) -> Result<(), SettingSetupFailure> {
+    let invalid = |advertised: Vec<String>| SettingSetupFailure::Invalid {
+        kind: ProviderSettingKind::Fast,
+        value: FAST_OFF.to_owned(),
+        advertised,
+    };
+    let Some(option) = catalog.config_option(ProviderSettingKind::Fast) else {
+        return Err(invalid(Vec::new()));
+    };
+    let value = match option.current_value {
+        crate::ProviderConfigValue::Boolean(_) => SessionConfigOptionValue::boolean(false),
+        crate::ProviderConfigValue::Select(_) => {
+            if !option.choices.iter().any(|choice| choice.value == "false") {
+                return Err(invalid(
+                    option
+                        .choices
+                        .iter()
+                        .map(|choice| choice.value.clone())
+                        .collect(),
+                ));
+            }
+            SessionConfigOptionValue::value_id("false")
+        }
+    };
+    let request =
+        SetSessionConfigOptionRequest::new(session.session_id().clone(), option.id.clone(), value);
+    let result = match request.to_untyped_message() {
+        Ok(request) => match send_setting_request(session.connection(), request).await {
+            Ok(response) => apply_fast_response(catalog, response, behavior),
+            Err(failure) => Err(failure),
+        },
+        Err(_) => Err(SettingResponseFailure::Unknown),
+    };
+    result.map_err(|failure| match failure {
+        SettingResponseFailure::Rejected(reason) => SettingSetupFailure::Agent {
+            kind: ProviderSettingKind::Fast,
+            value: FAST_OFF.to_owned(),
+            reason,
+        },
+        SettingResponseFailure::Unknown => SettingSetupFailure::Uncertain {
+            kind: ProviderSettingKind::Fast,
+            value: FAST_OFF.to_owned(),
+        },
+    })
+}
+
+/// For fast only, a readable answer that still reads on, or that no longer
+/// lists a fast option, is a definite refusal (D1 R8); an unreadable one is
+/// unknown.
+fn apply_fast_response(
+    catalog: &mut ProviderSettingsCatalog,
+    response: serde_json::Value,
+    behavior: &dyn crate::ProviderBehavior,
+) -> Result<(), SettingResponseFailure> {
+    let updated = catalog_from_config_response(catalog, &response, behavior)?;
+    match updated.fast_observed() {
+        crate::FastObserved::Off => {
+            *catalog = updated;
+            Ok(())
+        }
+        crate::FastObserved::On => Err(SettingResponseFailure::Rejected(
+            "the agent's fast option still reads on".to_owned(),
+        )),
+        crate::FastObserved::NoOption => Err(SettingResponseFailure::Rejected(
+            "the agent's answer no longer lists a fast option".to_owned(),
+        )),
+    }
 }
 
 /// Finishes the mode report right after the agent confirmed the mode.
@@ -249,6 +357,29 @@ fn apply_config_response(
     response: serde_json::Value,
     behavior: &dyn crate::ProviderBehavior,
 ) -> Result<(), SettingResponseFailure> {
+    let updated = catalog_from_config_response(catalog, &response, behavior)?;
+    let effective = updated.effective_settings();
+    let selected = match kind {
+        ProviderSettingKind::Mode => effective.mode.as_deref(),
+        ProviderSettingKind::Model => effective.model.as_deref(),
+        ProviderSettingKind::Effort => effective.effort.as_deref(),
+        // Fast is applied by apply_fast_off, never through this path.
+        ProviderSettingKind::Fast => return Err(SettingResponseFailure::Unknown),
+    };
+    if selected != Some(value) && (selected.is_none() || selected != accepted_fallback) {
+        return Err(SettingResponseFailure::Unknown);
+    }
+    *catalog = updated;
+    Ok(())
+}
+
+/// The catalog a set_config_option answer describes, or Unknown when the
+/// answer can't be read.
+fn catalog_from_config_response(
+    catalog: &ProviderSettingsCatalog,
+    response: &serde_json::Value,
+    behavior: &dyn crate::ProviderBehavior,
+) -> Result<ProviderSettingsCatalog, SettingResponseFailure> {
     let options = response
         .get("configOptions")
         .and_then(serde_json::Value::as_array)
@@ -266,17 +397,7 @@ fn apply_config_response(
         behavior,
         response.get("_meta").and_then(serde_json::Value::as_object),
     );
-    let effective = updated.effective_settings();
-    let selected = match kind {
-        ProviderSettingKind::Mode => effective.mode.as_deref(),
-        ProviderSettingKind::Model => effective.model.as_deref(),
-        ProviderSettingKind::Effort => effective.effort.as_deref(),
-    };
-    if selected != Some(value) && (selected.is_none() || selected != accepted_fallback) {
-        return Err(SettingResponseFailure::Unknown);
-    }
-    *catalog = updated;
-    Ok(())
+    Ok(updated)
 }
 
 async fn send_setting_request(

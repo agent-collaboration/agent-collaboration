@@ -272,6 +272,8 @@ pub struct AgentSessionClient<P: InteractionPort> {
     /// Crate tests read whether a session's in-folder grant is in Router auto.
     #[cfg(test)]
     in_folder_grants: InFolderGrants,
+    /// Accepting a refused fast as it stands ends keeping it off (D1 R8).
+    keep_fast_off: crate::provider_session_actor::KeepFastOff,
 }
 
 impl<P: InteractionPort> AgentSessionClient<P> {

@@ -226,6 +226,7 @@ async fn create_applies_requested_settings_before_first_prompt() {
                 mode: Some("ask".to_owned()),
                 model: Some("b".to_owned()),
                 effort: Some("high".to_owned()),
+                ..Default::default()
             },
         )
         .await
@@ -348,6 +349,7 @@ async fn partial_setup_blocks_prompt_until_settings_are_accepted() {
                 mode: Some("ask".to_owned()),
                 model: Some("b".to_owned()),
                 effort: Some("high".to_owned()),
+                ..Default::default()
             },
         )
         .await;
@@ -445,6 +447,7 @@ async fn resolving_failed_kind_keeps_untried_kind_gated_until_accepted() {
                 mode: Some("ask".to_owned()),
                 model: Some("b".to_owned()),
                 effort: Some("high".to_owned()),
+                ..Default::default()
             },
         )
         .await;

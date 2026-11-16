@@ -219,6 +219,7 @@ async fn create_provider_session(
                 model: None,
                 mode: None,
                 effort: None,
+                fast: None,
                 fork: None,
                 root_message_id: None,
             },

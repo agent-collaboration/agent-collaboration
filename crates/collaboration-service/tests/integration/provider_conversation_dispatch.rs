@@ -55,6 +55,7 @@ impl ProviderConversationBackend for RecordingBackend {
                 settings_catalog: None,
                 requested_mode: None,
                 mode_reason: None,
+                fast: None,
             })
         })
     }
@@ -166,6 +167,7 @@ fn settings_result(target: collaboration_protocol::SessionRef) -> ProviderSettin
             effort: None,
             requested_mode: None,
             mode_reason: None,
+            fast: None,
         },
     }
 }

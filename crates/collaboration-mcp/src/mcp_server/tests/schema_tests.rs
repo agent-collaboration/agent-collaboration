@@ -537,3 +537,67 @@ fn advertised_load_input_accepts_established_human_or_session_identity_shapes() 
         "a bare string is not a provider identity"
     );
 }
+
+/// Oracle: D1 V20, spec R1, R7 and R11 — the served create input takes fast
+/// off or auto and nothing else, the settings setter takes the fast setting,
+/// and the create descriptions say Claude and Cursor require a mode.
+#[test]
+fn advertised_create_and_settings_inputs_carry_fast_and_the_mode_rule() {
+    let surface = super::super::ToolSurface::new(None);
+    let tool = |name: &str| {
+        surface
+            .tools()
+            .iter()
+            .find(|tool| tool.name == name)
+            .cloned()
+            .expect("public tool")
+    };
+    let endpoint = serde_json::json!({"serviceId":"00000000-0000-4000-8000-000000000001","endpointId":"cursor-local"});
+    let human = serde_json::json!({"kind":"human","humanId":"schema-owner"});
+
+    let create = tool("conversation_create");
+    let validator = jsonschema::validator_for(
+        &serde_json::to_value(&create.input_schema).expect("create input schema"),
+    )
+    .expect("create schema compiles");
+    let create_input = |fast: &str| {
+        serde_json::json!({"operationId":collaboration_protocol::OperationId::generate(),
+            "endpoint":endpoint,"workingDirectory":"/project","access":"workspace-write",
+            "createdBy":human,"mode":"auto","fast":fast})
+    };
+    for fast in ["off", "auto"] {
+        assert!(
+            validator.is_valid(&create_input(fast)),
+            "fast {fast} is accepted"
+        );
+    }
+    for fast in ["on", "true", ""] {
+        assert!(
+            !validator.is_valid(&create_input(fast)),
+            "fast {fast} is refused"
+        );
+    }
+    for name in ["conversation_create", "conversation_create_and_prompt"] {
+        let description = tool(name).description.unwrap_or_default();
+        assert!(
+            description.contains("Claude and Cursor require mode"),
+            "{name}: {description}"
+        );
+    }
+
+    let settings = tool("conversation_settings_set");
+    let validator = jsonschema::validator_for(
+        &serde_json::to_value(&settings.input_schema).expect("settings input schema"),
+    )
+    .expect("settings schema compiles");
+    let target = serde_json::json!({"endpoint":endpoint,"sessionId":"stored-session"});
+    let settings_input = |setting: &str| serde_json::json!({"target":target,"actor":human,"setting":setting,"value":"off"});
+    assert!(
+        validator.is_valid(&settings_input("fast")),
+        "the fast setting is accepted"
+    );
+    assert!(
+        !validator.is_valid(&settings_input("turbo")),
+        "unknown settings are refused"
+    );
+}

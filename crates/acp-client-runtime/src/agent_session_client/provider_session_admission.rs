@@ -3,7 +3,8 @@
 use super::ExternalProviderToolCall;
 
 use super::provider_setting_application::{
-    InitialSettingsOutcome, SettingSetupFailure, apply_initial_settings,
+    FAST_OFF, InitialSettingsOutcome, SettingSetupFailure, apply_initial_settings,
+    fast_off_requested,
 };
 use super::{
     ActiveSession, Agent, Arc, CancellationToken, ConnectionTo, ExternalProviderCreatedSession,
@@ -15,10 +16,15 @@ use super::{
 use crate::provider_item_projection::ProviderItemProjection;
 use agent_client_protocol::schema::v1::CloseSessionRequest;
 
+/// The requested settings after the failed one, in apply order. Fast counts
+/// only when it would run, so a no-op default never becomes a hold (D1 R10).
 fn untried_settings(
     requested: &crate::RequestedProviderSettings,
+    catalog: &crate::ProviderSettingsCatalog,
     failed_kind: crate::ProviderSettingKind,
 ) -> Vec<crate::NotAppliedProviderSetting> {
+    let fast_off = FAST_OFF.to_owned();
+    let fast = fast_off_requested(requested.fast, catalog).then_some(&fast_off);
     let mut after_failure = false;
     let mut untried = Vec::new();
     for (kind, value) in [
@@ -28,6 +34,7 @@ fn untried_settings(
             crate::ProviderSettingKind::Effort,
             requested.effort.as_ref(),
         ),
+        (crate::ProviderSettingKind::Fast, fast),
     ] {
         if after_failure && let Some(value) = value {
             untried.push(crate::NotAppliedProviderSetting {
@@ -162,6 +169,10 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
             let response = session.response();
             let mut settings_catalog =
                 crate::provider_settings_catalog_codec::catalog_from_session_response(&response, runtime_handles.behavior.as_ref(), &runtime_handles.connection_model_reasoning);
+            // The caller's wish to keep fast off holds whatever this start's outcome (D1 R9).
+            if fast_off_requested(requested_settings.fast, &settings_catalog) {
+                runtime_handles.keep_fast_off.write().await.insert(provider_session_id.clone());
+            }
             let InitialSettingsOutcome { applied, failure, permission_mode, router_auto_active } =
                 apply_initial_settings(&session, &requested_settings, &mut settings_catalog, runtime_handles.behavior.as_ref()).await;
             if let Some(grant) = in_folder
@@ -205,7 +216,7 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                     } else {
                         ExternalProviderRuntimeError::CreatedWithoutSettings {
                             provider_session_id: provider_session_id.clone(),
-                            not_applied: untried_settings(&requested_settings, kind).into_boxed_slice(),
+                            not_applied: untried_settings(&requested_settings, &settings_catalog, kind).into_boxed_slice(),
                             applied,
                             failed: crate::FailedProviderSetting {
                                 kind,
@@ -220,6 +231,7 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                         if let Ok(mut grants) = runtime_handles.in_folder_grants.write() {
                             grants.remove(&provider_session_id);
                         }
+                        runtime_handles.keep_fast_off.write().await.remove(&provider_session_id);
                         registration_tx
                             .send(Err(error))
                             .map_err(|_| agent_client_protocol::Error::internal_error())?;
@@ -233,7 +245,7 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                     reason,
                 }) => Some(ExternalProviderRuntimeError::CreatedWithoutSettings {
                     provider_session_id: provider_session_id.clone(),
-                    not_applied: untried_settings(&requested_settings, kind).into_boxed_slice(),
+                    not_applied: untried_settings(&requested_settings, &settings_catalog, kind).into_boxed_slice(),
                     applied,
                     failed: crate::FailedProviderSetting {
                         kind,
@@ -245,7 +257,7 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                 Some(SettingSetupFailure::Uncertain { kind, value }) => {
                     Some(ExternalProviderRuntimeError::CreatedWithoutSettings {
                         provider_session_id: provider_session_id.clone(),
-                        not_applied: untried_settings(&requested_settings, kind).into_boxed_slice(),
+                        not_applied: untried_settings(&requested_settings, &settings_catalog, kind).into_boxed_slice(),
                         applied,
                         failed: crate::FailedProviderSetting {
                             kind,

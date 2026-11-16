@@ -121,7 +121,8 @@ async function serveSharedSettings(peer: {
 //   boolean-fast: fast is a boolean option instead of a false/true select.
 //   refuse-fast-once: the first fast change is answered with an error.
 //   refuse-fast-after-model: fast changes are accepted until a model change is
-//     accepted; the first fast change after it is refused, later ones accepted.
+//     accepted after the first fast change; the next fast change is refused,
+//     later ones accepted.
 //   malformed-fast-reply: the first fast change gets a success with no
 //     configOptions; fast stays as it was.
 //   malformed-fast-after-model: as refuse-fast-after-model, but that one fast
@@ -203,8 +204,10 @@ class ReactiveFastReplies {
     this.behaviours = behaviours;
   }
 
+  // A model change counts only after a fast change was answered, so the
+  // create's own model change doesn't trip the after-model behaviours.
   modelChanged(): void {
-    this.modelChangedSinceFast = true;
+    if (this.fastChanges > 0) this.modelChangedSinceFast = true;
   }
 
   next(): FastReply {
@@ -305,6 +308,19 @@ async function serveReactiveSettings(peer: ReactivePeer): Promise<void> {
         });
         break;
       }
+      case "session/load": {
+        // A restarted agent loads a stored session at its defaults.
+        const sessionId = String(requestParameters(request).sessionId);
+        const session = sessions.get(sessionId) ?? {
+          mode: "agent",
+          model: "fixture-a",
+          effort: "medium",
+          fast: true,
+        };
+        sessions.set(sessionId, session);
+        peer.reply(request, { configOptions: reactiveOptions(session, peer.behaviours, true) });
+        break;
+      }
       case "session/set_config_option":
         answerReactiveSetting(
           peer,
@@ -315,6 +331,9 @@ async function serveReactiveSettings(peer: ReactivePeer): Promise<void> {
         break;
       case "session/prompt":
         peer.reply(request, { stopReason: "end_turn" });
+        break;
+      case "authenticate":
+        peer.reply(request, {});
         break;
       case "session/close":
         sessions.delete(String(requestParameters(request).sessionId));
@@ -341,6 +360,19 @@ function applyScriptedSetting(
     // Cursor turns fast back on whenever the model changes.
     current.fast = "true";
   } else current.effort = value;
+}
+
+/** The initialize answer; the reactive scenario also serves the Host's real
+ * Cursor binding, which needs Cursor's login method. */
+function initializeResult(scenario: string): Record<string, unknown> {
+  return {
+    protocolVersion: 1n,
+    agentCapabilities: { loadSession: true, mcpCapabilities: { http: true } },
+    agentInfo: { name: "cursor-settings-wire-peer", version: "1" },
+    ...(scenario === "reactive"
+      ? { authMethods: [{ id: "cursor_login", name: "Cursor login" }] }
+      : {}),
+  };
 }
 
 function reactivePeer(
@@ -390,11 +422,7 @@ export async function main(): Promise<void> {
     const initialize = await readRequest();
     assert.equal(initialize?.method, "initialize");
     if (initialize === undefined) throw new Error("initialize request required");
-    reply(initialize, {
-      protocolVersion: 1n,
-      agentCapabilities: { loadSession: true, mcpCapabilities: { http: true } },
-      agentInfo: { name: "cursor-settings-wire-peer", version: "1" },
-    });
+    reply(initialize, initializeResult(scenario));
     if (scenario === "negotiation") {
       await io.drain();
       return;

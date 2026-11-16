@@ -178,6 +178,7 @@ impl Fixture {
                     mode: mode.map(str::to_owned),
                     model: None,
                     effort: None,
+                    ..Default::default()
                 },
             )
             .await
@@ -696,4 +697,135 @@ async fn cursor_auto_reports_its_stand_in_reason_and_its_own_agent_mode_none() {
         )
     );
     assert_eq!(native.permission_mode, report("agent", Some("agent"), None));
+}
+
+/// A Claude start with the Host's fast default (off when offered).
+async fn create_with_fast_default(
+    fixture: &Fixture,
+    scratch: Option<&Path>,
+) -> Result<acp_client_runtime::ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
+    fixture
+        .client
+        .create_session_with_settings(
+            fixture.project.clone(),
+            scratch.map(Path::to_path_buf),
+            RequestedProviderSettings {
+                mode: Some("auto".to_owned()),
+                fast: acp_client_runtime::FastRequest::OffIfOffered,
+                ..Default::default()
+            },
+        )
+        .await
+}
+
+fn fast_change(value: &str) -> acp_client_runtime::ProviderSettingRequest {
+    acp_client_runtime::ProviderSettingRequest {
+        kind: ProviderSettingKind::Fast,
+        value: value.to_owned(),
+        intent: session_event_model::SettingApplicationIntent::ExplicitChange,
+        expected_model: None,
+    }
+}
+
+/// Oracle: D1 spec R10 — Claude offers no fast option, so the default does
+/// nothing, sends no fast set, and reports fast: none.
+#[tokio::test]
+async fn claude_default_fast_is_a_no_op_and_reports_none() {
+    let fixture = Fixture::start(
+        "claude",
+        "grants-directories",
+        claude(),
+        ApprovalPortOutcome::Cancelled,
+        &[],
+    )
+    .await;
+    let created = create_with_fast_default(&fixture, None)
+        .await
+        .expect("created");
+    fixture.client.shutdown().await;
+    assert_eq!(
+        created.effective_settings.fast,
+        Some(acp_client_runtime::FastObserved::NoOption)
+    );
+    assert_eq!(fixture.receipt()["fastRequests"], json!([]));
+}
+
+/// Oracle: D1 spec R10 — an explicit fast off on Claude, which has no fast
+/// option, is an invalid setting with no advertised choices, and nothing is
+/// sent to the agent.
+#[tokio::test]
+async fn claude_explicit_fast_off_is_invalid() {
+    let fixture = Fixture::start(
+        "claude",
+        "grants-directories",
+        claude(),
+        ApprovalPortOutcome::Cancelled,
+        &[],
+    )
+    .await;
+    create_with_fast_default(&fixture, None)
+        .await
+        .expect("created");
+    let requests_before = fixture.receipt()["modeRequests"].clone();
+    let refused = fixture
+        .client
+        .set_setting("fixture-session-1".to_owned(), fast_change("off"))
+        .await;
+    fixture.client.shutdown().await;
+    match refused {
+        Err(ExternalProviderRuntimeError::InvalidSetting {
+            setting: ProviderSettingKind::Fast,
+            advertised,
+            ..
+        }) => assert!(advertised.is_empty(), "{advertised:?}"),
+        other => panic!("expected an invalid fast setting, got {other:?}"),
+    }
+    assert_eq!(fixture.receipt()["fastRequests"], json!([]));
+    assert_eq!(fixture.receipt()["modeRequests"], requests_before);
+}
+
+/// Oracle: D1 spec R10 "leaves no hold behind (even when another setting
+/// failed at start)" — after a lost mode, nothing lists fast as not applied,
+/// and once the mode is confirmed no hold is left: a new prompt runs.
+#[tokio::test]
+async fn claude_lost_mode_leaves_no_phantom_fast_hold() {
+    let fixture = Fixture::start(
+        "claude",
+        "grants-directories",
+        claude(),
+        ApprovalPortOutcome::Cancelled,
+        &["malformed-mode-reply"],
+    )
+    .await;
+    let own = fixture.scratch("session-a");
+    let not_applied = match create_with_fast_default(&fixture, Some(&own)).await {
+        Err(ExternalProviderRuntimeError::CreatedWithoutSettings { not_applied, .. }) => {
+            not_applied
+        }
+        other => panic!("expected a start created without settings, got {other:?}"),
+    };
+    fixture
+        .client
+        .set_setting(
+            "fixture-session-1".to_owned(),
+            acp_client_runtime::ProviderSettingRequest {
+                kind: ProviderSettingKind::Mode,
+                value: "auto".to_owned(),
+                intent: session_event_model::SettingApplicationIntent::ExplicitChange,
+                expected_model: None,
+            },
+        )
+        .await
+        .expect("confirmed auto");
+    fixture
+        .ask("fixture-session-1", &in_folder_edit(&own))
+        .await;
+    fixture.client.shutdown().await;
+    assert!(
+        not_applied
+            .iter()
+            .all(|setting| setting.kind != ProviderSettingKind::Fast),
+        "{not_applied:?}"
+    );
+    assert_eq!(fixture.receipt()["prompts"], json!(["fixture-session-1"]));
 }

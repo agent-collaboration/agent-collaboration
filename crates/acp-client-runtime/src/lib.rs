@@ -86,8 +86,8 @@ pub use provider_session_actor::{
     ProviderPromptDispatchObservation, ProviderSessionActivity, ProviderSteeringOutcome,
 };
 pub use provider_session_settings::{
-    AppliedProviderSetting, EffectiveProviderSettings, FailedProviderSetting,
-    InvalidSettingSessionDisposition, NotAppliedProviderSetting, ProviderConfigOption,
+    AppliedProviderSetting, EffectiveProviderSettings, FailedProviderSetting, FastObserved,
+    FastRequest, InvalidSettingSessionDisposition, NotAppliedProviderSetting, ProviderConfigOption,
     ProviderConfigValue, ProviderSettingKind, ProviderSettingRequest, ProviderSettingsCatalog,
     RequestedProviderSettings,
 };

@@ -41,6 +41,10 @@ pub struct ConversationCreateInput {
     pub mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effort: Option<String>,
+    /// Off unless the caller says auto; the Router never turns fast on.
+    /// Claude and Cursor only.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fast: Option<crate::protocol::FastSetting>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fork: Option<SessionId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -392,6 +396,7 @@ impl ConversationClient {
             Self::CodexAcp(acp) => {
                 let (created_by, approver) = codex_create_actors(&input)?;
                 codex_mode_accepted(&input.endpoint, input.mode.as_deref())?;
+                codex_fast_accepted(input.fast)?;
                 if acp.endpoint() != &input.endpoint {
                     return Err(ConversationClientError::InvalidInput(
                         "Codex ACP endpoint changed",
@@ -490,11 +495,13 @@ impl ConversationClient {
                     settings: if input.mode.is_some()
                         || input.model.is_some()
                         || input.effort.is_some()
+                        || input.fast.is_some()
                     {
                         Some(ProviderRequestedSettings {
                             mode: input.mode,
                             model: input.model,
                             effort: input.effort,
+                            fast: input.fast,
                         })
                     } else {
                         None
@@ -629,6 +636,19 @@ fn codex_mode_accepted(
             endpoint,
             "mode",
             "use mode auto or omit mode for this Codex ACP create",
+        )),
+    }
+}
+
+/// Fast is an agent's own option; Codex has none, so any fast choice, auto
+/// included, is refused before anything starts (D1 R10).
+fn codex_fast_accepted(
+    fast: Option<crate::protocol::FastSetting>,
+) -> Result<(), ConversationClientError> {
+    match fast {
+        None => Ok(()),
+        Some(_) => Err(ConversationClientError::InvalidInput(
+            "fast is a provider setting; Codex has none",
         )),
     }
 }

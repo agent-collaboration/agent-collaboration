@@ -412,6 +412,7 @@ async fn create_empty_conversation(
                 model: Some("gpt-5.6-luna".to_owned()),
                 mode: None,
                 effort: Some("low".to_owned()),
+                fast: None,
                 fork: None,
                 root_message_id: None,
             },

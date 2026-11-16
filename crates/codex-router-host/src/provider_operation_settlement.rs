@@ -1,10 +1,11 @@
 //! Persist applied provider effects and session metadata at one settlement boundary.
 use collaboration_protocol::{
     AppliedProviderSetting, ConversationOperationFailure, ConversationOperationSettlement,
-    EffectiveProviderSettings, FailedProviderSetting, MessageText, NotAppliedProviderSetting,
-    OperationId, ProviderAuthenticationState, ProviderIdentity, ProviderOperationEffect,
-    ProviderPromptStopReason, ProviderReconciliationState, ProviderRequestedPolicy,
-    ProviderSettingName, ProviderSettingsMappingStatus, ProviderWorkingDirectory, SessionRef,
+    EffectiveProviderSettings, FailedProviderSetting, FastState, MessageText,
+    NotAppliedProviderSetting, OperationId, ProviderAuthenticationState, ProviderIdentity,
+    ProviderOperationEffect, ProviderPromptStopReason, ProviderReconciliationState,
+    ProviderRequestedPolicy, ProviderSettingName, ProviderSettingsMappingStatus,
+    ProviderWorkingDirectory, SessionRef,
 };
 use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderOperationStoreError;
@@ -66,6 +67,16 @@ pub(crate) fn effective_settings(
         effort: None,
         requested_mode: None,
         mode_reason: None,
+        fast: None,
+    }
+}
+
+/// What the agent last reported for its fast option, on the wire (D1 R11).
+pub(crate) fn provider_fast_state(observed: acp_client_runtime::FastObserved) -> FastState {
+    match observed {
+        acp_client_runtime::FastObserved::Off => FastState::Off,
+        acp_client_runtime::FastObserved::On => FastState::On,
+        acp_client_runtime::FastObserved::NoOption => FastState::None,
     }
 }
 
@@ -76,6 +87,7 @@ pub(crate) fn provider_setting_name(
         acp_client_runtime::ProviderSettingKind::Mode => ProviderSettingName::Mode,
         acp_client_runtime::ProviderSettingKind::Model => ProviderSettingName::Model,
         acp_client_runtime::ProviderSettingKind::Effort => ProviderSettingName::Effort,
+        acp_client_runtime::ProviderSettingKind::Fast => ProviderSettingName::Fast,
     }
 }
 

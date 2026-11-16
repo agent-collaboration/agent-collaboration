@@ -80,6 +80,9 @@ pub(super) fn resume(
                                 observed.mode = effective.mode;
                                 observed.model = effective.model;
                                 observed.effort = effective.effort;
+                                observed.fast = effective
+                                    .fast
+                                    .map(crate::provider_operation_settlement::provider_fast_state);
                                 completion_inner
                                     .record_settings_catalog(completion_target.clone(), catalog)
                                     .await;

@@ -6,13 +6,40 @@ pub struct RequestedProviderSettings {
     pub mode: Option<String>,
     pub model: Option<String>,
     pub effort: Option<String>,
+    pub fast: FastRequest,
 }
 
 impl RequestedProviderSettings {
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.mode.is_none() && self.model.is_none() && self.effort.is_none()
+        self.mode.is_none()
+            && self.model.is_none()
+            && self.effort.is_none()
+            && self.fast == FastRequest::Leave
     }
+}
+
+/// What a request asks of the agent's fast option, and where it came from
+/// (D1 spec R7, R10). The Router never turns fast on.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum FastRequest {
+    /// Don't touch fast: `--fast auto`, and every setter that isn't about fast.
+    #[default]
+    Leave,
+    /// The create default: turn fast off when the agent offers it; a no-op
+    /// when it doesn't.
+    OffIfOffered,
+    /// An explicit fast off: with no fast option it's an invalid setting.
+    Off,
+}
+
+/// What the agent last reported for its fast option.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FastObserved {
+    Off,
+    On,
+    /// The agent offers no fast option.
+    NoOption,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
@@ -20,6 +47,7 @@ pub struct EffectiveProviderSettings {
     pub mode: Option<String>,
     pub model: Option<String>,
     pub effort: Option<String>,
+    pub fast: Option<FastObserved>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -27,6 +55,7 @@ pub enum ProviderSettingKind {
     Mode,
     Model,
     Effort,
+    Fast,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -42,6 +71,7 @@ impl ProviderSettingKind {
             Self::Mode => "mode",
             Self::Model => "model",
             Self::Effort => "effort",
+            Self::Fast => "fast",
         }
     }
 }
@@ -203,6 +233,29 @@ impl ProviderSettingsCatalog {
             mode: selected(ProviderSettingKind::Mode).or_else(|| self.current_mode.clone()),
             model: selected(ProviderSettingKind::Model),
             effort: selected(ProviderSettingKind::Effort),
+            fast: Some(self.fast_observed()),
+        }
+    }
+
+    /// Whether this catalog offers a fast option at all.
+    #[must_use]
+    pub fn offers_fast(&self) -> bool {
+        self.config_option(ProviderSettingKind::Fast).is_some()
+    }
+
+    /// The fast option's value as the agent reported it. Only an explicit
+    /// "false" or false reads off, so fast is never reported off by guess.
+    #[must_use]
+    pub fn fast_observed(&self) -> FastObserved {
+        match self.config_option(ProviderSettingKind::Fast) {
+            None => FastObserved::NoOption,
+            Some(option) => match &option.current_value {
+                ProviderConfigValue::Select(value) if value == "false" => FastObserved::Off,
+                ProviderConfigValue::Boolean(false) => FastObserved::Off,
+                ProviderConfigValue::Select(_) | ProviderConfigValue::Boolean(true) => {
+                    FastObserved::On
+                }
+            },
         }
     }
 }

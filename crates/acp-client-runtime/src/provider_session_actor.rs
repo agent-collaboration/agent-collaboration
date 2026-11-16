@@ -75,7 +75,13 @@ pub(crate) struct ProviderSessionRuntimeHandles {
     >,
     /// In-folder grants, so a confirmed mode change can turn auto's grant on or off.
     pub(crate) in_folder_grants: crate::agent_session_client::InFolderGrants,
+    /// Sessions whose caller wants fast kept off (D1 R9). It records the wish;
+    /// settings_unresolved records whether it's applied.
+    pub(crate) keep_fast_off: KeepFastOff,
 }
+
+/// Provider session ids the Router keeps non-fast, for this Router's life.
+pub(crate) type KeepFastOff = Arc<tokio::sync::RwLock<std::collections::HashSet<String>>>;
 
 pub(crate) enum ProviderSessionCommand<P: InteractionPort> {
     Prompt {

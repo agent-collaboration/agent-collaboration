@@ -113,10 +113,18 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             .get(&provider_session_id)
             .cloned()
             .ok_or(ExternalProviderRuntimeError::LocalNotFound)?;
-        self.settings_unresolved
+        let cleared = self
+            .settings_unresolved
             .write()
             .await
             .remove(&provider_session_id);
+        if cleared.is_some_and(|kinds| kinds.contains_key(&crate::ProviderSettingKind::Fast)) {
+            // The caller accepted a refused fast as it stands (D1 R8, R9).
+            self.keep_fast_off
+                .write()
+                .await
+                .remove(&provider_session_id);
+        }
         Ok(catalog.effective_settings())
     }
 
