@@ -1,4 +1,5 @@
 //! Recipient windows collate source-owned activity across workspace boundaries.
+use crate::engine::legacy_units::LegacyUnitOutcome;
 use crate::{
     ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
     central_mail_store::{self, timestamp},
@@ -9,9 +10,7 @@ use crate::{
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
 use workspace_ids::{NotificationWindowId, NotificationWindowItemId};
 use workspace_model::central_mail as mail;
-use workspace_model::{
-    ActorIdentityId, ChangeId, ChangePosition, NoticeCadence, ThreadId, Timestamp, WorkspaceId,
-};
+use workspace_model::{ActorIdentityId, ChangeId, NoticeCadence, ThreadId, Timestamp, WorkspaceId};
 
 #[derive(Clone)]
 pub(crate) struct NotificationWindow {
@@ -100,37 +99,10 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         }
         Ok(windows)
     }
-    pub(crate) async fn validate_notification_due_rows(&self) -> Result<(), StoreFailure> {
-        self.notification_windows().await?;
-        let rows=self.host.read(Statement{sql:"SELECT workspace_id,drained_through_position,drain_due_at FROM workspace_drains",args:vec![]}).await?;
-        for row in &rows.rows {
-            let _: WorkspaceId = parse(
-                string(&rows, row, "workspace_id")?,
-                "workspace_drains.workspace_id",
-            )?;
-            match column(&rows, row, "drained_through_position")? {
-                SqlValue::Integer(position) => {
-                    let _: ChangePosition = u64::try_from(position.get())
-                        .ok()
-                        .and_then(|value| ChangePosition::try_from(value).ok())
-                        .ok_or_else(|| corrupt("workspace_drains.drained_through_position"))?;
-                }
-                _ => return Err(corrupt("workspace_drains.drained_through_position")),
-            }
-            match column(&rows, row, "drain_due_at")? {
-                SqlValue::Null => {}
-                SqlValue::Text(value) => {
-                    parse_time(value, "workspace_drains.drain_due_at")?;
-                }
-                _ => return Err(corrupt("workspace_drains.drain_due_at")),
-            }
-        }
-        Ok(())
-    }
     async fn window_notice_items(
         &self,
         window: &NotificationWindowId,
-    ) -> Result<Vec<mail::NoticeItem>, StoreFailure> {
+    ) -> Result<Vec<mail::NoticeItem>, LegacyUnitOutcome> {
         let rows=self.host.read(Statement{sql:"SELECT window_item_id,workspace_id,thread_id,change_id FROM notification_window_items WHERE window_id=? ORDER BY workspace_id,change_id",args:vec![text(window)]}).await?;
         let mut grouped: std::collections::BTreeMap<
             WorkspaceId,
@@ -148,7 +120,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             let thread = match column(&rows, row, "thread_id")? {
                 SqlValue::Null => None,
                 SqlValue::Text(value) => Some(parse(value, "notification_window_items.thread_id")?),
-                _ => return Err(corrupt("notification_window_items.thread_id")),
+                _ => return Err(corrupt("notification_window_items.thread_id").into()),
             };
             let change = parse(
                 string(&rows, row, "change_id")?,
@@ -157,14 +129,14 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             grouped.entry(workspace).or_default().push((change, thread));
         }
         if grouped.is_empty() {
-            return Err(corrupt("notification_window_items"));
+            return Err(corrupt("notification_window_items").into());
         }
         let mut items = Vec::new();
         for (workspace, changes) in grouped {
             let ids: Vec<_> = changes.iter().map(|(id, _)| id).collect();
-            let rows=self.read_workspace(&workspace,Statement{sql:"SELECT json_object('changeId',change_id,'position',position,'item',json_object('kind',item_kind,'id',item_id),'actor',actor,'changeKind',change_kind,'threadId',thread_id,'projectId',project_id,'subjectActor',subject_actor,'role',role,'createdAt',created_at) AS payload FROM changes WHERE change_id IN (SELECT value FROM json_each(?)) ORDER BY position",args:vec![central_mail_store::encode(&ids)?]}).await?;
+            let rows=self.read_workspace(&workspace,Statement{sql:"SELECT json_object('changeId',change_id,'position',position,'item',json_object('kind',item_kind,'id',item_id),'actor',actor,'changeKind',change_kind,'threadId',thread_id,'projectId',project_id,'subjectActor',subject_actor,'role',role,'createdAt',created_at) AS payload FROM changes WHERE change_id IN (SELECT value FROM json_each(?)) ORDER BY position",args:vec![central_mail_store::encode(&ids)?]}).await.map_err(|failure| match failure { StoreFailure::Unavailable | StoreFailure::AlarmUnpublishable { .. } => LegacyUnitOutcome::RemoteUnavailable { workspaces: vec![workspace.clone()] }, failure @ (StoreFailure::Corrupt { .. } | StoreFailure::AnswerLost) => failure.into() })?;
             if rows.rows.len() != changes.len() {
-                return Err(corrupt("notification_window_items.change_id"));
+                return Err(corrupt("notification_window_items.change_id").into());
             }
             for row in &rows.rows {
                 let stored: crate::workspace_change_records::StoredChange =
@@ -173,7 +145,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     .iter()
                     .any(|(id, thread)| id == &stored.change_id && thread == &stored.thread_id)
                 {
-                    return Err(corrupt("notification_window_items.change_id"));
+                    return Err(corrupt("notification_window_items.change_id").into());
                 }
                 items.push(notice_item(&stored, &workspace)?);
             }
@@ -183,7 +155,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     pub(crate) async fn plan_due_windows(
         &self,
         now: Timestamp,
-    ) -> Result<(Vec<GuardedStatement>, usize), StoreFailure> {
+    ) -> Result<(Vec<GuardedStatement>, usize), LegacyUnitOutcome> {
         let mut statements = Vec::new();
         let mut count = 0;
         for window in self

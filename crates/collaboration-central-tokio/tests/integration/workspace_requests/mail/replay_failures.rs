@@ -72,13 +72,15 @@ async fn replay_rejects_convertible_stored_due_beyond_portable_ceiling_without_c
         .rows;
     let alarm_before = runtime.statement_host().alarm().map(|at| at.unix_millis());
     assert_eq!(alarm_before, Some(due.timestamp_millis()));
+    // Embedded setup allowance: the fixture's setup claimed the due batch at T0, so
+    // the held clock moves to T0 + 30 s before this event's due batch.
+    fixture.clock.set_utc(due - chrono::Duration::seconds(270));
+    // Isolation: the global preflight is gone, so the replay returns its stored
+    // WakeSet answer; the beyond-ceiling wake counts as due now, so the alarm is
+    // the next mark (here the same instant as the original due).
     assert_eq!(
         fixture.host.request_central(&fixture.caller, request).await,
-        Err(StoreFailure::Corrupt {
-            reason: CorruptReason::BadValue {
-                column: "wakes.due_at".to_owned()
-            }
-        })
+        Ok(first)
     );
     assert_eq!(
         runtime
@@ -125,7 +127,9 @@ async fn repair_failure_after_cached_success(failure: StoreFailure) {
             .fail_next_alarm_batch(failure.clone());
         let expected = match &failure {
             StoreFailure::Unavailable | StoreFailure::AnswerLost => Ok(Result::OutcomeUnknown),
-            error @ StoreFailure::Corrupt { .. } => Err(error.clone()),
+            error @ (StoreFailure::Corrupt { .. } | StoreFailure::AlarmUnpublishable { .. }) => {
+                Err(error.clone())
+            }
         };
         assert_eq!(
             fixture

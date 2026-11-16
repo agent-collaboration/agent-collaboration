@@ -1,3 +1,6 @@
+use super::super::engine_evidence::{
+    assert_fixture_attempt_ids_are_uuid_v7, witness_fixture_attempt_ids,
+};
 use super::super::{Statement, support::*};
 use std::sync::atomic::Ordering;
 use workspace_model::central_mail::{
@@ -22,6 +25,7 @@ async fn request(fixture: &Fixture, number: u32, operation: Operation) -> Result
 #[tokio::test]
 async fn interval_catches_up_once_and_after_finishes() {
     let fixture = Fixture::new().await;
+    witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
     let start =
         chrono::DateTime::from_timestamp_millis(fixture.clock.0.load(Ordering::SeqCst)).unwrap();
@@ -49,7 +53,11 @@ async fn interval_catches_up_once_and_after_finishes() {
         panic!("after refused")
     };
     // The first interval occurrence is the request's grid anchor itself.
-    runtime.on_alarm().await.unwrap();
+    fixture.clock.0.store(
+        (start + chrono::Duration::seconds(30)).timestamp_millis(),
+        std::sync::atomic::Ordering::SeqCst,
+    );
+    runtime.after_event().await.unwrap();
     let anchored = runtime
         .statement_host()
         .read(Statement {
@@ -70,15 +78,15 @@ async fn interval_catches_up_once_and_after_finishes() {
             (start + chrono::Duration::minutes(minute)).timestamp_millis(),
             Ordering::SeqCst,
         );
-        let result = runtime.on_alarm().await.unwrap();
+        let result = runtime.after_event().await.unwrap();
         assert_eq!(result.automations_fired, if step == 1 { 2 } else { 1 });
     }
     fixture.clock.0.store(
         (start + chrono::Duration::minutes(165)).timestamp_millis(),
         Ordering::SeqCst,
     );
-    assert_eq!(runtime.on_alarm().await.unwrap().automations_fired, 1);
-    assert_eq!(runtime.on_alarm().await.unwrap().automations_fired, 0);
+    assert_eq!(runtime.after_event().await.unwrap().automations_fired, 1);
+    assert_eq!(runtime.after_event().await.unwrap().automations_fired, 0);
     let rows = runtime.statement_host().read(Statement { sql: "SELECT state, next_due_at, evaluated_through_at FROM automations WHERE automation_id=?", args: vec![text(&interval_id)] }).await.unwrap();
     assert_eq!(
         rows.rows,
@@ -233,7 +241,7 @@ async fn interval_catches_up_once_and_after_finishes() {
         (start + chrono::Duration::minutes(175)).timestamp_millis(),
         Ordering::SeqCst,
     );
-    assert_eq!(runtime.on_alarm().await.unwrap().automations_fired, 0);
+    assert_eq!(runtime.after_event().await.unwrap().automations_fired, 0);
     let rows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM automations WHERE state='disabled'),(SELECT COUNT(*) FROM automations WHERE state='done'),(SELECT COUNT(*) FROM messages WHERE message_kind='automation')", args: vec![] }).await.unwrap();
     assert_eq!(
         rows.rows,
@@ -250,12 +258,19 @@ async fn interval_catches_up_once_and_after_finishes() {
             .unwrap(),
         None
     );
+    assert_fixture_attempt_ids_are_uuid_v7(
+        &fixture,
+        "interval_catches_up_once_and_after_finishes",
+        &[],
+    )
+    .await;
     fixture.host.close().await;
 }
 
 #[tokio::test]
 async fn at_and_cron_rules_retain_their_calendar_boundaries() {
     let fixture = Fixture::new().await;
+    witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
     let start =
         chrono::DateTime::from_timestamp_millis(fixture.clock.0.load(Ordering::SeqCst)).unwrap();
@@ -289,7 +304,7 @@ async fn at_and_cron_rules_retain_their_calendar_boundaries() {
         .clock
         .0
         .store((at).timestamp_millis(), Ordering::SeqCst);
-    assert_eq!(runtime.on_alarm().await.unwrap().automations_fired, 2);
+    assert_eq!(runtime.after_event().await.unwrap().automations_fired, 2);
     let rows = runtime
         .statement_host()
         .read(Statement {
@@ -311,12 +326,19 @@ async fn at_and_cron_rules_retain_their_calendar_boundaries() {
             ]
         ]
     );
+    assert_fixture_attempt_ids_are_uuid_v7(
+        &fixture,
+        "at_and_cron_rules_retain_their_calendar_boundaries",
+        &[],
+    )
+    .await;
     fixture.host.close().await;
 }
 
 #[tokio::test]
 async fn impossible_cron_refuses_no_occurrence_and_only_caches_the_answer() {
     let fixture = Fixture::new().await;
+    witness_fixture_attempt_ids(&fixture).await;
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
     let timing =
         serde_json::from_str(r#"{"kind":"cron","expression":"0 0 30 2 *","timezone":"UTC"}"#)
@@ -350,5 +372,11 @@ async fn impossible_cron_refuses_no_occurrence_and_only_caches_the_answer() {
             .unwrap(),
         None
     );
+    assert_fixture_attempt_ids_are_uuid_v7(
+        &fixture,
+        "impossible_cron_refuses_no_occurrence_and_only_caches_the_answer",
+        &[],
+    )
+    .await;
     fixture.host.close().await;
 }

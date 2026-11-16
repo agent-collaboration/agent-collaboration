@@ -66,6 +66,8 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         let mut statements = plan.statements;
         let mut operation = None;
         let mut retained = None;
+        let mut alarm = central_storage::AlarmUpdate::Unchanged;
+        let mut guard_failed = AdminRefusal::Conflict;
         let result = match &verified.operation {
             AdminOperation::CreateWorkspace(request) => {
                 let created = self
@@ -98,6 +100,32 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
                 )
                 .await?,
             },
+            AdminOperation::EngineHealth(_) => self.engine_health_result().await?.result,
+            AdminOperation::EngineListRetired(request) => {
+                self.engine_retired_result(request.after, request.limit.get())
+                    .await?
+                    .result
+            }
+            AdminOperation::EngineRetry(request) => {
+                let planned = self.prepare_engine_retry(&verified, request, now).await?;
+                statements.extend(planned.statements);
+                alarm = planned.alarm;
+                retained = planned.retained;
+                // A concurrent retry deleted the record first.
+                guard_failed = AdminRefusal::NotFound;
+                planned.result
+            }
+            AdminOperation::EngineDiscard(request) => {
+                let planned = self
+                    .prepare_engine_discard(&verified, request, &mut statements, now)
+                    .await?;
+                if planned.committed {
+                    return Ok(OrganizationAdminAnswer::Answered(planned.result));
+                }
+                statements.extend(planned.statements);
+                retained = planned.retained;
+                planned.result
+            }
         };
         #[cfg(feature = "test-support")]
         self.pauses
@@ -105,10 +133,7 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
             .await;
         match self
             .host
-            .run_batch(StatementBatch {
-                statements,
-                alarm: central_storage::AlarmUpdate::Unchanged,
-            })
+            .run_batch(StatementBatch { statements, alarm })
             .await?
         {
             BatchOutcome::Applied { .. } => {
@@ -128,9 +153,11 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
                     None => OrganizationAdminAnswer::Answered(result),
                 })
             }
+            // A rejected statement keeps main's store-outage answer on this path.
+            BatchOutcome::StatementRejected { .. } => Err(StoreFailure::Unavailable),
             _ => Ok(OrganizationAdminAnswer::Answered(
                 OrganizationAdminResult::Refused {
-                    reason: AdminRefusal::Conflict,
+                    reason: guard_failed,
                 },
             )),
         }

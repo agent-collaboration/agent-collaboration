@@ -1,5 +1,6 @@
 use super::super::{Statement, support::*};
 use std::sync::atomic::Ordering;
+use workspace_model as m;
 use workspace_model::central_mail::{
     CentralMailAnswer, CentralMailOperation, CentralMailRequest, CentralMailResult,
 };
@@ -9,8 +10,13 @@ async fn earlier_wake_queued_behind_timer_commit_owns_next_physical_alarm() {
     let f = Fixture::new().await;
     let runtime = f.host.central(&f.caller.organization_id).await;
     let now = f.clock.0.load(Ordering::SeqCst);
-    let later = chrono::DateTime::from_timestamp_millis(now + 600_000).unwrap();
-    let earlier = chrono::DateTime::from_timestamp_millis(now + 300_000).unwrap();
+    // The engine reaches the timer-commit points only for a unit with work, and
+    // only the window unit holds the central turn a request queues behind. A
+    // window due at the event's instant keeps the held commit; the wakes keep
+    // their original offsets from that instant.
+    let event = now + 900_000;
+    let later = chrono::DateTime::from_timestamp_millis(event + 600_000).unwrap();
+    let earlier = chrono::DateTime::from_timestamp_millis(event + 300_000).unwrap();
     let wake = |due_at| CentralMailOperation::SetWake {
         target: session(&f.caller),
         due_at,
@@ -37,13 +43,43 @@ async fn earlier_wake_queued_behind_timer_commit_owns_next_physical_alarm() {
             .unwrap(),
         Some(later.timestamp_millis())
     );
+    // An observer's join opens the thread creator's notice window, due at `event`.
+    let area = f.area(1402).await;
+    let thread = f.thread(1403, area).await;
+    let mut observer = f.caller.clone();
+    let mut address = session(&observer);
+    address.session_id = "alarm-order-observer".to_owned().try_into().unwrap();
+    observer.caller = m::Caller::Session(address);
+    let joined = call(
+        &f.host,
+        &observer,
+        Some(f.workspace.clone()),
+        1404,
+        m::WorkspaceOperation::JoinThread {
+            thread_id: thread,
+            role: m::MemberRole::Observer,
+        },
+    )
+    .await;
+    assert!(matches!(
+        joined.result,
+        m::WorkspaceResult::Done(m::WorkspaceAnswer::Updated { .. })
+    ));
+    assert_eq!(
+        runtime
+            .control::<Option<i64>>("raw-alarm-time", &())
+            .await
+            .unwrap(),
+        Some(event)
+    );
+    f.clock.0.store(event, Ordering::SeqCst);
     let _: bool = runtime
         .control("hold-central", &"beforeTimerCommit")
         .await
         .unwrap();
     let pending_alarm = tokio::spawn({
         let runtime = runtime.clone();
-        async move { runtime.on_alarm().await }
+        async move { runtime.after_event().await }
     });
     let _: bool = runtime
         .control("until-held-central", &"beforeTimerCommit")
@@ -72,6 +108,8 @@ async fn earlier_wake_queued_behind_timer_commit_owns_next_physical_alarm() {
         pending_request.await.unwrap().unwrap(),
         CentralMailResult::Done(CentralMailAnswer::WakeSet { .. })
     ));
+    // Embedded (Lead ruling): due units commit with the alarm unchanged and the
+    // re-arm is the event's final step, so this is read after both completed.
     assert_eq!(
         runtime
             .control::<Option<i64>>("raw-alarm-time", &())
@@ -82,7 +120,7 @@ async fn earlier_wake_queued_behind_timer_commit_owns_next_physical_alarm() {
     f.clock
         .0
         .store(earlier.timestamp_millis(), Ordering::SeqCst);
-    assert_eq!(runtime.on_alarm().await.unwrap().wakes_fired, 1);
+    assert_eq!(runtime.after_event().await.unwrap().wakes_fired, 1);
     let rows = runtime
         .read(Statement {
             sql: "SELECT state,COUNT(*) FROM wakes GROUP BY state ORDER BY state",

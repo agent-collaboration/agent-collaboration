@@ -205,7 +205,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
         };
         let due: m::Timestamp = due.parse().unwrap();
         f.clock.set_utc(due);
-        reopened.on_alarm().await.unwrap();
+        reopened.after_event().await.unwrap();
         let batch = reopened
             .queued_for_session(&m::SessionAddress {
                 session_id: "notice-observer".to_owned().try_into().unwrap(),
@@ -345,17 +345,22 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
             .timestamp_millis(),
         f.clock.utc_now().timestamp_millis() + 5_000
     );
+    // Kept, with the table's allowance: the clock sits inside the 30 s floor
+    // after the setup's due batch at this same held time, so the expected
+    // physical alarm is the backstop raised to that floor.
     assert_eq!(
         original_alarm.unix_millis(),
-        f.clock.utc_now().timestamp_millis() + 5_000
+        (f.clock.utc_now().timestamp_millis() + 5_000)
+            .max(f.clock.utc_now().timestamp_millis() + 30_000)
     );
+    let completed = runtime.alarm_completion_count();
     for second in 1..=60 {
         f.clock.advance(Duration::from_secs(1)).unwrap();
-        if second == 5 {
-            runtime
-                .workspace_turns()
-                .until_waiting(&f.workspace, 1)
-                .await;
+        // The backstop alarm is raised to the 30 s floor (allowance above). P5
+        // change 6: the driver's due batch skips W1, whose turn the held write
+        // holds, and completes instead of queueing behind it.
+        if second == 30 {
+            runtime.until_alarm_completed(completed + 1).await;
         }
         let other = call(
             &f.host,
@@ -380,9 +385,15 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
                 .rows,
             original.rows
         );
+        // Kept, oracle per Lead ruling: W2's writes never move W1's deadline
+        // beyond what the floor rule gives after the latest due batch.
+        let floor = runtime
+            .due_batch_snapshot()
+            .last_start_unix_millis
+            .map_or(i64::MIN, |start| start + 30_000);
         assert_eq!(
-            runtime.statement_host().alarm(),
-            Some(original_alarm),
+            runtime.statement_host().alarm().map(|at| at.unix_millis()),
+            Some(original_alarm.unix_millis().max(floor)),
             "W2 moved W1's retained alarm at second {second}"
         );
     }
@@ -392,12 +403,31 @@ async fn another_workspace_cannot_extend_a_pending_drain_deadline() {
     pending.abort();
     let _ = pending.await;
     drop(held);
-    drained.until_held().await;
+    // P5 change 6: no due batch waited behind the held turn, and the aborted write
+    // never ran its own drain, so the next due batch (the published alarm) drains W1.
+    let next = runtime
+        .statement_host()
+        .alarm()
+        .expect("W1 drain keeps an alarm");
+    // Let the real native driver settle on the published deadline, then advance
+    // the one clock: the driver itself runs the due batch that drains W1.
+    f.clock.not_due_check_now(f.clock.wall_deadline(next)).await;
+    let before_driver = runtime.alarm_completion_count();
+    f.clock.advance_to(next).unwrap();
+    let driver_drained = tokio::select! {
+        () = drained.until_held() => true,
+        () = runtime.until_alarm_completed(before_driver + 1) => false,
+    };
+    assert!(
+        driver_drained,
+        "the native driver completed without reaching the due drain"
+    );
     let after = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,drain_due_at FROM workspace_drains WHERE workspace_id=?", args: vec![text(&f.workspace)] }).await.unwrap();
     assert_eq!(after.rows.len(), 1);
     assert!(matches!(&after.rows[0][0], SqlValue::Integer(position) if position.get() > 0));
     assert_eq!(after.rows[0][1], SqlValue::Null);
     drained.release();
+    runtime.until_alarm_completed(before_driver + 1).await;
     f.host.close().await;
 }
 

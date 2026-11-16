@@ -56,19 +56,25 @@ impl<H: crate::ObjectHost, S: crate::WorkspaceStoreCalls> OrganizationSignInPort
         &self,
         request: &ProvisionOrganization,
     ) -> Result<ProvisionOrganizationResult, OrganizationProvisioningFailure> {
-        self.provision_organization(request).await
+        let answer = self.provision_organization(request).await;
+        self.after_signin_event().await;
+        answer
     }
     async fn digest(
         &self,
         request: &ReadOrganizationStatementDigest,
     ) -> Result<OrganizationStatementDigestReply, OrganizationProvisioningFailure> {
-        self.read_statement_digest(request).await
+        let answer = self.read_statement_digest(request).await;
+        self.after_signin_event().await;
+        answer
     }
     async fn revision(
         &self,
         request: &AuthorizationRevision,
     ) -> Result<AuthorizationRevisionAcknowledgement, OrganizationProvisioningFailure> {
-        self.deliver_authorization_revision(request).await
+        let answer = self.deliver_authorization_revision(request).await;
+        self.after_signin_event().await;
+        answer
     }
     async fn admin(
         &self,
@@ -78,18 +84,33 @@ impl<H: crate::ObjectHost, S: crate::WorkspaceStoreCalls> OrganizationSignInPort
         if organization != self.organization {
             return Ok(OrganizationAdminAnswer::Unauthenticated);
         }
-        self.admin_person_request(&input).await
+        let answer = self.admin_person_request(&input).await;
+        self.after_signin_event().await;
+        answer
     }
     async fn device_login(
         &self,
         request: &crate::identity_contract::DecideDeviceLogin,
     ) -> Result<crate::identity_contract::DeviceLoginDecision, StoreFailure> {
-        self.decide_device_login(request).await
+        let answer = self.decide_device_login(request).await;
+        self.after_signin_event().await;
+        answer
     }
     async fn machine_token(
         &self,
         request: &crate::identity_contract::DecideMachineToken,
     ) -> Result<crate::identity_contract::MachineTokenDecision, StoreFailure> {
-        self.decide_machine_token(request).await
+        let answer = self.decide_machine_token(request).await;
+        self.after_signin_event().await;
+        answer
+    }
+}
+
+impl<H: crate::ObjectHost, S: crate::WorkspaceStoreCalls> crate::WorkspaceRuntime<H, S> {
+    /// Every sign-in entry is an event (P6): after its own work, and after its
+    /// central turn is released, it runs the due batch and re-arms. An alarm
+    /// problem never replaces the entry's answer; it is observed.
+    async fn after_signin_event(&self) {
+        let _ = self.after_event().await;
     }
 }

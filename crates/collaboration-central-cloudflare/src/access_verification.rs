@@ -56,7 +56,10 @@ impl InvocationLabels {
                 outcome,
                 key_source,
             } => (route_class, outcome, key_source),
-            event @ CentralObservation::OrganizationStatementRefused { .. } => {
+            event @ (CentralObservation::OrganizationStatementRefused { .. }
+            | CentralObservation::EngineItemFailed { .. }
+            | CentralObservation::EngineStoreDown { .. }
+            | CentralObservation::EngineAlarmNotPublished { .. }) => {
                 observe_signin(event);
                 return;
             }
@@ -114,14 +117,43 @@ fn log_safe(value: &str) -> &str {
 
 /// Modern org runtime sink; only the core closed classification crosses here.
 pub(crate) fn observe_signin(observation: CentralObservation) {
-    if let CentralObservation::OrganizationStatementRefused {
-        organization,
-        refusal,
-    } = observation
-    {
-        worker::console_log!(
-            "central organization: organization={} refusal={refusal:?}",
-            organization.as_str()
-        );
+    match observation {
+        CentralObservation::EngineAlarmNotPublished { failure } => {
+            worker::console_log!("central engine alarm not published: {failure:?}");
+        }
+        CentralObservation::EngineStoreDown { kind, key, failure } => {
+            worker::console_log!(
+                "central engine store down: kind={} key={} failure={failure:?}",
+                kind.0,
+                log_safe(&key.0)
+            );
+        }
+        CentralObservation::EngineItemFailed {
+            kind,
+            key,
+            failure,
+            count,
+            retired,
+            workspaces,
+        } => {
+            worker::console_log!(
+                "central engine: kind={} key={} class={} count={} retired={} workspaces={workspaces:?}",
+                kind.0,
+                log_safe(&key.0),
+                failure.storage_tag(),
+                count,
+                retired
+            );
+        }
+        CentralObservation::OrganizationStatementRefused {
+            organization,
+            refusal,
+        } => {
+            worker::console_log!(
+                "central organization: organization={} refusal={refusal:?}",
+                organization.as_str()
+            );
+        }
+        CentralObservation::AccessCheck { .. } => {}
     }
 }

@@ -20,6 +20,10 @@ pub(crate) fn is_signin_path(path: &str) -> bool {
         AdminRoute::CreateWorkspace.path(),
         AdminRoute::WorkspaceLookup.path(),
         AdminRoute::ReadChangeRecords.path(),
+        AdminRoute::EngineHealth.path(),
+        AdminRoute::EngineListRetired.path(),
+        AdminRoute::EngineRetry.path(),
+        AdminRoute::EngineDiscard.path(),
     ]
     .contains(&path)
 }

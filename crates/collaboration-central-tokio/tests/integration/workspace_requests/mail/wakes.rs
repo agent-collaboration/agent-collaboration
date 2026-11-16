@@ -98,8 +98,8 @@ async fn equal_wakes_fire_once_and_cancelled_or_missing_wakes_do_not_fire() {
         Result::Refused(Refusal::WakeNotFound { wake_id: missing })
     );
     fixture.clock.set_utc(due);
-    runtime.on_alarm().await.unwrap();
-    assert_eq!(runtime.on_alarm().await.unwrap().wakes_fired, 0);
+    runtime.after_event().await.unwrap();
+    assert_eq!(runtime.after_event().await.unwrap().work.wakes_fired, 0);
     assert_eq!(
         request(
             &fixture,

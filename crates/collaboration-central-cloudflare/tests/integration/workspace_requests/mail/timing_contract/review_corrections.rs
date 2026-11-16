@@ -238,7 +238,20 @@ pub(super) async fn exercise_late_drain(f: &Fixture) {
             },
         )
         .await;
-    assert_eq!(response.result, m::WorkspaceResult::OutcomeUnknown);
+    // Embedded: the post committed, so its committed answer is returned; the
+    // rejected drain is recorded against the drain unit for the next mark.
+    assert!(
+        matches!(
+            response.result,
+            m::WorkspaceResult::Done(m::WorkspaceAnswer::Created { .. })
+        ),
+        "{response:?}"
+    );
+    let record = r.statement_host().read(Statement { sql: "SELECT state,last_failure FROM central_work_attempts WHERE machine_kind='legacy_workspace_drains' AND subject_key='all'", args: vec![] }).await.unwrap();
+    assert_eq!(
+        record.rows,
+        vec![vec![text("failing"), text("statement_rejected")]]
+    );
     let read = || Statement {
         sql: "SELECT due_at FROM notification_windows WHERE recipient_actor=?",
         args: vec![actor.clone()],
@@ -278,6 +291,22 @@ pub(super) async fn exercise_late_drain(f: &Fixture) {
         r.statement_host().read(read()).await.unwrap().rows,
         vec![vec![text(
             due.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+        )]]
+    );
+    // Embedded: the rejected drain retries at the next mark through its record,
+    // which succeeds now and clears the record; the window then fires at its slot.
+    let retry = chrono::DateTime::from_timestamp((now(f).timestamp().div_euclid(300) + 1) * 300, 0)
+        .unwrap();
+    drop(r);
+    if retry < due {
+        dispatch_to(f, retry).await;
+    }
+    let r = f.host.central(&f.caller.organization_id).await;
+    let record = r.statement_host().read(Statement { sql: "SELECT COUNT(*) FROM central_work_attempts WHERE machine_kind='legacy_workspace_drains'", args: vec![] }).await.unwrap();
+    assert_eq!(
+        record.rows,
+        vec![vec![central_storage::SqlValue::Integer(
+            0.try_into().unwrap()
         )]]
     );
     drop(r);
@@ -335,7 +364,7 @@ pub(super) async fn exercise_cadence_change_after_clock_rollback(f: &mut Fixture
         .await,
     );
     // Settle pre-existing due work so the retained alarm is stable for the late-write cut.
-    r.on_alarm().await.unwrap();
+    r.after_event().await.unwrap();
     let snapshot = || Statement {
         sql: "SELECT a.notice_cadence,w.window_id,w.first_activity_at,w.due_at,(SELECT json_group_array(json_array(i.window_item_id,i.workspace_id,i.thread_id,i.change_id,i.created_at,i.updated_at)) FROM notification_window_items i WHERE i.window_id=w.window_id),(SELECT COUNT(*) FROM request_log WHERE request_id=?),a.created_at,a.updated_at,w.created_at,w.updated_at FROM actor_identities a JOIN notification_windows w ON w.recipient_actor=a.actor_identity_id WHERE a.actor_identity_id=?",
         args: vec![text(id::<m::RequestId>(46304)), actor.clone()],
@@ -476,6 +505,6 @@ pub(super) async fn exercise_cadence_change_after_clock_rollback(f: &mut Fixture
             .rows
             .is_empty()
     );
-    r.on_alarm().await.unwrap();
+    r.after_event().await.unwrap();
     assert_eq!(r.queued_for_session(&address).await.unwrap(), queue);
 }

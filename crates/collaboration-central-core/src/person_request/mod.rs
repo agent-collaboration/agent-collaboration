@@ -9,7 +9,8 @@ pub(crate) mod request_admission;
 mod request_verifier;
 
 pub use admin_operations::{
-    AdminOperation, AdminOperationId, AdminRoute, CreateWorkspaceRequest, OrganizationAdminIntent,
+    AdminOperation, AdminOperationId, AdminRoute, CreateWorkspaceRequest, EngineAttemptRequest,
+    EngineHealthRequest, EngineListRetiredRequest, OrganizationAdminIntent,
     ReadChangeRecordsRequest, RecordPageLimit, WorkspaceLookupRequest, WorkspaceName,
 };
 pub use refusal::PersonRequestRefusal;

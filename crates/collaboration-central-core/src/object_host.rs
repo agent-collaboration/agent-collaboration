@@ -13,4 +13,9 @@ pub trait ObjectHost: Send + Sync + 'static {
         &self,
         statement: Statement,
     ) -> impl Future<Output = Result<ReadOutcome, StoreFailure>> + Send;
+    /// The physical alarm actually armed, for health (P8): Cloudflare reads the
+    /// Durable Object alarm, Tokio the last successfully published deadline.
+    fn published_alarm(
+        &self,
+    ) -> impl Future<Output = Result<Option<central_engine_model::EngineTime>, StoreFailure>> + Send;
 }

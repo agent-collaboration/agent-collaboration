@@ -46,6 +46,10 @@ pub fn organization_signin_router<Port: OrganizationSignInPort>(port: Arc<Port>)
         AdminRoute::CreateWorkspace,
         AdminRoute::WorkspaceLookup,
         AdminRoute::ReadChangeRecords,
+        AdminRoute::EngineHealth,
+        AdminRoute::EngineListRetired,
+        AdminRoute::EngineRetry,
+        AdminRoute::EngineDiscard,
     ] {
         let port = port.clone();
         router = router.route(

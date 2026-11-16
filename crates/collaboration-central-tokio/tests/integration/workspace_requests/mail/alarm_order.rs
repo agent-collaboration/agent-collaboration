@@ -68,6 +68,7 @@ async fn earlier_timer_waits_for_old_publication_and_becomes_the_driver_deadline
     let mut timer_commit = runtime
         .pause_points()
         .hold_central(collaboration_central_core::PausePoint::AfterTimerCommit);
+    let completed = runtime.alarm_completion_count();
     fixture
         .clock
         .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(300)))
@@ -103,10 +104,13 @@ async fn earlier_timer_waits_for_old_publication_and_becomes_the_driver_deadline
             1.try_into().unwrap()
         )]]
     );
+    // Embedded (Lead ruling): due units commit with the alarm unchanged and the
+    // re-arm is the event's final step, so the same oracle is read after it.
+    timer_commit.release();
+    runtime.until_alarm_completed(completed + 1).await;
     assert_eq!(
         runtime.statement_host().alarm().unwrap().unix_millis(),
         later.timestamp_millis()
     );
-    timer_commit.release();
     fixture.host.close().await;
 }

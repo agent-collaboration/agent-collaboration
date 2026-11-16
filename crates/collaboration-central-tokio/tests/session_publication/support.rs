@@ -211,6 +211,12 @@ impl collaboration_central_core::ObjectHost for TestHost {
     ) -> Result<central_storage::ReadOutcome, central_storage::StoreFailure> {
         self.native.read(statement).await
     }
+
+    async fn published_alarm(
+        &self,
+    ) -> Result<Option<chrono::DateTime<chrono::Utc>>, central_storage::StoreFailure> {
+        collaboration_central_core::ObjectHost::published_alarm(&*self.native).await
+    }
 }
 
 impl LegacyObjectHost for TestHost {

@@ -17,6 +17,9 @@ impl HeldClock {
     pub fn at(milliseconds: i64) -> Arc<Self> {
         Arc::new(Self(AtomicI64::new(milliseconds)))
     }
+    pub fn set(&self, milliseconds: i64) {
+        self.0.store(milliseconds, Ordering::SeqCst);
+    }
 }
 impl Clock for HeldClock {
     fn now(&self) -> SyncTime {

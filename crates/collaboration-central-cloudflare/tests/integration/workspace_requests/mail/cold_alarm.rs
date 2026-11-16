@@ -163,7 +163,7 @@ async fn timer_commit_crash_restarts_without_loss_or_duplicate() {
         let runtime = fixture.host.central(&fixture.caller.organization_id).await;
         let _: bool = runtime.control("hold-central", &point).await.unwrap();
         let driver = runtime.clone();
-        let running = tokio::spawn(async move { driver.on_alarm().await });
+        let running = tokio::spawn(async move { driver.after_event().await });
         let _: bool = runtime.control("until-held-central", &point).await.unwrap();
         let reset: std::result::Result<bool, _> = runtime.control("crash", &()).await;
         assert!(reset.is_err());

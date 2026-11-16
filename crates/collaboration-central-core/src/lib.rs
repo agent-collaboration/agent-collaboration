@@ -2,6 +2,18 @@
 #![forbid(unsafe_code)]
 
 mod clock_ids;
+mod engine;
+#[cfg(feature = "test-support")]
+pub mod engine_owed_probe;
+#[cfg(feature = "test-support")]
+pub mod engine_probe;
+mod engine_wiring;
+#[cfg(feature = "test-support")]
+pub use engine::DueUnitStart;
+#[cfg(feature = "test-support")]
+pub use engine::commit_fault::{EngineCommitFault, EngineCommitFaultKind, EngineReadFault};
+pub use engine::{AlarmNotPublished, EventCompletion};
+pub use engine::{DueBatchSnapshot, DueBatchState, engine_alarm_decider};
 pub mod identity_contract;
 #[cfg(feature = "test-support")]
 pub mod signin_test_observation;
@@ -61,6 +73,8 @@ mod machine_login_writes;
 mod workspace_runtime;
 #[cfg(feature = "test-support")]
 pub use machine_login_test_control::{MachineLoginControl, machine_login_control};
+#[cfg(feature = "test-support")]
+pub use workspace_runtime::LegacyUnitInvocations;
 pub use workspace_runtime::{WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls};
 mod organization_workspace_plans;
 mod workspace_actor_identity;
@@ -490,13 +504,14 @@ pub use wire_contract::*;
 
 pub use core_contract::*;
 
-mod central_mail_store;
-mod guarded_statements;
-pub use central_mail_store::EARLIEST_DUE;
 mod central_mail_requests;
+mod central_mail_rows;
+mod central_mail_store;
 mod central_timer_plans;
+mod central_timer_rows;
 mod central_timers;
-pub use central_timers::AlarmResult;
+mod guarded_statements;
+pub use engine::AlarmResult;
 mod notification_windows;
 mod workspace_drain;
 mod workspace_notice_plans;
@@ -532,6 +547,7 @@ mod organization_admin_contract;
 mod organization_admin_plans;
 mod organization_authority_cache;
 mod organization_change_rows;
+mod organization_engine_admin_plans;
 mod organization_provisioning_plans;
 mod organization_signin_http;
 mod organization_signin_port;

@@ -114,7 +114,6 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
                     return Err(Failure::StaleStatement);
                 }
                 let repair = async {
-                    self.validated_timers().await?;
                     crate::central_mail_store::applied(
                         self.host
                             .run_batch(StatementBatch {
@@ -127,7 +126,9 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
                 .await;
                 repair.map_err(|error| match error {
                     StoreFailure::Unavailable | StoreFailure::AnswerLost => Failure::OutcomeUnknown,
-                    StoreFailure::Corrupt { .. } => Failure::Unavailable,
+                    StoreFailure::Corrupt { .. } | StoreFailure::AlarmUnpublishable { .. } => {
+                        Failure::Unavailable
+                    }
                 })?;
                 self.signin_authority.forget();
                 return Ok(ProvisionOrganizationResult::Provisioned {});
@@ -169,7 +170,7 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
             target_id: self.organization.as_str().to_owned(),
             created_at_millis: now.unix_millis(),
         };
-        self.validated_timers().await?;
+
         let statements = vec![stamp, organization_change_rows::insert(&record)?];
         #[cfg(feature = "test-support")]
         self.pauses
@@ -184,6 +185,8 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
             .await?
         {
             BatchOutcome::Applied { .. } => {}
+            // A rejected statement keeps main's store-outage answer on this path.
+            BatchOutcome::StatementRejected { .. } => return Err(Failure::Unavailable),
             _ => return Err(Failure::StaleStatement),
         }
         self.signin_authority.forget();

@@ -25,10 +25,16 @@ pub(crate) struct OwnedGuardedStatement {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(tag = "kind", content = "query", rename_all = "camelCase")]
+#[serde(
+    tag = "kind",
+    content = "query",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub(crate) enum OwnedAlarmUpdate {
     Unchanged,
     SetFromQuery(OwnedStatement),
+    SetEngineFromQuery { query: OwnedStatement },
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -72,6 +78,9 @@ impl From<AlarmUpdate> for OwnedAlarmUpdate {
         match alarm {
             AlarmUpdate::Unchanged => Self::Unchanged,
             AlarmUpdate::SetFromQuery(statement) => Self::SetFromQuery(statement.into()),
+            AlarmUpdate::SetEngineFromQuery { query } => Self::SetEngineFromQuery {
+                query: query.into(),
+            },
         }
     }
 }

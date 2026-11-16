@@ -36,6 +36,9 @@ impl ObjectHost for ObjectStorage {
     async fn read(&self, statement: Statement) -> Result<ReadOutcome, StoreFailure> {
         ObjectStorage::read(self, statement).await
     }
+    async fn published_alarm(&self) -> Result<Option<chrono::DateTime<chrono::Utc>>, StoreFailure> {
+        ObjectStorage::published_alarm(self)
+    }
 }
 #[derive(Clone)]
 struct ClockHandle(Arc<dyn RuntimeClock>);
@@ -144,7 +147,10 @@ impl TokioWorkspaceHost {
                 .ok_or(StoreFailure::Unavailable)?;
             let organization =
                 OrganizationId::try_from(name.to_owned()).map_err(|_| StoreFailure::Unavailable)?;
-            host.central(&organization).await?;
+            // Organizations open independently: one bad store never blocks the rest.
+            if let Err(error) = host.central(&organization).await {
+                tracing::warn!(?error, organization = %organization.as_str(), "central organization open failed; continuing other organizations");
+            }
         }
         Ok(host)
     }
@@ -156,21 +162,29 @@ impl TokioWorkspaceHost {
         if let Some(runtime) = orgs.get(organization) {
             return Ok(runtime.clone());
         }
-        let storage = Arc::new(ObjectStorage::new(
-            self.root
-                .join("central")
-                .join(format!("{}.sqlite", organization.as_str())),
-            Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
-        ));
         let clock_handle = ClockHandle(self.clock.clone());
         let ids: Arc<dyn IdSource> = Arc::new(ClockIds::new(clock_handle.clone()));
         let clock: Arc<dyn Clock> = Arc::new(clock_handle);
+        let due_batches = Arc::new(collaboration_central_core::DueBatchState::default());
+        let storage = Arc::new(
+            ObjectStorage::new(
+                self.root
+                    .join("central")
+                    .join(format!("{}.sqlite", organization.as_str())),
+                Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
+            )
+            .with_engine_publication(
+                clock.clone(),
+                collaboration_central_core::engine_alarm_decider(due_batches.clone()),
+            ),
+        );
         let runtime = WorkspaceRuntime::new(
             organization.clone(),
             storage,
             self.stores.clone(),
             clock.clone(),
             ids,
+            due_batches,
         );
         let runtime = match &self.sign_in {
             Some(trust) => match trust.for_organization(organization.clone(), clock) {
@@ -259,7 +273,7 @@ impl OrganizationSignInPort for TokioWorkspaceHost {
         self.central(&request.organization_id)
             .await
             .map_err(|_| OrganizationProvisioningFailure::Unavailable)?
-            .provision_organization(request)
+            .provision(request)
             .await
     }
 
@@ -270,7 +284,7 @@ impl OrganizationSignInPort for TokioWorkspaceHost {
         self.central(&request.organization_id)
             .await
             .map_err(|_| OrganizationProvisioningFailure::Unavailable)?
-            .read_statement_digest(request)
+            .digest(request)
             .await
     }
 
@@ -281,7 +295,7 @@ impl OrganizationSignInPort for TokioWorkspaceHost {
         self.central(request.organization_id())
             .await
             .map_err(|_| OrganizationProvisioningFailure::Unavailable)?
-            .deliver_authorization_revision(request)
+            .revision(request)
             .await
     }
 
@@ -292,7 +306,7 @@ impl OrganizationSignInPort for TokioWorkspaceHost {
     ) -> Result<OrganizationAdminAnswer, StoreFailure> {
         self.central(&organization)
             .await?
-            .admin_person_request(&input)
+            .admin(organization, input)
             .await
     }
     async fn device_login(
@@ -302,7 +316,7 @@ impl OrganizationSignInPort for TokioWorkspaceHost {
     {
         self.central(&request.organization_id)
             .await?
-            .decide_device_login(request)
+            .device_login(request)
             .await
     }
     async fn machine_token(
@@ -312,7 +326,7 @@ impl OrganizationSignInPort for TokioWorkspaceHost {
     {
         self.central(&request.organization_id)
             .await?
-            .decide_machine_token(request)
+            .machine_token(request)
             .await
     }
 }

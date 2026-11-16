@@ -401,6 +401,9 @@ jobs:
       # targets, so fetch target-specific packages even on this Linux runner.
       - name: Fetch dependencies for all targets
         run: cargo fetch --locked
+      - name: Check the central engine native property-test dependency offline
+        if: matrix.shard == 1
+        run: cargo check --locked --offline -p central-engine-model --tests
       - name: Select quota-reset stage
         id: quota_scope
         if: matrix.shard == 2 && github.event_name == 'pull_request'

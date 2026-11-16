@@ -128,3 +128,61 @@ produce two consecutive changes, both are drained, and replay preserves the curs
   Observation cases read actual machine/approval projections, refuse corrupt
   generation or grant-time fields without writes, then repair only setup and
   require the original complete observation.
+
+Ported from the paused reliability branch (alarm robustness):
+
+- `workspace_requests::mail::alarm_isolation::corrupt_queued_message_does_not_block_due_wake`:
+  an unreadable queued message stays untouched while the due wake fires and the
+  alarm moves to the later wake; no timer attempt record is written.
+- `workspace_requests::mail::alarm_admission`: corrupt terminal wake history does not
+  block fresh mail, alarm recomputation or cold startup; an unreadable active due
+  keeps unrelated mail and re-arms at the next five-minute mark; a shaped legacy wake
+  outside current grid/horizon policy still fires once.
+- `workspace_requests::mail::request_recovery`: warm Show, generic CreateWorkspace and
+  exact replay each re-arm a physically missing alarm on the same runtime; a failed
+  completion re-arm preserves the committed answer and its replay.
+- `workspace_requests::mail::alarm_startup`: one organization with a corrupt identity
+  does not block a healthy organization's host reopen, in either creation order.
+- `workspace_requests::notices::drain_replay_isolation`: a committed post and its replay
+  succeed when its drain is corrupt; the retry is the `legacy_workspace_drains` record.
+- `workspace_requests::notices::workspace_outage`: an unavailable workspace store does not
+  block another workspace's window or a due wake, and recovers without duplicates.
+- `organization_signin::alarm_recovery`: the private HTTP digest route re-arms a missing
+  alarm on the warm owner, and a failed re-arm keeps the digest answer.
+- `workspace_requests::mail::engine_event_support`: shared native helpers for the V6, V9
+  and V12 checks (named times from 10:00:00, the held-clock event driver, wake, window
+  and probe fixtures).
+- `workspace_requests::mail::engine_publication_failures`: V6 on the native host; a
+  post-commit publication failure keeps the rows and the previous alarm, the upper range
+  has no mark and arms nothing, a restart mid fan-out redoes nothing, and a dropped alarm
+  is re-published by the next request.
+- `workspace_requests::mail::engine_large_batch`: V9 on the native host; 1,000 due probe
+  instances in four capped batches 30 s apart, earliest first and once each, with at most
+  eight units in flight; prints batch timings as measurement only.
+- `workspace_requests::mail::engine_timing_races`: V12 races on the native host; a
+  publication built before a newer claim uses the newer floor and backlog, a claim waits
+  out a decision's publication, simultaneous events run one due batch, notice units get no
+  look-ahead, and a changed organization stamp refuses every event.
+- `workspace_requests::engine_v2_support`: shared native V2 helpers (failure record
+  reads, mark arithmetic, wake and automation requests, and a `tracing` capture of the
+  native `EngineItemFailed` log lines).
+- `workspace_requests::mail::engine_isolation_v2`: V2 on the native host; a corrupt wake
+  (target, due time, state) or automation (timing rule) beside healthy ones fails alone
+  at count 1 with the next mark, is observed, retires on the next pass and is never
+  visited during the following hour.
+- `workspace_requests::notices::engine_notice_units`: V2 on the native host; a failing
+  drain arms its next try on a mark, never its past drain time; the drain unit's control
+  row gates due batches and request drains across a restart; a failing request drain
+  records against the unit and keeps its committed answer.
+- `workspace_requests::notices::engine_drain_origins`: V2 error origin on the native host;
+  workspace-store outage, central outage, rejected, uncertain, unique-constraint and
+  guard-failed drain batches each take their own outcome, and the two-workspace mixes keep
+  CentralDown first and a committed workspace committed.
+- `organization_signin::engine_admin_support`: an organization with a workspace, today's
+  timers and the four engine admin routes over the real sign-in link with person proofs.
+- `organization_signin::engine_admin`: V13 on the native host; EngineHealth lists every
+  kind, the retired list pages in attempt order, retry and discard with their refusals,
+  replays and admission.
+- `organization_signin::engine_unit_revival`: V2 notice units and `engine_source` on the
+  native host; each unit recovers by itself, restarts its 60-day period, retires at 60
+  days, stays stopped and returns only by EngineRetry; a retired source is never read.
