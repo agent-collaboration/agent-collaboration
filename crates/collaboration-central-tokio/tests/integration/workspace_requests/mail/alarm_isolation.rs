@@ -281,3 +281,126 @@ async fn corrupt_due_automation_timing_does_not_block_due_wake() {
     );
     fixture.host.close().await;
 }
+
+async fn set_wake_at(
+    fixture: &Fixture,
+    number: u32,
+    due: workspace_model::Timestamp,
+    label: &str,
+) -> workspace_ids::WakeId {
+    let result = fixture
+        .host
+        .request_central(
+            &fixture.caller,
+            CentralMailRequest {
+                request_id: id(number),
+                operation: Operation::SetWake {
+                    target: session(&fixture.caller),
+                    due_at: due,
+                    text: label.to_owned().try_into().unwrap(),
+                },
+            },
+        )
+        .await
+        .unwrap();
+    let Result::Done(Answer::WakeSet { wake_id, .. }) = result else {
+        panic!("wake refused: {result:?}")
+    };
+    wake_id
+}
+
+async fn wake_state(fixture: &Fixture, wake: &workspace_ids::WakeId) -> Vec<Vec<SqlValue>> {
+    let runtime = fixture
+        .host
+        .central(&fixture.caller.organization_id)
+        .await
+        .unwrap();
+    runtime.statement_host().read(Statement {
+        sql: "SELECT state,(SELECT COUNT(*) FROM messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?) FROM wakes WHERE wake_id=?",
+        args: vec![text(wake), text(wake)],
+    }).await.unwrap().rows
+}
+
+#[tokio::test]
+async fn corrupt_queued_message_does_not_block_due_wake() {
+    let f = Fixture::new().await;
+    let due = f.clock.utc_now() + chrono::Duration::seconds(300);
+    let later = due + chrono::Duration::seconds(300);
+    let result = f
+        .host
+        .request_central(
+            &f.caller,
+            CentralMailRequest {
+                request_id: id(3020),
+                operation: Operation::SendMessage {
+                    to: session(&f.caller),
+                    body: "unrelated".to_owned().try_into().unwrap(),
+                },
+            },
+        )
+        .await
+        .unwrap();
+    let Result::Done(Answer::Queued { message_id }) = result else {
+        panic!("message refused: {result:?}")
+    };
+    let healthy = set_wake_at(&f, 3021, due, "healthy").await;
+    let future = set_wake_at(&f, 3022, later, "future").await;
+    let runtime = f.host.central(&f.caller.organization_id).await.unwrap();
+    let applied = runtime
+        .statement_host()
+        .run_batch(StatementBatch {
+            statements: vec![GuardedStatement {
+                statement: Statement {
+                    sql: "UPDATE messages SET body='not-json' WHERE message_id=?",
+                    args: vec![text(&message_id)],
+                },
+                expect: RowExpectation::Any,
+            }],
+            alarm: AlarmUpdate::Unchanged,
+        })
+        .await
+        .unwrap();
+    assert!(matches!(applied, BatchOutcome::Applied { .. }));
+    let message_row = || Statement {
+        sql: "SELECT * FROM messages WHERE message_id=?",
+        args: vec![text(&message_id)],
+    };
+    let before = runtime.statement_host().read(message_row()).await.unwrap();
+    f.clock
+        .not_due_check_now(ClockInstant::ZERO.after(Duration::from_secs(300)))
+        .await;
+    f.clock.set_utc(due);
+
+    let completion = runtime.after_event().await.unwrap();
+
+    assert_eq!(completion.work.wakes_fired, 1);
+    assert_eq!(
+        runtime.statement_host().read(message_row()).await.unwrap(),
+        before
+    );
+    assert_eq!(
+        wake_state(&f, &healthy).await,
+        vec![vec![text("done"), SqlValue::Integer(1.try_into().unwrap())]]
+    );
+    assert_eq!(
+        wake_state(&f, &future).await,
+        vec![vec![
+            text("active"),
+            SqlValue::Integer(0.try_into().unwrap())
+        ]]
+    );
+    // No timer item failed, so no timer carries an attempt record.
+    let attempts = runtime.statement_host().read(Statement {
+        sql: "SELECT machine_kind,subject_key FROM central_work_attempts WHERE machine_kind IN ('wake_timer','automation_timer')",
+        args: vec![],
+    }).await.unwrap();
+    assert_eq!(attempts.rows, Vec::<Vec<SqlValue>>::new());
+    assert_eq!(
+        runtime
+            .statement_host()
+            .alarm()
+            .map(|time| time.unix_millis()),
+        Some(later.timestamp_millis())
+    );
+    f.host.close().await;
+}

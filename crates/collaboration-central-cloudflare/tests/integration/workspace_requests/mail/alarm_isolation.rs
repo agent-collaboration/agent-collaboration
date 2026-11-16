@@ -271,3 +271,154 @@ async fn corrupt_due_automation_timing_does_not_block_other_timers() {
     );
     fixture.host.close().await;
 }
+
+async fn set_wake_at(
+    fixture: &Fixture,
+    number: u32,
+    due: workspace_model::Timestamp,
+    label: &str,
+) -> workspace_ids::WakeId {
+    let result = fixture
+        .host
+        .request_central(
+            &fixture.caller,
+            CentralMailRequest {
+                request_id: id(number),
+                operation: Operation::SetWake {
+                    target: session(&fixture.caller),
+                    due_at: due,
+                    text: label.to_owned().try_into().unwrap(),
+                },
+            },
+        )
+        .await
+        .unwrap();
+    let Result::Done(Answer::WakeSet { wake_id, .. }) = result else {
+        panic!("wake setup refused: {result:?}")
+    };
+    wake_id
+}
+
+async fn fired_wake_count(fixture: &Fixture, wake: &workspace_ids::WakeId) -> usize {
+    let runtime = fixture.host.central(&fixture.caller.organization_id).await;
+    let messages = runtime
+        .statement_host()
+        .read(Statement {
+            sql: "SELECT body FROM messages WHERE message_kind='wake'",
+            args: vec![],
+        })
+        .await
+        .unwrap();
+    messages
+        .rows
+        .iter()
+        .filter(|row| {
+            let SqlValue::Text(body) = &row[0] else {
+                panic!("wake body")
+            };
+            matches!(
+                serde_json::from_str::<workspace_model::central_mail::MessageBody>(body).unwrap(),
+                workspace_model::central_mail::MessageBody::Wake { wake_id, .. } if &wake_id == wake
+            )
+        })
+        .count()
+}
+
+#[tokio::test]
+async fn corrupt_queued_direct_message_does_not_block_timers() {
+    let f = Fixture::new().await;
+    let runtime = f.host.central(&f.caller.organization_id).await;
+    let start = now(&f);
+    let due = start + chrono::Duration::seconds(300);
+    let later_due = start + chrono::Duration::seconds(600);
+    let healthy = set_wake_at(&f, 8100, due, "healthy due").await;
+    let later = set_wake_at(&f, 8101, later_due, "healthy later").await;
+    let result = f
+        .host
+        .request_central(
+            &f.caller,
+            CentralMailRequest {
+                request_id: id(8102),
+                operation: Operation::SendMessage {
+                    to: session(&f.caller),
+                    body: "unrelated direct".to_owned().try_into().unwrap(),
+                },
+            },
+        )
+        .await
+        .unwrap();
+    let Result::Done(Answer::Queued { message_id }) = result else {
+        panic!("direct setup refused: {result:?}")
+    };
+    let applied = runtime
+        .statement_host()
+        .run_batch(StatementBatch {
+            statements: vec![GuardedStatement {
+                statement: Statement {
+                    sql: "UPDATE messages SET body='not-json' WHERE message_id=?",
+                    args: vec![text(&message_id)],
+                },
+                expect: RowExpectation::Any,
+            }],
+            alarm: AlarmUpdate::Unchanged,
+        })
+        .await
+        .unwrap();
+    assert!(matches!(applied, BatchOutcome::Applied { .. }));
+    let message_row = || Statement {
+        sql: "SELECT * FROM messages WHERE message_id=?",
+        args: vec![text(&message_id)],
+    };
+    let before = runtime.statement_host().read(message_row()).await.unwrap();
+    assert_eq!(
+        runtime
+            .control::<Option<i64>>("raw-alarm-time", &())
+            .await
+            .unwrap(),
+        Some(due.timestamp_millis())
+    );
+    f.clock.0.store(due.timestamp_millis(), Ordering::SeqCst);
+
+    let work = runtime.after_event().await.unwrap();
+
+    assert_eq!(work.wakes_fired, 1);
+    assert_eq!(
+        runtime.statement_host().read(message_row()).await.unwrap(),
+        before
+    );
+    assert_eq!(
+        fired_wake_count(&f, &healthy).await,
+        1,
+        "one bad item must not suppress the healthy due wake"
+    );
+    assert_eq!(
+        fired_wake_count(&f, &later).await,
+        0,
+        "future wake must not fire early"
+    );
+    // No timer item failed, so no timer carries an attempt record.
+    let attempts = runtime.statement_host().read(Statement {
+        sql: "SELECT machine_kind,subject_key FROM central_work_attempts WHERE machine_kind IN ('wake_timer','automation_timer')",
+        args: vec![],
+    }).await.unwrap();
+    assert_eq!(attempts.rows, Vec::<Vec<SqlValue>>::new());
+    assert_eq!(
+        runtime
+            .control::<Option<i64>>("raw-alarm-time", &())
+            .await
+            .unwrap(),
+        Some(later_due.timestamp_millis()),
+        "physical alarm must retain the earliest healthy timer"
+    );
+    f.clock
+        .0
+        .store(later_due.timestamp_millis(), Ordering::SeqCst);
+    runtime.after_event().await.unwrap();
+    assert_eq!(
+        fired_wake_count(&f, &later).await,
+        1,
+        "the later healthy timer must also fire"
+    );
+    assert_eq!(fired_wake_count(&f, &healthy).await, 1);
+    f.host.close().await;
+}

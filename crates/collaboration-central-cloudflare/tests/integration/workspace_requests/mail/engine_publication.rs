@@ -12,7 +12,13 @@ use workspace_model::central_mail::{
 async fn engine_alarm_publication_sets_the_real_retained_deadline() {
     let fixture = Fixture::new().await;
     let runtime = fixture.host.central(&fixture.caller.organization_id).await;
-    let due = fixture.clock.0.load(Ordering::SeqCst) + 5_000;
+    // Embedded setup allowance: the fixture's setup claimed the due batch at T0, so
+    // the held clock moves to T0 + 30 s before this publication; the query's own
+    // deadline then lies past the 30 s floor and reaches the real alarm unchanged.
+    let now = fixture.clock.0.load(Ordering::SeqCst) + 30_000;
+    fixture.clock.0.store(now, Ordering::SeqCst);
+    let _: bool = runtime.control("clock", &now).await.unwrap();
+    let due = now + 5_000;
     let result = runtime
         .run_batch(StatementBatch {
             statements: vec![],

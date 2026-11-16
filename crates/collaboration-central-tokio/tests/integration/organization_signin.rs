@@ -1,5 +1,6 @@
 //! Modern private sign-in routes over the real native Unix listener and SQLite.
 mod admission;
+mod alarm_recovery;
 mod causal_races;
 mod deadlines;
 mod floors;

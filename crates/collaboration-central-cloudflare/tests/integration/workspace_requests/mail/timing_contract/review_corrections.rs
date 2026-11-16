@@ -238,7 +238,20 @@ pub(super) async fn exercise_late_drain(f: &Fixture) {
             },
         )
         .await;
-    assert_eq!(response.result, m::WorkspaceResult::OutcomeUnknown);
+    // Embedded: the post committed, so its committed answer is returned; the
+    // rejected drain is recorded against the drain unit for the next mark.
+    assert!(
+        matches!(
+            response.result,
+            m::WorkspaceResult::Done(m::WorkspaceAnswer::Created { .. })
+        ),
+        "{response:?}"
+    );
+    let record = r.statement_host().read(Statement { sql: "SELECT state,last_failure FROM central_work_attempts WHERE machine_kind='legacy_workspace_drains' AND subject_key='all'", args: vec![] }).await.unwrap();
+    assert_eq!(
+        record.rows,
+        vec![vec![text("failing"), text("statement_rejected")]]
+    );
     let read = || Statement {
         sql: "SELECT due_at FROM notification_windows WHERE recipient_actor=?",
         args: vec![actor.clone()],
@@ -278,6 +291,22 @@ pub(super) async fn exercise_late_drain(f: &Fixture) {
         r.statement_host().read(read()).await.unwrap().rows,
         vec![vec![text(
             due.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+        )]]
+    );
+    // Embedded: the rejected drain retries at the next mark through its record,
+    // which succeeds now and clears the record; the window then fires at its slot.
+    let retry = chrono::DateTime::from_timestamp((now(f).timestamp().div_euclid(300) + 1) * 300, 0)
+        .unwrap();
+    drop(r);
+    if retry < due {
+        dispatch_to(f, retry).await;
+    }
+    let r = f.host.central(&f.caller.organization_id).await;
+    let record = r.statement_host().read(Statement { sql: "SELECT COUNT(*) FROM central_work_attempts WHERE machine_kind='legacy_workspace_drains'", args: vec![] }).await.unwrap();
+    assert_eq!(
+        record.rows,
+        vec![vec![central_storage::SqlValue::Integer(
+            0.try_into().unwrap()
         )]]
     );
     drop(r);

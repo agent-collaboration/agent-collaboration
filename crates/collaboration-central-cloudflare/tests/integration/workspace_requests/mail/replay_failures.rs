@@ -74,13 +74,18 @@ async fn replay_rejects_convertible_stored_due_beyond_portable_ceiling_without_c
         .await
         .unwrap();
     assert_eq!(alarm_before, Some(due.timestamp_millis()));
+    // Embedded setup allowance: the fixture's setup claimed the due batch at T0, so
+    // the held clock moves to T0 + 30 s before this event's due batch.
+    fixture.clock.0.store(
+        (due - chrono::Duration::seconds(270)).timestamp_millis(),
+        std::sync::atomic::Ordering::SeqCst,
+    );
+    // Isolation: the global preflight is gone, so the replay returns its stored
+    // WakeSet answer; the beyond-ceiling wake counts as due now, so the alarm is
+    // the next mark (here the same instant as the original due).
     assert_eq!(
         fixture.host.request_central(&fixture.caller, request).await,
-        Err(StoreFailure::Corrupt {
-            reason: CorruptReason::BadValue {
-                column: "wakes.due_at".to_owned()
-            }
-        })
+        Ok(first)
     );
     assert_eq!(
         runtime

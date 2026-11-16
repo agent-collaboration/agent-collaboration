@@ -188,7 +188,12 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         let mut count = 0;
         let mut outcome = LegacyUnitOutcome::Done;
         for workspace in workspaces {
-            let _turn = self.turns.take(&workspace).await;
+            // P5 change 6: a workspace whose turn another request holds is skipped
+            // for this batch, not a failure; its drain_due_at stays, and the holder's
+            // own drain or a later batch drains it.
+            let Some(_turn) = self.turns.try_take(&workspace) else {
+                continue;
+            };
             match self.commit_workspace_drain(&workspace).await {
                 Ok(_) => count += 1,
                 Err(error) => {

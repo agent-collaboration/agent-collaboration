@@ -354,8 +354,11 @@ async fn session_cadence_sets_nondefault_window_deadline() {
 mod roles;
 
 mod alarm_isolation;
+mod busy_workspace;
 mod concurrency;
 mod corruption;
+mod drain_replay_isolation;
 mod identities;
 mod queued_cancel;
 mod recovery;
+mod workspace_outage;

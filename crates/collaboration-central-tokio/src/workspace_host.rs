@@ -273,7 +273,7 @@ impl OrganizationSignInPort for TokioWorkspaceHost {
         self.central(&request.organization_id)
             .await
             .map_err(|_| OrganizationProvisioningFailure::Unavailable)?
-            .provision_organization(request)
+            .provision(request)
             .await
     }
 
@@ -284,7 +284,7 @@ impl OrganizationSignInPort for TokioWorkspaceHost {
         self.central(&request.organization_id)
             .await
             .map_err(|_| OrganizationProvisioningFailure::Unavailable)?
-            .read_statement_digest(request)
+            .digest(request)
             .await
     }
 
@@ -295,7 +295,7 @@ impl OrganizationSignInPort for TokioWorkspaceHost {
         self.central(request.organization_id())
             .await
             .map_err(|_| OrganizationProvisioningFailure::Unavailable)?
-            .deliver_authorization_revision(request)
+            .revision(request)
             .await
     }
 
@@ -306,7 +306,7 @@ impl OrganizationSignInPort for TokioWorkspaceHost {
     ) -> Result<OrganizationAdminAnswer, StoreFailure> {
         self.central(&organization)
             .await?
-            .admin_person_request(&input)
+            .admin(organization, input)
             .await
     }
     async fn device_login(
@@ -316,7 +316,7 @@ impl OrganizationSignInPort for TokioWorkspaceHost {
     {
         self.central(&request.organization_id)
             .await?
-            .decide_device_login(request)
+            .device_login(request)
             .await
     }
     async fn machine_token(
@@ -326,7 +326,7 @@ impl OrganizationSignInPort for TokioWorkspaceHost {
     {
         self.central(&request.organization_id)
             .await?
-            .decide_machine_token(request)
+            .machine_token(request)
             .await
     }
 }

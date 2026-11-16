@@ -1,5 +1,6 @@
 //! Actual private Worker binding, WebCrypto, guarded SQL and owning readback.
 mod admission;
+mod alarm_recovery;
 mod causal_races;
 mod deadlines;
 mod expiry_holds;

@@ -79,19 +79,34 @@ async fn corrupt_timer_target_and_timing_fail_alarm_without_effects() {
             .clock
             .0
             .store(due.timestamp_millis(), std::sync::atomic::Ordering::SeqCst);
-        let error = runtime.after_event().await.unwrap_err();
+        // Isolation (moved-tests table): the corrupt timer is recorded Failing, the
+        // real alarm handler succeeds, and the alarm re-arms on the next mark.
+        runtime.after_event().await.unwrap();
+        let kind = if number == 1300 {
+            "wake_timer"
+        } else {
+            "automation_timer"
+        };
+        let record = runtime.statement_host().read(Statement { sql: "SELECT state,failure_count,last_failure,last_failure_detail FROM central_work_attempts WHERE machine_kind=?", args: vec![text(kind)] }).await.unwrap();
+        assert_eq!(record.rows.len(), 1);
         assert_eq!(
-            error,
-            central_storage::StoreFailure::Corrupt {
-                reason: central_storage::CorruptReason::BadValue {
-                    column: expected_column.to_owned()
-                },
-            }
+            &record.rows[0][..3],
+            &[
+                text("failing"),
+                central_storage::SqlValue::Integer(1.try_into().unwrap()),
+                text("corrupt_row")
+            ]
+        );
+        assert!(
+            matches!(&record.rows[0][3], central_storage::SqlValue::Text(detail) if detail.contains(expected_column))
         );
         let receipt: Option<AlarmReceipt> = runtime.control("raw-alarm-status", &()).await.unwrap();
         let receipt = receipt.unwrap();
-        assert!(matches!(receipt.result, AlarmReceiptResult::Error { .. }));
-        assert_eq!(receipt.alarm_after, receipt.alarm_before);
+        assert!(matches!(receipt.result, AlarmReceiptResult::Applied { .. }));
+        assert_eq!(
+            receipt.alarm_after,
+            Some((due + chrono::Duration::minutes(5)).timestamp_millis())
+        );
         let rows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM wakes WHERE state='active'),(SELECT COUNT(*) FROM automations WHERE state='active'),(SELECT COUNT(*) FROM messages)", args: vec![] }).await.unwrap();
         let (wakes, automations) = if number == 1300 { (1, 0) } else { (0, 1) };
         assert_eq!(
@@ -144,11 +159,17 @@ async fn later_timer_statement_failure_rolls_back_queue_lifecycle_and_alarm() {
         .clock
         .0
         .store(due.timestamp_millis(), std::sync::atomic::Ordering::SeqCst);
-    assert!(runtime.after_event().await.is_err());
+    // Isolation: only the failing timer's batch rolls back; the real alarm handler
+    // succeeds and re-arms on the record's next mark.
+    runtime.after_event().await.unwrap();
     let receipt: Option<AlarmReceipt> = runtime.control("raw-alarm-status", &()).await.unwrap();
     let receipt = receipt.unwrap();
-    assert!(matches!(receipt.result, AlarmReceiptResult::Error { .. }));
-    assert_eq!(receipt.alarm_after, receipt.alarm_before);
+    assert!(matches!(receipt.result, AlarmReceiptResult::Applied { .. }));
+    assert_eq!(
+        receipt.alarm_after,
+        Some((due + chrono::Duration::minutes(5)).timestamp_millis()),
+        "the rejected wake retries at the next mark through its record"
+    );
     let rows = runtime.statement_host().read(Statement { sql: "SELECT state,(SELECT COUNT(*) FROM messages WHERE message_kind='wake') FROM wakes WHERE wake_id=?", args: vec![text(&wake_id)] }).await.unwrap();
     assert_eq!(
         rows.rows,
@@ -158,6 +179,10 @@ async fn later_timer_statement_failure_rolls_back_queue_lifecycle_and_alarm() {
         ]]
     );
     execute(&fixture, "DROP TRIGGER reject_wake_finish", vec![]).await;
+    fixture.clock.0.store(
+        (due + chrono::Duration::minutes(5)).timestamp_millis(),
+        std::sync::atomic::Ordering::SeqCst,
+    );
     assert_eq!(runtime.after_event().await.unwrap().wakes_fired, 1);
     let receipt: Option<AlarmReceipt> = runtime.control("raw-alarm-status", &()).await.unwrap();
     let receipt = receipt.unwrap();

@@ -128,3 +128,24 @@ produce two consecutive changes, both are drained, and replay preserves the curs
   Observation cases read actual machine/approval projections, refuse corrupt
   generation or grant-time fields without writes, then repair only setup and
   require the original complete observation.
+
+Ported from the paused reliability branch (alarm robustness):
+
+- `workspace_requests::mail::alarm_isolation::corrupt_queued_message_does_not_block_due_wake`:
+  an unreadable queued message stays untouched while the due wake fires and the
+  alarm moves to the later wake; no timer attempt record is written.
+- `workspace_requests::mail::alarm_admission`: corrupt terminal wake history does not
+  block fresh mail, alarm recomputation or cold startup; an unreadable active due
+  keeps unrelated mail and re-arms at the next five-minute mark; a shaped legacy wake
+  outside current grid/horizon policy still fires once.
+- `workspace_requests::mail::request_recovery`: warm Show, generic CreateWorkspace and
+  exact replay each re-arm a physically missing alarm on the same runtime; a failed
+  completion re-arm preserves the committed answer and its replay.
+- `workspace_requests::mail::alarm_startup`: one organization with a corrupt identity
+  does not block a healthy organization's host reopen, in either creation order.
+- `workspace_requests::notices::drain_replay_isolation`: a committed post and its replay
+  succeed when its drain is corrupt; the retry is the `legacy_workspace_drains` record.
+- `workspace_requests::notices::workspace_outage`: an unavailable workspace store does not
+  block another workspace's window or a due wake, and recovers without duplicates.
+- `organization_signin::alarm_recovery`: the private HTTP digest route re-arms a missing
+  alarm on the warm owner, and a failed re-arm keeps the digest answer.

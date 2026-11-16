@@ -172,3 +172,24 @@ Worker CI records nextest output in the job log and fails on a
 genuine `LEAK` result, including a test that nextest otherwise calls successful.
 An always-run `pgrep -x workerd` gate also rejects workerd-only orphans whose
 output pipes belong to Miniflare and cannot produce nextest's `LEAK` result.
+
+## Ported alarm-robustness cases
+
+These cases come from the paused reliability branch and mirror the native ones:
+
+- `workspace_requests::mail::alarm_isolation::corrupt_queued_direct_message_does_not_block_timers`:
+  an unreadable queued direct message stays untouched while due and later wakes fire
+  on the actual platform alarm; no timer attempt record is written.
+- `workspace_requests::mail::alarm_admission`: corrupt terminal wake history does not
+  block fresh mail, alarm repair or the cold alarm; an unreadable active due keeps
+  unrelated mail and re-arms at the next five-minute mark; a shaped legacy wake
+  outside current grid/horizon policy still fires once.
+- `workspace_requests::mail::request_recovery`: warm Show, generic CreateWorkspace and
+  exact replay each re-arm an alarm removed with the `raw-drop-alarm` control; a
+  failed completion re-arm preserves the committed answer and its replay.
+- `workspace_requests::notices::drain_replay_isolation`: a committed post and its replay
+  succeed when its drain is corrupt; the retry is the `legacy_workspace_drains` record.
+- `workspace_requests::notices::workspace_outage`: an unavailable workspace store does not
+  block another workspace's window or a due wake, and recovers without duplicates.
+- `workspace_requests::organization_signin::alarm_recovery`: the private digest binding
+  re-arms a missing alarm on the warm owner, and a failed re-arm keeps the answer.

@@ -53,10 +53,13 @@ async fn invalid_open_window_is_rejected_before_alarm_changes_queue_or_cursor() 
         let prior_alarm: Option<i64> = runtime.control("raw-alarm-time", &()).await.unwrap();
         assert!(prior_alarm.is_some());
         execute(&f, sql, vec![text(&actor)]).await;
-        let error = runtime.after_event().await.unwrap_err();
-        assert!(
-            matches!(error, StoreFailure::Corrupt { reason: CorruptReason::BadValue { column } } if column == expected_column)
-        );
+        // Embedded setup allowance: the fixture's setup claimed the due batch at T0.
+        let start = f.clock.0.load(Ordering::SeqCst);
+        f.clock.0.store(start + 30_000, Ordering::SeqCst);
+        // Isolation: the window unit fails as a whole with no window, queue or
+        // cursor change; the real alarm handler succeeds and re-arms, and the
+        // failure is the unit's record.
+        runtime.after_event().await.unwrap();
         assert_eq!(
             runtime.statement_host().read(read()).await.unwrap().rows,
             before.rows
@@ -66,9 +69,21 @@ async fn invalid_open_window_is_rejected_before_alarm_changes_queue_or_cursor() 
         let receipt = receipt.unwrap();
         assert!(matches!(
             receipt.result,
-            super::super::workerd_host::AlarmReceiptResult::Error { .. }
+            super::super::workerd_host::AlarmReceiptResult::Applied { .. }
         ));
-        assert_eq!(receipt.alarm_before, receipt.alarm_after);
+        assert_eq!(receipt.alarm_after, Some(start + 300_000));
+        let record = runtime.statement_host().read(Statement { sql: "SELECT state,failure_count,last_failure,last_failure_detail FROM central_work_attempts WHERE machine_kind='legacy_notice_windows' AND subject_key='all'", args: vec![] }).await.unwrap();
+        assert_eq!(
+            &record.rows[0][..3],
+            &[
+                text("failing"),
+                SqlValue::Integer(1.try_into().unwrap()),
+                text("corrupt_row")
+            ]
+        );
+        assert!(
+            matches!(&record.rows[0][3], SqlValue::Text(detail) if detail.contains(expected_column))
+        );
         let recipient = runtime.statement_host().read(Statement { sql: "SELECT COUNT(*) FROM messages WHERE recipient_actor=? AND message_kind='notice'", args: vec![text(actor)] }).await.unwrap();
         assert_eq!(
             recipient.rows,

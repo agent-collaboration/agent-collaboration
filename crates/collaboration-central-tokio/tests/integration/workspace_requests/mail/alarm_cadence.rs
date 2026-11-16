@@ -134,14 +134,23 @@ async fn a_pending_due_at_now_recomputes_to_the_next_mark() {
         .central(&fixture.caller.organization_id)
         .await
         .unwrap();
-    // Let the real driver settle on its current deadline first, so moving UTC to
-    // the due time cannot wake a stale loop iteration that runs the batch.
-    fixture
-        .clock
-        .not_due_check_now(
-            router_clock::ClockInstant::ZERO.after(std::time::Duration::from_secs(300)),
-        )
-        .await;
+    // The pending wake must not be run by the real driver at its due time, so its
+    // physical alarm is dropped first (test-only empty publication); only the
+    // recompute below decides the alarm for a wake that is due exactly now.
+    assert!(matches!(
+        runtime
+            .statement_host()
+            .run_batch(central_storage::StatementBatch {
+                statements: vec![],
+                alarm: central_storage::AlarmUpdate::SetFromQuery(Statement {
+                    sql: "SELECT NULL",
+                    args: vec![],
+                }),
+            })
+            .await
+            .unwrap(),
+        central_storage::BatchOutcome::Applied { .. }
+    ));
     fixture.clock.set_utc(due);
 
     runtime.recompute_alarm().await.unwrap();
