@@ -610,14 +610,23 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
         .cancel_active_prompt("session-1".into())
         .await
         .expect("release held turn, emitting skill removal before its terminal");
-    tokio::time::timeout(
+    // The refused entry stays recorded not sent with its reason (D1 R14),
+    // rather than being cleared as if it ran.
+    let not_sent = tokio::time::timeout(
         std::time::Duration::from_secs(3),
         supervisor
             .queued_operation_registry()
-            .wait_for_cleared(&queued_operation),
+            .wait_for_not_submitted(&queued_operation),
     )
     .await
     .expect("queued actor refusal settles");
+    assert!(
+        matches!(
+            &not_sent,
+            ConversationOperationQueueState::NotSubmitted { reason } if !reason.is_empty()
+        ),
+        "{not_sent:?}"
+    );
     let rejected = supervisor
         .wait(ConversationOperationWaitRequest {
             operation_id: queued_operation.clone(),
