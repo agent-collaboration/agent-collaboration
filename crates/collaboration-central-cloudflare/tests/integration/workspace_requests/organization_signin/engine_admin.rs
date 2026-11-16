@@ -542,3 +542,46 @@ async fn discarding_a_retired_subject_whose_lifecycle_state_will_not_decode_repo
     );
     engine.close().await;
 }
+
+/// V6 (Cloudflare clause): alarmMissing is checked by clearing the alarm under
+/// pending work; the next request's own batch re-arms it.
+#[tokio::test]
+async fn health_reports_alarm_missing_while_timed_work_waits_without_an_alarm() {
+    let engine = EngineOrg::new().await;
+    engine
+        .wake(
+            next_mark(engine.now()) + minutes(5),
+            "pending without an alarm",
+        )
+        .await;
+    assert!(
+        engine.alarm_ms().await.is_some(),
+        "the wake armed the alarm"
+    );
+    assert_eq!(engine.health().await["alarmMissing"], false);
+    assert!(
+        engine
+            .runtime()
+            .await
+            .control::<bool>("raw-drop-alarm", &())
+            .await
+            .unwrap()
+    );
+    assert_eq!(engine.alarm_ms().await, None, "the physical alarm is gone");
+
+    assert_eq!(
+        engine.health().await["alarmMissing"],
+        true,
+        "timed work is pending with no physical alarm"
+    );
+
+    engine
+        .wake(next_mark(engine.now()) + minutes(10), "the next request")
+        .await;
+    assert!(
+        engine.alarm_ms().await.is_some(),
+        "the next request re-armed"
+    );
+    assert_eq!(engine.health().await["alarmMissing"], false);
+    engine.close().await;
+}
