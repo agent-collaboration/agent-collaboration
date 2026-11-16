@@ -373,3 +373,46 @@ async fn a_load_in_flight_when_the_router_closes_the_session_stays_closed() {
     assert_eq!(prompts, 0, "no work reached the agent");
     stopped.expect("the supervisor drains without a timeout");
 }
+
+/// Oracle: D1 spec R14 and the Reviewer's C2 residual: a load whose
+/// router-closed check passed before the close but which reaches the
+/// connection after the release is refused there. Released on an agent that
+/// can load but can't close, the session can't be loaded again on that
+/// connection, and the agent never sees the session/load.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_load_reaching_the_connection_after_a_release_is_refused() {
+    // Arrange: a released session on a load-capable agent without
+    // session/close.
+    let root = tempfile::tempdir().expect("fixture root");
+    let receipt = root.path().join("wire.json");
+    let runtime = ExternalProviderRuntime::initialize(
+        crate::external_provider_runtime::acp_scripted_fixture::launch_fixture_agent(
+            "cursor-settings-agent.ts",
+            vec!["reactive".to_owned(), receipt.display().to_string()],
+        ),
+        Arc::new(acp_provider_adapters::StandardAcpBehavior),
+    )
+    .await
+    .expect("fixture provider");
+    runtime
+        .release_session("reactive-session-1".to_owned())
+        .await
+        .expect("the Router releases the session");
+
+    // Act
+    let loaded = runtime
+        .load_session("reactive-session-1".to_owned(), root.path().to_owned())
+        .await;
+    let loads = recorded_requests(&receipt, "session/load");
+    runtime.shutdown().await;
+
+    // Assert
+    assert!(
+        matches!(
+            loaded,
+            Err(acp_client_runtime::ExternalProviderRuntimeError::SessionReleased)
+        ),
+        "a released session isn't loaded again: {loaded:?}"
+    );
+    assert_eq!(loads, 0, "the agent never saw a session/load");
+}
