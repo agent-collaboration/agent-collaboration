@@ -165,7 +165,12 @@ async fn steered_prompt_is_accepted_under_its_requests_input_id() {
         tokio::task::yield_now().await;
     }
 
-    // Act: the caller's request names its own input ID.
+    // Act: the caller's request names its own input ID. The hub is followed
+    // from before the send: it publishes the acceptance on its own schedule.
+    let mut followed = hub
+        .attach(hub_target.clone())
+        .await
+        .expect("hub attachment");
     let chosen = session_event_model::InputId::generate();
     let steered = supervisor
         .prompt(ConversationPromptRequest {
@@ -181,17 +186,16 @@ async fn steered_prompt_is_accepted_under_its_requests_input_id() {
             },
         })
         .await;
-    let accepted: Vec<session_event_model::InputId> = hub
-        .attach(hub_target.clone())
-        .await
-        .expect("hub attachment")
-        .snapshot
-        .into_iter()
-        .filter_map(|event| match event.event {
-            SessionEvent::InputAccepted { input_id, .. } => Some(input_id),
-            _ => None,
-        })
-        .collect();
+    let accepted = loop {
+        match followed.receiver.recv().await {
+            Ok(event) => {
+                if let SessionEvent::InputAccepted { input_id, .. } = event.event {
+                    break vec![input_id];
+                }
+            }
+            Err(error) => panic!("the hub stopped before an acceptance: {error:?}"),
+        }
+    };
     std::fs::write(format!("{}.release", receipt.display()), b"").expect("release the turn");
     let held = held.await.expect("held turn task");
     queue.shutdown().await;
