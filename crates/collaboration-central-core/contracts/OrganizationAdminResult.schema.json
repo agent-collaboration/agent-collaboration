@@ -20,6 +20,26 @@
           "const": "conflict",
           "description": "The same operation ID arrived with a different request.",
           "type": "string"
+        },
+        {
+          "const": "notFound",
+          "description": "No failure record has this attempt ID (or a concurrent retry took it).",
+          "type": "string"
+        },
+        {
+          "const": "notRetired",
+          "description": "The record is failing, not retired.",
+          "type": "string"
+        },
+        {
+          "const": "discardUnsupported",
+          "description": "A notice unit or engine_source record has no subject to finish.",
+          "type": "string"
+        },
+        {
+          "const": "stale",
+          "description": "The subject moved; nothing changed.",
+          "type": "string"
         }
       ]
     },
@@ -27,6 +47,116 @@
       "maxLength": 128,
       "minLength": 1,
       "type": "string"
+    },
+    "EngineFailureClass": {
+      "description": "The closed failure classes of central_work_attempts.last_failure.",
+      "enum": [
+        "corrupt_row",
+        "constraint_violated",
+        "statement_rejected",
+        "refused",
+        "other_store_unavailable"
+      ],
+      "type": "string"
+    },
+    "EngineKindHealth": {
+      "additionalProperties": false,
+      "description": "One registered engine kind in EngineHealth; zero counts are listed too.",
+      "properties": {
+        "failing": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "kind": {
+          "$ref": "#/$defs/EngineKindName"
+        },
+        "lastFailure": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/EngineFailureClass"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "oldestFirstFailedAt": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retired": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "kind",
+        "failing",
+        "retired",
+        "oldestFirstFailedAt",
+        "lastFailure"
+      ],
+      "type": "object"
+    },
+    "EngineKindName": {
+      "description": "The closed set of engine kinds an admin sees; test-support machines are hidden.",
+      "enum": [
+        "wake_timer",
+        "automation_timer",
+        "legacy_notice_windows",
+        "legacy_workspace_drains",
+        "engine_source"
+      ],
+      "type": "string"
+    },
+    "EngineRetiredItem": {
+      "additionalProperties": false,
+      "description": "One retired failure record in EngineListRetired, ascending by attempt ID.",
+      "properties": {
+        "attemptId": {
+          "format": "uuid",
+          "type": "string"
+        },
+        "count": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "failureClass": {
+          "$ref": "#/$defs/EngineFailureClass"
+        },
+        "kind": {
+          "$ref": "#/$defs/EngineKindName"
+        },
+        "lastFailure": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "retiredAt": {
+          "format": "date-time",
+          "type": "string"
+        },
+        "subjectKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "attemptId",
+        "kind",
+        "subjectKey",
+        "failureClass",
+        "count",
+        "retiredAt",
+        "lastFailure"
+      ],
+      "type": "object"
     },
     "OrganizationChangeKind": {
       "enum": [
@@ -237,6 +367,92 @@
       "required": [
         "result",
         "records"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "alarm": {
+          "format": "date-time",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "alarmMissing": {
+          "type": "boolean"
+        },
+        "kinds": {
+          "items": {
+            "$ref": "#/$defs/EngineKindHealth"
+          },
+          "type": "array"
+        },
+        "result": {
+          "const": "engineHealth",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result",
+        "kinds",
+        "alarm",
+        "alarmMissing"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "items": {
+          "items": {
+            "$ref": "#/$defs/EngineRetiredItem"
+          },
+          "type": "array"
+        },
+        "next": {
+          "format": "uuid",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "result": {
+          "const": "engineRetired",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result",
+        "items",
+        "next"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "result": {
+          "const": "engineRetried",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
+      ],
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "result": {
+          "const": "engineDiscarded",
+          "type": "string"
+        }
+      },
+      "required": [
+        "result"
       ],
       "type": "object"
     },

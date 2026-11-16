@@ -52,3 +52,7 @@ pub fn failing_upgrade(original: sqlx::migrate::Migrator) -> sqlx::migrate::Migr
     migrations.push(Migration::new(next_version,"fixture failing upgrade".into(),MigrationType::Simple,SqlStr::from_static("CREATE TABLE rollback_probe (probe_id TEXT PRIMARY KEY,created_at TEXT NOT NULL,updated_at TEXT NOT NULL); INSERT INTO missing_migration_fixture_table VALUES (1);"),false));
     Migrator::with_migrations(migrations)
 }
+
+#[cfg(test)]
+#[path = "workspace_migrations_test.rs"]
+mod tests;

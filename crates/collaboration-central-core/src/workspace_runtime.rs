@@ -106,6 +106,11 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     pub fn statement_host(&self) -> &Host {
         &self.host
     }
+    /// The due-batch start and backlog bit the next publication will use.
+    #[cfg(feature = "test-support")]
+    pub fn due_batch_snapshot(&self) -> crate::DueBatchSnapshot {
+        self.due_batches.snapshot()
+    }
     #[cfg(feature = "test-support")]
     pub fn alarm_completion_count(&self) -> u64 {
         *self.completed_alarms.borrow()

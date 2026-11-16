@@ -171,6 +171,34 @@ pub struct ReadChangeRecordsRequest {
     pub limit: RecordPageLimit,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EngineHealthRequest {
+    pub organization_id: OrganizationId,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EngineListRetiredRequest {
+    pub organization_id: OrganizationId,
+    /// The last attempt ID of the previous page; absent or null for the first.
+    #[serde(default)]
+    #[schemars(with = "Option<String>", extend("format" = "uuid"))]
+    pub after: Option<durable_steps::Uuid>,
+    pub limit: RecordPageLimit,
+}
+
+/// Retry and discard name one failure record; the operation ID makes a replay
+/// return the stored answer, as for CreateWorkspace.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct EngineAttemptRequest {
+    pub organization_id: OrganizationId,
+    pub operation_id: AdminOperationId,
+    #[schemars(with = "String", extend("format" = "uuid"))]
+    pub attempt_id: durable_steps::Uuid,
+}
+
 /// Which route a request arrived on decides how its body is read; the body
 /// never chooses its own operation.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -179,6 +207,10 @@ pub enum AdminRoute {
     CreateWorkspace,
     WorkspaceLookup,
     ReadChangeRecords,
+    EngineHealth,
+    EngineListRetired,
+    EngineRetry,
+    EngineDiscard,
 }
 
 impl AdminRoute {
@@ -188,6 +220,10 @@ impl AdminRoute {
             Self::CreateWorkspace => "/organization-admin/v1/create-workspace",
             Self::WorkspaceLookup => "/organization-admin/v1/workspace-lookup",
             Self::ReadChangeRecords => "/organization-admin/v1/change-records",
+            Self::EngineHealth => "/organization-admin/v1/engine-health",
+            Self::EngineListRetired => "/organization-admin/v1/engine-retired",
+            Self::EngineRetry => "/organization-admin/v1/engine-retry",
+            Self::EngineDiscard => "/organization-admin/v1/engine-discard",
         }
     }
     /// The permission the sign-in service's policy grants for this route.
@@ -197,12 +233,19 @@ impl AdminRoute {
             Self::CreateWorkspace => "workspace:create",
             Self::WorkspaceLookup => "organization:view",
             Self::ReadChangeRecords => "organization:readAudit",
+            Self::EngineHealth | Self::EngineListRetired => "organization:readAudit",
+            // Mapped by the sign-in service's policy (Fleet access Lead); until it
+            // is, admission refuses these two routes with NotPermitted.
+            Self::EngineRetry | Self::EngineDiscard => "organization:repairWork",
         }
     }
     /// Changes need a fresh second factor; reads are exempt.
     #[must_use]
     pub const fn changes_state(self) -> bool {
-        matches!(self, Self::CreateWorkspace)
+        matches!(
+            self,
+            Self::CreateWorkspace | Self::EngineRetry | Self::EngineDiscard
+        )
     }
 }
 
@@ -213,6 +256,10 @@ pub enum AdminOperation {
     CreateWorkspace(CreateWorkspaceRequest),
     WorkspaceLookup(WorkspaceLookupRequest),
     ReadChangeRecords(ReadChangeRecordsRequest),
+    EngineHealth(EngineHealthRequest),
+    EngineListRetired(EngineListRetiredRequest),
+    EngineRetry(EngineAttemptRequest),
+    EngineDiscard(EngineAttemptRequest),
 }
 
 /// The version-one T06 object whose canonical bytes a person's proof hashes.
@@ -247,6 +294,34 @@ enum OrganizationAdminIntentWire {
         target: OrganizationId,
         operation_id: (),
         params: ReadChangeRecordsParams,
+    },
+    EngineHealth {
+        v: IntentVersionOne,
+        organization: OrganizationId,
+        target: OrganizationId,
+        operation_id: (),
+        params: WorkspaceLookupParams,
+    },
+    EngineListRetired {
+        v: IntentVersionOne,
+        organization: OrganizationId,
+        target: OrganizationId,
+        operation_id: (),
+        params: ReadChangeRecordsParams,
+    },
+    EngineRetry {
+        v: IntentVersionOne,
+        organization: OrganizationId,
+        target: OrganizationId,
+        operation_id: AdminOperationId,
+        params: EngineAttemptParams,
+    },
+    EngineDiscard {
+        v: IntentVersionOne,
+        organization: OrganizationId,
+        target: OrganizationId,
+        operation_id: AdminOperationId,
+        params: EngineAttemptParams,
     },
 }
 
@@ -299,6 +374,13 @@ struct ReadChangeRecordsParams {
     limit: RecordPageLimit,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EngineAttemptParams {
+    #[schemars(with = "String", extend("format" = "uuid"))]
+    attempt_id: durable_steps::Uuid,
+}
+
 impl AdminOperation {
     pub fn parse(route: AdminRoute, body: &[u8]) -> Result<Self, PersonRequestRefusal> {
         if body.len() > 8192 {
@@ -315,6 +397,18 @@ impl AdminOperation {
             AdminRoute::ReadChangeRecords => {
                 Self::ReadChangeRecords(serde_json::from_slice(body).map_err(refusal)?)
             }
+            AdminRoute::EngineHealth => {
+                Self::EngineHealth(serde_json::from_slice(body).map_err(refusal)?)
+            }
+            AdminRoute::EngineListRetired => {
+                Self::EngineListRetired(serde_json::from_slice(body).map_err(refusal)?)
+            }
+            AdminRoute::EngineRetry => {
+                Self::EngineRetry(serde_json::from_slice(body).map_err(refusal)?)
+            }
+            AdminRoute::EngineDiscard => {
+                Self::EngineDiscard(serde_json::from_slice(body).map_err(refusal)?)
+            }
         };
         operation.validate()?;
         Ok(operation)
@@ -326,7 +420,11 @@ impl AdminOperation {
                 request.description.len() <= MAXIMUM_DESCRIPTION_BYTES
             }
             Self::WorkspaceLookup(_) => true,
-            Self::ReadChangeRecords(_) => true,
+            Self::ReadChangeRecords(_)
+            | Self::EngineHealth(_)
+            | Self::EngineListRetired(_)
+            | Self::EngineRetry(_)
+            | Self::EngineDiscard(_) => true,
         };
         if valid {
             Ok(())
@@ -341,6 +439,10 @@ impl AdminOperation {
             Self::CreateWorkspace(_) => AdminRoute::CreateWorkspace,
             Self::WorkspaceLookup(_) => AdminRoute::WorkspaceLookup,
             Self::ReadChangeRecords(_) => AdminRoute::ReadChangeRecords,
+            Self::EngineHealth(_) => AdminRoute::EngineHealth,
+            Self::EngineListRetired(_) => AdminRoute::EngineListRetired,
+            Self::EngineRetry(_) => AdminRoute::EngineRetry,
+            Self::EngineDiscard(_) => AdminRoute::EngineDiscard,
         }
     }
 
@@ -350,6 +452,9 @@ impl AdminOperation {
             Self::CreateWorkspace(request) => &request.organization_id,
             Self::WorkspaceLookup(request) => &request.organization_id,
             Self::ReadChangeRecords(request) => &request.organization_id,
+            Self::EngineHealth(request) => &request.organization_id,
+            Self::EngineListRetired(request) => &request.organization_id,
+            Self::EngineRetry(request) | Self::EngineDiscard(request) => &request.organization_id,
         }
     }
 
@@ -357,7 +462,13 @@ impl AdminOperation {
     pub fn operation_id(&self) -> Option<&AdminOperationId> {
         match self {
             Self::CreateWorkspace(request) => Some(&request.operation_id),
-            Self::WorkspaceLookup(_) | Self::ReadChangeRecords(_) => None,
+            Self::EngineRetry(request) | Self::EngineDiscard(request) => {
+                Some(&request.operation_id)
+            }
+            Self::WorkspaceLookup(_)
+            | Self::ReadChangeRecords(_)
+            | Self::EngineHealth(_)
+            | Self::EngineListRetired(_) => None,
         }
     }
 
@@ -391,6 +502,41 @@ impl AdminOperation {
                 params: ReadChangeRecordsParams {
                     after: request.after,
                     limit: request.limit,
+                },
+            },
+            Self::EngineHealth(_) => OrganizationAdminIntentWire::EngineHealth {
+                v: IntentVersionOne,
+                organization: organization.clone(),
+                target: organization,
+                operation_id: (),
+                params: WorkspaceLookupParams {},
+            },
+            Self::EngineListRetired(request) => OrganizationAdminIntentWire::EngineListRetired {
+                v: IntentVersionOne,
+                organization: organization.clone(),
+                target: organization,
+                operation_id: (),
+                params: ReadChangeRecordsParams {
+                    after: request.after,
+                    limit: request.limit,
+                },
+            },
+            Self::EngineRetry(request) => OrganizationAdminIntentWire::EngineRetry {
+                v: IntentVersionOne,
+                organization: organization.clone(),
+                target: organization,
+                operation_id: request.operation_id.clone(),
+                params: EngineAttemptParams {
+                    attempt_id: request.attempt_id,
+                },
+            },
+            Self::EngineDiscard(request) => OrganizationAdminIntentWire::EngineDiscard {
+                v: IntentVersionOne,
+                organization: organization.clone(),
+                target: organization,
+                operation_id: request.operation_id.clone(),
+                params: EngineAttemptParams {
+                    attempt_id: request.attempt_id,
                 },
             },
         })

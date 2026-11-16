@@ -3,6 +3,7 @@ mod alarm_source;
 #[cfg(feature = "test-support")]
 pub(crate) mod commit_fault;
 pub use alarm_source::{AlarmNotPublished, EventCompletion};
+pub(crate) mod admin;
 pub(crate) mod attempt_records;
 pub(crate) mod attempt_statements;
 pub(crate) mod attempt_store;
