@@ -29,8 +29,9 @@ pub(crate) trait EngineHost: Send + Sync {
         &self,
         now: EngineTime,
     ) -> impl Future<Output = Result<usize, LegacyUnitOutcome>> + Send;
-    /// The central turn the notice-window unit commits under, as today.
-    fn central_turn(&self) -> impl Future<Output = tokio::sync::MutexGuard<'_, ()>> + Send;
+    /// The central turn the notice-window unit commits under, taken without
+    /// waiting (P5 change 7): `None` when another event holds it.
+    fn try_central_turn(&self) -> Option<tokio::sync::MutexGuard<'_, ()>>;
     #[cfg(feature = "test-support")]
     fn pauses(&self) -> &crate::PausePoints;
     #[cfg(feature = "test-support")]

@@ -32,6 +32,7 @@ mod engine_owed_reply;
 mod engine_probe_support;
 mod engine_publication_failures;
 mod engine_receipts;
+mod engine_request_alarm;
 mod engine_timing;
 mod engine_timing_races;
 mod engine_visit_order;

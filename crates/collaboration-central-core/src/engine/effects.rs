@@ -98,6 +98,15 @@ impl<Host: ObjectHost> EffectHandler for ObjectHostEffects<'_, Host> {
         Adapter: StoreAdapter<M>,
     {
         let request_claim = matches!(&receipt, ReceiptStatements::Request(_));
+        // R7: a request that changes state re-publishes the alarm in its own
+        // atomic batch, so rows, receipt and alarm commit together. A due unit
+        // keeps the alarm unchanged; its due batch publishes once at its end.
+        let alarm = match &receipt {
+            ReceiptStatements::None => AlarmUpdate::Unchanged,
+            ReceiptStatements::Request(_) | ReceiptStatements::Admin(_) => {
+                super::query_registry::alarm_update()
+            }
+        };
         let mut receipt = receipt.into_statements();
         let statements = (|| {
             receipt.push(adapter.save(key, prior, next)?);
@@ -122,10 +131,7 @@ impl<Host: ObjectHost> EffectHandler for ObjectHostEffects<'_, Host> {
             .await;
         classify_receipt_batch(
             self.host
-                .run_batch(StatementBatch {
-                    statements,
-                    alarm: AlarmUpdate::Unchanged,
-                })
+                .run_batch(StatementBatch { statements, alarm })
                 .await,
             request_claim,
         )?;

@@ -39,8 +39,8 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> EngineHost for WorkspaceRuntime<H, S
     async fn drain_due_workspaces(&self, now: EngineTime) -> Result<usize, LegacyUnitOutcome> {
         WorkspaceRuntime::drain_due_workspaces(self, now).await
     }
-    async fn central_turn(&self) -> tokio::sync::MutexGuard<'_, ()> {
-        self.take_central_turn().await
+    fn try_central_turn(&self) -> Option<tokio::sync::MutexGuard<'_, ()>> {
+        self.central_turn.try_lock().ok()
     }
     #[cfg(feature = "test-support")]
     fn pauses(&self) -> &crate::PausePoints {

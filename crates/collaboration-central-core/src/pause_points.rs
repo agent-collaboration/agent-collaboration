@@ -30,6 +30,9 @@ pub enum PausePoint {
     AfterEngineCommit,
     BeforeEngineFailureWrite,
     AfterEngineAbsentLookup,
+    /// Keyed by the notice unit's kind: after its run succeeded, before it
+    /// clears the control record it observed at its gate.
+    BeforeControlClear,
     BeforeSignInSample,
     AfterSignInSample,
 }

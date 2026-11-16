@@ -38,6 +38,7 @@ enum Point {
     AfterEngineCommit,
     BeforeEngineFailureWrite,
     AfterEngineAbsentLookup,
+    BeforeControlClear,
     BeforeSignInSample,
     AfterSignInSample,
 }
@@ -54,6 +55,7 @@ impl From<Point> for PausePoint {
             Point::AfterEngineCommit => Self::AfterEngineCommit,
             Point::BeforeEngineFailureWrite => Self::BeforeEngineFailureWrite,
             Point::AfterEngineAbsentLookup => Self::AfterEngineAbsentLookup,
+            Point::BeforeControlClear => Self::BeforeControlClear,
             Point::BeforeSignInSample => Self::BeforeSignInSample,
             Point::AfterSignInSample => Self::AfterSignInSample,
         }

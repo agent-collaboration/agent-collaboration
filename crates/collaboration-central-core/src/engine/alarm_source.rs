@@ -1,7 +1,7 @@
 use super::{
     attempt_records::EngineSubject,
     attempt_statements::CONTROL_WRITE,
-    control_gate::ControlGate,
+    control_gate::{ControlGate, ObservedControl},
     effects::ApplyFailure,
     failures::FailureOutcome,
     handle::HandleOutcome,
@@ -229,18 +229,18 @@ impl<R: EngineHost> Engine<'_, R> {
             DueKind::Probe,
         ] {
             let subject = source(kind.kind());
-            match self
+            let observed = match self
                 .control_gate(&subject, RetirementThreshold::DEFAULT)
                 .await
             {
-                ControlGate::Run => {}
+                ControlGate::Run(observed) => observed,
                 ControlGate::Skip | ControlGate::Uncertain => continue,
                 ControlGate::CentralDown(failure) => {
                     self.observe_engine_store_down(&subject, failure);
                     central_down = true;
                     break;
                 }
-            }
+            };
             let query = match central_engine_model::due_list_sql(
                 kind.sql(),
                 horizon,
@@ -257,7 +257,7 @@ impl<R: EngineHost> Engine<'_, R> {
                     leftovers |= rows.len() > policy.per_kind_cap;
                     rows.truncate(policy.per_kind_cap);
                     units.extend(rows.into_iter().map(|row| Unit::Machine(kind, row)));
-                    match self.clear_control(&subject).await {
+                    match self.clear_control(&subject, &observed).await {
                         Ok(()) | Err(ApplyFailure::Superseded | ApplyFailure::Uncertain) => {}
                         Err(ApplyFailure::StoreDown(_) | ApplyFailure::Rejected(_)) => {
                             central_down = true;
@@ -373,17 +373,25 @@ impl<R: EngineHost> Engine<'_, R> {
                 } else {
                     "legacy_workspace_drains"
                 });
-                match self
+                let observed = match self
                     .control_gate(&subject, RetirementThreshold::NOTICE_UNITS)
                     .await
                 {
-                    ControlGate::Run => {}
+                    ControlGate::Run(observed) => observed,
                     ControlGate::Skip | ControlGate::Uncertain => return (work, false),
                     ControlGate::CentralDown(failure) => {
                         self.observe_engine_store_down(&subject, failure);
                         return (work, true);
                     }
-                }
+                };
+                // P5 change 7: the window unit never waits on a busy central turn.
+                // Busy -> skipped for this batch: no failure, no record, the windows
+                // stay due and the alarm keeps them pending.
+                let window_turn = match is_windows.then(|| self.0.try_central_turn()) {
+                    Some(None) => return (work, false),
+                    Some(Some(turn)) => Some(turn),
+                    None => None,
+                };
                 #[cfg(feature = "test-support")]
                 self.0.count_legacy_invocation(&|count| {
                     if is_windows {
@@ -393,13 +401,18 @@ impl<R: EngineHost> Engine<'_, R> {
                     }
                 });
                 let result = if is_windows {
-                    self.run_window_unit(now, &subject).await
+                    self.run_window_unit(now, &observed, &subject).await
                 } else {
                     self.0.drain_due_workspaces(now).await
                 };
+                drop(window_turn);
                 match result {
                     Ok(count) => {
-                        match self.clear_control(&subject).await {
+                        #[cfg(feature = "test-support")]
+                        self.pauses()
+                            .reached_engine(crate::PausePoint::BeforeControlClear, subject.kind.0)
+                            .await;
+                        match self.clear_control(&subject, &observed).await {
                             Err(ApplyFailure::StoreDown(_) | ApplyFailure::Rejected(_)) => {
                                 return (work, true);
                             }
@@ -521,14 +534,20 @@ impl<R: EngineHost> Engine<'_, R> {
         .into()
     }
 
+    /// Runs under the central turn its caller took without waiting (change 7).
     async fn run_window_unit(
         &self,
         now: EngineTime,
+        observed: &ObservedControl,
         subject: &EngineSubject,
     ) -> Result<usize, LegacyUnitOutcome> {
-        let _turn = self.0.central_turn().await;
         let (mut statements, count) = self.0.plan_due_windows(now).await?;
-        statements.push(super::attempt_statements::delete_attempt(subject));
+        match observed {
+            ObservedControl::Absent => {}
+            ObservedControl::Present(guard) => statements.push(
+                super::attempt_statements::delete_observed_attempt(subject, guard),
+            ),
+        }
         // The kept notice tests hold the commit that delivers windows at the
         // existing timer-commit points; an empty window unit passes them by.
         #[cfg(feature = "test-support")]

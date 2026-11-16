@@ -41,6 +41,27 @@ pub(crate) fn delete_attempt(subject: &EngineSubject) -> GuardedStatement {
     )
 }
 
+/// Deletes the control record only while it is still the one a run observed
+/// (the write guard's columns, compared with IS). A record written or replaced
+/// after the observation matches nothing and survives.
+pub(crate) fn delete_observed_attempt(
+    subject: &EngineSubject,
+    observed: &AttemptGuard,
+) -> GuardedStatement {
+    any(
+        "DELETE FROM central_work_attempts WHERE machine_kind=? AND subject_key=? AND attempt_id IS ? AND state IS ? AND failure_count IS ? AND last_failure IS ? AND updated_at IS ?",
+        vec![
+            text(subject.kind.0),
+            text(&subject.key.0),
+            observed.attempt_id.clone(),
+            observed.state.clone(),
+            observed.failure_count.clone(),
+            observed.last_failure.clone(),
+            observed.updated_at.clone(),
+        ],
+    )
+}
+
 fn integer(value: i64) -> Result<SqlValue, StoreFailure> {
     value
         .try_into()

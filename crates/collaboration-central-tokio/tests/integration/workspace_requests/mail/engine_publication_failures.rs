@@ -87,10 +87,15 @@ async fn a_post_commit_publication_failure_keeps_committed_rows_and_the_previous
         "the request's rows committed"
     );
     assert_eq!(receipts(&runtime, 30004).await, 1);
-    // Pushed only for BatchOutcome::Applied { publication: Failed { .. } }.
+    // Pushed only for BatchOutcome::Applied { publication: Failed { .. } }: the
+    // request's own batch (C1, R7) and then its closing pass each committed and
+    // reported the failed publication.
     assert_eq!(
         runtime.statement_host().take_alarm_publication_failures(),
-        vec![AlarmPublicationFailure::NoLaterGridMark]
+        vec![
+            AlarmPublicationFailure::NoLaterGridMark,
+            AlarmPublicationFailure::NoLaterGridMark
+        ]
     );
     assert_eq!(alarm_ms(&runtime), previous, "the previous alarm is kept");
     assert_eq!(

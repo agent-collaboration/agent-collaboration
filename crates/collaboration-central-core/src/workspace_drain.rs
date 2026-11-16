@@ -59,7 +59,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             .control_gate(&subject, RetirementThreshold::NOTICE_UNITS)
             .await
         {
-            ControlGate::Run => {}
+            ControlGate::Run(_) => {}
             ControlGate::Skip | ControlGate::Uncertain => return Ok(()),
             ControlGate::CentralDown(failure) => {
                 crate::engine::port::Engine::new(self).observe_engine_store_down(&subject, failure);

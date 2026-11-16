@@ -276,10 +276,12 @@ async fn a_failed_request_publication_without_an_old_alarm_is_republished_by_the
 
     assert_eq!(answer, fired(), "the request returns its committed answer");
     assert_eq!(receipts(&runtime, 30405).await, 1);
+    // C1 (R7): the request's own batch carries the alarm, so only its closing
+    // publication failed; the pending work is still armed, never alarmMissing.
     assert_eq!(
         alarm_ms(&runtime).await,
-        None,
-        "timed work is pending with no physical alarm (alarmMissing)"
+        ms(at(start, 20, 0, 0)),
+        "the request's own batch published the alarm before its closing pass failed"
     );
     assert_eq!(
         probe_facts(&runtime, pending, pending_group).await,
