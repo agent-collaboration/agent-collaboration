@@ -15,9 +15,10 @@ use collaboration_protocol::{
     ConversationOutputUnavailableReason, ConversationPromptRequest, ConversationResumeRequest,
     EndpointAvailability, EndpointRef, NonEmptyText, OperationId, ProviderIdentity,
     ProviderInspectFailure, ProviderInspectFailureKind, ProviderOperationEffect,
-    ProviderOperationStage, ProviderReconciliationState, ProviderSessionInspectRequest,
-    ProviderSessionInspectResult, ProviderSettingsAcceptRequest, ProviderSettingsFailure,
-    ProviderSettingsFailureKind, ProviderSettingsResult, ProviderSettingsSetRequest, SessionRef,
+    ProviderOperationKind, ProviderOperationStage, ProviderReconciliationState,
+    ProviderSessionInspectRequest, ProviderSessionInspectResult, ProviderSettingsAcceptRequest,
+    ProviderSettingsFailure, ProviderSettingsFailureKind, ProviderSettingsResult,
+    ProviderSettingsSetRequest, SessionRef,
 };
 
 /// Conversation operations over the Host's provider backend and Codex operation records.
@@ -34,7 +35,7 @@ pub struct ConversationOperations {
 
 /// Submits one admitted operation to the backend with the binding's current generation.
 macro_rules! submitted_operations {
-    ($($(#[$documentation:meta])* $operation:ident($request:ty) => $backend_method:ident;)*) => {
+    ($($(#[$documentation:meta])* $operation:ident($request:ty) => $backend_method:ident as $kind:ident;)*) => {
         $(
             $(#[$documentation])*
             #[expect(clippy::result_large_err, reason = "Preserve typed failure payloads.")]
@@ -45,6 +46,7 @@ macro_rules! submitted_operations {
                 let admission = self
                     .admit_submission(SubmissionCheck {
                         operation_id: &request.operation_id,
+                        kind: ProviderOperationKind::$kind,
                         target: Some(&request.target),
                         endpoint: &request.target.endpoint,
                         actors: [&request.requested_by, &request.approver],
@@ -101,6 +103,7 @@ impl ConversationOperations {
         let admission = self
             .admit_submission(SubmissionCheck {
                 operation_id: &request.operation_id,
+                kind: ProviderOperationKind::ConversationCreate,
                 target: None,
                 endpoint: &request.endpoint,
                 actors: [&request.created_by, &request.approver],
@@ -123,15 +126,15 @@ impl ConversationOperations {
 
     submitted_operations! {
         /// Loads an existing provider session into the binding.
-        conversation_load(ConversationLoadRequest) => load;
+        conversation_load(ConversationLoadRequest) => load as ConversationLoad;
         /// Resumes a provider session.
-        conversation_resume(ConversationResumeRequest) => resume;
+        conversation_resume(ConversationResumeRequest) => resume as ConversationResume;
         /// Closes a provider session.
-        conversation_close(ConversationCloseRequest) => close;
+        conversation_close(ConversationCloseRequest) => close as ConversationClose;
         /// Prompts a provider session.
-        conversation_prompt(ConversationPromptRequest) => prompt;
+        conversation_prompt(ConversationPromptRequest) => prompt as ConversationPrompt;
         /// Cancels the provider session's running prompt.
-        conversation_cancel(ConversationCancelRequest) => cancel;
+        conversation_cancel(ConversationCancelRequest) => cancel as ConversationCancel;
     }
 
     /// Changes one advertised provider setting.
@@ -252,6 +255,13 @@ impl ConversationOperations {
         }
         match backend.lookup_existing(operation_id.clone()).await {
             Ok(Some(operation)) => {
+                if !stored_operation_matches_request(&operation, &check) {
+                    return Err(local_failure(
+                        LocalFailure::ReusedRequestId,
+                        operation_id.clone(),
+                        target,
+                    ));
+                }
                 return Ok(SubmissionAdmission::Existing(Box::new(
                     ConversationOperationSubmission {
                         admission: ConversationAdmissionState::Existing,
@@ -466,6 +476,8 @@ impl ConversationOperations {
 
 struct SubmissionCheck<'request> {
     operation_id: &'request OperationId,
+    /// What the request asks for; a reused operation ID must have been admitted for the same kind.
+    kind: ProviderOperationKind,
     /// The session the operation acts on; `None` when it creates one.
     target: Option<&'request SessionRef>,
     endpoint: &'request EndpointRef,
@@ -589,6 +601,23 @@ enum LocalFailure {
     InvalidBinding,
     StaleGeneration,
     Unavailable,
+    ReusedRequestId,
+}
+
+/// Whether the stored operation is the one this request describes. The store keeps no request body,
+/// so the kind and the target session are all that can be compared; a create has no target yet,
+/// and an absent target on either side is not comparable.
+fn stored_operation_matches_request(
+    stored: &ConversationOperationSnapshot,
+    check: &SubmissionCheck<'_>,
+) -> bool {
+    if stored.operation != check.kind {
+        return false;
+    }
+    match (stored.target.as_ref(), check.target) {
+        (Some(stored_target), Some(requested_target)) => stored_target == requested_target,
+        _ => true,
+    }
 }
 
 fn local_failure(
@@ -611,6 +640,11 @@ fn local_failure(
             ConversationOperationFailureKind::StaleGeneration,
             ConversationOperationFailureStage::Binding,
             "provider conversation generation is stale",
+        ),
+        LocalFailure::ReusedRequestId => (
+            ConversationOperationFailureKind::InvalidRequest,
+            ConversationOperationFailureStage::Validation,
+            "request ID already used for a different request",
         ),
         LocalFailure::Unavailable => (
             ConversationOperationFailureKind::Unavailable,

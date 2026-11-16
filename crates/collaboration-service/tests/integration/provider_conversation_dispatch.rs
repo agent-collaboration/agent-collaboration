@@ -582,6 +582,63 @@ async fn existing_operation_id_returns_existing_before_stale_generation_validati
 }
 
 #[tokio::test]
+async fn reused_request_id_with_a_different_kind_or_session_is_refused() -> TestResult {
+    let (fixture, backend) = initialized_fixture()?;
+    *backend.existing_lookup.lock().await = true;
+    let refused = "request ID already used for a different request";
+    // The stored operation is a prompt on "provider-conversation".
+    let different_kind = call(
+        &fixture,
+        "conversation/load",
+        json!({
+            "operationId":operation_id(),"target":session("provider-conversation"),"generation":generation(),
+            "workingDirectory":"/tmp/provider-work","requestedBy":actor("caller"),"approver":actor("approver"),
+            "requestedPolicy":{"access":"workspace-write"}
+        }),
+    )
+    .await?;
+    let different_session = call(
+        &fixture,
+        "conversation/prompt",
+        json!({
+            "operationId":operation_id(),"target":session("another-conversation"),"generation":generation(),
+            "requestedBy":actor("caller"),"approver":actor("approver"),
+            "prompt":{"kind":"humanUser","text":"hello"}
+        }),
+    )
+    .await?;
+    for response in [&different_kind, &different_session] {
+        let data = &response["error"]["data"];
+        ensure(
+            data["kind"] == "invalidRequest"
+                && data["stage"] == "validation"
+                && data["message"] == refused,
+            format!("reused request ID was not refused: {response}"),
+        )?;
+    }
+    let same_request = call(
+        &fixture,
+        "conversation/prompt",
+        json!({
+            "operationId":operation_id(),"target":session("provider-conversation"),"generation":generation(),
+            "requestedBy":actor("caller"),"approver":actor("approver"),
+            "prompt":{"kind":"humanUser","text":"hello"}
+        }),
+    )
+    .await?;
+    ensure(
+        same_request["result"]["admission"] == "existing"
+            && same_request["result"]["operation"]["operationId"] == operation_id(),
+        format!("same request did not replay the existing operation: {same_request}"),
+    )?;
+    ensure(
+        backend.calls.lock().await.is_empty(),
+        "a reused request ID reached the backend".to_owned(),
+    )?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn backend_failure_is_returned_as_the_structured_control_error() -> TestResult {
     let (fixture, backend) = initialized_fixture()?;
     let failure: ConversationOperationFailure = serde_json::from_value(json!({
