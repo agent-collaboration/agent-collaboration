@@ -500,11 +500,11 @@ async fn exercise_expiry(f: &mut Fixture) {
     assert_eq!(fired.len(), 1);
     assert!(original_due < now(f));
     assert_eq!(fired[0].created_at, now(f));
-    assert_eq!(r.on_alarm().await.unwrap().automations_fired, 0);
+    assert_eq!(r.after_event().await.unwrap().automations_fired, 0);
     drop(r);
     f.reopen().await;
     let r = f.host.central(&f.caller.organization_id).await;
-    assert_eq!(r.on_alarm().await.unwrap().automations_fired, 0);
+    assert_eq!(r.after_event().await.unwrap().automations_fired, 0);
     let reopened = r.queued_for_session(&session(&f.caller)).await.unwrap();
     assert_eq!(reopened.messages.iter().filter(|message|matches!(&message.body,MessageBody::Automation{automation_id:id,..}if id==&automation_id)).count(),1);
 }

@@ -1,4 +1,5 @@
 //! Workspace turn precedes central commit; durable deadlines precede workspace writes.
+use crate::engine::legacy_units::LegacyUnitOutcome;
 use crate::{
     ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
     central_mail_store::{alarm_update, applied, timestamp},
@@ -20,7 +21,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             .checked_add_signed(chrono::Duration::seconds(5))
             .ok_or_else(|| corrupt("drain_due_at"))?;
         let _turn = self.take_central_turn().await;
-        self.validated_timers().await?;
+
         applied(self.host.run_batch(StatementBatch{statements:vec![exact("INSERT INTO workspace_drains(workspace_id,drained_through_position,drain_due_at,created_at,updated_at) VALUES (?,0,?,?,?) ON CONFLICT(workspace_id) DO UPDATE SET drain_due_at=COALESCE(workspace_drains.drain_due_at,excluded.drain_due_at),updated_at=excluded.updated_at",vec![text(workspace),text(timestamp(due)),text(timestamp(now)),text(timestamp(now))])],alarm:alarm_update()}).await?)
     }
     pub async fn drain_workspace(
@@ -28,52 +29,72 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         workspace: &WorkspaceId,
     ) -> Result<DrainResult, StoreFailure> {
         let _turn = self.turns.take(workspace).await;
-        self.drain_workspace_held(workspace).await
+        self.drain_workspace_held(workspace)
+            .await
+            .map_err(LegacyUnitOutcome::into_request_failure)
     }
     pub(crate) async fn drain_workspace_held(
         &self,
         workspace: &WorkspaceId,
-    ) -> Result<DrainResult, StoreFailure> {
-        let outcome = self.commit_workspace_drain(workspace).await;
-        if matches!(
-            outcome,
-            Err(StoreFailure::Unavailable | StoreFailure::AnswerLost)
-        ) {
-            // Retry ownership is per workspace. A failure never rewrites another row.
-            self.retry_workspace_drain(workspace).await?;
-        } else if outcome.is_ok() {
-            self.drain_retry_seconds
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .remove(workspace);
-        }
-        outcome
+    ) -> Result<DrainResult, LegacyUnitOutcome> {
+        self.commit_workspace_drain(workspace).await
     }
-    async fn retry_workspace_drain(&self, workspace: &WorkspaceId) -> Result<(), StoreFailure> {
-        let now = self.now()?;
-        let seconds = {
-            let mut retries = self
-                .drain_retry_seconds
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
-            let next = retries.entry(workspace.clone()).or_insert(1);
-            let seconds = *next;
-            *next = next.saturating_mul(2).min(30);
-            seconds
+
+    /// A request owns one workspace's immediate drain, not the whole unit's
+    /// success. Its durable answer survives a failed notice delivery.
+    pub(crate) async fn drain_after_request(
+        &self,
+        workspace: &WorkspaceId,
+    ) -> Result<(), StoreFailure> {
+        use crate::engine::{
+            attempt_records::EngineSubject, attempt_statements::CONTROL_WRITE,
+            control_gate::ControlGate, failures::FailureOutcome, store_adapter::SubjectVersion,
         };
-        let due = now
-            .checked_add_signed(chrono::Duration::seconds(
-                i64::try_from(seconds).map_err(|_| corrupt("drain retry"))?,
-            ))
-            .ok_or_else(|| corrupt("drain_due_at"))?;
-        let _turn = self.take_central_turn().await;
-        self.validated_timers().await?;
-        applied(self.host.run_batch(StatementBatch{statements:vec![exact("UPDATE workspace_drains SET drain_due_at=?,updated_at=? WHERE workspace_id=?",vec![text(timestamp(due)),text(timestamp(now)),text(workspace)])],alarm:alarm_update()}).await?)
+        use central_engine_model::{InstanceKey, MachineKind, RetirementThreshold};
+        let subject = EngineSubject {
+            kind: MachineKind("legacy_workspace_drains"),
+            key: InstanceKey("all".into()),
+        };
+        match self
+            .control_gate(&subject, RetirementThreshold::NOTICE_UNITS)
+            .await
+        {
+            ControlGate::Run => {}
+            ControlGate::Skip | ControlGate::Uncertain => return Ok(()),
+            ControlGate::CentralDown(failure) => {
+                self.observe_engine_store_down(&subject, failure);
+                return Ok(());
+            }
+        }
+        match self.drain_workspace_held(workspace).await {
+            Ok(_) => Ok(()),
+            Err(LegacyUnitOutcome::CentralDown(failure)) => {
+                self.observe_engine_store_down(&subject, failure);
+                Ok(())
+            }
+            Err(outcome) => {
+                if let Some(class) = outcome.failure_class() {
+                    if let FailureOutcome::StoreDown(failure) = self
+                        .record_failure(
+                            &subject,
+                            CONTROL_WRITE,
+                            &SubjectVersion(vec![]),
+                            class,
+                            RetirementThreshold::NOTICE_UNITS,
+                        )
+                        .await
+                    {
+                        self.observe_engine_store_down(&subject, failure);
+                    }
+                }
+                Ok(())
+            }
+        }
     }
     async fn commit_workspace_drain(
         &self,
         workspace: &WorkspaceId,
-    ) -> Result<DrainResult, StoreFailure> {
+    ) -> Result<DrainResult, LegacyUnitOutcome> {
         let cursor = self
             .host
             .read(Statement {
@@ -89,7 +110,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 .ok()
                 .and_then(|value| ChangePosition::try_from(value).ok())
                 .ok_or_else(|| corrupt("workspace_drains.drained_through_position"))?,
-            _ => return Err(corrupt("workspace_drains.drained_through_position")),
+            _ => return Err(corrupt("workspace_drains.drained_through_position").into()),
         };
         let rows = WorkspaceRows::decode(
             self.read_workspace(
@@ -99,27 +120,37 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     args: vec![position_value(through)?],
                 },
             )
-            .await?,
+            .await
+            .map_err(|failure| match failure {
+                StoreFailure::Unavailable | StoreFailure::AlarmUnpublishable { .. } => {
+                    LegacyUnitOutcome::RemoteUnavailable {
+                        workspaces: vec![workspace.clone()],
+                    }
+                }
+                failure @ (StoreFailure::Corrupt { .. } | StoreFailure::AnswerLost) => {
+                    failure.into()
+                }
+            })?,
         )?;
         if rows.high_water < through {
-            return Err(corrupt("workspace_drains.drained_through_position"));
+            return Err(corrupt("workspace_drains.drained_through_position").into());
         }
         let now = self.now()?;
         let _central = self.take_central_turn().await;
-        self.validated_timers().await?;
+
         let (mut statements, result) = self.plan_workspace_notices(workspace, &rows, now).await?;
         statements.push(exact("UPDATE workspace_drains SET drained_through_position=?,drain_due_at=NULL,updated_at=? WHERE workspace_id=? AND drained_through_position=?",vec![position_value(rows.high_water)?,text(timestamp(now)),text(workspace),position_value(through)?]));
         #[cfg(feature = "test-support")]
         self.pauses
             .reached(workspace, crate::PausePoint::BeforeDrainCommit)
             .await;
-        applied(
+        LegacyUnitOutcome::batch(
             self.host
                 .run_batch(StatementBatch {
                     statements,
                     alarm: alarm_update(),
                 })
-                .await?,
+                .await,
         )?;
         #[cfg(feature = "test-support")]
         {
@@ -132,7 +163,10 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         }
         Ok(result)
     }
-    pub(crate) async fn drain_due_workspaces(&self, now: Timestamp) -> Result<usize, StoreFailure> {
+    pub(crate) async fn drain_due_workspaces(
+        &self,
+        now: Timestamp,
+    ) -> Result<usize, LegacyUnitOutcome> {
         let rows=self.host.read(Statement{sql:"SELECT workspace_id,drain_due_at FROM workspace_drains WHERE drain_due_at IS NOT NULL",args:vec![]}).await?;
         let mut workspaces = vec![];
         for row in &rows.rows {
@@ -149,19 +183,26 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             }
         }
         let mut count = 0;
-        let mut failure = None;
+        let mut outcome = LegacyUnitOutcome::Done;
         for workspace in workspaces {
-            match self.drain_workspace(&workspace).await {
+            let _turn = self.turns.take(&workspace).await;
+            match self.commit_workspace_drain(&workspace).await {
                 Ok(_) => count += 1,
                 Err(error) => {
-                    failure = Some(error);
+                    outcome = outcome.combine(error);
                 }
             }
         }
-        if let Some(error) = failure {
-            return Err(error);
+        match outcome {
+            LegacyUnitOutcome::Done => Ok(count),
+            failure @ (LegacyUnitOutcome::RemoteUnavailable { .. }
+            | LegacyUnitOutcome::Corrupt { .. }
+            | LegacyUnitOutcome::Rejected
+            | LegacyUnitOutcome::ConstraintViolated { .. }
+            | LegacyUnitOutcome::Superseded
+            | LegacyUnitOutcome::Uncertain
+            | LegacyUnitOutcome::CentralDown(_)) => Err(failure),
         }
-        Ok(count)
     }
 }
 

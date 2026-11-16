@@ -41,6 +41,18 @@ fn leftovers_continue_at_thirty_seconds_before_a_later_pending_mark() {
 }
 
 #[test]
+fn leftovers_keep_the_continuation_even_without_a_selected_pending_deadline() {
+    assert_eq!(
+        decide(AlarmInputs {
+            last_batch_start: Some(time(300_000)),
+            leftovers_beyond_cap: true,
+            ..inputs()
+        }),
+        AlarmDecision::SetAt(time(330_000))
+    );
+}
+
+#[test]
 fn future_grid_time_is_kept_and_due_or_past_time_moves_to_next_mark() {
     for (due, expected) in [
         (299_999, 600_000),

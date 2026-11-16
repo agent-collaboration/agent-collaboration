@@ -205,7 +205,7 @@ async fn drain_commit_crash_cuts_replay_without_loss_or_duplicate() {
         };
         let due: m::Timestamp = due.parse().unwrap();
         f.clock.set_utc(due);
-        reopened.on_alarm().await.unwrap();
+        reopened.after_event().await.unwrap();
         let batch = reopened
             .queued_for_session(&m::SessionAddress {
                 session_id: "notice-observer".to_owned().try_into().unwrap(),

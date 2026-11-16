@@ -232,9 +232,9 @@ async fn unconvertible_stored_wake_due_fails_closed_on_actual_alarm() {
         .await
         .unwrap();
     assert!(matches!(outcome, BatchOutcome::Applied { .. }));
-    let error = runtime.on_alarm().await.unwrap_err();
+    let error = runtime.after_event().await.unwrap_err();
     assert!(
-        matches!(error, central_storage::StoreFailure::Corrupt { reason: central_storage::CorruptReason::BadValue { column } } if column == "wakes.due_at")
+        matches!(error.failure, central_storage::StoreFailure::Corrupt { reason: central_storage::CorruptReason::BadValue { column } } if column == "wakes.due_at")
     );
     let rows = runtime
         .statement_host()

@@ -167,8 +167,8 @@ async fn provisioning_first_stamp_arms_pending_wake_and_actual_alarm_fires_once(
                 .unwrap(),
         )
         .unwrap();
-    assert_eq!(runtime.on_alarm().await.unwrap().wakes_fired, 1);
-    assert_eq!(runtime.on_alarm().await.unwrap().wakes_fired, 0);
+    assert_eq!(runtime.after_event().await.unwrap().wakes_fired, 1);
+    assert_eq!(runtime.after_event().await.unwrap().wakes_fired, 0);
     let rows=f.read("SELECT (SELECT COUNT(*) FROM wakes WHERE state='done'),(SELECT COUNT(*) FROM messages WHERE message_kind='wake')").await;
     assert_eq!(
         rows.rows,

@@ -90,7 +90,7 @@ async fn unprovisioned_alarm_and_recompute_clear_deadline_without_firing() {
     .await;
     fixture.clock.set_utc(due);
     assert_eq!(
-        runtime.on_alarm().await.unwrap(),
+        runtime.after_event().await.unwrap().work,
         collaboration_central_core::AlarmResult::default()
     );
     assert_eq!(runtime.statement_host().alarm(), None);
@@ -201,7 +201,7 @@ async fn invalid_stamp_rejects_alarm_and_startup_without_business_effects() {
                 column: expected_column.to_owned(),
             },
         };
-        assert_eq!(runtime.on_alarm().await.unwrap_err(), expected);
+        assert_eq!(runtime.after_event().await.unwrap_err().failure, expected);
         assert_eq!(runtime.recompute_alarm().await.unwrap_err(), expected);
         assert_eq!(runtime.statement_host().alarm(), prior_alarm);
         assert_untouched(runtime.statement_host(), &wake_id).await;

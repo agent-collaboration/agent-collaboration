@@ -42,7 +42,6 @@ pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     lost_provisioning_reply: std::sync::atomic::AtomicBool,
     #[cfg(feature = "test-support")]
     central_waiting: tokio::sync::watch::Sender<usize>,
-    pub(crate) drain_retry_seconds: std::sync::Mutex<std::collections::BTreeMap<WorkspaceId, u64>>,
     #[cfg(feature = "test-support")]
     pub(crate) pauses: crate::PausePoints,
     #[cfg(feature = "test-support")]
@@ -74,7 +73,6 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             central_waiting: tokio::sync::watch::channel(0).0,
             #[cfg(feature = "test-support")]
             lost_provisioning_reply: Default::default(),
-            drain_retry_seconds: Default::default(),
             #[cfg(feature = "test-support")]
             pauses: crate::PausePoints::default(),
             #[cfg(feature = "test-support")]
@@ -111,6 +109,11 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     #[cfg(feature = "test-support")]
     pub fn alarm_completion_count(&self) -> u64 {
         *self.completed_alarms.borrow()
+    }
+    #[cfg(feature = "test-support")]
+    pub fn mark_alarm_completed(&self) {
+        self.completed_alarms
+            .send_modify(|count| *count = count.saturating_add(1));
     }
     #[cfg(feature = "test-support")]
     pub async fn until_alarm_completed(&self, count: u64) {

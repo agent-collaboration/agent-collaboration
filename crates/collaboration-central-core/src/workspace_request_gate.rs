@@ -159,7 +159,7 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
             )
             .await?;
         if let Some(answer) = crate::workspace_request_log::replay(&logged, &actor, &digest)? {
-            if let Err(error) = runtime.drain_workspace_held(workspace).await {
+            if let Err(error) = runtime.drain_after_request(workspace).await {
                 return drain_failure(error);
             }
             return enrich(runtime, answer, true).await;
@@ -272,7 +272,7 @@ pub(crate) async fn execute<Host: ObjectHost, Stores: WorkspaceStoreCalls>(
     if runtime.take_lost_reply(request_id) {
         return Ok(reply(m::WorkspaceResult::OutcomeUnknown));
     }
-    if let Err(error) = runtime.drain_workspace_held(workspace).await {
+    if let Err(error) = runtime.drain_after_request(workspace).await {
         return drain_failure(error);
     }
     enrich(runtime, answer, true).await
@@ -335,7 +335,12 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         caller: &WorkspaceCaller,
         request: m::WorkspaceRequest,
     ) -> Result<m::WorkspaceReply, StoreFailure> {
-        match execute(self, caller, request).await {
+        if !self.alarm_organization_is_provisioned().await? {
+            return Err(corrupt("organization_identity.id"));
+        }
+        let result = execute(self, caller, request).await;
+        let _ = self.after_event().await;
+        match result {
             Err(StoreFailure::Unavailable) => Ok(reply(m::WorkspaceResult::CentralUnavailable)),
             Err(StoreFailure::AnswerLost) => Ok(reply(m::WorkspaceResult::CentralUnavailable)),
             result => result,

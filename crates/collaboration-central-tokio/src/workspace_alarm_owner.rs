@@ -1,13 +1,19 @@
 //! One cancellable driver per central object, using the host's injected clock.
 use super::{ObjectStorage, TokioWorkspaceStores};
+use crate::object_storage::LastAlarmPublication;
 use collaboration_central_core::WorkspaceRuntime;
 use router_clock::{ClockInstant, RuntimeClock};
-use runtime_primitives::SyncTime;
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
 type Runtime = WorkspaceRuntime<ObjectStorage, TokioWorkspaceStores>;
+
+#[derive(Clone, Copy)]
+enum AlarmWait {
+    Until(ClockInstant),
+    UntilPublication,
+}
 
 pub(super) struct WorkspaceAlarmOwner {
     stop: CancellationToken,
@@ -39,42 +45,58 @@ impl Drop for WorkspaceAlarmOwner {
 }
 
 async fn drive(runtime: Arc<Runtime>, clock: Arc<dyn RuntimeClock>, stop: CancellationToken) {
-    let mut alarm = runtime.statement_host().subscribe_alarm();
-    let mut retry: Option<(SyncTime, ClockInstant)> = None;
-    let mut retry_seconds = 1_u64;
+    let mut publication = runtime.statement_host().subscribe_publication_status();
+    let mut retry: Option<AlarmWait> = None;
     loop {
-        let due = *alarm.borrow_and_update();
-        let deadline = due.map(|due| {
-            let durable_deadline = clock.wall_deadline(due);
-            match retry {
-                Some((failed_due, retry_at)) if due >= failed_due => durable_deadline.max(retry_at),
-                _ => durable_deadline,
+        let status = *publication.borrow_and_update();
+        let deadline = retry.unwrap_or_else(|| match status {
+            LastAlarmPublication::Published { deadline } => deadline
+                .map_or(AlarmWait::UntilPublication, |at| {
+                    AlarmWait::Until(clock.wall_deadline(at))
+                }),
+            LastAlarmPublication::Failed { at } => {
+                next_mark_deadline(clock.as_ref(), at.unix_millis())
             }
         });
         tokio::select! {
             () = stop.cancelled() => return,
-            changed = alarm.changed() => if changed.is_err() { return; },
+            changed = publication.changed() => {
+                if changed.is_err() { return; }
+                retry = None;
+            },
             () = async {
                 match deadline {
-                    Some(deadline) => clock.sleep_until(deadline).await,
-                    None => std::future::pending().await,
+                    AlarmWait::Until(deadline) => clock.sleep_until(deadline).await,
+                    AlarmWait::UntilPublication => std::future::pending().await,
                 }
             } => {
                 let result = tokio::select! {
                     () = stop.cancelled() => return,
-                    result = runtime.on_alarm() => result,
+                    result = runtime.after_event() => result,
                 };
                 match result {
-                    Ok(_) => { retry = None; retry_seconds = 1; }
+                    Ok(_) => {
+                        #[cfg(feature = "test-support")]
+                        runtime.mark_alarm_completed();
+                        retry = None;
+                    }
                     Err(error) => {
                         tracing::warn!(?error, "central alarm drive failed; retrying");
-                        if let Some(failed_due) = due {
-                            retry = Some((failed_due, clock.monotonic_now().after(Duration::from_secs(retry_seconds))));
-                            retry_seconds = retry_seconds.saturating_mul(2).min(30);
-                        }
+                        retry = Some(next_mark_deadline(clock.as_ref(), clock.utc_now().timestamp_millis()));
                     }
                 }
             }
         }
     }
+}
+
+fn next_mark_deadline(clock: &dyn RuntimeClock, now: i64) -> AlarmWait {
+    central_storage::alarm_publication_time(Some(now), now)
+        .ok()
+        .flatten()
+        .map_or(AlarmWait::UntilPublication, |millis| {
+            AlarmWait::Until(
+                clock.wall_deadline(runtime_primitives::SyncTime::from_unix_millis(millis)),
+            )
+        })
 }

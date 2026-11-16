@@ -57,7 +57,7 @@ async fn held_drain_serializes_second_drain_and_source_index_rejects_duplicate()
     ));
     assert_eq!(second.await.unwrap().notices_queued, 0);
     f.clock.0.fetch_add(900_000, Ordering::SeqCst);
-    runtime.on_alarm().await.unwrap();
+    runtime.after_event().await.unwrap();
     let rows = runtime.read(Statement { sql: "SELECT COUNT(*) FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice'", args: vec![text(&actor), text(&thread)] }).await.unwrap();
     assert_eq!(
         rows.rows,

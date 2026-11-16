@@ -224,7 +224,7 @@ async fn unconvertible_stored_wake_due_fails_closed_on_actual_alarm() {
         .await
         .unwrap();
     assert!(matches!(outcome, BatchOutcome::Applied { .. }));
-    let error = runtime.on_alarm().await.unwrap_err();
+    let error = runtime.after_event().await.unwrap_err();
     assert_eq!(
         error,
         central_storage::StoreFailure::Corrupt {

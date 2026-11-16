@@ -52,7 +52,8 @@ async fn interval_catches_up_once_and_after_finishes() {
         panic!("after refused")
     };
     // The first interval occurrence is the request's grid anchor itself.
-    runtime.on_alarm().await.unwrap();
+    fixture.clock.set_utc(start + chrono::Duration::seconds(30));
+    runtime.after_event().await.unwrap();
     let anchored = runtime
         .statement_host()
         .read(Statement {
@@ -72,8 +73,11 @@ async fn interval_catches_up_once_and_after_finishes() {
         fixture
             .clock
             .set_utc(start + chrono::Duration::minutes(minute));
-        runtime.on_alarm().await.unwrap();
-        assert_eq!(runtime.on_alarm().await.unwrap().automations_fired, 0);
+        runtime.after_event().await.unwrap();
+        assert_eq!(
+            runtime.after_event().await.unwrap().work.automations_fired,
+            0
+        );
         let rows = runtime.statement_host().read(Statement { sql: "SELECT state,next_due_at,evaluated_through_at,(SELECT COUNT(*) FROM messages WHERE message_kind='automation') FROM automations WHERE automation_id=?", args: vec![text(&interval_id)] }).await.unwrap();
         assert_eq!(
             rows.rows,
@@ -106,8 +110,11 @@ async fn interval_catches_up_once_and_after_finishes() {
     fixture
         .clock
         .set_utc(start + chrono::Duration::minutes(165));
-    runtime.on_alarm().await.unwrap();
-    assert_eq!(runtime.on_alarm().await.unwrap().automations_fired, 0);
+    runtime.after_event().await.unwrap();
+    assert_eq!(
+        runtime.after_event().await.unwrap().work.automations_fired,
+        0
+    );
     let rows = runtime.statement_host().read(Statement { sql: "SELECT state, next_due_at, evaluated_through_at FROM automations WHERE automation_id=?", args: vec![text(&interval_id)] }).await.unwrap();
     assert_eq!(
         rows.rows,
@@ -261,7 +268,10 @@ async fn interval_catches_up_once_and_after_finishes() {
     fixture
         .clock
         .set_utc(start + chrono::Duration::minutes(175));
-    assert_eq!(runtime.on_alarm().await.unwrap().automations_fired, 0);
+    assert_eq!(
+        runtime.after_event().await.unwrap().work.automations_fired,
+        0
+    );
     let rows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM automations WHERE state='disabled'),(SELECT COUNT(*) FROM automations WHERE state='done'),(SELECT COUNT(*) FROM messages WHERE message_kind='automation')", args: vec![] }).await.unwrap();
     assert_eq!(
         rows.rows,
@@ -311,8 +321,11 @@ async fn at_and_cron_rules_retain_their_calendar_boundaries() {
     };
     assert_eq!(cron_due, start + chrono::Duration::minutes(5));
     fixture.clock.set_utc(at);
-    runtime.on_alarm().await.unwrap();
-    assert_eq!(runtime.on_alarm().await.unwrap().automations_fired, 0);
+    runtime.after_event().await.unwrap();
+    assert_eq!(
+        runtime.after_event().await.unwrap().work.automations_fired,
+        0
+    );
     let messages = runtime
         .statement_host()
         .read(Statement {

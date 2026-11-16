@@ -351,7 +351,7 @@ impl DurableObject for CentralObject {
                 Err(AlarmFailure::Platform(error)) => return Err(error),
             };
             runtime
-                .on_alarm()
+                .after_event()
                 .await
                 .map_err(|error| worker::Error::RustError(error.to_string()))?;
             Response::ok("alarm applied")

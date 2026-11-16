@@ -52,9 +52,9 @@ async fn invalid_open_window_is_rejected_before_alarm_changes_queue_or_cursor() 
         assert_eq!(before.rows[0][3], SqlValue::Integer(0.try_into().unwrap()));
         let prior_alarm = runtime.statement_host().alarm();
         execute(&f, sql, vec![text(&actor)]).await;
-        let error = runtime.on_alarm().await.unwrap_err();
+        let error = runtime.after_event().await.unwrap_err();
         assert!(
-            matches!(error, StoreFailure::Corrupt { reason: CorruptReason::BadValue { column } } if column == expected_column)
+            matches!(error.failure, StoreFailure::Corrupt { reason: CorruptReason::BadValue { column } } if column == expected_column)
         );
         assert_eq!(
             runtime.statement_host().read(read()).await.unwrap().rows,
@@ -205,7 +205,7 @@ async fn corrupt_existing_notice_body_stops_drain_before_cursor_or_new_effects()
     f.clock
         .advance(std::time::Duration::from_secs(900))
         .unwrap();
-    runtime.on_alarm().await.unwrap();
+    runtime.after_event().await.unwrap();
     let before = runtime.statement_host().read(Statement { sql: "SELECT drained_through_position,(SELECT COUNT(*) FROM messages WHERE source_thread_id=? AND message_kind='notice') FROM workspace_drains WHERE workspace_id=?", args: vec![text(&thread), text(&f.workspace)] }).await.unwrap();
     assert_eq!(before.rows[0][1], SqlValue::Integer(2.try_into().unwrap()));
     execute(

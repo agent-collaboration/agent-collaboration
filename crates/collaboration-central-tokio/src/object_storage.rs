@@ -36,6 +36,12 @@ struct EnginePublication {
     decide: EngineAlarmDecider,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum LastAlarmPublication {
+    Published { deadline: Option<SyncTime> },
+    Failed { at: SyncTime },
+}
+
 pub struct ObjectStorage {
     path: PathBuf,
     migrator: Arc<Migrator>,
@@ -46,6 +52,7 @@ pub struct ObjectStorage {
     alarm_batch_failure: std::sync::Mutex<Option<StoreFailure>>,
     /// Kept in memory after commit (Program Design, "the one alarm"; Tokio).
     alarm: watch::Sender<Option<SyncTime>>,
+    publication_status: watch::Sender<LastAlarmPublication>,
     #[cfg(feature = "test-support")]
     publication_pause: Option<(
         workspace_ids::WorkspaceId,
@@ -71,6 +78,9 @@ impl ObjectStorage {
             #[cfg(feature = "test-support")]
             alarm_batch_failure: Default::default(),
             alarm: watch::Sender::new(None),
+            publication_status: watch::Sender::new(LastAlarmPublication::Published {
+                deadline: None,
+            }),
             #[cfg(feature = "test-support")]
             publication_pause: None,
             #[cfg(feature = "test-support")]
@@ -108,6 +118,41 @@ impl ObjectStorage {
 
     pub async fn run_batch(&self, batch: StatementBatch) -> Result<BatchOutcome, StoreFailure> {
         let _order = self.lock_batch_order().await;
+        let publishes = !matches!(batch.alarm, central_storage::AlarmUpdate::Unchanged);
+        let result = self.run_ordered_batch(batch).await;
+        if publishes && let Some(engine) = &self.engine_publication {
+            let status = match &result {
+                Ok(BatchOutcome::Applied {
+                    publication: AlarmPublication::Set { .. } | AlarmPublication::Cleared,
+                    ..
+                }) => Some(LastAlarmPublication::Published {
+                    deadline: *self.alarm.borrow(),
+                }),
+                Ok(BatchOutcome::Applied {
+                    publication: AlarmPublication::Failed { .. },
+                    ..
+                })
+                | Err(_) => Some(LastAlarmPublication::Failed {
+                    at: engine.clock.now(),
+                }),
+                Ok(
+                    BatchOutcome::Applied {
+                        publication: AlarmPublication::Unchanged,
+                        ..
+                    }
+                    | BatchOutcome::GuardFailed { .. }
+                    | BatchOutcome::ConstraintViolated { .. }
+                    | BatchOutcome::StatementRejected { .. },
+                ) => None,
+            };
+            if let Some(status) = status {
+                self.publication_status.send_replace(status);
+            }
+        }
+        result
+    }
+
+    async fn run_ordered_batch(&self, batch: StatementBatch) -> Result<BatchOutcome, StoreFailure> {
         if matches!(
             &batch.alarm,
             central_storage::AlarmUpdate::SetEngineFromQuery { .. }
@@ -241,6 +286,10 @@ impl ObjectStorage {
         self.alarm.subscribe()
     }
 
+    pub(crate) fn subscribe_publication_status(&self) -> watch::Receiver<LastAlarmPublication> {
+        self.publication_status.subscribe()
+    }
+
     #[cfg(feature = "test-support")]
     #[must_use]
     pub fn hold_alarm_publication(&self) -> collaboration_central_core::HeldPause {
@@ -291,6 +340,14 @@ impl ObjectStorage {
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner),
         )
+    }
+
+    #[cfg(feature = "test-support")]
+    pub fn failed_alarm_publication_at(&self) -> Option<SyncTime> {
+        match *self.publication_status.borrow() {
+            LastAlarmPublication::Published { .. } => None,
+            LastAlarmPublication::Failed { at } => Some(at),
+        }
     }
 
     pub async fn close(&self) {

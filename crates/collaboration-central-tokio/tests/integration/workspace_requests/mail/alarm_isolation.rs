@@ -63,7 +63,7 @@ async fn exercise_isolation(corruption: &'static str, failure_column: &str) {
         .await;
     fixture.clock.set_utc(due);
 
-    let outcome = runtime.on_alarm().await;
+    let outcome = runtime.after_event().await;
 
     assert!(
         outcome.is_ok(),
@@ -153,7 +153,7 @@ async fn one_failed_wake_transaction_does_not_block_other_wakes_and_can_retry() 
         .await;
     fixture.clock.set_utc(due);
 
-    let outcome = runtime.on_alarm().await;
+    let outcome = runtime.after_event().await;
 
     assert!(
         outcome.is_ok(),
@@ -192,7 +192,7 @@ async fn one_failed_wake_transaction_does_not_block_other_wakes_and_can_retry() 
         .await
         .unwrap();
     fixture.clock.set_utc(due + chrono::Duration::minutes(5));
-    runtime.on_alarm().await.unwrap();
+    runtime.after_event().await.unwrap();
     let rows = runtime.statement_host().read(Statement {
         sql: "SELECT state,(SELECT COUNT(*) FROM messages WHERE message_kind='wake' AND json_extract(body,'$.wakeId')=?),(SELECT COUNT(*) FROM central_work_attempts WHERE machine_kind='wake_timer' AND subject_key=?) FROM wakes WHERE wake_id=?", args: vec![text(&bad), text(&bad), text(&bad)],
     }).await.unwrap();
@@ -255,7 +255,7 @@ async fn corrupt_due_automation_timing_does_not_block_due_wake() {
         .await;
     fixture.clock.set_utc(due);
 
-    let outcome = runtime.on_alarm().await;
+    let outcome = runtime.after_event().await;
 
     assert!(
         outcome.is_ok(),

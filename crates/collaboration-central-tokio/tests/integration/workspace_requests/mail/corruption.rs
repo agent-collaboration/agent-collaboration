@@ -80,9 +80,9 @@ async fn corrupt_timer_target_and_timing_fail_alarm_without_effects() {
         assert_eq!(prior_alarm, Some(due.timestamp_millis()));
         execute(&fixture, corrupt_sql, vec![]).await;
         fixture.clock.set_utc(due);
-        let error = runtime.on_alarm().await.unwrap_err();
+        let error = runtime.after_event().await.unwrap_err();
         assert!(
-            matches!(error, central_storage::StoreFailure::Corrupt { reason: central_storage::CorruptReason::BadValue { column } } if column == expected_column)
+            matches!(error.failure, central_storage::StoreFailure::Corrupt { reason: central_storage::CorruptReason::BadValue { column } } if column == expected_column)
         );
 
         let rows = runtime.statement_host().read(Statement { sql: "SELECT (SELECT COUNT(*) FROM wakes WHERE state='active'),(SELECT COUNT(*) FROM automations WHERE state='active'),(SELECT COUNT(*) FROM messages)", args: vec![] }).await.unwrap();
@@ -141,7 +141,7 @@ async fn later_timer_statement_failure_rolls_back_queue_lifecycle_and_alarm() {
     assert_eq!(prior_alarm, Some(due.timestamp_millis()));
     execute(&fixture, "CREATE TRIGGER reject_wake_finish BEFORE UPDATE ON wakes BEGIN SELECT RAISE(ABORT,'reject wake finish'); END", vec![]).await;
     fixture.clock.set_utc(due);
-    assert!(runtime.on_alarm().await.is_err());
+    assert!(runtime.after_event().await.is_err());
     let rows = runtime.statement_host().read(Statement { sql: "SELECT state,(SELECT COUNT(*) FROM messages WHERE message_kind='wake') FROM wakes WHERE wake_id=?", args: vec![text(&wake_id)] }).await.unwrap();
     assert_eq!(
         rows.rows,
@@ -158,8 +158,8 @@ async fn later_timer_statement_failure_rolls_back_queue_lifecycle_and_alarm() {
         prior_alarm
     );
     execute(&fixture, "DROP TRIGGER reject_wake_finish", vec![]).await;
-    runtime.on_alarm().await.unwrap();
-    assert_eq!(runtime.on_alarm().await.unwrap().wakes_fired, 0);
+    runtime.after_event().await.unwrap();
+    assert_eq!(runtime.after_event().await.unwrap().work.wakes_fired, 0);
     let rows = runtime.statement_host().read(Statement { sql: "SELECT state,(SELECT COUNT(*) FROM messages WHERE message_kind='wake') FROM wakes WHERE wake_id=?", args: vec![text(wake_id)] }).await.unwrap();
     assert_eq!(
         rows.rows,

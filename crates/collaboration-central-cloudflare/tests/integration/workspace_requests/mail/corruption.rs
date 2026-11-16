@@ -79,7 +79,7 @@ async fn corrupt_timer_target_and_timing_fail_alarm_without_effects() {
             .clock
             .0
             .store(due.timestamp_millis(), std::sync::atomic::Ordering::SeqCst);
-        let error = runtime.on_alarm().await.unwrap_err();
+        let error = runtime.after_event().await.unwrap_err();
         assert_eq!(
             error,
             central_storage::StoreFailure::Corrupt {
@@ -144,7 +144,7 @@ async fn later_timer_statement_failure_rolls_back_queue_lifecycle_and_alarm() {
         .clock
         .0
         .store(due.timestamp_millis(), std::sync::atomic::Ordering::SeqCst);
-    assert!(runtime.on_alarm().await.is_err());
+    assert!(runtime.after_event().await.is_err());
     let receipt: Option<AlarmReceipt> = runtime.control("raw-alarm-status", &()).await.unwrap();
     let receipt = receipt.unwrap();
     assert!(matches!(receipt.result, AlarmReceiptResult::Error { .. }));
@@ -158,7 +158,7 @@ async fn later_timer_statement_failure_rolls_back_queue_lifecycle_and_alarm() {
         ]]
     );
     execute(&fixture, "DROP TRIGGER reject_wake_finish", vec![]).await;
-    assert_eq!(runtime.on_alarm().await.unwrap().wakes_fired, 1);
+    assert_eq!(runtime.after_event().await.unwrap().wakes_fired, 1);
     let receipt: Option<AlarmReceipt> = runtime.control("raw-alarm-status", &()).await.unwrap();
     let receipt = receipt.unwrap();
     assert!(matches!(

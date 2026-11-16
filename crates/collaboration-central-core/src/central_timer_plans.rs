@@ -11,6 +11,7 @@ use central_storage::{GuardedStatement, ReadOutcome, Statement, StoreFailure};
 use workspace_ids::{AutomationId, WakeId};
 use workspace_model::central_mail as mail;
 use workspace_model::{PostText, SessionAddress, Timestamp};
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct WakeRow {
     pub id: WakeId,
     pub target: SessionAddress,
@@ -18,6 +19,7 @@ pub(crate) struct WakeRow {
     pub text: PostText,
     pub state: mail::WakeState,
 }
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct AutomationRow {
     pub id: AutomationId,
     pub target: SessionAddress,
@@ -222,22 +224,25 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 let rows = self
                     .host
                     .read(Statement {
-                        sql: "SELECT wake_id,target,due_at,text,state,created_at FROM wakes WHERE wake_id=?",
+                        sql: "SELECT state FROM wakes WHERE wake_id=?",
                         args: vec![text(wake_id)],
                     })
                     .await?;
-                let rows = decode_wakes(&rows)?;
-                let Some(row) = rows.first() else {
+                let Some(row) = rows.rows.first() else {
                     return Ok(Err(Refusal::WakeNotFound {
                         wake_id: wake_id.clone(),
                     }));
                 };
-                if row.state == mail::WakeState::Done {
+                let state: mail::WakeState = serde_json::from_value(serde_json::Value::String(
+                    string(&rows, row, "state")?.to_owned(),
+                ))
+                .map_err(|_| corrupt("wakes.state"))?;
+                if state == mail::WakeState::Done {
                     return Ok(Err(Refusal::WakeAlreadyFired {
                         wake_id: wake_id.clone(),
                     }));
                 }
-                let statements = if row.state == mail::WakeState::Disabled {
+                let mut statements = if state == mail::WakeState::Disabled {
                     vec![]
                 } else {
                     vec![exact(
@@ -245,6 +250,12 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                         vec![at(), text(wake_id)],
                     )]
                 };
+                statements.push(crate::engine::attempt_statements::delete_attempt(
+                    &crate::engine::attempt_records::EngineSubject {
+                        kind: central_engine_model::MachineKind("wake_timer"),
+                        key: central_engine_model::InstanceKey(wake_id.to_string()),
+                    },
+                ));
                 (
                     statements,
                     Answer::WakeCancelled {
@@ -332,7 +343,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                         automation_id: automation_id.clone(),
                     }));
                 }
-                let statements = if row.state == mail::AutomationState::Disabled {
+                let mut statements = if row.state == mail::AutomationState::Disabled {
                     vec![]
                 } else {
                     vec![exact(
@@ -340,6 +351,12 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                         vec![at(), text(automation_id)],
                     )]
                 };
+                statements.push(crate::engine::attempt_statements::delete_attempt(
+                    &crate::engine::attempt_records::EngineSubject {
+                        kind: central_engine_model::MachineKind("automation_timer"),
+                        key: central_engine_model::InstanceKey(automation_id.to_string()),
+                    },
+                ));
                 (
                     statements,
                     Answer::AutomationDisabled {

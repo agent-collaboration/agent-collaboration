@@ -23,6 +23,7 @@ pub enum PausePoint {
     AfterDrainCommit,
     BeforeTimerCommit,
     AfterTimerCommit,
+    AfterEngineLoad,
     BeforeSignInSample,
     AfterSignInSample,
 }

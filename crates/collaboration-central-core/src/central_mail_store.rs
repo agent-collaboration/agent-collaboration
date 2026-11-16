@@ -15,12 +15,8 @@ pub(crate) fn encode(value: &impl Serialize) -> Result<SqlValue, StoreFailure> {
 pub(crate) fn timestamp(value: Timestamp) -> String {
     value.to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
 }
-pub const EARLIEST_DUE: &str = "SELECT CASE WHEN COUNT(*) != COUNT(unixepoch(due_at)) THEN 'invalid_due_at' ELSE MIN(unixepoch(due_at)*1000+CAST(substr(strftime('%f',due_at),4,3) AS INTEGER)) END AS earliest_due FROM (SELECT due_at FROM wakes WHERE state='active' UNION ALL SELECT next_due_at FROM automations WHERE state='active' AND next_due_at IS NOT NULL UNION ALL SELECT due_at FROM notification_windows UNION ALL SELECT drain_due_at FROM workspace_drains WHERE drain_due_at IS NOT NULL) WHERE (SELECT COUNT(*) FROM organization_identity)=1";
 pub(crate) fn alarm_update() -> AlarmUpdate {
-    AlarmUpdate::SetFromQuery(Statement {
-        sql: EARLIEST_DUE,
-        args: vec![],
-    })
+    crate::engine::query_registry::alarm_update()
 }
 pub(crate) fn applied(outcome: BatchOutcome) -> Result<(), StoreFailure> {
     match outcome {

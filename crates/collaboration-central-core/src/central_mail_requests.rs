@@ -14,7 +14,13 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         caller: &WorkspaceCaller,
         request: mail::CentralMailRequest,
     ) -> Result<mail::CentralMailResult, StoreFailure> {
-        match self.execute_central(caller, request).await {
+        if !self.alarm_organization_is_provisioned().await? {
+            return Err(corrupt("organization_identity.id"));
+        }
+        let result = self.execute_central(caller, request).await;
+        // Due work and publication cannot replace this event's durable answer.
+        let _ = self.after_event().await;
+        match result {
             Err(StoreFailure::Unavailable | StoreFailure::AnswerLost) => {
                 Ok(mail::CentralMailResult::CentralUnavailable)
             }
@@ -67,7 +73,6 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             }
             // A committed request may have lost its alarm publication before its reply.
             let repair = async {
-                self.validated_timers().await?;
                 central_mail_store::applied(
                     self.host
                         .run_batch(StatementBatch {
@@ -159,7 +164,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             Ok((statements, answer)) => (statements, Result::Done(answer)),
             Err(reason) => (vec![], Result::Refused(reason)),
         };
-        self.validated_timers().await?;
+
         statements.extend(crate::workspace_request_log::retain(
             &request.request_id,
             &actor,

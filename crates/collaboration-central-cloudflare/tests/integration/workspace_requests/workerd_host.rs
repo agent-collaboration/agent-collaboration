@@ -462,7 +462,7 @@ impl RemoteRuntime {
         self.apply_clock().await;
         self.control("queue", session).await?
     }
-    pub async fn on_alarm(&self) -> Result<AlarmResult, StoreFailure> {
+    pub async fn after_event(&self) -> Result<AlarmResult, StoreFailure> {
         self.apply_clock().await;
         let _: bool = self
             .control("raw-arm-alarm", &self.clock.now().unix_millis())

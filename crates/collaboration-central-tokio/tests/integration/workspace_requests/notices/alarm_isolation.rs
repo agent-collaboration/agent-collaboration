@@ -103,7 +103,7 @@ async fn bad_due_window_does_not_suppress_wakes_or_automations() {
     .await;
     fixture.clock.set_utc(due);
 
-    let outcome = runtime.on_alarm().await;
+    let outcome = runtime.after_event().await;
 
     assert!(
         outcome.is_ok(),
@@ -126,7 +126,7 @@ async fn bad_due_window_does_not_suppress_wakes_or_automations() {
             fixture
                 .clock
                 .set_utc(due + chrono::Duration::minutes(5 * (count - 1)));
-            runtime.on_alarm().await.unwrap();
+            runtime.after_event().await.unwrap();
         }
         let record = runtime.statement_host().read(Statement {
             sql: "SELECT state,failure_count FROM central_work_attempts WHERE machine_kind='legacy_notice_windows' AND subject_key='all'", args: vec![],
@@ -143,7 +143,7 @@ async fn bad_due_window_does_not_suppress_wakes_or_automations() {
         execute(&fixture, "INSERT INTO notification_window_items(window_item_id,window_id,workspace_id,thread_id,change_id,created_at,updated_at) VALUES (?,?,?,?,?,?,?)", row).await;
     }
     fixture.clock.set_utc(due + chrono::Duration::minutes(15));
-    runtime.on_alarm().await.unwrap();
+    runtime.after_event().await.unwrap();
     let record = runtime.statement_host().read(Statement {
         sql: "SELECT (SELECT COUNT(*) FROM central_work_attempts WHERE machine_kind='legacy_notice_windows' AND subject_key='all'),(SELECT COUNT(*) FROM messages WHERE message_kind='notice' AND recipient_actor=?)", args: vec![text(&recipient)],
     }).await.unwrap();
@@ -204,7 +204,7 @@ async fn corrupt_drain_moves_retry_into_future_without_blocking_due_wake() {
     .await;
     fixture.clock.set_utc(due);
 
-    let outcome = runtime.on_alarm().await;
+    let outcome = runtime.after_event().await;
 
     assert!(
         outcome.is_ok(),
@@ -222,7 +222,7 @@ async fn corrupt_drain_moves_retry_into_future_without_blocking_due_wake() {
             fixture
                 .clock
                 .set_utc(due + chrono::Duration::minutes(5 * (count - 1)));
-            runtime.on_alarm().await.unwrap();
+            runtime.after_event().await.unwrap();
         }
         let record = runtime.statement_host().read(Statement {
             sql: "SELECT state,failure_count,next_try_at FROM central_work_attempts WHERE machine_kind='legacy_workspace_drains' AND subject_key='all'", args: vec![],
@@ -249,13 +249,98 @@ async fn corrupt_drain_moves_retry_into_future_without_blocking_due_wake() {
     )
     .await;
     fixture.clock.set_utc(due + chrono::Duration::minutes(15));
-    runtime.on_alarm().await.unwrap();
+    runtime.after_event().await.unwrap();
     let rows = runtime.statement_host().read(Statement {
         sql: "SELECT COUNT(*) FROM central_work_attempts WHERE machine_kind='legacy_workspace_drains' AND subject_key='all'", args: vec![],
     }).await.unwrap();
     assert_eq!(
         rows.rows,
         vec![vec![SqlValue::Integer(0.try_into().unwrap())]]
+    );
+    fixture.host.close().await;
+}
+
+#[tokio::test]
+async fn request_drains_obey_the_unit_gate_and_one_workspace_success_keeps_its_record() {
+    let fixture = Fixture::new().await;
+    let area = fixture.area(8310).await;
+    let thread = fixture.thread(8311, area).await;
+    let runtime = fixture
+        .host
+        .central(&fixture.caller.organization_id)
+        .await
+        .unwrap();
+    let now = fixture.clock.utc_now();
+    let stamp = |at: m::Timestamp| text(at.to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
+    let attempt_id: m::RequestId = id(8312);
+    execute(&fixture,
+        "INSERT INTO central_work_attempts VALUES (?,'legacy_workspace_drains','all','failing',1,?,'statement_rejected',NULL,?,?,NULL,?,?)",
+        vec![text(&attempt_id),stamp(now+chrono::Duration::minutes(5)),stamp(now),stamp(now),stamp(now),stamp(now)]).await;
+    let before = runtime
+        .statement_host()
+        .read(Statement {
+            sql: "SELECT drained_through_position FROM workspace_drains WHERE workspace_id=?",
+            args: vec![text(&fixture.workspace)],
+        })
+        .await
+        .unwrap();
+
+    created(fixture.call(8313, post(&thread, vec![])).await);
+
+    let deferred = runtime
+        .statement_host()
+        .read(Statement {
+            sql: "SELECT drained_through_position FROM workspace_drains WHERE workspace_id=?",
+            args: vec![text(&fixture.workspace)],
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        deferred.rows, before.rows,
+        "future retry must skip the immediate request drain"
+    );
+    execute(&fixture,"UPDATE central_work_attempts SET state='retired',next_try_at=NULL,retired_at=? WHERE attempt_id=?",vec![stamp(now),text(&attempt_id)]).await;
+    created(fixture.call(8314, post(&thread, vec![])).await);
+    let retired = runtime
+        .statement_host()
+        .read(Statement {
+            sql: "SELECT drained_through_position FROM workspace_drains WHERE workspace_id=?",
+            args: vec![text(&fixture.workspace)],
+        })
+        .await
+        .unwrap();
+    assert_eq!(
+        retired.rows, before.rows,
+        "traffic must leave a retired drain stopped"
+    );
+    execute(&fixture,"UPDATE central_work_attempts SET state='failing',next_try_at=?,retired_at=NULL WHERE attempt_id=?",vec![stamp(now),text(&attempt_id)]).await;
+
+    created(fixture.call(8315, post(&thread, vec![])).await);
+
+    let completed = runtime
+        .statement_host()
+        .read(Statement {
+            sql: "SELECT drained_through_position FROM workspace_drains WHERE workspace_id=?",
+            args: vec![text(&fixture.workspace)],
+        })
+        .await
+        .unwrap();
+    assert_ne!(
+        completed.rows, before.rows,
+        "a reached retry permits the immediate drain"
+    );
+    let record = runtime.statement_host().read(Statement {
+        sql: "SELECT attempt_id,state,failure_count,last_failure FROM central_work_attempts WHERE machine_kind='legacy_workspace_drains' AND subject_key='all'", args: vec![],
+    }).await.unwrap();
+    assert_eq!(
+        record.rows,
+        vec![vec![
+            text(&attempt_id),
+            text("failing"),
+            SqlValue::Integer(1.try_into().unwrap()),
+            text("statement_rejected")
+        ]],
+        "one workspace cannot clear the whole unit's record"
     );
     fixture.host.close().await;
 }

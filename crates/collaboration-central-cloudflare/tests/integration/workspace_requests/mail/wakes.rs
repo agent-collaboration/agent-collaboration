@@ -96,8 +96,8 @@ async fn actual_alarm_fires_simultaneous_wakes_once_and_excludes_cancelled() {
         .clock
         .0
         .store(due.timestamp_millis(), Ordering::SeqCst);
-    assert_eq!(runtime.on_alarm().await.unwrap().wakes_fired, 3);
-    assert_eq!(runtime.on_alarm().await.unwrap().wakes_fired, 0);
+    assert_eq!(runtime.after_event().await.unwrap().wakes_fired, 3);
+    assert_eq!(runtime.after_event().await.unwrap().wakes_fired, 0);
     assert_eq!(
         request(
             &fixture,

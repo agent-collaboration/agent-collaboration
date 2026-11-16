@@ -3,6 +3,8 @@
 
 mod clock_ids;
 mod engine;
+mod engine_machines;
+pub use engine::{AlarmNotPublished, EventCompletion};
 pub use engine::{DueBatchSnapshot, DueBatchState, engine_alarm_decider};
 pub mod identity_contract;
 #[cfg(feature = "test-support")]
@@ -492,12 +494,11 @@ pub use wire_contract::*;
 
 pub use core_contract::*;
 
-mod central_mail_store;
-mod guarded_statements;
-pub use central_mail_store::EARLIEST_DUE;
 mod central_mail_requests;
+mod central_mail_store;
 mod central_timer_plans;
 mod central_timers;
+mod guarded_statements;
 pub use central_timers::AlarmResult;
 mod notification_windows;
 mod workspace_drain;

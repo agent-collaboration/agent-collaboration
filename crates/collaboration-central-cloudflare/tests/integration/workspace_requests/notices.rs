@@ -175,11 +175,11 @@ async fn first_activity_fixes_window_and_addressed_posts_join_the_session_batch(
         messages.rows,
         vec![vec![SqlValue::Integer(0.try_into().unwrap())]]
     );
-    assert_eq!(runtime.on_alarm().await.unwrap().windows_fired, 0);
+    assert_eq!(runtime.after_event().await.unwrap().windows_fired, 0);
     f.clock.0.fetch_add(180_000, Ordering::SeqCst);
     // The observer's join also opened a window for the thread creator.
-    assert_eq!(runtime.on_alarm().await.unwrap().windows_fired, 2);
-    assert_eq!(runtime.on_alarm().await.unwrap().windows_fired, 0);
+    assert_eq!(runtime.after_event().await.unwrap().windows_fired, 2);
+    assert_eq!(runtime.after_event().await.unwrap().windows_fired, 0);
     let messages = runtime.statement_host().read(Statement { sql: "SELECT sender,body,source_change_id FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice' AND source_change_id=?", args: vec![text(&actor), text(&thread), text(&expected[0].change_id)] }).await.unwrap();
     assert_eq!(messages.rows.len(), 1);
     let (SqlValue::Text(sender), SqlValue::Text(body)) =

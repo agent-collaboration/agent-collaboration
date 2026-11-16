@@ -331,7 +331,7 @@ pub(super) async fn exercise_cadence_change_after_clock_rollback(f: &mut Fixture
         .await,
     );
     // Settle pre-existing due work so the retained alarm is stable for the late-write cut.
-    r.on_alarm().await.unwrap();
+    r.after_event().await.unwrap();
     let snapshot = || Statement {
         sql: "SELECT a.notice_cadence,w.window_id,w.first_activity_at,w.due_at,(SELECT json_group_array(json_array(i.window_item_id,i.workspace_id,i.thread_id,i.change_id,i.created_at,i.updated_at)) FROM notification_window_items i WHERE i.window_id=w.window_id),(SELECT COUNT(*) FROM request_log WHERE request_id=?),a.created_at,a.updated_at,w.created_at,w.updated_at FROM actor_identities a JOIN notification_windows w ON w.recipient_actor=a.actor_identity_id WHERE a.actor_identity_id=?",
         args: vec![text(id::<m::RequestId>(46304)), actor.clone()],
@@ -462,6 +462,6 @@ pub(super) async fn exercise_cadence_change_after_clock_rollback(f: &mut Fixture
             .rows
             .is_empty()
     );
-    r.on_alarm().await.unwrap();
+    r.after_event().await.unwrap();
     assert_eq!(r.queued_for_session(&address).await.unwrap(), queue);
 }

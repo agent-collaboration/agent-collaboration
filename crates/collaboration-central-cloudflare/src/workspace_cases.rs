@@ -28,6 +28,7 @@ enum Point {
     AfterDrainCommit,
     BeforeTimerCommit,
     AfterTimerCommit,
+    AfterEngineLoad,
     BeforeSignInSample,
     AfterSignInSample,
 }
@@ -40,6 +41,7 @@ impl From<Point> for PausePoint {
             Point::AfterDrainCommit => Self::AfterDrainCommit,
             Point::BeforeTimerCommit => Self::BeforeTimerCommit,
             Point::AfterTimerCommit => Self::AfterTimerCommit,
+            Point::AfterEngineLoad => Self::AfterEngineLoad,
             Point::BeforeSignInSample => Self::BeforeSignInSample,
             Point::AfterSignInSample => Self::AfterSignInSample,
         }
@@ -148,6 +150,7 @@ pub(super) async fn control(
                 point,
                 Point::BeforeTimerCommit
                     | Point::AfterTimerCommit
+                    | Point::AfterEngineLoad
                     | Point::BeforeSignInSample
                     | Point::AfterSignInSample
             ) {
@@ -542,19 +545,19 @@ pub(super) async fn alarm_with_receipt(object: &CentralObject) -> Result<Respons
         };
         organization = Some(org);
         runtime
-            .on_alarm()
+            .after_event()
             .await
             .map(Some)
-            .map_err(AlarmFailure::Store)
+            .map_err(|error| AlarmFailure::Store(error.failure))
     }
     .await;
     let alarm_after = storage.get_alarm().await?;
     let result = match &outcome {
         Ok(Some(result)) => AlarmReceiptResult::Applied {
-            wakes_fired: result.wakes_fired,
-            automations_fired: result.automations_fired,
-            windows_fired: result.windows_fired,
-            workspaces_drained: result.workspaces_drained,
+            wakes_fired: result.work.wakes_fired,
+            automations_fired: result.work.automations_fired,
+            windows_fired: result.work.windows_fired,
+            workspaces_drained: result.work.workspaces_drained,
         },
         Ok(None) => AlarmReceiptResult::Unprovisioned,
         Err(AlarmFailure::Store(failure)) => AlarmReceiptResult::Error {

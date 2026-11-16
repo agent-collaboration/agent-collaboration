@@ -114,7 +114,6 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
                     return Err(Failure::StaleStatement);
                 }
                 let repair = async {
-                    self.validated_timers().await?;
                     crate::central_mail_store::applied(
                         self.host
                             .run_batch(StatementBatch {
@@ -171,7 +170,7 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
             target_id: self.organization.as_str().to_owned(),
             created_at_millis: now.unix_millis(),
         };
-        self.validated_timers().await?;
+
         let statements = vec![stamp, organization_change_rows::insert(&record)?];
         #[cfg(feature = "test-support")]
         self.pauses

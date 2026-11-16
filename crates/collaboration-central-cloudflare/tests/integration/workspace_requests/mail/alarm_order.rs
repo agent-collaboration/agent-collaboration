@@ -43,7 +43,7 @@ async fn earlier_wake_queued_behind_timer_commit_owns_next_physical_alarm() {
         .unwrap();
     let pending_alarm = tokio::spawn({
         let runtime = runtime.clone();
-        async move { runtime.on_alarm().await }
+        async move { runtime.after_event().await }
     });
     let _: bool = runtime
         .control("until-held-central", &"beforeTimerCommit")
@@ -82,7 +82,7 @@ async fn earlier_wake_queued_behind_timer_commit_owns_next_physical_alarm() {
     f.clock
         .0
         .store(earlier.timestamp_millis(), Ordering::SeqCst);
-    assert_eq!(runtime.on_alarm().await.unwrap().wakes_fired, 1);
+    assert_eq!(runtime.after_event().await.unwrap().wakes_fired, 1);
     let rows = runtime
         .read(Statement {
             sql: "SELECT state,COUNT(*) FROM wakes GROUP BY state ORDER BY state",
