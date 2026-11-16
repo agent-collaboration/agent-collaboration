@@ -121,8 +121,10 @@ impl AcpChannelListener {
                 }
             }
         };
-        // Each connection ends through its own cleanup on the shutdown token,
-        // joining its routes; nothing it owned outlives the listener.
+        // Each connection ends through its own cleanup on the shutdown token
+        // and joins its routes. Provider routes join their prompt and observer
+        // tasks; the lazy Codex route aborts its inner generation task without
+        // awaiting it.
         connections_stop.cancel();
         while tasks.join_next().await.is_some() {}
         if result.is_err() {

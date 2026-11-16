@@ -103,10 +103,12 @@ pub async fn serve_acp_router_connection<
 }
 
 /// Serves one ACP connection until it closes or `stop` is cancelled. When
-/// `stop` ends it, each route sees the connection close, ends its own work and
-/// is joined before this returns, so nothing a route owned outlives the
-/// connection; every route given here must end on its closed token. Any other
-/// end aborts the routes, as `serve_acp_router_connection` always has.
+/// `stop` ends it, the connection closes and every route task is joined, not
+/// aborted, before this returns; every route given here must end on its closed
+/// token. What a route then does with its own tasks is the route's: a provider
+/// route joins its prompt and observer tasks, while the lazy Codex route aborts
+/// its inner generation task without awaiting it. Any other end aborts the
+/// routes, as `serve_acp_router_connection` always has.
 pub async fn serve_acp_router_connection_until<
     TStream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 >(
@@ -299,8 +301,10 @@ pub async fn serve_acp_router_connection_until<
     closed.cancel();
     if stop.is_cancelled() {
         // Stopped by the caller: every route ends on the connection's closed
-        // token and joins its own tasks, so nothing a route owned outlives the
-        // connection. Aborting a route from outside drops those tasks unjoined.
+        // token and is joined here, not aborted. A provider route joins its
+        // prompt and observer tasks first; the lazy Codex route aborts its
+        // inner generation task without awaiting it. Aborting a route from
+        // outside would drop the provider route's tasks unjoined.
         while route_tasks.join_next().await.is_some() {}
     } else {
         route_tasks.abort_all();
