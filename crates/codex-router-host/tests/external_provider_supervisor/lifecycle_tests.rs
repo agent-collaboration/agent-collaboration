@@ -552,7 +552,7 @@ async fn resume_and_close_are_durable_operations_and_resume_requires_advertiseme
     let closed = operation(wait(&backend, close_id).await)?;
     ensure!(
         matches!(closed.output, ConversationOperationWaitOutput::Available {
-        settlement: ConversationOperationSettlement::Closed { target: closed_target }
+        settlement: ConversationOperationSettlement::Closed { target: closed_target, router_closed: false }
     } if closed_target == target)
     );
     backend.shutdown().await?;

@@ -135,7 +135,7 @@ impl AttemptEvidenceSink for CloseSessionAtDispatch {
                 if !matches!(
                     closed.output,
                     ConversationOperationWaitOutput::Available {
-                        settlement: ConversationOperationSettlement::Closed { target: closed_target },
+                        settlement: ConversationOperationSettlement::Closed { target: closed_target, router_closed: false },
                     } if closed_target == target
                 ) {
                     return Err(DeliveryContractError::ClientOperation);
@@ -512,7 +512,7 @@ async fn loaded_only_queue_refuses_not_loaded_session_before_enqueue() {
     assert!(matches!(
         closed.output,
         ConversationOperationWaitOutput::Available {
-            settlement: ConversationOperationSettlement::Closed { target: closed_target },
+            settlement: ConversationOperationSettlement::Closed { target: closed_target, router_closed: false },
         } if closed_target == target
     ));
 

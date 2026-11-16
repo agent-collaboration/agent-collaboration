@@ -380,13 +380,14 @@ impl<P: InteractionPort> AgentSessionClient<P> {
             provider_session_id: provider_session_id.clone(),
             submitted: false,
         };
-        self.close_session_after_mark(provider_session_id, &mut admission_guard)
+        self.close_session_after_mark(provider_session_id, false, &mut admission_guard)
             .await
     }
 
     async fn close_session_after_mark(
         &self,
         provider_session_id: String,
+        release_only: bool,
         admission_guard: &mut PendingCloseAdmissionGuard,
     ) -> Result<(), ExternalProviderRuntimeError> {
         if self.session_activity(provider_session_id.clone()).await?
@@ -402,12 +403,37 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         self.commands
             .send(ProviderCommand::Close {
                 provider_session_id,
+                release_only,
                 reply,
             })
             .await
             .map_err(|_| self.retired_operation_error())?;
         admission_guard.transfer_to_connection();
         result.await.map_err(|_| self.retired_operation_error())?
+    }
+
+    /// Closes a session on an agent that offers no session/close (D1 R14):
+    /// interrupts a running turn, waits for idle, then releases the session
+    /// here. The agent keeps no close of its own.
+    pub async fn release_session(
+        &self,
+        provider_session_id: String,
+    ) -> Result<(), ExternalProviderRuntimeError> {
+        if !self
+            .pending_close_marks
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(provider_session_id.clone())
+        {
+            return Err(ExternalProviderRuntimeError::LocalBusy);
+        }
+        let mut admission_guard = PendingCloseAdmissionGuard {
+            marks: Arc::clone(&self.pending_close_marks),
+            provider_session_id: provider_session_id.clone(),
+            submitted: false,
+        };
+        self.close_session_after_mark(provider_session_id, true, &mut admission_guard)
+            .await
     }
 
     /// Steer with the same validated Session vocabulary used for prompts.

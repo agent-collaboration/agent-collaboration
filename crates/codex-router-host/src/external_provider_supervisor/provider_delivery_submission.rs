@@ -27,6 +27,8 @@ impl ExternalProviderSupervisor {
         let (binding, runtime) = self
             .runtime_binding(&target.endpoint, &operation_id, Some(target.clone()))
             .map_err(Box::new)?;
+        self.refuse_if_router_closed(&target, &operation_id)
+            .map_err(Box::new)?;
         let approval_context = crate::ExternalProviderApprovalContext {
             requester: request.requested_by,
             approver: request.approver.clone(),

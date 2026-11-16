@@ -417,6 +417,25 @@ impl ExternalProviderRuntime {
         self.client
             .close_session(provider_session_id.clone())
             .await?;
+        self.publish_closed(&provider_session_id)
+    }
+
+    /// Closes a session on an agent that offers no session/close: the turn is
+    /// interrupted and the session released by the Router alone (D1 R14).
+    pub async fn release_session(
+        &self,
+        provider_session_id: String,
+    ) -> Result<(), ExternalProviderRuntimeError> {
+        self.client
+            .release_session(provider_session_id.clone())
+            .await?;
+        self.publish_closed(&provider_session_id)
+    }
+
+    fn publish_closed(
+        &self,
+        provider_session_id: &str,
+    ) -> Result<(), ExternalProviderRuntimeError> {
         if let Some(event_sink) = &self.event_sink {
             acp_client_runtime::SessionEventSink::publish(
                 event_sink.as_ref(),

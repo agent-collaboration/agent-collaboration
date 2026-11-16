@@ -714,6 +714,11 @@ pub enum ConversationOperationSettlement {
     },
     Closed {
         target: SessionRef,
+        /// The agent offers no session/close, so the Router closed the
+        /// session itself: it interrupted the turn and released the session,
+        /// and the agent kept no close of its own (D1 R14).
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        router_closed: bool,
     },
     PromptCompleted {
         target: SessionRef,

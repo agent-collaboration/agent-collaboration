@@ -345,6 +345,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                 &request.operation_id,
                 Some(target.clone()),
             )?;
+            backend.refuse_if_router_closed(&target, &request.operation_id)?;
             if !runtime.admission().supports_load {
                 return Err(failure(
                     ConversationOperationFailureKind::UnsupportedCapability,

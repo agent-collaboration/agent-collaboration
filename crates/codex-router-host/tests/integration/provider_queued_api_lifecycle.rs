@@ -7,6 +7,7 @@
 mod conversation_cancel_door;
 mod lifecycle_host;
 mod restart_stages;
+mod router_side_close;
 
 use collaboration_client::{
     ConversationOperationResult, ConversationSettlementDetail, ProviderPromptOutput,

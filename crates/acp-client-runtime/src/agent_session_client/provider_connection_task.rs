@@ -583,7 +583,7 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                                 let _result = reply.send(result);
                                             });
                                         }
-                                        ProviderCommand::Close { provider_session_id, reply } => {
+                                        ProviderCommand::Close { provider_session_id, release_only, reply } => {
                                             if !pending_closes.insert(provider_session_id.clone()) {
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy));
                                                 continue;
@@ -594,7 +594,13 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             admission_tasks.spawn(async move {
                                                 let result = tokio::select! {
                                                     () = pending_shutdown.cancelled() => Err(ExternalProviderRuntimeError::TransportFailure),
-                                                    result = provider_lifecycle_requests::close_provider_session(pending_connection, provider_session_id.clone()) => result,
+                                                    result = async {
+                                                        if release_only {
+                                                            Ok(())
+                                                        } else {
+                                                            provider_lifecycle_requests::close_provider_session(pending_connection, provider_session_id.clone()).await
+                                                        }
+                                                    } => result,
                                                 };
                                                 publish_pending_session_admission(
                                                     &pending_admission_tx,

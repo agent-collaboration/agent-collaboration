@@ -150,6 +150,9 @@ enum ProviderCommand<P: InteractionPort> {
     },
     Close {
         provider_session_id: String,
+        /// The agent offers no session/close: the session is only released
+        /// here, and no request reaches the agent (D1 R14).
+        release_only: bool,
         reply: tokio::sync::oneshot::Sender<Result<(), ExternalProviderRuntimeError>>,
     },
     Prompt {

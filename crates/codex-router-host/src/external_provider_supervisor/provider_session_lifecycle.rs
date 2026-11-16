@@ -26,6 +26,7 @@ pub(super) fn resume(
             &request.operation_id,
             Some(target.clone()),
         )?;
+        backend.refuse_if_router_closed(&target, &request.operation_id)?;
         let provider_session_id = String::from(target.session_id.clone());
         if !runtime
             .capability_report(&provider_session_id)
@@ -132,20 +133,13 @@ pub(super) fn close(
             Some(target.clone()),
         )?;
         let provider_session_id = String::from(target.session_id.clone());
-        if !runtime
+        // An agent with no session/close is closed by the Router itself: the
+        // same interrupt, then a release here (owner: "close should just
+        // interrupt the agent and close", every agent).
+        let agent_closes = runtime
             .capability_report(&provider_session_id)
             .await
-            .supports_close
-        {
-            return Err(failure(
-                ConversationOperationFailureKind::UnsupportedCapability,
-                ConversationOperationFailureStage::Binding,
-                ProviderOperationEffect::None,
-                "provider runtime does not advertise conversation close",
-                request.operation_id,
-                Some(target),
-            ));
-        }
+            .supports_close;
         // Close interrupts a running turn (D1 R14): the live turn's row
         // doesn't refuse it; an earlier outcome that is unknown and no longer
         // live still does.
@@ -168,14 +162,23 @@ pub(super) fn close(
                 if let Some(fifo) = backend.message_fifo() {
                     fifo.close_session(&target, "session closed");
                 }
+                if !agent_closes {
+                    backend.mark_router_closed(&target);
+                }
                 let completion_target = target.clone();
                 // The runtime interrupts a running turn, waits for idle, then
-                // closes.
+                // closes, or only releases the session when the agent can't.
                 backend.spawn_operation(operation_id.clone(), live, async move {
-                    match runtime.close_session(provider_session_id).await {
+                    let closed = if agent_closes {
+                        runtime.close_session(provider_session_id).await
+                    } else {
+                        runtime.release_session(provider_session_id).await
+                    };
+                    match closed {
                         Ok(()) => ProviderOperationCompletion::Success {
                             settlement: ConversationOperationSettlement::Closed {
                                 target: completion_target.clone(),
+                                router_closed: !agent_closes,
                             },
                             target: Some(completion_target),
                             session_record: None,

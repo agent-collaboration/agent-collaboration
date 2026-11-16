@@ -90,6 +90,10 @@ struct SupervisorInner {
     /// `<router root>/scratch`: each Claude or Cursor session created here gets
     /// its own `session-<uuidv7>` folder in it (R4). `None` grants no folder.
     scratch_root: Option<PathBuf>,
+    /// Sessions the Router closed itself, on agents that offer no
+    /// session/close (D1 R14): later prompts, steers and loads are refused.
+    /// Held in memory, so a Router restart forgets them.
+    router_closed: StdMutex<std::collections::HashSet<SessionRef>>,
     /// Each provider's work-roots rule, as its startup configured it (D1 R18).
     work_roots: StdMutex<HashMap<EndpointRef, crate::provider_work_roots::ProviderWorkRoots>>,
     history_unavailable: Mutex<HashSet<SessionRef>>,
@@ -189,6 +193,44 @@ impl ExternalProviderSupervisor {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .insert(endpoint, work_roots);
+    }
+
+    /// Records that the Router closed `target` itself.
+    fn mark_router_closed(&self, target: &SessionRef) {
+        self.inner
+            .router_closed
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(target.clone());
+    }
+
+    /// Refuses work for a session the Router closed itself (D1 R14).
+    #[expect(
+        clippy::result_large_err,
+        reason = "The typed failure retains the full published operation payload."
+    )]
+    fn refuse_if_router_closed(
+        &self,
+        target: &SessionRef,
+        operation_id: &OperationId,
+    ) -> Result<(), ConversationOperationFailure> {
+        let closed = self
+            .inner
+            .router_closed
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .contains(target);
+        if closed {
+            return Err(failure(
+                ConversationOperationFailureKind::InvalidRequest,
+                ConversationOperationFailureStage::Validation,
+                ProviderOperationEffect::None,
+                "the session is closed",
+                operation_id.clone(),
+                Some(target.clone()),
+            ));
+        }
+        Ok(())
     }
 
     fn work_roots_for(
@@ -422,6 +464,7 @@ impl ExternalProviderSupervisor {
                 hub,
                 scratch_root,
                 work_roots: StdMutex::new(HashMap::new()),
+                router_closed: StdMutex::new(std::collections::HashSet::new()),
                 history_unavailable: Mutex::new(HashSet::new()),
                 settings_catalogs,
                 requested_modes: Mutex::new(HashMap::new()),
