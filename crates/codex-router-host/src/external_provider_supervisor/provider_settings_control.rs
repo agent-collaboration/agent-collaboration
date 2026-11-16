@@ -72,6 +72,24 @@ pub(super) async fn apply(
         }
         .into());
     }
+    if request.setting == ProviderSettingName::Mode
+        && supervisor
+            .provider_kind_for(&request.target.endpoint)
+            .is_some_and(|provider| {
+                super::provider_full_access_guard::is_full_access_mode(&provider, &request.value)
+            })
+    {
+        return Err(ProviderSettingsFailure {
+            kind: ProviderSettingsFailureKind::InvalidSetting,
+            stage: None,
+            target: Some(request.target.clone()),
+            message: super::provider_full_access_guard::FULL_ACCESS_REFUSAL.into(),
+            setting: Some(ProviderSettingName::Mode),
+            value: Some(request.value.clone()),
+            advertised: Vec::new(),
+        }
+        .into());
+    }
     if request.value.trim().is_empty() {
         return Err(failure(
             ProviderSettingsFailureKind::InvalidSetting,

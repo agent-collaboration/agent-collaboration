@@ -1,5 +1,6 @@
 //! Durable provider resume and close operations.
 
+use super::provider_operation_admission::DispatchMark;
 use super::{
     Arc, ConversationOperationFailureKind, ConversationOperationFailureStage,
     ConversationOperationSettlement, ConversationOperationSubmission, ExternalProviderSupervisor,
@@ -145,35 +146,40 @@ pub(super) fn close(
                 Some(target),
             ));
         }
+        // Close interrupts a running turn (D1 R14): the live turn's row
+        // doesn't refuse it; an earlier outcome that is unknown and no longer
+        // live still does.
         let prepared = backend
-            .prepare_operation(
+            .admit_operation(
                 request.operation_id.clone(),
                 ProviderOperationKind::ConversationClose,
                 binding,
                 Some(&target),
+                DispatchMark::Deferred,
             )
             .await?;
         match prepared {
             PreparedOperation::Existing(operation) => Ok(existing_submission(operation)),
-            PreparedOperation::Admitted { snapshot, live } => {
+            PreparedOperation::Admitted { live, .. } => {
                 let operation_id = request.operation_id.clone();
+                let snapshot = backend.begin_dispatch(&operation_id, &target).await?;
+                // Every waiting message ends not sent before the interrupt,
+                // so none starts as the running turn ends.
+                if let Some(fifo) = backend.message_fifo() {
+                    fifo.close_session(&target, "session closed");
+                }
                 let completion_target = target.clone();
-                let fifo = backend.message_fifo();
+                // The runtime interrupts a running turn, waits for idle, then
+                // closes.
                 backend.spawn_operation(operation_id.clone(), live, async move {
                     match runtime.close_session(provider_session_id).await {
-                        Ok(()) => {
-                            // Nothing still waiting is sent to a closed session (D1 R14).
-                            if let Some(fifo) = fifo {
-                                fifo.close_session(&completion_target, "session closed");
-                            }
-                            ProviderOperationCompletion::Success {
-                                settlement: ConversationOperationSettlement::Closed {
-                                    target: completion_target.clone(),
-                                },
-                                target: Some(completion_target),
-                                session_record: None,
-                            }
-                        }
+                        Ok(()) => ProviderOperationCompletion::Success {
+                            settlement: ConversationOperationSettlement::Closed {
+                                target: completion_target.clone(),
+                            },
+                            target: Some(completion_target),
+                            session_record: None,
+                        },
                         Err(error) => ProviderOperationCompletion::Failure(runtime_failure(
                             operation_id,
                             Some(completion_target),

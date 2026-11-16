@@ -60,6 +60,7 @@ mod provider_cache_warm;
 mod provider_content_commands;
 mod provider_endpoint_routing_structure;
 mod provider_face_composition;
+mod provider_full_access_refusal;
 mod provider_native_models;
 mod provider_native_skills;
 mod provider_pending_hub_races;

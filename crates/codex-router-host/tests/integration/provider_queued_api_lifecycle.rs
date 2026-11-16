@@ -199,15 +199,13 @@ async fn queued_api_prompt_permission_refusal_settles_as_refused() {
     stopped.expect("Host shutdown");
 }
 
-/// Oracle: D1 spec R14 (Lead decision 2026-11-16, option A) — "close is
-/// refused while a Router turn is unresolved; after an interrupt, close
-/// succeeds": with a held turn and queued API prompts, close is refused
-/// mid-turn and every queued ID is still queued; after the interrupt the line
-/// drains in order, and once it has drained a close succeeds. (Whether
-/// waiting entries end not sent after an interrupt has no deterministic
-/// ordering today: the worker dispatches the head as soon as the turn ends.)
+/// Oracle: D1 spec R14 (owner, 16 Nov: "close shoudl just interrupt the agent
+/// and close") and V27 as replaced: with a held turn and two queued API
+/// prompts, close is admitted mid-turn. Both queued prompts end not sent,
+/// reason "session closed"; the running turn is interrupted (Cancelled); the
+/// session is closed; no prompt reaches the agent after the held one.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn close_during_a_running_turn_is_refused() {
+async fn close_during_a_running_turn_interrupts_it_and_ends_the_waiting_not_sent() {
     // Arrange: a held turn, a head and one buffered entry.
     let staging = tempfile::tempdir().expect("receipt folder");
     let receipt = staging.path().join("wire.json");
@@ -224,81 +222,27 @@ async fn close_during_a_running_turn_is_refused() {
     let queued_texts = texts("queued", 2);
     let queued = host.queue_in_order(&target, &owner, &queued_texts).await;
 
-    // Act: close mid-turn and look at the line; interrupt the turn, let the
-    // line drain, then close.
-    let refused = host.close(&target, &owner, OperationId::generate()).await;
-    let mut shown = Vec::new();
-    for operation_id in &queued {
-        shown.push(
-            host.show(operation_id)
-                .await
-                .map(|snapshot| snapshot.queue_state),
-        );
-    }
-    let closes_while_held = recorded(&receipt, "session/close");
-    let cancels_while_held = recorded(&receipt, "session/cancel");
-    let interrupted = crate::provider_conversation_submission::submit_provider_cancel(
-        &host.client,
-        collaboration_protocol::ConversationCancelRequest {
-            operation_id: OperationId::generate(),
-            target_operation_id: held.clone(),
-            target: target.clone(),
-            generation: None,
-            requested_by: owner.clone(),
-            approver: owner.clone(),
-        },
-    )
-    .await;
+    // Act: close mid-turn.
+    let close = OperationId::generate();
+    let close_admitted = host.close(&target, &owner, close.clone()).await;
+    // Asserted where it's read: a refused close would leave the held turn
+    // running and every later wait hanging.
+    assert!(
+        close_admitted.is_ok(),
+        "close is admitted mid-turn: {close_admitted:?}"
+    );
+    let closed = host.wait(&close).await;
     let held_settled = completed(&host.wait(&held).await);
     let mut settled = Vec::new();
     for operation_id in &queued {
-        settled.push(completed(&host.wait(operation_id).await));
+        settled.push(host.wait(operation_id).await);
     }
-    let close_after_drain = OperationId::generate();
-    let close_admitted = host.close(&target, &owner, close_after_drain.clone()).await;
-    let closed = host.wait(&close_after_drain).await;
     let prompts = prompt_texts(&receipt);
+    let cancels = recorded(&receipt, "session/cancel");
+    let closes = recorded(&receipt, "session/close");
     let (_root, stopped) = host.stop().await;
 
     // Assert
-    let refusal = conversation_failure(
-        refused
-            .as_ref()
-            .err()
-            .unwrap_or_else(|| panic!("close is refused mid-turn: {refused:?}")),
-    );
-    assert_eq!(
-        refusal.kind,
-        ConversationOperationFailureKind::Busy,
-        "{refusal:?}"
-    );
-    assert_eq!(refusal.effect, ProviderOperationEffect::None);
-    assert_eq!(closes_while_held, 0, "the agent is never asked to close");
-    assert_eq!(cancels_while_held, 0, "the refused close stops nothing");
-    for state in &shown {
-        assert!(
-            matches!(
-                state,
-                Ok(Some(ConversationOperationQueueState::RouterQueued))
-            ),
-            "every queued ID is still queued: {shown:?}"
-        );
-    }
-    assert!(
-        interrupted.is_ok(),
-        "the interrupt is admitted: {interrupted:?}"
-    );
-    assert_eq!(held_settled, Some(ProviderPromptStopReason::Cancelled));
-    assert!(
-        settled
-            .iter()
-            .all(|stop| stop == &Some(ProviderPromptStopReason::EndTurn)),
-        "the line drains after the interrupt: {settled:?}"
-    );
-    let mut expected = vec!["first".to_owned()];
-    expected.extend(queued_texts);
-    assert_eq!(prompts, expected, "in order, each once");
-    assert!(close_admitted.is_ok(), "{close_admitted:?}");
     assert!(
         matches!(
             closed,
@@ -309,7 +253,28 @@ async fn close_during_a_running_turn_is_refused() {
                 ..
             })
         ),
-        "once the line has drained a close succeeds: {closed:?}"
+        "the session is closed: {closed:?}"
+    );
+    assert_eq!(held_settled, Some(ProviderPromptStopReason::Cancelled));
+    assert_eq!(cancels, 1, "the running turn is interrupted once");
+    assert_eq!(closes, 1, "the agent is asked to close once");
+    for waited in &settled {
+        let failure = conversation_failure(
+            waited
+                .as_ref()
+                .err()
+                .unwrap_or_else(|| panic!("a queued prompt ends not sent: {waited:?}")),
+        );
+        assert_eq!(
+            String::from(failure.message.clone()),
+            "not sent: session closed"
+        );
+        assert_eq!(failure.effect, ProviderOperationEffect::None);
+    }
+    assert_eq!(
+        prompts,
+        vec!["first".to_owned()],
+        "no prompt reaches the agent after the held one"
     );
     stopped.expect("Host shutdown");
 }

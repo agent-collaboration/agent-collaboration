@@ -104,6 +104,24 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                     None,
                 ));
             }
+            if let Some(mode) = request
+                .settings
+                .as_ref()
+                .and_then(|settings| settings.mode.as_deref())
+                && super::provider_full_access_guard::is_full_access_mode(
+                    &binding.runtime.provider,
+                    mode,
+                )
+            {
+                return Err(failure(
+                    ConversationOperationFailureKind::AuthenticationRequired,
+                    ConversationOperationFailureStage::Validation,
+                    ProviderOperationEffect::None,
+                    super::provider_full_access_guard::FULL_ACCESS_REFUSAL,
+                    request.operation_id.clone(),
+                    None,
+                ));
+            }
             let prepared = backend
                 .prepare_operation(
                     request.operation_id.clone(),

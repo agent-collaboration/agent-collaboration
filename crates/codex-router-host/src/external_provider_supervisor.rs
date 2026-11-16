@@ -9,6 +9,7 @@ mod provider_prompt_contents;
 pub(crate) use provider_prompt_contents::dispatch_refusal_reason;
 pub use provider_prompt_contents::{PromptBusyPolicy, ProviderPromptContentsRequest};
 mod provider_conversation_backend;
+mod provider_full_access_guard;
 mod provider_session_inspection;
 mod provider_session_lifecycle;
 mod provider_session_scratch;
@@ -173,6 +174,17 @@ impl LiveOperation {
 impl ExternalProviderSupervisor {
     pub(crate) fn queued_operation_registry(&self) -> &ProviderQueueOperationRegistry {
         &self.inner.queued_operations
+    }
+
+    /// The provider a binding runs, for checks made before anything reaches it.
+    fn provider_kind_for(
+        &self,
+        endpoint: &EndpointRef,
+    ) -> Option<collaboration_protocol::ProviderKind> {
+        self.inner
+            .bindings
+            .get(endpoint)
+            .map(|entry| entry.identity.runtime.provider.clone())
     }
 
     pub(crate) fn runtime_for(

@@ -172,20 +172,17 @@ async fn queued_busy_prompt_cancelled_before_submission_answers_not_sent() {
     stopped.expect("Host shutdown");
 }
 
-/// Oracle: D1 R14 (Lead decision 2026-11-16, option A: "close is refused
-/// while a Router turn is unresolved") with D1 R12, V22b — a close requested
-/// while a busy prompt waits behind a running turn is refused, so the waiting
-/// prompt is not ended by it: it is sent once when the turn ends and answers
-/// with its own turn's end. No Busy, zero cancels. (So "close gives NotSent"
-/// cannot happen to a busy ACP prompt through the Host: it only waits while a
-/// turn runs.)
+/// Oracle: D1 R14 (owner, 16 Nov: "close shoudl just interrupt the agent and
+/// close") with D1 R12, V22b: a close requested while a busy ACP prompt waits
+/// behind a running turn ends that prompt not sent, reason "session closed",
+/// interrupts the running turn, and closes the session. The waiting prompt
+/// never reaches the agent.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn close_while_a_busy_prompt_waits_is_refused_and_the_prompt_runs() {
+async fn close_while_a_busy_prompt_waits_interrupts_and_ends_it_not_sent() {
     // Arrange: a non-steering agent that can close, whose first turn is held.
     let mut host = AcpBusyHost::start(&BusyAgent::Cursor(&[
         "hold-first-prompt-open",
         "advertise-close",
-        "held-turn-ends-max-tokens",
     ]))
     .await;
     host.send_prompt(3, FIRST).await;
@@ -193,23 +190,27 @@ async fn close_while_a_busy_prompt_waits_is_refused_and_the_prompt_runs() {
     host.send_prompt(4, SECOND).await;
     let waiting = host.until_queued_or_answered(1, 4).await;
 
-    // Act: close while it waits, then let the turn end.
+    // Act: close while it waits.
     let closed = host.close().await;
-    let closes = agent_frames(&host.receipt, "session/close", None);
-    host.release("release");
-    let first = host.response(3).await;
+    // Asserted where it's read: a refused close would leave the held turn
+    // running and every later wait hanging.
+    assert!(closed.is_ok(), "close is admitted mid-turn: {closed:?}");
     let second = host.response(4).await;
+    let first = host.response(3).await;
+    until_agent_read(&host.receipt, "session/close", 1).await;
     let second_prompts = agent_frames(&host.receipt, "session/prompt", Some(SECOND));
     let cancels = agent_frames(&host.receipt, "session/cancel", None);
     let stopped = host.shutdown().await;
 
     // Assert
     assert_eq!(waiting.len(), 1, "one queue_add: {waiting:?}");
-    assert!(closed.is_err(), "close is refused mid-turn: {closed:?}");
-    assert_eq!(closes, 0, "the agent is never asked to close");
-    assert_eq!(first["result"]["stopReason"], "max_tokens", "{first}");
-    assert_eq!(second["result"]["stopReason"], "end_turn", "{second}");
-    assert_eq!(second_prompts, 1, "sent once");
-    assert_eq!(cancels, 0, "no cancel");
+    let message = second["error"]["message"].as_str().unwrap_or_default();
+    assert!(
+        message.contains("not sent: session closed"),
+        "an error naming why it was not sent: {second}"
+    );
+    assert_eq!(first["result"]["stopReason"], "cancelled", "{first}");
+    assert_eq!(second_prompts, 0, "the agent never saw it");
+    assert_eq!(cancels, 1, "the running turn is interrupted once");
     stopped.expect("Host shutdown");
 }
