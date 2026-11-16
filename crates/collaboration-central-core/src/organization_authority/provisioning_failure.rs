@@ -20,7 +20,9 @@ impl From<StoreFailure> for OrganizationProvisioningFailure {
     fn from(error: StoreFailure) -> Self {
         match error {
             StoreFailure::AnswerLost => Self::OutcomeUnknown,
-            StoreFailure::Unavailable | StoreFailure::Corrupt { .. } => Self::Unavailable,
+            StoreFailure::Unavailable
+            | StoreFailure::Corrupt { .. }
+            | StoreFailure::AlarmUnpublishable { .. } => Self::Unavailable,
         }
     }
 }

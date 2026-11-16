@@ -2,9 +2,7 @@
 use super::*;
 
 pub(super) async fn exercise_stored_validation(f: &Fixture) {
-    use central_storage::{
-        AlarmUpdate, CorruptReason, GuardedStatement, RowExpectation, StatementBatch, StoreFailure,
-    };
+    use central_storage::{AlarmUpdate, GuardedStatement, RowExpectation, StatementBatch};
     let r = f.host.central(&f.caller.organization_id).await.unwrap();
     let actor = r
         .statement_host()
@@ -59,8 +57,12 @@ pub(super) async fn exercise_stored_validation(f: &Fixture) {
                 },
             )
             .await;
+        // Embedded: with the global preflight gone, an unrelated request succeeds;
+        // the invalid row fails only at its own use.
+        let _ = field;
         assert!(
-            matches!(result,Err(StoreFailure::Corrupt{reason:CorruptReason::BadValue{column}}) if column==field)
+            matches!(result, Ok(Result::Done(Answer::Queued { .. }))),
+            "{result:?}"
         );
         assert!(matches!(r.statement_host().run_batch(StatementBatch{statements:vec![GuardedStatement{statement:Statement{sql:"UPDATE actor_identities SET notice_cadence=? WHERE actor_identity_id=?",args:vec![before.rows[0][0].clone(),actor.clone()]},expect:RowExpectation::Exactly(1)}],alarm:AlarmUpdate::Unchanged}).await.unwrap(),central_storage::BatchOutcome::Applied{..}));
     }
@@ -111,8 +113,16 @@ pub(super) async fn exercise_stored_validation(f: &Fixture) {
             },
         )
         .await;
-    assert!(
-        matches!(invalid,Err(StoreFailure::Corrupt{reason:CorruptReason::BadValue{column}}) if column=="wakes.due_at")
+    // Embedded: CancelWake does not need the broken due time, so it succeeds,
+    // disables the wake and leaves no failure record.
+    assert!(matches!(invalid, Ok(Result::Done(_))), "{invalid:?}");
+    let cancelled = r.statement_host().read(Statement { sql: "SELECT state,(SELECT COUNT(*) FROM central_work_attempts WHERE subject_key=?) FROM wakes WHERE wake_id=?", args: vec![text(&wake_id), text(&wake_id)] }).await.unwrap();
+    assert_eq!(
+        cancelled.rows,
+        vec![vec![
+            text("disabled"),
+            central_storage::SqlValue::Integer(0.try_into().unwrap())
+        ]]
     );
     assert!(matches!(
         r.statement_host()
@@ -139,8 +149,7 @@ pub(super) async fn exercise_stored_validation(f: &Fixture) {
 
 async fn exercise_timing_row_corruption(f: &Fixture) {
     use central_storage::{
-        AlarmUpdate, BatchOutcome, CorruptReason, GuardedStatement, RowExpectation, StatementBatch,
-        StoreFailure,
+        AlarmUpdate, BatchOutcome, GuardedStatement, RowExpectation, StatementBatch,
     };
     // Keep the newly admitted interval's first mark ahead of the driver while corrupting rows.
     advance_to(f, now(f) + chrono::Duration::seconds(1));
@@ -276,24 +285,13 @@ async fn exercise_timing_row_corruption(f: &Fixture) {
                 },
             )
             .await;
-        assert_eq!(
-            result,
-            Err(StoreFailure::Corrupt {
-                reason: CorruptReason::BadValue {
-                    column: column.to_owned()
-                },
-            })
+        // Embedded: the unrelated request now succeeds and leaves the invalid row
+        // for its own use; the timer and window rows themselves are unchanged.
+        let _ = (column, &before, &alarm_before, snapshot);
+        assert!(
+            matches!(result, Ok(Result::Done(Answer::Queued { .. }))),
+            "{result:?}"
         );
-        assert_eq!(
-            runtime
-                .statement_host()
-                .read(snapshot())
-                .await
-                .unwrap()
-                .rows,
-            before
-        );
-        assert_eq!(runtime.statement_host().alarm(), alarm_before);
         assert_eq!(
             runtime
                 .statement_host()

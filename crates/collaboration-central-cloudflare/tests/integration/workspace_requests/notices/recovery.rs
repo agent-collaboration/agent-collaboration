@@ -339,7 +339,7 @@ async fn drain_crash_cuts_keep_three_change_positions_and_notice_identities_atom
             assert_eq!(messages.rows, at_cut_messages.rows);
         }
         cold.drain_workspace(&f.workspace).await.unwrap();
-        cold.on_alarm().await.unwrap();
+        cold.after_event().await.unwrap();
         assert_eq!(
             cold.read(messages_query()).await.unwrap().rows,
             messages.rows

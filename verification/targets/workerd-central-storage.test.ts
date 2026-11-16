@@ -75,7 +75,15 @@ type TaggedValue = { kind: string; value?: unknown };
 const plain = (row: TaggedValue[]): unknown[] => row.map((cell) => cell.value ?? null);
 const rows = async (object: string, what: string, migrator?: Migrator): Promise<unknown[][]> =>
   ((await read(object, what, migrator)) as { Ok: { rows: TaggedValue[][] } }).Ok.rows.map(plain);
-const applied = (rowsAffected: number[]): unknown => ({ Ok: { outcome: "applied", rowsAffected } });
+type Publication =
+  | { kind: "unchanged" }
+  | { kind: "set"; unixMillis: number }
+  | { kind: "cleared" }
+  | { kind: "failed"; reason: string };
+const UNCHANGED: Publication = { kind: "unchanged" };
+const applied = (rowsAffected: number[], publication: Publication = UNCHANGED): unknown => ({
+  Ok: { outcome: "applied", rowsAffected, publication },
+});
 const violated = (index: number, kind: string): unknown => ({
   Ok: { outcome: "constraintViolated", index, kind },
 });
@@ -142,12 +150,12 @@ describe("statement batches on a Durable Object", () => {
         [owner("o1"), widget("w1", "o1", text("w1"), integer(1), FAR_ALARM_MS)],
         "earliestWidgetDue",
       ),
-      applied([1, 1]),
+      applied([1, 1], { kind: "set", unixMillis: FAR_ALARM_MS }),
     );
     assert.deepEqual(await json("alarm", "alarm", null), { alarmMs: FAR_ALARM_MS });
     assert.deepEqual(
       await batch("alarm", [{ retireLiveWidget: { widgetId: "w1" } }], "earliestWidgetDue"),
-      applied([1]),
+      applied([1], { kind: "cleared" }),
     );
     assert.deepEqual(await json("alarm", "alarm", null), { alarmMs: null });
     // An alarm written inside a storage transaction that then fails is rolled back.
@@ -265,7 +273,10 @@ describe("call_store reaches the workspace's store object", () => {
     assert.deepEqual(
       await callStore({ batch: { steps: [owner("o1"), widget("w1", "o1")], alarm: "unchanged" } }),
       {
-        Ok: { kind: "batch", reply: { outcome: "applied", rowsAffected: [1, 1] } },
+        Ok: {
+          kind: "batch",
+          reply: { outcome: "applied", rowsAffected: [1, 1], publication: UNCHANGED },
+        },
       },
     );
     assert.deepEqual(

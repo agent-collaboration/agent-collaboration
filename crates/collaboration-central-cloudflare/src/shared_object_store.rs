@@ -252,6 +252,31 @@ impl<SharedHost: Host> collaboration_central_core::ObjectHost
     ) -> impl Future<Output = Result<ReadOutcome, StoreFailure>> + Send {
         SendFuture::new(statement_store::read(&self.statements, statement.into()))
     }
+
+    fn published_alarm(
+        &self,
+    ) -> impl Future<Output = Result<Option<chrono::DateTime<chrono::Utc>>, StoreFailure>> + Send
+    {
+        SendFuture::new(async move {
+            let alarm = self
+                .state
+                .storage()
+                .get_alarm()
+                .await
+                .map_err(|_| StoreFailure::Unavailable)?;
+            alarm
+                .map(|millis| {
+                    chrono::DateTime::from_timestamp_millis(millis).ok_or_else(|| {
+                        StoreFailure::Corrupt {
+                            reason: central_storage::CorruptReason::BadValue {
+                                column: "alarm.deadline".into(),
+                            },
+                        }
+                    })
+                })
+                .transpose()
+        })
+    }
 }
 
 impl<SharedHost: Host> LegacyObjectHost for CloudflareStorageHost<SharedHost> {

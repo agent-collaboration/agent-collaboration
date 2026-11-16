@@ -115,3 +115,251 @@ async fn older_clear_cannot_overwrite_a_newer_set() {
 async fn older_set_cannot_overwrite_a_newer_clear() {
     publication_order(Some(5_000), None).await;
 }
+
+fn engine_alarm_from_widgets() -> AlarmUpdate {
+    AlarmUpdate::SetEngineFromQuery {
+        query: Statement {
+            sql: "SELECT MIN(due_at_ms),NULL FROM widgets WHERE active=1",
+            args: vec![],
+        },
+    }
+}
+
+#[tokio::test]
+async fn a_batch_prepared_before_a_new_claim_publishes_the_latest_floor() {
+    let root = tempfile::tempdir().unwrap();
+    let clock = HeldClock::at(32_000);
+    let state = Arc::new(collaboration_central_core::DueBatchState::default());
+    let storage = Arc::new(
+        ObjectStorage::new(
+            root.path().join("latest-floor.sqlite"),
+            Arc::new(widgets_migrator()),
+        )
+        .with_engine_publication(
+            clock,
+            collaboration_central_core::engine_alarm_decider(state.clone()),
+        ),
+    );
+    assert!(state.try_claim(0, chrono::Duration::seconds(30)).unwrap());
+    let mut held = storage.hold_alarm_publication();
+    let applying = storage.clone();
+    let prepared = StatementBatch {
+        statements: vec![
+            collaboration_central_core::storage_conformance::insert_owner(
+                "floor-owner",
+                central_storage::RowExpectation::Exactly(1),
+            ),
+        ],
+        alarm: AlarmUpdate::SetEngineFromQuery {
+            query: Statement {
+                sql: "SELECT 35000,NULL",
+                args: vec![],
+            },
+        },
+    };
+    let pending = tokio::spawn(async move { applying.run_batch(prepared).await.unwrap() });
+    held.until_held().await;
+    assert_eq!(
+        single_integer(
+            &storage
+                .read(Statement {
+                    sql: "SELECT COUNT(*) FROM widget_owners WHERE owner_id='floor-owner'",
+                    args: vec![]
+                })
+                .await
+                .unwrap()
+        ),
+        1
+    );
+    assert_eq!(storage.alarm(), None);
+    assert!(
+        state
+            .try_claim(31_000, chrono::Duration::seconds(30))
+            .unwrap()
+    );
+    held.release();
+    assert_eq!(
+        pending.await.unwrap(),
+        BatchOutcome::Applied {
+            rows_affected: vec![1],
+            publication: central_storage::AlarmPublication::Set {
+                unix_millis: 61_000
+            }
+        }
+    );
+    assert_eq!(storage.alarm(), Some(SyncTime::from_unix_millis(61_000)));
+    storage.close().await;
+}
+
+#[tokio::test]
+async fn publication_uses_the_shared_clock_after_both_committed_publication_holds() {
+    let root = tempfile::tempdir().unwrap();
+    let clock = HeldClock::at(0);
+    let pauses = PausePoints::default();
+    let workspace = workspace();
+    let storage = Arc::new(
+        ObjectStorage::new(
+            root.path().join("publication-clock.sqlite"),
+            Arc::new(widgets_migrator()),
+        )
+        .with_engine_publication(
+            clock.clone(),
+            collaboration_central_core::engine_alarm_decider(Arc::new(
+                collaboration_central_core::DueBatchState::default(),
+            )),
+        )
+        .with_publication_pause(workspace.clone(), pauses.clone()),
+    );
+    let mut central_hold = storage.hold_alarm_publication();
+    let mut workspace_hold = pauses.hold(&workspace, PausePoint::AfterStoreApplied);
+    let applying = storage.clone();
+    let batch = tokio::spawn(async move {
+        applying
+            .run_batch(StatementBatch {
+                statements: vec![
+                    collaboration_central_core::storage_conformance::insert_owner(
+                        "clock-owner",
+                        central_storage::RowExpectation::Exactly(1),
+                    ),
+                    collaboration_central_core::storage_conformance::insert_widget(
+                        "clock-widget",
+                        "clock-owner",
+                        SqlValue::Text("clock".to_owned()),
+                        SqlValue::Integer(1.try_into().unwrap()),
+                        Some(5_000.try_into().unwrap()),
+                    ),
+                ],
+                alarm: engine_alarm_from_widgets(),
+            })
+            .await
+            .unwrap()
+    });
+    central_hold.until_held().await;
+    assert_eq!(
+        single_integer(
+            &storage
+                .read(Statement {
+                    sql: "SELECT due_at_ms FROM widgets WHERE widget_id='clock-widget'",
+                    args: vec![],
+                })
+                .await
+                .unwrap()
+        ),
+        5_000
+    );
+    assert_eq!(storage.alarm(), None);
+    clock.set(1_000);
+    central_hold.release();
+    workspace_hold.until_held().await;
+    clock.set(300_000);
+    workspace_hold.release();
+
+    assert_eq!(
+        batch.await.unwrap(),
+        BatchOutcome::Applied {
+            rows_affected: vec![1, 1],
+            publication: central_storage::AlarmPublication::Set {
+                unix_millis: 600_000
+            }
+        }
+    );
+    assert_eq!(storage.alarm(), Some(SyncTime::from_unix_millis(600_000)));
+    assert!(storage.take_alarm_publication_failures().is_empty());
+    storage.close().await;
+}
+
+#[tokio::test]
+async fn postcommit_upper_edge_failure_preserves_applied_rows_and_the_previous_alarm() {
+    let root = tempfile::tempdir().unwrap();
+    let clock = HeldClock::at(0);
+    let storage = Arc::new(
+        ObjectStorage::new(
+            root.path().join("publication-failure.sqlite"),
+            Arc::new(widgets_migrator()),
+        )
+        .with_engine_publication(
+            clock.clone(),
+            collaboration_central_core::engine_alarm_decider(Arc::new(
+                collaboration_central_core::DueBatchState::default(),
+            )),
+        ),
+    );
+    assert_eq!(
+        storage
+            .run_batch(StatementBatch {
+                statements: vec![
+                    collaboration_central_core::storage_conformance::insert_owner(
+                        "failure-owner",
+                        central_storage::RowExpectation::Exactly(1),
+                    ),
+                    collaboration_central_core::storage_conformance::insert_widget(
+                        "failure-widget",
+                        "failure-owner",
+                        SqlValue::Text("failure".to_owned()),
+                        SqlValue::Integer(1.try_into().unwrap()),
+                        Some(600_000.try_into().unwrap()),
+                    ),
+                ],
+                alarm: engine_alarm_from_widgets(),
+            })
+            .await
+            .unwrap(),
+        BatchOutcome::Applied {
+            rows_affected: vec![1, 1],
+            publication: central_storage::AlarmPublication::Set {
+                unix_millis: 600_000
+            }
+        }
+    );
+    let previous = storage.alarm();
+    assert_eq!(previous, Some(SyncTime::from_unix_millis(600_000)));
+    let mut held = storage.hold_alarm_publication();
+    let applying = storage.clone();
+    let batch = tokio::spawn(async move {
+        applying
+            .run_batch(StatementBatch {
+                statements: vec![central_storage::GuardedStatement {
+                    statement: Statement {
+                        sql: "UPDATE widgets SET due_at_ms=0 WHERE widget_id='failure-widget'",
+                        args: vec![],
+                    },
+                    expect: central_storage::RowExpectation::Exactly(1),
+                }],
+                alarm: engine_alarm_from_widgets(),
+            })
+            .await
+            .unwrap()
+    });
+    held.until_held().await;
+    clock.set(i64::MAX / 1_000_000);
+    held.release();
+
+    assert_eq!(
+        batch.await.unwrap(),
+        BatchOutcome::Applied {
+            rows_affected: vec![1],
+            publication: central_storage::AlarmPublication::Failed {
+                reason: central_storage::AlarmPublicationFailure::NoLaterGridMark
+            }
+        }
+    );
+    assert_eq!(
+        single_integer(
+            &storage
+                .read(Statement {
+                    sql: "SELECT due_at_ms FROM widgets WHERE widget_id='failure-widget'",
+                    args: vec![],
+                })
+                .await
+                .unwrap()
+        ),
+        0
+    );
+    assert_eq!(storage.alarm(), previous);
+    assert_eq!(
+        storage.take_alarm_publication_failures(),
+        vec![central_storage::AlarmPublicationFailure::NoLaterGridMark,]
+    );
+    assert!(storage.take_alarm_publication_failures().is_empty());
+    storage.close().await;
+}

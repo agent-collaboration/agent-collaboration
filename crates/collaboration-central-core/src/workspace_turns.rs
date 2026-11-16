@@ -70,6 +70,16 @@ impl WorkspaceTurns {
         WorkspaceTurn { _held: held }
     }
 
+    /// Takes the turn only if it is free now; never waits (P5 change 6: the due
+    /// batch skips a workspace another request is writing).
+    #[must_use]
+    pub fn try_take(&self, workspace: &WorkspaceId) -> Option<WorkspaceTurn> {
+        let lock = self.slot(workspace).lock.clone();
+        lock.try_lock_owned()
+            .ok()
+            .map(|held| WorkspaceTurn { _held: held })
+    }
+
     /// How many requests wait for this workspace's turn (test seam).
     #[cfg(feature = "test-support")]
     #[must_use]

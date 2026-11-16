@@ -16,6 +16,7 @@ test-support = ["sqlx-core/migrate"]
 
 [dependencies]
 central-storage.workspace = true
+central-engine-model.workspace = true
 agent-automation = {path="../agent-automation",version="0.1.149"}
 workspace-model.workspace = true
 workspace-ids.workspace = true
@@ -59,6 +60,8 @@ uuid = { version = "=1.26.0", features = ["v7", "js"] }
 fleet-sync-query-gen.workspace = true
 
 [dev-dependencies]
+hegel = { package = "hegeltest", version = "=0.52.6", features = ["static-engine"] }
+sqlx = { workspace = true, features = ["sqlite", "migrate"] }
 ring = "0.17.14"
 jsonschema.workspace = true
 fleet-sync-tokio-runner.workspace = true

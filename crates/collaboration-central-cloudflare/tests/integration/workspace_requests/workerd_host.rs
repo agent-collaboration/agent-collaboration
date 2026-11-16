@@ -33,6 +33,10 @@ struct MissingBundle {
 pub(super) struct AlarmReceipt {
     pub organization: Option<OrganizationId>,
     pub initialized_cold: bool,
+    #[expect(
+        dead_code,
+        reason = "the receipt wire shape denies unknown fields; no kept row compares it after isolation"
+    )]
     pub alarm_before: Option<i64>,
     pub alarm_after: Option<i64>,
     pub result: AlarmReceiptResult,
@@ -413,6 +417,89 @@ pub(super) struct RemoteRuntime {
     lost_answers: Mutex<Vec<RequestId>>,
 }
 impl RemoteRuntime {
+    pub async fn inject_engine_commit_fault(
+        &self,
+        fault: collaboration_central_core::EngineCommitFault,
+    ) {
+        let _: bool = self.control("engine-commit-fault", &fault).await.unwrap();
+    }
+    pub async fn legacy_unit_invocations(
+        &self,
+    ) -> collaboration_central_core::LegacyUnitInvocations {
+        self.control("legacy-unit-invocations", &()).await.unwrap()
+    }
+    /// Every unit the object's due batches started, in start order (R2/R3).
+    pub async fn due_unit_starts(&self) -> Vec<collaboration_central_core::DueUnitStart> {
+        self.control("due-unit-starts", &()).await.unwrap()
+    }
+    pub async fn engine_commit_fault_pending(&self) -> bool {
+        self.control("engine-commit-fault-pending", &())
+            .await
+            .unwrap()
+    }
+    pub async fn inject_engine_read_fault(
+        &self,
+        fault: collaboration_central_core::EngineReadFault,
+    ) {
+        let _: bool = self.control("engine-read-fault", &fault).await.unwrap();
+    }
+    /// Arms one keyed engine hold (`point` in camelCase, e.g. "afterEngineLoad").
+    pub async fn hold_engine(&self, point: &str, key: &str) -> u64 {
+        self.control(
+            "hold-engine",
+            &serde_json::json!({"point": point, "key": key}),
+        )
+        .await
+        .unwrap()
+    }
+    pub async fn until_held_engine(&self, hold: u64) {
+        let _: bool = self.control("until-held-engine", &hold).await.unwrap();
+    }
+    pub async fn release_engine(&self, hold: u64) {
+        let _: bool = self.control("release-engine", &hold).await.unwrap();
+    }
+    pub async fn seed_probe(
+        &self,
+        seed: collaboration_central_core::engine_probe::SeedProbe,
+    ) -> Result<BatchOutcome, StoreFailure> {
+        self.apply_clock().await;
+        self.control("engine-probe-seed", &seed).await?
+    }
+    pub async fn seed_owed_reply(
+        &self,
+        seed: collaboration_central_core::engine_owed_probe::SeedOwedReply,
+    ) -> Result<BatchOutcome, StoreFailure> {
+        self.apply_clock().await;
+        self.control("engine-owed-seed", &seed).await?
+    }
+    pub async fn request_owed_reply(
+        &self,
+        caller: &WorkspaceCaller,
+        request: collaboration_central_core::engine_owed_probe::OwedReplyRequest,
+    ) -> Result<
+        collaboration_central_core::engine_owed_probe::EngineRequestOutcome<
+            collaboration_central_core::engine_owed_probe::OwedState,
+            collaboration_central_core::engine_owed_probe::OwedReplyRefusal,
+        >,
+        StoreFailure,
+    > {
+        self.apply_clock().await;
+        self.control("engine-owed-request",&serde_json::json!({"caller":caller.caller,"credentialHash":caller.credential_hash,"request":request})).await?
+    }
+    pub async fn request_probe(
+        &self,
+        caller: &WorkspaceCaller,
+        request: collaboration_central_core::engine_probe::ProbeRequest,
+    ) -> Result<
+        collaboration_central_core::engine_probe::EngineRequestOutcome<
+            collaboration_central_core::engine_probe::ProbeState,
+            collaboration_central_core::engine_probe::ProbeRefusal,
+        >,
+        StoreFailure,
+    > {
+        self.apply_clock().await;
+        self.control("engine-probe-request",&serde_json::json!({"caller":caller.caller,"credentialHash":caller.credential_hash,"request":request})).await?
+    }
     async fn apply_clock(&self) {
         let _: bool = self
             .control("clock", &self.clock.now().unix_millis())
@@ -462,7 +549,7 @@ impl RemoteRuntime {
         self.apply_clock().await;
         self.control("queue", session).await?
     }
-    pub async fn on_alarm(&self) -> Result<AlarmResult, StoreFailure> {
+    pub async fn after_event(&self) -> Result<AlarmResult, StoreFailure> {
         self.apply_clock().await;
         let _: bool = self
             .control("raw-arm-alarm", &self.clock.now().unix_millis())

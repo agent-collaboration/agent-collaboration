@@ -1,5 +1,6 @@
 //! Actual private Worker binding, WebCrypto, guarded SQL and owning readback.
 mod admission;
+mod alarm_recovery;
 mod causal_races;
 mod deadlines;
 mod expiry_holds;
@@ -17,3 +18,7 @@ mod carry_edges;
 mod metadata;
 mod route_boundaries;
 mod setup;
+
+mod engine_admin;
+mod engine_admin_support;
+mod engine_unit_revival;

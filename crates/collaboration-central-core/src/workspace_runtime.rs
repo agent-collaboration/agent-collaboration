@@ -23,6 +23,9 @@ pub struct WorkspaceCaller {
     pub credential_hash: String,
 }
 
+#[cfg(feature = "test-support")]
+pub use crate::engine::port::LegacyUnitInvocations;
+
 /// One organization's request runtime. Machine grant lifetime is fixed by central
 /// policy and has no public configuration API.
 pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
@@ -31,6 +34,7 @@ pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     pub(crate) stores: Stores,
     pub(crate) clock: Arc<dyn Clock>,
     pub(crate) ids: Arc<dyn IdSource>,
+    pub(crate) due_batches: Arc<crate::DueBatchState>,
     pub(crate) turns: WorkspaceTurns,
     pub(crate) signin_observer: Arc<dyn Fn(crate::CentralObservation) + Send + Sync>,
     pub(crate) signin_authority: crate::organization_authority_cache::OrganizationAuthority,
@@ -41,9 +45,10 @@ pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     lost_provisioning_reply: std::sync::atomic::AtomicBool,
     #[cfg(feature = "test-support")]
     central_waiting: tokio::sync::watch::Sender<usize>,
-    pub(crate) drain_retry_seconds: std::sync::Mutex<std::collections::BTreeMap<WorkspaceId, u64>>,
     #[cfg(feature = "test-support")]
     pub(crate) pauses: crate::PausePoints,
+    #[cfg(feature = "test-support")]
+    pub(crate) legacy_invocations: std::sync::Mutex<LegacyUnitInvocations>,
     #[cfg(feature = "test-support")]
     lost_answers: std::sync::Mutex<std::collections::BTreeSet<workspace_model::RequestId>>,
 }
@@ -54,6 +59,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         stores: Stores,
         clock: Arc<dyn Clock>,
         ids: Arc<dyn IdSource>,
+        due_batches: Arc<crate::DueBatchState>,
     ) -> Self {
         Self {
             organization,
@@ -61,17 +67,19 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             stores,
             clock,
             ids,
+            due_batches,
             turns: WorkspaceTurns::default(),
             central_turn: tokio::sync::Mutex::new(()),
             #[cfg(feature = "test-support")]
             completed_alarms: tokio::sync::watch::channel(0).0,
+            #[cfg(feature = "test-support")]
+            legacy_invocations: Default::default(),
             signin_authority: Default::default(),
             signin_observer: Arc::new(|_| {}),
             #[cfg(feature = "test-support")]
             central_waiting: tokio::sync::watch::channel(0).0,
             #[cfg(feature = "test-support")]
             lost_provisioning_reply: Default::default(),
-            drain_retry_seconds: Default::default(),
             #[cfg(feature = "test-support")]
             pauses: crate::PausePoints::default(),
             #[cfg(feature = "test-support")]
@@ -105,9 +113,40 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     pub fn statement_host(&self) -> &Host {
         &self.host
     }
+    /// The due-batch start and backlog bit the next publication will use.
+    #[cfg(feature = "test-support")]
+    pub fn due_batch_snapshot(&self) -> crate::DueBatchSnapshot {
+        self.due_batches.snapshot()
+    }
+    /// Every unit the due batches started, in start order (R2/R3 visit order).
+    #[cfg(feature = "test-support")]
+    pub fn due_unit_starts(&self) -> Vec<crate::DueUnitStart> {
+        self.due_batches.unit_starts()
+    }
+    #[cfg(feature = "test-support")]
+    pub fn legacy_unit_invocations(&self) -> LegacyUnitInvocations {
+        *self
+            .legacy_invocations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+    #[cfg(feature = "test-support")]
+    pub(crate) fn count_legacy_invocation(&self, count: impl FnOnce(&mut LegacyUnitInvocations)) {
+        count(
+            &mut self
+                .legacy_invocations
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
+    }
     #[cfg(feature = "test-support")]
     pub fn alarm_completion_count(&self) -> u64 {
         *self.completed_alarms.borrow()
+    }
+    #[cfg(feature = "test-support")]
+    pub fn mark_alarm_completed(&self) {
+        self.completed_alarms
+            .send_modify(|count| *count = count.saturating_add(1));
     }
     #[cfg(feature = "test-support")]
     pub async fn until_alarm_completed(&self, count: u64) {

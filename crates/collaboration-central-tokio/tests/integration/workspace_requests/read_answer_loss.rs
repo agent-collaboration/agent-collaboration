@@ -40,13 +40,20 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
     let f = Fixture::new().await;
     f.area(890).await;
     f.host.close().await;
-    let central = Arc::new(ObjectStorage::new(
-        f.root
-            .path()
-            .join("central")
-            .join(format!("{}.sqlite", f.caller.organization_id.as_str())),
-        Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
-    ));
+    let due_batches = Arc::new(collaboration_central_core::DueBatchState::default());
+    let central = Arc::new(
+        ObjectStorage::new(
+            f.root
+                .path()
+                .join("central")
+                .join(format!("{}.sqlite", f.caller.organization_id.as_str())),
+            Arc::new(collaboration_central_core::workspace_migrations::central_migrator()),
+        )
+        .with_engine_publication(
+            f.clock.clone(),
+            collaboration_central_core::engine_alarm_decider(due_batches.clone()),
+        ),
+    );
     let store = Arc::new(ObjectStorage::new(
         f.root
             .path()
@@ -63,6 +70,7 @@ async fn lost_read_answer_before_effect_is_unavailable_and_never_cached() {
         },
         f.clock.clone(),
         Arc::new(ClockIds::new(ArcClock(f.clock.clone()))),
+        due_batches,
     );
     let request = m::WorkspaceRequest {
         request_id: Some(id(891)),

@@ -171,7 +171,7 @@ async fn concurrent_drains_hold_workspace_turn_and_do_not_duplicate_notice() {
     f.clock
         .advance(std::time::Duration::from_secs(900))
         .unwrap();
-    runtime.on_alarm().await.unwrap();
+    runtime.after_event().await.unwrap();
     let rows = runtime.statement_host().read(Statement { sql: "SELECT COUNT(*) FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice'", args: vec![text(&actor), text(&thread)] }).await.unwrap();
     assert_eq!(
         rows.rows,
@@ -420,9 +420,18 @@ async fn session_cadence_sets_nondefault_window_deadline() {
     f.host.close().await;
 }
 
+mod alarm_isolation;
+mod busy_central_turn;
+mod busy_workspace;
+mod control_clear_race;
 mod corruption;
+mod drain_replay_isolation;
 mod identities;
 mod queued_cancel;
 mod recovery;
 mod roles;
 mod windows;
+mod workspace_outage;
+
+mod engine_drain_origins;
+mod engine_notice_units;

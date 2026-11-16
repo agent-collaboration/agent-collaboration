@@ -96,11 +96,13 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             }],
             alarm: AlarmUpdate::Unchanged,
         };
-        if !matches!(
-            self.host.run_batch(batch).await?,
-            BatchOutcome::Applied { .. }
-        ) {
-            return Err(corrupt("actor insertion"));
+        match self.host.run_batch(batch).await? {
+            BatchOutcome::Applied { .. } => {}
+            // A rejected statement keeps main's store-outage answer on this path.
+            BatchOutcome::StatementRejected { .. } => return Err(StoreFailure::Unavailable),
+            BatchOutcome::GuardFailed { .. } | BatchOutcome::ConstraintViolated { .. } => {
+                return Err(corrupt("actor insertion"));
+            }
         }
         let stored = self.host.read(lookup()).await?;
         let row = stored

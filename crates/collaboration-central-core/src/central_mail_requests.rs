@@ -14,7 +14,12 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         caller: &WorkspaceCaller,
         request: mail::CentralMailRequest,
     ) -> Result<mail::CentralMailResult, StoreFailure> {
-        match self.execute_central(caller, request).await {
+        // The request path answers as on main; the due batch that follows checks
+        // the organization stamp once for this event before any unit (P3).
+        let result = self.execute_central(caller, request).await;
+        // Due work and publication cannot replace this event's durable answer.
+        let _ = self.after_event().await;
+        match result {
             Err(StoreFailure::Unavailable | StoreFailure::AnswerLost) => {
                 Ok(mail::CentralMailResult::CentralUnavailable)
             }
@@ -67,7 +72,6 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             }
             // A committed request may have lost its alarm publication before its reply.
             let repair = async {
-                self.validated_timers().await?;
                 central_mail_store::applied(
                     self.host
                         .run_batch(StatementBatch {
@@ -83,7 +87,10 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 Err(StoreFailure::Unavailable | StoreFailure::AnswerLost) => {
                     return Ok(Result::OutcomeUnknown);
                 }
-                Err(error @ StoreFailure::Corrupt { .. }) => return Err(error),
+                Err(
+                    error
+                    @ (StoreFailure::Corrupt { .. } | StoreFailure::AlarmUnpublishable { .. }),
+                ) => return Err(error),
             }
             return Ok(answer);
         }
@@ -156,7 +163,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             Ok((statements, answer)) => (statements, Result::Done(answer)),
             Err(reason) => (vec![], Result::Refused(reason)),
         };
-        self.validated_timers().await?;
+
         statements.extend(crate::workspace_request_log::retain(
             &request.request_id,
             &actor,
@@ -174,6 +181,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             .await
         {
             Ok(BatchOutcome::Applied { .. }) => {}
+            // A rejected statement keeps main's store-outage answer on this path.
+            Ok(BatchOutcome::StatementRejected { .. }) => return Ok(Result::CentralUnavailable),
             Ok(_) => return Ok(Result::Conflict),
             Err(StoreFailure::AnswerLost) => return Ok(Result::OutcomeUnknown),
             Err(StoreFailure::Unavailable) => return Ok(Result::CentralUnavailable),

@@ -22,6 +22,19 @@
       ],
       "type": "object"
     },
+    "EngineAttemptParams": {
+      "additionalProperties": false,
+      "properties": {
+        "attemptId": {
+          "format": "uuid",
+          "type": "string"
+        }
+      },
+      "required": [
+        "attemptId"
+      ],
+      "type": "object"
+    },
     "IntentVersionOne": {
       "const": 1,
       "type": "integer"
@@ -109,6 +122,138 @@
             },
             "params": {
               "$ref": "#/$defs/ReadChangeRecordsParams"
+            },
+            "target": {
+              "$ref": "#/$defs/OrganizationId"
+            },
+            "v": {
+              "$ref": "#/$defs/IntentVersionOne"
+            }
+          },
+          "required": [
+            "operation",
+            "v",
+            "organization",
+            "target",
+            "operationId",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "EngineHealth",
+              "type": "string"
+            },
+            "operationId": {
+              "type": "null"
+            },
+            "organization": {
+              "$ref": "#/$defs/OrganizationId"
+            },
+            "params": {
+              "$ref": "#/$defs/WorkspaceLookupParams"
+            },
+            "target": {
+              "$ref": "#/$defs/OrganizationId"
+            },
+            "v": {
+              "$ref": "#/$defs/IntentVersionOne"
+            }
+          },
+          "required": [
+            "operation",
+            "v",
+            "organization",
+            "target",
+            "operationId",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "EngineListRetired",
+              "type": "string"
+            },
+            "operationId": {
+              "type": "null"
+            },
+            "organization": {
+              "$ref": "#/$defs/OrganizationId"
+            },
+            "params": {
+              "$ref": "#/$defs/ReadChangeRecordsParams"
+            },
+            "target": {
+              "$ref": "#/$defs/OrganizationId"
+            },
+            "v": {
+              "$ref": "#/$defs/IntentVersionOne"
+            }
+          },
+          "required": [
+            "operation",
+            "v",
+            "organization",
+            "target",
+            "operationId",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "EngineRetry",
+              "type": "string"
+            },
+            "operationId": {
+              "$ref": "#/$defs/AdminOperationId"
+            },
+            "organization": {
+              "$ref": "#/$defs/OrganizationId"
+            },
+            "params": {
+              "$ref": "#/$defs/EngineAttemptParams"
+            },
+            "target": {
+              "$ref": "#/$defs/OrganizationId"
+            },
+            "v": {
+              "$ref": "#/$defs/IntentVersionOne"
+            }
+          },
+          "required": [
+            "operation",
+            "v",
+            "organization",
+            "target",
+            "operationId",
+            "params"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "operation": {
+              "const": "EngineDiscard",
+              "type": "string"
+            },
+            "operationId": {
+              "$ref": "#/$defs/AdminOperationId"
+            },
+            "organization": {
+              "$ref": "#/$defs/OrganizationId"
+            },
+            "params": {
+              "$ref": "#/$defs/EngineAttemptParams"
             },
             "target": {
               "$ref": "#/$defs/OrganizationId"

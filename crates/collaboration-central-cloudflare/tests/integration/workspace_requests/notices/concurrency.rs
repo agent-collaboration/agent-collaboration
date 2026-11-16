@@ -57,7 +57,7 @@ async fn held_drain_serializes_second_drain_and_source_index_rejects_duplicate()
     ));
     assert_eq!(second.await.unwrap().notices_queued, 0);
     f.clock.0.fetch_add(900_000, Ordering::SeqCst);
-    runtime.on_alarm().await.unwrap();
+    runtime.after_event().await.unwrap();
     let rows = runtime.read(Statement { sql: "SELECT COUNT(*) FROM messages WHERE recipient_actor=? AND source_thread_id=? AND message_kind='notice'", args: vec![text(&actor), text(&thread)] }).await.unwrap();
     assert_eq!(
         rows.rows,
@@ -153,7 +153,10 @@ async fn sustained_other_workspace_writes_do_not_postpone_pending_drain_alarm() 
     let due = chrono::DateTime::parse_from_rfc3339(due)
         .unwrap()
         .timestamp_millis();
-    assert_eq!(due, f.clock.0.load(Ordering::SeqCst) + 5_000);
+    let start = f.clock.0.load(Ordering::SeqCst);
+    assert_eq!(due, start + 5_000);
+    // P5 change 6: due batches claimed by W2's own requests (seconds 30 and 60)
+    // skip W1, whose turn the held write holds, so no request waits on it.
     for second in 1..=60 {
         f.clock.0.fetch_add(1_000, Ordering::SeqCst);
         let other = call(
@@ -171,8 +174,16 @@ async fn sustained_other_workspace_writes_do_not_postpone_pending_drain_alarm() 
             m::WorkspaceResult::Done(m::WorkspaceAnswer::Created { .. })
         ));
         assert_eq!(runtime.read(read_due()).await.unwrap().rows, original.rows);
+        // Kept with the floor allowance: the alarm is no later than the drain's
+        // +5 s, raised only by the 30 s floor after a batch. Workerd exposes no
+        // due-batch snapshot, so the floor follows from the claims this loop
+        // makes: setup claimed at T0, then W2's requests at seconds 30 and 60.
+        let floor = start + 30_000 * (i64::from(second) / 30) + 30_000;
         let alarm: Option<i64> = runtime.control("raw-alarm-time", &()).await.unwrap();
-        assert!(alarm.is_some_and(|at| at <= due));
+        assert!(
+            alarm.is_some_and(|at| at <= due.max(floor)),
+            "W2 postponed W1's drain alarm at second {second}: {alarm:?}"
+        );
     }
     let _: bool = runtime.control("release", &pause).await.unwrap();
     assert!(matches!(

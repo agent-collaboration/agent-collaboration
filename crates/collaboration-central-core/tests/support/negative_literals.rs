@@ -69,14 +69,20 @@ pub fn explicit_negatives(name: &str, literals: &[Value]) -> Vec<Value> {
                     invalid.push(wrong_version);
                 }
                 let mut wrong_identity = literal.clone();
-                wrong_identity["operationId"] = if literal["operation"] == "CreateWorkspace" {
+                wrong_identity["operationId"] = if matches!(
+                    literal["operation"].as_str(),
+                    Some("CreateWorkspace" | "EngineRetry" | "EngineDiscard")
+                ) {
                     Value::Null
                 } else {
                     json!("019a3dce-2000-7000-8000-000000000003")
                 };
                 invalid.push(wrong_identity);
                 let mut wrong_params = literal.clone();
-                wrong_params["params"] = if literal["operation"] == "WorkspaceLookup" {
+                wrong_params["params"] = if matches!(
+                    literal["operation"].as_str(),
+                    Some("WorkspaceLookup" | "EngineHealth")
+                ) {
                     json!({"name":"Fixture workspace","description":"Fixture description"})
                 } else {
                     json!({})

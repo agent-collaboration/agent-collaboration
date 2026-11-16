@@ -11,12 +11,18 @@ use worker::{Headers, Method, RequestInit, js_sys};
 
 #[derive(Default)]
 pub(crate) struct Controls {
+    pub(super) engine_commit_fault:
+        std::sync::Arc<std::sync::Mutex<Option<collaboration_central_core::EngineCommitFault>>>,
+    pub(super) engine_read_fault:
+        std::sync::Arc<std::sync::Mutex<Option<collaboration_central_core::EngineReadFault>>>,
     pub(super) alarm_batch_failure:
         std::sync::Arc<std::sync::Mutex<Option<central_storage::StoreFailure>>>,
     pub(super) lose_read: std::sync::Arc<std::sync::atomic::AtomicBool>,
     observations: RefCell<BTreeMap<workspace_ids::WorkspaceId, HeldPause>>,
     holds: RefCell<BTreeMap<(workspace_ids::WorkspaceId, Point), HeldPause>>,
     central_holds: RefCell<BTreeMap<Point, HeldPause>>,
+    engine_holds: RefCell<BTreeMap<u64, HeldPause>>,
+    next_engine_hold: std::cell::Cell<u64>,
     alarm_waiters: RefCell<Vec<futures_channel::oneshot::Sender<()>>>,
 }
 #[derive(Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
@@ -28,6 +34,11 @@ enum Point {
     AfterDrainCommit,
     BeforeTimerCommit,
     AfterTimerCommit,
+    AfterEngineLoad,
+    AfterEngineCommit,
+    BeforeEngineFailureWrite,
+    AfterEngineAbsentLookup,
+    BeforeControlClear,
     BeforeSignInSample,
     AfterSignInSample,
 }
@@ -40,10 +51,21 @@ impl From<Point> for PausePoint {
             Point::AfterDrainCommit => Self::AfterDrainCommit,
             Point::BeforeTimerCommit => Self::BeforeTimerCommit,
             Point::AfterTimerCommit => Self::AfterTimerCommit,
+            Point::AfterEngineLoad => Self::AfterEngineLoad,
+            Point::AfterEngineCommit => Self::AfterEngineCommit,
+            Point::BeforeEngineFailureWrite => Self::BeforeEngineFailureWrite,
+            Point::AfterEngineAbsentLookup => Self::AfterEngineAbsentLookup,
+            Point::BeforeControlClear => Self::BeforeControlClear,
             Point::BeforeSignInSample => Self::BeforeSignInSample,
             Point::AfterSignInSample => Self::AfterSignInSample,
         }
     }
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EnginePause {
+    point: Point,
+    key: String,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -118,8 +140,74 @@ pub(super) async fn control(
         object.clock.hold(request.json::<i64>().await?);
         return Response::from_json(&true);
     }
-    let runtime = object.runtime(organization).await?;
+    let runtime = object.runtime(organization.clone()).await?;
     match path.as_str() {
+        "/test/legacy-unit-invocations" => Response::from_json(&runtime.legacy_unit_invocations()),
+        "/test/due-unit-starts" => Response::from_json(&runtime.due_unit_starts()),
+        "/test/engine-commit-fault-pending" => Response::from_json(
+            &object
+                .controls
+                .engine_commit_fault
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .is_some(),
+        ),
+        "/test/engine-commit-fault" => {
+            let fault = request.json().await?;
+            *object
+                .controls
+                .engine_commit_fault
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(fault);
+            Response::from_json(&true)
+        }
+        "/test/engine-read-fault" => {
+            let fault = request.json().await?;
+            *object
+                .controls
+                .engine_read_fault
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(fault);
+            Response::from_json(&true)
+        }
+        "/test/engine-probe-seed" => {
+            Response::from_json(&runtime.seed_probe(request.json().await?).await)
+        }
+        "/test/engine-probe-request" => {
+            #[derive(Deserialize)]
+            #[serde(rename_all = "camelCase", deny_unknown_fields)]
+            struct ProbeCall {
+                caller: workspace_model::Caller,
+                credential_hash: String,
+                request: collaboration_central_core::engine_probe::ProbeRequest,
+            }
+            let call: ProbeCall = request.json().await?;
+            let caller = collaboration_central_core::WorkspaceCaller {
+                organization_id: organization.clone(),
+                caller: call.caller,
+                credential_hash: call.credential_hash,
+            };
+            Response::from_json(&runtime.request_probe(&caller, call.request).await)
+        }
+        "/test/engine-owed-seed" => {
+            Response::from_json(&runtime.seed_owed_reply(request.json().await?).await)
+        }
+        "/test/engine-owed-request" => {
+            #[derive(Deserialize)]
+            #[serde(rename_all = "camelCase", deny_unknown_fields)]
+            struct OwedCall {
+                caller: workspace_model::Caller,
+                credential_hash: String,
+                request: collaboration_central_core::engine_owed_probe::OwedReplyRequest,
+            }
+            let call: OwedCall = request.json().await?;
+            let caller = collaboration_central_core::WorkspaceCaller {
+                organization_id: organization.clone(),
+                caller: call.caller,
+                credential_hash: call.credential_hash,
+            };
+            Response::from_json(&runtime.request_owed_reply(&caller, call.request).await)
+        }
         "/test/lose-provisioning-reply" => {
             runtime.lose_next_provisioning_reply();
             Response::from_json(&true)
@@ -148,6 +236,7 @@ pub(super) async fn control(
                 point,
                 Point::BeforeTimerCommit
                     | Point::AfterTimerCommit
+                    | Point::AfterEngineLoad
                     | Point::BeforeSignInSample
                     | Point::AfterSignInSample
             ) {
@@ -158,6 +247,35 @@ pub(super) async fn control(
                 .central_holds
                 .borrow_mut()
                 .insert(point, runtime.pause_points().hold_central(point.into()));
+            Response::from_json(&true)
+        }
+        "/test/hold-engine" => {
+            let pause: EnginePause = request.json().await?;
+            let id = object.controls.next_engine_hold.get();
+            object.controls.next_engine_hold.set(id + 1);
+            let held = runtime
+                .pause_points()
+                .hold_engine(pause.point.into(), &pause.key);
+            object.controls.engine_holds.borrow_mut().insert(id, held);
+            Response::from_json(&id)
+        }
+        "/test/until-held-engine" => {
+            let id: u64 = request.json().await?;
+            let mut held = object
+                .controls
+                .engine_holds
+                .borrow_mut()
+                .remove(&id)
+                .ok_or_else(|| error("engine hold not armed"))?;
+            held.until_held().await;
+            object.controls.engine_holds.borrow_mut().insert(id, held);
+            Response::from_json(&true)
+        }
+        "/test/release-engine" => {
+            let id: u64 = request.json().await?;
+            if let Some(held) = object.controls.engine_holds.borrow_mut().remove(&id) {
+                held.release();
+            }
             Response::from_json(&true)
         }
         "/test/until-central-waiting" => {
@@ -188,14 +306,25 @@ pub(super) async fn control(
             }
             Response::from_json(&true)
         }
-        "/test/central-batch" => Response::from_json(
-            &statement_store::run_batch(
-                &object.connection,
-                request.json::<OwnedBatch>().await?,
-                AlarmPolicy::Ignore,
+        "/test/central-batch" => {
+            let batch = request.json::<OwnedBatch>().await?;
+            let policy = match &batch.alarm {
+                crate::store_wire::OwnedAlarmUpdate::SetEngineFromQuery { .. } => {
+                    AlarmPolicy::Engine(
+                        object.state.storage(),
+                        object.clock.clone(),
+                        collaboration_central_core::engine_alarm_decider(
+                            object.due_batches.clone(),
+                        ),
+                    )
+                }
+                crate::store_wire::OwnedAlarmUpdate::Unchanged
+                | crate::store_wire::OwnedAlarmUpdate::SetFromQuery(_) => AlarmPolicy::Ignore,
+            };
+            Response::from_json(
+                &statement_store::run_batch(&object.connection, batch, policy).await,
             )
-            .await,
-        ),
+        }
         "/test/central-read" => Response::from_json(
             &statement_store::read(&object.connection, request.json::<OwnedStatement>().await?)
                 .await,
@@ -424,6 +553,10 @@ pub(super) async fn raw_control(object: &CentralObject, mut request: Request) ->
             Response::from_json(&receipt)
         }
         "/test/raw-alarm-time" => Response::from_json(&storage.get_alarm().await?),
+        "/test/raw-drop-alarm" => {
+            storage.delete_alarm().await?;
+            Response::from_json(&true)
+        }
         "/test/raw-probe-alarm" => {
             let milliseconds: i64 = request.json().await?;
             let prior = storage.get_alarm().await?;
@@ -531,19 +664,19 @@ pub(super) async fn alarm_with_receipt(object: &CentralObject) -> Result<Respons
         };
         organization = Some(org);
         runtime
-            .on_alarm()
+            .after_event()
             .await
             .map(Some)
-            .map_err(AlarmFailure::Store)
+            .map_err(|error| AlarmFailure::Store(error.failure))
     }
     .await;
     let alarm_after = storage.get_alarm().await?;
     let result = match &outcome {
         Ok(Some(result)) => AlarmReceiptResult::Applied {
-            wakes_fired: result.wakes_fired,
-            automations_fired: result.automations_fired,
-            windows_fired: result.windows_fired,
-            workspaces_drained: result.workspaces_drained,
+            wakes_fired: result.work.wakes_fired,
+            automations_fired: result.work.automations_fired,
+            windows_fired: result.work.windows_fired,
+            workspaces_drained: result.work.workspaces_drained,
         },
         Ok(None) => AlarmReceiptResult::Unprovisioned,
         Err(AlarmFailure::Store(failure)) => AlarmReceiptResult::Error {

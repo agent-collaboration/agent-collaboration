@@ -8,6 +8,11 @@
 
 use serde::Serialize;
 
+mod alarm_publication;
+pub use alarm_publication::{AlarmPublicationFailure, alarm_publication_time};
+mod publication_receipt;
+pub use publication_receipt::{AlarmPublication, EngineAlarmDecider, EngineAlarmTimes};
+
 /// One SQL statement and its positional arguments.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize)]
 pub struct Statement {
@@ -105,7 +110,12 @@ pub struct StatementBatch {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
-#[serde(tag = "kind", content = "query", rename_all = "camelCase")]
+#[serde(
+    tag = "kind",
+    content = "query",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 pub enum AlarmUpdate {
     Unchanged,
     /// Core's Timers module supplies the query; the host runs it last in the same
@@ -114,19 +124,28 @@ pub enum AlarmUpdate {
     /// The query returns one row with one column: the alarm time as INTEGER Unix
     /// milliseconds, or NULL to clear the alarm. Any other answer is `StoreFailure::Corrupt`.
     SetFromQuery(Statement),
+    /// The host reads two pending-time columns atomically and applies engine policy.
+    SetEngineFromQuery {
+        query: Statement,
+    },
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, serde::Deserialize)]
 #[serde(tag = "outcome", rename_all = "camelCase")]
 pub enum BatchOutcome {
     #[serde(rename_all = "camelCase")]
-    Applied { rows_affected: Vec<u64> },
+    Applied {
+        rows_affected: Vec<u64>,
+        publication: AlarmPublication,
+    },
     /// Rolled back.
     #[serde(rename_all = "camelCase")]
     GuardFailed { index: u32, rows_affected: u64 },
     /// Rolled back.
     #[serde(rename_all = "camelCase")]
     ConstraintViolated { index: u32, kind: ConstraintKind },
+    /// The database rejected an item statement; the batch rolled back.
+    StatementRejected { index: u32 },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, serde::Deserialize)]
@@ -148,6 +167,8 @@ pub struct ReadOutcome {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, serde::Deserialize, thiserror::Error)]
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum StoreFailure {
+    #[error("the alarm cannot be published: {reason}")]
+    AlarmUnpublishable { reason: AlarmPublicationFailure },
     #[error("the store is unavailable")]
     Unavailable,
     #[error("the store's answer was lost")]
