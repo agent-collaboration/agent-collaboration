@@ -589,3 +589,7 @@ fn active_turn_id(attachment: &SessionEventAttachment) -> Option<&str> {
             _ => current,
         })
 }
+
+#[cfg(test)]
+#[path = "provider_session_command_port_node_tap_test.rs"]
+mod node_tap_tests;

@@ -1,0 +1,773 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Protocol contracts — Program Design</title>
+  <link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+  <script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content" src="./navigation.json"></ex-nav>
+<ex-document id="content">
+<h1>Program Design</h1>
+
+<ex-callout title="In short" tone="tldr">
+  <p>The Router is a graph of twelve nodes. Each node is fixed in place: it decodes into typed messages, does one declared conversion with owned state, and emits typed messages. The types come from three definitions: a Rust crate generated from Codex's own export, the official ACP SDK, and one Router vocabulary, which Specta turns into TypeScript. Duplicate conversions collapse into the node that owns them. Every map here comes from the verified map of the code at c4b6254e1.</p>
+</ex-callout>
+
+<h2 id="graph-today">The graph today</h2>
+
+<ex-mermaid id="graph-today-diagram" label="Nodes and edges at c4b6254e1"><script type="text/plain">
+flowchart LR
+  cli[Codex CLI]
+  codex[Managed Codex]
+  agents[Claude / Cursor]
+  callers[MCP callers, CLI]
+  subgraph router[Router]
+    N1[N1 CLI face]
+    N2[N2 native relay]
+    N3[N3 output mapper]
+    N4[N4 command port]
+    N5[(N5 event hub)]
+    N6[N6 ACP client]
+    N7[N7 approvals broker]
+    N8[N8 Codex ACP adapter]
+    N9[N9 provider ACP route]
+    N10[N10 Codex client]
+    N11[N11 MCP server]
+    N12[N12 Claude metadata]
+  end
+  cli -- "Value" --> N1
+  cli -- bytes --> N2 --> codex
+  N1 --> N4 --> N6
+  N6 -- "typed ACP" --> agents
+  agents --> N6
+  N6 -- "events, usage as JSON string" --> N5
+  N6 --> N7 --> N5
+  N5 --> N3 -- "json!" --> N1
+  N5 --> N9
+  callers --> N11
+  N11 --> N4
+  N11 -- "ACP Value" --> N8 --> N10
+  N11 --> N10
+  N10 -- "Value + runtime schema" --> codex
+  agents -. "_meta" .-> N12 --> N6
+  class N1,N3,N8,N9,N10 slot5
+  class N6,N7,N11,N12 slot2
+</script></ex-mermaid>
+
+<p>Rose nodes convert with untyped JSON. Amber nodes are partly typed. N2 is a byte relay: a Codex CLI on a Codex session never passes through the shim (<code>native_channel_relay.rs:10</code>). N9 has no product client; only tests use it.</p>
+
+<h2 id="graph-target">The graph after</h2>
+
+<ex-mermaid id="graph-target-diagram" label="Target graph"><script type="text/plain">
+flowchart LR
+  cli[Codex CLI]
+  codex[Managed Codex]
+  agents[Claude / Cursor]
+  callers[MCP callers, CLI]
+  subgraph router[Router]
+    N1[N1 CLI face]
+    N2[N2 native relay]
+    N3[N3 output mapper]
+    N4[N4 command port]
+    N5[(N5 event hub)]
+    N6[N6 ACP client]
+    N7[N7 one approvals broker]
+    N8[N8 Codex ACP adapter]
+    N10[N10 Codex client]
+    N11[N11 MCP server]
+    N12[N12 Claude metadata]
+  end
+  KC[(Codex contract,<br/>generated)]
+  KA[(ACP SDK)]
+  KV[(Router vocabulary<br/>+ Specta TS)]
+  cli -- Codex types --> N1
+  cli -- bytes --> N2 --> codex
+  N1 -- vocab --> N4 -- vocab --> N6 -- ACP types --> agents
+  N6 -- typed events --> N5 --> N3 -- Codex types --> N1
+  N6 --> N7 --> N5
+  callers --> N11 --> N4
+  N11 -- ACP types --> N8 -- Codex types --> N10 -- Codex types --> codex
+  N12 -- vocab --> N6
+  KC -.-> N1 & N3 & N10 & N8
+  KA -.-> N6 & N8
+  KV -.-> N4 & N5 & N7 & N12
+  class KC,KA,KV slot3
+</script></ex-mermaid>
+
+<p>Every edge the Router decodes is typed. N9 is kept and typed (D24). The shared middle is N4, N5 and N7, plus the three definitions.</p>
+
+<h2 id="choice">How the types are made</h2>
+
+<ex-mermaid id="choice-diagram" label="Type source per protocol"><script type="text/plain">
+flowchart LR
+  subgraph codex[Codex app-server]
+    ex[Pinned export: JSON + TS] --> gen[Our TS generator]
+    cr[common.rs at release commit] --> gen
+    ov[Override registry] --> gen
+    gen --> kc[Rust crate codex-app-server-contract]
+  end
+  subgraph acp[ACP]
+    sdk[agent-client-protocol 2.2.0, both roles]
+  end
+  subgraph vocab[Router vocabulary]
+    rs[Rust types] --> sp[Specta] --> ts[TypeScript types]
+  end
+</script></ex-mermaid>
+
+<aside class="design-item" id="D20" data-design-item="decision" data-authority="author"><p><strong>Codex: our own TypeScript generator</strong> over the pinned export, with pairing taken from <code>common.rs</code>. It writes plain serde Rust, committed. t3code does the same in TypeScript/Effect, but pairs requests by naming plus a 12-entry hand map (<code>generate.ts:491</code>); we use Codex's own declaration. <strong>Rejected:</strong> Codex crates (C1); typify (it loses null versus absent, extra fields and pairing); hand types (U2). <strong>Would reopen:</strong> Codex publishing a small protocol crate with semver.</p></aside>
+<aside class="design-item" id="D21" data-design-item="decision" data-authority="author"><p><strong>Override registry and open-enum rule.</strong> Every departure from the export lives in one registry, with its shape, reason, removal condition and a test. Fields whose values grow across releases decode an unknown value as <code>Unknown(String)</code>. This is t3code's lesson: a closed <code>CodexErrorInfo</code> dropped <code>turn/completed</code> and left turns running (<code>generate.ts:175</code>).</p></aside>
+<aside class="design-item" id="D22" data-design-item="decision" data-authority="author"><p><strong>Vocabulary to TypeScript with Specta</strong> (<code>specta-typescript</code>). Its Zod and JSON Schema exporters are experimental, and you found them flaky, so we don't use them. Hand-written Zod stays only where TypeScript parses foreign input (Claude SDK output), and keeps its refinements. It is tied to the generated type with <code>satisfies z.ZodType&lt;T&gt;</code>, so drift fails <code>tsc</code>.</p></aside>
+<aside class="design-item" id="A20" data-design-item="assumption" data-authority="author"><p>Specta 2.0.0-rc.28 handles our serde attributes: <code>flatten</code>, tagged enums and <code>Option&lt;Option&lt;T&gt;&gt;</code>. A small experiment in D0 checks this before D6 relies on it. Depends on it: D22.</p></aside>
+<aside class="design-item" id="A21" data-design-item="assumption" data-authority="contract" data-source="openai/codex rust-v0.166.0 → 6ff1e1ca, common.rs; coverage run 2026-11-13; re-confirmed by the Codex reviewer"><p>Pairing coverage: <code>common.rs</code> pairs all 179 client and 11 server requests in the export, and every response type it names exists. Three deprecated source-only requests are ignored. For future releases, the generator fails closed if this changes.</p></aside>
+<aside class="design-item" id="A22" data-design-item="assumption" data-authority="contract" data-source="crates.io agent-client-protocol 2.2.0: src/role/acp.rs:43 Client, :291 Agent; src/schema/{client_to_agent,agent_to_client}"><p>The ACP SDK types both roles, so it can be the one ACP authority.</p></aside>
+<aside class="design-item" id="D25" data-design-item="decision" data-authority="author" data-source="agent-client-protocol-schema 1.9.1 src/v1/client.rs:98 (#[non_exhaustive]); finding from the Codex reviewer 2026-11-13"><p>For external enums that may grow (the ACP SDK), R9 is enforced by a required check against the pinned SDK's own schema, not by the compiler. A new ACP variant can only arrive through a deliberate version bump, and the check fails until every variant has an entry.</p></aside>
+<aside class="design-item" id="A23" data-design-item="assumption" data-authority="unknown"><p>CI can install Codex at an exact release for the online drift check.</p></aside>
+
+<h2 id="nodes">Every node, and its fix</h2>
+
+<p>Each node shows what comes in, what goes out and what state it owns. Below that: what is wrong today (anchors at c4b6254e1) and what changes.</p>
+
+<section id="N1">
+<h3>N1 · CLI face</h3>
+<ex-mermaid id="n1" label="N1"><script type="text/plain">
+flowchart LR
+  cli[Codex CLI requests] --> N1[N1 decode + disposition]
+  N1 -- session commands --> N4[N4]
+  N1 -- approval replies --> N7[N7]
+  N3[N3 frames] --> N1 --> out[to CLI]
+  st[(thread aliases, list cursor)] --- N1
+</script></ex-mermaid>
+<p><strong>Today:</strong></p>
+<ul>
+<li>decodes into <code>Value</code> (<code>router_session_app_server.rs:370</code>);</li>
+<li>has its own content parser (<code>native_turn_input.rs:7</code>), one of four;</li>
+<li>the fixed policy block appears twice, and the <code>"provider-default"</code> literal about six times;</li>
+<li>49 requests get "method not found".</li>
+</ul>
+<p><strong>Fix:</strong></p>
+<ul>
+<li>decode into the generated <code>ClientRequest</code>, with one exhaustive disposition per request;</li>
+<li>each handler returns its own request's response type;</li>
+<li>one shared content parser;</li>
+<li>N1 sends each frame and acknowledges it after a successful send; it does not own the connection state (see N3).</li>
+</ul>
+<p><strong>Delivered in:</strong> <a href="d3-input-settings-history.html">D3</a> for input, settings and history; <a href="d4-approvals.html">D4</a> for approval replies.</p>
+</section>
+
+<section id="N2">
+<h3>N2 · Native relay</h3>
+<ex-mermaid id="n2" label="N2"><script type="text/plain">
+flowchart LR
+  cli[Codex CLI, Codex session] -- bytes --> N2[N2 relay, no decode] -- bytes --> codex[Managed Codex]
+</script></ex-mermaid>
+<p><strong>Today:</strong> forwards bytes without decoding them (<code>native_channel_relay.rs:10</code>). <strong>Fix:</strong> none needed; it stays opaque. It is the only place Q1's version policy could apply to Codex sessions, and that part waits on Q1.</p>
+</section>
+
+<section id="N3">
+<h3>N3 · Output mapper</h3>
+<ex-mermaid id="n3" label="N3"><script type="text/plain">
+flowchart LR
+  ev[Session event] --> N3{N3 map by variant}
+  N3 -- 0 outputs --> drop[ignored with reason]
+  N3 -- 1 output --> one[Codex notification]
+  N3 -- many --> many[item started + delta + completed]
+  st[(per connection: text already sent,<br/>active turn, pending approval summaries)] <--> N3
+</script></ex-mermaid>
+<p><strong>Today:</strong></p>
+<ul>
+<li>about 51 <code>json!</code> bodies;</li>
+<li>usage is parsed again from a string (<code>app_server_token_usage.rs:20</code>);</li>
+<li>metadata is detected by sniffing text (<code>app_server_item_metadata.rs:49</code>);</li>
+<li>deltas use <code>strip_prefix</code>, written twice;</li>
+<li>tool kind, turn outcome and history-to-turns are each copied elsewhere.</li>
+</ul>
+<p><strong>Fix:</strong></p>
+<ul>
+<li>one exhaustive mapping per event variant, declaring zero, one or many outputs, per the <a href="#catalog">conversion catalog</a>;</li>
+<li>outputs are generated Codex types.</li>
+</ul>
+<p><strong>Connection state has one owner: N3's per-connection state.</strong> It holds receipts, pending interactions, text already sent and the active turn. Today this is <code>AppServerEventForwarding</code>, including <code>user_receipts</code>. The existing transitions are kept exactly:</p>
+<ex-mermaid id="n3-state" label="Receipt and connection-state transitions"><script type="text/plain">
+stateDiagram-v2
+  [*] --> Outstanding: turn/start or turn/steer accepted (client message id recorded)
+  Outstanding --> Bound: user message item stamped with the input id
+  Bound --> Retired: N1 sent the frame successfully, then called delivered
+  Bound --> Dropped: send failed, so the connection ends and all its state is dropped (today's behavior, kept)
+  Outstanding --> Outstanding: turn ends (complete_turn clears only the next-item binding)
+  Bound --> Bound: replay re-accepts the input but never assigns it to another item
+  Retired --> [*]
+</script></ex-mermaid>
+<p>Anchors: <code>native_user_receipts.rs:83</code> (identities survive resets), <code>:111</code> (replay never rebinds), <code>:126</code> (delivered only after a successful send), <code>router_session_app_server.rs:345-346</code> (send, then acknowledge; a failed send exits the connection loop through <code>?</code>). <code>reset_session</code> resolves pending interactions while it clears projection state (<code>app_server_event_forwarding.rs:193</code>). The design keeps all of this and adds no new recovery.</p>
+<p><strong>Delivered in:</strong> <a href="d2-output-stream.html">D2</a>.</p>
+</section>
+
+<section id="N4">
+<h3>N4 · Command port</h3>
+<ex-mermaid id="n4" label="N4"><script type="text/plain">
+flowchart LR
+  N1[N1] --> N4[N4 command port + delivery route]
+  N11[N11] -. today: bypasses N4 .-> sup[provider supervisor]
+  auto[automation dispatch, FIFO, loading] -. today: bypasses N4 .-> sup
+  sup --> N6
+  N4 -- prompt contents --> N6[N6]
+</script></ex-mermaid>
+<p><strong>Today:</strong></p>
+<ul>
+<li>converts SessionRef between two crates (<code>provider_session_command_port.rs:383-411</code>), one of seven such conversions;</li>
+<li>checks content capability (<code>provider_content_commands.rs:318</code>), duplicating the same check in <code>acp-client-runtime</code>;</li>
+<li>is only one of two command entries. N11's conversation operations (<code>collaboration-service/src/collaboration_application/conversation_operations.rs:55-62</code>) and the automation paths (<code>provider_acp_run_dispatch.rs:164,282</code>, <code>provider_acp_message_fifo.rs:317</code>, <code>provider_acp_session_loading.rs:126</code>) call the provider supervisor's <code>ProviderConversationBackend</code> directly (<code>external_provider_supervisor/provider_conversation_backend.rs:23</code>), not N4. Found by D0's send-site review, 2026-11-14.</li>
+</ul>
+<p><strong>Fix:</strong> one SessionRef and one capability check, and one command entry: N11's and the automation paths' session commands go through N4, so the SessionRef and capability check cannot be skipped. Until then this bypass is a current structural defect on D0's list. Session-layer behavior stays with the Session/MCP Lead, and the Host crate needs the central Lead's go-ahead. <strong>Delivered in:</strong> <a href="d3-input-settings-history.html">D3</a>.</p>
+</section>
+
+<section id="N5">
+<h3>N5 · Event hub</h3>
+<ex-mermaid id="n5" label="N5"><script type="text/plain">
+flowchart LR
+  N6[N6] -- events --> N5[(N5 hub: broadcast + history)]
+  N7[N7] -- interaction events --> N5
+  N5 --> N3[N3] & N11[N11 events_observe] & inv[inventory] & N4[N4 waits for TurnStarted]
+</script></ex-mermaid>
+<p><strong>Today:</strong> events are typed <code>SessionEvent</code>, but usage, config options, session info and available commands arrive as JSON strings inside <code>SessionItem.text</code>. <strong>Fix:</strong> a typed variant in the vocabulary for each of them. <strong>Delivered in:</strong> <a href="d2-output-stream.html">D2</a>, coordinated with the Session/MCP Lead.</p>
+</section>
+
+<section id="N6">
+<h3>N6 · ACP client</h3>
+<ex-mermaid id="n6" label="N6"><script type="text/plain">
+flowchart LR
+  N4[N4 contents] --> N6[N6 ACP client]
+  N6 -- typed ACP --> agents[Claude / Cursor]
+  agents -- session/update --> N6
+  N6 -- events --> N5[N5]
+  N6 -- permission requests --> N7[N7]
+  st[(turn ids, text accumulation,<br/>settings catalog)] --- N6
+</script></ex-mermaid>
+<p><strong>Today:</strong></p>
+<ul>
+<li>the ACP edge itself is typed;</li>
+<li>updates are stringified when projected into events (<code>provider_item_projection.rs:273-288</code>, verified);</li>
+<li>steering is an untyped <code>_session/steering</code> built with <code>json!</code> (<code>provider_session_actor.rs:541</code>);</li>
+<li>model discovery is untyped.</li>
+</ul>
+<p><strong>Fix:</strong> project into typed events, and give steering and discovery typed extension messages. <strong>Delivered in:</strong> <a href="d2-output-stream.html">D2</a> for the projection; <a href="d3-input-settings-history.html">D3</a> for steering and models.</p>
+</section>
+
+<section id="N7">
+<h3>N7 · Approvals broker</h3>
+<ex-mermaid id="n7" label="N7"><script type="text/plain">
+flowchart LR
+  N6[N6 permission request] --> N7[N7 broker]
+  N8[N8 Codex approval] --> N7
+  N7 -- interaction event --> N5[N5]
+  N1[N1 CLI reply] --> N7
+  N11[N11 approval_decide] --> N7
+  N7 -- selected option --> N6 & N8
+  st[(pending approvals, 300s timeout)] --- N7
+</script></ex-mermaid>
+<p><strong>Today:</strong></p>
+<ul>
+<li>two brokers, one typed and one legacy native;</li>
+<li>five copies of the option mapping;</li>
+<li>a SessionRef serde round-trip (<code>acp_interaction_port.rs:405</code>).</li>
+</ul>
+<p><strong>Fix:</strong> one broker and one option mapping, typed in both directions, including the path that carries the selected option back. Who receives approvals stays with the Session/MCP Lead, whose fan-out sits on this broker. The broker settles each request once: the first decision wins. Central is the approval authority, and approval records move to central in Lead A's D. This broker keeps only the agent's waiting request and the option mapping in both directions (D28). <strong>Delivered in:</strong> <a href="d4-approvals.html">D4</a>.</p>
+</section>
+
+<section id="N8">
+<h3>N8 · Codex ACP adapter</h3>
+<ex-mermaid id="n8" label="N8"><script type="text/plain">
+flowchart LR
+  callers[MCP carrier, CLI] -- ACP --> N8[N8 adapter]
+  N8 -- Codex calls --> N10[N10]
+  N10 -- Codex notifications --> N8
+  N8 -- ACP updates --> callers
+</script></ex-mermaid>
+<p><strong>Today:</strong></p>
+<ul>
+<li>ACP as <code>Value</code>, checked against a vendored schema (<code>acp_schema_catalog.rs:6</code>);</li>
+<li>about 154 <code>json!</code> bodies;</li>
+<li>its own content parser, history mapping and base64 cursor;</li>
+<li>the legacy approval path.</li>
+</ul>
+<p><strong>Fix:</strong> the Codex side moves onto the generated contract (<a href="d5-codex-client.html">D5</a>); the ACP side moves onto the SDK's agent role (<a href="d6-acp-vocabulary.html">D6</a>).</p>
+</section>
+
+<section id="N9">
+<h3>N9 · Provider ACP route</h3>
+<ex-mermaid id="n9" label="N9"><script type="text/plain">
+flowchart LR
+  clients[ACP clients on codex-acp.sock] --> N9[N9 provider ACP route, wired in production] --> fix[Own ACP renderer on the SDK in D6, sharing N3's event interpretation]
+</script></ex-mermaid>
+<aside class="design-item" id="D28" data-design-item="decision" data-authority="owner-words" data-source="owner answer relayed by the CLI+MCP Lead, 2026-11-13"><p>The owner chose central as the approval authority:</p><blockquote>yeah b or the cli client right? if there is one directly attached</blockquote><p>Relayed with this reading: approval records move to central in Lead A's D, and the Mac keeps only the waiting request. Where the inbox and outbox live is Lead A's call.</p></aside>
+<aside class="design-item" id="D24" data-design-item="decision" data-authority="author" data-source="startup_composition.rs:684, acp_channel_listener.rs:103; Codex reviewer finding 2026-11-13"><p>N9 is kept and fixed, not deleted. It is wired production code (<code>startup_composition.rs:684</code>, <code>acp_channel_listener.rs:103</code>), and no tests using it doesn't prove that no client does. N9 keeps its own ACP renderer, typed on the SDK in D6. It shares with N3 only the interpretation of session events: the metadata filter, tool kind and status, the text-delta suffix and the turn outcome. N3 renders those as Codex frames; N9 renders them as ACP <code>session/update</code>. Retiring the served route would need its own owner decision.</p></aside>
+</section>
+
+<section id="N10">
+<h3>N10 · Codex client</h3>
+<ex-mermaid id="n10" label="N10"><script type="text/plain">
+flowchart LR
+  users[message dispatch, workers,<br/>inventory, native control, N8] -- request&lt;R&gt; --> N10[N10 Codex client] --> codex[Managed Codex]
+  codex -- reply or malformed --> N10
+  N10 -- R::Response or CodexCallError --> users
+</script></ex-mermaid>
+<p><strong>Today:</strong> calls use <code>Value</code>, checked at runtime against a schema the Router exports from the binary at every start; 13 operations are covered. <strong>Fix:</strong></p>
+<ul>
+<li>typed <code>request&lt;R&gt;</code>;</li>
+<li>decoding still rejects bad replies with today's outcomes (R17);</li>
+<li>the runtime pipeline is deleted;</li>
+<li>the digest that admission checks compare keeps its format, but is hashed from the committed export at build time.</li>
+</ul>
+<p><strong>Delivered in:</strong> <a href="d5-codex-client.html">D5</a>.</p>
+</section>
+
+<section id="N11">
+<h3>N11 · MCP server</h3>
+<ex-mermaid id="n11" label="N11"><script type="text/plain">
+flowchart LR
+  callers[MCP callers] --> N11[N11] --> N4[N4] & N8[N8] & N10[N10]
+  KC[(Codex contract types)] -- schemars derive --> schemas[advertised tool schemas]
+</script></ex-mermaid>
+<p><strong>Today:</strong> Codex shapes are spliced into tool schemas at runtime (<code>schema_binding.rs:3</code>). <strong>Fix:</strong> tool schemas are derived from the generated types. Which tools exist stays with the Session/MCP Lead. <strong>Delivered in:</strong> <a href="d5-codex-client.html">D5</a>.</p>
+</section>
+
+<section id="N12">
+<h3>N12 · Claude metadata</h3>
+<ex-mermaid id="n12" label="N12"><script type="text/plain">
+flowchart LR
+  sdk[Claude SDK output] -- hand Zod, satisfies generated type --> wrap[TS wrapper]
+  rs[Rust vocabulary type] -- Specta --> tsT[TS type]
+  tsT --> wrap -- ACP _meta --> N6[N6 reads with the same Rust type]
+</script></ex-mermaid>
+<p><strong>Today:</strong> two hand-written definitions, one in Zod (<code>model-metadata.ts:34</code>) and one in serde (<code>model_reasoning_metadata.rs</code>). <strong>Fix:</strong> as decided in D22. <strong>Delivered in:</strong> <a href="d6-acp-vocabulary.html">D6</a>.</p>
+</section>
+
+<h2 id="streams">The streams through the nodes</h2>
+
+<section id="S1">
+<h3>S1 · Prompt and steer to a Claude or Cursor session</h3>
+<ex-mermaid id="s1" label="S1"><script type="text/plain">
+sequenceDiagram
+  participant CLI as Codex CLI
+  participant N1
+  participant N4
+  participant N6
+  participant A as Claude/Cursor
+  CLI->>N1: turn/start or turn/steer (Codex type)
+  N1->>N4: Prompt or Steer command (vocab)
+  N4->>N6: prompt contents (vocab)
+  N6->>A: session/prompt or steering extension (ACP type)
+  N1-->>CLI: response of that request
+</script></ex-mermaid>
+</section>
+
+<section id="S2">
+<h3>S2 · Output back to the CLI</h3>
+<ex-mermaid id="s2" label="S2"><script type="text/plain">
+sequenceDiagram
+  participant A as Claude/Cursor
+  participant N6
+  participant N5
+  participant N3
+  participant N1
+  participant CLI as Codex CLI
+  A->>N6: session/update (text, tool, usage, config)
+  N6->>N5: typed event (usage typed, not a string)
+  N5->>N3: event
+  N3->>N3: map: 0, 1 or many outputs, update connection state
+  N3->>N1: item/turn/tokenUsage/receipt (Codex types)
+  N1->>CLI: emit
+</script></ex-mermaid>
+</section>
+
+<section id="S3">
+<h3>S3 · Approvals, both ways</h3>
+<ex-mermaid id="s3" label="S3"><script type="text/plain">
+sequenceDiagram
+  participant A as Claude/Cursor
+  participant N6
+  participant N7
+  participant N3
+  participant CLI as Codex CLI
+  A->>N6: request_permission
+  N6->>N7: approval request (vocab)
+  N7->>N3: interaction event
+  N3->>CLI: approval server request (Codex type)
+  CLI->>N7: reply via N1 (Codex type → vocab)
+  N7->>N6: selected option
+  N6->>A: permission outcome (ACP type)
+</script></ex-mermaid>
+</section>
+
+<section id="S4">
+<h3>S4 · Settings and models</h3>
+<ex-mermaid id="s4" label="S4"><script type="text/plain">
+sequenceDiagram
+  participant CLI as Codex CLI
+  participant N1
+  participant N4
+  participant N6
+  participant A as Claude/Cursor
+  CLI->>N1: model/list
+  N1-->>CLI: model list from N6's catalog (Codex type)
+  CLI->>N1: thread/settings/update (each field keeps its own null meaning, R2)
+  N1->>N4: settings command
+  N4->>N6: set config option / mode (ACP type)
+  N6-->>N1: SettingsChanged event via N5, N3
+</script></ex-mermaid>
+</section>
+
+<section id="S5">
+<h3>S5 · History: list, read, resume</h3>
+<ex-mermaid id="s5" label="S5"><script type="text/plain">
+flowchart LR
+  CLI[thread/list, read, resume] --> N1
+  N1 --> store[session store and ACP session/load]
+  store --> h[one history-to-turns mapping] --> N1 --> CLI
+  N8h[N8 Codex history] --> h
+</script></ex-mermaid>
+</section>
+
+<section id="S6">
+<h3>S6 and S7 · Tool schemas and provider metadata</h3>
+<ex-mermaid id="s67" label="S6 and S7"><script type="text/plain">
+flowchart LR
+  KC[(Codex contract)] -- schemars --> N11[N11 tool schemas] --> callers[MCP callers]
+  RS[(Vocabulary)] -- Specta --> TS[Claude TS wrapper] -- _meta --> N6[N6]
+</script></ex-mermaid>
+</section>
+
+<h2 id="catalog">Conversion catalog</h2>
+
+<p>This is the authoritative list of what each converting node does, per input variant. It keeps today's behavior (anchors at c4b6254e1), except where a row is marked <strong>change</strong>. Shapes owned by Codex or ACP are referenced, not copied. The O4 taps check against these rows.</p>
+
+<section id="catalog-n6">
+<h3>N6 · ACP session update → session events</h3>
+<ex-mermaid id="cat-n6" label="N6 conversion"><script type="text/plain">
+flowchart LR
+  u[ACP SessionUpdate] --> txt[text chunks: 0-2 events]
+  u --> tool[tool call / update: 1 event]
+  u --> plan[plan: 1 event]
+  u --> meta[mode, config, info, usage, commands: 2-3 events]
+  u --> other[any other variant: Unlisted, 0-1 events]
+</script></ex-mermaid>
+<div class="ex-table-scroll" data-width="canvas">
+<table>
+<thead><tr><th>Input (ACP SDK type)</th><th>Output events</th><th>Item kind and payload</th><th>State</th><th>Anchor</th></tr></thead>
+<tbody>
+<tr><td>User / agent message chunk, thought chunk</td><td>New text item: 1 <code>ItemStarted</code>, preceded by 1 <code>ItemCompleted</code> if the previous text item differs. Continuing text: 1 <code>ItemUpdated</code> with the full text so far. A non-text block closes the open item.</td><td>UserMessage / AgentMessage / AgentThought, id = message id or a new UUIDv7</td><td>open text item, output limit</td><td><code>provider_item_projection.rs:248-256, 293-338</code></td></tr>
+<tr><td>Tool call</td><td>closes open text, then 1 Started (new id) or 1 Updated (known id)</td><td>ToolCall { kind, status }, text = title</td><td>tool items, tool order</td><td><code>:257-260, 357-383</code></td></tr>
+<tr><td>Tool call update</td><td>closes open text, then 1 Started (unknown id) or 1 Updated</td><td>unknown id starts as other / pending; contextCompaction kind is kept</td><td>tool items, tool order</td><td><code>:261-264, 385-425</code></td></tr>
+<tr><td>Plan</td><td>closes open text, then 1 Started (first) or 1 Updated</td><td>Plan, one stable id per turn</td><td>plan item</td><td><code>:265-268, 427-452</code></td></tr>
+<tr><td>Current mode update</td><td>0 or 1 <code>ItemCompleted</code> for open text (<code>emit_once</code> calls <code>finish_text</code>, <code>:495</code>), then Started + Completed: 2-3 events</td><td>ModeChange { mode id }</td><td>none</td><td><code>:269-272</code></td></tr>
+<tr><td>Config option update</td><td>same as mode: 2-3 events</td><td><strong>change:</strong> ConfigChange carries typed config options, not a JSON string</td><td>none</td><td><code>:273-276</code></td></tr>
+<tr><td>Session info update</td><td>same: 2-3 events</td><td><strong>change:</strong> SessionInfo carries typed fields</td><td>none</td><td><code>:277-280</code></td></tr>
+<tr><td>Usage update</td><td>same: 2-3 events</td><td><strong>change:</strong> Usage { used, size } typed</td><td>none</td><td><code>:281-284</code></td></tr>
+<tr><td>Available commands update</td><td>same: 2-3 events, plus the skill-view update (unchanged)</td><td><strong>change:</strong> CommandCatalog typed (today a Notice whose text is JSON)</td><td>skill view</td><td><code>:285-288, 148-190</code></td></tr>
+<tr><td>Any other variant (the SDK enum may grow)</td><td>closes open text only</td><td>disposition <code>Unlisted</code>, recorded (D25)</td><td>open text item</td><td><code>:289</code></td></tr>
+<tr><td>Unknown update kind (decode level)</td><td>0 or 1 <code>ItemCompleted</code> for open text, then Started + Completed: 2-3 events</td><td>Unknown { source kind }</td><td>none</td><td><code>:467-488</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Other transitions stay as they are:</p>
+<ul>
+<li>Turn start and end clear the turn-local cursors but keep the tool items (<code>:340-346</code>).</li>
+<li><code>finish()</code> completes the text, then the tools, then the plan.</li>
+<li>Compaction promotion emits one Updated (<code>:73-104</code>).</li>
+<li>Turn ids and input acceptance come from the session actor, not from this projection.</li>
+</ul>
+</section>
+
+<section id="catalog-vocab">
+<h3>New vocabulary payloads</h3>
+<ex-mermaid id="cat-vocab" label="Typed provider metadata"><script type="text/plain">
+classDiagram
+  class SessionItemKind {
+    UserMessage, AgentMessage, AgentThought
+    ToolCall(kind, status), Plan, ModeChange(id)
+    Usage(used, size)
+    ConfigChange(options)
+    SessionInfo(fields)
+    CommandCatalog(commands)
+    Notice(text), Unknown(source_kind)
+  }
+</script></ex-mermaid>
+<p>These types live in the Router vocabulary (<code>session-event-model</code>). They carry the fields the providers send, with names copied from the ACP SDK types they mirror, so the vocabulary crate does not depend on the SDK.</p>
+<aside class="design-item" id="D27" data-design-item="decision" data-authority="contract" data-source="Session/MCP Lead reply, 2026-11-13"><p>Making these payloads typed changes what MCP <code>events_observe</code> returns: an object instead of a JSON string inside <code>text</code>. That is a named correction of a wrong shape under R19. The Session/MCP Lead agreed on 2026-11-13 and chose to accept the typed shape. Their D2 replaces <code>events_observe</code> with session read, whose item kind is this same type, so no string form is kept.</p></aside>
+</section>
+
+<section id="catalog-n3">
+<h3>N3 · Session event → Codex messages to the CLI</h3>
+<ex-mermaid id="cat-n3" label="N3 conversion"><script type="text/plain">
+flowchart LR
+  e[Session event] --> t[turn started / ended: 1]
+  e --> it[item started: 1-2]
+  e --> iu[item updated: 0-1]
+  e --> ic[item completed: 0-1]
+  e --> md[metadata kinds: 0, or 1 tokenUsage]
+  e --> ia[interaction requested: 1 or 3]
+  e --> ir[interaction resolved: 0..n]
+  e --> z[capabilities, resync: 0]
+</script></ex-mermaid>
+<div class="ex-table-scroll" data-width="canvas">
+<table>
+<thead><tr><th>Input</th><th>Codex messages out</th><th>State</th><th>Anchor</th></tr></thead>
+<tbody>
+<tr><td>SettingsChanged</td><td>0 or 1 <code>thread/settings/updated</code> (0 if no working directory is registered)</td><td>reads working directories</td><td><code>app_server_event_forwarding.rs:222-234</code></td></tr>
+<tr><td>StateChanged</td><td>1 <code>thread/status/changed</code>, plus <code>thread/closed</code> when closed</td><td>none</td><td><code>:235-237</code></td></tr>
+<tr><td>TurnStarted</td><td>1 <code>turn/started</code></td><td>receipts accept; turn id recorded</td><td><code>:238-242</code></td></tr>
+<tr><td>TurnEnded</td><td>1 <code>turn/completed</code> (cancelled → interrupted, ended → completed, lost → failed with the reason)</td><td>receipts complete turn; turn id and items cleared</td><td><code>:243-249</code></td></tr>
+<tr><td>Item Usage</td><td>0 or 1 <code>thread/tokenUsage/updated</code> (needs a turn), window = size, total = last = used</td><td>reads turn id</td><td><code>:250-260</code>, <code>app_server_token_usage.rs:13-34</code></td></tr>
+<tr><td>Item ModeChange, ConfigChange, SessionInfo, CommandCatalog</td><td>0 (metadata, not transcript)</td><td>item removed</td><td><code>app_server_item_metadata.rs:40-57</code></td></tr>
+<tr><td>Item Plan</td><td>0 or 1 <code>turn/plan/updated</code> (suppressed if unchanged)</td><td>item stored</td><td><code>:280-286</code></td></tr>
+<tr><td>ItemStarted, other kinds</td><td>1 <code>item/started</code>, plus 1 delta for agent message or reasoning with text</td><td>user message stamped with client id; item stored</td><td><code>:261-311</code></td></tr>
+<tr><td>ItemUpdated</td><td>message / reasoning: 0 or 1 delta (the suffix after the text already sent; 0 if it isn't a prefix). Tool: 0 or 1 <code>item/mcpToolCall/progress</code>. Others: 0</td><td>item stored</td><td><code>:312-370</code></td></tr>
+<tr><td>ItemCompleted</td><td>0 or 1 <code>item/completed</code> (0 for unknown items, plans, or outside a turn)</td><td>item removed</td><td><code>:376-390</code></td></tr>
+<tr><td>InputAccepted</td><td>0</td><td>receipts accept</td><td><code>:391-394</code></td></tr>
+<tr><td>InteractionRequested</td><td>1 server request (command approval, file change approval, or elicitation form), or 3 read-only "pending" items when this connection isn't the approver</td><td>pending stored</td><td><code>:395-397, 422-509</code>; <code>app_server_item_translation.rs:248-371</code></td></tr>
+<tr><td>InteractionResolved</td><td>0..n <code>serverRequest/resolved</code>, one per pending id (including retries)</td><td>pending removed</td><td><code>:398-417</code></td></tr>
+<tr><td>CapabilitiesChanged, ResyncRequired</td><td>0 (resync is handled by the transport loop: reset, then replay)</td><td>none</td><td><code>:418</code></td></tr>
+</tbody>
+</table>
+</div>
+<p>Item translation to Codex thread items is unchanged (<code>app_server_item_translation.rs:21-102</code>): user message, agent message, reasoning, MCP tool call with status, result and error, context compaction, and plan. A non-catalogue notice or an unknown item is shown as an agent message. Metadata kinds are dropped before any turn check (<code>app_server_item_translation.rs:26</code>), so they produce no frames inside or outside a turn.</p>
+</section>
+
+<section id="catalog-ext">
+<h3>Typed extension messages</h3>
+<ex-mermaid id="cat-ext" label="Extension requests"><script type="text/plain">
+sequenceDiagram
+  participant N6
+  participant A as Claude / Cursor
+  N6->>A: _session/steering { sessionId, prompt, _meta.steering.idleBehavior = promptRequired }
+  A-->>N6: { outcome: injected | startedNewTurn | promptRequired | failed }
+  N6->>A: cursor/list_available_models {}
+  A-->>N6: { models: [ { value, name, configOptions } ] }
+</script></ex-mermaid>
+<ul>
+<li><strong>Steering:</strong> request and reply as above, with a 10 second timeout. The outcome is a closed enum; any other value is an invalid-reply error. A timeout or dropped channel is a transport failure. <em>Injected</em> while running keeps today's side effect: InputAccepted plus the user message. <em>StartedNewTurn</em> while idle is a <strong>change</strong> row: today it publishes TurnStarted, the user message, and at once <code>TurnEnded</code> with <code>Lost { EndNotObservable }</code> (<code>provider_session_actor.rs:449-475</code>), so the turn is reported lost while the agent is still answering, and its items then arrive after its end (breaks O5 k1). It is a current defect on D0's expected-failure list, fixed in <a href="d3-input-settings-history.html">D3</a>: the started turn's end must become observable, or the outcome must not claim a turn; which one is an open design item D3 settles in its own design pass before its plan.</li>
+<li><strong>Cursor model discovery:</strong> 2 second timeout. Any failure means no model data is available. Unknown fields are allowed. The effort option is chosen as today (<code>model_reasoning_metadata.rs:100-204</code>).</li>
+<li><strong>Claude model reasoning</strong> (<code>_meta.codexRouter.modelReasoning</code>, version 1): either available models (model id, plus config id, choices and default) or unknown with a reason (UnsupportedSource, Unavailable, Malformed, Ambiguous, Unrecognized). The checks JSON Schema can't express stay in both Zod and Rust, tied to the one generated type (D22): the default must be one of the choices, choice values must be unique, and model ids must be unique. Two retained differences are named, not hidden: Zod strips unknown keys while Rust rejects them, and Zod pins version 1 while Rust reports other versions as Unrecognized.</li>
+</ul>
+</section>
+
+<section id="catalog-dispositions">
+<h3>Dispositions: refused and ignored, with reasons</h3>
+<ex-mermaid id="cat-disp" label="Disposition kinds"><script type="text/plain">
+flowchart LR
+  req[Inbound kind] --> h[Handled]
+  req --> r[Refused: named reason, CLI survives]
+  req --> m[Minimal: smallest truthful result]
+  req --> i[Ignored: named reason]
+  req --> u[Unlisted: ACP SDK fallback, recorded]
+</script></ex-mermaid>
+<div class="ex-table-scroll" data-width="canvas">
+<table>
+<thead><tr><th>Reason (closed enum)</th><th>Requests or messages today</th><th>Anchor</th></tr></thead>
+<tbody>
+<tr><td>Refused · HostShell</td><td>command/exec, exec/*, thread/shellCommand, backgroundTerminals/*</td><td rowspan="11"><code>native_unsupported_methods.rs:3-47</code></td></tr>
+<tr><td>Refused · ContextCloneOrInject</td><td>thread/fork, thread/inject_items</td></tr>
+<tr><td>Refused · SessionMetadataReadOnly</td><td>thread/name/set, archive, unarchive</td></tr>
+<tr><td>Refused · NativeQueue</td><td>thread/queue/*</td></tr>
+<tr><td>Refused · CodexReview</td><td>review/start (the CLI exits on this error today, so D3 tests whether it must become Minimal)</td></tr>
+<tr><td>Refused · Realtime</td><td>thread/realtime/*</td></tr>
+<tr><td>Refused · AccountLimits</td><td>account/rateLimits/read</td></tr>
+<tr><td>Refused · ProviderAuth</td><td>account/login/*, logout</td></tr>
+<tr><td>Refused · HistoryRevert</td><td>thread/revert</td></tr>
+<tr><td>Refused · CodexMemory</td><td>thread/memoryMode/set, thread/memory/read, memory/*</td></tr>
+<tr><td>Refused · ThreadGoals</td><td>thread/goal/*</td></tr>
+<tr><td>Refused · ConfigWrite, ConfigTrustReadOnly, HookDiscovery, PermissionProfileDiscovery</td><td>config/write, batchWrite, hooks/list, permissionProfile/list</td><td><code>router_session_app_server_methods.rs:87-114</code></td></tr>
+<tr><td>Minimal · CompactUnsupported</td><td>compact/start: empty result plus a turn error</td><td><code>native_request_dispatch.rs:124-131</code></td></tr>
+<tr><td>Ignored · ClientNotificationWithoutId</td><td>CLI notifications with no id</td><td><code>router_session_app_server.rs:379-381</code></td></tr>
+<tr><td>Ignored · ProviderMetadataNotTranscript</td><td>mode, config, info and command catalogue items at N3</td><td><code>app_server_item_metadata.rs:40-57</code></td></tr>
+<tr><td><strong>change:</strong> no request is answered "method not found"</td><td>every client request in the pinned contract gets one of the dispositions above or Handled (R10)</td><td><code>router_session_app_server_methods.rs:121</code> today</td></tr>
+</tbody>
+</table>
+</div>
+<p>Error codes stay as they are today (<code>native_request_dispatch.rs:282-327</code>): -32602 for invalid parameters and settings, -32002 for not found, -32000 for unavailable or unsupported, -32600 for busy.</p>
+</section>
+
+<h2 id="producers-consumers">Who produces and consumes each message</h2>
+
+<ex-mermaid id="pc-diagram" label="Shared messages and the nodes that touch them"><script type="text/plain">
+flowchart LR
+  ev[Session event] --- N6 & N7 & N3 & N11 & N4 & N9
+  ap[Approval request and decision] --- N6 & N8 & N7 & N1 & N11
+  sr[SessionRef] --- all[all 12 nodes, 7 conversions today]
+</script></ex-mermaid>
+
+<div class="ex-table-scroll" data-width="canvas">
+<table>
+<thead><tr><th>Message</th><th>Produced by</th><th>Consumed by</th><th>Definition</th></tr></thead>
+<tbody>
+<tr><td>Codex client request (from CLI)</td><td>Codex CLI</td><td>N1</td><td>Codex contract</td></tr>
+<tr><td>Codex response, notification, server request (to CLI)</td><td>N3, N1</td><td>Codex CLI</td><td>Codex contract</td></tr>
+<tr><td>Codex request (to Codex)</td><td>N8, N11 (native control), dispatch, workers, inventory, each through N10</td><td>N10 → Managed Codex</td><td>Codex contract</td></tr>
+<tr><td>Codex notification, server request (from Codex)</td><td>Managed Codex</td><td>N10 → N8, workers</td><td>Codex contract</td></tr>
+<tr><td>Session command (prompt, steer, settings, cancel)</td><td>N1, N11, N9</td><td>N4 → N6</td><td>vocabulary</td></tr>
+<tr><td>Prompt contents</td><td>N4</td><td>N6</td><td>vocabulary</td></tr>
+<tr><td>ACP prompt, set config/mode, steering extension</td><td>N6</td><td>Claude, Cursor</td><td>ACP SDK + typed extensions</td></tr>
+<tr><td>ACP session update, and the agent's own requests (permission)</td><td>Claude, Cursor</td><td>N6</td><td>ACP SDK</td></tr>
+<tr><td>Session event</td><td>N6, N7</td><td>N3, N11, N9, inventory, N4</td><td>vocabulary</td></tr>
+<tr><td>Approval request</td><td>N6, N8</td><td>N7</td><td>vocabulary</td></tr>
+<tr><td>Approval decision</td><td>N1, N11</td><td>N7 → N6, N8</td><td>vocabulary</td></tr>
+<tr><td>ACP request to the Codex ACP adapter</td><td>MCP carrier, N11</td><td>N8</td><td>ACP SDK</td></tr>
+<tr><td>ACP served for Codex sessions</td><td>N8</td><td>MCP carrier, CLI</td><td>ACP SDK</td></tr>
+<tr><td>ACP served for Router sessions (requests in, updates out)</td><td>MCP callers ⇄ N9</td><td>N9 ⇄ MCP callers</td><td>ACP SDK</td></tr>
+<tr><td>MCP tool call and tools/list</td><td>MCP callers</td><td>N11</td><td>MCP (rmcp) + derived input types</td></tr>
+<tr><td>MCP tool schema</td><td>N11</td><td>MCP callers</td><td>derived from types</td></tr>
+<tr><td>Claude model metadata</td><td>N12 (TS)</td><td>N6</td><td>vocabulary + Specta</td></tr>
+</tbody>
+</table>
+</div>
+
+<p><strong>Replies:</strong> a reply travels on its request's edge, in the other direction, and belongs to the request's row: the steering outcome and model list come back to N6 under the ACP request row, N6's result goes back to N4 under the session command row, and the N8, N9 and N11 responses go back to their callers under their request rows.</p>
+<p>D0's taps record what each node actually produces and consumes, and compare that with this table (R21). The first D0 report (2026-11-14) found the N9, inbound N8, inbound N11 and N11 → N10 paths missing from this table, though the graph draws them; they are added above.</p>
+
+<h2 id="inventory">Duplicates and what each becomes</h2>
+
+<ex-mermaid id="dup-diagram" label="Duplicate conversions collapse into their owning node"><script type="text/plain">
+flowchart LR
+  c4[Content: wire decoding repeated] --> one1[shared typed decoding,<br/>node policies kept]
+  sr7[SessionRef x7] --> one2[one SessionRef]
+  ap5[Approval options x5] --> one3[N7]
+  tk3[Tool kind x3, turn outcome x3,<br/>deltas x3, history x3] --> one4[one shared interpretation;<br/>N3 and N9 render it]
+  br2[Two brokers] --> one3
+  st[Stop reason x2 + related one] --> one5[one type + one mapping]
+</script></ex-mermaid>
+
+<div class="ex-table-scroll" data-width="canvas">
+<table>
+<thead><tr><th>Duplicate (c4b6254e1)</th><th>Same meaning?</th><th>Becomes</th></tr></thead>
+<tbody>
+<tr><td>Content conversions: N1 <code>native_turn_input.rs:7</code> (Codex input, plus selected skills and local-image file effects); N8 <code>prompt_content_translation.rs:30</code> (ACP text and resource links to Codex text, resource description kept, other content refused, limits of 256 blocks and 64 MiB); N9 <code>provider_acp_content_translation.rs:15</code> (keeps resource links, images, audio); N6 <code>provider_prompt_content.rs:16</code> (the opposite direction: vocabulary to ACP blocks)</td><td><strong>No, only the wire decoding is shared</strong></td><td>Shared typed decoding of ACP and Codex content blocks. Each node keeps its own policy, limits, effects and encoding unchanged. N6 is an encoder, not a duplicate parser.</td></tr>
+<tr><td>SessionRef conversion ×7 (port, interaction port, model catalog, hub ×2, broker, notice, N9)</td><td>Yes</td><td>One SessionRef after central rewrites <code>message-board</code>; until then, one conversion function</td></tr>
+<tr><td>Approval option tables ×5</td><td>Yes</td><td>N7 owns the one mapping</td></tr>
+<tr><td>Tool kind/status ×3, text deltas ×3, turn outcome ×3, history-to-turns ×3, pending summary ×2</td><td>Yes</td><td>One shared event-interpretation step, used by N3 (renders Codex frames), N9 (renders ACP) and N8's history</td></tr>
+<tr><td>Stop reason: <code>StopReason</code>, <code>ProviderPromptStopReason</code>; <code>ConversationStopReason</code> adds Completed and TimedOut</td><td>First two yes; third related</td><td>One type, plus one mapping to the third; each boundary keeps its casing</td></tr>
+<tr><td>Schema digest: 3 types, 4 hand encoders</td><td>Yes</td><td>One type</td></tr>
+<tr><td>Model reasoning: Zod + serde</td><td>Yes</td><td>Rust type + Specta (D22)</td></tr>
+<tr><td>base64 cursors ×3</td><td>Yes</td><td>One cursor helper</td></tr>
+<tr><td>Seven uncompiled Host files</td><td>n/a</td><td>Deleted in D0</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="interfaces">The interfaces that enforce it</h2>
+
+<ex-mermaid id="interfaces-diagram" label="Typed boundaries"><script type="text/plain">
+flowchart LR
+  subgraph k[Shared rules]
+    req["N10: request&lt;R: CodexRequest&gt;(R::Params) → R::Response | CodexCallError"]
+    face["N1: match ClientRequest → handler returns R::Response"]
+    emit["N1/N3: emit&lt;N: CodexNotification&gt;"]
+    conv["each node: convert(input, &mut state) → outputs (0..n)"]
+    disp["each node: Disposition { Handled, Refused, Minimal, Ignored }"]
+  end
+</script></ex-mermaid>
+
+<ul>
+<li><code>CodexCallError</code> is closed: <code>Transport</code>, <code>Rejected</code>, <code>MalformedResult { outcome: OutcomeUnknown | Protocol }</code>. A malformed result retires the connection, as <code>request_validated</code> does today.</li>
+<li>Raw JSON exists only inside the generated crate's codec.</li>
+<li>Matches over our own types (generated Codex types, Router vocabulary) have no wildcard arm, so a new kind fails the build.</li>
+<li>The ACP SDK's enums are <code>#[non_exhaustive]</code> (schema 1.9.1, <code>SessionUpdate</code> at <code>client.rs:98</code>), so a downstream match must have a fallback. There the fallback maps to a named <code>Unlisted</code> disposition, which is recorded and never dropped silently. A required check reads the SDK's schema at the pinned version (<code>=2.2.0</code>, via its <code>schemars</code> feature) and fails if any variant lacks an explicit entry in the node's disposition table (D25).</li>
+</ul>
+
+<h2 id="refresh">Following a Codex release</h2>
+
+<ex-mermaid id="refresh-sequence" label="Refresh"><script type="text/plain">
+sequenceDiagram
+  participant M as Maintainer
+  participant G as Generator
+  participant X as Installed Codex
+  participant C as Contract crate
+  M->>G: refresh
+  G->>X: generate-json-schema / generate-ts --experimental
+  G->>G: read common.rs at the release commit, apply overrides
+  G->>C: write Rust + header with input hashes
+  G-->>M: report: added, removed, changed shapes; overrides still needed?
+  M->>C: build: errors name every node that no longer matches
+</script></ex-mermaid>
+
+<p>The offline check, part of the required checks, verifies the header hashes and regenerates from the committed export. The online check installs the pinned Codex and compares its export. Orca checks its ACP schema the same way (<code>generate-protocol.mjs --check</code>).</p>
+
+<h2 id="deliverables">Deliverables</h2>
+
+<ex-mermaid id="deliverables-diagram" label="Deliverables and dependencies"><script type="text/plain">
+flowchart LR
+  D0[D0 verification first] --> D1[D1 Codex contract]
+  D1 --> D2[D2 output stream]
+  D1 --> D3[D3 input, settings, history]
+  D1 --> D4[D4 approvals]
+  central2[central approvals design] --> D4
+  D1 --> D5[D5 Codex client side]
+  D5 --> D6[D6 ACP + vocabulary]
+  central[central's D] --> D6
+</script></ex-mermaid>
+
+<p>Pages: <a href="d0-verification.html">D0</a> · <a href="d1-codex-contract.html">D1</a> · <a href="d2-output-stream.html">D2</a> · <a href="d3-input-settings-history.html">D3</a> · <a href="d4-approvals.html">D4</a> · <a href="d5-codex-client.html">D5</a> · <a href="d6-acp-vocabulary.html">D6</a></p>
+
+<h2 id="bindings">Where each noun lives</h2>
+
+<div class="ex-table-scroll" data-width="canvas">
+<table>
+<thead><tr><th>Entity</th><th>Home</th><th>Shape</th></tr></thead>
+<tbody>
+<tr><td><a href="specification.html#E1">E1</a> Node</td><td>existing modules named per node above</td><td>one set of conversion functions per node</td></tr>
+<tr><td><a href="specification.html#E2">E2</a> Edge</td><td>existing transports (sockets, stdio, HTTP)</td><td>one family of contract types per edge</td></tr>
+<tr><td><a href="specification.html#E3">E3</a> Stream</td><td>derived; documented as S1–S7 here</td><td>none</td></tr>
+<tr><td><a href="specification.html#E4">E4</a> Message shape</td><td>Codex: new <code>crates/codex-app-server-contract</code>. ACP: <code>agent-client-protocol</code> 2.2.0. Vocabulary: <code>session-event-model</code> now, final home after central's rewrite (A24).</td><td>serde types; Codex requests implement <code>CodexRequest</code></td></tr>
+<tr><td><a href="specification.html#E5">E5</a> Contract</td><td>the three definitions above</td><td>none</td></tr>
+<tr><td><a href="specification.html#E6">E6</a> Conversion</td><td>owning node</td><td><code>convert(input, &amp;mut state) -&gt; Outputs</code>, exhaustive</td></tr>
+<tr><td><a href="specification.html#E7">E7</a> Disposition</td><td>owning node</td><td><code>enum Disposition { Handled, Refused(RefusalReason), Minimal, Ignored(IgnoreReason) }</code></td></tr>
+<tr><td><a href="specification.html#E8">E8</a> Codex release</td><td>new <code>protocol-schemas/codex-app-server/&lt;release&gt;/</code></td><td>export files + <code>common.rs</code> + <code>release.json</code></td></tr>
+<tr><td><a href="specification.html#E9">E9</a> Override</td><td>new generator registry in <code>verification/tooling/codex-contract/</code></td><td><code>{ shape, change, reason, removeWhen, test }</code></td></tr>
+<tr><td><a href="specification.html#E10">E10</a> Producer/consumer link</td><td>table above, checked by D0's taps</td><td>(message, node, produces | consumes)</td></tr>
+<tr><td><a href="specification.html#E11">E11</a> Protocol crate</td><td>workspace manifests</td><td>none</td></tr>
+</tbody>
+</table>
+</div>
+
+<aside class="design-item" id="A24" data-design-item="assumption" data-authority="author"><p>New vocabulary types land in <code>session-event-model</code>, which central is not rewriting. The final merged home waits for central's rewrite of <code>collaboration-protocol</code> (C3).</p></aside>
+
+<h2 id="trace">Rule → node → proof</h2>
+
+<div class="ex-table-scroll" data-width="canvas">
+<table>
+<thead><tr><th>R</th><th>U</th><th>Owner node</th><th>Interface</th><th>State / failure</th><th>Deliverable</th><th>Proof (Verification)</th></tr></thead>
+<tbody>
+<tr><td><a href="specification.html#R1">R1</a></td><td>U1 U2</td><td>N1 N3 N10 N8</td><td>generated types</td><td>build error</td><td>D1–D5</td><td>edge conformance; compile-fail</td></tr>
+<tr><td><a href="specification.html#R2">R2</a></td><td>U1 U2</td><td>generator</td><td><code>Option&lt;Option&lt;T&gt;&gt;</code> + field docs</td><td>n/a</td><td>D1, D3</td><td>round trip; <code>/model</code> journey</td></tr>
+<tr><td><a href="specification.html#R3">R3</a></td><td>U1</td><td>generator</td><td><code>CodexRequest::Response</code></td><td>refresh fails closed</td><td>D1</td><td>swapped pairing fails</td></tr>
+<tr><td><a href="specification.html#R4">R4</a></td><td>U1</td><td>generator</td><td>flatten extra</td><td>n/a</td><td>D1</td><td>relay round trip</td></tr>
+<tr><td><a href="specification.html#R5">R5</a></td><td>U1 U3</td><td>generator</td><td>open enums</td><td>never drops turn completion</td><td>D1</td><td>unknown value sample</td></tr>
+<tr><td><a href="specification.html#R6">R6</a></td><td>U2 U3</td><td>generator</td><td>override registry</td><td>refresh reports stale overrides</td><td>D1</td><td>registry test per override</td></tr>
+<tr><td><a href="specification.html#R7">R7</a></td><td>U2 U3</td><td>generator</td><td>refresh / check</td><td>check fails on drift</td><td>D1</td><td>offline + online check</td></tr>
+<tr><td><a href="specification.html#R8">R8</a></td><td>U3</td><td>N1, N10 (N2 per Q1)</td><td>gate before effects</td><td>gap: policy waits on Q1</td><td>after Q1</td><td>mismatch journey</td></tr>
+<tr><td><a href="specification.html#R9">R9</a></td><td>U1 U9</td><td>every node</td><td><code>Disposition</code> match</td><td>build error on a new kind</td><td>D2–D5</td><td>compile-fail; taps</td></tr>
+<tr><td><a href="specification.html#R10">R10</a></td><td>U7</td><td>N1</td><td>refused / minimal</td><td>named error</td><td>D3</td><td>CLI survives each refusal</td></tr>
+<tr><td><a href="specification.html#R11">R11</a></td><td>U7</td><td>N1 N3 N6</td><td>whole S1–S5</td><td>n/a</td><td>D2 D3 D4</td><td>Codex-vs-Router comparison</td></tr>
+<tr><td><a href="specification.html#R12">R12</a></td><td>U5 U9</td><td>every converting node</td><td><code>convert</code></td><td>declared outputs</td><td>D2–D6</td><td>node taps</td></tr>
+<tr><td><a href="specification.html#R13">R13</a></td><td>U9</td><td>N1 N3 N6 N7</td><td>declared state per node</td><td>resets owned</td><td>D2 D4</td><td>node taps with state</td></tr>
+<tr><td><a href="specification.html#R14">R14</a></td><td>U5</td><td>owning nodes</td><td>inventory above</td><td>encodings unchanged</td><td>D2–D6</td><td>inventory review</td></tr>
+<tr><td><a href="specification.html#R15">R15</a></td><td>U5</td><td>N6 N8</td><td>ACP SDK, both roles</td><td>n/a</td><td>D6</td><td>no ACP schema file left</td></tr>
+<tr><td><a href="specification.html#R16">R16</a></td><td>U5</td><td>N11</td><td>schemars on generated types</td><td>n/a</td><td>D5</td><td>advertised equals derived</td></tr>
+<tr><td><a href="specification.html#R17">R17</a></td><td>U1 U5</td><td>N10 N1</td><td><code>CodexCallError</code></td><td>OutcomeUnknown / Protocol + retire</td><td>D5</td><td>malformed reply cases</td></tr>
+<tr><td><a href="specification.html#R18">R18</a></td><td>U6</td><td>workspace</td><td>manifests</td><td>n/a</td><td>D0, D6</td><td>crate list; orphans gone</td></tr>
+<tr><td><a href="specification.html#R19">R19</a></td><td>U5 U6 U9</td><td>each deliverable</td><td>none</td><td>named corrections</td><td>all</td><td>before/after comparison</td></tr>
+<tr><td><a href="specification.html#R20">R20</a></td><td>U9</td><td>this page</td><td>node sections</td><td>n/a</td><td>all</td><td>each node's fix observed</td></tr>
+<tr><td><a href="specification.html#R21">R21</a></td><td>U10</td><td>this page + taps</td><td>producer/consumer table</td><td>mismatch reported</td><td>D0</td><td>taps compared with the table</td></tr>
+<tr><td><a href="specification.html#R22">R22</a></td><td>U11</td><td>verification</td><td>conformance tool</td><td>n/a</td><td>D1</td><td>samples from the export</td></tr>
+<tr><td><a href="specification.html#R23">R23</a></td><td>U9 U11</td><td>verification</td><td>tap harness</td><td>n/a</td><td>D0</td><td>per-node tap cases</td></tr>
+<tr><td><a href="specification.html#R24">R24</a></td><td>U7 U11</td><td>verification</td><td>comparison journeys</td><td>n/a</td><td>D0</td><td>Codex vs Router</td></tr>
+<tr><td><a href="specification.html#R25">R25</a></td><td>U11</td><td>verification</td><td>baseline</td><td>n/a</td><td>D0</td><td>known failures fail</td></tr>
+<tr><td><a href="specification.html#R26">R26</a></td><td>U8</td><td>N1, generated types</td><td>transport-free inputs</td><td>n/a</td><td>D3</td><td>review of handler inputs</td></tr>
+</tbody>
+</table>
+</div>
+
+</ex-document>
+</body>
+</html>

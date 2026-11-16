@@ -1,0 +1,355 @@
+{
+  "version": 1,
+  "pages": [
+    {
+      "id": "home",
+      "title": "Protocol contracts",
+      "href": "index.html",
+      "icon": "path"
+    },
+    {
+      "id": "requirements",
+      "title": "Requirements",
+      "href": "requirements.html",
+      "icon": "user"
+    },
+    {
+      "id": "specification",
+      "title": "Specification",
+      "href": "specification.html",
+      "icon": "file"
+    },
+    {
+      "id": "program",
+      "title": "Program Design",
+      "href": "program-design.html",
+      "icon": "code"
+    },
+    {
+      "id": "verification",
+      "title": "Verification Design",
+      "href": "verification.html",
+      "icon": "test-tube"
+    },
+    {
+      "id": "d0",
+      "title": "D0 Verification first",
+      "href": "d0-verification.html",
+      "icon": "test-tube"
+    },
+    {
+      "id": "d1",
+      "title": "D1 Codex contract",
+      "href": "d1-codex-contract.html",
+      "icon": "package"
+    },
+    {
+      "id": "d2",
+      "title": "D2 Output stream",
+      "href": "d2-output-stream.html",
+      "icon": "chat-circle"
+    },
+    {
+      "id": "d3",
+      "title": "D3 Input, settings, history",
+      "href": "d3-input-settings-history.html",
+      "icon": "terminal"
+    },
+    {
+      "id": "d4",
+      "title": "D4 Approvals",
+      "href": "d4-approvals.html",
+      "icon": "lock"
+    },
+    {
+      "id": "d5",
+      "title": "D5 Codex client side",
+      "href": "d5-codex-client.html",
+      "icon": "plug"
+    },
+    {
+      "id": "d6",
+      "title": "D6 ACP and vocabulary",
+      "href": "d6-acp-vocabulary.html",
+      "icon": "stack"
+    },
+    {
+      "id": "plan-d0",
+      "title": "Plan: D0",
+      "href": "plans/2026-11-14-d0-verification-build-journeys.html",
+      "icon": "path"
+    }
+  ],
+  "map": [
+    {
+      "title": "Codex app-server contract",
+      "description": "Capability · Codex messages typed from Codex own export",
+      "icon": "shield-check",
+      "target": {
+        "page": "requirements",
+        "fragment": "cap-contract"
+      },
+      "children": [
+        {
+          "title": "Rules R1–R8",
+          "description": "Specification · contract rules",
+          "icon": "file",
+          "target": {
+            "page": "specification",
+            "fragment": "cap-contract"
+          }
+        },
+        {
+          "title": "How types are made",
+          "description": "Program Design · generator, pairing, overrides",
+          "icon": "code",
+          "target": {
+            "page": "program",
+            "fragment": "choice"
+          }
+        },
+        {
+          "title": "D1 Codex contract",
+          "description": "Deliverable",
+          "icon": "package",
+          "target": {
+            "page": "d1",
+            "fragment": "scope"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Every node fixed",
+      "description": "Capability · each node typed, one definition each",
+      "icon": "stack",
+      "target": {
+        "page": "requirements",
+        "fragment": "cap-nodes"
+      },
+      "children": [
+        {
+          "title": "Rules R9–R21",
+          "description": "Specification · node rules",
+          "icon": "file",
+          "target": {
+            "page": "specification",
+            "fragment": "cap-nodes"
+          }
+        },
+        {
+          "title": "Every node and its fix",
+          "description": "Program Design · N1–N12",
+          "icon": "code",
+          "target": {
+            "page": "program",
+            "fragment": "nodes"
+          }
+        },
+        {
+          "title": "Streams through the nodes",
+          "description": "Program Design · S1–S7",
+          "icon": "path",
+          "target": {
+            "page": "program",
+            "fragment": "streams"
+          }
+        },
+        {
+          "title": "Producers and consumers",
+          "description": "Program Design · who makes and reads each message",
+          "icon": "users",
+          "target": {
+            "page": "program",
+            "fragment": "producers-consumers"
+          }
+        },
+        {
+          "title": "Duplicates and what each becomes",
+          "description": "Program Design · inventory",
+          "icon": "code",
+          "target": {
+            "page": "program",
+            "fragment": "inventory"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Verification system",
+      "description": "Capability · you are never the first test",
+      "icon": "test-tube",
+      "target": {
+        "page": "requirements",
+        "fragment": "cap-verify"
+      },
+      "children": [
+        {
+          "title": "Rules R11, R22–R25",
+          "description": "Specification · verification rules",
+          "icon": "file",
+          "target": {
+            "page": "specification",
+            "fragment": "cap-verify"
+          }
+        },
+        {
+          "title": "Four layers",
+          "description": "Verification Design",
+          "icon": "test-tube",
+          "target": {
+            "page": "verification",
+            "fragment": "layers"
+          }
+        },
+        {
+          "title": "D0 Verification first",
+          "description": "Deliverable",
+          "icon": "test-tube",
+          "target": {
+            "page": "d0",
+            "fragment": "scope"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Deliverables",
+      "description": "D0–D6 in order",
+      "icon": "rocket",
+      "target": {
+        "page": "home",
+        "fragment": "deliverables"
+      },
+      "children": [
+        {
+          "title": "D2 Output stream",
+          "description": "770K, steer receipt",
+          "icon": "chat-circle",
+          "target": {
+            "page": "d2",
+            "fragment": "scope"
+          }
+        },
+        {
+          "title": "D3 Input, settings, history",
+          "description": "typed CLI requests",
+          "icon": "terminal",
+          "target": {
+            "page": "d3",
+            "fragment": "scope"
+          }
+        },
+        {
+          "title": "D4 Approvals",
+          "description": "one broker, both ways",
+          "icon": "lock",
+          "target": {
+            "page": "d4",
+            "fragment": "scope"
+          }
+        },
+        {
+          "title": "D5 Codex client side",
+          "description": "typed calls, pipeline gone",
+          "icon": "plug",
+          "target": {
+            "page": "d5",
+            "fragment": "scope"
+          }
+        },
+        {
+          "title": "D6 ACP and vocabulary",
+          "description": "one ACP authority, Specta",
+          "icon": "stack",
+          "target": {
+            "page": "d6",
+            "fragment": "scope"
+          }
+        }
+      ]
+    },
+    {
+      "title": "Your decisions",
+      "description": "Decided: Q1, Q2, Q3. Open: Q4 (untested CLI option)",
+      "icon": "chat-circle",
+      "target": {
+        "page": "home",
+        "fragment": "decisions"
+      }
+    }
+  ],
+  "walkthroughs": [
+    {
+      "id": "read-the-design",
+      "title": "How does this design fit together?",
+      "description": "From the problem through the graph, the nodes and the deliverables.",
+      "steps": [
+        {
+          "target": {
+            "page": "requirements",
+            "fragment": "journeys"
+          },
+          "narration": "How the bugs reached you, and why they keep coming.",
+          "icon": "user"
+        },
+        {
+          "target": {
+            "page": "program",
+            "fragment": "graph-today"
+          },
+          "narration": "The graph today: which nodes convert by hand.",
+          "icon": "code"
+        },
+        {
+          "target": {
+            "page": "program",
+            "fragment": "graph-target"
+          },
+          "narration": "The graph after: every edge typed from three definitions.",
+          "icon": "code"
+        },
+        {
+          "target": {
+            "page": "program",
+            "fragment": "nodes"
+          },
+          "narration": "Each node, what is wrong, and its fix.",
+          "icon": "code"
+        },
+        {
+          "target": {
+            "page": "program",
+            "fragment": "streams"
+          },
+          "narration": "The streams through those nodes.",
+          "icon": "path"
+        },
+        {
+          "target": {
+            "page": "verification",
+            "fragment": "layers"
+          },
+          "narration": "How each layer is proven.",
+          "icon": "test-tube"
+        },
+        {
+          "target": {
+            "page": "home",
+            "fragment": "deliverables"
+          },
+          "narration": "The deliverables and their order.",
+          "icon": "rocket"
+        },
+        {
+          "target": {
+            "page": "home",
+            "fragment": "decisions"
+          },
+          "narration": "What needs your answer.",
+          "icon": "chat-circle"
+        }
+      ]
+    }
+  ]
+}

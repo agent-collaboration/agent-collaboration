@@ -28,6 +28,11 @@ import { CODEX_0_165_TEXT } from './codex-acp-scenes.ts';
 // PtyGridDriver.start creates its core at this size before any recorded resize.
 const DRIVER_COLUMNS = 120;
 const DRIVER_ROWS = 36;
+// The replay keeps every row a run scrolls away, so the whole-run error check sees all of them. The
+// cap is bytes of page memory (ghostty), not rows: the library default kept 448 of the 2,024 rows of
+// the D0 r3-c21 steer reply and discarded 1,576; 16,000,000 kept all of them. Rows the core still
+// discards past this cap are refused, never skipped.
+const REPLAY_SCROLLBACK_LIMIT_BYTES = 256 * 1024 * 1024;
 
 /** One error history cell, where it first appeared. */
 export interface FrameErrorLine {
@@ -74,7 +79,7 @@ export async function observeCompletedFrames(
 			throw new Error('invalid terminal resize boundary');
 		previous = resize.byteOffset;
 	}
-	const core = await createTerminalCore(DRIVER_COLUMNS, DRIVER_ROWS);
+	const core = await createTerminalCore(DRIVER_COLUMNS, DRIVER_ROWS, REPLAY_SCROLLBACK_LIMIT_BYTES);
 	try {
 		const errors: FrameErrorLine[] = [];
 		const seen = new Set<string>();
@@ -162,6 +167,32 @@ export function requireNoWholeRunError(observation: FrameObservation): void {
 }
 
 /**
+ * The scoped error rule: the whole run showed no error cell except the declared ones, each
+ * declared cell (whole line, `■ ` then its text) was seen, and every frame was observable. A cell
+ * that merely starts with a declared text, or the same text inside another cell, is another cell.
+ */
+export function requireOnlyExpectedErrors(
+	observation: FrameObservation,
+	expectedCells: readonly string[],
+): void {
+	if (observation.completedFrames === 0)
+		throw new Error('no completed frame was observed in the whole run');
+	if (observation.unterminatedFrame)
+		throw new Error('the whole run ended inside an unfinished frame');
+	if (observation.scrollbackDiscarded > 0)
+		throw new Error('scrollback rows were discarded before they could be inspected');
+	const expected = new Set(expectedCells.map((text) => CODEX_0_165_TEXT.errorPrefix + text));
+	const unexpected = observation.errors.find((error) => !expected.has(error.line));
+	if (unexpected !== undefined)
+		throw new Error(
+			`undeclared error cell in the whole run (frame ${unexpected.frame}, after byte ${unexpected.byteOffset}): ${unexpected.line}`,
+		);
+	const seen = new Set(observation.errors.map((error) => error.line));
+	const missing = [...expected].find((line) => !seen.has(line));
+	if (missing !== undefined) throw new Error(`declared error cell never appeared: ${missing}`);
+}
+
+/**
  * After the PTY ends: observe every completed frame, keep the evidence in the run output, require
  * the replay to end on the live grid, and, for a journey that forbids them, refuse any error cell.
  * The evidence is written before any refusal so a failed run keeps it.
@@ -170,7 +201,9 @@ export async function settleWholeRunFrames(input: {
 	readonly bytes: Uint8Array;
 	readonly resizes: readonly TerminalResize[];
 	readonly liveLines: readonly string[];
-	readonly policy: 'forbid' | 'record';
+	readonly policy: 'forbid' | 'scoped' | 'record';
+	// The error cells a 'scoped' policy allows (their text after `■ `); empty for the other policies.
+	readonly expectedErrors?: readonly string[];
 	readonly output: string;
 }): Promise<FrameObservation> {
 	const frames = await observeCompletedFrames(input.bytes, input.resizes);
@@ -184,6 +217,7 @@ export async function settleWholeRunFrames(input: {
 				scrollback_discarded: frames.scrollbackDiscarded,
 				errors: frames.errors,
 				whole_run_errors: input.policy,
+				expected_errors: input.expectedErrors ?? [],
 			},
 			null,
 			2,
@@ -192,5 +226,6 @@ export async function settleWholeRunFrames(input: {
 	);
 	requireReplayMatchesLiveGrid(frames, input.liveLines);
 	if (input.policy === 'forbid') requireNoWholeRunError(frames);
+	if (input.policy === 'scoped') requireOnlyExpectedErrors(frames, input.expectedErrors ?? []);
 	return frames;
 }

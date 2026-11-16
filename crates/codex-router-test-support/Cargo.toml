@@ -19,6 +19,8 @@ codex-router-proxy = { path = "../codex-router-proxy", version = "0.1.4" }
 codex-router-secret-store = { path = "../codex-router-secret-store", version = "0.1.4", features = ["test-support"] }
 codex-router-state = { path = "../codex-router-state", version = "0.1.4", features = ["sync-rusqlite-fixtures"] }
 futures-util.workspace = true
+jsonschema.workspace = true
+rmcp.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
@@ -28,6 +30,8 @@ tokio-tungstenite.workspace = true
 tungstenite = "0.28.0"
 
 [dev-dependencies]
+agent-client-protocol.workspace = true
+schemars.workspace = true
 owned-process-test-support = { path = "../owned-process-test-support", version = "0.1.126" }
 tempfile = "3.27.0"
 codex-router-secret-store = { path = "../codex-router-secret-store", version = "0.1.4", features = ["keychain-test-guard", "test-support"] }

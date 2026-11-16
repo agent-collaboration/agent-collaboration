@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Protocol contracts — D3</title>
+  <link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+  <script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content" src="./navigation.json"></ex-nav>
+<ex-document id="content">
+<h1>D3 · Input, settings, history</h1>
+
+<ex-callout title="Goal" tone="tldr"><p>The CLI face decodes typed requests, every request gets one declared answer, and content, history and models each have one implementation.</p></ex-callout>
+
+<h2 id="scope">Nodes this deliverable fixes</h2>
+<ex-mermaid id="scope-graph" label="Touched nodes highlighted"><script type="text/plain">
+flowchart LR
+  cli[Codex CLI]
+  codex[Managed Codex]
+  agents[Claude / Cursor]
+  callers[MCP callers]
+  N1[N1 CLI face]
+  N2[N2 relay]
+  N3[N3 output mapper]
+  N4[N4 command port]
+  N5[(N5 hub)]
+  N6[N6 ACP client]
+  N7[N7 approvals]
+  N8[N8 Codex ACP adapter]
+  N9[N9 provider ACP route]
+  N10[N10 Codex client]
+  N11[N11 MCP server]
+  N12[N12 Claude metadata]
+  cli --> N1
+  cli --> N2 --> codex
+  N1 --> N4 --> N6 --> agents
+  agents --> N6 --> N5 --> N3 --> N1
+  N6 --> N7 --> N5
+  N5 --> N9
+  callers --> N11 --> N4
+  N11 --> N8 --> N10 --> codex
+  N12 --> N6
+  class N1,N4,N6 slot2
+</script></ex-mermaid>
+<p>Teal nodes change in this deliverable. Node details: <a href="program-design.html#nodes">Program Design</a>.</p>
+
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Part</th><th>Change</th></tr></thead>
+<tbody>
+<tr><td>N1 CLI face</td><td>decode the generated ClientRequest; exhaustive disposition; no method-not-found; one content parser; one history-to-turns; typed model list</td></tr>
+<tr><td>N4 command port</td><td>one SessionRef conversion; one capability check</td></tr>
+<tr><td>N6 ACP client</td><td>typed steering and model-discovery extension messages</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="order">Where it sits</h2>
+<ex-mermaid id="order-graph" label="Dependencies"><script type="text/plain">
+flowchart LR
+  before["D0, D1"] --> this[D3] --> after["none required"]
+  class this slot2
+</script></ex-mermaid>
+
+<h2 id="proof">How it is proven</h2>
+<ex-mermaid id="proof-graph" label="Observations"><script type="text/plain">
+flowchart LR
+  this[D3] --> p0["O1 compile-fail on N1 handlers"] & p1["O4 taps on N1, N4"] & p2["O5: send, steer, /model, /resume, two windows, refused commands"] & p3["O7 handler inputs review"]
+</script></ex-mermaid>
+<div class="ex-table-scroll" data-width="canvas">
+<table>
+<thead><tr><th>Check</th><th>Target</th><th>Passes when</th><th>Fails a wrong build when</th></tr></thead>
+<tbody>
+<tr><td>Journey first (O5)</td><td>real CLI vs real Codex and vs debug Router with Claude Haiku, before any D3 fix</td><td>D0's two-window, /resume, refused-command and tier journeys run on the pre-fix head; each case that a D3 defect breaks fails there with a named reason</td><td>a case passes on the pre-fix head although its defect is present, or the journeys run only after the fix</td></tr>
+<tr><td>Compile-fail (O1)</td><td>N1 handlers</td><td>a handler that returns another request's response, or a request with no disposition, does not compile</td><td>either compiles</td></tr>
+<tr><td>CLI journeys (O5)</td><td>real CLI vs real Codex, and vs debug Router with Claude and Cursor</td><td>send, steer, /model, /resume list and open, and two windows all match the reference; serviceTier null clears and an absent field keeps its value</td><td>any mismatch</td></tr>
+<tr><td>Refused commands (O5)</td><td>same</td><td>after each refused command the CLI stays usable, and no response says "method not found"</td><td>the CLI exits, or method-not-found appears in the taps</td></tr>
+<tr><td>One content parser (O4)</td><td>N1, N4</td><td>text, image, local image and skill inputs give the same prompt contents from every entry point</td><td>two entry points disagree</td></tr>
+<tr><td>Handler inputs (O7)</td><td>review</td><td>no handler reads a socket path or carrier</td><td>one does</td></tr>
+<tr><td>Typed steering (O1 + O7)</td><td>N6 steering call</td><td>building the steering request from untyped JSON does not compile; the review finds no json! steering payload</td><td>an untyped steering request still compiles</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Streams:</strong> S1, S4, S5. <strong>Rules:</strong> R1 (N1 edge), R2 (/model), R8 (after Q1), R9, R10, R12, R14, R19, R26. Details: <a href="verification.html">Verification Design</a>.</p>
+
+<h2 id="boundary">Out of scope and coordination</h2>
+<ul>
+<li><strong>Out of scope:</strong> Approvals (D4).</li>
+<li><strong>Coordinate:</strong> Session/MCP Lead decides which requests are implemented. Lead A must approve changes in codex-router-host (N4).</li>
+<li><strong>Done when:</strong> Every CLI request has one declared answer, and the S1, S4 and S5 journeys match real Codex.</li>
+</ul>
+
+<p><a href="index.html#deliverables">All deliverables</a></p>
+</ex-document>
+</body>
+</html>

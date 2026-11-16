@@ -87,3 +87,7 @@ pub fn translate_prompt_content(
         input,
     })
 }
+
+#[cfg(test)]
+#[path = "prompt_content_translation_node_tap_test.rs"]
+mod node_tap_tests;

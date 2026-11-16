@@ -633,3 +633,7 @@ pub async fn receive_hub_event(
 #[cfg(test)]
 #[path = "provider_session_event_hub_test.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "provider_session_event_hub_node_tap_test.rs"]
+mod node_tap_tests;

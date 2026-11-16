@@ -151,7 +151,7 @@ else process.exitCode = 1;`,
 		output: join(root, 'codex-acp-run'),
 		target: codexAcpTargetSchema.parse({
 			codex: captureArtifact(codex),
-			codex_version: '0.165.0',
+			codex_version: '0.166.0',
 			service_directory: host.serviceDirectory,
 			expected_service_id: SERVICE,
 			expected_service_epoch: EPOCH,

@@ -1,4 +1,6 @@
 /** A launch frame must authorize typing; only the known update modal gets one Escape. */
+import { homedir } from 'node:os';
+
 import type { PtyGridDriver } from '../terminal/pty-grid-driver.ts';
 import type { KeyProtocol } from '../terminal/pty-grid-driver.ts';
 import { gridLines } from '../terminal/terminal-grid.ts';
@@ -10,10 +12,13 @@ import {
 	gridShowsEmptyComposer,
 } from './codex-acp-scenes.ts';
 import type { CodexJourney } from './codex-acp-scenes.ts';
+import { CODEX_PINNED_VERSION } from './codex-acp-target.ts';
 
 function showsUpdateModal(lines: readonly string[]): boolean {
+	// Only the update modal of the pinned CLI release is known; any other release is a stop.
+	const title = `Update available · ${CODEX_PINNED_VERSION} → `;
 	return (
-		lines.some((line) => /Update available\s*·\s*0\.165\.0\s*→\s*\S+/u.test(line)) &&
+		lines.some((line) => line.trim().startsWith(title)) &&
 		['1. Update now', '2. Skip', '3. Skip until next version', 'enter continue', 'esc skip'].every(
 			(text) => lines.some((line) => line.includes(text)),
 		)
@@ -40,9 +45,26 @@ function composerReady(grid: TerminalGrid): boolean {
 
 type StartupState = 'ready' | 'update' | 'resuming' | 'blocked';
 
-function startupState(grid: TerminalGrid): StartupState {
+/**
+ * Real Codex 0.166.0's folder-trust prompt (D0 r1 attempt 4). The driver never answers it: the
+ * owner adds trust entries himself (assignment Correction 27, review F1), so any trust prompt, for
+ * any folder, stops the run with no key sent.
+ */
+function showsFolderTrustPrompt(lines: readonly string[]): boolean {
+	return lines.some(
+		(line) => line.trim() === 'Folder access' || line.includes('Trust this folder?'),
+	);
+}
+
+/** How Codex prints the launch cwd in its startup header: the home directory as `~`. */
+export function launchCwdLine(cwd: string, home: string = homedir()): string {
+	return cwd === home || cwd.startsWith(`${home}/`) ? `~${cwd.slice(home.length)}` : cwd;
+}
+
+function startupState(grid: TerminalGrid, cwdLine: string): StartupState {
 	const lines = gridLines(grid);
 	if (showsUpdateModal(lines)) return 'update';
+	if (showsFolderTrustPrompt(lines)) return 'blocked';
 	if (
 		[
 			CODEX_0_165_TEXT.errorPrefix,
@@ -53,12 +75,16 @@ function startupState(grid: TerminalGrid): StartupState {
 	)
 		return 'blocked';
 	if (lines.some((line) => line.includes(CODEX_0_165_TEXT.resumingSession))) {
-		// Exactly the mcf50 startup view, including its known cwd. Unknown added dialog/text
+		// Exactly the mcf50 startup view, with the declared launch cwd. Unknown added dialog/text
 		// cannot gain a wait by retaining an old Resuming label behind it.
 		const allowed = new Set([
 			'',
 			'>_ OpenAI Codex (v0.165.0)',
-			'~/code/projects/codex-router',
+			'>_ OpenAI Codex (v0.166.0)',
+			cwdLine,
+			// Real Codex prints this placeholder in the header's directory line until the resumed thread
+			// loads (D0 r1 frame, runs/r1-base-codex-reference/out-attempt2).
+			'loading',
 			CODEX_0_165_TEXT.resumingSession,
 			CODEX_0_165_TEXT.composerPrompt + CODEX_0_165_TEXT.emptyComposerPlaceholder,
 		]);
@@ -67,14 +93,33 @@ function startupState(grid: TerminalGrid): StartupState {
 	return composerReady(grid) ? 'ready' : 'blocked';
 }
 
-const STARTUP_COMPOSER_BOUND_MS = UI_CHECKPOINT_MS;
+/** The default startup bound; a target may declare a longer one (real Codex resumes slower). */
+export const STARTUP_COMPOSER_BOUND_MS = UI_CHECKPOINT_MS;
 
 export async function requireLaunchComposer(inputs: {
 	readonly driver: Pick<PtyGridDriver, 'frameGeneration' | 'send' | 'waitForGrid'>;
 	readonly keys: KeyProtocol;
 	readonly record: (step: CodexJourney['steps'][number], grid: TerminalGrid) => Promise<void>;
+	/** The `--cd` directory Codex was launched in; its startup header shows it. */
+	readonly launchCwd: string;
+	/** The bound for the whole startup, modal dismissal included; defaults to the UI checkpoint bound. */
+	readonly boundMs?: number;
+	/**
+	 * A readiness the launch must also reach before a composer frame counts (the real-Codex
+	 * reference: its own thread/start reply on the wire, assignment Correction 30). Real Codex
+	 * draws a transient composer, then its update modal, and starts its thread only after that, so
+	 * a composer frame before it is not ready. `ready` may throw to refuse at once.
+	 */
+	readonly launchReadiness?: { readonly ready: () => boolean; readonly pending: () => string };
 }): Promise<void> {
 	const { driver, keys, record } = inputs;
+	const cwdLine = launchCwdLine(inputs.launchCwd);
+	const readiness = inputs.launchReadiness ?? null;
+	// A launch frame is input-ready only when its composer is drawn and any declared readiness holds.
+	const stateOf = (grid: TerminalGrid): StartupState => {
+		const state = startupState(grid, cwdLine);
+		return state === 'ready' && readiness !== null && !readiness.ready() ? 'resuming' : state;
+	};
 	const capture = async (scene: string, grid: TerminalGrid): Promise<void> => {
 		await record(
 			{
@@ -95,7 +140,7 @@ export async function requireLaunchComposer(inputs: {
 			grid,
 		);
 	};
-	const deadline = Date.now() + STARTUP_COMPOSER_BOUND_MS;
+	const deadline = Date.now() + (inputs.boundMs ?? STARTUP_COMPOSER_BOUND_MS);
 	const observation: { lastFrame: TerminalGrid | null } = { lastFrame: null };
 	const remaining = (): number => {
 		const milliseconds = deadline - Date.now();
@@ -116,13 +161,13 @@ export async function requireLaunchComposer(inputs: {
 					gridLines(candidate).every((line) => line.trim() === '')
 				)
 					return false;
-				return startupState(candidate) !== 'resuming';
+				return stateOf(candidate) !== 'resuming';
 			},
 			after,
 			remaining(),
 		);
 		remaining();
-		const state = startupState(grid);
+		const state = stateOf(grid);
 		if (state === 'update' && dismissal === 'not-dismissed') {
 			await capture('startup-update-modal', grid);
 			remaining();
@@ -144,6 +189,12 @@ export async function requireLaunchComposer(inputs: {
 		if (observation.lastFrame !== null)
 			await capture('startup-composer-refused', observation.lastFrame);
 		if (error instanceof Error && error.message.includes('composer is not ready')) throw error;
+		if (error instanceof Error && error.message.startsWith('the real-Codex reference')) throw error;
+		if (readiness !== null && !readiness.ready())
+			throw new Error(
+				`the launch did not reach its declared readiness within its startup bound (${readiness.pending()}); no input sent`,
+				{ cause: error },
+			);
 		throw new Error('startup composer readiness did not reach a ready frame within its bound', {
 			cause: error,
 		});

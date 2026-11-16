@@ -75,6 +75,40 @@ export function codexEffortLabel(value: string): string {
 	return EFFORT_LABELS[value] ?? value;
 }
 
+/**
+ * The declared fields of one `/model` pick, shared by the `model` journey and the comparison
+ * journey's model step: the refreshed catalogue page and stale bootstrap rows, the selected model
+ * row and optional effort row, the apply, and its declared text.
+ */
+export const modelPickFields = {
+	catalogue_page: z.array(z.string().min(1)).min(1).max(8),
+	stale_rows: z.array(z.string().min(1)),
+	model_navigation: z.array(codexMenuKeySchema),
+	target: z.strictObject({
+		display_name: z.string().min(1),
+		number: z.number().int().positive(),
+		is_current: z.boolean(),
+	}),
+	effort: z
+		.strictObject({
+			navigation: z.array(codexMenuKeySchema),
+			value: z.string().min(1),
+			number: z.number().int().positive(),
+			is_default: z.boolean(),
+			is_current: z.boolean(),
+		})
+		.nullable(),
+	apply: z.enum(['session', 'default']),
+	// `session`: the declared outcome fragments. `default`: none; the outcome is the regular
+	// success cell for `saved_default`, the values the action saves.
+	expected_outcome: z.array(z.string().min(1)).default([]),
+	saved_default: z
+		.strictObject({ model: z.string().min(1), effort: z.string().min(1) })
+		.nullable()
+		.default(null),
+	outcome_deadline_ms: z.number().int().positive().max(600_000),
+};
+
 /** A numbered menu row the journey must see selected, with exactly these markers. */
 export interface CodexMenuRow {
 	readonly number: number;
