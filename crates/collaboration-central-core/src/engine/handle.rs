@@ -1,10 +1,10 @@
+use super::port::{Engine, EngineHost};
 use super::{
     effects::{ApplyFailure, EffectHandler, ObjectHostEffects},
     failures::FailureOutcome,
     source::{EventSource, SourcePolicy},
     store_adapter::{LoadFailure, StoreAdapter, Versioned},
 };
-use crate::{ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls};
 use central_engine_model::{
     Context, InstanceKey, ItemFailureClass, Machine, RefusalTag, TransitionError,
 };
@@ -57,7 +57,7 @@ impl central_engine_model::IdSource for ReducerIds<'_> {
     }
 }
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<R: EngineHost> Engine<'_, R> {
     /// Handles one event for one instance. The event's entry (after_event for due
     /// units, the request entry for requests) has already checked the organization
     /// once for this event (P3), so handle does not read the stamp again.
@@ -78,9 +78,9 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         Source: EventSource<M>,
     {
         let handler = ObjectHostEffects {
-            host: self.host.as_ref(),
+            host: self.host(),
             #[cfg(feature = "test-support")]
-            pauses: &self.pauses,
+            pauses: self.pauses(),
         };
         for _ in 0..2 {
             let prior = match adapter.load(&key).await {
@@ -126,7 +126,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 return outcome;
             }
             #[cfg(feature = "test-support")]
-            self.pauses
+            self.pauses()
                 .reached_engine(crate::PausePoint::AfterEngineLoad, &key.0)
                 .await;
             let now = match self.now() {
@@ -134,7 +134,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 Err(failure) => return HandleOutcome::StoreDown(failure),
             };
             let transition = {
-                let mut ids = ReducerIds(self.ids.as_ref());
+                let mut ids = ReducerIds(self.ids());
                 M::transition(
                     &prior.state,
                     event.clone(),
@@ -186,7 +186,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             {
                 Ok(()) => {
                     #[cfg(feature = "test-support")]
-                    self.pauses
+                    self.pauses()
                         .reached_engine(crate::PausePoint::AfterEngineCommit, &key.0)
                         .await;
                     return HandleOutcome::Done(next);
@@ -225,7 +225,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         prior: &Versioned<M::State>,
     ) -> Option<HandleOutcome<M::State, M::Error>> {
         let subject = adapter.subject(key);
-        match super::attempt_store::load_attempt(self.host.as_ref(), &subject).await {
+        match super::attempt_store::load_attempt(self.host(), &subject).await {
             Ok(Some(stored)) => match &stored.record {
                 Err(corruption) => Some(
                     self.write_failure(

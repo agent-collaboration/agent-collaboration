@@ -4,10 +4,13 @@ use super::{
         LoadFailure, StoreAdapter, Versioned, decode_load_failure, load_store_failure, raw_version,
     },
 };
+use super::{
+    port::EngineHost,
+    probe_machine::{EngineProbe, ProbeEffect, ProbeState},
+};
+use crate::ObjectHost as _;
 use crate::{
-    ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
-    central_mail_store::timestamp,
-    engine_probe::{EngineProbe, ProbeEffect, ProbeState},
+    central_mail_rows::timestamp,
     guarded_statements::{exact, text},
     workspace_decode_error::corrupt,
     workspace_row_codec::{column, string},
@@ -15,9 +18,7 @@ use crate::{
 use central_engine_model::{EngineTime, InstanceKey, StateTag};
 use central_storage::{GuardedStatement, ReadOutcome, SqlValue, Statement, StoreFailure};
 
-pub(crate) struct ProbeStore<'a, Host: ObjectHost, Stores: WorkspaceStoreCalls>(
-    pub &'a WorkspaceRuntime<Host, Stores>,
-);
+pub(crate) struct ProbeStore<'a, R: EngineHost>(pub &'a R);
 const FAILURE: &str = guarded_attempt_sql!(
     "EXISTS(SELECT 1 FROM engine_probe_items WHERE item_id IS ?20 AND group_id IS ?21 AND due_at IS ?22 AND claim IS ?23 AND state IS ?24 AND completed_claim IS ?25 AND created_at IS ?26 AND updated_at IS ?27 AND machine_kind='engine_probe' AND state NOT IN ('fired','stopped'))"
 );
@@ -69,11 +70,9 @@ fn decode(rows: &ReadOutcome) -> Result<ProbeState, StoreFailure> {
         _ => Err(corrupt("engine_probe_items.state")),
     }
 }
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> StoreAdapter<EngineProbe>
-    for ProbeStore<'_, Host, Stores>
-{
+impl<R: EngineHost> StoreAdapter<EngineProbe> for ProbeStore<'_, R> {
     async fn load(&self, key: &InstanceKey) -> Result<Option<Versioned<ProbeState>>, LoadFailure> {
-        let rows=self.0.host.read(Statement {
+        let rows=self.0.host().read(Statement {
             sql:"SELECT item_id,group_id,due_at,claim,state,completed_claim,created_at,updated_at FROM engine_probe_items WHERE item_id=? AND machine_kind='engine_probe'",
             args:vec![text(&key.0)],
         }).await.map_err(load_store_failure)?;

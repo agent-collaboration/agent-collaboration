@@ -9,13 +9,16 @@ use super::{
     query_registry,
     store_adapter::{SubjectVersion, corrupt_class},
 };
-use crate::{
-    AlarmResult, ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
-    engine_machines::{
+use super::{
+    machines::{
         automation_timer,
         timer_store::{AutomationStore, WakeStore},
         wake_timer,
     },
+    port::{Engine, EngineHost},
+};
+use crate::ObjectHost as _;
+use crate::{
     workspace_decode_error::corrupt,
     workspace_row_codec::{column, string},
 };
@@ -27,6 +30,16 @@ use central_storage::{
 };
 use futures_util::{StreamExt, stream};
 use std::sync::atomic::{AtomicBool, Ordering};
+
+/// What one due batch did, counted per unit kind.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AlarmResult {
+    pub wakes_fired: usize,
+    pub automations_fired: usize,
+    pub windows_fired: usize,
+    pub workspaces_drained: usize,
+}
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct EventCompletion {
@@ -100,10 +113,10 @@ fn decode_due(rows: central_storage::ReadOutcome) -> Result<Vec<DueRow>, StoreFa
         .collect()
 }
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<R: EngineHost> Engine<'_, R> {
     /// Every event reaches this after its own work. The claim occurs before the
     /// first await; only individual units perform async work, at most eight wide.
-    pub async fn after_event(&self) -> Result<EventCompletion, AlarmNotPublished> {
+    pub(crate) async fn after_event(&self) -> Result<EventCompletion, AlarmNotPublished> {
         let result = self.complete_event().await;
         if let Err(error) = &result {
             self.observe_alarm_not_published(error.failure.clone());
@@ -116,13 +129,14 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             .now()
             .map_err(|failure| AlarmNotPublished { failure })?;
         let claimed = self
-            .due_batches
+            .due_batches()
             .try_claim(now.timestamp_millis(), DueBatchPolicy::DEFAULT.spacing)
             .map_err(|reason| AlarmNotPublished {
                 failure: StoreFailure::AlarmUnpublishable { reason },
             })?;
         let provisioned = self
-            .alarm_organization_is_provisioned()
+            .0
+            .organization_is_provisioned()
             .await
             .map_err(|failure| AlarmNotPublished { failure })?;
         if !provisioned {
@@ -154,7 +168,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         query: Statement,
     ) -> Result<AlarmPublication, AlarmNotPublished> {
         match self
-            .host
+            .host()
             .run_batch(StatementBatch {
                 statements: vec![],
                 alarm: AlarmUpdate::SetEngineFromQuery { query },
@@ -222,7 +236,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     break;
                 }
             };
-            match self.host.read(query).await.and_then(decode_due) {
+            match self.host().read(query).await.and_then(decode_due) {
                 Ok(mut rows) => {
                     leftovers |= rows.len() > policy.per_kind_cap;
                     rows.truncate(policy.per_kind_cap);
@@ -287,7 +301,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 work.workspaces_drained += done.workspaces_drained;
             }
         }
-        self.due_batches.finish(now.timestamp_millis(), leftovers);
+        self.due_batches().finish(now.timestamp_millis(), leftovers);
         work
     }
 
@@ -299,7 +313,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     #[cfg(feature = "test-support")]
                     DueKind::Probe => {
                         self.run_machine_unit::<crate::engine_probe::EngineProbe, _>(
-                            &super::probe_store::ProbeStore(self),
+                            &super::probe_store::ProbeStore(self.0),
                             row,
                             "engine_probe_items.due_at",
                             |occurrence| crate::engine_probe::ProbeEvent::Due { occurrence },
@@ -308,7 +322,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     }
                     DueKind::Wake => {
                         self.run_machine_unit::<wake_timer::WakeTimer, _>(
-                            &WakeStore(self),
+                            &WakeStore(self.0),
                             row,
                             "wakes.due_at",
                             |occurrence| wake_timer::Event::Due { occurrence },
@@ -317,7 +331,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     }
                     DueKind::Automation => {
                         self.run_machine_unit::<automation_timer::AutomationTimer, _>(
-                            &AutomationStore(self),
+                            &AutomationStore(self.0),
                             row,
                             "automations.next_due_at",
                             |occurrence| automation_timer::Event::Due { occurrence },
@@ -352,7 +366,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     }
                 }
                 #[cfg(feature = "test-support")]
-                self.count_legacy_invocation(|count| {
+                self.0.count_legacy_invocation(&|count| {
                     if is_windows {
                         count.windows += 1;
                     } else {
@@ -362,7 +376,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 let result = if is_windows {
                     self.run_window_unit(now, &subject).await
                 } else {
-                    self.drain_due_workspaces(now).await
+                    self.0.drain_due_workspaces(now).await
                 };
                 match result {
                     Ok(count) => {
@@ -493,19 +507,19 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         now: EngineTime,
         subject: &EngineSubject,
     ) -> Result<usize, LegacyUnitOutcome> {
-        let _turn = self.take_central_turn().await;
-        let (mut statements, count) = self.plan_due_windows(now).await?;
+        let _turn = self.0.central_turn().await;
+        let (mut statements, count) = self.0.plan_due_windows(now).await?;
         statements.push(super::attempt_statements::delete_attempt(subject));
         // The kept notice tests hold the commit that delivers windows at the
         // existing timer-commit points; an empty window unit passes them by.
         #[cfg(feature = "test-support")]
         if count > 0 {
-            self.pauses
+            self.pauses()
                 .reached_central(crate::PausePoint::BeforeTimerCommit)
                 .await;
         }
         LegacyUnitOutcome::batch(
-            self.host
+            self.host()
                 .run_batch(StatementBatch {
                     statements,
                     alarm: AlarmUpdate::Unchanged,
@@ -514,7 +528,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         )?;
         #[cfg(feature = "test-support")]
         if count > 0 {
-            self.pauses
+            self.pauses()
                 .reached_central(crate::PausePoint::AfterTimerCommit)
                 .await;
         }

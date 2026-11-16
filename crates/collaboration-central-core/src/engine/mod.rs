@@ -2,7 +2,7 @@ mod alarm_decision;
 mod alarm_source;
 #[cfg(feature = "test-support")]
 pub(crate) mod commit_fault;
-pub use alarm_source::{AlarmNotPublished, EventCompletion};
+pub use alarm_source::{AlarmNotPublished, AlarmResult, EventCompletion};
 pub(crate) mod admin;
 pub(crate) mod attempt_records;
 pub(crate) mod attempt_statements;
@@ -15,8 +15,12 @@ pub(crate) mod handle;
 pub(crate) mod legacy_units;
 #[cfg(test)]
 pub(crate) mod machine_property_support;
+pub(crate) mod machines;
 #[cfg(feature = "test-support")]
 pub(crate) mod owed_reply_store;
+pub(crate) mod port;
+#[cfg(feature = "test-support")]
+pub(crate) mod probe_machine;
 #[cfg(feature = "test-support")]
 pub(crate) mod probe_store;
 pub(crate) mod query_registry;

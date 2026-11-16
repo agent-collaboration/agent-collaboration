@@ -1,12 +1,12 @@
 //! Test-support entry that runs the owed-reply reducer through `handle` on a
 //! real host (P10, V1). No production route or table reaches it.
+pub use crate::engine::machines::owed_reply::{
+    Event as OwedEvent, Finish as OwedFinish, OwedReply, OwedReplyRefusal,
+    RouterAnswer as OwedAnswer, State as OwedState,
+};
 pub use crate::engine::{
     receipts::{EngineReceipt, EngineRefusal},
     requests::EngineRequestOutcome,
-};
-pub use crate::engine_machines::owed_reply::{
-    Event as OwedEvent, Finish as OwedFinish, OwedReply, OwedReplyRefusal,
-    RouterAnswer as OwedAnswer, State as OwedState,
 };
 use serde::{Deserialize, Serialize};
 
@@ -67,25 +67,25 @@ impl<Host: crate::ObjectHost, Stores: crate::WorkspaceStoreCalls>
         if let Err(reason) = self.admit_workspace(caller, None).await? {
             return Ok(EngineRequestOutcome::NotPermitted { reason });
         }
-        let actor = self.resolve_identity(&caller_identity(caller)).await?;
-        self.request_engine::<OwedReply, _>(
-            &crate::engine::owed_reply_store::OwedReplyStore(self),
-            actor,
-            request.request_id,
-            request.key,
-            request.event,
-        )
-        .await
-    }
-}
-
-fn caller_identity(caller: &crate::WorkspaceCaller) -> workspace_model::Identity {
-    match &caller.caller {
-        workspace_model::Caller::Session(session) => workspace_model::Identity::AgentSession {
-            session: session.clone(),
-        },
-        workspace_model::Caller::Person { person_id, .. } => workspace_model::Identity::Person {
-            person_id: person_id.clone(),
-        },
+        let identity = match &caller.caller {
+            workspace_model::Caller::Session(session) => workspace_model::Identity::AgentSession {
+                session: session.clone(),
+            },
+            workspace_model::Caller::Person { person_id, .. } => {
+                workspace_model::Identity::Person {
+                    person_id: person_id.clone(),
+                }
+            }
+        };
+        let actor = self.resolve_identity(&identity).await?;
+        crate::engine::port::Engine::new(self)
+            .request_engine::<OwedReply, _>(
+                &crate::engine::owed_reply_store::OwedReplyStore(self),
+                actor,
+                request.request_id,
+                request.key,
+                request.event,
+            )
+            .await
     }
 }

@@ -1,6 +1,6 @@
 use super::attempt_records::{AttemptGuard, EngineSubject, failure_detail};
 use crate::{
-    central_mail_store::timestamp,
+    central_mail_rows::timestamp,
     guarded_statements::{any, exact, text},
     workspace_decode_error::corrupt,
 };

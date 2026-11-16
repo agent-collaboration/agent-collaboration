@@ -3,11 +3,11 @@
 
 mod clock_ids;
 mod engine;
-mod engine_machines;
 #[cfg(feature = "test-support")]
 pub mod engine_owed_probe;
 #[cfg(feature = "test-support")]
 pub mod engine_probe;
+mod engine_wiring;
 #[cfg(feature = "test-support")]
 pub use engine::commit_fault::{EngineCommitFault, EngineCommitFaultKind, EngineReadFault};
 pub use engine::{AlarmNotPublished, EventCompletion};
@@ -503,11 +503,13 @@ pub use wire_contract::*;
 pub use core_contract::*;
 
 mod central_mail_requests;
+mod central_mail_rows;
 mod central_mail_store;
 mod central_timer_plans;
+mod central_timer_rows;
 mod central_timers;
 mod guarded_statements;
-pub use central_timers::AlarmResult;
+pub use engine::AlarmResult;
 mod notification_windows;
 mod workspace_drain;
 mod workspace_notice_plans;

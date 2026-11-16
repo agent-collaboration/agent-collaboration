@@ -2,15 +2,6 @@
 use crate::{ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls, workspace_decode_error::corrupt};
 use central_storage::{Statement, StoreFailure};
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct AlarmResult {
-    pub wakes_fired: usize,
-    pub automations_fired: usize,
-    pub windows_fired: usize,
-    pub workspaces_drained: usize,
-}
-
 impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
     pub(crate) async fn alarm_organization_is_provisioned(&self) -> Result<bool, StoreFailure> {
         match crate::prepare_central_alarm(self.host.as_ref()).await? {
@@ -34,7 +25,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 args: vec![],
             }
         };
-        self.publish_engine_query(query)
+        crate::engine::port::Engine::new(self)
+            .publish_engine_query(query)
             .await
             .map(|_| ())
             .map_err(|error| error.failure)

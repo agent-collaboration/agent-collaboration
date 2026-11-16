@@ -1,3 +1,4 @@
+use super::port::{Engine, EngineHost};
 use super::{
     attempt_records::{EngineSubject, StoredAttempt},
     attempt_statements::write_attempt,
@@ -5,7 +6,7 @@ use super::{
     effects::{ApplyFailure, classify_batch},
     store_adapter::SubjectVersion,
 };
-use crate::{ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls};
+use crate::ObjectHost as _;
 use central_engine_model::{FailureRecord, ItemFailureClass, RetirementThreshold, after_failure};
 use central_storage::{AlarmUpdate, StatementBatch, StoreFailure};
 use workspace_model::WorkspaceId;
@@ -18,9 +19,9 @@ pub(crate) enum FailureOutcome {
     StoreDown(StoreFailure),
 }
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<R: EngineHost> Engine<'_, R> {
     pub(crate) fn observe_engine_store_down(&self, subject: &EngineSubject, failure: StoreFailure) {
-        (self.signin_observer)(crate::CentralObservation::EngineStoreDown {
+        self.observe(crate::CentralObservation::EngineStoreDown {
             kind: subject.kind,
             key: subject.key.clone(),
             failure,
@@ -28,7 +29,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     }
 
     pub(crate) fn observe_alarm_not_published(&self, failure: StoreFailure) {
-        (self.signin_observer)(crate::CentralObservation::EngineAlarmNotPublished { failure });
+        self.observe(crate::CentralObservation::EngineAlarmNotPublished { failure });
     }
     pub(crate) async fn record_failure(
         &self,
@@ -53,7 +54,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         threshold: RetirementThreshold,
         workspaces: &[WorkspaceId],
     ) -> FailureOutcome {
-        let prior = match load_attempt(self.host.as_ref(), subject).await {
+        let prior = match load_attempt(self.host(), subject).await {
             Ok(prior) => prior,
             Err(StoreFailure::AnswerLost) => return FailureOutcome::Uncertain,
             Err(failure) => return FailureOutcome::StoreDown(failure),
@@ -98,7 +99,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         workspaces: &[WorkspaceId],
     ) -> FailureOutcome {
         #[cfg(feature = "test-support")]
-        self.pauses
+        self.pauses()
             .reached_engine(crate::PausePoint::BeforeEngineFailureWrite, &subject.key.0)
             .await;
         let (record, class) = match prior.map(|stored| &stored.record) {
@@ -118,7 +119,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             Ok(now) => now,
             Err(failure) => return FailureOutcome::StoreDown(failure),
         };
-        let record = match after_failure(record, class, now, threshold, self.ids.new_id()) {
+        let record = match after_failure(record, class, now, threshold, self.ids().new_id()) {
             Ok(record) => record,
             Err(_) => {
                 return FailureOutcome::StoreDown(crate::workspace_decode_error::corrupt(
@@ -137,7 +138,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             Err(failure) => return FailureOutcome::StoreDown(failure),
         };
         match classify_batch(
-            self.host
+            self.host()
                 .run_batch(StatementBatch {
                     statements: vec![statement],
                     alarm: AlarmUpdate::Unchanged,
@@ -145,7 +146,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 .await,
         ) {
             Ok(()) => {
-                (self.signin_observer)(crate::CentralObservation::EngineItemFailed {
+                self.observe(crate::CentralObservation::EngineItemFailed {
                     kind: subject.kind,
                     key: subject.key.clone(),
                     failure: record.last_failure.clone(),

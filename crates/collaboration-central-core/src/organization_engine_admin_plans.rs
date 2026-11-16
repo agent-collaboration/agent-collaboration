@@ -74,7 +74,9 @@ fn retained_engine_result(encoded: &str) -> Result<OrganizationAdminResult, Stor
 
 impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
     pub(crate) async fn engine_health_result(&self) -> Result<EngineAdminPlan, StoreFailure> {
-        let health = self.engine_health().await?;
+        let health = crate::engine::port::Engine::new(self)
+            .engine_health()
+            .await?;
         Ok(EngineAdminPlan::read(
             OrganizationAdminResult::EngineHealth {
                 kinds: health
@@ -99,7 +101,9 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         after: Option<uuid::Uuid>,
         limit: u16,
     ) -> Result<EngineAdminPlan, StoreFailure> {
-        let (items, next) = self.engine_retired_page(after, limit).await?;
+        let (items, next) = crate::engine::port::Engine::new(self)
+            .engine_retired_page(after, limit)
+            .await?;
         Ok(EngineAdminPlan::read(
             OrganizationAdminResult::EngineRetired {
                 items: items
@@ -191,7 +195,10 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
                 cutoff,
             } => (operation, actor, statements, cutoff),
         };
-        let result = match self.plan_engine_retry(request.attempt_id).await? {
+        let result = match crate::engine::port::Engine::new(self)
+            .plan_engine_retry(request.attempt_id)
+            .await?
+        {
             Ok(delete) => {
                 statements.push(delete);
                 OrganizationAdminResult::EngineRetried {}
@@ -257,12 +264,15 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
         let mut committed = admission.clone();
         committed.extend(statements.clone());
         committed.extend(retain(&OrganizationAdminResult::EngineDiscarded {})?);
-        match self.engine_discard(request.attempt_id, committed).await? {
+        match crate::engine::port::Engine::new(self)
+            .engine_discard(request.attempt_id, committed)
+            .await?
+        {
             DiscardOutcome::Committed => {
                 admission.clear();
                 // The re-arm is this event's last step; a failed publication is
                 // observed and the next event re-publishes.
-                let _ = self
+                let _ = crate::engine::port::Engine::new(self)
                     .publish_engine_query(central_engine_model::next_due_sql(
                         crate::engine::query_registry::ALARM_INPUTS,
                     ))

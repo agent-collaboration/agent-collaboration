@@ -1,10 +1,11 @@
 use super::{automation_timer as automation, wake_timer as wake};
+use crate::ObjectHost as _;
 use crate::{
-    ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
-    central_mail_store::{insert_message, timestamp},
-    central_timer_plans::{decode_automations, decode_wakes},
+    central_mail_rows::{insert_message, timestamp},
+    central_timer_rows::{decode_automations, decode_wakes},
     engine::{
         attempt_statements::guarded_attempt_sql,
+        port::EngineHost,
         store_adapter::{
             LoadFailure, StoreAdapter, Versioned, decode_load_failure, load_store_failure,
             raw_version,
@@ -17,12 +18,8 @@ use central_engine_model::{InstanceKey, StateTag};
 use central_storage::{GuardedStatement, SqlValue, Statement, StoreFailure};
 use workspace_model::central_mail as mail;
 
-pub(crate) struct WakeStore<'a, Host: ObjectHost, Stores: WorkspaceStoreCalls>(
-    pub &'a WorkspaceRuntime<Host, Stores>,
-);
-pub(crate) struct AutomationStore<'a, Host: ObjectHost, Stores: WorkspaceStoreCalls>(
-    pub &'a WorkspaceRuntime<Host, Stores>,
-);
+pub(crate) struct WakeStore<'a, R: EngineHost>(pub &'a R);
+pub(crate) struct AutomationStore<'a, R: EngineHost>(pub &'a R);
 
 const WAKE_FAILURE: &str = guarded_attempt_sql!(
     "EXISTS(SELECT 1 FROM wakes WHERE wake_id IS ?20 AND target IS ?21 AND due_at IS ?22 AND text IS ?23 AND state IS ?24 AND created_at IS ?25 AND updated_at IS ?26 AND state NOT IN ('done','disabled'))"
@@ -31,11 +28,9 @@ const AUTOMATION_FAILURE: &str = guarded_attempt_sql!(
     "EXISTS(SELECT 1 FROM automations WHERE automation_id IS ?20 AND target IS ?21 AND timing_rule IS ?22 AND anchor_at IS ?23 AND expires_at IS ?24 AND evaluated_through_at IS ?25 AND text IS ?26 AND next_due_at IS ?27 AND state IS ?28 AND created_at IS ?29 AND updated_at IS ?30 AND state NOT IN ('done','disabled'))"
 );
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> StoreAdapter<wake::WakeTimer>
-    for WakeStore<'_, Host, Stores>
-{
+impl<R: EngineHost> StoreAdapter<wake::WakeTimer> for WakeStore<'_, R> {
     async fn load(&self, key: &InstanceKey) -> Result<Option<Versioned<wake::State>>, LoadFailure> {
-        let rows = self.0.host.read(Statement {
+        let rows = self.0.host().read(Statement {
             sql: "SELECT wake_id,target,due_at,text,state,created_at,updated_at FROM wakes WHERE wake_id=?", args: vec![text(&key.0)],
         }).await.map_err(load_store_failure)?;
         let Some(version) = raw_version(&rows)? else {
@@ -80,14 +75,12 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> StoreAdapter<wake::WakeTimer
     }
 }
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> StoreAdapter<automation::AutomationTimer>
-    for AutomationStore<'_, Host, Stores>
-{
+impl<R: EngineHost> StoreAdapter<automation::AutomationTimer> for AutomationStore<'_, R> {
     async fn load(
         &self,
         key: &InstanceKey,
     ) -> Result<Option<Versioned<automation::State>>, LoadFailure> {
-        let rows = self.0.host.read(Statement {
+        let rows = self.0.host().read(Statement {
             sql: "SELECT automation_id,target,timing_rule,anchor_at,expires_at,evaluated_through_at,text,next_due_at,state,created_at,updated_at FROM automations WHERE automation_id=?", args: vec![text(&key.0)],
         }).await.map_err(load_store_failure)?;
         let Some(version) = raw_version(&rows)? else {

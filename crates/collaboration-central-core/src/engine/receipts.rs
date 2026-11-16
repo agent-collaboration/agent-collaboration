@@ -1,5 +1,5 @@
 use crate::{
-    central_mail_store::timestamp,
+    central_mail_rows::timestamp,
     guarded_statements::{any, exact, text},
     workspace_decode_error::corrupt,
     workspace_row_codec::{json, string},

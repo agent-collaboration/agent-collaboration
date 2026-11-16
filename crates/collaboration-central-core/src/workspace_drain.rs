@@ -55,14 +55,14 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             kind: MachineKind("legacy_workspace_drains"),
             key: InstanceKey("all".into()),
         };
-        match self
+        match crate::engine::port::Engine::new(self)
             .control_gate(&subject, RetirementThreshold::NOTICE_UNITS)
             .await
         {
             ControlGate::Run => {}
             ControlGate::Skip | ControlGate::Uncertain => return Ok(()),
             ControlGate::CentralDown(failure) => {
-                self.observe_engine_store_down(&subject, failure);
+                crate::engine::port::Engine::new(self).observe_engine_store_down(&subject, failure);
                 return Ok(());
             }
         }
@@ -71,24 +71,26 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         match self.drain_workspace_held(workspace).await {
             Ok(_) => Ok(()),
             Err(LegacyUnitOutcome::CentralDown(failure)) => {
-                self.observe_engine_store_down(&subject, failure);
+                crate::engine::port::Engine::new(self).observe_engine_store_down(&subject, failure);
                 Ok(())
             }
             Err(outcome) => {
                 let outcome = outcome.in_workspace(workspace);
                 if let Some(class) = outcome.failure_class()
-                    && let FailureOutcome::StoreDown(failure) = self
-                        .record_failure_naming(
-                            &subject,
-                            CONTROL_WRITE,
-                            &SubjectVersion(vec![]),
-                            class,
-                            RetirementThreshold::NOTICE_UNITS,
-                            outcome.affected_workspaces(),
-                        )
-                        .await
+                    && let FailureOutcome::StoreDown(failure) =
+                        crate::engine::port::Engine::new(self)
+                            .record_failure_naming(
+                                &subject,
+                                CONTROL_WRITE,
+                                &SubjectVersion(vec![]),
+                                class,
+                                RetirementThreshold::NOTICE_UNITS,
+                                outcome.affected_workspaces(),
+                            )
+                            .await
                 {
-                    self.observe_engine_store_down(&subject, failure);
+                    crate::engine::port::Engine::new(self)
+                        .observe_engine_store_down(&subject, failure);
                 }
                 Ok(())
             }

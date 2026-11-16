@@ -1,3 +1,4 @@
+use super::port::{Engine, EngineHost};
 use super::{
     attempt_records::EngineSubject,
     attempt_statements::{CONTROL_WRITE, delete_attempt},
@@ -6,7 +7,7 @@ use super::{
     failures::FailureOutcome,
     store_adapter::SubjectVersion,
 };
-use crate::{ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls};
+use crate::ObjectHost as _;
 use central_engine_model::{AttemptState, RetirementThreshold};
 use central_storage::{AlarmUpdate, StatementBatch, StoreFailure};
 
@@ -17,13 +18,13 @@ pub(crate) enum ControlGate {
     CentralDown(StoreFailure),
 }
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<R: EngineHost> Engine<'_, R> {
     pub(crate) async fn control_gate(
         &self,
         subject: &EngineSubject,
         threshold: RetirementThreshold,
     ) -> ControlGate {
-        let stored = match load_attempt(self.host.as_ref(), subject).await {
+        let stored = match load_attempt(self.host(), subject).await {
             Ok(None) => return ControlGate::Run,
             Ok(Some(stored)) => stored,
             Err(StoreFailure::AnswerLost) => return ControlGate::Uncertain,
@@ -58,7 +59,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
 
     pub(crate) async fn clear_control(&self, subject: &EngineSubject) -> Result<(), ApplyFailure> {
         classify_batch(
-            self.host
+            self.host()
                 .run_batch(StatementBatch {
                     statements: vec![delete_attempt(subject)],
                     alarm: AlarmUpdate::Unchanged,

@@ -1,4 +1,4 @@
-use crate::central_timer_plans::{AutomationRow, WakeRow};
+use crate::central_timer_rows::{AutomationRow, WakeRow};
 use central_engine_model::{Context, EngineTime, IdSource};
 use workspace_model::{SessionAddress, central_mail as mail};
 

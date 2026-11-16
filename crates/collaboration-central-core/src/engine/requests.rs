@@ -1,3 +1,4 @@
+use super::port::{Engine, EngineHost};
 use super::{
     attempt_records::EngineSubject,
     handle::HandleOutcome,
@@ -5,7 +6,8 @@ use super::{
     source::RequestSource,
     store_adapter::StoreAdapter,
 };
-use crate::{ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls, workspace_decode_error::corrupt};
+use crate::ObjectHost as _;
+use crate::workspace_decode_error::corrupt;
 use central_engine_model::{InstanceKey, Machine};
 use central_storage::StoreFailure;
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
@@ -28,7 +30,7 @@ pub enum EngineRequestOutcome<State, Error> {
     },
 }
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<R: EngineHost> Engine<'_, R> {
     pub(crate) async fn request_engine<M, Adapter>(
         &self,
         adapter: &Adapter,
@@ -84,12 +86,12 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             started_at: now,
             cutoff,
         });
-        let logged = self.host.read(source.0.lookup()).await?;
+        let logged = self.host().read(source.0.lookup()).await?;
         if let Some(receipt) = source.0.replay(&logged)? {
             return Ok(EngineRequestOutcome::Answer { receipt });
         }
         #[cfg(feature = "test-support")]
-        self.pauses
+        self.pauses()
             .reached_engine(
                 crate::PausePoint::AfterEngineAbsentLookup,
                 &source.0.request.to_string(),
@@ -124,7 +126,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     EngineRequestOutcome::CentralUnavailable
                 }
                 HandleOutcome::Superseded => {
-                    let logged = self.host.read(source.0.lookup()).await?;
+                    let logged = self.host().read(source.0.lookup()).await?;
                     match source.0.replay(&logged)? {
                         Some(receipt) => EngineRequestOutcome::Answer { receipt },
                         None => EngineRequestOutcome::Conflict,

@@ -6,14 +6,17 @@ use super::{
     query_registry,
     source::{EventSource, ReceiptStatements, SourcePolicy},
 };
-use crate::organization_admin_contract::{EngineFailureClass, EngineKindName};
-use crate::{
-    ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
-    engine_machines::{
+use super::{
+    machines::{
         automation_timer,
         timer_store::{AutomationStore, WakeStore},
         wake_timer,
     },
+    port::{Engine, EngineHost},
+};
+use crate::ObjectHost as _;
+use crate::organization_admin_contract::{EngineFailureClass, EngineKindName};
+use crate::{
     guarded_statements::{exact, text},
     workspace_decode_error::corrupt,
     workspace_row_codec::column,
@@ -145,10 +148,10 @@ impl<M: Machine> EventSource<M> for DiscardSource {
     }
 }
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+impl<R: EngineHost> Engine<'_, R> {
     pub(crate) async fn engine_health(&self) -> Result<EngineHealthFacts, StoreFailure> {
         let rows = self
-            .host
+            .host()
             .read(Statement {
                 sql: READ_HEALTH,
                 args: vec![],
@@ -190,9 +193,9 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                     .transpose()?,
             };
         }
-        let alarm = self.host.published_alarm().await?;
+        let alarm = self.host().published_alarm().await?;
         let pending = self
-            .host
+            .host()
             .read(central_engine_model::next_due_sql(
                 query_registry::ALARM_INPUTS,
             ))
@@ -215,7 +218,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         limit: u16,
     ) -> Result<(Vec<RetiredItem>, Option<uuid::Uuid>), StoreFailure> {
         let rows = self
-            .host
+            .host()
             .read(Statement {
                 sql: READ_RETIRED_PAGE,
                 args: vec![
@@ -271,7 +274,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         attempt_id: uuid::Uuid,
     ) -> Result<Result<(StoredAttempt, EngineKindName, String), AttemptRefusal>, StoreFailure> {
         let rows = self
-            .host
+            .host()
             .read(Statement {
                 sql: READ_BY_ID,
                 args: vec![text(attempt_id)],
@@ -328,7 +331,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         let outcome = match kind {
             EngineKindName::WakeTimer => discard_outcome(
                 self.handle::<wake_timer::WakeTimer, _, _>(
-                    &WakeStore(self),
+                    &WakeStore(self.0),
                     key,
                     wake_timer::Event::Discard,
                     &source,
@@ -337,7 +340,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             ),
             EngineKindName::AutomationTimer => discard_outcome(
                 self.handle::<automation_timer::AutomationTimer, _, _>(
-                    &AutomationStore(self),
+                    &AutomationStore(self.0),
                     key,
                     automation_timer::Event::Discard,
                     &source,

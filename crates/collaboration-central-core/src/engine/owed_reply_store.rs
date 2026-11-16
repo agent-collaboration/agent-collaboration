@@ -7,10 +7,13 @@ use super::{
         LoadFailure, StoreAdapter, Versioned, decode_load_failure, load_store_failure, raw_version,
     },
 };
+use super::{
+    machines::owed_reply::{Effect, Finish, OwedReply, State},
+    port::EngineHost,
+};
+use crate::ObjectHost as _;
 use crate::{
-    ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls,
-    central_mail_store::timestamp,
-    engine_machines::owed_reply::{Effect, Finish, OwedReply, State},
+    central_mail_rows::timestamp,
     guarded_statements::{exact, text},
     workspace_decode_error::corrupt,
     workspace_row_codec::{column, string},
@@ -18,9 +21,7 @@ use crate::{
 use central_engine_model::{EngineTime, InstanceKey};
 use central_storage::{GuardedStatement, ReadOutcome, SqlValue, Statement, StoreFailure};
 
-pub(crate) struct OwedReplyStore<'a, Host: ObjectHost, Stores: WorkspaceStoreCalls>(
-    pub &'a WorkspaceRuntime<Host, Stores>,
-);
+pub(crate) struct OwedReplyStore<'a, R: EngineHost>(pub &'a R);
 const FAILURE: &str = guarded_attempt_sql!(
     "EXISTS(SELECT 1 FROM engine_probe_items WHERE item_id IS ?20 AND group_id IS ?21 AND claim IS ?22 AND state IS ?23 AND completed_claim IS ?24 AND send_id IS ?25 AND connection_id IS ?26 AND created_at IS ?27 AND updated_at IS ?28 AND machine_kind='owed_reply' AND state IN ('waiting','in_flight'))"
 );
@@ -86,13 +87,11 @@ fn decode(rows: &ReadOutcome) -> Result<State, StoreFailure> {
     }
 }
 
-impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> StoreAdapter<OwedReply>
-    for OwedReplyStore<'_, Host, Stores>
-{
+impl<R: EngineHost> StoreAdapter<OwedReply> for OwedReplyStore<'_, R> {
     async fn load(&self, key: &InstanceKey) -> Result<Option<Versioned<State>>, LoadFailure> {
         let rows = self
             .0
-            .host
+            .host()
             .read(Statement {
                 sql: COLUMNS,
                 args: vec![text(&key.0)],
