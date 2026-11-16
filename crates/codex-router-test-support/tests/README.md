@@ -7,6 +7,8 @@ cargo nextest run --locked --profile ci -p codex-router-test-support
 ```
 
 `integration/main.rs` gathers 1 former external test root.
+It needs the default `router-fixtures` feature (`required-features`), as do the finalization
+library cases; with `--no-default-features` only `node_taps` and the plain fixtures build.
 The external root holds opt-in installed-Codex scenarios; both retain their ignored status. Other library unit tests remain colocated with their implementations. The 15 owned-process
 and finalization cases stay in their original library modules to preserve their identities;
 their helpers are implemented by owned-process-test-support, a dev-dependency.
