@@ -55,6 +55,8 @@ tracing.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
+acp-provider-adapters = { path = "../acp-provider-adapters", version = "0.1.114", features = ["test-support"] }
+codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.4" }
 router-clock = { workspace = true, features = ["test-support"] }
 collaboration-contracts = { version = "0.1.105", path = "../collaboration-contracts", features = ["test-support"] }
 fleet-sync-delivery = { workspace = true, features = ["test-support"] }

@@ -29,3 +29,7 @@ impl NativeProtocolConnection {
         Ok(result)
     }
 }
+
+#[cfg(test)]
+#[path = "validated_native_request_node_tap_test.rs"]
+mod node_tap_tests;

@@ -23,6 +23,7 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
+    "@agentclientprotocol/claude-agent-acp": "0.81.0",
     "@types/node": "26.6.5",
     "@types/ws": "8.18.1",
     "oxfmt": "0.74.0",

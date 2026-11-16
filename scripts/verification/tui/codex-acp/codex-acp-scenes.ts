@@ -22,38 +22,53 @@ export const codexActionSchema = z.discriminatedUnion('kind', [
 ]);
 export type CodexAction = z.infer<typeof codexActionSchema>;
 
-export const codexCheckpointSchema = z.strictObject({
-	scene: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u),
-	// Literal text that must all appear on the grid, and text that must not appear.
-	require: z.array(z.string().min(1)).min(1),
-	forbid: z.array(z.string().min(1)),
-	// The declared bound for this checkpoint; the wait itself ends on a matching grid frame.
-	deadline_ms: z.number().int().positive().max(600_000),
-	// A selected `$` popup row: `› <display name>` then the `[Skill]` tag on the same grid line.
-	selected_skill_row: z.string().min(1).optional(),
-	// A grid line that is the empty composer alone: its prompt and placeholder, nothing typed.
-	empty_composer: z.literal(true).optional(),
-	// A selected numbered menu row: `› <number>. <label>` with exactly the declared markers.
-	selected_menu_row: z
-		.strictObject({
-			number: z.number().int().positive(),
-			label: z.string().min(1),
-			default: z.boolean(),
-			current: z.boolean(),
-		})
-		.optional(),
-	// The selected slash-popup row: `› /<command>`, the column gap, then exactly its description.
-	selected_slash_row: z
-		.strictObject({
-			command: z.string().regex(/^[a-z][a-z-]*$/u),
-			description: z.string().min(1),
-		})
-		.optional(),
-	// A grid line that is one whole error history cell: `■ `, this text, then only padding.
-	error_line: z.string().min(1).optional(),
-	// Exactly one grid line that is a whole info history cell: `• `, this text, then only padding.
-	info_line: z.string().min(1).optional(),
-});
+export const codexCheckpointSchema = z
+	.strictObject({
+		scene: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u),
+		// Literal text that must all appear on the grid, and text that must not appear.
+		// Empty only when the checkpoint requires a running turn instead (Correction 65).
+		require: z.array(z.string().min(1)),
+		// Groups of literal text: at least one text of each group must appear (one state Codex can draw
+		// in more than one way, such as a running turn; assignment Correction 51).
+		require_any: z
+			.array(z.array(z.string().min(1)).min(2))
+			.min(1)
+			.optional(),
+		// A turn is running (Correction 65): `Working` on screen, the in-turn composer hint while the
+		// composer holds text, or the wire tee's current turn started and not completed.
+		running_turn: z.literal(true).optional(),
+		forbid: z.array(z.string().min(1)),
+		// The declared bound for this checkpoint; the wait itself ends on a matching grid frame.
+		deadline_ms: z.number().int().positive().max(600_000),
+		// A selected `$` popup row: `› <display name>` then the `[Skill]` tag on the same grid line.
+		selected_skill_row: z.string().min(1).optional(),
+		// A grid line that is the empty composer alone: its prompt and placeholder, nothing typed.
+		empty_composer: z.literal(true).optional(),
+		// A selected numbered menu row: `› <number>. <label>` with exactly the declared markers.
+		selected_menu_row: z
+			.strictObject({
+				number: z.number().int().positive(),
+				label: z.string().min(1),
+				default: z.boolean(),
+				current: z.boolean(),
+			})
+			.optional(),
+		// The selected slash-popup row: `› /<command>`, the column gap, then exactly its description.
+		selected_slash_row: z
+			.strictObject({
+				command: z.string().regex(/^[a-z][a-z-]*$/u),
+				description: z.string().min(1),
+			})
+			.optional(),
+		// A grid line that is one whole error history cell: `■ `, this text, then only padding.
+		error_line: z.string().min(1).optional(),
+		// Exactly one grid line that is a whole info history cell: `• `, this text, then only padding.
+		info_line: z.string().min(1).optional(),
+	})
+	.refine(
+		(checkpoint) => checkpoint.require.length > 0 || checkpoint.running_turn === true,
+		'a checkpoint requires literal text or a running turn',
+	);
 export type CodexCheckpoint = z.infer<typeof codexCheckpointSchema>;
 
 export const codexJourneySchema = z
@@ -67,16 +82,37 @@ export const codexJourneySchema = z
 				}),
 			)
 			.min(1),
-		// Every completed frame of the whole run must show no error history cell. Journeys that
-		// expect an error (interrupt, refusals) omit it; their frames are still recorded.
-		whole_run_errors: z.literal('forbid').optional(),
+		// `forbid`: every completed frame of the whole run shows no error history cell. `scoped`: the
+		// only error cells allowed anywhere are the ones its steps declare (a checkpoint `error_line`),
+		// and each must appear; any other error cell fails. Journeys that omit it only record frames.
+		whole_run_errors: z.enum(['forbid', 'scoped']).optional(),
 	})
 	.refine(
 		(journey) =>
 			new Set(journey.steps.map((step) => step.checkpoint.scene)).size === journey.steps.length,
 		'duplicate checkpoint scene',
+	)
+	.refine(
+		(journey) => journey.whole_run_errors !== 'scoped' || expectedErrorCells(journey).length > 0,
+		'a scoped error rule declares at least one expected error cell',
 	);
 export type CodexJourney = z.infer<typeof codexJourneySchema>;
+
+/**
+ * The error cells a journey expects: each step's checkpoint `error_line`, in order, without
+ * repeats. Under `whole_run_errors: 'scoped'` these are the only error cells allowed in the run.
+ */
+export function expectedErrorCells(journey: {
+	readonly steps: readonly { readonly checkpoint: { readonly error_line?: string | undefined } }[];
+}): string[] {
+	return [
+		...new Set(
+			journey.steps.flatMap((step) =>
+				step.checkpoint.error_line === undefined ? [] : [step.checkpoint.error_line],
+			),
+		),
+	];
+}
 
 /** Text the unchanged Codex 0.165 TUI renders, with its source anchor at 360319d8. */
 export const CODEX_0_165_TEXT = {
@@ -117,6 +153,10 @@ export const CODEX_0_165_TEXT = {
 	// bottom_pane/mod.rs:1306, default status header while a turn runs. While a bottom-pane view
 	// is open only the view is drawn, without the status row (bottom_pane/mod.rs:2418-2453).
 	working: 'Working',
+	// Codex 0.166.0's composer hint while a turn runs and the composer holds text: the literal
+	// `Working` row is gone while the agent's reply streams (D0 r1 c50, out-discovery
+	// terminal-grid.json row 35: "  tab to queue message … 96% context left").
+	inTurnComposerHint: 'tab to queue message',
 	// slash_command.rs:117, :119 and :156, the `/skills`, `/hooks` and `/mcp` rows in the slash popup.
 	skillsCommandRow: 'use skills to improve how Codex performs specific tasks',
 	hooksCommandRow: 'view and manage lifecycle hooks',
@@ -292,7 +332,8 @@ export function interruptJourney(provider: 'claude' | 'cursor', longPrompt: stri
 				actions: [{ kind: 'key', key: 'Enter' }],
 				checkpoint: {
 					scene: 'turn-running',
-					require: [CODEX_0_165_TEXT.working],
+					require: [],
+					running_turn: true,
 					forbid: [CODEX_0_165_TEXT.interrupted],
 					deadline_ms: UI_CHECKPOINT_MS,
 				},
@@ -550,13 +591,49 @@ export function countInfoLines(lines: readonly string[], text: string): number {
 }
 
 /** Whether one grid frame shows a checkpoint: every required text and no forbidden text. */
-export function gridShowsCheckpoint(
+/** What the frame's judge also knows from outside the screen: the wire tee's turn state. */
+export interface CheckpointSignals {
+	readonly turnRunning?: boolean;
+}
+
+/**
+ * The active composer holds typed text. Only the bottom-most prompt row counts: rows above it are
+ * retained user history (review F18), and an empty active composer shows its placeholder.
+ */
+function composerHoldsText(lines: readonly string[]): boolean {
+	const active = lines
+		.map((line) => line.trimEnd())
+		.findLast((line) => line.startsWith(CODEX_0_165_TEXT.composerPrompt));
+	return (
+		active !== undefined &&
+		active.length > CODEX_0_165_TEXT.composerPrompt.length &&
+		active !== CODEX_0_165_TEXT.composerPrompt + CODEX_0_165_TEXT.emptyComposerPlaceholder
+	);
+}
+
+/** The shared running-turn signal (Correction 65). */
+export function showsRunningTurn(
 	lines: readonly string[],
-	checkpoint: CodexCheckpoint,
+	signals: CheckpointSignals = {},
 ): boolean {
 	const screen = lines.join('\n');
 	return (
+		screen.includes(CODEX_0_165_TEXT.working) ||
+		(screen.includes(CODEX_0_165_TEXT.inTurnComposerHint) && composerHoldsText(lines)) ||
+		signals.turnRunning === true
+	);
+}
+
+export function gridShowsCheckpoint(
+	lines: readonly string[],
+	checkpoint: CodexCheckpoint,
+	signals: CheckpointSignals = {},
+): boolean {
+	const screen = lines.join('\n');
+	return (
+		(checkpoint.running_turn !== true || showsRunningTurn(lines, signals)) &&
 		checkpoint.require.every((text) => screen.includes(text)) &&
+		(checkpoint.require_any ?? []).every((group) => group.some((text) => screen.includes(text))) &&
 		checkpoint.forbid.every((text) => !screen.includes(text)) &&
 		(checkpoint.selected_skill_row === undefined ||
 			gridShowsSelectedSkillRow(lines, checkpoint.selected_skill_row)) &&

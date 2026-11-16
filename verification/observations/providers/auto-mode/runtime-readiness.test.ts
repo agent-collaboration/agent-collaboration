@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { encode } from "../../../exact-json.ts";
-import { decodeSavedConfiguration } from "./runtime-readiness.ts";
+import { decodeSavedCodexHomeSnapshot as decodeSavedConfiguration } from "../../runtime/readonly-codex-home.ts";
 
 const fingerprint = {
   path: "/normal/config",

@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Plan — D0 verification first (revised)</title>
+  <link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+  <script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content" src="../navigation.json"></ex-nav>
+<ex-document id="content">
+<h1>Plan: D0 verification first (revised)</h1>
+
+<ex-callout title="In short" tone="tldr">
+  <p>D0 builds the harness that every later deliverable is judged by, and changes no product behavior. It has five parts:</p>
+  <ul>
+    <li>node taps;</li>
+    <li>Codex-vs-Router stream comparisons on the real Codex CLI;</li>
+    <li>a two-sided baseline: historical bugs fail before PR #242 and pass now, and current defects are recorded as strict expected failures;</li>
+    <li>a producer/consumer report;</li>
+    <li>deletion of seven uncompiled Host files.</li>
+  </ul>
+  <p>It ships as one PR.</p>
+</ex-callout>
+
+<h2 id="changed">Changed from the first plan</h2>
+<ex-mermaid id="changed-diagram" label="Where the four actions moved"><script type="text/plain">
+flowchart LR
+  s4[S4 journeys in D0] --> keep[send, steer, /model pick, status line + usage]
+  s4 -. moved .-> d3[D3 builds first: two windows, /resume, refused commands, service tier]
+  s4 -. moved .-> d4[D4 builds first: approval both ways]
+  mnf[method-not-found current defect] --> o4[S3 N1 tap, O4]
+</script></ex-mermaid>
+<div class="ex-table-scroll" data-width="canvas">
+<table>
+<thead><tr><th>Change</th><th>Why</th><th>What it invalidates</th></tr></thead>
+<tbody>
+<tr><td>S4 runs send, steer mid-turn, the <code>/model</code> pick, and the status line with usage. Two windows, <code>/resume</code>, refused commands, the service-tier pick and approvals leave D0.</td><td>The Implementer hit the plan's stop condition (A30): those five need a second concurrent PTY, an approval trigger plus an agent-side outcome reading, grounded 0.166.0 picker and refusal texts, and a tier picker. None of the historical cases depends on them.</td><td>The first plan's S4 action list. V-U7 is earned in D0 for send, steer, model and usage only.</td></tr>
+<tr><td>Each moved journey is built at the start of the deliverable whose fix it proves, before that fix: D3 for two windows, <code>/resume</code>, refused commands and service tier; D4 for approvals. It must run on the pre-fix head first and record a failure where a defect exists.</td><td>Keeps the owner's rule that verification comes before each fix (Q3), one deliverable at a time.</td><td>Nothing already built. D3 and D4 each gain a "Journey first" check.</td></tr>
+<tr><td>The method-not-found current defect is seeded at N1 by an S3 tap (unhandled CLI request methods), not by an O5 refused-command journey.</td><td>The refused-command journey moved to D3; the defect is visible at N1's outbound edge without the CLI.</td><td>The O5 source of that one current-defect case.</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="record">Plan record</h2>
+<div class="ex-table-scroll" data-width="canvas">
+<table>
+<tbody>
+<tr><th>Planning result</th><td>ready</td></tr>
+<tr><th>Originating planner</th><td>plan-update (the Lead; the plan-update skill is not installed, so this follows <code>canonical-implementation-plan.md</code>)</td></tr>
+<tr><th>Supersedes</th><td><a href="2026-11-13-d0-verification.html">plans/2026-11-13-d0-verification.html</a></td></tr>
+<tr><th>Governing basis</th><td>reviewed four-document design: <a href="../requirements.html">Requirements</a>, <a href="../specification.html">Specification</a>, <a href="../program-design.html">Program Design</a>, <a href="../verification.html">Verification Design</a>. Review: the design review record (kept outside the repository), Recheck 2, 0 open findings. Owner decisions: Q2 boundary as drawn, Q3 D0 first, Q1 installed Codex if pinned plus tested CLIs only (review 395339ce).</td></tr>
+<tr><th>Delivery context</th><td>requested terminal: pr-ready-unmerged · grouping: single:d0-verification · PR topology: one-pr · repository: agent-collaboration/agent-collaboration</td></tr>
+<tr><th>Planned at</th><td>branch <code>feat/codex-app-server-contract</code> at <code>ae185fe1a</code> (none of the design's anchors changed since c4b6254e1)</td></tr>
+<tr><th>Deliverable page</th><td><a href="../d0-verification.html">D0</a></td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="goal">Goal, scope and non-goals</h2>
+<ex-mermaid id="goal-diagram" label="What D0 adds"><script type="text/plain">
+flowchart LR
+  subgraph adds[D0 adds]
+    tap[Tap recorder + per-node tap tests]
+    cmp[Codex-vs-Router journeys]
+    base[Two-sided baseline]
+    rep[Producer/consumer report + send-site review]
+  end
+  subgraph removes[D0 removes]
+    orph[7 uncompiled Host files]
+  end
+  product[Product behavior] -. unchanged .- adds
+</script></ex-mermaid>
+<ul>
+<li><strong>In scope:</strong> verification tooling; per-node tap tests that record today's behavior; journeys; the baseline; the report; deleting the orphan files; the Specta experiment (A20).</li>
+<li><strong>Not in scope:</strong> any change to a node's behavior (D1–D6); the generated contract crate (D1); Cursor journeys before Cursor qualification (A31); a version bump or release, since nothing user-facing changes.</li>
+</ul>
+
+<h2 id="slices">Slices</h2>
+<ex-mermaid id="slice-graph" label="Slices and dependencies"><script type="text/plain">
+flowchart LR
+  s1[S1 orphan deletion] --> s6[S6 integration gate]
+  s2[S2 tap recorder] --> s3[S3 per-node tap tests]
+  s3 --> s5[S5 producer/consumer report]
+  s4[S4 Codex-vs-Router journeys] --> s4b[S4b baseline runs]
+  s3 --> s6
+  s4b --> s6
+  s5 --> s6
+  s7[S7 Specta experiment] --> s6
+  leadA[Lead A go-ahead for codex-router-host] -.-> s1
+  leadA -.-> s3
+</script></ex-mermaid>
+
+<div class="ex-table-scroll" data-width="canvas">
+<table>
+<thead><tr><th>Slice</th><th>Write surface</th><th>What it does</th><th>Proof it earns</th></tr></thead>
+<tbody>
+<tr id="S1"><td>S1 Orphan deletion</td><td><code>crates/codex-router-host/src/</code>: <code>provider_capability_report.rs</code>, <code>provider_prompt_content.rs</code>, <code>provider_update_kind.rs</code>, <code>external_provider_runtime/{provider_prompt_dispatch, provider_request_fallback, provider_acp_error_mapping, provider_initialize_request}.rs</code></td><td>Deletes files that are declared in no module (checked: no <code>mod</code> line in <code>lib.rs</code> or <code>external_provider_runtime.rs</code>)</td><td>R18 · build and full required checks unchanged</td></tr>
+<tr id="S2"><td>S2 Tap recorder</td><td><code>crates/codex-router-test-support</code> (new test-only module)</td><td>Records, per test case: node, edge, direction, message kind, and the state before and after. Holds a strict expected-failure list: each current defect names the deliverable that will fix it, and its case must keep failing until that deliverable flips it.</td><td>R23 harness, R25 current defects</td></tr>
+<tr id="S3"><td>S3 Per-node tap tests</td><td>colocated <code>*_test.rs</code> and <code>tests/integration/</code> in the node crates: <code>acp-client-runtime</code> (N6, N7 dispatch), <code>collaboration-runtime</code> (N1, N3, N5, N9), <code>codex-router-host</code> (N4, N7 port; Lead A gate), <code>codex-acp-adapter</code> (N8), <code>codex-native-integration</code> (N10), <code>collaboration-mcp</code> (N11), <code>acp-provider-adapters</code> and <code>providers/claude-acp</code> (N12)</td><td>Feeds each input variant of the <a href="../program-design.html#catalog">conversion catalog</a> into today's code and records the outputs. Rows that match today's behavior pass. Rows marked <strong>change</strong>, and current defects, go on the expected-failure list.</td><td>R23, R21 (data), R25 current defects</td></tr>
+<tr id="S4"><td>S4 Codex-vs-Router journeys</td><td><code>verification/observations/providers/acp/</code>, <code>scripts/verification/tui/codex-acp/codex-acp-run.ts</code>, and the <code>verify-codex-router</code> skill references</td><td>Runs the same action script on the real Codex CLI 0.166.0 twice on one debug Router: once on a Codex session (through the relay to real Codex: the reference) and once on a Claude Haiku session. Compares structure: event and item order, steer receipt by message id, turn status, approval delivery, model and service-tier state, and usage against the provider's own report. Actions in D0: send, steer mid-turn, the <code>/model</code> pick, and the status line with usage. Two windows, <code>/resume</code>, refused commands, the service-tier pick and approvals are built first in D3 and D4 (see Changed). The TypeScript reads Specta and Codex-exported types where they exist (D26).</td><td>R24, R11 (plan), V-U7</td></tr>
+<tr id="S4b"><td>S4b Baseline runs</td><td>an evidence folder under <code>tmp/</code> in the worktree, not committed</td><td>Builds a debug Router at <code>95ab03b56</code> (before PR #242) in a separate copy-on-write worktree and runs S4: the steer receipt, 770K and <code>/model</code> cases must fail with named reasons. Runs S4 at the head: the same cases pass, and current defects fail as listed.</td><td>R25</td></tr>
+<tr id="S5"><td>S5 Producer/consumer report + send-site review</td><td><code>verification/tooling/</code> (TS report over S3's recordings); a one-time review note in the PR</td><td>Compares the recorded produced and consumed messages with the <a href="../program-design.html#producers-consumers">table</a>, row by row. Lists every send site on each edge that sits outside the twelve nodes.</td><td>R21</td></tr>
+<tr id="S6"><td>S6 Integration gate</td><td>none</td><td>Full required checks through the signed cargo runner, the <code>verification/</code> package checks, and Demistify lint for any page that changed</td><td>R19 (no behavior change)</td></tr>
+<tr id="S7"><td>S7 Specta experiment</td><td>scratch crate outside the repo</td><td>Tries Specta 2.0.0-rc.28 on <code>flatten</code>, tagged enums and <code>Option&lt;Option&lt;T&gt;&gt;</code>; records the result in the work record</td><td>A20</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="mapping">Verification rows this plan earns</h2>
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Row</th><th>Earned by</th><th>Left for later</th></tr></thead>
+<tbody>
+<tr><td><a href="../verification.html#V-U11">V-U11</a> (R23, R24, R25)</td><td>S2, S3, S4, S4b</td><td>R22 conformance (D1)</td></tr>
+<tr><td><a href="../verification.html#V-U10">V-U10</a> (R21)</td><td>S3 data, S5 report</td><td>each deliverable re-runs S5 for its nodes</td></tr>
+<tr><td><a href="../verification.html#V-U6">V-U6</a> (R18, orphans only)</td><td>S1</td><td>crate merges (D6)</td></tr>
+<tr><td><a href="../verification.html#V-U7">V-U7</a> (R24 harness)</td><td>S4, for send, steer, model and usage</td><td>two windows, <code>/resume</code>, refused commands and service tier (built first in D3); approvals (built first in D4); green results per stream (D2–D4)</td></tr>
+<tr><td>U1–U5, U8, U9 rows</td><td>none</td><td>D1–D6</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="gates">Gates, risks and stop conditions</h2>
+<ex-mermaid id="gate-diagram" label="Gates"><script type="text/plain">
+flowchart LR
+  a[Lead A go-ahead for codex-router-host] --> b[Implementer + paired Verifier]
+  b --> c[Lead acceptance]
+  c --> d[Sol Reviewer]
+  d --> e[Owner merge]
+</script></ex-mermaid>
+<ul>
+<li><strong>Standing rules:</strong>
+  <ul>
+  <li>debug Router only, with Claude on Haiku;</li>
+  <li>no production Router, no production installs;</li>
+  <li>every Rust run goes through <code>scripts/cargo_debug_signing_runner.sh</code>;</li>
+  <li>one injected clock, no wall-clock tests;</li>
+  <li>no file over 1,000 lines;</li>
+  <li>no permanent repo-wide source scans (the send-site review is done once);</li>
+  <li>no git stash.</li>
+  </ul></li>
+<li><strong>Risks:</strong>
+  <ul>
+  <li>Haiku quota on the debug account;</li>
+  <li>some node types are crate-private, so their taps must live in colocated tests;</li>
+  <li>building at <code>95ab03b56</code> uses disk, so that worktree is removed after the baseline;</li>
+  <li>Cursor stays unqualified (A31);</li>
+  <li>the journey driver may need more than an extension (A30).</li>
+  </ul></li>
+<li><strong>Stop and come back to the Lead if:</strong>
+  <ul>
+  <li>a node can't be driven in-process without changing production structure (a program-design gap);</li>
+  <li>the structural comparison can't tell a correct Claude run from a wrong one (a verification-design gap);</li>
+  <li>Lead A refuses the <code>codex-router-host</code> changes;</li>
+  <li>any baseline case behaves differently from what the catalog says today's code does.</li>
+  </ul></li>
+</ul>
+
+<p><a href="2026-11-13-d0-verification.html">First plan</a> · <a href="../index.html#deliverables">All deliverables</a> · <a href="../d0-verification.html">D0 page</a></p>
+
+</ex-document>
+</body>
+</html>

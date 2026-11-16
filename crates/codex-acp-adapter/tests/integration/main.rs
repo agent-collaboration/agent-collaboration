@@ -10,6 +10,8 @@ mod recording_scratch_scopes;
 mod acp_connection_dispatch;
 mod acp_connection_transport;
 mod acp_frame_transport;
+#[cfg(test)]
+mod acp_served_n8_node_tap;
 mod acp_server_request_routing;
 mod assistant_text_projection;
 mod cancellation_reload;

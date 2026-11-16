@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import { expect, test } from 'vitest';
@@ -576,16 +577,25 @@ async function promptWithRouteEffects(afterScene: string): Promise<{
 		replyRows: [`• ${PROMPT.completion}`, '', EMPTY_COMPOSER],
 	});
 	let baseline: ClaudeRouteBaseline | null = null;
-	const observed = driveCodexJourney(driver, journey, 'legacy', async () => undefined, {
-		afterScene,
-		capture: () => {
-			baseline = captureClaudeRouteBaseline(binding, {
-				afterScene: 'prompt-composed',
-				providerSessionId: RAW_SESSION,
-				nativeThreadId: ALIAS,
-			});
+	const observed = driveCodexJourney(
+		driver,
+		journey,
+		'legacy',
+		async () => undefined,
+		{
+			afterScene,
+			capture: () => {
+				baseline = captureClaudeRouteBaseline(binding, {
+					afterScene: 'prompt-composed',
+					providerSessionId: RAW_SESSION,
+					nativeThreadId: ALIAS,
+				});
+			},
 		},
-	});
+		null,
+		null,
+		join(homedir(), 'code', 'projects', 'codex-router'),
+	);
 	return {
 		observed,
 		baseline: () => baseline,

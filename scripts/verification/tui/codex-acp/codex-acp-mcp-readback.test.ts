@@ -2,6 +2,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import { expect, test } from 'vitest';
@@ -232,7 +233,16 @@ async function controlledRun(options: CaseOptions = {}): Promise<{
 	};
 	return {
 		drive: (): Promise<string[]> =>
-			driveCodexJourney(driver, journey, 'legacy', async (): Promise<void> => {}, null, hooks),
+			driveCodexJourney(
+				driver,
+				journey,
+				'legacy',
+				async (): Promise<void> => {},
+				null,
+				hooks,
+				null,
+				join(homedir(), 'code', 'projects', 'codex-router'),
+			),
 		cleanup: async (): Promise<void> => {
 			core.dispose();
 			await new Promise<void>((resolve, reject) =>

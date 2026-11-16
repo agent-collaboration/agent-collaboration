@@ -683,3 +683,7 @@ async fn serve_provider_sessions(
     while observers.tasks.join_next().await.is_some() {}
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "provider_acp_session_route_node_tap_test.rs"]
+mod node_tap_tests;

@@ -10,8 +10,19 @@ autotests = false
 name = "integration"
 path = "tests/integration/main.rs"
 
+[[example]]
+name = "check_recording"
+path = "examples/check_recording.rs"
+required-features = ["test-support"]
+
 [lints]
 workspace = true
+
+[features]
+# The owning checks of Router-owned contracts (owned_contract_checks.rs), shared by every part test
+# and the live recording checker. Enabled only from dev-dependencies; it adds no dependency, so test
+# support (which reaches this crate through the CLI) never forms a cycle with it.
+test-support = []
 
 [dependencies]
 acp-client-runtime = { path = "../acp-client-runtime", version = "0.1.114" }
@@ -22,5 +33,6 @@ url = "2.5.8"
 tokio.workspace = true
 
 [dev-dependencies]
+codex-router-test-support = { path = "../codex-router-test-support", version = "0.1.4" }
 tempfile = "3.27.0"
 tokio-util.workspace = true

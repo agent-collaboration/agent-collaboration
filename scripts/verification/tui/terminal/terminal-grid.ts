@@ -33,12 +33,21 @@ export function ghosttyWasmBytes(): Buffer {
 	return readFileSync(new URL(import.meta.resolve('@wterm/ghostty/ghostty-vt.wasm')));
 }
 
-export async function createTerminalCore(columns: number, rows: number): Promise<GhosttyCore> {
+/**
+ * A terminal core at the given size. `scrollbackLimitBytes` is ghostty's scrollback cap, in bytes of
+ * page memory, not rows; the library default (10,000) keeps only a few hundred 120-column rows.
+ */
+export async function createTerminalCore(
+	columns: number,
+	rows: number,
+	scrollbackLimitBytes?: number,
+): Promise<GhosttyCore> {
 	// The public loader uses fetch. A data URL loads the exact pinned asset in
 	// Node without a file-fetch shim, a server, or mutation of global fetch.
 	const core = await GhosttyCore.load({
 		wasmPath: `data:application/wasm;base64,${ghosttyWasmBytes().toString('base64')}`,
 		imageStorageLimit: 0,
+		...(scrollbackLimitBytes === undefined ? {} : { scrollbackLimit: scrollbackLimitBytes }),
 	});
 	core.init(columns, rows);
 	core.setThemeColors(terminalTheme);

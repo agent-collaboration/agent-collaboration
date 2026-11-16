@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Protocol contracts — Specification</title>
+  <link rel="stylesheet" href="https://demistify.getagentstudio.dev/v1/theme.css">
+  <script type="module" src="https://demistify.getagentstudio.dev/v1/runtime.js"></script>
+</head>
+<body>
+<ex-nav for="content" src="./navigation.json"></ex-nav>
+<ex-document id="content">
+<h1>Specification</h1>
+
+<ex-callout title="In short" tone="tldr">
+  <p>Every edge carries one protocol, whose types come from one definition. Every node declares what it does with each message kind it receives, and what comes out (zero, one or many messages). Any state a conversion needs is owned by one place. Every message's producers and consumers are listed. Verification proves each edge, each node and each stream against a real reference; for Codex, that reference is Codex itself.</p>
+</ex-callout>
+
+<h2 id="context">Who sees the result</h2>
+
+<ex-mermaid id="context-diagram" label="Parties around the Router"><script type="text/plain">
+flowchart LR
+  cli[Codex CLI]
+  app[Managed Codex app-server]
+  agents[Claude and Cursor]
+  mcp[MCP callers and the CLI]
+  maint[Maintainers]
+  router((Router))
+  cli -- Codex app-server --> router
+  router -- Codex app-server --> app
+  router -- ACP --> agents
+  mcp -- MCP --> router
+  maint -- build, refresh, verify --> router
+</script></ex-mermaid>
+
+<h2 id="capability-map">Rules at a glance</h2>
+
+<ex-tree id="rules-tree" title="Capabilities and rules" icon="stack"><script type="text/markdown">
+- Codex app-server contract
+  - [R1 Codex-protocol edges use contract shapes or fail the build](#R1)
+  - [R2 Absent, null and set stay distinct; each field keeps its meaning](#R2)
+  - [R3 Each request tied to its response, from Codex's own declaration](#R3)
+  - [R4 Relayed unknown fields arrive unchanged](#R4)
+  - [R5 A new value Codex adds never fails a whole message](#R5)
+  - [R6 Departures from the contract only through the override list](#R6)
+  - [R7 One refresh step, drift fails the checks, the diff is readable](#R7)
+  - [R8 Another Codex release is named before anything happens](#R8)
+- Every node fixed, one definition each
+  - [R9 Every inbound message kind has one declared disposition](#R9)
+  - [R10 Refused only where the CLI survives](#R10)
+  - [R12 Every conversion declared: zero, one or many outputs, typed both sides](#R12)
+  - [R13 Conversion state has one owner](#R13)
+  - [R14 One definition per meaning](#R14)
+  - [R15 One ACP authority](#R15)
+  - [R16 MCP tool schemas from the same definitions](#R16)
+  - [R17 Incoming bytes still rejected with today's outcomes](#R17)
+  - [R18 One job per crate; no orphan files](#R18)
+  - [R19 No behavior change except named fixes](#R19)
+  - [R20 Every node is listed with its fix](#R20)
+  - [R21 Producers and consumers listed and matching the code](#R21)
+- Verification system
+  - [R11 Your actions behave as against Codex](#R11)
+  - [R22 Each edge checked against its definition, independently](#R22)
+  - [R23 Each node's conversions checked at its edges](#R23)
+  - [R24 Each stream checked end to end against a reference](#R24)
+  - [R25 Today's known failures fail first](#R25)
+- Remote CLIs, later
+  - [R26 Nothing depends on how a client connects](#R26)
+</script></ex-tree>
+
+<h2 id="entities">The nouns</h2>
+
+<ex-mermaid id="entity-map" label="Entities"><script type="text/plain">
+erDiagram
+  STREAM ||--|{ EDGE : "passes through"
+  EDGE }o--|| NODE : "from"
+  EDGE }o--|| NODE : "to"
+  EDGE }o--|| CONTRACT : "carries one"
+  CONTRACT ||--|{ MESSAGE_SHAPE : defines
+  NODE ||--|{ CONVERSION : performs
+  CONVERSION }o--|| MESSAGE_SHAPE : "takes"
+  CONVERSION }o--o{ MESSAGE_SHAPE : "emits zero or more"
+  NODE ||--|{ DISPOSITION : declares
+  CODEX_RELEASE ||--|| CONTRACT : "pins the Codex one"
+  CONTRACT ||--o{ OVERRIDE : "may have"
+</script></ex-mermaid>
+
+<div class="ex-table-scroll" data-width="canvas">
+<table>
+<thead><tr><th>Entity</th><th>Same when</th><th>Always true</th><th>States</th></tr></thead>
+<tbody>
+<tr id="E1"><td><strong>E1 Node</strong></td><td>Same conversion responsibility. Two modules doing the same conversion are one node implemented twice, which is a defect</td><td>Has inbound and outbound edges, or is an end node</td><td>fixed · not fixed</td></tr>
+<tr id="E2"><td><strong>E2 Edge</strong></td><td>Same two nodes, direction and protocol</td><td>Carries exactly one contract</td><td>typed · untyped</td></tr>
+<tr id="E3"><td><strong>E3 Stream</strong></td><td>Same kind of action: input, output, approvals, settings and models, history, tool schemas, provider metadata</td><td>Starts and ends at end nodes</td><td>none</td></tr>
+<tr id="E4"><td><strong>E4 Message shape</strong></td><td>Direction + method; nested values by name</td><td>One definition; keeps absent, null and set apart</td><td>stable · experimental</td></tr>
+<tr id="E5"><td><strong>E5 Contract</strong></td><td>One per protocol: Codex app-server (per pinned release), ACP, Router vocabulary</td><td>Never hand-edited where generated</td><td>current · stale</td></tr>
+<tr id="E6"><td><strong>E6 Conversion</strong></td><td>Same node + same input message kind</td><td>Emits zero, one or many declared outputs; touches only declared state</td><td>declared · undeclared</td></tr>
+<tr id="E7"><td><strong>E7 Disposition</strong></td><td>Same node + same inbound kind</td><td>Exactly one per inbound kind</td><td>handled · refused · minimal · ignored with reason</td></tr>
+<tr id="E8"><td><strong>E8 Codex release</strong></td><td>Same <code>codex --version</code></td><td>One pinned at a time</td><td>pinned · not</td></tr>
+<tr id="E9"><td><strong>E9 Override</strong></td><td>Same contract shape + same departure</td><td>Has a reason and a removal condition; rechecked every refresh</td><td>active · retired</td></tr>
+<tr id="E10"><td><strong>E10 Producer/consumer link</strong></td><td>Same shape + node + role</td><td>Matches the code</td><td>listed · missing</td></tr>
+<tr id="E11"><td><strong>E11 Protocol crate</strong></td><td>Package name</td><td>One job</td><td>kept · merged · removed</td></tr>
+</tbody>
+</table>
+</div>
+
+<h2 id="cap-contract">Codex app-server contract</h2>
+
+<ex-mermaid id="codex-edges" label="Edges that carry the Codex protocol"><script type="text/plain">
+flowchart LR
+  cli[Codex CLI] -- "Codex protocol, Claude/Cursor sessions" --> face[Router CLI face]
+  cli -- "byte relay, Codex sessions" --> app[Managed Codex]
+  client[Router Codex client] -- Codex protocol --> app
+  contract[(Pinned Codex contract)] -. types .-> face
+  contract -. types .-> client
+</script></ex-mermaid>
+
+<ol>
+<li id="R1"><strong>R1 · Codex-protocol edges use contract shapes, or the build fails.</strong> This covers every message the Router decodes on an edge that carries the Codex protocol. The byte relay never decodes, so it is exempt. <small>E2 E4 E5 · U1 U2 · V1; ref: the pinned release's export.</small></li>
+<li id="R2"><strong>R2 · Absent, null and set stay distinct, and each field keeps its own meaning.</strong> In 0.166.0, <code>serviceTier: null</code> clears the tier, but <code>disabledPluginIds: null</code> keeps the list. <small>E4 · U1 U2 · V2; ref: the export's field docs.</small></li>
+<li id="R3"><strong>R3 · Each request is tied to its response,</strong> as Codex declares it at the release commit. A wrong pairing fails. <small>E4 · U1 · V3; ref: <code>common.rs</code> at 6ff1e1ca (179 client + 11 server requests covered).</small></li>
+<li id="R4"><strong>R4 · Relayed unknown fields arrive unchanged.</strong> <small>E4 · U1 · V4.</small></li>
+<li id="R5"><strong>R5 · A value Codex adds later never fails a whole message.</strong> Where a field's values grow across releases (error codes, plan types, hook names), an unknown value is kept as unknown. Messages that settle a turn are never dropped because of one. <small>E4 · U1 U3 · V5; ref: t3code's <code>CodexErrorInfo</code> lesson (generate.ts:175).</small></li>
+<li id="R6"><strong>R6 · Departures from the contract go only through the override list.</strong> Each override has a reason and a removal condition, and is rechecked on every refresh. <small>E9 · U2 U3 · V6.</small></li>
+<li id="R7"><strong>R7 · One refresh step makes the contract.</strong> Drift fails the required checks. A release change lists every shape added, removed or changed, and a broken build names the shape. <small>E5 E8 · U2 U3 · V7.</small></li>
+<li id="R8"><strong>R8 · Another Codex release is named before any thread or turn starts.</strong> The Router runs the installed Codex only when it is the pinned release, and admits only tested CLI releases (D8). An opt-in Router setting, off by default, lets an untested CLI release connect. The mismatch is still named first, a warning stays visible on that connection, and any request shape the contract doesn't know gets a named error (D8). <small>E8 · U3 · V8.</small></li>
+</ol>
+
+<aside class="design-item" id="D8" data-design-item="decision" data-authority="owner-accepted" data-source="owner review 395339ce-f711-4716-a9ed-81a159b72927 on index.html (revision sha256:a7bbf4f9…), relayed verbatim by the Session/MCP Lead, 2026-11-13"><p>You selected the options worded:</p><blockquote>The installed Codex, only if it's the pinned release (recommended)</blockquote><blockquote>Tested releases only (recommended)</blockquote><p>Your comments on them:</p><blockquote>if we run into troubles we can discuss. but logins ar eall thorugh proxy fyi</blockquote><blockquote>should we allow option to run even with errors?</blockquote><p>On the run-anyway question, the owner selected the option worded:</p><blockquote>Yes, as an opt-in setting, off by default (recommended)</blockquote></aside>
+
+<h2 id="cap-nodes">Every node fixed, one definition each</h2>
+
+<ex-mermaid id="node-contract" label="What every node must declare"><script type="text/plain">
+flowchart LR
+  in[Inbound message kind] --> disp{Disposition}
+  disp -- handled --> conv[Conversion]
+  disp -- refused / minimal / ignored --> named[Named outcome]
+  conv --> out0[zero outputs]
+  conv --> out1[one output]
+  conv --> outn[many outputs]
+  state[(Declared state,<br/>one owner)] <--> conv
+</script></ex-mermaid>
+
+<ol start="9">
+<li id="R9"><strong>R9 · Every inbound message kind at every node has one declared disposition.</strong> A new kind fails the build (our own and generated types) or the required checks (types from an external crate that may add variants) until it has one. A message that settles a turn is never silently dropped. <small>E1 E7 · U1 U9 · V9.</small></li>
+<li id="R10"><strong>R10 · Refused only where the Codex CLI survives the error; otherwise minimal.</strong> Never "method not found". <small>E7 · U7 · V10; ref: the pinned CLI's observed behavior.</small></li>
+<li id="R12"><strong>R12 · Every conversion is declared and typed on both sides,</strong> with zero, one or many outputs per input variant. No typed message carries another message as a JSON string. <small>E6 · U5 U9 · V12; ref: the node table in <a href="program-design.html#nodes">Program Design</a>.</small></li>
+<li id="R13"><strong>R13 · State a conversion depends on has one declared owner.</strong> This covers receipts, pending items and approvals, turn ids and text already sent, plus their resets and acknowledgements. <small>E1 E6 · U9 · V13.</small></li>
+<li id="R14"><strong>R14 · One definition per meaning.</strong> True duplicates merge; related terms keep one mapping between them; wire encodings stay unchanged. <small>E4 · U5 · V14; ref: <a href="program-design.html#inventory">duplicate inventory</a>.</small></li>
+<li id="R15"><strong>R15 · One ACP authority</strong> for the ACP the Router sends and the ACP it serves. <small>E5 · U5 · V15.</small></li>
+<li id="R16"><strong>R16 · MCP tool schemas come from the same definitions;</strong> nothing is spliced at runtime. <small>E5 · U5 · V16.</small></li>
+<li id="R17"><strong>R17 · Incoming bytes are still decoded and rejected with today's outcomes.</strong> A malformed reply after an effectful request gives <code>OutcomeUnknown</code>, after a read gives <code>Protocol</code>, and retires the connection. Messages the Router built itself are not re-checked. <small>E2 · U1 U5 · V17.</small></li>
+<li id="R18"><strong>R18 · One job per crate; no orphan files.</strong> <small>E11 · U6 · V18.</small></li>
+<li id="R19"><strong>R19 · No behavior change except named fixes of wrong shapes.</strong> <small>U5 U6 U9 · V19.</small></li>
+<li id="R20"><strong>R20 · Every node is listed with its problems and its fix;</strong> no node is left converting by hand. <small>E1 · U9 · V20.</small></li>
+<li id="R21"><strong>R21 · Every message's producer and consumer nodes are listed in one place, and the list matches the code.</strong> <small>E10 · U10 · V21.</small></li>
+</ol>
+
+<h2 id="cap-verify">Verification system</h2>
+
+<ex-mermaid id="verify-layers" label="What the verification system must prove"><script type="text/plain">
+flowchart TB
+  l1[Edge: each message checked against its definition] --> l2[Node: each conversion checked at its edges]
+  l2 --> l3[Stream: each action end to end vs a reference]
+  ref[(Reference: real Codex for Codex behavior;<br/>provider output for ACP)] -.-> l3
+</script></ex-mermaid>
+
+<ol start="22">
+<li id="R11"><strong>R11 · Your actions behave as they do against Codex,</strong> on Claude, Cursor and Codex sessions: send, steer, status line (a 1M window shows as 1M), <code>/model</code>, <code>/resume</code>, two windows, refused commands. <small>U7 · V11; ref: the same action against Codex's own app-server.</small></li>
+<li id="R22"><strong>R22 · Each edge's messages are checked against that edge's definition,</strong> independently of our generator. <small>E2 E5 · U11 · V22.</small></li>
+<li id="R23"><strong>R23 · Each node's conversions are checked at its edges.</strong> For each input variant, the declared outputs and state changes appear, including the reverse path for approvals. <small>E1 E6 · U9 U11 · V23.</small></li>
+<li id="R24"><strong>R24 · Each stream is checked end to end against a reference.</strong> <small>E3 · U7 U11 · V24.</small></li>
+<li id="R25"><strong>R25 · Verification catches known wrong behavior.</strong> The bugs already fixed in PR #242 (stuck steer, 770K window, broken <code>/model</code>) fail against the commit before that fix, <code>95ab03b56</code>, and pass on the current head. Defects that still exist today (such as "method not found" answers and JSON strings inside typed events) fail on the current head until their deliverable fixes them. <small>U11 · V25.</small></li>
+</ol>
+
+<h2 id="cap-remote">Remote CLIs (later)</h2>
+
+<ex-mermaid id="transports" label="Same contract over any connection"><script type="text/plain">
+flowchart LR
+  s[Local socket] --> c[Same shapes and outcomes]
+  l[Loopback] --> c
+  n[Network, later] --> c
+</script></ex-mermaid>
+
+<ol start="26">
+<li id="R26"><strong>R26 · Nothing depends on how a client connects.</strong> <small>E2 · U8 · V26.</small></li>
+</ol>
+
+<h2 id="constraints">Limits</h2>
+
+<ex-mermaid id="limits" label="Limits on every rule"><script type="text/plain">
+flowchart LR
+  router((Router)) -. never links .-> cc[Codex crates: C1]
+  router -. never forks .-> up[Upstream deps: C2]
+  router -. waits for .-> cen[Central's crates: C3]
+  router -. only .-> lang[Rust, TypeScript: C4]
+</script></ex-mermaid>
+
+<ul>
+<li id="C1"><strong>C1</strong> No Codex crate, no Codex of our own (<a href="requirements.html#D4">D4</a>).</li>
+<li id="C2"><strong>C2</strong> No forks without the owner (AGENTS.md).</li>
+<li id="C3"><strong>C3</strong> Central's crates wait for its rewrite (<a href="requirements.html#A2">A2</a>).</li>
+<li id="C4"><strong>C4</strong> Rust or TypeScript only (AGENTS.md, <a href="requirements.html#D13">D13</a>).</li>
+</ul>
+
+<h2 id="coverage">Need → rule</h2>
+
+<div class="ex-table-scroll">
+<table>
+<thead><tr><th>Need</th><th>Rules</th></tr></thead>
+<tbody>
+<tr><td><a href="requirements.html#U1">U1</a></td><td>R1 R2 R3 R4 R5 R9 R17</td></tr>
+<tr><td><a href="requirements.html#U2">U2</a></td><td>R1 R2 R6 R7</td></tr>
+<tr><td><a href="requirements.html#U3">U3</a></td><td>R5 R6 R7 R8</td></tr>
+<tr><td><a href="requirements.html#U4">U4</a></td><td>C1</td></tr>
+<tr><td><a href="requirements.html#U5">U5</a></td><td>R12 R14 R15 R16 R17 R19</td></tr>
+<tr><td><a href="requirements.html#U6">U6</a></td><td>R18 R19</td></tr>
+<tr><td><a href="requirements.html#U7">U7</a></td><td>R10 R11 R24</td></tr>
+<tr><td><a href="requirements.html#U8">U8</a></td><td>R26</td></tr>
+<tr><td><a href="requirements.html#U9">U9</a></td><td>R9 R12 R13 R19 R20 R23</td></tr>
+<tr><td><a href="requirements.html#U10">U10</a></td><td>R21</td></tr>
+<tr><td><a href="requirements.html#U11">U11</a></td><td>R22 R23 R24 R25</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>How: <a href="program-design.html">Program Design</a>. Proof: <a href="verification.html">Verification Design</a>. Deliverables: <a href="index.html#deliverables">home</a>.</p>
+
+</ex-document>
+</body>
+</html>

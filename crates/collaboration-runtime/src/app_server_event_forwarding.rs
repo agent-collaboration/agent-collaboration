@@ -787,3 +787,15 @@ mod notification_wire_tests;
 #[cfg(test)]
 #[path = "app_server_metadata_projection_test.rs"]
 mod metadata_projection_tests;
+
+#[cfg(test)]
+#[path = "app_server_event_forwarding_node_tap_test.rs"]
+mod node_tap_tests;
+
+#[cfg(test)]
+#[path = "app_server_event_forwarding_node_tap_interaction_test.rs"]
+mod node_tap_interaction_tests;
+
+#[cfg(test)]
+#[path = "app_server_event_forwarding_node_tap_item_test.rs"]
+mod node_tap_item_tests;

@@ -28,6 +28,7 @@ import {
 import { StreamingMcpClient } from '../../../../verification/observations/mcp-control/transport/streaming-mcp-client.ts';
 import type { CodexAcpRunPlan } from './codex-acp-run.ts';
 import { CODEX_0_165_TEXT } from './codex-acp-scenes.ts';
+import { routerSession } from './codex-acp-target.ts';
 import type { CodexAcpTarget } from './codex-acp-target.ts';
 
 const serviceSchema = z.looseObject({
@@ -76,7 +77,7 @@ export function cliPromptReadback(inputs: {
 	};
 	const session: SessionRef = {
 		endpoint: { serviceId: target.expected_service_id, endpointId: target.endpoint_id },
-		sessionId: target.provider_session_id,
+		sessionId: routerSession(target).providerSessionId,
 	};
 	const reads: ObservationRead[] = [];
 	let baselineReads = 0;

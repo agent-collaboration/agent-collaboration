@@ -1,0 +1,94 @@
+{
+  "caseId": "N11/native_control_tool_to_n10",
+  "node": "N11",
+  "case": "native_control_tool_to_n10",
+  "catalogRow": "N11 section: N11 --> N10; table: Codex request (to Codex) from N10",
+  "stateBefore": {},
+  "records": [
+    {
+      "direction": "consumed",
+      "family": "mcpToolCall",
+      "counterpart": {
+        "kind": "McpCaller"
+      },
+      "reply": false,
+      "kind": "tools/call:turn_interrupt",
+      "payload": {
+        "target": {
+          "endpoint": {
+            "serviceId": "00000000-0000-4000-8000-000000000001",
+            "endpointId": "codex-local"
+          },
+          "sessionId": "thread-a"
+        },
+        "generation": {
+          "serviceEpoch": "00000000-0000-4000-8000-000000000002",
+          "generation": 7
+        },
+        "turnId": "turn-a"
+      }
+    },
+    {
+      "direction": "produced",
+      "family": "codexRequestToCodex",
+      "counterpart": {
+        "kind": "Node",
+        "node": "N10"
+      },
+      "reply": false,
+      "kind": "turn/interrupt",
+      "payload": {
+        "id": "agent-collaboration-1",
+        "method": "turn/interrupt",
+        "params": {
+          "threadId": "thread-a",
+          "turnId": "turn-a"
+        }
+      }
+    },
+    {
+      "direction": "produced",
+      "family": "mcpToolCall",
+      "counterpart": {
+        "kind": "McpCaller"
+      },
+      "reply": true,
+      "kind": "tools/call:turn_interrupt",
+      "payload": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "result": {
+          "content": [
+            {
+              "type": "text",
+              "text": "{\"target\":{\"endpoint\":{\"serviceId\":\"00000000-0000-4000-8000-000000000001\",\"endpointId\":\"codex-local\"},\"sessionId\":\"thread-a\"},\"generation\":{\"serviceEpoch\":\"00000000-0000-4000-8000-000000000002\",\"generation\":7},\"turnId\":\"turn-a\",\"kind\":\"interruptCompleted\"}"
+            }
+          ],
+          "structuredContent": {
+            "target": {
+              "endpoint": {
+                "serviceId": "00000000-0000-4000-8000-000000000001",
+                "endpointId": "codex-local"
+              },
+              "sessionId": "thread-a"
+            },
+            "generation": {
+              "serviceEpoch": "00000000-0000-4000-8000-000000000002",
+              "generation": 7
+            },
+            "turnId": "turn-a",
+            "kind": "interruptCompleted"
+          },
+          "isError": false
+        }
+      }
+    }
+  ],
+  "stateAfter": {},
+  "comparison": {
+    "verdict": "matchesCatalog"
+  },
+  "outcome": {
+    "outcome": "passed"
+  }
+}

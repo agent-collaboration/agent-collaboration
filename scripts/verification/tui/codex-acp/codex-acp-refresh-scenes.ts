@@ -49,7 +49,8 @@ export function refreshJourney(input: RefreshJourneyInput): CodexJourney {
 				actions: [{ kind: 'key', key: 'Enter' }],
 				checkpoint: {
 					scene: 'refresh-turn-running',
-					require: [CODEX_0_165_TEXT.working],
+					require: [],
+					running_turn: true,
 					forbid: ended,
 					deadline_ms: UI_CHECKPOINT_MS,
 				},
@@ -58,7 +59,8 @@ export function refreshJourney(input: RefreshJourneyInput): CodexJourney {
 				actions: [{ kind: 'text', text: '/skills' }],
 				checkpoint: {
 					scene: 'refresh-skills-command-ready',
-					require: [CODEX_0_165_TEXT.working, CODEX_0_165_TEXT.skillsCommandRow],
+					require: [CODEX_0_165_TEXT.skillsCommandRow],
+					running_turn: true,
 					forbid: ended,
 					deadline_ms: UI_CHECKPOINT_MS,
 					selected_slash_row: { command: 'skills', description: CODEX_0_165_TEXT.skillsCommandRow },
@@ -115,7 +117,8 @@ export function refreshJourney(input: RefreshJourneyInput): CodexJourney {
 				actions: [{ kind: 'key', key: 'Escape' }],
 				checkpoint: {
 					scene: 'refresh-manage-closed',
-					require: [CODEX_0_165_TEXT.working],
+					require: [],
+					running_turn: true,
 					forbid: [
 						CODEX_0_165_TEXT.manageSkillsSubtitle,
 						CODEX_0_165_TEXT.manageSkillsHint,
