@@ -382,3 +382,26 @@ fn a_dangling_symlink_inside_a_root_asks() {
         "a redirection through a dangling symlink asks"
     );
 }
+
+/// Oracle: the Reviewer's D3 ("no Node is found" refuses Claude in auto):
+/// a launch runs a known Node when its executable is `node` or a script whose
+/// `#!` line names an absolute Node; a script run through `env`, or a binary
+/// that isn't Node, has none.
+#[test]
+fn a_launch_names_its_node_directly_or_by_an_absolute_shebang() {
+    // Arrange
+    let root = tempfile::tempdir().expect("launch root");
+    let node = PathBuf::from("/opt/node/bin/node");
+    let absolute = root.path().join("absolute-shebang");
+    std::fs::write(&absolute, "#!/opt/node/bin/node\nimport './x.mjs';\n").expect("script");
+    let through_env = root.path().join("env-shebang");
+    std::fs::write(&through_env, "#!/usr/bin/env node\n").expect("script");
+    let binary = root.path().join("binary");
+    std::fs::write(&binary, [0x7f_u8, b'E', b'L', b'F']).expect("binary");
+
+    // Act, Assert
+    assert_eq!(super::launch_node(&node), Some(node.clone()));
+    assert_eq!(super::launch_node(&absolute), Some(node));
+    assert_eq!(super::launch_node(&through_env), None);
+    assert_eq!(super::launch_node(&binary), None);
+}

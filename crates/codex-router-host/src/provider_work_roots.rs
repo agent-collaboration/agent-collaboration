@@ -63,6 +63,27 @@ impl AskOutsideHook {
     }
 }
 
+/// The Node a launch runs: the executable itself when it is `node`, or the
+/// absolute Node a script's `#!` line names. `None` otherwise (a script run
+/// through `env`, say), so Claude in auto is refused rather than unguarded.
+pub(crate) fn launch_node(executable: &Path) -> Option<PathBuf> {
+    let is_node = |path: &Path| path.file_name() == Some(std::ffi::OsStr::new("node"));
+    if is_node(executable) {
+        return Some(executable.to_path_buf());
+    }
+    let mut first_line = [0_u8; 256];
+    let read = io::Read::read(&mut fs::File::open(executable).ok()?, &mut first_line).ok()?;
+    let text = std::str::from_utf8(first_line.get(..read)?).ok()?;
+    let interpreter = text
+        .strip_prefix("#!")?
+        .lines()
+        .next()?
+        .split_whitespace()
+        .next()?;
+    let interpreter = Path::new(interpreter);
+    (interpreter.is_absolute() && is_node(interpreter)).then(|| interpreter.to_path_buf())
+}
+
 /// Writes the hook, owner-only, into `directory` and returns its path. The
 /// file is replaced whole, so a session never reads a half-written hook.
 pub(crate) fn install_work_roots_hook(directory: &Path) -> io::Result<PathBuf> {

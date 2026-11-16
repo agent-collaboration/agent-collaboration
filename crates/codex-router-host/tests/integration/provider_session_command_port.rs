@@ -17,25 +17,22 @@ use tokio::{
     clippy::expect_used,
     reason = "A fixture that cannot be written must fail its test."
 )]
-fn write_claude_permission_fixture(root: &std::path::Path) -> std::path::PathBuf {
+/// The Claude permission-mode fixture launched by Node itself, so the Host
+/// knows the Node that runs Claude's work-roots hook (D1 R18).
+fn claude_permission_fixture(root: &std::path::Path) -> (std::path::PathBuf, Vec<String>) {
     let program = node_test_fixture::fixture_program("permission-mode-agent.ts")
         .canonicalize()
         .expect("fixture program");
     let node = node_test_fixture::node_executable().expect("node");
-    let executable = root.join("claude-permission-agent");
-    std::fs::write(
-        &executable,
-        format!(
-            "#!/bin/sh\nexec {} {} {} claude grants-directories\n",
-            node.display(),
-            program.display(),
-            root.join("receipt.json").display()
-        ),
+    (
+        node,
+        vec![
+            program.display().to_string(),
+            root.join("receipt.json").display().to_string(),
+            "claude".to_owned(),
+            "grants-directories".to_owned(),
+        ],
     )
-    .expect("launcher");
-    std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700))
-        .expect("launcher executable");
-    executable
 }
 
 async fn next_json(
@@ -54,7 +51,7 @@ async fn protocol_door_create_succeeds_in_auto() {
     let root = tempfile::tempdir().expect("runtime root");
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))
         .expect("private runtime root");
-    let provider = write_claude_permission_fixture(root.path());
+    let (provider, provider_arguments) = claude_permission_fixture(root.path());
     let runtime = CollaborationRuntime::start_with_external_providers(
         CollaborationRuntimeInputs {
             board_session: None,
@@ -70,7 +67,7 @@ async fn protocol_door_create_succeeds_in_auto() {
             remote_control_server_name: None,
         },
         vec![ExternalProviderStartup::Launch({
-            let mut binding = ExternalProviderLaunchBinding::claude(provider, Vec::new())
+            let mut binding = ExternalProviderLaunchBinding::claude(provider, provider_arguments)
                 .expect("provider binding");
             codex_router_test_support::global_claude_fixture::declare_global_claude_fixture(
                 root.path(),

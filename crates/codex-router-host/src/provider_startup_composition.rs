@@ -153,10 +153,8 @@ pub(crate) async fn compose_provider_startup(
                 };
                 // The Node a qualified Claude launch runs under also runs its
                 // work-roots hook (D1 R18).
-                let launch_node = claude_node.or_else(|| {
-                    (launch.executable.file_name() == Some(std::ffi::OsStr::new("node")))
-                        .then(|| launch.executable.clone())
-                });
+                let launch_node = claude_node
+                    .or_else(|| crate::provider_work_roots::launch_node(&launch.executable));
                 let hub_endpoint = message_board::SessionEndpointRef {
                     service_id: message_board::ServiceId::try_from(String::from(
                         service_id.clone(),
