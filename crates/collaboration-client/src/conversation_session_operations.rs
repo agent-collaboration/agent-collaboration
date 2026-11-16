@@ -278,9 +278,10 @@ impl ConversationClient {
                     prompt: input.message.into(),
                 };
                 let wait_seconds = provider_wait_seconds(timeout)?;
-                let router = match provider {
-                    ProviderConversations::Api(client) => {
-                        return match composite_call(
+                let router =
+                    match provider {
+                        ProviderConversations::Api(client) => {
+                            return match composite_call(
                             client,
                             "conversation_prompt",
                             api_arguments,
@@ -290,16 +291,31 @@ impl ConversationClient {
                         .await?
                         {
                             CompositeAnswer::Settled(result) => Ok(result),
-                            CompositeAnswer::StillRunning => {
-                                Ok(ConversationOperationResult::Pending {
+                            // Not settled: waiting in the session's line says
+                            // queued, anything else pending (D1 R12).
+                            CompositeAnswer::StillRunning => Ok(match client
+                                .show_provider_conversation_operation(
+                                    collaboration_protocol::ConversationOperationShowRequest {
+                                        operation_id: operation_id.clone(),
+                                    },
+                                )
+                                .await
+                            {
+                                Ok(snapshot) if router_queued(&snapshot) => {
+                                    ConversationOperationResult::Queued {
+                                        operation_id,
+                                        target,
+                                    }
+                                }
+                                _ => ConversationOperationResult::Pending {
                                     operation_id,
                                     target,
-                                })
-                            }
+                                },
+                            }),
                         };
-                    }
-                    ProviderConversations::Local(router) => router,
-                };
+                        }
+                        ProviderConversations::Local(router) => router,
+                    };
                 let operations = LocalProviderOperations(router.as_ref());
                 let submitted = tokio::time::timeout(timeout, async {
                     operations.prompt_provider_conversation(request).await?;
@@ -321,9 +337,30 @@ impl ConversationClient {
                 .await;
                 match submitted {
                     Ok(Err(ConversationClientError::Client(ClientError::Timeout))) | Err(_) => {
-                        Ok(ConversationOperationResult::Pending {
-                            operation_id,
-                            target,
+                        // One short look: a prompt waiting in its line says queued.
+                        let looked = match collaboration_protocol::PositiveSeconds::try_from(1) {
+                            Ok(timeout_seconds) => operations
+                                .wait_for_provider_conversation_operation(
+                                    ConversationOperationWaitRequest {
+                                        operation_id: operation_id.clone(),
+                                        timeout_seconds,
+                                    },
+                                )
+                                .await
+                                .ok(),
+                            Err(_) => None,
+                        };
+                        Ok(match looked {
+                            Some(waited) if router_queued(&waited.operation) => {
+                                ConversationOperationResult::Queued {
+                                    operation_id,
+                                    target,
+                                }
+                            }
+                            _ => ConversationOperationResult::Pending {
+                                operation_id,
+                                target,
+                            },
                         })
                     }
                     Ok(result) => result,
@@ -508,6 +545,14 @@ pub(crate) fn provider_operation_result(
         operation_id,
         target,
     })
+}
+
+/// The operation is waiting in its session's line, not running.
+fn router_queued(snapshot: &collaboration_protocol::ConversationOperationSnapshot) -> bool {
+    matches!(
+        snapshot.queue_state,
+        Some(collaboration_protocol::ConversationOperationQueueState::RouterQueued)
+    )
 }
 
 fn provider_stop_reason(reason: ProviderPromptStopReason) -> ConversationStopReason {

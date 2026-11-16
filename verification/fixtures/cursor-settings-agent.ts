@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { existsSync, writeFileSync } from "node:fs";
+import { setTimeout as delay } from "node:timers/promises";
 import { AcpStdio, requestParameters, requireArgument, wireJson } from "./acp-stdio.ts";
 
 interface ConfigOption {
@@ -131,6 +132,8 @@ async function serveSharedSettings(peer: {
 //     which fast still reads on.
 //   fast-option-vanishes: the first fast change is answered with a valid
 //     catalog that has no fast option.
+//   hold-first-prompt: the first prompt's turn stays running until the file
+//     <receipt>.release exists, so a test can send to a busy session.
 const reactiveBehaviourNames = [
   "boolean-fast",
   "refuse-fast-once",
@@ -139,6 +142,7 @@ const reactiveBehaviourNames = [
   "malformed-fast-after-model",
   "fast-stays-on",
   "fast-option-vanishes",
+  "hold-first-prompt",
 ] as const;
 type ReactiveBehaviour = (typeof reactiveBehaviourNames)[number];
 
@@ -186,6 +190,8 @@ function reactiveOptions(
 
 interface ReactivePeer {
   readonly behaviours: ReadonlySet<ReactiveBehaviour>;
+  /** The file whose appearance ends a held first prompt's turn. */
+  readonly releasePath: string;
   readonly readRequest: () => Promise<Record<string, unknown> | undefined>;
   readonly reply: (request: Record<string, unknown>, result: unknown) => void;
   readonly refuse: (request: Record<string, unknown>, message: string) => void;
@@ -291,7 +297,13 @@ function answerReactiveSetting(
   peer.reply(request, { configOptions: reactiveOptions(session, peer.behaviours, true) });
 }
 
+/** Waits until the test releases the held turn by creating its file. */
+async function waitForRelease(releasePath: string): Promise<void> {
+  while (!existsSync(releasePath)) await delay(10);
+}
+
 async function serveReactiveSettings(peer: ReactivePeer): Promise<void> {
+  let promptsSeen = 0;
   const sessions = new Map<string, ReactiveSession>();
   const replies = new ReactiveFastReplies(peer.behaviours);
   for (;;) {
@@ -330,6 +342,9 @@ async function serveReactiveSettings(peer: ReactivePeer): Promise<void> {
         );
         break;
       case "session/prompt":
+        promptsSeen += 1;
+        if (promptsSeen === 1 && peer.behaviours.has("hold-first-prompt"))
+          await waitForRelease(peer.releasePath);
         peer.reply(request, { stopReason: "end_turn" });
         break;
       case "authenticate":
@@ -382,6 +397,7 @@ function reactivePeer(
 ): ReactivePeer {
   return {
     behaviours: reactiveBehaviours(process.argv.slice(4)),
+    releasePath: `${requireArgument(3)}.release`,
     readRequest,
     reply,
     refuse: (request: Record<string, unknown>, message: string): void => {
