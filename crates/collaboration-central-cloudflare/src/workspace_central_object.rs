@@ -23,6 +23,11 @@ use worker::{
 
 struct CentralStatements {
     #[cfg(feature = "test-support")]
+    engine_commit_fault:
+        Arc<std::sync::Mutex<Option<collaboration_central_core::EngineCommitFault>>>,
+    #[cfg(feature = "test-support")]
+    engine_read_fault: Arc<std::sync::Mutex<Option<collaboration_central_core::EngineReadFault>>>,
+    #[cfg(feature = "test-support")]
     alarm_batch_failure: Arc<std::sync::Mutex<Option<StoreFailure>>>,
     connection: SendWrapper<DoConnection>,
     state: Arc<SendWrapper<State>>,
@@ -36,6 +41,22 @@ impl ObjectHost for CentralStatements {
     ) -> impl std::future::Future<Output = std::result::Result<BatchOutcome, StoreFailure>> + Send
     {
         SendFuture::new(async move {
+            #[cfg(feature = "test-support")]
+            let fault = {
+                let mut armed = self
+                    .engine_commit_fault
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                if armed.as_ref().is_some_and(|fault| fault.matches(&batch)) {
+                    armed.take()
+                } else {
+                    None
+                }
+            };
+            #[cfg(feature = "test-support")]
+            if let Some(result) = fault.as_ref().and_then(|fault| fault.before()) {
+                return result;
+            }
             #[cfg(feature = "test-support")]
             if batch.statements.is_empty()
                 && matches!(
@@ -51,7 +72,7 @@ impl ObjectHost for CentralStatements {
             {
                 return Err(failure);
             }
-            statement_store::run_batch(
+            let result = statement_store::run_batch(
                 &self.connection,
                 batch.into(),
                 AlarmPolicy::Engine(
@@ -60,7 +81,18 @@ impl ObjectHost for CentralStatements {
                     self.decide_alarm.clone(),
                 ),
             )
-            .await
+            .await;
+            #[cfg(feature = "test-support")]
+            if fault.is_some_and(|fault| {
+                matches!(
+                    fault.kind,
+                    collaboration_central_core::EngineCommitFaultKind::AppliedAnswerLost
+                )
+            }) && matches!(result, Ok(BatchOutcome::Applied { .. }))
+            {
+                return Err(StoreFailure::AnswerLost);
+            }
+            result
         })
     }
     fn read(
@@ -68,7 +100,27 @@ impl ObjectHost for CentralStatements {
         statement: Statement,
     ) -> impl std::future::Future<Output = std::result::Result<ReadOutcome, StoreFailure>> + Send
     {
-        SendFuture::new(statement_store::read(&self.connection, statement.into()))
+        SendFuture::new(async move {
+            #[cfg(feature = "test-support")]
+            {
+                let mut fault = self
+                    .engine_read_fault
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                if fault
+                    .as_ref()
+                    .is_some_and(|fault| fault.matches(&statement))
+                {
+                    fault.take();
+                    return Err(StoreFailure::Corrupt {
+                        reason: central_storage::CorruptReason::BadValue {
+                            column: "engine.due_list".into(),
+                        },
+                    });
+                }
+            }
+            statement_store::read(&self.connection, statement.into()).await
+        })
     }
 }
 #[derive(Clone)]
@@ -151,6 +203,10 @@ impl CentralObject {
 
     fn statement_host(&self) -> Arc<CentralStatements> {
         Arc::new(CentralStatements {
+            #[cfg(feature = "test-support")]
+            engine_commit_fault: self.controls.engine_commit_fault.clone(),
+            #[cfg(feature = "test-support")]
+            engine_read_fault: self.controls.engine_read_fault.clone(),
             #[cfg(feature = "test-support")]
             alarm_batch_failure: self.controls.alarm_batch_failure.clone(),
             connection: SendWrapper::new(DoConnection::new(self.state.storage())),

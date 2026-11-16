@@ -44,18 +44,24 @@ pub struct AlarmNotPublished {
 enum DueKind {
     Wake,
     Automation,
+    #[cfg(feature = "test-support")]
+    Probe,
 }
 impl DueKind {
     fn kind(self) -> MachineKind {
         match self {
             Self::Wake => MachineKind("wake_timer"),
             Self::Automation => MachineKind("automation_timer"),
+            #[cfg(feature = "test-support")]
+            Self::Probe => MachineKind("engine_probe"),
         }
     }
     fn sql(self) -> &'static str {
         match self {
             Self::Wake => query_registry::WAKE_LIST,
             Self::Automation => query_registry::AUTOMATION_LIST,
+            #[cfg(feature = "test-support")]
+            Self::Probe => query_registry::PROBE_LIST,
         }
     }
 }
@@ -186,7 +192,12 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         let mut units = Vec::new();
         let mut leftovers = false;
         let mut central_down = false;
-        for kind in [DueKind::Wake, DueKind::Automation] {
+        for kind in [
+            DueKind::Wake,
+            DueKind::Automation,
+            #[cfg(feature = "test-support")]
+            DueKind::Probe,
+        ] {
             let subject = source(kind.kind());
             match self
                 .control_gate(&subject, RetirementThreshold::DEFAULT)
@@ -284,60 +295,41 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         let mut work = AlarmResult::default();
         match unit {
             Unit::Machine(kind, row) => {
-                let Some(occurrence) = EngineTime::from_timestamp_millis(row.occurrence_ms) else {
-                    return (work, true);
-                };
                 let (done, down) = match kind {
-                    DueKind::Wake => match self
-                        .handle::<wake_timer::WakeTimer, _>(
+                    #[cfg(feature = "test-support")]
+                    DueKind::Probe => {
+                        self.run_machine_unit::<crate::engine_probe::EngineProbe, _>(
+                            &super::probe_store::ProbeStore(self),
+                            row,
+                            "engine_probe_items.due_at",
+                            |occurrence| crate::engine_probe::ProbeEvent::Due { occurrence },
+                        )
+                        .await
+                    }
+                    DueKind::Wake => {
+                        self.run_machine_unit::<wake_timer::WakeTimer, _>(
                             &WakeStore(self),
-                            row.key.clone(),
-                            wake_timer::Event::Due { occurrence },
+                            row,
+                            "wakes.due_at",
+                            |occurrence| wake_timer::Event::Due { occurrence },
                         )
                         .await
-                    {
-                        HandleOutcome::Done(_) => (true, false),
-                        HandleOutcome::StoreDown(failure) => {
-                            self.observe_engine_store_down(
-                                &EngineSubject {
-                                    kind: kind.kind(),
-                                    key: row.key.clone(),
-                                },
-                                failure,
-                            );
-                            (false, true)
-                        }
-                        HandleOutcome::Failed
-                        | HandleOutcome::Superseded
-                        | HandleOutcome::Uncertain => (false, false),
-                    },
-                    DueKind::Automation => match self
-                        .handle::<automation_timer::AutomationTimer, _>(
+                    }
+                    DueKind::Automation => {
+                        self.run_machine_unit::<automation_timer::AutomationTimer, _>(
                             &AutomationStore(self),
-                            row.key.clone(),
-                            automation_timer::Event::Due { occurrence },
+                            row,
+                            "automations.next_due_at",
+                            |occurrence| automation_timer::Event::Due { occurrence },
                         )
                         .await
-                    {
-                        HandleOutcome::Done(_) => (true, false),
-                        HandleOutcome::StoreDown(failure) => {
-                            self.observe_engine_store_down(
-                                &EngineSubject {
-                                    kind: kind.kind(),
-                                    key: row.key.clone(),
-                                },
-                                failure,
-                            );
-                            (false, true)
-                        }
-                        HandleOutcome::Failed
-                        | HandleOutcome::Superseded
-                        | HandleOutcome::Uncertain => (false, false),
-                    },
+                    }
                 };
                 match kind {
                     DueKind::Wake => work.wakes_fired = usize::from(done),
                     DueKind::Automation => work.automations_fired = usize::from(done),
+                    #[cfg(feature = "test-support")]
+                    DueKind::Probe => {}
                 }
                 (work, down)
             }
@@ -387,12 +379,13 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                         Some(class) => (
                             work,
                             matches!(
-                                self.record_failure(
+                                self.record_failure_naming(
                                     &subject,
                                     CONTROL_WRITE,
                                     &SubjectVersion(vec![]),
                                     class,
-                                    RetirementThreshold::NOTICE_UNITS
+                                    RetirementThreshold::NOTICE_UNITS,
+                                    outcome.affected_workspaces(),
                                 )
                                 .await,
                                 FailureOutcome::StoreDown(_)
@@ -403,6 +396,88 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 }
             }
         }
+    }
+
+    /// One due machine instance as its own unit: `(done, central_down)`.
+    async fn run_machine_unit<M, Adapter>(
+        &self,
+        adapter: &Adapter,
+        row: DueRow,
+        due_column: &'static str,
+        due_event: fn(EngineTime) -> M::Event,
+    ) -> (bool, bool)
+    where
+        M: central_engine_model::Machine,
+        M::State: Send + Sync,
+        M::Event: Send + Sync,
+        M::Effect: Send + Sync,
+        M::Error: Send + Sync,
+        Adapter: super::store_adapter::StoreAdapter<M>,
+    {
+        let subject = adapter.subject(&row.key);
+        let outcome = match EngineTime::from_timestamp_millis(row.occurrence_ms) {
+            Some(occurrence) => {
+                self.handle::<M, Adapter, _>(
+                    adapter,
+                    row.key.clone(),
+                    due_event(occurrence),
+                    &super::source::DueSource,
+                )
+                .await
+            }
+            // The due SQL clamps unreadable times, so this is defensive: the item
+            // fails alone as CorruptRow and the batch continues (P3).
+            None => {
+                self.record_unrepresentable_due(adapter, &row.key, due_column)
+                    .await
+            }
+        };
+        match outcome {
+            HandleOutcome::Done(_) => (true, false),
+            HandleOutcome::StoreDown(failure) => {
+                self.observe_engine_store_down(&subject, failure);
+                (false, true)
+            }
+            HandleOutcome::Failed(_)
+            | HandleOutcome::RequestFailed(_)
+            | HandleOutcome::NotFound
+            | HandleOutcome::Refused(_)
+            | HandleOutcome::Superseded
+            | HandleOutcome::Uncertain => (false, false),
+        }
+    }
+
+    async fn record_unrepresentable_due<M, Adapter>(
+        &self,
+        adapter: &Adapter,
+        key: &InstanceKey,
+        due_column: &'static str,
+    ) -> HandleOutcome<M::State, M::Error>
+    where
+        M: central_engine_model::Machine,
+        Adapter: super::store_adapter::StoreAdapter<M>,
+    {
+        let version = match adapter.load(key).await {
+            Ok(Some(loaded)) => loaded.version,
+            Ok(None) => return HandleOutcome::NotFound,
+            Err(super::store_adapter::LoadFailure::Corrupt { version, .. }) => version,
+            Err(super::store_adapter::LoadFailure::Uncertain) => return HandleOutcome::Uncertain,
+            Err(super::store_adapter::LoadFailure::StoreDown(failure)) => {
+                return HandleOutcome::StoreDown(failure);
+            }
+        };
+        self.record_failure(
+            &adapter.subject(key),
+            adapter.failure_sql(),
+            &version,
+            central_engine_model::ItemFailureClass::CorruptRow {
+                column: due_column.into(),
+                raw_value: None,
+            },
+            M::retirement_threshold(),
+        )
+        .await
+        .into()
     }
 
     async fn run_window_unit(

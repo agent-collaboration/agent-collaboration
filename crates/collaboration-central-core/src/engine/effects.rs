@@ -1,10 +1,11 @@
 use super::{
     attempt_statements::delete_attempt,
+    source::ReceiptStatements,
     store_adapter::{StoreAdapter, Versioned},
 };
 use crate::ObjectHost;
 use central_engine_model::{InstanceKey, ItemFailureClass, Machine};
-use central_storage::{AlarmUpdate, BatchOutcome, GuardedStatement, StatementBatch, StoreFailure};
+use central_storage::{AlarmUpdate, BatchOutcome, ConstraintKind, StatementBatch, StoreFailure};
 use std::future::Future;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -37,6 +38,24 @@ pub(crate) fn classify_batch(
     }
 }
 
+fn classify_receipt_batch(
+    result: Result<BatchOutcome, StoreFailure>,
+    request_claim: bool,
+) -> Result<(), ApplyFailure> {
+    if request_claim
+        && matches!(
+            &result,
+            Ok(BatchOutcome::ConstraintViolated {
+                index: 1,
+                kind: ConstraintKind::Unique
+            })
+        )
+    {
+        return Err(ApplyFailure::Superseded);
+    }
+    classify_batch(result)
+}
+
 /// The ObjectHost supplies the platform transaction; the adapter supplies the
 /// machine's statements. Both modern hosts use this same effect handler.
 pub(crate) trait EffectHandler {
@@ -47,7 +66,7 @@ pub(crate) trait EffectHandler {
         prior: &Versioned<M::State>,
         next: &M::State,
         effects: &[M::Effect],
-        receipt: Vec<GuardedStatement>,
+        receipt: ReceiptStatements,
     ) -> impl Future<Output = Result<(), ApplyFailure>> + Send
     where
         M: Machine,
@@ -70,7 +89,7 @@ impl<Host: ObjectHost> EffectHandler for ObjectHostEffects<'_, Host> {
         prior: &Versioned<M::State>,
         next: &M::State,
         effects: &[M::Effect],
-        mut receipt: Vec<GuardedStatement>,
+        receipt: ReceiptStatements,
     ) -> Result<(), ApplyFailure>
     where
         M: Machine,
@@ -78,6 +97,8 @@ impl<Host: ObjectHost> EffectHandler for ObjectHostEffects<'_, Host> {
         M::Effect: Sync,
         Adapter: StoreAdapter<M>,
     {
+        let request_claim = matches!(&receipt, ReceiptStatements::Request(_));
+        let mut receipt = receipt.into_statements();
         let statements = (|| {
             receipt.push(adapter.save(key, prior, next)?);
             for effect in effects {
@@ -99,18 +120,37 @@ impl<Host: ObjectHost> EffectHandler for ObjectHostEffects<'_, Host> {
         self.pauses
             .reached_central(crate::PausePoint::BeforeTimerCommit)
             .await;
-        classify_batch(
+        classify_receipt_batch(
             self.host
                 .run_batch(StatementBatch {
                     statements,
                     alarm: AlarmUpdate::Unchanged,
                 })
                 .await,
+            request_claim,
         )?;
         #[cfg(feature = "test-support")]
         self.pauses
             .reached_central(crate::PausePoint::AfterTimerCommit)
             .await;
         Ok(())
+    }
+}
+
+impl<Host: ObjectHost> ObjectHostEffects<'_, Host> {
+    pub(crate) async fn apply_receipt(
+        &self,
+        receipt: ReceiptStatements,
+    ) -> Result<(), ApplyFailure> {
+        let request_claim = matches!(&receipt, ReceiptStatements::Request(_));
+        classify_receipt_batch(
+            self.host
+                .run_batch(StatementBatch {
+                    statements: receipt.into_statements(),
+                    alarm: AlarmUpdate::Unchanged,
+                })
+                .await,
+            request_claim,
+        )
     }
 }

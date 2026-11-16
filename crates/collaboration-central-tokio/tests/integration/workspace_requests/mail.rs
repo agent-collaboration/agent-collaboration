@@ -16,4 +16,5 @@ mod replay;
 
 mod replay_failures;
 
+mod probe_requests;
 mod timing_contract;

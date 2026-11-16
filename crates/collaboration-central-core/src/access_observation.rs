@@ -51,6 +51,8 @@ pub enum CentralObservation {
         failure: central_engine_model::ItemFailureClass,
         count: u32,
         retired: bool,
+        /// The workspaces a notice unit failure affected; empty for machine subjects.
+        workspaces: Vec<workspace_model::WorkspaceId>,
     },
     AccessCheck {
         route_class: AccessRouteClass,

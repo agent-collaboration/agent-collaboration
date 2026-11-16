@@ -43,6 +43,10 @@ pub(crate) enum LastAlarmPublication {
 }
 
 pub struct ObjectStorage {
+    #[cfg(feature = "test-support")]
+    engine_commit_fault: std::sync::Mutex<Option<collaboration_central_core::EngineCommitFault>>,
+    #[cfg(feature = "test-support")]
+    engine_read_fault: std::sync::Mutex<Option<collaboration_central_core::EngineReadFault>>,
     path: PathBuf,
     migrator: Arc<Migrator>,
     store: OnceCell<SqliteObjectStore>,
@@ -71,6 +75,10 @@ impl ObjectStorage {
     #[must_use]
     pub fn new(path: PathBuf, migrator: Arc<Migrator>) -> Self {
         Self {
+            #[cfg(feature = "test-support")]
+            engine_commit_fault: Default::default(),
+            #[cfg(feature = "test-support")]
+            engine_read_fault: Default::default(),
             path,
             migrator,
             store: OnceCell::new(),
@@ -153,6 +161,22 @@ impl ObjectStorage {
     }
 
     async fn run_ordered_batch(&self, batch: StatementBatch) -> Result<BatchOutcome, StoreFailure> {
+        #[cfg(feature = "test-support")]
+        let commit_fault = {
+            let mut armed = self
+                .engine_commit_fault
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if armed.as_ref().is_some_and(|fault| fault.matches(&batch)) {
+                armed.take()
+            } else {
+                None
+            }
+        };
+        #[cfg(feature = "test-support")]
+        if let Some(result) = commit_fault.as_ref().and_then(|fault| fault.before()) {
+            return result;
+        }
         if matches!(
             &batch.alarm,
             central_storage::AlarmUpdate::SetEngineFromQuery { .. }
@@ -226,6 +250,16 @@ impl ObjectStorage {
             }
             *receipt = publication;
         }
+        #[cfg(feature = "test-support")]
+        if commit_fault.is_some_and(|fault| {
+            matches!(
+                fault.kind,
+                collaboration_central_core::EngineCommitFaultKind::AppliedAnswerLost
+            )
+        }) && matches!(outcome, BatchOutcome::Applied { .. })
+        {
+            return Err(StoreFailure::AnswerLost);
+        }
         Ok(outcome)
     }
 
@@ -278,6 +312,24 @@ impl ObjectStorage {
     }
 
     pub async fn read(&self, statement: Statement) -> Result<ReadOutcome, StoreFailure> {
+        #[cfg(feature = "test-support")]
+        {
+            let mut fault = self
+                .engine_read_fault
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if fault
+                .as_ref()
+                .is_some_and(|fault| fault.matches(&statement))
+            {
+                fault.take();
+                return Err(StoreFailure::Corrupt {
+                    reason: central_storage::CorruptReason::BadValue {
+                        column: "engine.due_list".into(),
+                    },
+                });
+            }
+        }
         self.opened().await?.read(statement).await
     }
 
@@ -330,6 +382,20 @@ impl ObjectStorage {
             .alarm_batch_failure
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(failure);
+    }
+    #[cfg(feature = "test-support")]
+    pub fn inject_engine_commit_fault(&self, fault: collaboration_central_core::EngineCommitFault) {
+        *self
+            .engine_commit_fault
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(fault);
+    }
+    #[cfg(feature = "test-support")]
+    pub fn inject_engine_read_fault(&self, fault: collaboration_central_core::EngineReadFault) {
+        *self
+            .engine_read_fault
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(fault);
     }
 
     #[cfg(feature = "test-support")]

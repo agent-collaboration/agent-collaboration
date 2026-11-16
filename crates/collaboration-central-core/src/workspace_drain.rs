@@ -73,14 +73,16 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 Ok(())
             }
             Err(outcome) => {
+                let outcome = outcome.in_workspace(workspace);
                 if let Some(class) = outcome.failure_class() {
                     if let FailureOutcome::StoreDown(failure) = self
-                        .record_failure(
+                        .record_failure_naming(
                             &subject,
                             CONTROL_WRITE,
                             &SubjectVersion(vec![]),
                             class,
                             RetirementThreshold::NOTICE_UNITS,
+                            outcome.affected_workspaces(),
                         )
                         .await
                     {
@@ -189,18 +191,23 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             match self.commit_workspace_drain(&workspace).await {
                 Ok(_) => count += 1,
                 Err(error) => {
-                    outcome = outcome.combine(error);
+                    outcome = outcome.combine(error.in_workspace(&workspace));
+                    if matches!(outcome, LegacyUnitOutcome::CentralDown(_)) {
+                        break;
+                    }
                 }
             }
         }
+        // The unit succeeds when every workspace is Done, Superseded or Uncertain
+        // (P5); committed workspaces stay counted.
         match outcome {
-            LegacyUnitOutcome::Done => Ok(count),
+            LegacyUnitOutcome::Done
+            | LegacyUnitOutcome::Superseded
+            | LegacyUnitOutcome::Uncertain => Ok(count),
             failure @ (LegacyUnitOutcome::RemoteUnavailable { .. }
             | LegacyUnitOutcome::Corrupt { .. }
-            | LegacyUnitOutcome::Rejected
+            | LegacyUnitOutcome::Rejected { .. }
             | LegacyUnitOutcome::ConstraintViolated { .. }
-            | LegacyUnitOutcome::Superseded
-            | LegacyUnitOutcome::Uncertain
             | LegacyUnitOutcome::CentralDown(_)) => Err(failure),
         }
     }

@@ -8,6 +8,7 @@ use super::{
 use crate::{ObjectHost, WorkspaceRuntime, WorkspaceStoreCalls};
 use central_engine_model::{FailureRecord, ItemFailureClass, RetirementThreshold, after_failure};
 use central_storage::{AlarmUpdate, StatementBatch, StoreFailure};
+use workspace_model::WorkspaceId;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) enum FailureOutcome {
@@ -37,18 +38,34 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         class: ItemFailureClass,
         threshold: RetirementThreshold,
     ) -> FailureOutcome {
+        self.record_failure_naming(subject, failure_sql, version, class, threshold, &[])
+            .await
+    }
+
+    /// Records a failure whose observation names the workspaces a notice unit
+    /// affected; the stored record keeps only its class (P2, P5 change 4).
+    pub(crate) async fn record_failure_naming(
+        &self,
+        subject: &EngineSubject,
+        failure_sql: &'static str,
+        version: &SubjectVersion,
+        class: ItemFailureClass,
+        threshold: RetirementThreshold,
+        workspaces: &[WorkspaceId],
+    ) -> FailureOutcome {
         let prior = match load_attempt(self.host.as_ref(), subject).await {
             Ok(prior) => prior,
             Err(StoreFailure::AnswerLost) => return FailureOutcome::Uncertain,
             Err(failure) => return FailureOutcome::StoreDown(failure),
         };
-        self.write_failure(
+        self.write_failure_naming(
             subject,
             failure_sql,
             version,
             class,
             threshold,
             prior.as_ref(),
+            workspaces,
         )
         .await
     }
@@ -61,6 +78,21 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         class: ItemFailureClass,
         threshold: RetirementThreshold,
         prior: Option<&StoredAttempt>,
+    ) -> FailureOutcome {
+        self.write_failure_naming(subject, failure_sql, version, class, threshold, prior, &[])
+            .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    async fn write_failure_naming(
+        &self,
+        subject: &EngineSubject,
+        failure_sql: &'static str,
+        version: &SubjectVersion,
+        class: ItemFailureClass,
+        threshold: RetirementThreshold,
+        prior: Option<&StoredAttempt>,
+        workspaces: &[WorkspaceId],
     ) -> FailureOutcome {
         let (record, class) = match prior.map(|stored| &stored.record) {
             Some(Ok(record)) => (Some(record), class),
@@ -115,6 +147,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                         record.state,
                         central_engine_model::AttemptState::Retired { .. }
                     ),
+                    workspaces: workspaces.to_vec(),
                 });
                 FailureOutcome::Recorded(record)
             }

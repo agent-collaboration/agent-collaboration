@@ -11,6 +11,10 @@ use worker::{Headers, Method, RequestInit, js_sys};
 
 #[derive(Default)]
 pub(crate) struct Controls {
+    pub(super) engine_commit_fault:
+        std::sync::Arc<std::sync::Mutex<Option<collaboration_central_core::EngineCommitFault>>>,
+    pub(super) engine_read_fault:
+        std::sync::Arc<std::sync::Mutex<Option<collaboration_central_core::EngineReadFault>>>,
     pub(super) alarm_batch_failure:
         std::sync::Arc<std::sync::Mutex<Option<central_storage::StoreFailure>>>,
     pub(super) lose_read: std::sync::Arc<std::sync::atomic::AtomicBool>,
@@ -120,8 +124,45 @@ pub(super) async fn control(
         object.clock.hold(request.json::<i64>().await?);
         return Response::from_json(&true);
     }
-    let runtime = object.runtime(organization).await?;
+    let runtime = object.runtime(organization.clone()).await?;
     match path.as_str() {
+        "/test/engine-commit-fault" => {
+            let fault = request.json().await?;
+            *object
+                .controls
+                .engine_commit_fault
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(fault);
+            Response::from_json(&true)
+        }
+        "/test/engine-read-fault" => {
+            let fault = request.json().await?;
+            *object
+                .controls
+                .engine_read_fault
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(fault);
+            Response::from_json(&true)
+        }
+        "/test/engine-probe-seed" => {
+            Response::from_json(&runtime.seed_probe(request.json().await?).await)
+        }
+        "/test/engine-probe-request" => {
+            #[derive(Deserialize)]
+            #[serde(rename_all = "camelCase", deny_unknown_fields)]
+            struct ProbeCall {
+                caller: workspace_model::Caller,
+                credential_hash: String,
+                request: collaboration_central_core::engine_probe::ProbeRequest,
+            }
+            let call: ProbeCall = request.json().await?;
+            let caller = collaboration_central_core::WorkspaceCaller {
+                organization_id: organization.clone(),
+                caller: call.caller,
+                credential_hash: call.credential_hash,
+            };
+            Response::from_json(&runtime.request_probe(&caller, call.request).await)
+        }
         "/test/lose-provisioning-reply" => {
             runtime.lose_next_provisioning_reply();
             Response::from_json(&true)

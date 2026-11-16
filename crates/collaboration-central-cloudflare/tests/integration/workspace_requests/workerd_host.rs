@@ -413,6 +413,39 @@ pub(super) struct RemoteRuntime {
     lost_answers: Mutex<Vec<RequestId>>,
 }
 impl RemoteRuntime {
+    pub async fn inject_engine_commit_fault(
+        &self,
+        fault: collaboration_central_core::EngineCommitFault,
+    ) {
+        let _: bool = self.control("engine-commit-fault", &fault).await.unwrap();
+    }
+    pub async fn inject_engine_read_fault(
+        &self,
+        fault: collaboration_central_core::EngineReadFault,
+    ) {
+        let _: bool = self.control("engine-read-fault", &fault).await.unwrap();
+    }
+    pub async fn seed_probe(
+        &self,
+        seed: collaboration_central_core::engine_probe::SeedProbe,
+    ) -> Result<BatchOutcome, StoreFailure> {
+        self.apply_clock().await;
+        self.control("engine-probe-seed", &seed).await?
+    }
+    pub async fn request_probe(
+        &self,
+        caller: &WorkspaceCaller,
+        request: collaboration_central_core::engine_probe::ProbeRequest,
+    ) -> Result<
+        collaboration_central_core::engine_probe::EngineRequestOutcome<
+            collaboration_central_core::engine_probe::ProbeState,
+            collaboration_central_core::engine_probe::ProbeRefusal,
+        >,
+        StoreFailure,
+    > {
+        self.apply_clock().await;
+        self.control("engine-probe-request",&serde_json::json!({"caller":caller.caller,"credentialHash":caller.credential_hash,"request":request})).await?
+    }
     async fn apply_clock(&self) {
         let _: bool = self
             .control("clock", &self.clock.now().unix_millis())

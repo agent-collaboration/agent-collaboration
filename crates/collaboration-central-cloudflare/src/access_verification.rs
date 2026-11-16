@@ -134,9 +134,10 @@ pub(crate) fn observe_signin(observation: CentralObservation) {
             failure,
             count,
             retired,
+            workspaces,
         } => {
             worker::console_log!(
-                "central engine: kind={} key={} class={} count={} retired={}",
+                "central engine: kind={} key={} class={} count={} retired={} workspaces={workspaces:?}",
                 kind.0,
                 log_safe(&key.0),
                 failure.storage_tag(),

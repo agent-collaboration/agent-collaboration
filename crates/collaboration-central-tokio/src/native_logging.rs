@@ -14,8 +14,9 @@ pub(crate) fn observe(observation: CentralObservation) {
             failure,
             count,
             retired,
+            workspaces,
         } => {
-            tracing::warn!(target:"collaboration_central::engine",kind=kind.0,key=%key.0,class=failure.storage_tag(),count,retired,"central engine item failed")
+            tracing::warn!(target:"collaboration_central::engine",kind=kind.0,key=%key.0,class=failure.storage_tag(),count,retired,?workspaces,"central engine item failed")
         }
         CentralObservation::AccessCheck {
             route_class,

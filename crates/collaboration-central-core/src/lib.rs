@@ -4,6 +4,10 @@
 mod clock_ids;
 mod engine;
 mod engine_machines;
+#[cfg(feature = "test-support")]
+pub mod engine_probe;
+#[cfg(feature = "test-support")]
+pub use engine::commit_fault::{EngineCommitFault, EngineCommitFaultKind, EngineReadFault};
 pub use engine::{AlarmNotPublished, EventCompletion};
 pub use engine::{DueBatchSnapshot, DueBatchState, engine_alarm_decider};
 pub mod identity_contract;
