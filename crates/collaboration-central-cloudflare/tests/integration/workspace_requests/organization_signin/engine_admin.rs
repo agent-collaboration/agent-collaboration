@@ -262,12 +262,13 @@ async fn retry_wakes_an_idle_object_and_refuses_missing_failing_and_unadmitted_c
     // Two concurrent retries of one retired row: one wins, one finds nothing.
     let other = engine.attempt_id("wake_timer", &wakes[1]).await;
     let (first, second) = tokio::join!(engine.retry(&other), engine.retry(&other));
-    let mut answers = [first, second];
-    answers.sort_by_key(|answer| answer.to_string());
-    assert_eq!(
-        answers,
-        [refused("notFound"), json!({"result":"engineRetried"})]
-    );
+    // Value equality ignores JSON key order, which serde_json's preserve_order
+    // feature changes when another crate unifies it on.
+    let answers = [first, second];
+    let count =
+        |expected: &serde_json::Value| answers.iter().filter(|answer| *answer == expected).count();
+    assert_eq!(count(&json!({"result":"engineRetried"})), 1, "{answers:?}");
+    assert_eq!(count(&refused("notFound")), 1, "{answers:?}");
 
     // A failing row is not retired.
     let due = next_mark(engine.now());
