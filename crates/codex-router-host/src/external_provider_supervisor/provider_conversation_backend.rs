@@ -140,6 +140,23 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                     let created_by = request.created_by;
                     let approver = request.approver;
                     let requested_settings = request.settings.unwrap_or_default();
+                    // A session started in auto works in the Router's work
+                    // roots (D1 R18); a named mode keeps only its own folders.
+                    let auto = requested_settings.mode.as_deref() == Some("auto");
+                    let configured_roots = if auto {
+                        backend.work_roots_for(&endpoint)
+                    } else {
+                        crate::provider_work_roots::ProviderWorkRoots::default()
+                    };
+                    let named_roots: Vec<PathBuf> = if auto {
+                        request
+                            .work_roots
+                            .iter()
+                            .map(|root| PathBuf::from(String::from(root.clone())))
+                            .collect()
+                    } else {
+                        Vec::new()
+                    };
                     let scratch_root = backend.inner.scratch_root.clone();
                     let completion_inner = Arc::clone(&backend.inner);
                     backend.spawn_operation(operation_id.clone(), live, async move {
@@ -156,9 +173,11 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                 ));
                             }
                         };
+                        let cwd = PathBuf::from(String::from(working_directory.clone()));
+                        let work_roots = session_work_roots(&configured_roots, &cwd, scratch_folder.as_deref(), &named_roots);
                         match runtime
-                            .create_session_with_settings(
-                                PathBuf::from(String::from(working_directory.clone())),
+                            .create_session_with_work_roots(
+                                cwd,
                                 scratch_folder,
                                 acp_client_runtime::RequestedProviderSettings {
                                     mode: requested_settings.mode,
@@ -172,6 +191,7 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
                                         acp_client_runtime::FastRequest::OffIfOffered
                                     },
                                 },
+                                work_roots,
                             )
                             .await
                         {
@@ -748,3 +768,29 @@ impl ProviderConversationBackend for ExternalProviderSupervisor {
 #[cfg(test)]
 #[path = "provider_conversation_backend_test.rs"]
 mod tests;
+
+/// A session's work roots (D1 R18): the configured list and its project's
+/// tmp/, and for Claude the hook command naming every folder it may write
+/// without asking, its working and scratch folders included.
+fn session_work_roots(
+    configured: &crate::provider_work_roots::ProviderWorkRoots,
+    cwd: &std::path::Path,
+    scratch_folder: Option<&std::path::Path>,
+    named: &[PathBuf],
+) -> acp_client_runtime::SessionWorkRoots {
+    if configured.roots.is_empty() && configured.ask_outside.is_none() && named.is_empty() {
+        return acp_client_runtime::SessionWorkRoots::default();
+    }
+    let roots = crate::provider_work_roots::session_work_roots(&configured.roots, cwd, named);
+    let ask_outside_command = configured.ask_outside.as_ref().map(|hook| {
+        let inside = std::iter::once(cwd.to_path_buf())
+            .chain(scratch_folder.map(std::path::Path::to_path_buf))
+            .chain(roots.iter().cloned())
+            .collect::<Vec<_>>();
+        hook.command(&inside)
+    });
+    acp_client_runtime::SessionWorkRoots {
+        roots,
+        ask_outside_command,
+    }
+}

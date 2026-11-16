@@ -508,16 +508,20 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                 command = command_rx.recv() => {
                                     let Some(command) = command else { break; };
                                     match command {
-                                        ProviderCommand::Create { cwd, scratch_folder, settings, reply } => {
+                                        ProviderCommand::Create { cwd, scratch_folder, work_roots, settings, reply } => {
                                             let mut request = NewSessionRequest::new(&cwd)
                                                 .mcp_servers(session_mcp_servers.clone());
-                                            if base_capabilities.supports_additional_directories
-                                                && let Some(scratch_folder) = &scratch_folder
-                                            {
-                                                request = request.additional_directories(vec![scratch_folder.clone()]);
+                                            // The scratch folder, then the work roots that exist (D1 R18).
+                                            let folders = super::in_folder_allowance::session_folders(scratch_folder.as_deref(), &work_roots.roots);
+                                            if base_capabilities.supports_additional_directories && !folders.is_empty() {
+                                                request = request.additional_directories(folders.clone());
                                             }
+                                            request.meta = task_runtime_handles.behavior.session_new_meta(&crate::SessionWorkRoots {
+                                                roots: folders,
+                                                ask_outside_command: work_roots.ask_outside_command.clone(),
+                                            });
                                             let in_folder = scratch_folder.as_deref().and_then(|scratch_folder| {
-                                                super::in_folder_allowance::InFolderGrant::new(&cwd, scratch_folder)
+                                                super::in_folder_allowance::InFolderGrant::new(&cwd, scratch_folder, &work_roots.roots)
                                             });
                                             let pending_connection = connection.clone();
                                             let pending_shutdown = task_shutdown.clone();

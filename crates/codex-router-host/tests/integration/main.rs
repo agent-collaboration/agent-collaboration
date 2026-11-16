@@ -70,6 +70,7 @@ mod provider_send_behaviour;
 mod provider_send_races;
 mod provider_session_command_port;
 mod provider_startup_isolation;
+mod provider_work_roots;
 mod remote_wake;
 mod router_executable_status;
 mod router_settings;

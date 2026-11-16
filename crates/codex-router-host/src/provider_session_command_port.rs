@@ -88,6 +88,7 @@ impl SessionCommandPort for HostSessionCommandPort {
         Box::pin(async move {
             let operation_id = OperationId::generate();
             let request = ConversationCreateRequest {
+                work_roots: Vec::new(),
                 operation_id: operation_id.clone(),
                 endpoint: protocol_endpoint(&command.endpoint)?,
                 generation: None,

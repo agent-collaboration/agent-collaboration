@@ -20,6 +20,7 @@ async fn supervisor_shutdown_joins_runtime_and_settles_held_work() -> TestResult
     operation(
         backend
             .create(ConversationCreateRequest {
+                work_roots: Vec::new(),
                 settings: Some(collaboration_protocol::ProviderRequestedSettings {
                     mode: Some("auto".into()),
                     ..collaboration_protocol::ProviderRequestedSettings::default()

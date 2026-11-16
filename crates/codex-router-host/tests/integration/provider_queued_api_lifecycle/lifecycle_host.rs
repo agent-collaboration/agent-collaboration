@@ -189,6 +189,7 @@ impl LifecycleHost {
         if let Err(error) = submit_provider_create(
             &self.client,
             ConversationCreateRequest {
+                work_roots: Vec::new(),
                 settings: Some(ProviderRequestedSettings {
                     mode: Some("auto".into()),
                     ..ProviderRequestedSettings::default()

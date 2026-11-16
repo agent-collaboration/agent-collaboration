@@ -113,6 +113,7 @@ async fn collaboration_api_reaches_host_owned_provider_and_reuses_target() {
     submit_provider_create(
         &client,
         ConversationCreateRequest {
+            work_roots: Vec::new(),
             settings: Some(collaboration_protocol::ProviderRequestedSettings {
                 mode: Some("auto".into()),
                 ..collaboration_protocol::ProviderRequestedSettings::default()
@@ -306,6 +307,7 @@ async fn provider_process_exit_retires_advertisement_and_rejects_new_admission()
     let failure = submit_provider_create(
         &client,
         ConversationCreateRequest {
+            work_roots: Vec::new(),
             settings: Some(collaboration_protocol::ProviderRequestedSettings {
                 mode: Some("auto".into()),
                 ..collaboration_protocol::ProviderRequestedSettings::default()

@@ -196,6 +196,7 @@ pub(super) fn run_create(args: CreateArguments) -> i32 {
             }
         };
         let request = ConversationCreateInput {
+            work_roots: args.work_roots,
             operation_id: operation_id.clone(),
             endpoint: endpoint.clone(),
             working_directory: args.cwd,
@@ -369,6 +370,7 @@ pub(super) fn run_new_prompt(args: PromptArguments) -> i32 {
             }
         };
         let create = ConversationCreateInput {
+            work_roots: args.work_roots.clone(),
             operation_id: create_operation_id.clone(),
             endpoint,
             working_directory: cwd,

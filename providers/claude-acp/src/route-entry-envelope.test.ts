@@ -376,3 +376,79 @@ await test("Host capture is immutable and bounded, and preparation keeps unrelat
     assert.equal(metadata.vendor, nested);
   }
 });
+
+// D1 R18: the Router's work-root layer arrives on its own channel and is
+// added on top of whichever settings won the vendor's precedence.
+const routerHook = {
+  matcher: "Write|Edit|MultiEdit|NotebookEdit|Bash",
+  hooks: [{ type: "command", command: "'/node' '/router-work-roots-hook.ts' '[\"/work-root\"]'" }],
+};
+const ownerHook = { matcher: "Read", hooks: [{ type: "command", command: "owner-hook" }] };
+const routerLayer = {
+  workRootSettings: {
+    permissions: { additionalDirectories: ["/work-root"] },
+    hooks: { PreToolUse: [routerHook] },
+  },
+};
+await test("shipped Router work-root layer is appended to caller settings and never reaches the vendor", async (): Promise<void> => {
+  const params = {
+    sessionId: "fixture",
+    _meta: {
+      claudeCode: {
+        options: {
+          settings: {
+            permissions: { additionalDirectories: ["/owner-root"] },
+            hooks: { PreToolUse: [ownerHook] },
+          },
+        },
+      },
+      codexRouter: routerLayer,
+    },
+  };
+  const row = await runEntry(params, lifecycleMethods);
+  assert.equal(row.calls.length, 3);
+  for (const call of row.calls) {
+    assert.deepEqual(optionsFor(call.params).settings, {
+      permissions: { additionalDirectories: ["/owner-root", "/work-root"] },
+      hooks: { PreToolUse: [ownerHook, routerHook] },
+      env: hostRoute,
+      apiKeyHelper: "",
+    });
+    assert.equal(recordSchema.parse(call.params._meta).codexRouter, undefined);
+  }
+  assert.equal(row.inputUnchanged, true);
+  assert.deepEqual(row.forbiddenAccesses, []);
+});
+
+await test("shipped Router work-root layer keeps the model-config fallback when no caller settings are given", async (): Promise<void> => {
+  const params = { sessionId: "fixture", _meta: { codexRouter: routerLayer } };
+  const row = await runEntry(params, lifecycleMethods, JSON.stringify(configuredModels));
+  assert.equal(row.calls.length, 3);
+  for (const call of row.calls)
+    assert.deepEqual(optionsFor(call.params).settings, {
+      availableModels: configuredModels.availableModels,
+      modelOverrides: configuredModels.modelOverrides,
+      permissions: { additionalDirectories: ["/work-root"] },
+      hooks: { PreToolUse: [routerHook] },
+      env: hostRoute,
+      apiKeyHelper: "",
+    });
+});
+
+await test("shipped malformed Router work-root layer refuses without delegation", async (): Promise<void> => {
+  for (const codexRouter of [
+    [],
+    "private-input-sentinel",
+    {
+      workRootSettings: { permissions: { additionalDirectories: "/x" }, hooks: { PreToolUse: [] } },
+    },
+  ]) {
+    const row = await runEntry({ sessionId: "fixture", _meta: { codexRouter } }, lifecycleMethods);
+    assert.deepEqual(row.calls, []);
+    for (const result of row.results)
+      assert.equal(
+        result.error,
+        "Qualified Claude session creation is unsupported: MalformedMetadata",
+      );
+  }
+});

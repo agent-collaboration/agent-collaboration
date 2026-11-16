@@ -49,6 +49,7 @@ async fn a_start_in_bypass_permissions_is_refused_and_nothing_starts() {
     let refused = submit_provider_create(
         &host.client,
         ConversationCreateRequest {
+            work_roots: Vec::new(),
             settings: Some(collaboration_protocol::ProviderRequestedSettings {
                 mode: Some("bypassPermissions".into()),
                 ..collaboration_protocol::ProviderRequestedSettings::default()

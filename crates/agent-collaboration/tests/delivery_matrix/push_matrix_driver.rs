@@ -41,6 +41,7 @@ async fn create_conversation_fixture(
     match conversation
         .create(
             ConversationCreateInput {
+                work_roots: Vec::new(),
                 operation_id: OperationId::generate(),
                 endpoint,
                 working_directory: proof.workspace.clone(),

@@ -255,11 +255,29 @@ impl<P: InteractionPort> AgentSessionClient<P> {
         scratch_folder: Option<PathBuf>,
         settings: crate::RequestedProviderSettings,
     ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
+        self.create_session_with_work_roots(
+            cwd,
+            scratch_folder,
+            settings,
+            crate::SessionWorkRoots::default(),
+        )
+        .await
+    }
+
+    /// Creates a session that also works in the Router's work roots (D1 R18).
+    pub async fn create_session_with_work_roots(
+        &self,
+        cwd: PathBuf,
+        scratch_folder: Option<PathBuf>,
+        settings: crate::RequestedProviderSettings,
+        work_roots: crate::SessionWorkRoots,
+    ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
         let (reply, result) = tokio::sync::oneshot::channel();
         self.commands
             .send(ProviderCommand::Create {
                 cwd,
                 scratch_folder,
+                work_roots,
                 settings,
                 reply,
             })

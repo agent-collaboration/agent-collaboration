@@ -2,11 +2,12 @@
 //! the session's own folders (R4, owner Q3).
 //!
 //! File reads, edits, deletes and moves whose named paths all lie in the working
-//! folder or the session's scratch folder are allowed once. A request names its
+//! folder, the session's scratch folder or one of the Router's work roots
+//! (D1 R18: same rule, wider set) are allowed once. A request names its
 //! paths in ACP `locations`, in `diff` content, or, for an agent that states
 //! them only in the title (Cursor), as its provider behaviour reads that title. A shell command is
 //! allowed once only when it runs one of a closed set of file utilities, with no
-//! shell syntax, on operands that all lie in the scratch folder. Anything else,
+//! shell syntax, on operands that all lie in the scratch folder or a work root. Anything else,
 //! or anything the rule cannot read for certain, goes to the approval path.
 //!
 //! The rule decides only the requests an agent sends. Claude in acceptEdits runs
@@ -64,6 +65,23 @@ pub(crate) type StatedTargetReader<'a> =
 pub(crate) struct InFolderGrant {
     working_folder: PathBuf,
     scratch_folder: PathBuf,
+    /// The Router's work roots that exist (D1 R18).
+    work_roots: Vec<PathBuf>,
+}
+
+/// A session's folders beyond its working folder, as an agent is told them:
+/// the scratch folder, then the work roots that exist, once each.
+pub(crate) fn session_folders(
+    scratch_folder: Option<&Path>,
+    work_roots: &[PathBuf],
+) -> Vec<PathBuf> {
+    let mut folders: Vec<PathBuf> = scratch_folder.map(Path::to_path_buf).into_iter().collect();
+    for root in work_roots {
+        if root.is_dir() && !folders.contains(root) {
+            folders.push(root.clone());
+        }
+    }
+    folders
 }
 
 /// A session's in-folder roots, and whether Router auto is its current mode.
@@ -99,13 +117,29 @@ pub(crate) fn set_router_auto(grants: &InFolderGrants, session_id: &str, router_
 }
 
 impl InFolderGrant {
-    /// `None` when either folder cannot be resolved; such a session asks for
-    /// everything rather than allowing against a path it cannot pin down.
-    pub(crate) fn new(working_folder: &Path, scratch_folder: &Path) -> Option<Self> {
+    /// `None` when the working or scratch folder cannot be resolved; such a
+    /// session asks for everything rather than allowing against a path it
+    /// cannot pin down. A work root that doesn't exist on this computer is
+    /// left out.
+    pub(crate) fn new(
+        working_folder: &Path,
+        scratch_folder: &Path,
+        work_roots: &[PathBuf],
+    ) -> Option<Self> {
         Some(Self {
             working_folder: std::fs::canonicalize(working_folder).ok()?,
             scratch_folder: std::fs::canonicalize(scratch_folder).ok()?,
+            work_roots: work_roots
+                .iter()
+                .filter_map(|root| std::fs::canonicalize(root).ok())
+                .collect(),
         })
+    }
+
+    /// Whether a path lies in one of the folders a shell operand may name:
+    /// the scratch folder or a work root.
+    fn in_command_folders(&self, path: &Path) -> bool {
+        within(path, &self.scratch_folder) || self.work_roots.iter().any(|root| within(path, root))
     }
 
     /// The agent's allow-once option when the request lies within the grant.
@@ -164,7 +198,7 @@ impl InFolderGrant {
                     .collect();
                 !paths.is_empty()
                     && paths.iter().all(|path| {
-                        within(path, &self.working_folder) || within(path, &self.scratch_folder)
+                        within(path, &self.working_folder) || self.in_command_folders(path)
                     })
             }
             Some(ToolKind::Execute) => {
@@ -185,7 +219,7 @@ impl InFolderGrant {
                 !commands.is_empty()
                     && commands
                         .iter()
-                        .all(|command| self.command_stays_in_scratch(command))
+                        .all(|command| self.command_stays_inside(command))
             }
             _ => false,
         }
@@ -193,8 +227,9 @@ impl InFolderGrant {
 
     /// A file utility from [`FILE_UTILITIES`] with only its own options, no
     /// shell syntax that could reach another path or program, and operands
-    /// that are all paths in the scratch folder, with at least one.
-    fn command_stays_in_scratch(&self, command: &str) -> bool {
+    /// that are all paths in the scratch folder or a work root, with at least
+    /// one.
+    fn command_stays_inside(&self, command: &str) -> bool {
         const SHELL_SYNTAX: &[char] = &[
             '$', '`', '|', ';', '&', '<', '>', '(', ')', '{', '}', '*', '?', '[', ']', '~', '\\',
             '"', '\'', '\n', '\r', '#', '!', '=',
@@ -215,7 +250,8 @@ impl InFolderGrant {
         else {
             return false;
         };
-        // Every operand is an absolute path in the scratch folder; a bare word
+        // Every operand is an absolute path in the scratch folder or a work
+        // root; a bare word
         // could name a file in the project, so it is not allowed here.
         let mut named_a_path = false;
         for word in words {
@@ -228,7 +264,7 @@ impl InFolderGrant {
                 }
                 continue;
             }
-            if !within(Path::new(word), &self.scratch_folder) {
+            if !self.in_command_folders(Path::new(word)) {
                 return false;
             }
             named_a_path = true;

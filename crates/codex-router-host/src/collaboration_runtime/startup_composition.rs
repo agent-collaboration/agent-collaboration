@@ -240,6 +240,7 @@ impl CollaborationRuntime {
                 .directory
                 .parent()
                 .map(codex_native_integration::router_scratch_root),
+            Some(inputs.directory.join("hooks")),
         )
         .await?;
         let provider_face_endpoints = startup.endpoints.clone();

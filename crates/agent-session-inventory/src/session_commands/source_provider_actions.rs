@@ -106,6 +106,7 @@ pub async fn execute_provider_action(
                         .map_err(|_| SourceRejection::InvalidRequest)?,
                 );
                 let input = ConversationCreateInput {
+                    work_roots: Vec::new(),
                     operation_id: operation_id.clone(),
                     endpoint: binding.endpoint.clone(),
                     working_directory: PathBuf::from(directory.as_str()),

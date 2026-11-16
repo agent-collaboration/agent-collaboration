@@ -31,6 +31,47 @@ function publicRecord(value: unknown): Record<string, unknown> | undefined {
   return parsed.success ? parsed.data : undefined;
 }
 
+const workRootLayerSchema = z.object({
+  permissions: z.object({ additionalDirectories: z.array(z.string()) }),
+  hooks: z.object({ PreToolUse: z.array(z.unknown()) }),
+});
+type WorkRootLayer = z.infer<typeof workRootLayerSchema>;
+
+/// The Router's work-root layer for this session (D1 R18), from
+/// _meta.codexRouter.workRootSettings; "malformed" when present but unreadable.
+function workRootLayer(metadata: Record<string, unknown>): WorkRootLayer | undefined | "malformed" {
+  const router =
+    metadata.codexRouter === undefined ? undefined : publicRecord(metadata.codexRouter);
+  if (metadata.codexRouter !== undefined && router === undefined) return "malformed";
+  if (router?.workRootSettings === undefined) return undefined;
+  const parsed = workRootLayerSchema.safeParse(router.workRootSettings);
+  return parsed.success ? parsed.data : "malformed";
+}
+
+/// Adds the Router's work roots and hook on top of the session's settings,
+/// whichever won the vendor's precedence: its directories and PreToolUse
+/// hooks are appended, never replacing the caller's or the owner's own.
+function withWorkRootLayer(
+  settings: Record<string, unknown>,
+  layer: WorkRootLayer | undefined,
+): Record<string, unknown> | undefined {
+  if (layer === undefined) return settings;
+  const permissions = settings.permissions === undefined ? {} : publicRecord(settings.permissions);
+  const hooks = settings.hooks === undefined ? {} : publicRecord(settings.hooks);
+  if (permissions === undefined || hooks === undefined) return undefined;
+  const directories = permissions.additionalDirectories ?? [];
+  const preToolUse = hooks.PreToolUse ?? [];
+  if (!Array.isArray(directories) || !Array.isArray(preToolUse)) return undefined;
+  return {
+    ...settings,
+    permissions: {
+      ...permissions,
+      additionalDirectories: [...directories, ...layer.permissions.additionalDirectories],
+    },
+    hooks: { ...hooks, PreToolUse: [...preToolUse, ...layer.hooks.PreToolUse] },
+  };
+}
+
 function publicEnvironment(value: unknown): Record<string, string | undefined> | undefined {
   if (value === undefined) return {};
   const parsed = environmentSchema.safeParse(value);
@@ -78,7 +119,11 @@ export function prepareClaudeRoute({
       ? { availableModels: configuredModels.availableModels }
       : {}),
   };
-  const settings = options.settings == null ? fallback : publicRecord(options.settings);
+  const layer = workRootLayer(metadata);
+  if (layer === "malformed") return { kind: "unsupported", reason: "MalformedMetadata" };
+  const callerSettings = options.settings == null ? fallback : publicRecord(options.settings);
+  const settings =
+    callerSettings === undefined ? undefined : withWorkRootLayer(callerSettings, layer);
   const environment = publicEnvironment(options.env);
   const settingsEnvironment = settings === undefined ? undefined : publicEnvironment(settings.env);
   if (settings === undefined || environment === undefined || settingsEnvironment === undefined)
@@ -109,12 +154,14 @@ export function prepareClaudeRoute({
     return { kind: "unsupported", reason: "UnsupportedSdkOptions" };
   }
   const settingsPath = writeSettings(serializedSettings);
+  // The Router's own channel is consumed here; the vendor adapter never sees it.
+  const { codexRouter: _consumed, ...vendorMetadata } = metadata;
   return {
     kind: "prepared",
     params: {
       ...request,
       _meta: {
-        ...metadata,
+        ...vendorMetadata,
         claudeCode: {
           ...claude,
           options: {

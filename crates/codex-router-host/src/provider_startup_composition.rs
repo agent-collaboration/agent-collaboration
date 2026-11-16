@@ -28,6 +28,16 @@ pub enum ExternalProviderStartup {
 }
 
 impl ExternalProviderStartup {
+    /// A launch that starts its auto sessions with these work roots (D1 R18);
+    /// an unavailable provider is unchanged.
+    #[must_use]
+    pub fn with_work_roots(self, work_roots: &[std::path::PathBuf]) -> Self {
+        match self {
+            Self::Launch(binding) => Self::Launch(binding.with_work_roots(work_roots.to_vec())),
+            unavailable @ Self::Unavailable { .. } => unavailable,
+        }
+    }
+
     pub fn unavailable(
         provider: ProviderKind,
         reason: String,
@@ -57,6 +67,7 @@ pub(crate) async fn compose_provider_startup(
     service_epoch: &UuidIdentity,
     mcp_url: &str,
     scratch_root: Option<std::path::PathBuf>,
+    hook_directory: Option<std::path::PathBuf>,
 ) -> io::Result<ProviderStartupComposition> {
     let hub = store
         .as_ref()
@@ -65,6 +76,8 @@ pub(crate) async fn compose_provider_startup(
     let mut endpoints = Vec::with_capacity(configured.len());
     let mut retirements = Vec::new();
     let mut cache_warm = None;
+    let mut work_roots = Vec::new();
+    let mut installed_hook = None;
     for provider in configured {
         match provider {
             ExternalProviderStartup::Unavailable {
@@ -132,6 +145,11 @@ pub(crate) async fn compose_provider_startup(
                         ))
                     }
                 };
+                // The Node a qualified Claude launch runs under also runs its
+                // work-roots hook (D1 R18).
+                let launch_node = (launch.executable.file_name()
+                    == Some(std::ffi::OsStr::new("node")))
+                .then(|| launch.executable.clone());
                 let hub_endpoint = message_board::SessionEndpointRef {
                     service_id: message_board::ServiceId::try_from(String::from(
                         service_id.clone(),
@@ -222,6 +240,44 @@ pub(crate) async fn compose_provider_startup(
                         {
                             cache_warm = Some((description.endpoint.clone(), setting));
                         }
+                        if !binding.work_roots.is_empty() {
+                            let ask_outside = match (binding.provider, launch_node, &hook_directory)
+                            {
+                                (ProviderKind::ClaudeCode, Some(node), Some(directory)) => {
+                                    let hook = match &installed_hook {
+                                        Some(hook) => Some(std::path::PathBuf::clone(hook)),
+                                        None => match crate::provider_work_roots::install_work_roots_hook(directory) {
+                                            Ok(hook) => {
+                                                installed_hook = Some(hook.clone());
+                                                Some(hook)
+                                            }
+                                            Err(error) => {
+                                                tracing::warn!(%error, "the Claude work-roots hook could not be installed; Claude sessions won't ask outside the work roots");
+                                                None
+                                            }
+                                        },
+                                    };
+                                    hook.map(|hook| crate::provider_work_roots::AskOutsideHook {
+                                        node,
+                                        hook,
+                                    })
+                                }
+                                (ProviderKind::ClaudeCode, None, _) => {
+                                    tracing::warn!(
+                                        "the Claude launch runs no known Node, so its sessions get no work-roots hook"
+                                    );
+                                    None
+                                }
+                                _ => None,
+                            };
+                            work_roots.push((
+                                description.endpoint.clone(),
+                                crate::provider_work_roots::ProviderWorkRoots {
+                                    roots: binding.work_roots.clone(),
+                                    ask_outside,
+                                },
+                            ));
+                        }
                         retirements.push((runtime.retirement(), description.clone()));
                         endpoints.push(description);
                         bindings.push(ExternalProviderBinding { identity, runtime });
@@ -253,6 +309,11 @@ pub(crate) async fn compose_provider_startup(
         )),
         _ => None,
     };
+    if let Some(supervisor) = &supervisor {
+        for (endpoint, roots) in work_roots {
+            supervisor.set_work_roots(endpoint, roots);
+        }
+    }
     Ok(ProviderStartupComposition {
         supervisor,
         hub,

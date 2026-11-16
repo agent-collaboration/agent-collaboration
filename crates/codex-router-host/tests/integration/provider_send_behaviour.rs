@@ -104,6 +104,7 @@ impl ComposedHost {
         submit_provider_create(
             &self.client,
             ConversationCreateRequest {
+                work_roots: Vec::new(),
                 settings: Some(collaboration_protocol::ProviderRequestedSettings {
                     mode: Some("auto".into()),
                     ..collaboration_protocol::ProviderRequestedSettings::default()
@@ -653,4 +654,91 @@ async fn mail_and_cli_outcomes_for_each_session_state() {
         let cli = outcome_through(Door::Cli, state).await;
         assert_eq!((mail, cli), expected, "{state:?}");
     }
+}
+
+/// Oracle: D1 spec R12, "a caller that explicitly asks to steer an agent that
+/// can't steer is refused with 'steer unsupported', unchanged from main", and
+/// message send's rule mirrored for an idle session (no running turn): both
+/// explicit steers are refused, nothing reaches the agent, and no turn is
+/// interrupted.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_explicit_steer_without_a_turn_to_join_is_refused() {
+    // Arrange: an idle steering agent, and a held turn on one that can't steer.
+    let steering = ComposedHost::start(claude_steering(), "claude-local").await;
+    let steering_owner = ComposedHost::human("steer-owner");
+    let idle = steering.create(&steering_owner).await;
+    let staging = tempfile::tempdir().expect("receipt folder");
+    let receipt = staging.path().join("wire.json");
+    let non_steering = ComposedHost::start(
+        cursor_reactive(&receipt, &["hold-first-prompt"]),
+        "cursor-local",
+    )
+    .await;
+    let owner = ComposedHost::human("steer-owner");
+    let busy = non_steering.create(&owner).await;
+    let _held = non_steering
+        .prompt(&busy, &owner, OperationId::generate(), "first", SHORT_WAIT)
+        .await;
+    until_recorded(&receipt, "session/prompt", 1).await;
+
+    // Act
+    let to_idle = steering
+        .prompt_answer(
+            &idle,
+            &steering_owner,
+            OperationId::generate(),
+            "steer-idle",
+            SHORT_WAIT,
+            MessageDelivery::Steer,
+        )
+        .await;
+    let to_non_steering = non_steering
+        .prompt_answer(
+            &busy,
+            &owner,
+            OperationId::generate(),
+            "steer-busy",
+            SHORT_WAIT,
+            MessageDelivery::Steer,
+        )
+        .await;
+    let prompts = recorded(&receipt, "session/prompt");
+    let cancels = recorded(&receipt, "session/cancel");
+    steering.runtime.shutdown().await.expect("Host shutdown");
+    non_steering
+        .runtime
+        .shutdown()
+        .await
+        .expect("Host shutdown");
+
+    // Assert
+    let refusal = |answer: &Result<
+        ConversationOperationResult,
+        collaboration_client::ConversationClientError,
+    >| {
+        match answer {
+            Err(collaboration_client::ConversationClientError::Client(error)) => error
+                .conversation_failure()
+                .map(|failure| (failure.kind, String::from(failure.message))),
+            _ => None,
+        }
+    };
+    assert_eq!(
+        refusal(&to_idle),
+        Some((
+            collaboration_protocol::ConversationOperationFailureKind::InvalidRequest,
+            "no running turn to steer".to_owned()
+        )),
+        "{to_idle:?}"
+    );
+    assert_eq!(
+        refusal(&to_non_steering),
+        Some((
+            collaboration_protocol::ConversationOperationFailureKind::UnsupportedCapability,
+            "steer unsupported by provider".to_owned()
+        )),
+        "{to_non_steering:?}"
+    );
+    assert_eq!(prompts, 1, "neither steer reached the agent");
+    assert_eq!(cancels, 0, "no turn is interrupted");
 }

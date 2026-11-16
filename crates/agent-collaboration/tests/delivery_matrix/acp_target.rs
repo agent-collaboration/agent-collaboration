@@ -210,6 +210,7 @@ async fn create_provider_session(
     match conversation
         .create(
             ConversationCreateInput {
+                work_roots: Vec::new(),
                 operation_id: OperationId::generate(),
                 endpoint,
                 working_directory: proof.workspace.clone(),

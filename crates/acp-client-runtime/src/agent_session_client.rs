@@ -129,6 +129,8 @@ enum ProviderCommand<P: InteractionPort> {
         /// The session's own scratch folder, granted to agents that accept
         /// additional directories and allowed by the in-folder rule.
         scratch_folder: Option<PathBuf>,
+        /// The Router's work roots for a session it starts in auto (D1 R18).
+        work_roots: crate::SessionWorkRoots,
         settings: crate::RequestedProviderSettings,
         reply: tokio::sync::oneshot::Sender<
             Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError>,

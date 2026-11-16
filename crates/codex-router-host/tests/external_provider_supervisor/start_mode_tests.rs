@@ -55,6 +55,7 @@ impl ModeFixture {
         settings: Option<ProviderRequestedSettings>,
     ) -> TestResult<ConversationCreateRequest> {
         Ok(ConversationCreateRequest {
+            work_roots: Vec::new(),
             settings,
             operation_id,
             endpoint: self.endpoint.clone(),

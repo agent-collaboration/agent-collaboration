@@ -27,6 +27,7 @@ async fn provider_create_projects_effective_partial_and_invalid_settings() -> Te
         operation(
             backend
                 .create(ConversationCreateRequest {
+                    work_roots: Vec::new(),
                     settings: Some(ProviderRequestedSettings {
                         // No auto realization here, so auto plans no mode change
                         // and the invalid model stays the first setting.

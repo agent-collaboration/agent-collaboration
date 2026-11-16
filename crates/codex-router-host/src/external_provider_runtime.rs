@@ -280,9 +280,26 @@ impl ExternalProviderRuntime {
         scratch_folder: Option<PathBuf>,
         settings: acp_client_runtime::RequestedProviderSettings,
     ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
+        self.create_session_with_work_roots(
+            cwd,
+            scratch_folder,
+            settings,
+            acp_client_runtime::SessionWorkRoots::default(),
+        )
+        .await
+    }
+
+    /// Creates a session that also works in the Router's work roots (D1 R18).
+    pub async fn create_session_with_work_roots(
+        &self,
+        cwd: PathBuf,
+        scratch_folder: Option<PathBuf>,
+        settings: acp_client_runtime::RequestedProviderSettings,
+        work_roots: acp_client_runtime::SessionWorkRoots,
+    ) -> Result<ExternalProviderCreatedSession, ExternalProviderRuntimeError> {
         let created = self
             .client
-            .create_session_with_settings(cwd, scratch_folder, settings)
+            .create_session_with_work_roots(cwd, scratch_folder, settings, work_roots)
             .await;
         let active_session = match &created {
             Ok(created) => Some(created.provider_session_id.as_str()),

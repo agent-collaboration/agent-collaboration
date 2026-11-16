@@ -169,6 +169,7 @@ pub(super) async fn create_provider_target(
     submit_provider_create(
         client,
         ConversationCreateRequest {
+            work_roots: Vec::new(),
             settings: Some(collaboration_protocol::ProviderRequestedSettings {
                 mode: Some("auto".into()),
                 ..collaboration_protocol::ProviderRequestedSettings::default()

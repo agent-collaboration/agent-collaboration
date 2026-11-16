@@ -40,6 +40,7 @@ pub(super) async fn deliver_approval_notice(
     let created = conversation
         .create(
             ConversationCreateInput {
+                work_roots: Vec::new(),
                 operation_id: OperationId::generate(),
                 endpoint: provider.clone(),
                 working_directory: proof.workspace.clone(),

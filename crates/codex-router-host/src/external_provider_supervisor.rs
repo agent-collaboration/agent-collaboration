@@ -90,6 +90,8 @@ struct SupervisorInner {
     /// `<router root>/scratch`: each Claude or Cursor session created here gets
     /// its own `session-<uuidv7>` folder in it (R4). `None` grants no folder.
     scratch_root: Option<PathBuf>,
+    /// Each provider's work-roots rule, as its startup configured it (D1 R18).
+    work_roots: StdMutex<HashMap<EndpointRef, crate::provider_work_roots::ProviderWorkRoots>>,
     history_unavailable: Mutex<HashSet<SessionRef>>,
     settings_catalogs: Arc<Mutex<HashMap<SessionRef, acp_client_runtime::ProviderSettingsCatalog>>>,
     /// The mode each session created here was asked for, and why its actual
@@ -174,6 +176,32 @@ impl LiveOperation {
 impl ExternalProviderSupervisor {
     pub(crate) fn queued_operation_registry(&self) -> &ProviderQueueOperationRegistry {
         &self.inner.queued_operations
+    }
+
+    /// Sets the work-roots rule sessions on `endpoint` start with (D1 R18).
+    pub(crate) fn set_work_roots(
+        &self,
+        endpoint: EndpointRef,
+        work_roots: crate::provider_work_roots::ProviderWorkRoots,
+    ) {
+        self.inner
+            .work_roots
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(endpoint, work_roots);
+    }
+
+    fn work_roots_for(
+        &self,
+        endpoint: &EndpointRef,
+    ) -> crate::provider_work_roots::ProviderWorkRoots {
+        self.inner
+            .work_roots
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(endpoint)
+            .cloned()
+            .unwrap_or_default()
     }
 
     /// The provider a binding runs, for checks made before anything reaches it.
@@ -393,6 +421,7 @@ impl ExternalProviderSupervisor {
                 queued_operations: ProviderQueueOperationRegistry::default(),
                 hub,
                 scratch_root,
+                work_roots: StdMutex::new(HashMap::new()),
                 history_unavailable: Mutex::new(HashSet::new()),
                 settings_catalogs,
                 requested_modes: Mutex::new(HashMap::new()),

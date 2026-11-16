@@ -402,6 +402,7 @@ async fn create_empty_conversation(
     let created = conversation
         .create(
             ConversationCreateInput {
+                work_roots: Vec::new(),
                 operation_id: OperationId::generate(),
                 endpoint: proof.endpoint.clone(),
                 working_directory: proof.workspace.clone(),

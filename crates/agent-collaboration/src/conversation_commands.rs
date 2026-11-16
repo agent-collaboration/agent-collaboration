@@ -101,6 +101,10 @@ struct CreateArguments {
     approver_owner: bool,
     #[arg(long)]
     root_message_id: Option<String>,
+    /// A folder this Claude or Cursor session, started in auto, may also work
+    /// in without asking, on top of the Router's work roots. Repeatable.
+    #[arg(long = "work-root")]
+    work_roots: Vec<PathBuf>,
     #[arg(long)]
     cwd: PathBuf,
     #[arg(long)]
@@ -154,6 +158,11 @@ struct PromptArguments {
     /// Board root message ID used to share owner-private scratch across sessions.
     #[arg(long)]
     root_message_id: Option<String>,
+    /// With --new: a folder this Claude or Cursor session, started in auto,
+    /// may also work in without asking, on top of the Router work roots.
+    /// Repeatable.
+    #[arg(long = "work-root", requires = "new_session")]
+    work_roots: Vec<PathBuf>,
     #[arg(long)]
     cwd: Option<PathBuf>,
     #[arg(

@@ -1,6 +1,23 @@
 //! The `providers` section of `settings.jsonc`: owner-edited provider defaults.
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+/// The owner's default work roots (D1 R18): every worktree, the two log
+/// repositories, the toolchain caches, system temp and all of /tmp/agents/.
+const DEFAULT_WORK_ROOTS: &[&str] = &[
+    "~/code/projects",
+    "~/dev/memory-logs",
+    "~/dev/session-logs",
+    "~/.cargo",
+    "~/.rustup",
+    "~/Library/Caches",
+    "~/.cache",
+    "~/Library/pnpm",
+    SYSTEM_TEMP,
+    "/tmp/agents",
+];
+/// How the settings file names the system temp folder.
+const SYSTEM_TEMP: &str = "$TMPDIR";
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -47,6 +64,20 @@ impl ProviderConfigurationEntry {
 pub struct ProviderConfigurationEntries {
     version: u8,
     providers: ProviderEntries,
+    /// Where a session the Router starts in auto works without asking, on
+    /// top of the agent's own global settings (D1 R18). `~/` names a folder
+    /// under the owner's home and `$TMPDIR` the system temp folder; any other
+    /// entry is an absolute path. A file written before this list existed
+    /// gets the defaults.
+    #[serde(default = "default_work_roots", rename = "workRoots")]
+    work_roots: Vec<String>,
+}
+
+fn default_work_roots() -> Vec<String> {
+    DEFAULT_WORK_ROOTS
+        .iter()
+        .map(|root| (*root).to_owned())
+        .collect()
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -67,6 +98,16 @@ impl ProviderConfigurationEntries {
         &self.providers.cursor
     }
 
+    /// The work roots as absolute paths, with `~/` under `home` and
+    /// `$TMPDIR` as `system_temp`.
+    #[must_use]
+    pub fn work_roots(&self, home: &Path, system_temp: &Path) -> Vec<PathBuf> {
+        self.work_roots
+            .iter()
+            .filter_map(|root| expand_work_root(root, home, system_temp))
+            .collect()
+    }
+
     /// Accepts only the section version this Router understands.
     pub(crate) fn validated(self) -> Result<Self, String> {
         if self.version != 1 {
@@ -77,6 +118,15 @@ impl ProviderConfigurationEntries {
                 "\"cacheWarm\" is not allowed on the cursor entry: only Claude keeps a prompt cache warm"
                     .to_owned(),
             );
+        }
+        if let Some(root) = self
+            .work_roots
+            .iter()
+            .find(|root| expand_work_root(root, Path::new("/"), Path::new("/")).is_none())
+        {
+            return Err(format!(
+                "\"workRoots\" entry {root:?} must be an absolute path, start with \"~/\", or start with \"$TMPDIR\""
+            ));
         }
         if let Some(setting) = &self.providers.claude.cache_warm {
             if setting.every_minutes == 0 {
@@ -108,8 +158,24 @@ impl Default for ProviderConfigurationEntries {
                     cache_warm: None,
                 },
             },
+            work_roots: default_work_roots(),
         }
     }
+}
+
+/// One work-root entry as an absolute path; `None` when it is neither
+/// absolute nor under `~/` or `$TMPDIR`.
+fn expand_work_root(root: &str, home: &Path, system_temp: &Path) -> Option<PathBuf> {
+    if let Some(rest) = root.strip_prefix("~/") {
+        return Some(home.join(rest));
+    }
+    if root == SYSTEM_TEMP {
+        return Some(system_temp.to_path_buf());
+    }
+    if let Some(rest) = root.strip_prefix("$TMPDIR/") {
+        return Some(system_temp.join(rest));
+    }
+    Path::new(root).is_absolute().then(|| PathBuf::from(root))
 }
 
 #[cfg(test)]

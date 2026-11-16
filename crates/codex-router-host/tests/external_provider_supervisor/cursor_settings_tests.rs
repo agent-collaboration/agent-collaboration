@@ -41,6 +41,7 @@ async fn cursor_effort_setting_reports_adjusted_catalog_without_public_api_expan
     operation(
         backend
             .create(ConversationCreateRequest {
+                work_roots: Vec::new(),
                 settings: Some(collaboration_protocol::ProviderRequestedSettings {
                     mode: Some("auto".into()),
                     // This test is about effort; --fast auto leaves the fixture's fast alone.
@@ -188,6 +189,7 @@ impl ReactiveCursor {
         operation(
             self.backend
                 .create(ConversationCreateRequest {
+                    work_roots: Vec::new(),
                     settings: Some(ProviderRequestedSettings {
                         mode: Some("auto".into()),
                         fast,

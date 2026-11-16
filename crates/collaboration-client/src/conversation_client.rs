@@ -49,6 +49,10 @@ pub struct ConversationCreateInput {
     pub fork: Option<SessionId>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub root_message_id: Option<UuidIdentity>,
+    /// Folders the creator names as work roots for a Claude or Cursor session
+    /// started in auto, on top of the Router's list (D1 R18).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub work_roots: Vec<PathBuf>,
 }
 
 impl ConversationCreateInput {
@@ -416,6 +420,13 @@ impl ConversationClient {
                         "omit the generation guard for this Codex ACP create",
                     ));
                 }
+                if !input.work_roots.is_empty() {
+                    return Err(unsupported(
+                        &input.endpoint,
+                        "workRoots",
+                        "omit work roots for a Codex create",
+                    ));
+                }
                 let request = crate::ConversationCreateRequest {
                     operation_id: operation_id.clone(),
                     endpoint: input.endpoint,
@@ -485,7 +496,20 @@ impl ConversationClient {
                         .to_owned(),
                 )
                 .map_err(|_| ConversationClientError::InvalidInput("invalid working directory"))?;
+                let work_roots = input
+                    .work_roots
+                    .iter()
+                    .map(|root| {
+                        root.to_str()
+                            .map(str::to_owned)
+                            .and_then(|root| ProviderWorkingDirectory::try_from(root).ok())
+                            .ok_or(ConversationClientError::InvalidInput(
+                                "a work root must be an absolute UTF-8 path",
+                            ))
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
                 let request = collaboration_protocol::ConversationCreateRequest {
+                    work_roots,
                     operation_id: operation_id.clone(),
                     endpoint: input.endpoint,
                     generation: input.generation,

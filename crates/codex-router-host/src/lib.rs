@@ -26,6 +26,7 @@ mod provider_acp_route_claim;
 mod provider_queue_operation_registry;
 mod provider_queue_submission_gate;
 mod provider_session_command_port;
+mod provider_work_roots;
 pub use provider_queue_operation_registry::{ProviderQueueCancellationError, ProviderQueuedInput};
 pub use provider_session_command_port::HostSessionCommandPort;
 mod provider_cache_warm;

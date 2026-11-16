@@ -23,6 +23,64 @@ fn load_providers(
     load_or_create_provider_settings(root.path())
 }
 
+/// Oracle: D1 R18, "work roots are one list in the Router's settings.jsonc.
+/// By default: ~/code/projects, ~/dev/memory-logs, ~/dev/session-logs; the
+/// toolchain caches; system temp, all of /tmp/agents/": a file written before
+/// the list existed gets those defaults, expanded under the owner's home and
+/// the system temp folder.
+#[test]
+fn a_file_without_work_roots_gets_the_default_list_expanded() {
+    // Arrange
+    let providers = load_providers(CLAUDE_WITHOUT_CACHE_WARM, CURSOR_WITHOUT_CACHE_WARM)
+        .expect("a file written before workRoots existed stays valid");
+
+    // Act
+    let roots = providers.work_roots(
+        std::path::Path::new("/Users/owner"),
+        std::path::Path::new("/var/folders/t"),
+    );
+
+    // Assert
+    let expected: Vec<std::path::PathBuf> = [
+        "/Users/owner/code/projects",
+        "/Users/owner/dev/memory-logs",
+        "/Users/owner/dev/session-logs",
+        "/Users/owner/.cargo",
+        "/Users/owner/.rustup",
+        "/Users/owner/Library/Caches",
+        "/Users/owner/.cache",
+        "/Users/owner/Library/pnpm",
+        "/var/folders/t",
+        "/tmp/agents",
+    ]
+    .iter()
+    .map(std::path::PathBuf::from)
+    .collect();
+    assert_eq!(roots, expected);
+}
+
+/// Oracle: D1 R18's list, checked when read: an entry that is neither
+/// absolute nor under ~/ or $TMPDIR is refused, naming it.
+#[test]
+fn a_relative_work_root_is_refused_naming_it() {
+    // Arrange
+    let root = tempfile::tempdir().expect("router root");
+    std::fs::write(
+        router_settings_path(root.path()),
+        format!(
+            r#"{{"providers": {{"version":1,"providers":{{"claude":{CLAUDE_WITHOUT_CACHE_WARM},"cursor":{CURSOR_WITHOUT_CACHE_WARM}}},"workRoots":["code/projects"]}}}}"#
+        ),
+    )
+    .expect("settings fixture");
+
+    // Act
+    let loaded = load_or_create_provider_settings(root.path());
+
+    // Assert
+    let error = loaded.expect_err("a relative root is refused").to_string();
+    assert!(error.contains("code/projects"), "{error}");
+}
+
 #[test]
 fn existing_file_without_cache_warm_loads_with_claude_on_at_55_and_8() {
     let providers = load_providers(CLAUDE_WITHOUT_CACHE_WARM, CURSOR_WITHOUT_CACHE_WARM)

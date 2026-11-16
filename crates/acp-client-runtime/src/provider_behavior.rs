@@ -1,6 +1,17 @@
 //! Consumer-owned, synchronous provider interpretation and preparation contract.
 
 use session_event_model::{PromptContent, ProviderSubmission, SkillView, ToolCallStatus};
+use std::path::PathBuf;
+
+/// The folders a Router-started session in auto works in without asking,
+/// beyond its working folder (D1 R18): its scratch folder and the Router's
+/// work roots that exist, and for Claude the command its hook runs to make
+/// it ask outside them.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct SessionWorkRoots {
+    pub roots: Vec<PathBuf>,
+    pub ask_outside_command: Option<String>,
+}
 
 pub trait ProviderBehavior: Send + Sync {
     fn initialization_authentication(&self) -> ProviderInitializationAuthentication;
@@ -22,6 +33,16 @@ pub trait ProviderBehavior: Send + Sync {
         _action: PermissionRequestAction,
         _title: &str,
     ) -> Option<StatedPermissionTarget> {
+        None
+    }
+
+    /// The `_meta` a new session's request carries so the agent's own
+    /// settings take the Router's work roots (D1 R18); the default sends
+    /// none.
+    fn session_new_meta(
+        &self,
+        _work_roots: &SessionWorkRoots,
+    ) -> Option<serde_json::Map<String, serde_json::Value>> {
         None
     }
 }

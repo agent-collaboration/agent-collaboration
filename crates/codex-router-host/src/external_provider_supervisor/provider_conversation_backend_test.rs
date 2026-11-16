@@ -58,6 +58,7 @@ async fn start_and_show_report_requested_and_actual_mode_with_the_reason() {
         let operation_id = OperationId::generate();
         backend
             .create(ConversationCreateRequest {
+                work_roots: Vec::new(),
                 settings: requested.map(|mode: &str| ProviderRequestedSettings {
                     mode: Some(mode.to_owned()),
                     ..ProviderRequestedSettings::default()

@@ -13,18 +13,28 @@ pub(super) fn configured_provider_startups(
 ) -> Result<Vec<ExternalProviderStartup>, HostCommandError> {
     let configuration = load_or_create_provider_settings(router_root);
     match configuration {
-        Ok(configuration) => Ok(vec![
-            configured_provider(
-                ProviderKind::ClaudeCode,
-                configuration.claude(),
-                explicit_launches,
-            )?,
-            configured_provider(
-                ProviderKind::Cursor,
-                configuration.cursor(),
-                explicit_launches,
-            )?,
-        ]),
+        Ok(configuration) => {
+            // The work roots sessions started in auto use (D1 R18), expanded
+            // under this Host's home and system temp folder.
+            let home = std::env::var_os("HOME")
+                .map(PathBuf::from)
+                .unwrap_or_default();
+            let work_roots = configuration.work_roots(&home, &std::env::temp_dir());
+            Ok(vec![
+                configured_provider(
+                    ProviderKind::ClaudeCode,
+                    configuration.claude(),
+                    explicit_launches,
+                )?
+                .with_work_roots(&work_roots),
+                configured_provider(
+                    ProviderKind::Cursor,
+                    configuration.cursor(),
+                    explicit_launches,
+                )?
+                .with_work_roots(&work_roots),
+            ])
+        }
         Err(error) => {
             let reason = error.to_string();
             let fix = format!(

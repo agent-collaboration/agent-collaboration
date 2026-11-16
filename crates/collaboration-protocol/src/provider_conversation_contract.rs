@@ -580,6 +580,10 @@ pub struct ConversationCreateRequest {
     pub requested_policy: ProviderRequestedPolicy,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settings: Option<ProviderRequestedSettings>,
+    /// Folders the creator names as work roots for a session started in auto,
+    /// on top of the Router's list (D1 R18). Absolute paths.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub work_roots: Vec<ProviderWorkingDirectory>,
 }
 
 #[derive(Clone, Debug, JsonSchema, Serialize, Deserialize)]

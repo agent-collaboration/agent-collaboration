@@ -78,7 +78,7 @@ fn shell_call(command: &str) -> ToolCallUpdate {
 #[test]
 fn file_actions_inside_the_project_or_scratch_folder_are_allowed_once_and_nothing_else() {
     let folders = folders();
-    let grant = InFolderGrant::new(&folders.project, &folders.scratch).unwrap();
+    let grant = InFolderGrant::new(&folders.project, &folders.scratch, &[]).unwrap();
     let new_scratch_file = folders.scratch.join("new/deeper/note.txt");
     let project_file = folders.project.join("src/lib.rs");
     let sibling = folders.root.join("scratch/session-ab/file");
@@ -151,7 +151,7 @@ fn file_actions_inside_the_project_or_scratch_folder_are_allowed_once_and_nothin
 #[test]
 fn shell_commands_are_allowed_once_only_when_every_operand_is_in_the_scratch_folder() {
     let folders = folders();
-    let grant = InFolderGrant::new(&folders.project, &folders.scratch).unwrap();
+    let grant = InFolderGrant::new(&folders.project, &folders.scratch, &[]).unwrap();
     let scratch = folders.scratch.display().to_string();
     let project = folders.project.display().to_string();
     let cases = [
@@ -233,7 +233,7 @@ fn shell_commands_are_allowed_once_only_when_every_operand_is_in_the_scratch_fol
 #[test]
 fn without_one_allow_once_option_the_request_goes_to_approval() {
     let folders = folders();
-    let grant = InFolderGrant::new(&folders.project, &folders.scratch).unwrap();
+    let grant = InFolderGrant::new(&folders.project, &folders.scratch, &[]).unwrap();
     let call = file_call(ToolKind::Edit, &[&folders.scratch.join("a")]);
     let no_allow_once = vec![PermissionOption::new(
         "always",
@@ -260,7 +260,7 @@ fn without_one_allow_once_option_the_request_goes_to_approval() {
 #[test]
 fn a_dangling_symlink_final_or_ancestor_asks() {
     let folders = folders();
-    let grant = InFolderGrant::new(&folders.project, &folders.scratch).unwrap();
+    let grant = InFolderGrant::new(&folders.project, &folders.scratch, &[]).unwrap();
     let scratch = folders.scratch.display().to_string();
     let dangling_final = folders.scratch.join("dangling");
     let dangling_ancestor = folders.scratch.join("dangling-dir/new");
@@ -302,7 +302,7 @@ fn a_dangling_symlink_final_or_ancestor_asks() {
 #[test]
 fn diff_on_scratch_directories_with_a_child_link_out_asks() {
     let folders = folders();
-    let grant = InFolderGrant::new(&folders.project, &folders.scratch).unwrap();
+    let grant = InFolderGrant::new(&folders.project, &folders.scratch, &[]).unwrap();
     let left = folders.scratch.join("left");
     let right = folders.scratch.join("right");
     std::fs::create_dir_all(&left).unwrap();
@@ -324,7 +324,7 @@ fn diff_on_scratch_directories_with_a_child_link_out_asks() {
 #[test]
 fn sort_on_a_scratch_file_asks() {
     let folders = folders();
-    let grant = InFolderGrant::new(&folders.project, &folders.scratch).unwrap();
+    let grant = InFolderGrant::new(&folders.project, &folders.scratch, &[]).unwrap();
     let command = format!("sort {}/input", folders.scratch.display());
     assert!(
         grant
@@ -351,7 +351,7 @@ fn diff_call(kind: ToolKind, diff_path: &Path, title: &str) -> ToolCallUpdate {
 #[test]
 fn a_diff_path_is_a_named_path() {
     let folders = folders();
-    let grant = InFolderGrant::new(&folders.project, &folders.scratch).unwrap();
+    let grant = InFolderGrant::new(&folders.project, &folders.scratch, &[]).unwrap();
     let inside = folders.scratch.join("note.txt");
     let outside = folders.root.join("outside/note.txt");
     assert!(
@@ -392,7 +392,7 @@ fn a_diff_path_is_a_named_path() {
 #[test]
 fn a_stated_target_takes_the_same_rule() {
     let folders = folders();
-    let grant = InFolderGrant::new(&folders.project, &folders.scratch).unwrap();
+    let grant = InFolderGrant::new(&folders.project, &folders.scratch, &[]).unwrap();
     let inside = folders.scratch.join("note.txt");
     let outside = folders.root.join("outside/note.txt");
     let titled = |kind: ToolKind| {
@@ -487,4 +487,56 @@ fn a_stated_target_takes_the_same_rule() {
             .is_none(),
         "every named command must stay in scratch"
     );
+}
+
+/// Oracle: D1 R18 and V33, "paths inside any root are allowed; outside
+/// asks", with "only working + scratch counted" as the wrong build: a file
+/// action or a file utility's operand inside a work root is allowed once; one
+/// outside every folder still asks; a work root missing on this computer is
+/// left out without dropping the grant.
+#[test]
+fn work_roots_widen_the_inside_for_file_actions_and_command_operands() {
+    // Arrange
+    let folders = folders();
+    let work_root = folders.root.join("worktrees");
+    std::fs::create_dir_all(&work_root).unwrap();
+    let missing_root = folders.root.join("not-on-this-computer");
+    let grant = InFolderGrant::new(
+        &folders.project,
+        &folders.scratch,
+        &[work_root.clone(), missing_root],
+    )
+    .expect("a grant despite a missing root");
+    let in_root = work_root.join("other-checkout/src/lib.rs");
+    let outside = folders.root.join("outside/file");
+    let cases = [
+        (
+            "edit in a work root",
+            file_call(ToolKind::Edit, &[&in_root]),
+            true,
+        ),
+        (
+            "edit outside",
+            file_call(ToolKind::Edit, &[&outside]),
+            false,
+        ),
+        (
+            "utility on a work-root path",
+            shell_call(&format!("rm -rf {}", in_root.display())),
+            true,
+        ),
+        (
+            "utility outside",
+            shell_call(&format!("rm -rf {}", outside.display())),
+            false,
+        ),
+    ];
+
+    for (case, call, allowed) in cases {
+        // Act
+        let answered = grant.allow_once(&call, &options(), &NO_TITLES);
+
+        // Assert
+        assert_eq!(answered.is_some(), allowed, "{case}");
+    }
 }

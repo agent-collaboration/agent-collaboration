@@ -47,11 +47,22 @@ pub struct ExternalProviderLaunchBinding {
     /// Claude only: the owner's cache-warm setting, carried from the settings
     /// file with the startup. Absent means this binding keeps no cache warm.
     pub cache_warm: Option<crate::CacheWarmSetting>,
+    /// The owner's work roots from the settings file (D1 R18), already
+    /// absolute. Empty means sessions get no work roots beyond their own
+    /// folders.
+    pub work_roots: Vec<PathBuf>,
 }
 impl ExternalProviderLaunchBinding {
     #[must_use]
     pub fn with_cache_warm(mut self, setting: crate::CacheWarmSetting) -> Self {
         self.cache_warm = Some(setting);
+        self
+    }
+
+    /// The work roots sessions this binding starts in auto work in (D1 R18).
+    #[must_use]
+    pub fn with_work_roots(mut self, work_roots: Vec<PathBuf>) -> Self {
+        self.work_roots = work_roots;
         self
     }
 
@@ -94,6 +105,7 @@ impl ExternalProviderLaunchBinding {
                 environment: Vec::new(),
             },
             cache_warm: None,
+            work_roots: Vec::new(),
         })
     }
 

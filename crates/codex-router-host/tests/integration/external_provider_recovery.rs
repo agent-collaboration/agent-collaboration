@@ -225,6 +225,7 @@ async fn crash_child_records_durable_boundary() -> TestResult {
     if mode == "create" {
         backend
             .create(ConversationCreateRequest {
+                work_roots: Vec::new(),
                 settings: Some(collaboration_protocol::ProviderRequestedSettings {
                     mode: Some("auto".into()),
                     ..collaboration_protocol::ProviderRequestedSettings::default()
@@ -392,6 +393,7 @@ async fn verify_dispatched_crash(mode: &str, expected_target: Option<SessionRef>
     let duplicate = if mode == "create" {
         backend
             .create(ConversationCreateRequest {
+                work_roots: Vec::new(),
                 settings: Some(collaboration_protocol::ProviderRequestedSettings {
                     mode: Some("auto".into()),
                     ..collaboration_protocol::ProviderRequestedSettings::default()
@@ -452,6 +454,7 @@ async fn verify_dispatched_crash(mode: &str, expected_target: Option<SessionRef>
     let fresh = if mode == "create" {
         backend
             .create(ConversationCreateRequest {
+                work_roots: Vec::new(),
                 settings: Some(collaboration_protocol::ProviderRequestedSettings {
                     mode: Some("auto".into()),
                     ..collaboration_protocol::ProviderRequestedSettings::default()

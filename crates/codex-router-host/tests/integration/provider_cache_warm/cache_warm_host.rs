@@ -300,6 +300,7 @@ impl CacheWarmHost {
         submit_provider_create(
             &self.client,
             ConversationCreateRequest {
+                work_roots: Vec::new(),
                 settings: Some(collaboration_protocol::ProviderRequestedSettings {
                     mode: Some("auto".into()),
                     ..collaboration_protocol::ProviderRequestedSettings::default()
