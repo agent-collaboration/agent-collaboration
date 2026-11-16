@@ -193,6 +193,11 @@ pub enum ExternalProviderRuntimeError {
     UnsupportedCapability { capability: &'static str },
     #[error("provider conversation operation is not active")]
     LocalNotFound,
+    /// The Router released the session (closed it here for an agent with no
+    /// session/close), so it isn't loaded or resumed again on this
+    /// connection, even by a load that was already in flight (D1 R14).
+    #[error("provider session was closed by the Router")]
+    SessionReleased,
     #[error("provider cancellation target is no longer active")]
     LocalCancelTargetMismatch,
     #[error("provider authentication is required (ACP code {code})")]

@@ -152,6 +152,8 @@ async function serveSharedSettings(peer: {
 //   held-turn-ends-max-tokens: with hold-first-prompt-open, the released
 //     held turn ends with the stop reason max_tokens instead of end_turn, so
 //     a test can tell that turn's end from any later turn's.
+//   hold-load: session/load is answered only once the file
+//     <receipt>.release-load exists; other requests are answered meanwhile.
 const reactiveBehaviourNames = [
   "boolean-fast",
   "refuse-fast-once",
@@ -168,6 +170,7 @@ const reactiveBehaviourNames = [
   "exit-on-stop-file",
   "permission-after-steer",
   "held-turn-ends-max-tokens",
+  "hold-load",
 ] as const;
 type ReactiveBehaviour = (typeof reactiveBehaviourNames)[number];
 
@@ -437,7 +440,11 @@ async function serveReactiveSettings(peer: ReactivePeer): Promise<void> {
           fast: true,
         };
         sessions.set(sessionId, session);
-        peer.reply(request, { configOptions: reactiveOptions(session, peer.behaviours, true) });
+        const answer = (): void =>
+          peer.reply(request, { configOptions: reactiveOptions(session, peer.behaviours, true) });
+        if (peer.behaviours.has("hold-load"))
+          void fileAppears(`${peer.releasePath}-load`).then(answer);
+        else answer();
         break;
       }
       case "session/set_config_option":

@@ -221,6 +221,16 @@ pub(super) fn runtime_failure(
             operation_id,
             target,
         ),
+        // The Router closed the session while a load or resume was in
+        // flight; the same refusal as one checked before it (D1 R14).
+        ExternalProviderRuntimeError::SessionReleased => failure(
+            ConversationOperationFailureKind::InvalidRequest,
+            ConversationOperationFailureStage::Validation,
+            ProviderOperationEffect::None,
+            "the session is closed",
+            operation_id,
+            target,
+        ),
         ExternalProviderRuntimeError::LocalNotFound
         | ExternalProviderRuntimeError::LocalCancelTargetMismatch => failure(
             ConversationOperationFailureKind::NotFound,

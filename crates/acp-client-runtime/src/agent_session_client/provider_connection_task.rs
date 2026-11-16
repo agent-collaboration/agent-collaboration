@@ -356,6 +356,12 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                         let (admission_tx, mut admission_rx) = tokio::sync::mpsc::channel(32);
                         let mut pending_loads = std::collections::HashSet::<String>::new();
                         let mut pending_closes = std::collections::HashSet::<String>::new();
+                        // Release-only closes in flight, and the sessions they
+                        // released: a released session never comes back on
+                        // this connection, and a restore that was already in
+                        // flight is dropped when it lands (D1 R14).
+                        let mut pending_releases = std::collections::HashSet::<String>::new();
+                        let mut released_sessions = std::collections::HashSet::<String>::new();
                         let Some(base_capabilities) = base_capabilities else { return Ok(()); };
                         loop {
                             tokio::select! {
@@ -425,6 +431,11 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                         }
                                         PendingSessionAdmission::Restore { provider_session_id, result, reply } => {
                                             pending_loads.remove(&provider_session_id);
+                                            if released_sessions.contains(&provider_session_id) {
+                                                known_sessions.forget(&provider_session_id).await;
+                                                let _result = reply.send(Err(ExternalProviderRuntimeError::SessionReleased));
+                                                continue;
+                                            }
                                             if matches!(result.as_ref(), Err(ExternalProviderRuntimeError::SinkClosed)) {
                                                 sink_closed.cancel();
                                                 task_shutdown.cancel();
@@ -475,8 +486,12 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                         }
                                         PendingSessionAdmission::Close { provider_session_id, result, reply } => {
                                             pending_closes.remove(&provider_session_id);
+                                            let released = pending_releases.remove(&provider_session_id);
                                             task_pending_close_marks.lock().unwrap_or_else(std::sync::PoisonError::into_inner).remove(&provider_session_id);
                                             if result.is_ok() {
+                                                if released {
+                                                    released_sessions.insert(provider_session_id.clone());
+                                                }
                                                 sessions.remove(&provider_session_id);
                                                 known_sessions.forget(&provider_session_id).await;
                                                 task_session_capabilities.write().await.remove(&provider_session_id);
@@ -551,7 +566,9 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             });
                                         }
                                         ProviderCommand::Restore { provider_session_id, cwd, mode, reply } => {
-                                            if sessions.contains_key(&provider_session_id) || !pending_loads.insert(provider_session_id.clone()) {
+                                            if released_sessions.contains(&provider_session_id) {
+                                                let _result = reply.send(Err(ExternalProviderRuntimeError::SessionReleased));
+                                            } else if sessions.contains_key(&provider_session_id) || !pending_loads.insert(provider_session_id.clone()) {
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy));
                                             } else {
                                                 known_sessions.track(provider_session_id.clone()).await;
@@ -588,6 +605,9 @@ impl<P: InteractionPort> AgentSessionClient<P> {
                                             if !pending_closes.insert(provider_session_id.clone()) {
                                                 let _result = reply.send(Err(ExternalProviderRuntimeError::LocalBusy));
                                                 continue;
+                                            }
+                                            if release_only {
+                                                pending_releases.insert(provider_session_id.clone());
                                             }
                                             let pending_connection = connection.clone();
                                             let pending_shutdown = task_shutdown.clone();

@@ -134,6 +134,11 @@ pub(crate) async fn ensure_provider_session_loaded(
         .await
     {
         Ok(()) => ProviderSessionLoadOutcome::Ready,
+        // The Router closed the session while this load was in flight: the
+        // connection dropped the restored session, so it stays closed.
+        Err(ExternalProviderRuntimeError::SessionReleased) => {
+            ProviderSessionLoadOutcome::RouterClosed
+        }
         Err(ExternalProviderRuntimeError::ProviderSessionNotFound {
             code,
             correlation_id,

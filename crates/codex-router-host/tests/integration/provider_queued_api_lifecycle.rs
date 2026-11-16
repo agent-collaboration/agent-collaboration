@@ -568,7 +568,7 @@ async fn provider_stop_settles_queued_waiters_not_sent() {
         .await;
 
     // Act: the agent stops.
-    std::fs::write(staging.path().join("wire.json.stop"), b"").expect("stop the agent");
+    node_test_fixture::release_fixture(&receipt, ".stop").expect("stop the agent");
     let mut settled = Vec::new();
     for operation_id in &queued {
         settled.push(not_sent_reason(&host.wait_once(operation_id, 5).await));

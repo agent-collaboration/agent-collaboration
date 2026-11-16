@@ -503,6 +503,7 @@ fn map_runtime_failure(error: ExternalProviderRuntimeError) -> CommandFailure {
             CommandFailure::UnsupportedOperation { operation: "steer" }
         }
         ExternalProviderRuntimeError::LocalNotFound
+        | ExternalProviderRuntimeError::SessionReleased
         | ExternalProviderRuntimeError::ProviderSessionNotFound { .. } => {
             CommandFailure::SessionNotFound
         }
