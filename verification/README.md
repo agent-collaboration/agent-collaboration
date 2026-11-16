@@ -55,6 +55,10 @@ the central Worker's test-support bundle:
 worker-build crates/collaboration-central-cloudflare --dev --no-opt --out-dir build-test-support -- --features test-support,conformance
 ```
 
+CI builds this bundle (and `build-link-test-support`) with `CARGO_PROFILE_DEV_OPT_LEVEL=1`:
+each workerd test compiles the test wasm at boot, and the smaller optimized bundle
+roughly halves the suite's time. Prefix the same variable locally for the same effect.
+
 `workerd-central-storage.test.ts` covers the storage boundary on the Cloudflare host
 (Verification O1): batch atomicity, constraint kinds with foreign keys enforced,
 `SetFromQuery` alarms, in-transaction migrations, clock-minted id order,
