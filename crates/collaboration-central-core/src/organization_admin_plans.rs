@@ -153,6 +153,8 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
                     None => OrganizationAdminAnswer::Answered(result),
                 })
             }
+            // A rejected statement keeps main's store-outage answer on this path.
+            BatchOutcome::StatementRejected { .. } => Err(StoreFailure::Unavailable),
             _ => Ok(OrganizationAdminAnswer::Answered(
                 OrganizationAdminResult::Refused {
                     reason: guard_failed,

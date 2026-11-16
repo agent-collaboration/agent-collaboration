@@ -185,6 +185,8 @@ impl<H: ObjectHost, S: WorkspaceStoreCalls> WorkspaceRuntime<H, S> {
             .await?
         {
             BatchOutcome::Applied { .. } => {}
+            // A rejected statement keeps main's store-outage answer on this path.
+            BatchOutcome::StatementRejected { .. } => return Err(Failure::Unavailable),
             _ => return Err(Failure::StaleStatement),
         }
         self.signin_authority.forget();

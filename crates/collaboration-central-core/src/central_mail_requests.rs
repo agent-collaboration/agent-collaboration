@@ -14,9 +14,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         caller: &WorkspaceCaller,
         request: mail::CentralMailRequest,
     ) -> Result<mail::CentralMailResult, StoreFailure> {
-        if !self.alarm_organization_is_provisioned().await? {
-            return Err(corrupt("organization_identity.id"));
-        }
+        // The request path answers as on main; the due batch that follows checks
+        // the organization stamp once for this event before any unit (P3).
         let result = self.execute_central(caller, request).await;
         // Due work and publication cannot replace this event's durable answer.
         let _ = self.after_event().await;
@@ -182,6 +181,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             .await
         {
             Ok(BatchOutcome::Applied { .. }) => {}
+            // A rejected statement keeps main's store-outage answer on this path.
+            Ok(BatchOutcome::StatementRejected { .. }) => return Ok(Result::CentralUnavailable),
             Ok(_) => return Ok(Result::Conflict),
             Err(StoreFailure::AnswerLost) => return Ok(Result::OutcomeUnknown),
             Err(StoreFailure::Unavailable) => return Ok(Result::CentralUnavailable),
