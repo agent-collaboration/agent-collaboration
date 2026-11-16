@@ -100,6 +100,13 @@ async fn a_refused_competing_load_leaves_the_admitted_run_alone() {
         .await;
     let _go = activation_release.send(());
     let first = first.await.expect("first load task");
+    // Checked here, so a refused attempt that ended the admitted run fails
+    // at once rather than leaving the close below without its Closed.
+    assert!(
+        matches!(competing, Err(ExternalProviderRuntimeError::LocalBusy)),
+        "the competing load is refused: {competing:?}"
+    );
+    assert!(first.is_ok(), "the admitted load activates: {first:?}");
     let state_after_first =
         SessionEventHub::state(fixture.hub.as_ref(), fixture.hub_target.clone()).await;
     let after_activation =
@@ -107,39 +114,21 @@ async fn a_refused_competing_load_leaves_the_admitted_run_alone() {
             .await
             .expect("hub attachment");
     let refused_before_close = runtime
-        .load_session("reactive-session-1".to_owned(), cwd)
+        .load_session("reactive-session-1".to_owned(), cwd.clone())
         .await;
-    let mut before_close =
-        SessionEventHub::attach(fixture.hub.as_ref(), fixture.hub_target.clone())
-            .await
-            .expect("hub attachment");
     let closed = runtime
         .release_session("reactive-session-1".to_owned())
         .await;
-    let close_published = loop {
-        match before_close.receiver.recv().await {
-            Ok(event) => {
-                if let SessionEvent::StateChanged {
-                    state: SessionState::Closed,
-                } = event.event
-                {
-                    break true;
-                }
-            }
-            Err(_) => break false,
-        }
-    };
+    // The connection enqueued the close's Closed before the release returned.
+    // A new session's activation waits until the hub takes its Idle, so by
+    // then the hub has applied everything enqueued before it.
+    let flushed = runtime.create_session(cwd).await;
     let state_after_close =
         SessionEventHub::state(fixture.hub.as_ref(), fixture.hub_target.clone()).await;
     let loads = recorded_requests(&fixture.receipt, "session/load");
     runtime.shutdown().await;
 
     // Assert
-    assert!(
-        matches!(competing, Err(ExternalProviderRuntimeError::LocalBusy)),
-        "the competing load is refused: {competing:?}"
-    );
-    assert!(first.is_ok(), "the admitted load activates: {first:?}");
     assert!(
         matches!(state_after_first, Ok(SessionState::Idle)),
         "the hub shows the admitted run idle: {state_after_first:?}"
@@ -162,10 +151,10 @@ async fn a_refused_competing_load_leaves_the_admitted_run_alone() {
         "{refused_before_close:?}"
     );
     assert!(closed.is_ok(), "the session closes: {closed:?}");
-    assert!(close_published, "the close published Closed");
+    assert!(flushed.is_ok(), "the flushing session started: {flushed:?}");
     assert!(
         matches!(state_after_close, Ok(SessionState::Closed)),
-        "{state_after_close:?}"
+        "the close published Closed: {state_after_close:?}"
     );
     assert_eq!(loads, 1, "only the admitted load reached the agent");
 }
