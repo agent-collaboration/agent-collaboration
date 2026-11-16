@@ -98,6 +98,21 @@ pub async fn serve_acp_router_connection<
     stream: TStream,
     routes: Vec<Box<dyn AcpSessionRoute>>,
 ) -> io::Result<()> {
+    serve_acp_router_connection_until(stream, routes, tokio_util::sync::CancellationToken::new())
+        .await
+}
+
+/// Serves one ACP connection until it closes or `stop` is cancelled. Either
+/// way it ends through its own cleanup: the connection closes, each route sees
+/// that and ends its own work, and every route task is joined before this
+/// returns, so nothing a route owned outlives the connection.
+pub async fn serve_acp_router_connection_until<
+    TStream: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+>(
+    stream: TStream,
+    routes: Vec<Box<dyn AcpSessionRoute>>,
+    stop: tokio_util::sync::CancellationToken,
+) -> io::Result<()> {
     let (wire, mut connection) = acp_connection_channels();
     let closed = connection.closed.clone();
     let transport = tokio::spawn(run_acp_transport(stream, wire));
@@ -116,6 +131,7 @@ pub async fn serve_acp_router_connection<
         loop {
             tokio::select! {
                 _ = connection.closed.cancelled() => break Ok(()),
+                _ = stop.cancelled() => break Ok(()),
                 completed = route_tasks.join_next(), if !route_tasks.is_empty() => {
                     let Some(Ok(())) = completed else {
                         break Err(io::Error::other("ACP Session route task failed"));
@@ -279,8 +295,9 @@ pub async fn serve_acp_router_connection<
             }
         }
     }.await;
+    // Every route ends on the connection's closed token and joins its own
+    // tasks; aborting a route from outside would drop those tasks unjoined.
     closed.cancel();
-    route_tasks.abort_all();
     while route_tasks.join_next().await.is_some() {}
     let transport_result = transport
         .await

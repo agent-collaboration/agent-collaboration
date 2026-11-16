@@ -4,7 +4,7 @@ use crate::ProviderAcpSessionRoute;
 use crate::private_socket_listener::PrivateSocketListener;
 use codex_acp_adapter::{
     AcpConnectionInputs, AcpSchemaCatalog, AcpSessionRoute, AcpStoredSessions,
-    CodexAdmissionSource, lazy_codex_session_route, serve_acp_router_connection,
+    CodexAdmissionSource, lazy_codex_session_route, serve_acp_router_connection_until,
 };
 use collaboration_contracts::SessionCommandPort;
 use collaboration_contracts::SessionEventHub;
@@ -79,6 +79,8 @@ impl AcpChannelListener {
     }
     pub async fn run(self, shutdown: CancellationToken) -> io::Result<()> {
         let mut tasks = JoinSet::new();
+        // Connections stop on the listener's shutdown, or when it fails.
+        let connections_stop = shutdown.child_token();
         let result = loop {
             tokio::select! {
                 _ = shutdown.cancelled() => break Ok(()),
@@ -114,11 +116,14 @@ impl AcpChannelListener {
                         } else { route };
                         Box::new(route) as Box<dyn AcpSessionRoute>
                     }));
-                    tasks.spawn(async move { let _permit = permit; serve_acp_router_connection(stream,routes).await });
+                    let stop = connections_stop.child_token();
+                    tasks.spawn(async move { let _permit = permit; serve_acp_router_connection_until(stream, routes, stop).await });
                 }
             }
         };
-        tasks.abort_all();
+        // Each connection ends through its own cleanup on the shutdown token,
+        // joining its routes; nothing it owned outlives the listener.
+        connections_stop.cancel();
         while tasks.join_next().await.is_some() {}
         if result.is_err() {
             self.generations.retire()?;

@@ -512,10 +512,28 @@ async fn run_provider_message_fifo(
                 } => submitted,
             };
             match submitted {
+                // Nothing reached the agent: the line records why, so a caller
+                // waiting on this input learns it now, and the record stays
+                // for show instead of being cleared as if it ran (D1 R14).
+                Ok(ProviderPromptDispatch::Refused(reason)) => {
+                    let reason = crate::external_provider_supervisor::dispatch_refusal_reason(
+                        reason,
+                        operation_id.clone(),
+                        target.clone(),
+                    );
+                    supervisor
+                        .queued_operation_registry()
+                        .mark_not_submitted(&operation_id, reason);
+                    break;
+                }
+                Ok(ProviderPromptDispatch::NotSubmitted) => {
+                    supervisor
+                        .queued_operation_registry()
+                        .mark_not_submitted(&operation_id, "provider input was not submitted");
+                    break;
+                }
                 Ok(
                     ProviderPromptDispatch::Submitted
-                    | ProviderPromptDispatch::NotSubmitted
-                    | ProviderPromptDispatch::Refused(_)
                     | ProviderPromptDispatch::Existing
                     | ProviderPromptDispatch::Uncertain,
                 ) => {
@@ -668,3 +686,7 @@ fn mark_entry_not_sent(
 #[cfg(test)]
 #[path = "provider_acp_message_fifo_test.rs"]
 mod loaded_only_tests;
+
+#[cfg(test)]
+#[path = "provider_acp_message_fifo_refusal_test.rs"]
+mod refusal_tests;

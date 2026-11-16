@@ -6,6 +6,7 @@ mod provider_queued_api_prompt;
 pub(crate) use provider_queued_api_prompt::AdmittedApiPrompt;
 mod provider_operation_failure;
 mod provider_prompt_contents;
+pub(crate) use provider_prompt_contents::dispatch_refusal_reason;
 pub use provider_prompt_contents::{PromptBusyPolicy, ProviderPromptContentsRequest};
 mod provider_conversation_backend;
 mod provider_session_inspection;

@@ -30,7 +30,7 @@ use collaboration_runtime::ProviderOperationStore;
 use collaboration_runtime::ProviderSessionRecord;
 use std::sync::Arc;
 
-struct NoLivePeer;
+pub(super) struct NoLivePeer;
 
 impl LiveSessionOwnershipCheck for NoLivePeer {
     fn check<'a>(&'a self, _target: &'a SessionRef) -> DeliveryFuture<'a, LiveSessionOwnership> {
@@ -38,7 +38,7 @@ impl LiveSessionOwnershipCheck for NoLivePeer {
     }
 }
 
-fn target() -> SessionRef {
+pub(super) fn target() -> SessionRef {
     SessionRef {
         endpoint: EndpointRef {
             service_id: "0ff962c5-7fa3-4c18-a5ca-1bbe8db09e89"
@@ -51,7 +51,7 @@ fn target() -> SessionRef {
     }
 }
 
-fn binding(target: &SessionRef) -> ProviderBindingIdentity {
+pub(super) fn binding(target: &SessionRef) -> ProviderBindingIdentity {
     ProviderBindingIdentity {
         endpoint: target.endpoint.clone(),
         binding_id: ProviderBindingId::try_from("fifo-binding".to_owned()).expect("binding ID"),
@@ -661,7 +661,7 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
 }
 
 /// How many requests with `method` the Cursor fixture recorded in `receipt`.
-fn recorded_requests(receipt: &std::path::Path, method: &str) -> usize {
+pub(super) fn recorded_requests(receipt: &std::path::Path, method: &str) -> usize {
     std::fs::read(receipt)
         .ok()
         .and_then(|bytes| serde_json::from_slice::<Vec<serde_json::Value>>(&bytes).ok())

@@ -305,6 +305,15 @@ pub(super) fn prompt_completion(
     }
 }
 
+/// Why a refused dispatch never reached the agent, as its failure says it.
+pub(crate) fn dispatch_refusal_reason(
+    reason: acp_client_runtime::ProviderDispatchRefusal,
+    operation_id: OperationId,
+    target: SessionRef,
+) -> String {
+    String::from(dispatch_refusal_failure(reason, operation_id, target).message)
+}
+
 /// The failure a refused dispatch reports; nothing reached the agent.
 pub(super) fn dispatch_refusal_failure(
     reason: acp_client_runtime::ProviderDispatchRefusal,

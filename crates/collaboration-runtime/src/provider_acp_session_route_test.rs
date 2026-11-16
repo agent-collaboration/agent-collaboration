@@ -14,6 +14,8 @@ use tokio_util::sync::CancellationToken;
 #[derive(Default)]
 struct BusyScript {
     steer: Option<Result<SessionSteerOutcome, CommandFailure>>,
+    /// The answer to a second steer, once the first answer is taken.
+    second_steer: Option<Result<SessionSteerOutcome, CommandFailure>>,
     prompt: Option<Result<SessionTurnHandle, CommandFailure>>,
     /// The answer to a second prompt, once the first answer is taken.
     second_prompt: Option<Result<SessionTurnHandle, CommandFailure>>,
@@ -116,7 +118,10 @@ impl SessionCommandPort for RecordingSessionBackend {
             .expect("test lock")
             .steer_expected_turns
             .push(command.expected_turn_id);
-        let answer = self.script.lock().expect("test lock").steer.take();
+        let answer = {
+            let mut script = self.script.lock().expect("test lock");
+            script.steer.take().or_else(|| script.second_steer.take())
+        };
         Box::pin(async { answer.unwrap_or(Err(CommandFailure::Unsupported)) })
     }
     fn queue_add(&self, _: QueueInputCommand) -> CommandFuture<'_, QueuedSessionInput> {
@@ -241,8 +246,9 @@ async fn session_new_asks_for_auto() -> Result<(), Box<dyn std::error::Error>> {
         .send(json!({"jsonrpc":"2.0","id":7,"method":"session/new",
             "params":{"cwd":directory.path(),"mcpServers":[]}}))
         .await?;
-    let reply = tokio::time::timeout(std::time::Duration::from_secs(5), output_receiver.recv())
-        .await?
+    let reply = output_receiver
+        .recv()
+        .await
         .ok_or("route closed before replying")?;
 
     // Assert: the create succeeded and asked for mode auto, nothing else set.
@@ -261,12 +267,15 @@ async fn session_new_asks_for_auto() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
     closed.cancel();
-    tokio::time::timeout(std::time::Duration::from_secs(5), served).await???;
+    served.await??;
     Ok(())
 }
 
-const BOUNDED_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
-const QUIET_WAIT: std::time::Duration = std::time::Duration::from_millis(100);
+// Waits here are bounded by the test runner (.config/nextest.toml), never by a
+// clock in test code (AGENTS.md "Time").
+
+/// Scheduler turns the route gets before a check that it has not answered.
+const QUIET_TURNS: usize = 256;
 
 /// The route served over in-memory frames, with a session already created.
 struct BusyRouteHarness {
@@ -358,22 +367,26 @@ impl BusyRouteHarness {
 
     /// The next response with this id; notifications are skipped.
     async fn reply_for(&mut self, id: &Value) -> Result<Value, Box<dyn std::error::Error>> {
-        tokio::time::timeout(BOUNDED_WAIT, async {
-            loop {
-                let frame = self.replies.recv().await.ok_or("route closed")?;
-                if frame.get("id") == Some(id) && frame.get("method").is_none() {
-                    return Ok((*frame).clone());
-                }
+        loop {
+            let frame = self.replies.recv().await.ok_or("route closed")?;
+            if frame.get("id") == Some(id) && frame.get("method").is_none() {
+                return Ok((*frame).clone());
             }
-        })
-        .await?
+        }
     }
 
-    /// True when a response with this id arrives within the quiet wait.
-    async fn replies_within_quiet_wait(&mut self, id: &Value) -> bool {
-        tokio::time::timeout(QUIET_WAIT, self.reply_for(id))
-            .await
-            .is_ok()
+    /// True when a response with this id is already there after the route has
+    /// had its scheduler turns; notifications seen on the way are skipped.
+    async fn replies_without_waiting(&mut self, id: &Value) -> bool {
+        for _ in 0..QUIET_TURNS {
+            tokio::task::yield_now().await;
+        }
+        while let Ok(frame) = self.replies.try_recv() {
+            if frame.get("id") == Some(id) && frame.get("method").is_none() {
+                return true;
+            }
+        }
+        false
     }
 
     /// Yields until the command port has recorded what the test waits for.
@@ -381,18 +394,15 @@ impl BusyRouteHarness {
         &self,
         recorded: impl Fn(&RecordedCalls) -> bool,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        tokio::time::timeout(BOUNDED_WAIT, async {
-            while !recorded(&self.backend.calls.lock().expect("test lock")) {
-                tokio::task::yield_now().await;
-            }
-        })
-        .await?;
+        while !recorded(&self.backend.calls.lock().expect("test lock")) {
+            tokio::task::yield_now().await;
+        }
         Ok(())
     }
 
     async fn stop(self) -> Result<(), Box<dyn std::error::Error>> {
         self.closed.cancel();
-        tokio::time::timeout(BOUNDED_WAIT, self.served).await???;
+        self.served.await??;
         Ok(())
     }
 }
@@ -431,12 +441,13 @@ async fn busy_prompt_steers_and_answers_at_the_running_turn_end()
     harness
         .until_recorded(|calls| !calls.steer_expected_turns.is_empty())
         .await?;
-    let answered_early = harness.replies_within_quiet_wait(&json!(2)).await;
+    let answered_early = harness.replies_without_waiting(&json!(2)).await;
+    // Asserted here: a reply already taken can't be waited for again.
+    assert!(!answered_early, "the prompt answered before its turn ended");
     harness.backend.publish_turn_ended("t1");
     let reply = harness.reply_for(&json!(2)).await?;
 
     // Assert: one steer at t1, no other command, and a stop reason at the turn end.
-    assert!(!answered_early, "the prompt answered before its turn ended");
     assert_eq!(reply["result"]["stopReason"], "end_turn", "{reply}");
     {
         let calls = harness.backend.calls.lock().expect("test lock");
@@ -473,12 +484,13 @@ async fn busy_prompt_queues_when_steering_unsupported() -> Result<(), Box<dyn st
     harness
         .until_recorded(|calls| calls.queue_outcomes > 0)
         .await?;
-    let answered_early = harness.replies_within_quiet_wait(&json!(2)).await;
+    let answered_early = harness.replies_without_waiting(&json!(2)).await;
+    // Asserted here: a reply already taken can't be waited for again.
+    assert!(!answered_early, "the prompt answered before t2 ended");
     harness.backend.publish_turn_ended("t2");
     let reply = harness.reply_for(&json!(2)).await?;
 
     // Assert: one queue_add, an answer only at t2's end, nothing cancelled.
-    assert!(!answered_early, "the prompt answered before t2 ended");
     assert_eq!(reply["result"]["stopReason"], "end_turn", "{reply}");
     {
         let calls = harness.backend.calls.lock().expect("test lock");
@@ -601,6 +613,59 @@ async fn idle_prompt_that_meets_a_new_turn_is_placed_never_busy()
     {
         let calls = harness.backend.calls.lock().expect("test lock");
         assert_eq!((calls.prompts, calls.queue_adds, calls.cancels), (2, 1, 0));
+    }
+    harness.stop().await
+}
+
+/// Oracle: D1 R12 and V22b, "forced expected-turn mismatch" — the steer names
+/// the running turn the route read, but the command port finds the turn has
+/// changed and answers busy once. The route reads the turn once more and
+/// places the message with exactly one submission (here the second steer is
+/// injected), never busy and never cancelling the turn.
+#[tokio::test]
+#[expect(
+    clippy::panic_in_result_fn,
+    reason = "Contract asserts; setup may fail."
+)]
+async fn steer_whose_expected_turn_changed_is_placed_once_after_one_re_read()
+-> Result<(), Box<dyn std::error::Error>> {
+    // Arrange: the first steer meets a changed turn; the second is taken.
+    let mut harness = BusyRouteHarness::start(
+        "t1",
+        BusyScript {
+            steer: Some(Err(CommandFailure::Busy)),
+            second_steer: Some(Ok(SessionSteerOutcome::Injected {
+                turn_id: "t1".into(),
+            })),
+            ..BusyScript::default()
+        },
+    )
+    .await?;
+
+    // Act
+    harness.send_prompt(2).await?;
+    harness
+        // Whatever the route does next: a second steer, a prompt or a queue_add.
+        .until_recorded(|calls| {
+            calls.steer_expected_turns.len() >= 2 || calls.prompts > 0 || calls.queue_adds > 0
+        })
+        .await?;
+    harness.backend.publish_turn_ended("t1");
+    let reply = harness.reply_for(&json!(2)).await?;
+
+    // Assert: one re-read, one submission, no other command, no busy answer.
+    assert!(
+        reply.get("error").is_none(),
+        "never refused as busy: {reply}"
+    );
+    assert_eq!(reply["result"]["stopReason"], "end_turn", "{reply}");
+    {
+        let calls = harness.backend.calls.lock().expect("test lock");
+        assert_eq!(
+            calls.steer_expected_turns,
+            vec!["t1".to_owned(), "t1".to_owned()]
+        );
+        assert_eq!((calls.prompts, calls.queue_adds, calls.cancels), (0, 0, 0));
     }
     harness.stop().await
 }
