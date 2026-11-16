@@ -33,6 +33,10 @@ struct MissingBundle {
 pub(super) struct AlarmReceipt {
     pub organization: Option<OrganizationId>,
     pub initialized_cold: bool,
+    #[expect(
+        dead_code,
+        reason = "the receipt wire shape denies unknown fields; no kept row compares it after isolation"
+    )]
     pub alarm_before: Option<i64>,
     pub alarm_after: Option<i64>,
     pub result: AlarmReceiptResult,
@@ -418,6 +422,11 @@ impl RemoteRuntime {
         fault: collaboration_central_core::EngineCommitFault,
     ) {
         let _: bool = self.control("engine-commit-fault", &fault).await.unwrap();
+    }
+    pub async fn legacy_unit_invocations(
+        &self,
+    ) -> collaboration_central_core::LegacyUnitInvocations {
+        self.control("legacy-unit-invocations", &()).await.unwrap()
     }
     pub async fn engine_commit_fault_pending(&self) -> bool {
         self.control("engine-commit-fault-pending", &())

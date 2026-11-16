@@ -351,6 +351,14 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                         return (work, true);
                     }
                 }
+                #[cfg(feature = "test-support")]
+                self.count_legacy_invocation(|count| {
+                    if is_windows {
+                        count.windows += 1;
+                    } else {
+                        count.drains += 1;
+                    }
+                });
                 let result = if is_windows {
                     self.run_window_unit(now, &subject).await
                 } else {

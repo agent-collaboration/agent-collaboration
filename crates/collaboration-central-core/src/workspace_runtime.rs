@@ -23,6 +23,19 @@ pub struct WorkspaceCaller {
     pub credential_hash: String,
 }
 
+/// Test-support counts of whole notice-unit runs (V2 control gate).
+#[cfg(feature = "test-support")]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct LegacyUnitInvocations {
+    /// The due batch ran the notice-window unit.
+    pub windows: u64,
+    /// The due batch ran the workspace-drain unit.
+    pub drains: u64,
+    /// A request-triggered drain of one workspace ran (P5 change 5).
+    pub request_drains: u64,
+}
+
 /// One organization's request runtime. Machine grant lifetime is fixed by central
 /// policy and has no public configuration API.
 pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
@@ -44,6 +57,8 @@ pub struct WorkspaceRuntime<Host: ObjectHost, Stores: WorkspaceStoreCalls> {
     central_waiting: tokio::sync::watch::Sender<usize>,
     #[cfg(feature = "test-support")]
     pub(crate) pauses: crate::PausePoints,
+    #[cfg(feature = "test-support")]
+    pub(crate) legacy_invocations: std::sync::Mutex<LegacyUnitInvocations>,
     #[cfg(feature = "test-support")]
     lost_answers: std::sync::Mutex<std::collections::BTreeSet<workspace_model::RequestId>>,
 }
@@ -67,6 +82,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             central_turn: tokio::sync::Mutex::new(()),
             #[cfg(feature = "test-support")]
             completed_alarms: tokio::sync::watch::channel(0).0,
+            #[cfg(feature = "test-support")]
+            legacy_invocations: Default::default(),
             signin_authority: Default::default(),
             signin_observer: Arc::new(|_| {}),
             #[cfg(feature = "test-support")]
@@ -110,6 +127,22 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
     #[cfg(feature = "test-support")]
     pub fn due_batch_snapshot(&self) -> crate::DueBatchSnapshot {
         self.due_batches.snapshot()
+    }
+    #[cfg(feature = "test-support")]
+    pub fn legacy_unit_invocations(&self) -> LegacyUnitInvocations {
+        *self
+            .legacy_invocations
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+    #[cfg(feature = "test-support")]
+    pub(crate) fn count_legacy_invocation(&self, count: impl FnOnce(&mut LegacyUnitInvocations)) {
+        count(
+            &mut self
+                .legacy_invocations
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner),
+        );
     }
     #[cfg(feature = "test-support")]
     pub fn alarm_completion_count(&self) -> u64 {

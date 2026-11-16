@@ -66,6 +66,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 return Ok(());
             }
         }
+        #[cfg(feature = "test-support")]
+        self.count_legacy_invocation(|count| count.request_drains += 1);
         match self.drain_workspace_held(workspace).await {
             Ok(_) => Ok(()),
             Err(LegacyUnitOutcome::CentralDown(failure)) => {

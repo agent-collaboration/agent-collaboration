@@ -71,6 +71,8 @@ mod machine_login_writes;
 mod workspace_runtime;
 #[cfg(feature = "test-support")]
 pub use machine_login_test_control::{MachineLoginControl, machine_login_control};
+#[cfg(feature = "test-support")]
+pub use workspace_runtime::LegacyUnitInvocations;
 pub use workspace_runtime::{WorkspaceCaller, WorkspaceRuntime, WorkspaceStoreCalls};
 mod organization_workspace_plans;
 mod workspace_actor_identity;

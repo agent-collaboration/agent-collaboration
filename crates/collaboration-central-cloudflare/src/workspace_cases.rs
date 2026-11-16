@@ -140,6 +140,7 @@ pub(super) async fn control(
     }
     let runtime = object.runtime(organization.clone()).await?;
     match path.as_str() {
+        "/test/legacy-unit-invocations" => Response::from_json(&runtime.legacy_unit_invocations()),
         "/test/engine-commit-fault-pending" => Response::from_json(
             &object
                 .controls

@@ -22,6 +22,9 @@ pub enum EngineCommitFaultKind {
     AppliedAnswerLost,
     Unavailable,
     DatabaseCode(i32),
+    /// The batch's guarded statement reports GuardFailed, for the drain cursor
+    /// whose real overlap the workspace drain turn makes impossible (P5).
+    GuardFailed,
 }
 impl EngineCommitFault {
     pub fn matches(&self, batch: &StatementBatch) -> bool {
@@ -29,7 +32,8 @@ impl EngineCommitFault {
             let sql = statement.statement.sql;
             (sql.starts_with("UPDATE wakes SET")
                 || sql.starts_with("UPDATE automations SET")
-                || sql.starts_with("UPDATE engine_probe_items SET"))
+                || sql.starts_with("UPDATE engine_probe_items SET")
+                || sql.starts_with("UPDATE workspace_drains SET"))
                 && statement
                     .statement
                     .args
@@ -48,6 +52,10 @@ impl EngineCommitFault {
                     Err(StoreFailure::Unavailable)
                 })
             }
+            EngineCommitFaultKind::GuardFailed => Some(Ok(BatchOutcome::GuardFailed {
+                index: 0,
+                rows_affected: 0,
+            })),
             EngineCommitFaultKind::AppliedAnswerLost => None,
         }
     }
