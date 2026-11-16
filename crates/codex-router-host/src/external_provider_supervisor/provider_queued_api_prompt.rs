@@ -10,47 +10,8 @@ use super::{
     ConversationOperationFailureStage, ExternalProviderSupervisor, LiveOperation, OperationId,
     ProviderOperationCompletion, ProviderOperationEffect, SessionRef, failure,
 };
+use crate::provider_queue_submission_gate::QueuedSubmissionCommit;
 use std::sync::atomic::{AtomicBool, Ordering};
-use tokio_util::sync::CancellationToken;
-
-/// The queue's stop as a claimed dispatch's owner reads it at the submission
-/// boundary (D1 R14): the line's shutdown and the provider's retirement, each
-/// with the reason the line gives its unsent entries. The line builds it, so
-/// the reasons stay the line's.
-#[derive(Clone)]
-pub(crate) struct QueueSubmissionStop {
-    shutdown: CancellationToken,
-    shutdown_reason: &'static str,
-    retirement: CancellationToken,
-    retirement_reason: &'static str,
-}
-
-impl QueueSubmissionStop {
-    pub(crate) fn new(
-        shutdown: CancellationToken,
-        shutdown_reason: &'static str,
-        retirement: CancellationToken,
-        retirement_reason: &'static str,
-    ) -> Self {
-        Self {
-            shutdown,
-            shutdown_reason,
-            retirement,
-            retirement_reason,
-        }
-    }
-
-    /// Why the queue stopped, once it has.
-    fn stopped_reason(&self) -> Option<&'static str> {
-        if self.retirement.is_cancelled() {
-            Some(self.retirement_reason)
-        } else if self.shutdown.is_cancelled() {
-            Some(self.shutdown_reason)
-        } else {
-            None
-        }
-    }
-}
 
 /// The admitted, unsettled operation an API queue entry carries. Opaque to
 /// the line: only the supervisor dispatches or settles it, at most once.
@@ -82,13 +43,14 @@ impl AdmittedApiPrompt {
 impl ExternalProviderSupervisor {
     /// Sends a queued API prompt the worker found idle. An unresolved
     /// outcome that appeared while it waited (other than a live turn) means it
-    /// is not sent; a turn that started again sends it back to wait; a queue
-    /// that stopped before the submission left means it is not sent.
+    /// is not sent; a turn that started again sends it back to wait; a line
+    /// that stopped or closed before the submission committed means it is
+    /// not sent.
     pub(crate) async fn dispatch_queued_api_prompt(
         &self,
         request: ProviderPromptContentsRequest,
         admitted: &AdmittedApiPrompt,
-        queue_stop: QueueSubmissionStop,
+        queue_commit: QueuedSubmissionCommit,
     ) -> Result<ProviderPromptDispatch, Box<ConversationOperationFailure>> {
         let operation_id = request.operation_id.clone();
         let target = request.target.clone();
@@ -121,7 +83,7 @@ impl ExternalProviderSupervisor {
         let (reply, answer) = tokio::sync::oneshot::channel();
         tokio::spawn(async move {
             let outcome = owner
-                .dispatch_claimed_api_prompt(request, binding, runtime, &admitted, &queue_stop)
+                .dispatch_claimed_api_prompt(request, binding, runtime, &admitted, &queue_commit)
                 .await;
             if reply.send(outcome).is_err() && !admitted.is_settled() {
                 // The worker is gone and the entry went back to waiting, so
@@ -144,16 +106,16 @@ impl ExternalProviderSupervisor {
 
     /// The claimed part of a queued dispatch, run by its own owner: the
     /// dispatch marker, the submission and its settlement. A marker that
-    /// can't be written settles the operation here; a queue that stopped
-    /// before the submission boundary settles it not sent; a turn that started
-    /// again hands the entry back, unclaimed, to wait.
+    /// can't be written settles the operation here; a line that stopped or
+    /// closed before the submission committed settles it not sent; a turn
+    /// that started again hands the entry back, unclaimed, to wait.
     async fn dispatch_claimed_api_prompt(
         &self,
         request: ProviderPromptContentsRequest,
         binding: collaboration_protocol::ProviderBindingIdentity,
         runtime: Arc<crate::ExternalProviderRuntime>,
         admitted: &AdmittedApiPrompt,
-        queue_stop: &QueueSubmissionStop,
+        queue_commit: &QueuedSubmissionCommit,
     ) -> Result<ProviderPromptDispatch, Box<ConversationOperationFailure>> {
         let operation_id = request.operation_id.clone();
         let target = request.target.clone();
@@ -181,17 +143,21 @@ impl ExternalProviderSupervisor {
                 return Err(Box::new(marker_failure));
             }
         };
-        // The stop and the submission are decided together: nothing awaits
-        // between this read and the spawn, so a stop seen here wins (not
-        // sent), and a stop after it leaves the submission its real outcome.
-        if let Some(reason) = queue_stop.stopped_reason() {
-            self.queued_operation_registry()
-                .mark_not_submitted(&operation_id, reason);
-            let unsent = unsent_failure(&operation_id, &target, reason);
-            self.settle_claimed_unsent(admitted, &operation_id, unsent.clone());
-            return Err(Box::new(unsent));
-        }
-        let started = self.start_admitted_submission(&request, &binding, runtime);
+        // The line's gate decides between its stop or close and this
+        // submission: a stop that took it first ends the entry not sent; a
+        // submission started under it keeps its real outcome.
+        let started = match queue_commit
+            .commit(|| self.start_admitted_submission(&request, &binding, runtime))
+        {
+            Ok(started) => started,
+            Err(reason) => {
+                self.queued_operation_registry()
+                    .mark_not_submitted(&operation_id, reason.clone());
+                let unsent = unsent_failure(&operation_id, &target, &reason);
+                self.settle_claimed_unsent(admitted, &operation_id, unsent.clone());
+                return Err(Box::new(unsent));
+            }
+        };
         match self
             .observe_admitted_submission(request, started, snapshot, Arc::clone(&admitted.live))
             .await

@@ -92,11 +92,10 @@ struct SessionLineState {
     stop: CancellationToken,
     /// Entries sent into the line so far.
     sent: std::sync::atomic::AtomicU64,
-    /// Entries numbered below this were in the line when the session
-    /// closed: none of them is loaded or prompted (D1 R14).
-    closed_before: std::sync::atomic::AtomicU64,
-    /// Why the session closed, when it did.
-    close_reason: StdMutex<Option<String>>,
+    /// Orders the line's stop and its session's close against a claimed
+    /// entry's submission (D1 R14); entries in the line when the session
+    /// closed are never loaded or prompted.
+    gate: crate::provider_queue_submission_gate::QueueSubmissionGate,
     /// Wakes a worker waiting with its held head when the session closes.
     closed: tokio::sync::Notify,
 }
@@ -107,22 +106,14 @@ impl SessionLineState {
             holding: std::sync::atomic::AtomicBool::new(false),
             stop,
             sent: std::sync::atomic::AtomicU64::new(0),
-            closed_before: std::sync::atomic::AtomicU64::new(0),
-            close_reason: StdMutex::new(None),
+            gate: crate::provider_queue_submission_gate::QueueSubmissionGate::default(),
             closed: tokio::sync::Notify::new(),
         }
     }
 
     /// The close reason, when this entry was in the line as its session closed.
     fn closed_reason_for(&self, sequence: u64) -> Option<String> {
-        if sequence < self.closed_before.load(std::sync::atomic::Ordering::SeqCst) {
-            self.close_reason
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .clone()
-        } else {
-            None
-        }
+        self.gate.closed_reason_for(sequence)
     }
 }
 
@@ -292,19 +283,14 @@ impl ProviderAcpMessageFifo {
             .get(target)
             .map(|line| Arc::clone(&line.state));
         if let Some(line) = line {
-            *line
-                .close_reason
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(reason.to_owned());
-            line.closed_before.store(
-                line.sent.load(std::sync::atomic::Ordering::SeqCst),
-                std::sync::atomic::Ordering::SeqCst,
-            );
+            line.gate
+                .close_before(line.sent.load(std::sync::atomic::Ordering::SeqCst), reason);
             line.closed.notify_waiters();
         }
     }
 
     pub(crate) async fn shutdown(&self) {
+        self.stop_lines();
         self.shutdown.cancel();
         let workers = match self.workers.lock() {
             Ok(mut workers) => std::mem::take(&mut *workers),
@@ -312,6 +298,20 @@ impl ProviderAcpMessageFifo {
         };
         for worker in workers {
             let _result = worker.await;
+        }
+    }
+
+    /// Stops every line's gate before its worker is cancelled, so a claimed
+    /// entry either committed its submission already or never does (D1 R14).
+    fn stop_lines(&self) {
+        let senders = self
+            .senders
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        for line in senders.values() {
+            line.state
+                .gate
+                .stop("Router shutdown before provider submission");
         }
     }
 
@@ -329,6 +329,7 @@ impl ProviderAcpMessageFifo {
 
 impl Drop for ProviderAcpMessageFifo {
     fn drop(&mut self) {
+        self.stop_lines();
         self.shutdown.cancel();
         if let Ok(mut workers) = self.workers.lock() {
             for worker in workers.drain(..) {
@@ -508,9 +509,9 @@ async fn run_provider_message_fifo(
                             supervisor.dispatch_queued_api_prompt(
                                 request,
                                 &admitted,
-                                crate::external_provider_supervisor::QueueSubmissionStop::new(
-                                    shutdown.clone(),
-                                    "Router shutdown before provider submission",
+                                crate::provider_queue_submission_gate::QueuedSubmissionCommit::new(
+                                    line.gate.clone(),
+                                    sequence,
                                     retirement.clone(),
                                     PROVIDER_RETIRED_REASON,
                                 ),

@@ -3,7 +3,7 @@
 mod provider_operation_admission;
 mod provider_prompt_send;
 mod provider_queued_api_prompt;
-pub(crate) use provider_queued_api_prompt::{AdmittedApiPrompt, QueueSubmissionStop};
+pub(crate) use provider_queued_api_prompt::AdmittedApiPrompt;
 mod provider_operation_failure;
 mod provider_prompt_contents;
 pub(crate) use provider_prompt_contents::dispatch_refusal_reason;

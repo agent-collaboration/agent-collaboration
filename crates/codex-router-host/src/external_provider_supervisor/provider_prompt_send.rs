@@ -37,6 +37,16 @@ impl ExternalProviderSupervisor {
             .insert(operation_id.clone(), approver.clone());
     }
 
+    /// The approver recorded for a turn this Host dispatched.
+    fn turn_approver_of(&self, operation_id: &OperationId) -> Option<ProviderIdentity> {
+        self.inner
+            .turn_approvers
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(operation_id)
+            .cloned()
+    }
+
     pub(super) fn forget_turn_approver(&self, operation_id: &OperationId) {
         self.inner
             .turn_approvers
@@ -197,6 +207,19 @@ impl ExternalProviderSupervisor {
         let target = request.target.clone();
         let provider_session_id = String::from(target.session_id.clone());
         self.begin_dispatch(&request.operation_id, &target).await?;
+        // The running turn and its approver, read while that turn is live and
+        // its record certainly exists; the injection's answer below is matched
+        // against it, so the turn ending or its record being evicted before
+        // the answer is read doesn't lose the approver.
+        let joined_before = runtime
+            .active_prompt_operation(provider_session_id.clone())
+            .await
+            .ok()
+            .flatten()
+            .and_then(|running| {
+                let approver = self.turn_approver_of(&running)?;
+                Some((running, approver))
+            });
         let steered = runtime
             .steer_session_contents_with_input(
                 provider_session_id.clone(),
@@ -223,18 +246,16 @@ impl ExternalProviderSupervisor {
                 running_operation_id,
             }) => {
                 // The approver of the turn the input actually joined, as the
-                // injection reports it, when it differs from this request's.
-                // Its record outlives the turn's settlement, so a turn that
-                // ended before this line still names its approver.
-                let turn_approver = running_operation_id.and_then(|running| {
-                    self.inner
-                        .turn_approvers
-                        .lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner)
-                        .get(&running)
-                        .cloned()
-                        .filter(|approver| approver != &request.approver)
-                });
+                // injection reports it, when it differs from this request's:
+                // the one read before the injection when it is the same turn,
+                // otherwise that turn's record (another turn replaced the one
+                // read before).
+                let turn_approver = running_operation_id
+                    .and_then(|running| match joined_before {
+                        Some((before, approver)) if before == running => Some(approver),
+                        _ => self.turn_approver_of(&running),
+                    })
+                    .filter(|approver| approver != &request.approver);
                 ProviderOperationCompletion::Success {
                     settlement: ConversationOperationSettlement::Steered {
                         target: target.clone(),

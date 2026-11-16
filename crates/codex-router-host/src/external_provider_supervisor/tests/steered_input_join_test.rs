@@ -194,11 +194,12 @@ async fn steered_prompt_is_accepted_under_its_requests_input_id() {
 
 /// Oracle: D1 spec R12 and program design C1, "the result names the running
 /// turn's approver when it differs from the requested one", with the review's
-/// F3 follow-up: a mail-started turn under approver A takes an API steer
-/// naming B, and the injection reply and the turn's end (its settlement) both
+/// F3 follow-ups: a mail-started turn under approver A takes an API steer
+/// naming B. The injection reply, the turn's end (its settlement), and more
+/// settlements than the supervisor retains (evicting the turn's record) all
 /// land before the steer reads the approver. The steer still names A.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn steer_whose_turn_ended_before_it_read_the_approver_still_names_it() {
+async fn steer_whose_turn_ended_and_was_evicted_before_it_read_the_approver_still_names_it() {
     // Arrange: mail starts the held turn under A.
     let session = steering_session().await;
     let approver_a = human("approver-a");
@@ -252,10 +253,19 @@ async fn steer_whose_turn_ended_before_it_read_the_approver_still_names_it() {
     let turn_settled = session
         .supervisor
         .wait(ConversationOperationWaitRequest {
-            operation_id: mailed_operation,
+            operation_id: mailed_operation.clone(),
             timeout_seconds: PositiveSeconds::try_from(5).expect("bound"),
         })
         .await;
+    for _ in 0..=MAX_RETAINED_SETTLEMENTS {
+        let other = OperationId::generate();
+        session.supervisor.hold_live_operation(other.clone());
+        assert!(session.supervisor.publish_held_result(&other).await);
+    }
+    let evicted = session
+        .supervisor
+        .held_result_for_test(&mailed_operation)
+        .is_none();
     let _continued = continue_steer.send(());
     let submitted = steer.await.expect("steer task");
     let steered = session
@@ -285,6 +295,7 @@ async fn steer_whose_turn_ended_before_it_read_the_approver_still_names_it() {
         ),
         "the mail turn settled before the steer read its approver: {turn_settled:?}"
     );
+    assert!(evicted, "the turn's settlement and record were evicted");
     assert!(submitted.is_ok(), "the steer was admitted: {submitted:?}");
     match steered {
         Ok(collaboration_protocol::ConversationOperationWaitResult {
