@@ -1,26 +1,17 @@
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 
 import { DEFINITION_INVENTORY } from "./definition-inventory.ts";
-import { LEDGER_BASE, LEDGER_SECTIONS } from "./source-coverage-ledger.ts";
+import { LEDGER_BASE_FILES } from "./ledger-base-files.ts";
+import { LEDGER_SECTIONS } from "./source-coverage-ledger.ts";
 
 const repositoryRoot = join(import.meta.dirname, "../../..");
 
-/** The ledger's file list at its base commit, by the rule its header records. */
+/** The ledger's base file list, committed as data (ledger-base-files.ts): no git history needed. */
 function baseFiles(): string[] {
-  const listed = execFileSync("git", ["ls-tree", "-r", "--name-only", LEDGER_BASE.commit], {
-    cwd: repositoryRoot,
-    encoding: "utf8",
-    maxBuffer: 64 * 1024 * 1024,
-  });
-  return listed
-    .split("\n")
-    .filter((path) => /^(crates|providers)\/[^/]+\/src\//u.test(path))
-    .filter((path) => !/_tests?\.rs$/u.test(path))
-    .sort();
+  return [...LEDGER_BASE_FILES];
 }
 
 const ledgerFiles = LEDGER_SECTIONS.flatMap((section) => section.files.map((entry) => entry.file));

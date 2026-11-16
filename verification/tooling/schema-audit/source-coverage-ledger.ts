@@ -5,6 +5,8 @@
  * deliverable; it is not a lasting source scanner.
  *
  * File list: `git ls-tree -r --name-only` at LEDGER_BASE.commit, filtered by LEDGER_BASE.roots,
+ * committed as data in ledger-base-files.ts (the base commit is not in the public repository after
+ * the squash, so the test reads the committed list, never git),
  * leaving out by name only colocated unit tests (LEDGER_BASE.leftOutByName). cfg(test)-only
  * modules are listed as excluded with where they are declared.
  */
@@ -89,7 +91,8 @@ import { section as workspaceModel } from "./source-coverage-ledger/workspace-mo
 import { section as workspaceRules } from "./source-coverage-ledger/workspace-rules.ts";
 
 export const LEDGER_BASE = {
-  commit: "afc76c82c",
+  /** The commit the committed list was generated from (ledger-base-files.ts). */
+  commit: "afc76c82cfad3375e2861b1720084aae0530a6f4",
   roots: ["crates/*/src/**", "providers/*/src/**"],
   leftOutByName: ["*_test.rs", "*_tests.rs"],
 } as const;
