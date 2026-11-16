@@ -40,6 +40,9 @@ impl central_engine_model::IdSource for ReducerIds<'_> {
 }
 
 impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Stores> {
+    /// Handles one event for one instance. The event's entry (after_event for due
+    /// units, the request entry for requests) has already checked the organization
+    /// once for this event (P3), so handle does not read the stamp again.
     pub(crate) async fn handle<M, Adapter, Source>(
         &self,
         adapter: &Adapter,

@@ -140,6 +140,14 @@ pub(super) async fn control(
     }
     let runtime = object.runtime(organization.clone()).await?;
     match path.as_str() {
+        "/test/engine-commit-fault-pending" => Response::from_json(
+            &object
+                .controls
+                .engine_commit_fault
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .is_some(),
+        ),
         "/test/engine-commit-fault" => {
             let fault = request.json().await?;
             *object
@@ -176,6 +184,25 @@ pub(super) async fn control(
                 credential_hash: call.credential_hash,
             };
             Response::from_json(&runtime.request_probe(&caller, call.request).await)
+        }
+        "/test/engine-owed-seed" => {
+            Response::from_json(&runtime.seed_owed_reply(request.json().await?).await)
+        }
+        "/test/engine-owed-request" => {
+            #[derive(Deserialize)]
+            #[serde(rename_all = "camelCase", deny_unknown_fields)]
+            struct OwedCall {
+                caller: workspace_model::Caller,
+                credential_hash: String,
+                request: collaboration_central_core::engine_owed_probe::OwedReplyRequest,
+            }
+            let call: OwedCall = request.json().await?;
+            let caller = collaboration_central_core::WorkspaceCaller {
+                organization_id: organization.clone(),
+                caller: call.caller,
+                credential_hash: call.credential_hash,
+            };
+            Response::from_json(&runtime.request_owed_reply(&caller, call.request).await)
         }
         "/test/lose-provisioning-reply" => {
             runtime.lose_next_provisioning_reply();

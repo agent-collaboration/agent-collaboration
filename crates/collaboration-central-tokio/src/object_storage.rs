@@ -406,6 +406,14 @@ impl ObjectStorage {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(fault);
     }
+    /// Whether an armed commit fault is still waiting for its batch.
+    #[cfg(feature = "test-support")]
+    pub fn engine_commit_fault_pending(&self) -> bool {
+        self.engine_commit_fault
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .is_some()
+    }
     #[cfg(feature = "test-support")]
     pub fn inject_engine_read_fault(&self, fault: collaboration_central_core::EngineReadFault) {
         *self

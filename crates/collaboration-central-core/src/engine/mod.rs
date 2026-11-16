@@ -15,6 +15,8 @@ pub(crate) mod legacy_units;
 #[cfg(test)]
 pub(crate) mod machine_property_support;
 #[cfg(feature = "test-support")]
+pub(crate) mod owed_reply_store;
+#[cfg(feature = "test-support")]
 pub(crate) mod probe_store;
 pub(crate) mod query_registry;
 pub(crate) mod receipts;

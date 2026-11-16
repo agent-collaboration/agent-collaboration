@@ -68,9 +68,8 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         M::Error: Send + Sync,
         Adapter: StoreAdapter<M>,
     {
-        if !self.alarm_organization_is_provisioned().await? {
-            return Err(corrupt("organization_identity.id"));
-        }
+        // The request entry (for example `request_probe`) checked the organization
+        // once for this event, before any read (P3).
         let now = self.now()?;
         let cutoff = now
             .checked_sub_signed(chrono::Duration::hours(24))

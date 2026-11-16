@@ -419,6 +419,11 @@ impl RemoteRuntime {
     ) {
         let _: bool = self.control("engine-commit-fault", &fault).await.unwrap();
     }
+    pub async fn engine_commit_fault_pending(&self) -> bool {
+        self.control("engine-commit-fault-pending", &())
+            .await
+            .unwrap()
+    }
     pub async fn inject_engine_read_fault(
         &self,
         fault: collaboration_central_core::EngineReadFault,
@@ -446,6 +451,27 @@ impl RemoteRuntime {
     ) -> Result<BatchOutcome, StoreFailure> {
         self.apply_clock().await;
         self.control("engine-probe-seed", &seed).await?
+    }
+    pub async fn seed_owed_reply(
+        &self,
+        seed: collaboration_central_core::engine_owed_probe::SeedOwedReply,
+    ) -> Result<BatchOutcome, StoreFailure> {
+        self.apply_clock().await;
+        self.control("engine-owed-seed", &seed).await?
+    }
+    pub async fn request_owed_reply(
+        &self,
+        caller: &WorkspaceCaller,
+        request: collaboration_central_core::engine_owed_probe::OwedReplyRequest,
+    ) -> Result<
+        collaboration_central_core::engine_owed_probe::EngineRequestOutcome<
+            collaboration_central_core::engine_owed_probe::OwedState,
+            collaboration_central_core::engine_owed_probe::OwedReplyRefusal,
+        >,
+        StoreFailure,
+    > {
+        self.apply_clock().await;
+        self.control("engine-owed-request",&serde_json::json!({"caller":caller.caller,"credentialHash":caller.credential_hash,"request":request})).await?
     }
     pub async fn request_probe(
         &self,
