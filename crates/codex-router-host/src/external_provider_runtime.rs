@@ -439,7 +439,7 @@ impl ExternalProviderRuntime {
         if let Some(event_sink) = &self.event_sink {
             acp_client_runtime::SessionEventSink::publish(
                 event_sink.as_ref(),
-                &provider_session_id,
+                provider_session_id,
                 session_event_model::SessionEvent::StateChanged {
                     state: session_event_model::SessionState::Closed,
                 },
