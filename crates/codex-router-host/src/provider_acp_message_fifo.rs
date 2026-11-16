@@ -35,6 +35,9 @@ pub(crate) enum ProviderQueuedPrompt {
     Contents {
         request: ProviderPromptContentsRequest,
         load_policy: LoadPolicy,
+        /// An API prompt admitted before it was queued (D1 R12); mail and
+        /// content-command entries are admitted when dispatched.
+        admitted: Option<crate::external_provider_supervisor::AdmittedApiPrompt>,
     },
 }
 
@@ -122,6 +125,36 @@ impl ProviderAcpMessageFifo {
             .map_err(|_| "provider session queue is full")
     }
 
+    /// Queues an admitted API prompt; refused when the session's line is full.
+    pub(crate) fn enqueue_admitted_api_prompt(
+        &self,
+        request: ProviderPromptContentsRequest,
+        binding: collaboration_protocol::ProviderBindingIdentity,
+        admitted: crate::external_provider_supervisor::AdmittedApiPrompt,
+    ) -> Result<crate::ProviderQueuedInput, &'static str> {
+        let permit = self.reserve(&request.target)?;
+        let contents = match &request.input {
+            acp_client_runtime::ProviderTurnInput::Prompt(submission) => submission.content.clone(),
+            _ => Vec::new(),
+        };
+        let queued = self
+            .supervisor
+            .queued_operation_registry()
+            .record_queued_contents(
+                request.operation_id.clone(),
+                request.target.clone(),
+                binding,
+                request.input_id.clone(),
+                &contents,
+            );
+        permit.send(ProviderQueuedPrompt::Contents {
+            request,
+            load_policy: LoadPolicy::MayLoad,
+            admitted: Some(admitted),
+        });
+        Ok(queued)
+    }
+
     pub(crate) async fn shutdown(&self) {
         self.shutdown.cancel();
         let workers = match self.workers.lock() {
@@ -181,7 +214,7 @@ async fn run_provider_message_fifo(
         let Some(runtime) = supervisor.runtime_for(&target.endpoint) else {
             drop_current_and_remaining(
                 &supervisor,
-                &operation_id,
+                &request,
                 &mut receiver,
                 PROVIDER_RETIRED_REASON,
             );
@@ -196,7 +229,7 @@ async fn run_provider_message_fifo(
             if shutdown.is_cancelled() {
                 drop_current_and_remaining(
                     &supervisor,
-                    &operation_id,
+                    &request,
                     &mut receiver,
                     "Router shutdown before provider submission",
                 );
@@ -205,7 +238,7 @@ async fn run_provider_message_fifo(
             if retirement.is_cancelled() {
                 drop_current_and_remaining(
                     &supervisor,
-                    &operation_id,
+                    &request,
                     &mut receiver,
                     PROVIDER_RETIRED_REASON,
                 );
@@ -214,11 +247,11 @@ async fn run_provider_message_fifo(
             if !loaded {
                 let load_outcome = tokio::select! {
                     () = shutdown.cancelled() => {
-                        drop_current_and_remaining(&supervisor, &operation_id, &mut receiver, "Router shutdown before provider submission");
+                        drop_current_and_remaining(&supervisor, &request, &mut receiver, "Router shutdown before provider submission");
                         return;
                     },
                     () = retirement.cancelled() => {
-                        drop_current_and_remaining(&supervisor, &operation_id, &mut receiver, PROVIDER_RETIRED_REASON);
+                        drop_current_and_remaining(&supervisor, &request, &mut receiver, PROVIDER_RETIRED_REASON);
                         return;
                     },
                     outcome = ensure_provider_session_loaded(&supervisor, &store, ownership.as_ref(), &target, load_policy) => outcome,
@@ -229,40 +262,31 @@ async fn run_provider_message_fifo(
                         loaded = true;
                     }
                     ProviderSessionLoadOutcome::NotLoaded => {
-                        supervisor
-                            .queued_operation_registry()
-                            .mark_not_submitted(&operation_id, NOT_LOADED_REASON);
+                        mark_entry_not_sent(&supervisor, &request, NOT_LOADED_REASON);
                         break;
                     }
                     ProviderSessionLoadOutcome::UnsupportedLoad => {
-                        supervisor
-                            .queued_operation_registry()
-                            .mark_not_submitted(&operation_id, "unsupported: load");
+                        mark_entry_not_sent(&supervisor, &request, "unsupported: load");
                         break;
                     }
                     ProviderSessionLoadOutcome::MissingRecord => {
-                        supervisor.queued_operation_registry().mark_not_submitted(
-                            &operation_id,
+                        mark_entry_not_sent(
+                            &supervisor,
+                            &request,
                             "provider session record is missing",
                         );
                         break;
                     }
                     ProviderSessionLoadOutcome::LiveElsewhere => {
-                        supervisor
-                            .queued_operation_registry()
-                            .mark_not_submitted(&operation_id, "session is live elsewhere");
+                        mark_entry_not_sent(&supervisor, &request, "session is live elsewhere");
                         break;
                     }
                     ProviderSessionLoadOutcome::Unavailable { reason } => {
-                        supervisor
-                            .queued_operation_registry()
-                            .mark_not_submitted(&operation_id, reason);
+                        mark_entry_not_sent(&supervisor, &request, reason);
                         break;
                     }
                     ProviderSessionLoadOutcome::Rejected { reason } => {
-                        supervisor
-                            .queued_operation_registry()
-                            .mark_not_submitted(&operation_id, reason.safe_detail());
+                        mark_entry_not_sent(&supervisor, &request, reason.safe_detail());
                         break;
                     }
                 }
@@ -271,11 +295,11 @@ async fn run_provider_message_fifo(
             wait_started.notify_one();
             let idle = tokio::select! {
                 () = shutdown.cancelled() => {
-                    drop_current_and_remaining(&supervisor, &operation_id, &mut receiver, "Router shutdown before provider submission");
+                    drop_current_and_remaining(&supervisor, &request, &mut receiver, "Router shutdown before provider submission");
                     return;
                 },
                 () = retirement.cancelled() => {
-                    drop_current_and_remaining(&supervisor, &operation_id, &mut receiver, PROVIDER_RETIRED_REASON);
+                    drop_current_and_remaining(&supervisor, &request, &mut receiver, PROVIDER_RETIRED_REASON);
                     return;
                 },
                 idle = runtime.wait_session_idle(String::from(target.session_id.clone())) => idle,
@@ -284,7 +308,7 @@ async fn run_provider_message_fifo(
                 if !wait_before_retry(&shutdown, &retirement, retry_delay).await {
                     drop_current_and_remaining(
                         &supervisor,
-                        &operation_id,
+                        &request,
                         &mut receiver,
                         interrupted_queue_reason(&shutdown, &retirement),
                     );
@@ -304,16 +328,18 @@ async fn run_provider_message_fifo(
             }
             let submitted = tokio::select! {
                 () = shutdown.cancelled() => {
-                    drop_current_and_remaining(&supervisor, &operation_id, &mut receiver, "Router shutdown before provider submission");
+                    drop_current_and_remaining(&supervisor, &request, &mut receiver, "Router shutdown before provider submission");
                     return;
                 },
                 () = retirement.cancelled() => {
-                    drop_current_and_remaining(&supervisor, &operation_id, &mut receiver, PROVIDER_RETIRED_REASON);
+                    drop_current_and_remaining(&supervisor, &request, &mut receiver, PROVIDER_RETIRED_REASON);
                     return;
                 },
                 submitted = async {
                     match request.clone() {
-                        ProviderQueuedPrompt::Contents { request, .. } =>
+                        ProviderQueuedPrompt::Contents { request, admitted: Some(admitted), .. } =>
+                            supervisor.dispatch_queued_api_prompt(request, &admitted).await,
+                        ProviderQueuedPrompt::Contents { request, admitted: None, .. } =>
                             supervisor.submit_delivery_prompt_contents(request).await,
                     }
                 } => submitted,
@@ -333,16 +359,14 @@ async fn run_provider_message_fifo(
                 }
                 Err(failure) if failure.kind == ConversationOperationFailureKind::Busy => {}
                 Err(failure) => {
-                    supervisor
-                        .queued_operation_registry()
-                        .mark_not_submitted(&operation_id, String::from(failure.message));
+                    mark_entry_not_sent(&supervisor, &request, String::from(failure.message));
                     break;
                 }
             }
             if !wait_before_retry(&shutdown, &retirement, retry_delay).await {
                 drop_current_and_remaining(
                     &supervisor,
-                    &operation_id,
+                    &request,
                     &mut receiver,
                     interrupted_queue_reason(&shutdown, &retirement),
                 );
@@ -432,13 +456,11 @@ fn next_retry_delay(current: std::time::Duration) -> std::time::Duration {
 
 fn drop_current_and_remaining(
     supervisor: &ExternalProviderSupervisor,
-    current: &collaboration_protocol::OperationId,
+    current: &ProviderQueuedPrompt,
     receiver: &mut mpsc::Receiver<ProviderQueuedPrompt>,
     reason: &str,
 ) {
-    supervisor
-        .queued_operation_registry()
-        .mark_not_submitted(current, reason);
+    mark_entry_not_sent(supervisor, current, reason);
     mark_remaining_not_submitted(supervisor, receiver, reason);
 }
 
@@ -448,9 +470,31 @@ fn mark_remaining_not_submitted(
     reason: &str,
 ) {
     while let Ok(request) = receiver.try_recv() {
-        supervisor
-            .queued_operation_registry()
-            .mark_not_submitted(request.operation_id(), reason);
+        mark_entry_not_sent(supervisor, &request, reason);
+    }
+}
+
+/// An entry leaves the line unsent: the registry says so, and an admitted
+/// API prompt's operation is settled by its one completion owner.
+fn mark_entry_not_sent(
+    supervisor: &ExternalProviderSupervisor,
+    entry: &ProviderQueuedPrompt,
+    reason: impl Into<String>,
+) {
+    let reason = reason.into();
+    let ProviderQueuedPrompt::Contents {
+        request, admitted, ..
+    } = entry;
+    supervisor
+        .queued_operation_registry()
+        .mark_not_submitted(&request.operation_id, reason.clone());
+    if let Some(admitted) = admitted {
+        supervisor.complete_unsent_api_entry(
+            admitted,
+            &request.operation_id,
+            &request.target,
+            &reason,
+        );
     }
 }
 

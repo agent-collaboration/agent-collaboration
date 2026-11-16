@@ -182,6 +182,7 @@ async fn queued_loaded_only_item_not_submitted_if_close_happens_before_fifo_drai
         .send(ProviderQueuedPrompt::Contents {
             request: contents,
             load_policy: LoadPolicy::LoadedOnly,
+            admitted: None,
         })
         .await
         .expect("accepted queue item");
@@ -589,8 +590,10 @@ async fn selected_skill_removed_while_fifo_waits_is_refused_without_a_provider_p
                 requested_by: target.clone().into(),
                 approver: target.clone().into(),
                 input: acp_client_runtime::ProviderTurnInput::Prompt(submission),
+                busy: crate::external_provider_supervisor::PromptBusyPolicy::RefuseBusy,
             },
             load_policy: LoadPolicy::MayLoad,
+            admitted: None,
         });
     tokio::time::timeout(
         std::time::Duration::from_secs(3),

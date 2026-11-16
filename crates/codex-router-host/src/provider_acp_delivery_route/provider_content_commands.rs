@@ -159,6 +159,7 @@ impl ProviderAcpDeliveryRoute {
                 requested_by: actor,
                 approver: record.approver,
                 input,
+                busy: crate::external_provider_supervisor::PromptBusyPolicy::RefuseBusy,
             })
             .await
             .map_err(|failure| ProviderPromptContentsError::Operation(Box::new(failure)))
@@ -308,8 +309,10 @@ impl ProviderAcpDeliveryRoute {
                 requested_by: actor,
                 approver: record.approver,
                 input: acp_client_runtime::ProviderTurnInput::Prompt(contents),
+                busy: crate::external_provider_supervisor::PromptBusyPolicy::RefuseBusy,
             },
             load_policy: LoadPolicy::MayLoad,
+            admitted: None,
         });
         Ok(queued)
     }

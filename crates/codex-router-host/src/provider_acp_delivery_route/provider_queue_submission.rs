@@ -45,6 +45,7 @@ impl ProviderAcpDeliveryRoute {
                     ProviderQueuedPrompt::Contents {
                         request: prompt_request,
                         load_policy: request.load_policy,
+                        admitted: None,
                     },
                 )
             }

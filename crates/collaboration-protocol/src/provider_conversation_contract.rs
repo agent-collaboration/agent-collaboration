@@ -716,6 +716,15 @@ pub enum ConversationOperationSettlement {
         target: SessionRef,
         target_operation_id: OperationId,
     },
+    /// Accepted into the running turn (D1 R12). It doesn't claim the turn
+    /// finished and carries no reply of its own; the reply belongs to that turn.
+    Steered {
+        target: SessionRef,
+        /// The running turn's approver, when it differs from the one this
+        /// request named: a steered message's work is approved by the turn's.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        turn_approver: Option<crate::ProviderIdentity>,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, JsonSchema, Serialize, Deserialize)]

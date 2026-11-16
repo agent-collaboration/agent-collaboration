@@ -55,7 +55,7 @@ pub struct ProviderAcpDeliveryRoute {
     supervisor: Arc<ExternalProviderSupervisor>,
     store: Arc<Mutex<ProviderOperationStore>>,
     ownership: Arc<dyn LiveSessionOwnershipCheck>,
-    queue: ProviderAcpMessageFifo,
+    queue: Arc<ProviderAcpMessageFifo>,
     session_locks: StdMutex<HashMap<SessionRef, Arc<Mutex<()>>>>,
 }
 
@@ -91,11 +91,13 @@ impl ProviderAcpDeliveryRoute {
             Arc::clone(&supervisor),
             Arc::clone(&store),
         );
-        let queue = ProviderAcpMessageFifo::new(
+        let queue = Arc::new(ProviderAcpMessageFifo::new(
             Arc::clone(&supervisor),
             Arc::clone(&store),
             Arc::clone(&ownership),
-        );
+        ));
+        // API prompts to a session that can't steer wait in this same line (D1 R12).
+        supervisor.attach_message_fifo(&queue);
         Self {
             service_id,
             claim,

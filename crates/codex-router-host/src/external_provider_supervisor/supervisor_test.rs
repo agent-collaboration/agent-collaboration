@@ -350,6 +350,7 @@ async fn router_queue_drains_provider_prompts_in_fifo_order() {
             crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
                 request: contents,
                 load_policy: collaboration_contracts::LoadPolicy::MayLoad,
+                admitted: None,
             },
         );
     }
@@ -470,6 +471,7 @@ async fn router_queue_shutdown_drops_an_unstarted_prompt() {
         crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
             request: queued_contents,
             load_policy: collaboration_contracts::LoadPolicy::MayLoad,
+            admitted: None,
         },
     );
 
@@ -573,6 +575,7 @@ async fn provider_retirement_settles_queued_input_without_resubmission() {
         crate::provider_acp_message_fifo::ProviderQueuedPrompt::Contents {
             request: queued_contents,
             load_policy: collaboration_contracts::LoadPolicy::MayLoad,
+            admitted: None,
         },
     );
     backend

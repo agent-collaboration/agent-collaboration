@@ -1,8 +1,12 @@
 //! Host-owned admission and settlement for external ACP provider operations.
 
+mod provider_operation_admission;
+mod provider_prompt_send;
+mod provider_queued_api_prompt;
+pub(crate) use provider_queued_api_prompt::AdmittedApiPrompt;
 mod provider_operation_failure;
 mod provider_prompt_contents;
-pub use provider_prompt_contents::ProviderPromptContentsRequest;
+pub use provider_prompt_contents::{PromptBusyPolicy, ProviderPromptContentsRequest};
 mod provider_conversation_backend;
 mod provider_session_inspection;
 mod provider_session_lifecycle;
@@ -92,6 +96,15 @@ struct SupervisorInner {
     requested_modes: Mutex<HashMap<SessionRef, RequestedModeRecord>>,
     catalog_tasks: Mutex<Vec<tokio::task::JoinHandle<()>>>,
     started_at_ms: i64,
+    /// The approver of each prompt this Host dispatched, until it settles: a
+    /// message steered into that turn is approved by it (D1 C1).
+    turn_approvers: StdMutex<HashMap<OperationId, collaboration_protocol::ProviderIdentity>>,
+    /// The session line API prompts wait in when the agent can't steer (D1
+    /// R12), given once the delivery route is composed. Weak: the line holds
+    /// this supervisor.
+    message_fifo: std::sync::OnceLock<
+        std::sync::Weak<crate::provider_acp_message_fifo::ProviderAcpMessageFifo>,
+    >,
     #[cfg(test)]
     admission_test_pause: StdMutex<Option<AdmissionTestPause>>,
 }
@@ -287,6 +300,8 @@ impl ExternalProviderSupervisor {
                 bindings: runtimes,
                 store,
                 live_operations: StdMutex::new(LiveOperations::default()),
+                turn_approvers: StdMutex::new(HashMap::new()),
+                message_fifo: std::sync::OnceLock::new(),
                 completions: tokio::sync::watch::channel(0).0,
                 queued_operations: ProviderQueueOperationRegistry::default(),
                 hub,
@@ -359,110 +374,14 @@ impl ExternalProviderSupervisor {
         binding: ProviderBindingIdentity,
         known_target: Option<&SessionRef>,
     ) -> Result<PreparedOperation, ConversationOperationFailure> {
-        let admitted_at_ms = now_ms();
-        let failure_target = known_target.cloned();
-        let mut store = self.inner.store.lock().await;
-        #[cfg(test)]
-        let admission_test_pause = {
-            self.inner
-                .admission_test_pause
-                .lock()
-                .unwrap_or_else(std::sync::PoisonError::into_inner)
-                .take()
-        };
-        #[cfg(test)]
-        if let Some(pause) = admission_test_pause {
-            let _result = pause.entered.send(());
-            let _result = pause.release.await;
-        }
-        if let Some(record) = store.inspect(&operation_id).await.map_err(|_| {
-            admission_failure(
-                operation_id.clone(),
-                "provider operation admission could not be inspected",
-                failure_target.clone(),
-            )
-        })? {
-            return Ok(PreparedOperation::Existing(
-                snapshot_from_record(record)
-                    .map_err(|message| snapshot_failure(operation_id, message))?,
-            ));
-        }
-        if operation_kind != ProviderOperationKind::ConversationCancel {
-            let blocking = store
-                .blocking_uncertain_operation_ids(&binding, known_target)
-                .await
-                .map_err(|_| unavailable_failure(operation_id.clone(), failure_target.clone()))?;
-            if !blocking.is_empty() {
-                let ids = blocking
-                    .iter()
-                    .map(OperationId::as_str)
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                return Err(failure(
-                    ConversationOperationFailureKind::Busy,
-                    ConversationOperationFailureStage::Validation,
-                    ProviderOperationEffect::None,
-                    &format!("provider binding has unresolved operations: {ids}"),
-                    operation_id,
-                    failure_target,
-                ));
-            }
-        }
-        let admission = store
-            .admit(ProviderOperationAdmission {
-                operation_id: operation_id.clone(),
-                operation_kind,
-                binding: ConversationBindingIdentity::ExternalProvider { binding },
-                admitted_at_ms,
-            })
-            .await
-            .map_err(|_| {
-                admission_failure(
-                    operation_id.clone(),
-                    "provider operation admission could not be persisted",
-                    failure_target.clone(),
-                )
-            })?;
-        match admission {
-            ProviderOperationAdmissionResult::Existing(record) => Ok(PreparedOperation::Existing(
-                snapshot_from_record(record)
-                    .map_err(|message| snapshot_failure(operation_id, message))?,
-            )),
-            ProviderOperationAdmissionResult::Admitted(_) => {
-                if let Some(target) = known_target {
-                    store
-                        .record_target(&operation_id, target, now_ms())
-                        .await
-                        .map_err(|_| {
-                            admission_failure(
-                                operation_id.clone(),
-                                "provider operation target could not be persisted",
-                                failure_target.clone(),
-                            )
-                        })?;
-                }
-                let record = store
-                    .mark_may_have_dispatched(&operation_id, now_ms())
-                    .await
-                    .map_err(|_| {
-                        admission_failure(
-                            operation_id.clone(),
-                            "provider dispatch marker could not be persisted",
-                            failure_target,
-                        )
-                    })?;
-                let snapshot = snapshot_from_record(record)
-                    .map_err(|message| snapshot_failure(operation_id.clone(), message))?;
-                let live = Arc::new(LiveOperation::pending());
-                self.inner
-                    .live_operations
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner)
-                    .operations
-                    .insert(operation_id, Arc::clone(&live));
-                Ok(PreparedOperation::Admitted { snapshot, live })
-            }
-        }
+        self.admit_operation(
+            operation_id,
+            operation_kind,
+            binding,
+            known_target,
+            provider_operation_admission::DispatchMark::AtAdmission,
+        )
+        .await
     }
 
     fn spawn_operation<F>(&self, operation_id: OperationId, live: Arc<LiveOperation>, operation: F)
@@ -574,6 +493,10 @@ impl SupervisorInner {
         live: Arc<LiveOperation>,
         completion: ProviderOperationCompletion,
     ) {
+        self.turn_approvers
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(&operation_id);
         let result = match completion {
             ProviderOperationCompletion::Success {
                 settlement,
