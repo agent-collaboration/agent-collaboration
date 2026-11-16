@@ -52,6 +52,7 @@ fn refusal(refusal: AttemptRefusal) -> OrganizationAdminResult {
             AttemptRefusal::NotRetired => AdminRefusal::NotRetired,
             AttemptRefusal::DiscardUnsupported => AdminRefusal::DiscardUnsupported,
             AttemptRefusal::Stale => AdminRefusal::Stale,
+            AttemptRefusal::SubjectUnreadable => AdminRefusal::SubjectUnreadable,
         },
     }
 }

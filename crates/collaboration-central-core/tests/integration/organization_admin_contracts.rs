@@ -80,6 +80,7 @@ fn organization_admin_result_wire_contract() {
             json!({"result":"refused","reason":"notRetired"}),
             json!({"result":"refused","reason":"discardUnsupported"}),
             json!({"result":"refused","reason":"stale"}),
+            json!({"result":"refused","reason":"subjectUnreadable"}),
         ].into_iter().chain(boundaries).collect(),
         false,
     );

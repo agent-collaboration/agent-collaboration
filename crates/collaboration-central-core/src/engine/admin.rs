@@ -76,6 +76,7 @@ pub(crate) enum AttemptRefusal {
     NotRetired,
     DiscardUnsupported,
     Stale,
+    SubjectUnreadable,
 }
 pub(crate) enum DiscardOutcome {
     /// The subject's Discard transition, the guarded record delete and the
@@ -329,24 +330,24 @@ impl<R: EngineHost> Engine<'_, R> {
         let source = DiscardSource(statements);
         let key = InstanceKey(key);
         let outcome = match kind {
-            EngineKindName::WakeTimer => discard_outcome(
-                self.handle::<wake_timer::WakeTimer, _, _>(
+            EngineKindName::WakeTimer => {
+                self.discard_subject::<wake_timer::WakeTimer, _>(
                     &WakeStore(self.0),
                     key,
                     wake_timer::Event::Discard,
                     &source,
                 )
-                .await,
-            ),
-            EngineKindName::AutomationTimer => discard_outcome(
-                self.handle::<automation_timer::AutomationTimer, _, _>(
+                .await
+            }
+            EngineKindName::AutomationTimer => {
+                self.discard_subject::<automation_timer::AutomationTimer, _>(
                     &AutomationStore(self.0),
                     key,
                     automation_timer::Event::Discard,
                     &source,
                 )
-                .await,
-            ),
+                .await
+            }
             EngineKindName::LegacyNoticeWindows
             | EngineKindName::LegacyWorkspaceDrains
             | EngineKindName::EngineSource => {
@@ -354,6 +355,40 @@ impl<R: EngineHost> Engine<'_, R> {
             }
         }?;
         Ok(outcome)
+    }
+
+    /// A subject whose row will not decode cannot run its Discard transition:
+    /// the answer is SubjectUnreadable and nothing changes (Retry still works).
+    async fn discard_subject<M, Adapter>(
+        &self,
+        adapter: &Adapter,
+        key: InstanceKey,
+        event: M::Event,
+        source: &DiscardSource,
+    ) -> Result<DiscardOutcome, StoreFailure>
+    where
+        M: Machine,
+        M::State: Send + Sync,
+        M::Event: Send + Sync,
+        M::Effect: Send + Sync,
+        M::Error: Send + Sync,
+        Adapter: super::store_adapter::StoreAdapter<M>,
+    {
+        match adapter.load(&key).await {
+            Ok(Some(_)) => {}
+            Ok(None) => return Ok(DiscardOutcome::Refused(AttemptRefusal::Stale)),
+            Err(super::store_adapter::LoadFailure::Corrupt { .. }) => {
+                return Ok(DiscardOutcome::Refused(AttemptRefusal::SubjectUnreadable));
+            }
+            Err(super::store_adapter::LoadFailure::Uncertain) => {
+                return Err(StoreFailure::AnswerLost);
+            }
+            Err(super::store_adapter::LoadFailure::StoreDown(failure)) => return Err(failure),
+        }
+        discard_outcome(
+            self.handle::<M, Adapter, _>(adapter, key, event, source)
+                .await,
+        )
     }
 }
 

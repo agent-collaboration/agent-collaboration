@@ -210,11 +210,10 @@ async fn run_in_transaction(
             OwnedAlarmUpdate::SetEngineFromQuery { query } => {
                 let rows = bound(query).fetch_all(transaction).await?;
                 let answer = read_outcome(&rows).map_err(BatchStop::Failed)?;
-                let (clock, decide) = clock.ok_or_else(|| {
-                    BatchStop::Failed(StoreFailure::AlarmUnpublishable {
+                let (clock, decide) =
+                    clock.ok_or(BatchStop::Failed(StoreFailure::AlarmUnpublishable {
                         reason: AlarmPublicationFailure::ClockUnavailable,
-                    })
-                })?;
+                    }))?;
                 decided_engine_alarm(&answer, clock.now().unix_millis(), &decide)
                     .map_err(BatchStop::Failed)?
             }

@@ -145,6 +145,8 @@ pub enum AdminRefusal {
     DiscardUnsupported,
     /// The subject moved; nothing changed.
     Stale,
+    /// Discard on a retired subject whose row will not decode; nothing changed.
+    SubjectUnreadable,
 }
 
 impl From<AdmissionRefusal> for AdminRefusal {

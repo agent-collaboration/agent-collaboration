@@ -40,6 +40,11 @@
           "const": "stale",
           "description": "The subject moved; nothing changed.",
           "type": "string"
+        },
+        {
+          "const": "subjectUnreadable",
+          "description": "Discard on a retired subject whose row will not decode; nothing changed.",
+          "type": "string"
         }
       ]
     },
