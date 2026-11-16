@@ -4,6 +4,11 @@ use std::sync::Mutex;
 
 struct ReadSequence(Mutex<Vec<(&'static str, ReadOutcome)>>);
 impl ObjectHost for ReadSequence {
+    async fn published_alarm(
+        &self,
+    ) -> Result<Option<central_engine_model::EngineTime>, central_storage::StoreFailure> {
+        panic!("this test double never reads the physical alarm")
+    }
     async fn read(&self, statement: Statement) -> Result<ReadOutcome, StoreFailure> {
         let (sql, result) = self.0.lock().unwrap().remove(0);
         assert_eq!(statement.sql, sql);

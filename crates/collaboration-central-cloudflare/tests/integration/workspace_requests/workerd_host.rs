@@ -425,6 +425,21 @@ impl RemoteRuntime {
     ) {
         let _: bool = self.control("engine-read-fault", &fault).await.unwrap();
     }
+    /// Arms one keyed engine hold (`point` in camelCase, e.g. "afterEngineLoad").
+    pub async fn hold_engine(&self, point: &str, key: &str) -> u64 {
+        self.control(
+            "hold-engine",
+            &serde_json::json!({"point": point, "key": key}),
+        )
+        .await
+        .unwrap()
+    }
+    pub async fn until_held_engine(&self, hold: u64) {
+        let _: bool = self.control("until-held-engine", &hold).await.unwrap();
+    }
+    pub async fn release_engine(&self, hold: u64) {
+        let _: bool = self.control("release-engine", &hold).await.unwrap();
+    }
     pub async fn seed_probe(
         &self,
         seed: collaboration_central_core::engine_probe::SeedProbe,

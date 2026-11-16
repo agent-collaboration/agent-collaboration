@@ -36,6 +36,9 @@ impl ObjectHost for ObjectStorage {
     async fn read(&self, statement: Statement) -> Result<ReadOutcome, StoreFailure> {
         ObjectStorage::read(self, statement).await
     }
+    async fn published_alarm(&self) -> Result<Option<chrono::DateTime<chrono::Utc>>, StoreFailure> {
+        ObjectStorage::published_alarm(self)
+    }
 }
 #[derive(Clone)]
 struct ClockHandle(Arc<dyn RuntimeClock>);

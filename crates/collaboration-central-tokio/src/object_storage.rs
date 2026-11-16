@@ -338,6 +338,22 @@ impl ObjectStorage {
         self.alarm.subscribe()
     }
 
+    /// The last successfully published physical deadline; a failed publication
+    /// keeps the previous one, so health reports what is actually armed.
+    pub fn published_alarm(&self) -> Result<Option<chrono::DateTime<chrono::Utc>>, StoreFailure> {
+        (*self.alarm.borrow())
+            .map(|deadline| {
+                chrono::DateTime::from_timestamp_millis(deadline.unix_millis()).ok_or_else(|| {
+                    StoreFailure::Corrupt {
+                        reason: central_storage::CorruptReason::BadValue {
+                            column: "alarm.deadline".into(),
+                        },
+                    }
+                })
+            })
+            .transpose()
+    }
+
     pub(crate) fn subscribe_publication_status(&self) -> watch::Receiver<LastAlarmPublication> {
         self.publication_status.subscribe()
     }

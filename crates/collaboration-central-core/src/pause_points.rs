@@ -5,7 +5,7 @@
 //! until the case releases it, or until the case drops the object (a simulated crash)
 //! and the held request's future goes with it. Built only with `test-support`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::{Arc, Mutex, PoisonError};
 use tokio::sync::watch;
 use workspace_ids::WorkspaceId;
@@ -23,18 +23,28 @@ pub enum PausePoint {
     AfterDrainCommit,
     BeforeTimerCommit,
     AfterTimerCommit,
+    /// Engine points are keyed by instance (`hold_engine`): after `handle` loaded
+    /// its instance, after the instance batch committed, before a failure write,
+    /// and after a request found no live receipt.
     AfterEngineLoad,
+    AfterEngineCommit,
+    BeforeEngineFailureWrite,
+    AfterEngineAbsentLookup,
     BeforeSignInSample,
     AfterSignInSample,
 }
 
 type PauseKey = (WorkspaceId, PausePoint);
+type EngineKey = (PausePoint, String);
 
 #[derive(Clone, Default)]
 pub struct PausePoints {
     armed: Arc<Mutex<BTreeMap<PauseKey, ArmedPause>>>,
     held: Arc<Mutex<BTreeMap<WorkspaceId, Vec<PausePoint>>>>,
     central: Arc<Mutex<BTreeMap<PausePoint, ArmedPause>>>,
+    /// Several holds may be armed on one key; arrivals take them in arming order,
+    /// so two callers on one instance or request can each be held.
+    engine: Arc<Mutex<BTreeMap<EngineKey, VecDeque<ArmedPause>>>>,
 }
 
 struct ArmedPause {
@@ -95,6 +105,40 @@ impl PausePoints {
             let _ = armed.release.wait_for(|released| *released).await;
         }
     }
+    /// Arms one engine hold on `point` for `key` (an instance or request key).
+    #[must_use]
+    pub fn hold_engine(&self, point: PausePoint, key: &str) -> HeldPause {
+        let (arrived_sender, arrived) = watch::channel(false);
+        let (release, release_receiver) = watch::channel(false);
+        self.engine
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .entry((point, key.to_owned()))
+            .or_default()
+            .push_back(ArmedPause {
+                arrived: arrived_sender,
+                release: release_receiver,
+            });
+        HeldPause { arrived, release }
+    }
+
+    /// Called by the engine at `point` for `key`; waits only when a case armed it.
+    pub async fn reached_engine(&self, point: PausePoint, key: &str) {
+        let armed = {
+            let mut engine = self.engine.lock().unwrap_or_else(PoisonError::into_inner);
+            let entry = (point, key.to_owned());
+            let armed = engine.get_mut(&entry).and_then(VecDeque::pop_front);
+            if engine.get(&entry).is_some_and(VecDeque::is_empty) {
+                engine.remove(&entry);
+            }
+            armed
+        };
+        if let Some(mut armed) = armed {
+            armed.arrived.send_replace(true);
+            let _ = armed.release.wait_for(|released| *released).await;
+        }
+    }
+
     /// Arms `point` for `workspace`: the next request to reach it waits for the release.
     #[must_use]
     pub fn hold(&self, workspace: &WorkspaceId, point: PausePoint) -> HeldPause {

@@ -19,6 +19,11 @@ struct ScopeHost {
     wake: FixtureIo,
 }
 impl crate::ObjectHost for ScopeHost {
+    async fn published_alarm(
+        &self,
+    ) -> Result<Option<central_engine_model::EngineTime>, central_storage::StoreFailure> {
+        panic!("this test double never reads the physical alarm")
+    }
     async fn run_batch(
         &self,
         _: central_storage::StatementBatch,

@@ -150,6 +150,12 @@ impl<SharedHost: Host> collaboration_central_core::ObjectHost for TokioStorageHo
     ) -> Result<central_storage::ReadOutcome, central_storage::StoreFailure> {
         self.storage.read(statement).await
     }
+
+    async fn published_alarm(
+        &self,
+    ) -> Result<Option<chrono::DateTime<chrono::Utc>>, central_storage::StoreFailure> {
+        self.storage.published_alarm()
+    }
 }
 
 impl<SharedHost: Host> LegacyObjectHost for TokioStorageHost<SharedHost> {

@@ -89,6 +89,13 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         if let Some(receipt) = source.0.replay(&logged)? {
             return Ok(EngineRequestOutcome::Answer { receipt });
         }
+        #[cfg(feature = "test-support")]
+        self.pauses
+            .reached_engine(
+                crate::PausePoint::AfterEngineAbsentLookup,
+                &source.0.request.to_string(),
+            )
+            .await;
         let subject = EngineSubject {
             kind: M::KIND,
             key: key.clone(),

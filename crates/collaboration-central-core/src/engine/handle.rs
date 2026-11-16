@@ -106,7 +106,7 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
             }
             #[cfg(feature = "test-support")]
             self.pauses
-                .reached_central(crate::PausePoint::AfterEngineLoad)
+                .reached_engine(crate::PausePoint::AfterEngineLoad, &key.0)
                 .await;
             let now = match self.now() {
                 Ok(now) => now,
@@ -163,7 +163,13 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
                 .apply::<M, Adapter>(adapter, &key, &prior, &next, &effects, receipt)
                 .await
             {
-                Ok(()) => return HandleOutcome::Done(next),
+                Ok(()) => {
+                    #[cfg(feature = "test-support")]
+                    self.pauses
+                        .reached_engine(crate::PausePoint::AfterEngineCommit, &key.0)
+                        .await;
+                    return HandleOutcome::Done(next);
+                }
                 Err(ApplyFailure::Superseded) => {
                     if source.policy() == SourcePolicy::Discard {
                         return HandleOutcome::Superseded;

@@ -127,6 +127,9 @@ pub(crate) enum CasePausePoint {
     BeforeTimerCommit,
     AfterTimerCommit,
     AfterEngineLoad,
+    AfterEngineCommit,
+    BeforeEngineFailureWrite,
+    AfterEngineAbsentLookup,
     BeforeSignInSample,
     AfterSignInSample,
 }
@@ -142,6 +145,9 @@ impl From<CasePausePoint> for PausePoint {
             CasePausePoint::BeforeTimerCommit => Self::BeforeTimerCommit,
             CasePausePoint::AfterTimerCommit => Self::AfterTimerCommit,
             CasePausePoint::AfterEngineLoad => Self::AfterEngineLoad,
+            CasePausePoint::AfterEngineCommit => Self::AfterEngineCommit,
+            CasePausePoint::BeforeEngineFailureWrite => Self::BeforeEngineFailureWrite,
+            CasePausePoint::AfterEngineAbsentLookup => Self::AfterEngineAbsentLookup,
             CasePausePoint::BeforeSignInSample => Self::BeforeSignInSample,
             CasePausePoint::AfterSignInSample => Self::AfterSignInSample,
         }
@@ -158,6 +164,9 @@ impl From<PausePoint> for CasePausePoint {
             PausePoint::BeforeTimerCommit => Self::BeforeTimerCommit,
             PausePoint::AfterTimerCommit => Self::AfterTimerCommit,
             PausePoint::AfterEngineLoad => Self::AfterEngineLoad,
+            PausePoint::AfterEngineCommit => Self::AfterEngineCommit,
+            PausePoint::BeforeEngineFailureWrite => Self::BeforeEngineFailureWrite,
+            PausePoint::AfterEngineAbsentLookup => Self::AfterEngineAbsentLookup,
             PausePoint::BeforeSignInSample => Self::BeforeSignInSample,
             PausePoint::AfterSignInSample => Self::AfterSignInSample,
         }

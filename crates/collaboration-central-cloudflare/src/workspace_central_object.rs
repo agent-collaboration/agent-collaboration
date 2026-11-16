@@ -122,6 +122,31 @@ impl ObjectHost for CentralStatements {
             statement_store::read(&self.connection, statement.into()).await
         })
     }
+    fn published_alarm(
+        &self,
+    ) -> impl std::future::Future<
+        Output = std::result::Result<Option<chrono::DateTime<chrono::Utc>>, StoreFailure>,
+    > + Send {
+        SendFuture::new(async move {
+            let alarm = self
+                .state
+                .storage()
+                .get_alarm()
+                .await
+                .map_err(|_| StoreFailure::Unavailable)?;
+            alarm
+                .map(|millis| {
+                    chrono::DateTime::from_timestamp_millis(millis).ok_or_else(|| {
+                        StoreFailure::Corrupt {
+                            reason: central_storage::CorruptReason::BadValue {
+                                column: "alarm.deadline".into(),
+                            },
+                        }
+                    })
+                })
+                .transpose()
+        })
+    }
 }
 #[derive(Clone)]
 struct WorkspaceTransport {

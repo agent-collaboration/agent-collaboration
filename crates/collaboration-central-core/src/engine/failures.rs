@@ -94,6 +94,10 @@ impl<Host: ObjectHost, Stores: WorkspaceStoreCalls> WorkspaceRuntime<Host, Store
         prior: Option<&StoredAttempt>,
         workspaces: &[WorkspaceId],
     ) -> FailureOutcome {
+        #[cfg(feature = "test-support")]
+        self.pauses
+            .reached_engine(crate::PausePoint::BeforeEngineFailureWrite, &subject.key.0)
+            .await;
         let (record, class) = match prior.map(|stored| &stored.record) {
             Some(Ok(record)) => (Some(record), class),
             Some(Err(corruption)) => (None, corruption.failure_class()),

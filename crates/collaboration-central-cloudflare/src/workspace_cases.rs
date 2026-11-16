@@ -21,6 +21,8 @@ pub(crate) struct Controls {
     observations: RefCell<BTreeMap<workspace_ids::WorkspaceId, HeldPause>>,
     holds: RefCell<BTreeMap<(workspace_ids::WorkspaceId, Point), HeldPause>>,
     central_holds: RefCell<BTreeMap<Point, HeldPause>>,
+    engine_holds: RefCell<BTreeMap<u64, HeldPause>>,
+    next_engine_hold: std::cell::Cell<u64>,
     alarm_waiters: RefCell<Vec<futures_channel::oneshot::Sender<()>>>,
 }
 #[derive(Clone, Copy, Deserialize, Eq, Ord, PartialEq, PartialOrd)]
@@ -33,6 +35,9 @@ enum Point {
     BeforeTimerCommit,
     AfterTimerCommit,
     AfterEngineLoad,
+    AfterEngineCommit,
+    BeforeEngineFailureWrite,
+    AfterEngineAbsentLookup,
     BeforeSignInSample,
     AfterSignInSample,
 }
@@ -46,10 +51,19 @@ impl From<Point> for PausePoint {
             Point::BeforeTimerCommit => Self::BeforeTimerCommit,
             Point::AfterTimerCommit => Self::AfterTimerCommit,
             Point::AfterEngineLoad => Self::AfterEngineLoad,
+            Point::AfterEngineCommit => Self::AfterEngineCommit,
+            Point::BeforeEngineFailureWrite => Self::BeforeEngineFailureWrite,
+            Point::AfterEngineAbsentLookup => Self::AfterEngineAbsentLookup,
             Point::BeforeSignInSample => Self::BeforeSignInSample,
             Point::AfterSignInSample => Self::AfterSignInSample,
         }
     }
+}
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EnginePause {
+    point: Point,
+    key: String,
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -202,6 +216,35 @@ pub(super) async fn control(
                 .central_holds
                 .borrow_mut()
                 .insert(point, runtime.pause_points().hold_central(point.into()));
+            Response::from_json(&true)
+        }
+        "/test/hold-engine" => {
+            let pause: EnginePause = request.json().await?;
+            let id = object.controls.next_engine_hold.get();
+            object.controls.next_engine_hold.set(id + 1);
+            let held = runtime
+                .pause_points()
+                .hold_engine(pause.point.into(), &pause.key);
+            object.controls.engine_holds.borrow_mut().insert(id, held);
+            Response::from_json(&id)
+        }
+        "/test/until-held-engine" => {
+            let id: u64 = request.json().await?;
+            let mut held = object
+                .controls
+                .engine_holds
+                .borrow_mut()
+                .remove(&id)
+                .ok_or_else(|| error("engine hold not armed"))?;
+            held.until_held().await;
+            object.controls.engine_holds.borrow_mut().insert(id, held);
+            Response::from_json(&true)
+        }
+        "/test/release-engine" => {
+            let id: u64 = request.json().await?;
+            if let Some(held) = object.controls.engine_holds.borrow_mut().remove(&id) {
+                held.release();
+            }
             Response::from_json(&true)
         }
         "/test/until-central-waiting" => {
