@@ -46,6 +46,8 @@ pub(crate) struct ProviderStartupComposition {
     pub hub: Option<Arc<ProviderSessionEventHub>>,
     pub endpoints: Vec<EndpointDescription>,
     pub retirements: Vec<(CancellationToken, EndpointDescription)>,
+    /// The started Claude endpoint and the setting its startup carried.
+    pub cache_warm: Option<(EndpointRef, crate::CacheWarmSetting)>,
 }
 
 pub(crate) async fn compose_provider_startup(
@@ -62,6 +64,7 @@ pub(crate) async fn compose_provider_startup(
     let mut bindings = Vec::new();
     let mut endpoints = Vec::with_capacity(configured.len());
     let mut retirements = Vec::new();
+    let mut cache_warm = None;
     for provider in configured {
         match provider {
             ExternalProviderStartup::Unavailable {
@@ -214,6 +217,11 @@ pub(crate) async fn compose_provider_startup(
                                 auto_realization: Some(auto_realization),
                             }],
                         };
+                        if let (ProviderKind::ClaudeCode, Some(setting)) =
+                            (binding.provider, binding.cache_warm)
+                        {
+                            cache_warm = Some((description.endpoint.clone(), setting));
+                        }
                         retirements.push((runtime.retirement(), description.clone()));
                         endpoints.push(description);
                         bindings.push(ExternalProviderBinding { identity, runtime });
@@ -250,6 +258,7 @@ pub(crate) async fn compose_provider_startup(
         hub,
         endpoints,
         retirements,
+        cache_warm,
     })
 }
 

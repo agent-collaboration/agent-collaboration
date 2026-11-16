@@ -1,11 +1,6 @@
 //! Which in-folder grant a start leaves behind, read from the grant map the
 //! permission path uses (D1 spec R2, R4).
 
-#![expect(
-    clippy::expect_used,
-    reason = "A fixture that fails to start or answer must fail the test at once."
-)]
-
 use crate::{
     AgentSessionClient, ApprovalPortOutcome, EventSinkClosed, ExternalProviderLaunch,
     ExternalProviderRuntimeError, HistoryReplayFuture, InteractionFuture, InteractionPort,

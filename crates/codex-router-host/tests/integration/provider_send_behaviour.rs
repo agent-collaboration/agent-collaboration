@@ -4,6 +4,7 @@
 
 #![expect(
     clippy::expect_used,
+    clippy::panic,
     reason = "A Host or fixture that cannot start or answer must fail its test."
 )]
 
@@ -17,8 +18,10 @@ use collaboration_client::{
 };
 use collaboration_protocol::{
     ConversationCreateRequest, ConversationOperationSettlement, ConversationOperationWaitOutput,
-    ConversationOperationWaitRequest, EndpointRef, OperationId, PositiveSeconds, ProviderIdentity,
-    ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess, SessionRef,
+    ConversationOperationWaitRequest, DeliveryClientReceipt, DeliveryOutcome, EndpointRef,
+    MessageDelivery, MessageSendResult, MessageText, OperationId, PositiveSeconds,
+    ProviderIdentity, ProviderRequestedPolicy, ProviderWorkingDirectory, RouterAccess,
+    SessionReachability, SessionRef,
 };
 use serde_json::Value;
 use std::os::unix::fs::PermissionsExt as _;
@@ -137,6 +140,27 @@ impl ComposedHost {
         }
     }
 
+    /// One Auto mail to `target` from a human, as `message send` sends it.
+    async fn mail(&self, target: &SessionRef) -> collaboration_protocol::DeliveryReceipt {
+        let sent = self
+            .client
+            .send_message(collaboration_client::MessageSendRequest {
+                item_id: None,
+                target: target.clone(),
+                message: collaboration_client::PublicMessageContent::HumanUser {
+                    text: MessageText::try_from("second".to_owned()).expect("mail text"),
+                },
+                delivery: MessageDelivery::Auto,
+                generation_guard: None,
+            })
+            .await
+            .expect("mail receipt");
+        match sent {
+            MessageSendResult::Local(sent) => sent.receipt,
+            MessageSendResult::Queued { .. } => panic!("a local session took sender custody"),
+        }
+    }
+
     /// One API prompt as `approver`, answered after at most `wait`.
     async fn prompt(
         &self,
@@ -184,15 +208,12 @@ fn recorded(receipt: &Path, method: &str) -> usize {
         })
 }
 
-/// Waits, bounded and without sleeping, until the fixture recorded `count`.
+/// Waits until the fixture recorded `count`; the test runner bounds the case
+/// (`.config/nextest.toml`), so test code never waits on Tokio's clock.
 async fn until_recorded(receipt: &Path, method: &str, count: usize) {
-    tokio::time::timeout(Duration::from_secs(10), async {
-        while recorded(receipt, method) < count {
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("fixture records the request");
+    while recorded(receipt, method) < count {
+        tokio::task::yield_now().await;
+    }
 }
 
 fn cursor_reactive(receipt: &Path, behaviours: &[&str]) -> ExternalProviderLaunchBinding {
@@ -339,5 +360,156 @@ async fn prompt_to_a_busy_steering_agent_steers() {
             other => panic!("expected steered, got {other:?}"),
         },
         other => panic!("expected a steered completion, got {other:?}"),
+    }
+}
+
+/// How a send to a session ended, in the same words for every door (R12).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SendOutcome {
+    Prompted,
+    Steered,
+    Queued,
+}
+
+/// The state the session is in when the second message arrives.
+#[derive(Clone, Copy, Debug)]
+enum SessionStateAtSend {
+    Idle,
+    BusySteering,
+    BusyNonSteering,
+}
+
+/// The door the second message comes through.
+#[derive(Clone, Copy, Debug)]
+enum Door {
+    Mail,
+    Cli,
+}
+
+fn claude_steering() -> ExternalProviderLaunchBinding {
+    ExternalProviderLaunchBinding::claude(
+        node_test_fixture::node_executable().expect("Node"),
+        vec![
+            node_test_fixture::fixture_program("provider-steering-agent.ts")
+                .to_string_lossy()
+                .into_owned(),
+            "injected".to_owned(),
+        ],
+    )
+    .expect("Claude binding")
+}
+
+/// What one door's message did to a session in `state`, on its own Host:
+/// the outcome, plus the evidence each door keeps (mail: its Router ACP
+/// receipt naming the operation; a queued message: it runs once after the
+/// turn ends), and no session/cancel at the agent.
+async fn outcome_through(door: Door, state: SessionStateAtSend) -> SendOutcome {
+    let staging = tempfile::tempdir().expect("receipt folder");
+    let receipt = staging.path().join("wire.json");
+    let (binding, endpoint) = match state {
+        SessionStateAtSend::Idle => (cursor_reactive(&receipt, &[]), "cursor-local"),
+        SessionStateAtSend::BusyNonSteering => (
+            cursor_reactive(&receipt, &["hold-first-prompt"]),
+            "cursor-local",
+        ),
+        SessionStateAtSend::BusySteering => (claude_steering(), "claude-local"),
+    };
+    let host = ComposedHost::start(binding, endpoint).await;
+    let owner = ComposedHost::human("same-outcome-owner");
+    let target = host.create(&owner).await;
+    if !matches!(state, SessionStateAtSend::Idle) {
+        let held = host
+            .prompt(
+                &target,
+                &owner,
+                OperationId::generate(),
+                "first",
+                SHORT_WAIT,
+            )
+            .await;
+        assert!(
+            matches!(held, ConversationOperationResult::Pending { .. }),
+            "{door:?} {state:?}: the first turn is held: {held:?}"
+        );
+    }
+    if matches!(state, SessionStateAtSend::BusyNonSteering) {
+        until_recorded(&receipt, "session/prompt", 1).await;
+    }
+    let outcome = match door {
+        Door::Mail => {
+            let receipt = host.mail(&target).await;
+            assert_eq!(
+                receipt.reachability,
+                Some(SessionReachability::ProviderAcp),
+                "{door:?} {state:?}: mail keeps its evidence: {receipt:?}"
+            );
+            assert!(
+                matches!(
+                    receipt.client,
+                    Some(DeliveryClientReceipt::ProviderAcp { .. })
+                ),
+                "{door:?} {state:?}: mail names its Router operation: {receipt:?}"
+            );
+            match receipt.outcome {
+                DeliveryOutcome::Started => SendOutcome::Prompted,
+                DeliveryOutcome::Steered => SendOutcome::Steered,
+                DeliveryOutcome::Queued => SendOutcome::Queued,
+                other => panic!("{door:?} {state:?}: mail ended {other:?}"),
+            }
+        }
+        Door::Cli => {
+            let result = host
+                .prompt(
+                    &target,
+                    &owner,
+                    OperationId::generate(),
+                    "second",
+                    Duration::from_secs(10),
+                )
+                .await;
+            match result {
+                ConversationOperationResult::Queued { .. } => SendOutcome::Queued,
+                ConversationOperationResult::Completed { ref settlement, .. } => {
+                    match settlement.detail {
+                        ConversationSettlementDetail::ProviderSteered { .. } => {
+                            SendOutcome::Steered
+                        }
+                        ConversationSettlementDetail::ProviderPrompt { .. } => {
+                            SendOutcome::Prompted
+                        }
+                        _ => panic!("{door:?} {state:?}: the CLI ended {result:?}"),
+                    }
+                }
+                other => panic!("{door:?} {state:?}: the CLI ended {other:?}"),
+            }
+        }
+    };
+    if matches!(state, SessionStateAtSend::BusyNonSteering) {
+        std::fs::write(PathBuf::from(format!("{}.release", receipt.display())), b"")
+            .expect("release the held turn");
+        // The queued message runs once, after the held turn ends.
+        until_recorded(&receipt, "session/prompt", 2).await;
+    }
+    let cancels = recorded(&receipt, "session/cancel");
+    host.runtime.shutdown().await.expect("Host shutdown");
+    assert_eq!(cancels, 0, "{door:?} {state:?}: no send interrupts a turn");
+    outcome
+}
+
+/// Oracle: D1 spec R12 "one send behaviour" and V23 — for idle,
+/// busy-steerable and busy-non-steerable sessions, an Auto mail delivery and
+/// a CLI prompt both end prompted, steered or queued the same way; mail keeps
+/// its Router ACP evidence, and neither deadlocks or interrupts the turn.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn mail_and_cli_reach_the_same_outcome_for_the_same_session_state() {
+    let cases = [
+        (SessionStateAtSend::Idle, SendOutcome::Prompted),
+        (SessionStateAtSend::BusySteering, SendOutcome::Steered),
+        (SessionStateAtSend::BusyNonSteering, SendOutcome::Queued),
+    ];
+    for (state, expected) in cases {
+        let mail = outcome_through(Door::Mail, state).await;
+        let cli = outcome_through(Door::Cli, state).await;
+        assert_eq!((mail, cli), (expected, expected), "{state:?}");
     }
 }

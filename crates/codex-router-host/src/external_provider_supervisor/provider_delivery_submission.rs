@@ -53,7 +53,7 @@ impl ExternalProviderSupervisor {
         let completion_target = target.clone();
         let completion_operation_id = operation_id.clone();
         self.spawn_operation(operation_id, live, async move {
-            match runtime
+            let result = runtime
                 .submit_with_approval_dispatch_for_input(
                     provider_session_id,
                     input_id,
@@ -61,16 +61,14 @@ impl ExternalProviderSupervisor {
                     approval_context,
                     Some(dispatched),
                 )
-                .await
-            {
-                // Same settlement as an unqueued prompt, permission refusal
-                // included (D1 C5): mail's refusals were recorded as completed.
-                result => super::provider_prompt_contents::prompt_completion(
-                    result,
-                    completion_operation_id,
-                    completion_target,
-                ),
-            }
+                .await;
+            // Same settlement as an unqueued prompt, permission refusal
+            // included (D1 C5): mail's refusals were recorded as completed.
+            super::provider_prompt_contents::prompt_completion(
+                result,
+                completion_operation_id,
+                completion_target,
+            )
         });
         Ok(
             match tokio::time::timeout(DELIVERY_DISPATCH_TIMEOUT, dispatch_observation).await {

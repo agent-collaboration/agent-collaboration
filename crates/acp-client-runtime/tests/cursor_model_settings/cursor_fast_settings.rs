@@ -2,6 +2,12 @@
 //! fixture, which starts fast on and turns it back on at every model change
 //! (D1 spec R7-R11).
 
+#![expect(
+    clippy::panic_in_result_fn,
+    clippy::indexing_slicing,
+    reason = "Wire-receipt assertions index the recorded requests and assert inside Result-returning tests."
+)]
+
 use super::acp_wire_fixture::AcpWireFixture;
 use acp_client_runtime::{
     ExternalProviderRuntimeError, FastObserved, FastRequest, ProviderSettingKind,

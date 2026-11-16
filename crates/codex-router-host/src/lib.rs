@@ -27,6 +27,7 @@ mod provider_queue_operation_registry;
 mod provider_session_command_port;
 pub use provider_queue_operation_registry::{ProviderQueueCancellationError, ProviderQueuedInput};
 pub use provider_session_command_port::HostSessionCommandPort;
+mod provider_cache_warm;
 mod provider_model_catalog;
 mod provider_session_event_sink;
 pub use provider_acp_delivery_route::{
@@ -84,7 +85,9 @@ mod owner_identity_resolution;
 mod process_group_child;
 mod provider_settings_section;
 mod router_credential_migration;
-pub use provider_settings_section::{ProviderConfigurationEntries, ProviderConfigurationEntry};
+pub use provider_settings_section::{
+    CacheWarmSetting, ProviderConfigurationEntries, ProviderConfigurationEntry,
+};
 mod router_settings;
 pub use router_settings::{
     ROUTER_SETTINGS_FILE_NAME, RouterSettingsError, RouterSettingsSection,

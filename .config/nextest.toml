@@ -343,6 +343,28 @@ filter = "package(=collaboration-central-tokio) & test(page_limits::maximum_list
 test-group = "process-runtime"
 threads-required = "num-test-threads"
 
+# The compiled-CLI create checks make at most two CLI calls, each once bounded
+# to 30 seconds in test code. The runner holds that bound instead, so the test
+# never waits on Tokio's clock (AGENTS.md "Time").
+[[profile.default.overrides]]
+filter = "package(=agent-collaboration) & binary(=integration) & test(/^provider_create_mode_cli::/)"
+slow-timeout = { period = "30s", terminate-after = 2 }
+
+[[profile.ci.overrides]]
+filter = "package(=agent-collaboration) & binary(=integration) & test(/^provider_create_mode_cli::/)"
+slow-timeout = { period = "30s", terminate-after = 2 }
+
+# The D1 send, ACP busy-prompt, cache-warm and protocol-door cases once bounded
+# each wait to 10 seconds in test code. The runner bounds each case instead, so
+# the test never waits on Tokio's clock (AGENTS.md "Time").
+[[profile.default.overrides]]
+filter = "package(=codex-router-host) & binary(=integration) & test(/^(provider_send_behaviour|provider_acp_busy_prompt|provider_cache_warm|provider_session_command_port|provider_send_races|provider_queued_api_lifecycle)::/)"
+slow-timeout = { period = "30s", terminate-after = 2 }
+
+[[profile.ci.overrides]]
+filter = "package(=codex-router-host) & binary(=integration) & test(/^(provider_send_behaviour|provider_acp_busy_prompt|provider_cache_warm|provider_session_command_port|provider_send_races|provider_queued_api_lifecycle)::/)"
+slow-timeout = { period = "30s", terminate-after = 2 }
+
 # Only the Worker CI step relaxes the broad Worker serial reservation, using
 # reviewed isolation: per-child mkdtemp state and port 0 (workerd-storage.ts:199),
 # per-fixture plans/JWKS listeners, and read-only bundles built before the suite.

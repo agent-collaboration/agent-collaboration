@@ -39,6 +39,9 @@ impl CollaborationRuntime {
     pub async fn shutdown(mut self) -> io::Result<()> {
         self.manifest.take();
         self.shutdown.cancel();
+        if let Some(cache_warm) = self.provider_cache_warm.take() {
+            cache_warm.shutdown().await;
+        }
         let mut failure = None;
         if let Some(mut exposure) = self.tailscale_exposure.take()
             && let Err(error) = exposure.shutdown().await

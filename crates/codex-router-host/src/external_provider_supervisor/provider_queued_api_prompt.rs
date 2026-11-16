@@ -79,9 +79,11 @@ impl ExternalProviderSupervisor {
             )
             .await
         {
-            AdmittedPromptDispatch::Done(Ok(_)) => Ok(ProviderPromptDispatch::Submitted),
-            // Settled by the dispatch itself; the worker observes the outcome.
-            AdmittedPromptDispatch::Done(Err(_)) => Ok(ProviderPromptDispatch::Existing),
+            AdmittedPromptDispatch::Done(result) => Ok(match *result {
+                Ok(_) => ProviderPromptDispatch::Submitted,
+                // Settled by the dispatch itself; the worker observes the outcome.
+                Err(_) => ProviderPromptDispatch::Existing,
+            }),
             AdmittedPromptDispatch::TurnRunning { .. } => {
                 admitted.settled.store(false, Ordering::SeqCst);
                 Err(Box::new(
@@ -97,6 +99,10 @@ impl ExternalProviderSupervisor {
 
     /// Whether an unresolved outcome other than a live turn now blocks this
     /// session, leaving the entry's own row out.
+    #[expect(
+        clippy::result_large_err,
+        reason = "The typed failure retains the full published operation payload."
+    )]
     async fn earlier_outcome_unknown(
         &self,
         binding: &collaboration_protocol::ProviderBindingIdentity,

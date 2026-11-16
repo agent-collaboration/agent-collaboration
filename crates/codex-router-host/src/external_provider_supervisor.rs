@@ -317,6 +317,18 @@ impl ExternalProviderSupervisor {
         })
     }
 
+    /// Tells `observer` of every live event of every session on `endpoint`.
+    pub(crate) fn install_live_event_observer(
+        &self,
+        endpoint: &EndpointRef,
+        observer: Arc<dyn crate::provider_cache_warm::LiveSessionEventObserver>,
+    ) -> bool {
+        self.inner.bindings.get(endpoint).is_some_and(|binding| {
+            binding.runtime.install_live_event_observer(observer);
+            true
+        })
+    }
+
     pub async fn install_approval_broker(
         &self,
         broker: Arc<collaboration_runtime::ServiceInteractionBroker>,

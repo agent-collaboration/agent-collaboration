@@ -72,7 +72,7 @@ impl ModeFixture {
             return Ok(json!([]));
         }
         let receipt: Value = serde_json::from_slice(&std::fs::read(&self.receipt)?)?;
-        Ok(receipt["sessions"].clone())
+        Ok(receipt.get("sessions").cloned().unwrap_or(Value::Null))
     }
 }
 

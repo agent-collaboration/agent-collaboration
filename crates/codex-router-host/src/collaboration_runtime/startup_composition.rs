@@ -246,6 +246,12 @@ impl CollaborationRuntime {
         let provider_retirements = startup.retirements;
         let external_provider_supervisor = startup.supervisor;
         let provider_session_hub = startup.hub;
+        let provider_cache_warm = crate::provider_cache_warm::compose_provider_cache_warm(
+            startup.cache_warm,
+            external_provider_supervisor.as_ref(),
+            provider_store.as_ref(),
+            worker_clock.clone(),
+        );
         let provider_endpoints = startup
             .endpoints
             .iter()
@@ -893,6 +899,7 @@ impl CollaborationRuntime {
             provider_store,
             automation_store,
             external_provider_supervisor,
+            provider_cache_warm,
             provider_delivery_route,
             provider_retention: None,
             open_scratch_scopes,

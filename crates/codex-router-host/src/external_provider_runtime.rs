@@ -236,6 +236,15 @@ impl ExternalProviderRuntime {
         }
     }
 
+    pub(crate) fn install_live_event_observer(
+        &self,
+        observer: Arc<dyn crate::provider_cache_warm::LiveSessionEventObserver>,
+    ) {
+        if let Some(event_sink) = &self.event_sink {
+            event_sink.install_live_event_observer(observer);
+        }
+    }
+
     pub fn retirement(&self) -> CancellationToken {
         self.client.retirement()
     }

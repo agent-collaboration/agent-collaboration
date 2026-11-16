@@ -245,11 +245,12 @@ pub enum ExternalProviderRuntimeError {
     #[error("createdWithoutSettings: provider session needs setting resolution")]
     CreatedWithoutSettings {
         provider_session_id: String,
-        applied: Vec<crate::AppliedProviderSetting>,
+        applied: Box<[crate::AppliedProviderSetting]>,
         failed: crate::FailedProviderSetting,
         not_applied: Box<[crate::NotAppliedProviderSetting]>,
         /// The requested and confirmed mode, finished before the failed setting.
-        permission_mode: crate::PermissionModeReport,
+        /// Boxed so the error stays small on every Result path.
+        permission_mode: Box<crate::PermissionModeReport>,
     },
     #[error("session history replay admission failed before provider load")]
     HistoryReplayAdmissionFailed,

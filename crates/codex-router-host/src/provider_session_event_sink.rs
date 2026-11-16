@@ -8,6 +8,7 @@ use std::{
     },
 };
 
+use crate::provider_cache_warm::LiveSessionEventObserver;
 use acp_client_runtime::{
     EventSinkClosed, HistoryReplayFuture, HistoryReplayUnavailable, SessionEventSink,
 };
@@ -49,6 +50,8 @@ pub(crate) struct HubSessionEventSink {
     backlog_warned: Arc<StdMutex<HashSet<String>>>,
     not_publishing: Arc<StdMutex<HashSet<String>>>,
     catalog_refresh: StdMutex<Option<mpsc::UnboundedSender<String>>>,
+    /// Told of every live event after the hub published it; installed after startup.
+    live_observer: Arc<StdMutex<Option<Arc<dyn LiveSessionEventObserver>>>>,
 }
 
 impl HubSessionEventSink {
@@ -60,7 +63,12 @@ impl HubSessionEventSink {
         let consumer_backlog = Arc::clone(&backlog);
         let consumer_warned = Arc::clone(&backlog_warned);
         let consumer_failures = Arc::clone(&not_publishing);
+        let live_observer: Arc<StdMutex<Option<Arc<dyn LiveSessionEventObserver>>>> =
+            Arc::new(StdMutex::new(None));
+        let consumer_observer = Arc::clone(&live_observer);
         let consumer = tokio::spawn(async move {
+            // Sessions whose history is being replayed: those events are not live.
+            let mut replaying: HashSet<String> = HashSet::new();
             while let Some(command) = receiver.recv().await {
                 consumer_backlog.fetch_sub(1, Ordering::Relaxed);
                 match command {
@@ -83,6 +91,15 @@ impl HubSessionEventSink {
                                 state: session_event_model::SessionState::Closed,
                             }
                         );
+                        // Only the small turn and state events matter to an observer.
+                        let observed = matches!(
+                            &event,
+                            SessionEvent::TurnStarted { .. }
+                                | SessionEvent::InputAccepted { .. }
+                                | SessionEvent::TurnEnded { .. }
+                                | SessionEvent::StateChanged { .. }
+                        )
+                        .then(|| event.clone());
                         let result = hub.publish(session.clone(), event).await.map(|_| ()).map_err(|error| {
                             tracing::error!(%error, session_id = %session.session_id.as_str(), "provider Session event publication failed");
                             consumer_failures
@@ -91,6 +108,16 @@ impl HubSessionEventSink {
                                 .insert(session.session_id.as_str().to_owned());
                             EventSinkClosed
                         });
+                        if result.is_ok()
+                            && let Some(observed) = &observed
+                        {
+                            observe_live_event(
+                                &consumer_observer,
+                                &mut replaying,
+                                session.session_id.as_str(),
+                                observed,
+                            );
+                        }
                         if session_closed && result.is_ok() {
                             let session_id = session.session_id.as_str();
                             consumer_warned
@@ -118,6 +145,9 @@ impl HubSessionEventSink {
                                 tracing::error!(%error, session_id = %session.session_id.as_str(), "provider Session replay reset failed");
                                 HistoryReplayUnavailable
                             });
+                        if result.is_ok() {
+                            replaying.insert(session.session_id.as_str().to_owned());
+                        }
                         let _ = completion.send(result);
                     }
                     HubCommand::BeginUnavailable {
@@ -145,7 +175,16 @@ impl HubSessionEventSink {
             backlog_warned,
             not_publishing,
             catalog_refresh: StdMutex::new(None),
+            live_observer,
         }
+    }
+
+    /// Every later live event of every session on this endpoint reaches `observer`.
+    pub(crate) fn install_live_event_observer(&self, observer: Arc<dyn LiveSessionEventObserver>) {
+        *self
+            .live_observer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(observer);
     }
 
     fn session(&self, session_id: &str) -> Result<SessionRef, HistoryReplayUnavailable> {
@@ -247,6 +286,34 @@ impl HubSessionEventSink {
             },
         )?;
         result.await.map_err(|_| EventSinkClosed)?
+    }
+}
+
+/// Passes a published event to the observer unless it belongs to replayed history.
+/// Replay ends at the first state change out of the replay's `Unloaded` state.
+fn observe_live_event(
+    observer: &StdMutex<Option<Arc<dyn LiveSessionEventObserver>>>,
+    replaying: &mut HashSet<String>,
+    session_id: &str,
+    event: &SessionEvent,
+) {
+    if replaying.contains(session_id) {
+        match event {
+            SessionEvent::StateChanged {
+                state: session_event_model::SessionState::Unloaded,
+            } => return,
+            SessionEvent::StateChanged { .. } => {
+                replaying.remove(session_id);
+            }
+            _ => return,
+        }
+    }
+    let observer = observer
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+    if let Some(observer) = observer {
+        observer.observe_live_event(session_id, event);
     }
 }
 

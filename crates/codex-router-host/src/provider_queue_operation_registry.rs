@@ -231,7 +231,9 @@ impl ProviderQueueOperationRegistry {
                 .values()
                 .find(|operation| &operation.target == target && &operation.input_id == input_id)
                 .and_then(|operation| match &operation.state {
-                    ConversationOperationQueueState::NotSubmitted { reason } => Some(reason.clone()),
+                    ConversationOperationQueueState::NotSubmitted { reason } => {
+                        Some(reason.clone())
+                    }
                     ConversationOperationQueueState::RouterQueued => None,
                 });
             if let Some(reason) = reason {

@@ -52,22 +52,20 @@ async fn start_host(root: &Path, fixture: &str, arguments: Vec<String>) -> Colla
 }
 
 /// Runs the compiled CLI against the Host in `root`; returns its exit code and
-/// its stdout and stderr together.
+/// its stdout and stderr together. The test runner bounds the whole case
+/// (`.config/nextest.toml`); the child dies with it.
 async fn run_cli(root: &Path, arguments: &[&str]) -> (Option<i32>, String) {
-    let output = tokio::time::timeout(
-        std::time::Duration::from_secs(30),
-        tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
-            .args(arguments)
-            .arg("--service-directory")
-            .arg(root)
-            .env("CODEX_THREAD_ID", CALLER_SESSION_ID)
-            .env_remove("CLAUDE_CODE_SESSION_ID")
-            .env_remove("CURSOR_CONVERSATION_ID")
-            .output(),
-    )
-    .await
-    .expect("CLI deadline")
-    .expect("CLI output");
+    let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_agent-collaboration"))
+        .args(arguments)
+        .arg("--service-directory")
+        .arg(root)
+        .env("CODEX_THREAD_ID", CALLER_SESSION_ID)
+        .env_remove("CLAUDE_CODE_SESSION_ID")
+        .env_remove("CURSOR_CONVERSATION_ID")
+        .kill_on_drop(true)
+        .output()
+        .await
+        .expect("CLI output");
     (
         output.status.code(),
         format!(
@@ -103,8 +101,8 @@ fn created_target(rendered: &str) -> String {
     rendered
         .lines()
         .filter_map(|line| serde_json::from_str::<Value>(line).ok())
-        .find(|line| line["kind"] == "created")
-        .map(|line| line["target"].to_string())
+        .find(|line| line.get("kind").and_then(Value::as_str) == Some("created"))
+        .and_then(|line| line.get("target").map(Value::to_string))
         .expect("a created session")
 }
 

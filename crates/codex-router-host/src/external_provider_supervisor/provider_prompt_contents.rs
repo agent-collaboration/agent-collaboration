@@ -127,7 +127,7 @@ impl ExternalProviderSupervisor {
                     .dispatch_admitted_prompt(request, &binding, runtime, snapshot, live)
                     .await
                 {
-                    AdmittedPromptDispatch::Done(result) => result,
+                    AdmittedPromptDispatch::Done(result) => *result,
                     // Only SteerOrQueue hands a running turn back; RefuseBusy
                     // settles it as the Busy refusal it is.
                     AdmittedPromptDispatch::TurnRunning { live, .. } => {
@@ -237,14 +237,14 @@ impl ExternalProviderSupervisor {
             )),
         };
         self.spawn_operation(request.operation_id, live, complete(submitted));
-        AdmittedPromptDispatch::Done(result)
+        AdmittedPromptDispatch::Done(Box::new(result))
     }
 }
 
 /// What sending an admitted prompt came to.
 pub(super) enum AdmittedPromptDispatch {
     /// Dispatched, refused or uncertain: the operation is settled as before.
-    Done(Result<ConversationOperationSubmission, ConversationOperationFailure>),
+    Done(Box<Result<ConversationOperationSubmission, ConversationOperationFailure>>),
     /// A turn was running (SteerOrQueue only): nothing was sent, and the
     /// operation is still admitted and unsettled.
     TurnRunning {

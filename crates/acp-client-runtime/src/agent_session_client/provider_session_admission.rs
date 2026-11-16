@@ -217,13 +217,13 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                         ExternalProviderRuntimeError::CreatedWithoutSettings {
                             provider_session_id: provider_session_id.clone(),
                             not_applied: untried_settings(&requested_settings, &settings_catalog, kind).into_boxed_slice(),
-                            applied,
+                            applied: applied.into_boxed_slice(),
                             failed: crate::FailedProviderSetting {
                                 kind,
                                 value,
                                 reason: session_event_model::ProviderSettingFailureReason::InvalidSetting,
                             },
-                            permission_mode: permission_mode.clone(),
+                            permission_mode: Box::new(permission_mode.clone()),
                         }
                     };
                     if disposition == crate::InvalidSettingSessionDisposition::Closed {
@@ -246,25 +246,25 @@ pub(super) async fn run_create_admission<P: InteractionPort>(inputs: CreateAdmis
                 }) => Some(ExternalProviderRuntimeError::CreatedWithoutSettings {
                     provider_session_id: provider_session_id.clone(),
                     not_applied: untried_settings(&requested_settings, &settings_catalog, kind).into_boxed_slice(),
-                    applied,
+                    applied: applied.into_boxed_slice(),
                     failed: crate::FailedProviderSetting {
                         kind,
                         value,
                         reason: reason.into(),
                     },
-                    permission_mode: permission_mode.clone(),
+                    permission_mode: Box::new(permission_mode.clone()),
                 }),
                 Some(SettingSetupFailure::Uncertain { kind, value }) => {
                     Some(ExternalProviderRuntimeError::CreatedWithoutSettings {
                         provider_session_id: provider_session_id.clone(),
                         not_applied: untried_settings(&requested_settings, &settings_catalog, kind).into_boxed_slice(),
-                        applied,
+                        applied: applied.into_boxed_slice(),
                         failed: crate::FailedProviderSetting {
                             kind,
                             value,
                             reason: session_event_model::ProviderSettingFailureReason::OutcomeUnknown,
                         },
-                        permission_mode: permission_mode.clone(),
+                        permission_mode: Box::new(permission_mode.clone()),
                     })
                 }
             };

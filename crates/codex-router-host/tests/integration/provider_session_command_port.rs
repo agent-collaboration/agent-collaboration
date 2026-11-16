@@ -10,7 +10,6 @@ use std::os::unix::fs::PermissionsExt as _;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::UnixStream,
-    time::{Duration, timeout},
 };
 
 /// Writes an executable that runs the permission-mode fixture as Claude.
@@ -42,12 +41,8 @@ fn write_claude_permission_fixture(root: &std::path::Path) -> std::path::PathBuf
 async fn next_json(
     lines: &mut tokio::io::Lines<BufReader<tokio::net::unix::OwnedReadHalf>>,
 ) -> Value {
-    let line = timeout(Duration::from_secs(10), lines.next_line())
-        .await
-        .ok()
-        .and_then(Result::ok)
-        .flatten()
-        .unwrap_or_default();
+    // The test runner bounds the case (`.config/nextest.toml`).
+    let line = lines.next_line().await.ok().flatten().unwrap_or_default();
     serde_json::from_str(&line).unwrap_or(Value::Null)
 }
 
@@ -55,10 +50,6 @@ async fn next_json(
 /// no mode, so the door asks for auto; the real Host create through
 /// HostSessionCommandPort starts it with requested auto and actual auto.
 #[tokio::test]
-#[expect(
-    clippy::expect_used,
-    reason = "A Host that cannot start or answer must fail its test."
-)]
 async fn protocol_door_create_succeeds_in_auto() {
     let root = tempfile::tempdir().expect("runtime root");
     std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o700))

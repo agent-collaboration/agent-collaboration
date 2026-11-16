@@ -216,7 +216,7 @@ impl ProviderAcpMessageFifo {
         let permit = self.reserve(&request.target)?;
         let contents = match &request.input {
             acp_client_runtime::ProviderTurnInput::Prompt(submission) => submission.content.clone(),
-            _ => Vec::new(),
+            acp_client_runtime::ProviderTurnInput::Compact => Vec::new(),
         };
         let queued = self
             .supervisor

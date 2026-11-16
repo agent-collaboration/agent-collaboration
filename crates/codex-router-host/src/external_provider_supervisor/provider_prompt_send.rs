@@ -144,7 +144,7 @@ impl ExternalProviderSupervisor {
                             )
                             .await
                         {
-                            AdmittedPromptDispatch::Done(result) => return result,
+                            AdmittedPromptDispatch::Done(result) => return *result,
                             AdmittedPromptDispatch::TurnRunning { .. } => {
                                 route = if attempt == 0 {
                                     Self::busy_route(&runtime, &provider_session_id).await
@@ -158,7 +158,7 @@ impl ExternalProviderSupervisor {
                         .steer_admitted(&request, &runtime, &snapshot, Arc::clone(&live))
                         .await?
                     {
-                        SteerResult::Settled(submission) => return Ok(submission),
+                        SteerResult::Settled(submission) => return Ok(*submission),
                         SteerResult::NoRunningTurn => {
                             route = if attempt == 0 {
                                 SendRoute::Prompt
@@ -169,18 +169,19 @@ impl ExternalProviderSupervisor {
                     },
                     SendRoute::Queue => {
                         return backend
-                            .queue_admitted_api_prompt(request, &binding, snapshot, live)
-                            .await;
+                            .queue_admitted_api_prompt(request, &binding, snapshot, live);
                     }
                 }
             }
-            backend
-                .queue_admitted_api_prompt(request, &binding, snapshot, live)
-                .await
+            backend.queue_admitted_api_prompt(request, &binding, snapshot, live)
         })
     }
 
     /// Steers the prompt into the running turn with the caller's input ID.
+    #[expect(
+        clippy::result_large_err,
+        reason = "The typed failure retains the full published operation payload."
+    )]
     async fn steer_admitted(
         &self,
         request: &ProviderPromptContentsRequest,
@@ -250,7 +251,9 @@ impl ExternalProviderSupervisor {
                         session_record: None,
                     }
                 });
-                return Ok(SteerResult::Settled(admitted_submission(snapshot.clone())));
+                return Ok(SteerResult::Settled(Box::new(admitted_submission(
+                    snapshot.clone(),
+                ))));
             }
             Ok(crate::ProviderSteeringOutcome::Failed) => {
                 ProviderOperationCompletion::Failure(failure(
@@ -273,14 +276,20 @@ impl ExternalProviderSupervisor {
             )),
         };
         self.spawn_operation(operation_id, live, async move { completion });
-        Ok(SteerResult::Settled(admitted_submission(snapshot.clone())))
+        Ok(SteerResult::Settled(Box::new(admitted_submission(
+            snapshot.clone(),
+        ))))
     }
 
     /// Hands the admitted prompt to the session's line, where it waits for the
     /// running turn to end. A full line refuses it, and its operation is
     /// settled unsent; without a line (a bare supervisor) the running turn
     /// refuses it as before.
-    async fn queue_admitted_api_prompt(
+    #[expect(
+        clippy::result_large_err,
+        reason = "The typed failure retains the full published operation payload."
+    )]
+    fn queue_admitted_api_prompt(
         &self,
         request: ProviderPromptContentsRequest,
         binding: &super::ProviderBindingIdentity,
@@ -328,7 +337,7 @@ impl ExternalProviderSupervisor {
 /// What a steer came to.
 enum SteerResult {
     /// The operation is settled or settling; this is its submission.
-    Settled(ConversationOperationSubmission),
+    Settled(Box<ConversationOperationSubmission>),
     /// The turn ended first; nothing was sent.
     NoRunningTurn,
 }

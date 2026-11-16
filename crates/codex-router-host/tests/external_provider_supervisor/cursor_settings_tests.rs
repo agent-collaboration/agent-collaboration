@@ -215,6 +215,10 @@ impl ReactiveCursor {
         }
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "The test reads the full typed settings failure."
+    )]
     async fn set(
         &self,
         target: &SessionRef,
